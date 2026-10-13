@@ -56,6 +56,7 @@ const RESOURCE_TITLES: Record<Resource, string> = {
   posts: "Posts",
   sends: "Sends",
   subscribers: "Subscribers",
+  imports: "Imports",
   suppressions: "Suppressions",
   subscriptions: "Subscriptions",
   archive: "Archive",

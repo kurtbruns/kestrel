@@ -1,0 +1,274 @@
+/**
+ * Authed import and export routes (SPEC §7): the format and its templates, a plan that
+ * writes nothing, the commit that applies a plan whole, and the whole list out.
+ *
+ * The rules of consent at the commit live here, where the principal is known: a plan that
+ * confirms anyone needs the publisher's attestation, a plan that grows a scheduled send
+ * needs a person to acknowledge each one (a service token can't), and the plan the commit
+ * applies must hash the same as the one the publisher saw.
+ */
+
+import {
+  ATTESTATION,
+  describeFormat,
+  type ExportResponse,
+  type ExportRow,
+  fileKindOf,
+  IMPORT_FORMAT,
+  IMPORT_LIMITS,
+  type ImportStatus,
+  PLAIN_LIST_STATUSES,
+  type SuppressionClaim,
+  TEMPLATE_CSV,
+  TEMPLATE_TXT,
+  toImportCsv,
+} from "../../shared/imports";
+import * as imports from "../db/imports";
+import { getSettings } from "../db/settings";
+import {
+  fieldError,
+  type JsonObject,
+  oneOf,
+  optObject,
+  optString,
+  optStringList,
+  readJsonObject,
+} from "../lib/body";
+import { badRequest, HttpError, json, refusal } from "../lib/errors";
+import { log } from "../lib/log";
+import type { RequestContext } from "../router";
+import {
+  commitImport,
+  fileSha256,
+  type ImportInput,
+  maxImportRows,
+  type Plan,
+  planImport,
+  planResponse,
+  planStale,
+  replayResponse,
+} from "../services/imports";
+
+/** GET /api/imports/format */
+export function format(c: RequestContext): Response {
+  const { maxRows, reason } = maxImportRows(c.config.subrequestBudget);
+  return json(describeFormat(maxRows, reason));
+}
+
+function download(body: string, type: string, filename: string): Response {
+  return new Response(body, {
+    headers: {
+      "content-type": `${type}; charset=utf-8`,
+      "content-disposition": `attachment; filename="${filename}"`,
+    },
+  });
+}
+
+/** GET /api/imports/template.csv */
+export function templateCsv(): Response {
+  return download(TEMPLATE_CSV, "text/csv", "kestrel-subscribers.csv");
+}
+
+/** GET /api/imports/template.txt */
+export function templateTxt(): Response {
+  return download(TEMPLATE_TXT, "text/plain", "email-list.txt");
+}
+
+/** Refuse a body over the limit before reading it, when it says its length. */
+function refuseOversize(c: RequestContext, bytes?: number): void {
+  const declared = Number(c.req.headers.get("content-length") ?? "0");
+  if ((bytes ?? declared) > IMPORT_LIMITS.maxBodyBytes) {
+    throw new HttpError(
+      413,
+      "body_too_large",
+      `The request is over ${IMPORT_LIMITS.maxBodyBytes / (1024 * 1024)} MB. Split the file into smaller imports.`,
+    );
+  }
+}
+
+/** The file and its declared meaning, as the plan and the commit both take them. */
+function readInput(body: JsonObject): ImportInput {
+  const file = optObject(body, "file");
+  if (!file) {
+    throw fieldError("file", "file is required, as { name, text }");
+  }
+  const name = optString(file, "name", "file");
+  if (!name) {
+    throw fieldError("file.name", "file.name is required: the file's name, ending .csv or .txt");
+  }
+  const text = optString(file, "text", "file");
+  if (text === undefined) {
+    throw fieldError("file.text", "file.text is required: the file's contents as UTF-8 text");
+  }
+  const declared =
+    body.plain_list_status === undefined
+      ? null
+      : oneOf(body, "plain_list_status", PLAIN_LIST_STATUSES);
+  // A plain list means `subscribed` unless it says otherwise, so it plans and hashes the same
+  // whether the default is sent or left out.
+  return {
+    name,
+    text,
+    plainListStatus: declared ?? (fileKindOf(name) === "txt" ? "subscribed" : null),
+  };
+}
+
+async function plan(c: RequestContext, input: ImportInput): Promise<Plan> {
+  if (new TextEncoder().encode(input.text).length > IMPORT_LIMITS.maxBodyBytes) {
+    refuseOversize(c, IMPORT_LIMITS.maxBodyBytes + 1);
+  }
+  const { maxRows, reason } = maxImportRows(c.config.subrequestBudget);
+  const settings = await getSettings(c.env.DB);
+  return planImport(c.env.DB, input, {
+    maxRows,
+    maxRowsReason: reason,
+    publication: settings.publication.name,
+  });
+}
+
+/** POST /api/imports/plan */
+export async function planRoute(c: RequestContext): Promise<Response> {
+  refuseOversize(c);
+  const input = readInput(await readJsonObject(c));
+  return json(planResponse(await plan(c, input)));
+}
+
+/** POST /api/imports */
+export async function commit(c: RequestContext): Promise<Response> {
+  refuseOversize(c);
+  const body = await readJsonObject(c);
+  const input = readInput(body);
+  const planHash = optString(body, "plan_hash");
+  if (!planHash) {
+    throw fieldError("plan_hash", "plan_hash is required: the hash of the plan being committed");
+  }
+  const attestation = optObject(body, "attestation");
+  if (attestation && (typeof attestation.version !== "number" || attestation.accepted !== true)) {
+    throw fieldError(
+      "attestation",
+      "attestation must be { version, accepted: true }, with the version the plan returned",
+    );
+  }
+  const acknowledged = new Set(optStringList(body, "acknowledge_sends") ?? []);
+  const principal = c.principal;
+  if (!principal) {
+    throw badRequest("no principal");
+  }
+
+  // A commit replayed after a lost answer: the import already made from this plan and file.
+  const done = await imports.getImportByPlanHash(c.env.DB, planHash);
+  if (done && done.file_sha256 === (await fileSha256(input.text))) {
+    return json(replayResponse(done));
+  }
+
+  const p = await plan(c, input);
+  if (p.planHash !== planHash) {
+    throw planStale();
+  }
+  if (
+    p.attestation &&
+    !(attestation?.accepted === true && attestation.version === p.attestation.version)
+  ) {
+    throw refusal(
+      409,
+      "attestation_required",
+      `This import confirms ${p.counts.create_confirmed + p.counts.confirm_pending} subscribers, so it needs the publisher's attestation: "${p.attestation.text}" Send attestation: { version: ${ATTESTATION.version}, accepted: true } once they have given it.`,
+      { attestation: p.attestation },
+    );
+  }
+  if (p.sendsGrowing.length > 0) {
+    if (principal.kind === "service") {
+      throw refusal(
+        409,
+        "sends_acknowledgement_required",
+        "This import would add people to the audience of a scheduled send, which only a person can acknowledge. Ask the publisher to finish it in the dashboard (Subscribers, Import), choosing the same file: the same plan appears there.",
+        { sends: p.sendsGrowing },
+      );
+    }
+    const missing = p.sendsGrowing.filter((s) => !acknowledged.has(s.id));
+    if (missing.length > 0) {
+      throw refusal(
+        409,
+        "sends_acknowledgement_required",
+        `This import would add ${p.sendsGrowing[0]?.gains ?? 0} people to the audience of ${missing.length === 1 ? "a scheduled send" : `${missing.length} scheduled sends`} not yet acknowledged. Acknowledge each one by its id in acknowledge_sends.`,
+        { sends: missing },
+      );
+    }
+  }
+
+  let result: Awaited<ReturnType<typeof commitImport>>;
+  try {
+    result = await commitImport(c.env.DB, p, principal, Date.now());
+  } catch (err) {
+    // Another commit of this plan got there first: its batch wrote the record, this one
+    // wrote nothing.
+    const raced = await imports.getImportByPlanHash(c.env.DB, planHash);
+    if (raced) {
+      return json(replayResponse(raced));
+    }
+    throw err;
+  }
+  log.info("import.committed", {
+    importId: result.import.id,
+    principal: principal.kind,
+    rows: p.rowCount,
+    confirmed: result.counts.create_confirmed + result.counts.confirm_pending,
+    unsubscribed: result.counts.mark_unsubscribed + result.counts.create_unsubscribed,
+    suppressed: result.suppressions_added,
+    differed: result.differed.length,
+  });
+  return json(result, 201);
+}
+
+// The list's states and suppression reasons in the format's words.
+const STATUS_CLAIM: Record<string, ImportStatus> = {
+  confirmed: "subscribed",
+  pending: "pending",
+  unsubscribed: "unsubscribed",
+};
+const SUPPRESSION_CLAIM: Record<string, SuppressionClaim> = {
+  bounce: "bounce",
+  import_bounce: "bounce",
+  complaint: "complaint",
+  import_complaint: "complaint",
+  manual: "manual",
+  erased: "erased",
+};
+
+const iso = (ms: number | null): string | null => (ms === null ? null : new Date(ms).toISOString());
+
+/** GET /api/subscribers/export */
+export async function exportList(c: RequestContext): Promise<Response> {
+  const as = c.url.searchParams.get("format") ?? "csv";
+  if (as !== "csv" && as !== "json") {
+    throw fieldError("format", "format must be 'csv' or 'json'");
+  }
+  const rows: ExportRow[] = (await imports.listForExport(c.env.DB)).map((r) => ({
+    email: r.email,
+    status: r.status === null ? "none" : (STATUS_CLAIM[r.status] ?? "none"),
+    opt_in: r.opt_in ?? "unknown",
+    origin: r.origin ?? "unknown",
+    suppression: r.reason === null ? null : (SUPPRESSION_CLAIM[r.reason] ?? "manual"),
+    subscribed_at: iso(r.created_at),
+    confirmed_at: iso(r.confirmed_at),
+    unsubscribed_at: iso(r.unsubscribed_at),
+    suppressed_at: iso(r.suppressed_at),
+    evidence: r.consent_evidence,
+    format: IMPORT_FORMAT,
+  }));
+  const day = new Date().toISOString().slice(0, 10);
+  if (as === "json") {
+    const body: ExportResponse = {
+      format: IMPORT_FORMAT,
+      exported_at: Date.now(),
+      subscribers: rows,
+    };
+    return new Response(JSON.stringify(body), {
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "content-disposition": `attachment; filename="subscribers-${day}.json"`,
+      },
+    });
+  }
+  return download(toImportCsv(rows), "text/csv", `subscribers-${day}.csv`);
+}

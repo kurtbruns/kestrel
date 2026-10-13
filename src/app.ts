@@ -17,6 +17,7 @@
  * has no such routes at all (a 404 by absence, not by check) and its reference omits them.
  */
 
+import { IMPORT_LIMITS } from "../shared/imports";
 import type { ReferenceResponse } from "../shared/reference";
 import {
   BOUNCE_SPIKE_MIN,
@@ -38,6 +39,7 @@ import * as archiveRoutes from "./routes/archive";
 import * as devRoutes from "./routes/dev";
 import * as docsRoutes from "./routes/docs";
 import * as imageRoutes from "./routes/images";
+import * as importRoutes from "./routes/imports";
 import * as postRoutes from "./routes/posts";
 import * as publicRoutes from "./routes/public";
 import * as readerPageRoutes from "./routes/reader_pages";
@@ -974,6 +976,46 @@ export function createRouter({
       handler: subscriberRoutes.list,
     },
     {
+      // Before `/api/subscribers/:id`, which would otherwise take `export` as an id.
+      method: "GET",
+      path: "/api/subscribers/export",
+      access: "admin",
+      resource: "subscribers",
+      summary:
+        "The whole list in the import format (`kestrel-subscribers/1`, SPEC §7), as a CSV download or JSON.",
+      description:
+        "Every subscriber (`confirmed` is written as `status: subscribed`) with how they joined, their evidence, and their suppression, plus every address suppressed with no subscriber behind it (`status: none`), an erased one as `suppression: erased`. An imported bounce or complaint is written as `bounce` or `complaint`. Times are UTC ISO-8601. Importing it into another instance carries the list over, every confirmation arriving as imported. One response, not paged.",
+      query: [
+        {
+          name: "format",
+          description:
+            "`csv` (default: the format's CSV, as an attachment) or `json` (`{ format, exported_at, subscribers }`, the same rows). Anything else is a 400 naming the field.",
+        },
+      ],
+      example: {
+        response: {
+          format: "kestrel-subscribers/1",
+          exported_at: 1768467600000,
+          subscribers: [
+            {
+              email: "ada@example.com",
+              status: "subscribed",
+              opt_in: "double",
+              origin: "kestrel",
+              suppression: null,
+              subscribed_at: "2026-01-02T09:30:00.000Z",
+              confirmed_at: "2026-01-02T09:42:00.000Z",
+              unsubscribed_at: null,
+              suppressed_at: null,
+              evidence: '{"confirmed_ip":"203.0.113.7"}',
+              format: "kestrel-subscribers/1",
+            },
+          ],
+        },
+      },
+      handler: importRoutes.exportList,
+    },
+    {
       method: "GET",
       path: "/api/subscribers/:id",
       access: "admin",
@@ -988,6 +1030,116 @@ export function createRouter({
       resource: "subscribers",
       summary: "Unsubscribe a subscriber (admin-initiated).",
       handler: subscriberRoutes.unsubscribe,
+    },
+
+    // --- imports (authed admin) ---
+    {
+      method: "GET",
+      path: "/api/imports/format",
+      access: "admin",
+      resource: "imports",
+      summary:
+        "Everything about the import format (SPEC §7), generated from the definition the importer reads with: the preferred file and why, each accepted file with when to use it and what it loses, the columns, the plain list's rules, this deployment's limits, the outcomes, and the attestation.",
+      description:
+        "Read it before converting a list. The full CSV (`kestrel-subscribers/1`) is preferred: it carries unsubscribes, bounces, and how each person joined, and it is what the export writes. A plain `.txt` list of addresses is the fallback for a list that is only addresses. Another service's export is converted to the format first; nothing is guessed. `limits.max_rows` is what this deployment takes, with `max_rows_reason` when it is below the format's own limit.",
+      handler: importRoutes.format,
+    },
+    {
+      method: "GET",
+      path: "/api/imports/template.csv",
+      access: "admin",
+      resource: "imports",
+      summary:
+        "A CSV template in the import format, showing its cases; uploaded unchanged it plans cleanly.",
+      handler: importRoutes.templateCsv,
+    },
+    {
+      method: "GET",
+      path: "/api/imports/template.txt",
+      access: "admin",
+      resource: "imports",
+      summary: "A plain-list template: one address per line.",
+      handler: importRoutes.templateTxt,
+    },
+    {
+      method: "POST",
+      path: "/api/imports/plan",
+      access: "admin",
+      accepts: JSON_BODY,
+      resource: "imports",
+      summary:
+        "Plan an import: what it would do to every row against the list as it stands. Writes nothing, so call it as often as a file needs.",
+      description: `Body \`{ file: { name, text }, plain_list_status? }\`: the file's name (\`.csv\` for the format, \`.txt\` for a plain list) and its contents as UTF-8 text, and for a plain list what its addresses are, \`subscribed\` (the default), \`unsubscribed\`, or \`bounced\` (a 400 naming the field on a CSV, whose rows say). Answers \`counts\` (every row once, by outcome, summing to \`file.rows\`), \`suppressions_added\`, \`confirmed\` (the rows to be confirmed, by \`opt_in\` and \`origin\`), \`rows\` (each row that won't be confirmed, with its outcome), \`sends_growing\` (each scheduled send whose audience would grow, with \`gains\`), \`attestation\` (\`{ version, text }\` when anyone would be confirmed, else null), and \`plan_hash\`. The outcomes and when each applies are in \`GET /api/imports/format\`. Refusals name what was wrong and what was expected: 400 \`unrecognized_format\` (not a file in the format at all, with \`row\` where it shows), 400 \`invalid_field\` (a column or value the format doesn't take, with \`row\`, \`column\`, and \`allowed\` where the values are a set), 400 \`too_many_rows\` (over this deployment's \`limit\`), and 413 \`body_too_large\` (over ${IMPORT_LIMITS.maxBodyBytes / (1024 * 1024)} MB).`,
+      example: {
+        request: {
+          file: {
+            name: "subscribers.csv",
+            text: "email,status,opt_in,origin\r\nada@example.com,subscribed,double,sendy\r\nedsger@example.com,unsubscribed,unknown,sendy\r\n",
+          },
+        },
+        response: {
+          file: {
+            name: "subscribers.csv",
+            kind: "csv",
+            rows: 2,
+            addresses: 2,
+            plain_list_status: null,
+          },
+          counts: {
+            create_confirmed: 1,
+            confirm_pending: 0,
+            unchanged: 0,
+            mark_unsubscribed: 0,
+            create_unsubscribed: 1,
+            kept_confirmed_newer: 0,
+            kept_unsubscribed: 0,
+            blocked_by_suppression: 0,
+            suppression_added: 0,
+            left_out: 0,
+            invalid: 0,
+            merged: 0,
+          },
+          suppressions_added: 0,
+          confirmed: { opt_in: { double: 1, single: 0, unknown: 0 }, origin: { sendy: 1 } },
+          rows: [
+            {
+              row: 2,
+              email: "edsger@example.com",
+              outcome: "create_unsubscribed",
+              suppression_added: false,
+            },
+          ],
+          sends_growing: [
+            { id: "s_xyz789", subject: "Spring migration", fire_at: 1768554000000, gains: 1 },
+          ],
+          attestation: {
+            version: 1,
+            text: "Everyone I'm importing as subscribed opted in to receive Field Notes. This isn't a purchased, rented, or scraped list.",
+          },
+          plan_hash: "9f2c…",
+        },
+      },
+      handler: importRoutes.planRoute,
+    },
+    {
+      method: "POST",
+      path: "/api/imports",
+      access: "admin",
+      accepts: JSON_BODY,
+      resource: "imports",
+      summary:
+        "Commit a plan: apply it all, or nothing, in one batch, and keep the import's record. Never sends an email.",
+      description:
+        "The plan's body plus `plan_hash`, `attestation: { version, accepted: true }` when the plan returned one, and `acknowledge_sends`: the id of every send in `sends_growing`. It plans again and refuses 409 `plan_stale` when the hash differs (the file, its declared meaning, whether an attestation is needed, or the growing sends changed; plan again). The list moving in between is not refused: every write re-checks the list as it stands, so a reader who unsubscribed meanwhile stays unsubscribed, and `differed` lists each row whose result differs from the commit's own plan. 409 `attestation_required` (with the `attestation` to show) when the plan confirms anyone and none was given. 409 `sends_acknowledgement_required` (with the `sends`) when a send that would grow isn't acknowledged, and always for a service token, which can't acknowledge one: the publisher finishes that import in the dashboard. A service token may attest; the record says so, and the publisher is emailed the counts. Answers 201 with the `import` record (never an address), `counts` and `suppressions_added` as applied, `rows` (those not confirmed, as applied), `differed`, and `replayed: false`. A commit repeated with the same plan and file answers 200 with the stored record and `replayed: true`, applying nothing twice. The plan route's refusals apply too.",
+      example: {
+        request: {
+          file: { name: "subscribers.csv", text: "email,status,opt_in,origin\r\n…" },
+          plan_hash: "9f2c…",
+          attestation: { version: 1, accepted: true },
+          acknowledge_sends: ["s_xyz789"],
+        },
+      },
+      handler: importRoutes.commit,
     },
 
     // --- suppressions (authed admin) ---

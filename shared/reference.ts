@@ -22,6 +22,7 @@ export type Resource =
   | "posts"
   | "sends"
   | "subscribers"
+  | "imports"
   | "suppressions"
   | "subscriptions"
   | "archive"

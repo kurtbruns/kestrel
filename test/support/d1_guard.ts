@@ -1,12 +1,26 @@
 /**
  * A D1 handle that holds the test pool to what production D1 enforces and local SQLite
- * does not: at most 100 bound parameters per statement. It also counts the statements it
+ * does not: at most 100 bound parameters per statement, and no bound string or blob over
+ * D1's 2,000,000-byte limit on one value. It also counts the statements it
  * runs (a batch counts each of its statements), so a spec can check a tick stays inside
  * the per-invocation budget independently of the send loop's own meter.
  */
 
 /** D1's cap on bound parameters in one statement. */
 export const D1_MAX_BOUND_PARAMETERS = 100;
+
+/** D1's cap on one string or blob, in bytes. */
+export const D1_MAX_VALUE_BYTES = 2_000_000;
+
+function byteSize(value: unknown): number {
+  if (typeof value === "string") {
+    return new TextEncoder().encode(value).length;
+  }
+  if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
+    return value.byteLength;
+  }
+  return 0;
+}
 
 export interface GuardedD1 {
   db: D1Database;
@@ -23,6 +37,12 @@ export function guardD1(db: D1Database): GuardedD1 {
         if (values.length > D1_MAX_BOUND_PARAMETERS) {
           throw new Error(
             `D1 rejects more than ${D1_MAX_BOUND_PARAMETERS} bound parameters; this statement binds ${values.length}: ${sql.slice(0, 120)}`,
+          );
+        }
+        const largest = Math.max(0, ...values.map(byteSize));
+        if (largest > D1_MAX_VALUE_BYTES) {
+          throw new Error(
+            `D1 rejects a value over ${D1_MAX_VALUE_BYTES} bytes; this statement binds one of ${largest}: ${sql.slice(0, 120)}`,
           );
         }
         return wrap(stmt.bind(...values), sql);

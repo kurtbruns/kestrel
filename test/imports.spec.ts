@@ -1,0 +1,817 @@
+import { SELF } from "cloudflare:test";
+import { env } from "cloudflare:workers";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  IMPORT_COLUMNS,
+  IMPORT_FORMAT,
+  IMPORT_LIMITS,
+  IMPORT_OUTCOMES,
+  type ImportCommitResponse,
+  type ImportPlanResponse,
+  type OutcomeCounts,
+} from "../shared/imports";
+import { updateSettings } from "../src/db/settings";
+import * as subscribers from "../src/db/subscribers";
+import { getConfig } from "../src/env";
+import { clearFakeNotifications, fakeNotifications } from "../src/notify/fake";
+import { notifyPublisher } from "../src/notify/notify";
+import type { Principal } from "../src/router";
+import { Budget } from "../src/send/budget";
+import { commitImport, maxImportRows, planImport } from "../src/services/imports";
+import { guardD1 } from "./support/d1_guard";
+import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
+import { AUTH, adminAuth, base, JSON_AUTH, readJson } from "./support/http";
+import { fetchWith } from "./support/worker_env";
+
+// Bringing a list in and taking it out (SPEC §7, §8): one format, a plan that writes nothing,
+// a commit that applies the plan whole under the publisher's attestation, and an export that
+// another instance imports back.
+
+const HEADER =
+  "email,status,opt_in,origin,suppression,subscribed_at,confirmed_at,unsubscribed_at,suppressed_at,evidence";
+const HUMAN: Principal = { kind: "human", email: "Publisher@Example.com", via: "dev" };
+const ATTEST = { version: 1, accepted: true };
+const PAID = { SUBREQUEST_BUDGET: "1000" };
+
+function csvFile(lines: string[], name = "list.csv") {
+  return { name, text: `${[HEADER, ...lines].join("\r\n")}\r\n` };
+}
+
+function plan(body: unknown, headers: Record<string, string> = JSON_AUTH): Promise<Response> {
+  return SELF.fetch(`${base}/api/imports/plan`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+}
+
+function commit(body: unknown, headers: Record<string, string> = JSON_AUTH): Promise<Response> {
+  return SELF.fetch(`${base}/api/imports`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+}
+
+async function planOk(body: unknown): Promise<ImportPlanResponse> {
+  const res = await plan(body);
+  expect(res.status).toBe(200);
+  return res.json();
+}
+
+/** Plan a file and commit that plan as a person, attesting and acknowledging what it asks. */
+async function importFile(
+  file: { name: string; text: string },
+  extra: Record<string, unknown> = {},
+): Promise<ImportCommitResponse> {
+  const p = await planOk({ file, ...extra });
+  const res = await commit({
+    file,
+    ...extra,
+    plan_hash: p.plan_hash,
+    attestation: p.attestation ? ATTEST : undefined,
+    acknowledge_sends: p.sends_growing.map((s) => s.id),
+  });
+  expect(res.status).toBe(201);
+  return res.json();
+}
+
+function counts(over: Partial<OutcomeCounts>): OutcomeCounts {
+  return { ...(Object.fromEntries(IMPORT_OUTCOMES.map((o) => [o, 0])) as OutcomeCounts), ...over };
+}
+
+async function subscriberRow(email: string) {
+  return env.DB.prepare(
+    "SELECT status, origin, opt_in, consent_evidence, import_id, confirm_token, confirmed_at, unsubscribed_at FROM subscribers WHERE email = ?",
+  )
+    .bind(email)
+    .first<Record<string, unknown>>();
+}
+
+async function suppressionOf(email: string): Promise<string | null> {
+  const row = await env.DB.prepare("SELECT reason FROM suppressions WHERE email = ?")
+    .bind(email)
+    .first<{ reason: string }>();
+  return row?.reason ?? null;
+}
+
+async function seedPending(email: string): Promise<void> {
+  await env.DB.prepare(
+    "INSERT INTO subscribers (id, email, status, confirm_token, confirm_sent_at, unsub_token, created_at) VALUES (?, ?, 'pending', ?, ?, ?, ?)",
+  )
+    .bind(`id-${email}`, email, `cfm-${email}`, Date.now(), `uns-${email}`, Date.now())
+    .run();
+}
+
+async function seedUnsubscribed(email: string): Promise<void> {
+  await env.DB.prepare(
+    "INSERT INTO subscribers (id, email, status, unsub_token, created_at, unsubscribed_at) VALUES (?, ?, 'unsubscribed', ?, ?, ?)",
+  )
+    .bind(`id-${email}`, email, `uns-${email}`, Date.now(), Date.now())
+    .run();
+}
+
+async function count(sql: string): Promise<number> {
+  return (await env.DB.prepare(sql).first<{ n: number }>())?.n ?? 0;
+}
+
+const planOptions = {
+  maxRows: IMPORT_LIMITS.maxRows,
+  maxRowsReason: null,
+  publication: "Field Notes",
+};
+
+beforeEach(async () => {
+  await resetDatabase();
+  clearFakeNotifications();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("the format, as the API serves it (SPEC §7)", () => {
+  it("describes the columns the importer reads, prefers the full CSV, and says what a plain list loses", async () => {
+    const res = await SELF.fetch(`${base}/api/imports/format`, { headers: AUTH });
+    expect(res.status).toBe(200);
+    const body = await readJson(res);
+    expect(body.format).toBe(IMPORT_FORMAT);
+    expect(body.columns.map((c: { name: string }) => c.name)).toEqual(
+      IMPORT_COLUMNS.map((c) => c.name),
+    );
+    expect(body.preferred.kind).toBe("csv");
+    expect(body.files.find((f: { kind: string }) => f.kind === "txt").loses.length).toBeGreaterThan(
+      0,
+    );
+    expect(body.outcomes.map((o: { outcome: string }) => o.outcome)).toEqual([...IMPORT_OUTCOMES]);
+  });
+
+  it("names the lower row limit on Workers Free, and the full one when the budget says Paid", async () => {
+    const free = await readJson(await SELF.fetch(`${base}/api/imports/format`, { headers: AUTH }));
+    expect(free.limits.max_rows).toBe(IMPORT_LIMITS.maxRowsFree);
+    expect(free.limits.max_rows_reason).toContain("Workers Free");
+    const paid = await readJson(await fetchWith(PAID, "/api/imports/format", { headers: AUTH }));
+    expect(paid.limits).toMatchObject({ max_rows: IMPORT_LIMITS.maxRows, max_rows_reason: null });
+  });
+
+  it("serves templates that, uploaded unchanged, plan cleanly", async () => {
+    const csv = await SELF.fetch(`${base}/api/imports/template.csv`, { headers: AUTH });
+    expect(csv.headers.get("content-type")).toBe("text/csv; charset=utf-8");
+    const fromCsv = await planOk({
+      file: { name: "kestrel-subscribers.csv", text: await csv.text() },
+    });
+    expect(fromCsv.counts).toEqual(
+      counts({ create_confirmed: 2, create_unsubscribed: 1, suppression_added: 1 }),
+    );
+    const txt = await SELF.fetch(`${base}/api/imports/template.txt`, { headers: AUTH });
+    const fromTxt = await planOk({ file: { name: "email-list.txt", text: await txt.text() } });
+    expect(fromTxt.counts).toEqual(counts({ create_confirmed: 3 }));
+  });
+
+  it("is the publisher's: every import route is behind sign-in", async () => {
+    for (const path of [
+      "/api/imports/format",
+      "/api/imports/template.csv",
+      "/api/subscribers/export",
+    ]) {
+      expect((await SELF.fetch(`${base}${path}`)).status).toBe(401);
+    }
+    expect((await plan({ file: csvFile([]) }, { "content-type": "application/json" })).status).toBe(
+      401,
+    );
+  });
+});
+
+describe("refusals name what was wrong and what was expected (SPEC §7)", () => {
+  it("unrecognized_format: a file that isn't the format, or isn't a plain list", async () => {
+    const xlsx = await plan({ file: { name: "list.xlsx", text: "x" } });
+    expect(xlsx.status).toBe(400);
+    expect(await readJson(xlsx)).toMatchObject({ error: "unrecognized_format", field: "file" });
+    const table = await plan({ file: { name: "list.txt", text: "a@x.io,subscribed\n" } });
+    expect(await readJson(table)).toMatchObject({ error: "unrecognized_format", row: 1 });
+  });
+
+  it("invalid_field: an extra column, by name, and a value outside its set, with the values", async () => {
+    const extra = await readJson(
+      await plan({
+        file: {
+          name: "l.csv",
+          text: "email,status,opt_in,origin,name\na@x.io,subscribed,double,sendy,Ada\n",
+        },
+      }),
+    );
+    expect(extra).toMatchObject({ error: "invalid_field", column: "name", row: 0 });
+    const value = await readJson(
+      await plan({ file: csvFile(["a@x.io,active,double,sendy,,,,,,"]) }),
+    );
+    expect(value).toMatchObject({
+      error: "invalid_field",
+      row: 1,
+      column: "status",
+      allowed: ["subscribed", "pending", "unsubscribed", "none"],
+    });
+  });
+
+  it("too_many_rows: over this deployment's limit, naming it", async () => {
+    const lines = Array.from(
+      { length: IMPORT_LIMITS.maxRowsFree + 1 },
+      (_, i) => `r${i}@example.com`,
+    );
+    const res = await plan({ file: { name: "big.txt", text: lines.join("\n") } });
+    expect(res.status).toBe(400);
+    const body = await readJson(res);
+    expect(body).toMatchObject({ error: "too_many_rows", limit: IMPORT_LIMITS.maxRowsFree });
+    expect(body.message).toContain("2,000");
+  });
+
+  it("body_too_large: a request over 10 MB", async () => {
+    const text = "a".repeat(IMPORT_LIMITS.maxBodyBytes + 1);
+    const res = await plan({ file: { name: "big.txt", text } });
+    expect(res.status).toBe(413);
+    expect((await readJson(res)).error).toBe("body_too_large");
+  });
+
+  it("refuses a plain-list meaning on a CSV, which says each row's status itself", async () => {
+    const res = await plan({
+      file: csvFile(["a@x.io,subscribed,double,sendy,,,,,,"]),
+      plain_list_status: "bounced",
+    });
+    expect(res.status).toBe(400);
+    expect((await readJson(res)).field).toBe("plain_list_status");
+  });
+
+  it("plan_stale: a commit whose plan no longer hashes the same", async () => {
+    const file = csvFile(["a@x.io,unsubscribed,unknown,sendy,,,,,,"]);
+    const p = await planOk({ file });
+    const res = await commit({ file, plan_hash: `${p.plan_hash}x` });
+    expect(res.status).toBe(409);
+    expect((await readJson(res)).error).toBe("plan_stale");
+    // A different meaning for the same plain list is a different plan.
+    const list = { name: "l.txt", text: "a@x.io\n" };
+    const subscribed = await planOk({ file: list });
+    const bounced = await planOk({ file: list, plain_list_status: "bounced" });
+    expect(bounced.plan_hash).not.toBe(subscribed.plan_hash);
+    expect(
+      (await commit({ file: list, plain_list_status: "bounced", plan_hash: subscribed.plan_hash }))
+        .status,
+    ).toBe(409);
+  });
+
+  it("attestation_required: an import that confirms anyone, committed without it", async () => {
+    const file = csvFile(["a@x.io,subscribed,single,sendy,,,,,,"]);
+    const p = await planOk({ file });
+    expect(p.attestation).toEqual({
+      version: 1,
+      text: "Everyone I'm importing as subscribed opted in to receive this newsletter. This isn't a purchased, rented, or scraped list.",
+    });
+    const res = await commit({ file, plan_hash: p.plan_hash });
+    expect(res.status).toBe(409);
+    expect(await readJson(res)).toMatchObject({
+      error: "attestation_required",
+      attestation: p.attestation,
+    });
+    expect(await count("SELECT COUNT(*) AS n FROM subscribers")).toBe(0);
+  });
+
+  it("names the publication in the attestation", async () => {
+    await updateSettings(env.DB, { publication: { name: "Field Notes" } });
+    const p = await planOk({ file: csvFile(["a@x.io,subscribed,single,sendy,,,,,,"]) });
+    expect(p.attestation?.text).toContain("to receive Field Notes.");
+  });
+});
+
+describe("the plain list (SPEC §7)", () => {
+  it("counts an invalid line among the rows left out, and needs no attestation to unsubscribe or bounce", async () => {
+    const file = { name: "l.txt", text: "﻿a@x.io\r\n\r\nAda <b@x.io>\r\n" };
+    const subscribed = await planOk({ file });
+    expect(subscribed.counts).toEqual(counts({ create_confirmed: 1, invalid: 1 }));
+    expect(subscribed.rows).toEqual([
+      { row: 3, email: "Ada <b@x.io>", outcome: "invalid", suppression_added: false },
+    ]);
+    expect((await planOk({ file, plain_list_status: "unsubscribed" })).attestation).toBeNull();
+    const bounced = await planOk({ file, plain_list_status: "bounced" });
+    expect(bounced.attestation).toBeNull();
+    expect(bounced.counts.suppression_added).toBe(1);
+  });
+
+  it("imports its rows as origin unknown, opt-in unknown", async () => {
+    await importFile({ name: "l.txt", text: "a@x.io\n" });
+    expect(await subscriberRow("a@x.io")).toMatchObject({
+      status: "confirmed",
+      origin: "unknown",
+      opt_in: "unknown",
+    });
+  });
+});
+
+describe("what an import does to each address (SPEC §7)", () => {
+  it("applies every outcome, reporting each row once", async () => {
+    const yearAgo = new Date(Date.now() - 365 * 86_400_000).toISOString();
+    await seedPending("pending@x.io");
+    await seedConfirmed(["native@x.io", "leaving@x.io", "newer@x.io"]);
+    await seedUnsubscribed("left@x.io");
+    await subscribers.addSuppression(env.DB, "erased@x.io", "erased");
+    const file = csvFile([
+      `new@x.io,subscribed,double,sendy,,2024-01-01T00:00:00Z,2024-01-02T00:00:00Z,,,"{""ip"":""1.2.3.4""}"`,
+      "pending@x.io,subscribed,single,mailchimp,,,,,,",
+      "native@x.io,subscribed,single,sendy,,,,,,",
+      "leaving@x.io,unsubscribed,unknown,sendy,,,,,,",
+      "gone@x.io,unsubscribed,unknown,sendy,,,,2024-05-05T00:00:00Z,,",
+      `newer@x.io,unsubscribed,unknown,sendy,,,,${yearAgo},,`,
+      "left@x.io,subscribed,double,sendy,,,,,,",
+      "erased@x.io,subscribed,double,sendy,,,,,,",
+      "bounced@x.io,none,unknown,sendy,bounce,,,,,",
+      "maybe@x.io,pending,unknown,sendy,,,,,,",
+      "nobody,subscribed,double,sendy,,,,,,",
+      "NEW@x.io,subscribed,double,sendy,,,,,,",
+    ]);
+    const p = await planOk({ file });
+    const expected = counts({
+      create_confirmed: 1,
+      confirm_pending: 1,
+      unchanged: 1,
+      mark_unsubscribed: 1,
+      create_unsubscribed: 1,
+      kept_confirmed_newer: 1,
+      kept_unsubscribed: 1,
+      blocked_by_suppression: 1,
+      suppression_added: 1,
+      left_out: 1,
+      invalid: 1,
+      merged: 1,
+    });
+    expect(p.counts).toEqual(expected);
+    expect(p.confirmed).toEqual({
+      opt_in: { double: 1, single: 1, unknown: 0 },
+      origin: { sendy: 1, mailchimp: 1 },
+    });
+    // A plan writes nothing.
+    expect(await subscriberRow("new@x.io")).toBeNull();
+
+    const result = await importFile(file);
+    expect(result.counts).toEqual(expected);
+    expect(result.differed).toEqual([]);
+    const id = result.import.id;
+
+    expect(await subscriberRow("new@x.io")).toMatchObject({
+      status: "confirmed",
+      origin: "sendy",
+      opt_in: "double",
+      consent_evidence: '{"ip":"1.2.3.4"}',
+      import_id: id,
+      confirmed_at: Date.parse("2024-01-02T00:00:00Z"),
+    });
+    expect(await subscriberRow("pending@x.io")).toMatchObject({
+      status: "confirmed",
+      origin: "mailchimp",
+      opt_in: "single",
+      confirm_token: null,
+      import_id: id,
+    });
+    // A subscriber who joined here keeps their own record.
+    expect(await subscriberRow("native@x.io")).toMatchObject({
+      status: "confirmed",
+      origin: "kestrel",
+      opt_in: "double",
+      import_id: null,
+    });
+    expect(await subscriberRow("leaving@x.io")).toMatchObject({ status: "unsubscribed" });
+    expect(await subscriberRow("gone@x.io")).toMatchObject({
+      status: "unsubscribed",
+      import_id: id,
+      unsubscribed_at: Date.parse("2024-05-05T00:00:00Z"),
+    });
+    expect(await subscriberRow("newer@x.io")).toMatchObject({ status: "confirmed" });
+    expect(await subscriberRow("left@x.io")).toMatchObject({ status: "unsubscribed" });
+    // An erased address listed as subscribed is never added, and its marker survives.
+    expect(await subscriberRow("erased@x.io")).toBeNull();
+    expect(await suppressionOf("erased@x.io")).toBe("erased");
+    expect(await suppressionOf("bounced@x.io")).toBe("import_bounce");
+    expect(await subscriberRow("bounced@x.io")).toBeNull();
+    expect(await subscriberRow("maybe@x.io")).toBeNull();
+    // An import sends no email.
+    expect(fakeNotifications()).toEqual([]);
+  });
+
+  it("applies a suppression and a status change on one row, and reports both", async () => {
+    await seedConfirmed("a@x.io");
+    const file = csvFile(["a@x.io,unsubscribed,unknown,sendy,complaint,,,,,"]);
+    const p = await planOk({ file });
+    expect(p.counts).toEqual(counts({ mark_unsubscribed: 1 }));
+    expect(p.suppressions_added).toBe(1);
+    expect(p.rows).toEqual([
+      { row: 1, email: "a@x.io", outcome: "mark_unsubscribed", suppression_added: true },
+    ]);
+    await importFile(file);
+    expect(await subscriberRow("a@x.io")).toMatchObject({ status: "unsubscribed" });
+    expect(await suppressionOf("a@x.io")).toBe("import_complaint");
+  });
+
+  it("never replaces a suppression already here, the first one standing", async () => {
+    await subscribers.addSuppression(env.DB, "a@x.io", "erased");
+    const p = await planOk({ file: csvFile(["a@x.io,none,unknown,sendy,bounce,,,,,"]) });
+    expect(p.counts).toEqual(counts({ left_out: 1 }));
+    await importFile(csvFile(["a@x.io,none,unknown,sendy,bounce,,,,,"]));
+    expect(await suppressionOf("a@x.io")).toBe("erased");
+  });
+
+  it("confirms a subscribed row that brings its own bounce, suppressed, so it never joins an audience", async () => {
+    await frozenSend(Date.now() + 3_600_000);
+    const p = await planOk({ file: csvFile(["a@x.io,subscribed,double,sendy,bounce,,,,,"]) });
+    expect(p.counts.create_confirmed).toBe(1);
+    expect(p.sends_growing).toEqual([]);
+    await importFile(csvFile(["a@x.io,subscribed,double,sendy,bounce,,,,,"]));
+    expect(await subscriberRow("a@x.io")).toMatchObject({ status: "confirmed" });
+    expect(await suppressionOf("a@x.io")).toBe("import_bounce");
+    expect(await subscribers.audienceCount(env.DB)).toBe(0);
+  });
+
+  it("merges an address's repeats before classifying it", async () => {
+    const p = await planOk({
+      file: csvFile([
+        "a@x.io,subscribed,double,sendy,,,,,,",
+        "A@x.io,unsubscribed,unknown,sendy,,,,,,",
+        "a@x.io,pending,single,other,manual,,,,,",
+      ]),
+    });
+    expect(p.counts).toEqual(counts({ create_unsubscribed: 1, merged: 2 }));
+    expect(p.suppressions_added).toBe(1);
+    expect(p.rows.map((r) => [r.row, r.outcome])).toEqual([
+      [1, "create_unsubscribed"],
+      [2, "merged"],
+      [3, "merged"],
+    ]);
+  });
+});
+
+describe("a confirmation here makes the consent this app's (SPEC §7)", () => {
+  it("clears the import's provenance and records the confirming IP", async () => {
+    const result = await importFile(csvFile(["a@x.io,unsubscribed,single,sendy,,,,,,"]));
+    expect(await subscriberRow("a@x.io")).toMatchObject({ import_id: result.import.id });
+    // The person subscribes again here and presses Confirm.
+    await env.DB.prepare(
+      "UPDATE subscribers SET status = 'pending', confirm_token = 'tok', confirm_sent_at = ? WHERE email = 'a@x.io'",
+    )
+      .bind(Date.now())
+      .run();
+    await subscribers.confirm(env.DB, "tok", 0, "203.0.113.9");
+    expect(await subscriberRow("a@x.io")).toMatchObject({
+      status: "confirmed",
+      origin: "kestrel",
+      opt_in: "double",
+      import_id: null,
+      consent_evidence: '{"confirmed_ip":"203.0.113.9"}',
+    });
+  });
+});
+
+describe("provenance is keyed on the import, not on the file's claims (SPEC §7)", () => {
+  it("reads a row claiming this app's double opt-in as imported", async () => {
+    const result = await importFile(csvFile(["a@x.io,subscribed,double,kestrel,,,,,,"]));
+    expect(await subscriberRow("a@x.io")).toMatchObject({
+      origin: "kestrel",
+      opt_in: "double",
+      import_id: result.import.id,
+    });
+  });
+});
+
+describe("the record and the notice (SPEC §8)", () => {
+  it("keeps who committed it, the attestation's version, the file, and the counts, and no subscriber's address", async () => {
+    const file = csvFile(["a@x.io,subscribed,double,sendy,,,,,,"]);
+    const result = await importFile(file);
+    const row = await env.DB.prepare("SELECT * FROM imports").first<Record<string, unknown>>();
+    expect(row).toMatchObject({
+      id: result.import.id,
+      principal_kind: "human",
+      principal_email: "tester@example.com",
+      attestation_version: 1,
+      file_name: "list.csv",
+      plan_hash: result.import.plan_hash,
+      suppressions_added: 0,
+    });
+    expect(JSON.parse(row?.counts as string)).toEqual(counts({ create_confirmed: 1 }));
+    expect(JSON.stringify(row)).not.toContain("a@x.io");
+    // A person's import needs no notice: they saw it happen.
+    expect(await count("SELECT COUNT(*) AS n FROM notifications")).toBe(0);
+  });
+
+  it("keeps no attestation for an import that confirms no one", async () => {
+    const result = await importFile(csvFile(["a@x.io,unsubscribed,unknown,sendy,,,,,,"]));
+    expect(result.import.attestation_version).toBeNull();
+  });
+
+  it("lets a service token attest, records it as the service, and emails the publisher the counts", async () => {
+    await updateSettings(env.DB, { notifications: { to: "publisher@example.com" } });
+    const service = { ...(await adminAuth({})), "content-type": "application/json" };
+    const file = csvFile([
+      "a@x.io,subscribed,double,sendy,,,,,,",
+      "b@x.io,unsubscribed,unknown,sendy,,,,,,",
+    ]);
+    const p = await planOk({ file });
+    const res = await commit({ file, plan_hash: p.plan_hash, attestation: ATTEST }, service);
+    expect(res.status).toBe(201);
+    const result: ImportCommitResponse = await res.json();
+    expect(result.import.principal).toEqual({ kind: "service", email: null });
+
+    await notifyPublisher(env, new Budget(50));
+    const sent = fakeNotifications();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.subject).toBe("Claude imported 1 subscribers from list.csv");
+    expect(sent[0]?.text).toContain("Confirmed as subscribers: 1. Unsubscribed: 1.");
+    expect(sent[0]?.text).toContain("Claude attested for you");
+    expect(sent[0]?.text).toContain("/dashboard/?to=/subscribers");
+    // Told once.
+    await notifyPublisher(env, new Budget(50));
+    expect(fakeNotifications()).toHaveLength(1);
+  });
+});
+
+describe("a person sees every send an import would grow (SPEC §7, I6)", () => {
+  it("names each scheduled send and what it gains, and refuses a commit that doesn't acknowledge it", async () => {
+    const send = await frozenSend(Date.now() + 3_600_000);
+    const file = csvFile([
+      "a@x.io,subscribed,double,sendy,,,,,,",
+      "b@x.io,subscribed,double,sendy,,,,,,",
+    ]);
+    const p = await planOk({ file });
+    expect(p.sends_growing).toEqual([
+      { id: send.id, subject: send.subject, fire_at: send.fire_at, gains: 2 },
+    ]);
+    const refused = await commit({ file, plan_hash: p.plan_hash, attestation: ATTEST });
+    expect(refused.status).toBe(409);
+    expect(await readJson(refused)).toMatchObject({
+      error: "sends_acknowledgement_required",
+      sends: p.sends_growing,
+    });
+    const ok = await commit({
+      file,
+      plan_hash: p.plan_hash,
+      attestation: ATTEST,
+      acknowledge_sends: [send.id],
+    });
+    expect(ok.status).toBe(201);
+    expect(await subscribers.audienceCount(env.DB)).toBe(2);
+  });
+
+  it("refuses a service token's commit that would grow one, acknowledged or not, until a person does it", async () => {
+    const send = await frozenSend(Date.now() + 3_600_000);
+    const service = { ...(await adminAuth({})), "content-type": "application/json" };
+    const file = csvFile(["a@x.io,subscribed,double,sendy,,,,,,"]);
+    const p = await planOk({ file });
+    const res = await commit(
+      { file, plan_hash: p.plan_hash, attestation: ATTEST, acknowledge_sends: [send.id] },
+      service,
+    );
+    expect(res.status).toBe(409);
+    expect((await readJson(res)).error).toBe("sends_acknowledgement_required");
+    expect(await count("SELECT COUNT(*) AS n FROM subscribers")).toBe(0);
+    // The publisher finishes it in the dashboard with the same file: the same plan.
+    expect((await planOk({ file })).plan_hash).toBe(p.plan_hash);
+    expect(
+      (
+        await commit({
+          file,
+          plan_hash: p.plan_hash,
+          attestation: ATTEST,
+          acknowledge_sends: [send.id],
+        })
+      ).status,
+    ).toBe(201);
+  });
+});
+
+describe("a commit is idempotent and atomic (SPEC §7)", () => {
+  it("returns the stored result for a replayed commit and writes nothing twice", async () => {
+    const file = csvFile(["a@x.io,subscribed,double,sendy,,,,,,"]);
+    const p = await planOk({ file });
+    const body = { file, plan_hash: p.plan_hash, attestation: ATTEST };
+    const first: ImportCommitResponse = await (await commit(body)).json();
+    const again = await commit(body);
+    expect(again.status).toBe(200);
+    const replay: ImportCommitResponse = await again.json();
+    expect(replay).toMatchObject({ replayed: true, import: first.import, counts: first.counts });
+    expect(await count("SELECT COUNT(*) AS n FROM imports")).toBe(1);
+    expect(await count("SELECT COUNT(*) AS n FROM subscribers")).toBe(1);
+  });
+
+  it("writes nothing when a write fails part-way", async () => {
+    await seedConfirmed("leaving@x.io");
+    const p = await planImport(
+      env.DB,
+      {
+        ...csvFile([
+          "leaving@x.io,unsubscribed,unknown,sendy,bounce,,,,,",
+          "a@x.io,subscribed,double,sendy,,,,,,",
+        ]),
+        plainListStatus: null,
+      },
+      planOptions,
+    );
+    // An origin the schema refuses, on the last subscriber the batch adds.
+    const bad = p.planned.find((r) => r.row.email === "a@x.io");
+    if (bad) {
+      bad.row.origin = "NOT VALID";
+    }
+    await expect(commitImport(env.DB, p, HUMAN, Date.now())).rejects.toThrow();
+    expect(await subscriberRow("leaving@x.io")).toMatchObject({ status: "confirmed" });
+    expect(await suppressionOf("leaving@x.io")).toBeNull();
+    expect(await count("SELECT COUNT(*) AS n FROM imports")).toBe(0);
+    expect(await count("SELECT COUNT(*) AS n FROM subscribers")).toBe(1);
+  });
+});
+
+describe("the list moving between the plan and the commit (SPEC §7)", () => {
+  it("never confirms a reader who unsubscribed in between, and reports the difference", async () => {
+    await seedPending("reader@x.io");
+    const p = await planImport(
+      env.DB,
+      {
+        ...csvFile([
+          "reader@x.io,subscribed,double,sendy,,,,,,",
+          "new@x.io,subscribed,double,sendy,,,,,,",
+        ]),
+        plainListStatus: null,
+      },
+      planOptions,
+    );
+    expect(p.counts.confirm_pending).toBe(1);
+    await env.DB.prepare(
+      "UPDATE subscribers SET status = 'unsubscribed' WHERE email = 'reader@x.io'",
+    ).run();
+    await subscribers.addSuppression(env.DB, "new@x.io", "complaint");
+
+    const result = await commitImport(env.DB, p, HUMAN, Date.now());
+    expect(await subscriberRow("reader@x.io")).toMatchObject({ status: "unsubscribed" });
+    expect(await subscriberRow("new@x.io")).toBeNull();
+    expect(result.differed).toEqual([
+      { row: 1, email: "reader@x.io", planned: "confirm_pending", applied: "kept_unsubscribed" },
+      { row: 2, email: "new@x.io", planned: "create_confirmed", applied: "blocked_by_suppression" },
+    ]);
+    expect(result.counts).toEqual(counts({ kept_unsubscribed: 1, blocked_by_suppression: 1 }));
+    // The record keeps the counts as applied.
+    const row = await env.DB.prepare("SELECT counts FROM imports").first<{ counts: string }>();
+    expect(JSON.parse(row?.counts ?? "{}")).toEqual(result.counts);
+  });
+
+  it("commits through the API when a reader unsubscribes after the plan, and answers what was applied", async () => {
+    await seedPending("reader@x.io");
+    const file = csvFile([
+      "reader@x.io,subscribed,double,sendy,,,,,,",
+      "new@x.io,subscribed,double,sendy,,,,,,",
+    ]);
+    const p = await planOk({ file });
+    expect(p.counts.confirm_pending).toBe(1);
+    await env.DB.prepare(
+      "UPDATE subscribers SET status = 'unsubscribed' WHERE email = 'reader@x.io'",
+    ).run();
+    const res = await commit({ file, plan_hash: p.plan_hash, attestation: ATTEST });
+    expect(res.status).toBe(201);
+    const result: ImportCommitResponse = await res.json();
+    expect(result.counts).toEqual(counts({ create_confirmed: 1, kept_unsubscribed: 1 }));
+    expect(result.rows).toEqual([
+      { row: 1, email: "reader@x.io", outcome: "kept_unsubscribed", suppression_added: false },
+    ]);
+    expect(await subscriberRow("reader@x.io")).toMatchObject({ status: "unsubscribed" });
+  });
+
+  it("confirms an address that subscribed here in between, rather than adding it twice", async () => {
+    const p = await planImport(
+      env.DB,
+      { ...csvFile(["a@x.io,subscribed,double,sendy,,,,,,"]), plainListStatus: null },
+      planOptions,
+    );
+    await seedPending("a@x.io");
+    const result = await commitImport(env.DB, p, HUMAN, Date.now());
+    expect(result.differed).toEqual([
+      { row: 1, email: "a@x.io", planned: "create_confirmed", applied: "confirm_pending" },
+    ]);
+    expect(await subscriberRow("a@x.io")).toMatchObject({
+      status: "confirmed",
+      import_id: result.import.id,
+    });
+  });
+});
+
+describe("the export, and the round trip (SPEC §7)", () => {
+  async function seedList() {
+    const confirmedAt = Date.parse("2025-06-01T10:00:00Z");
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO subscribers (id, email, status, unsub_token, created_at, confirmed_at, consent_evidence)
+         VALUES ('1', 'native@x.io', 'confirmed', 'u1', ?, ?, '{"confirmed_ip":"203.0.113.7"}')`,
+      ).bind(confirmedAt - 60_000, confirmedAt),
+      env.DB.prepare(
+        "INSERT INTO subscribers (id, email, status, unsub_token, created_at, confirmed_at) VALUES ('2', 'bouncy@x.io', 'confirmed', 'u2', 1, 2)",
+      ),
+      env.DB.prepare(
+        "INSERT INTO subscribers (id, email, status, unsub_token, created_at, unsubscribed_at) VALUES ('3', 'left@x.io', 'unsubscribed', 'u3', 1, 3)",
+      ),
+      env.DB.prepare(
+        "INSERT INTO subscribers (id, email, status, unsub_token, created_at) VALUES ('4', 'waiting@x.io', 'pending', 'u4', 1)",
+      ),
+    ]);
+    await subscribers.addSuppression(env.DB, "bouncy@x.io", "bounce");
+    await subscribers.addSuppression(env.DB, "complainer@x.io", "complaint");
+    await subscribers.addSuppression(env.DB, "erased@x.io", "erased");
+  }
+
+  it("writes the whole list in the format, including suppressed addresses with no subscriber", async () => {
+    await seedList();
+    const res = await SELF.fetch(`${base}/api/subscribers/export?format=json`, { headers: AUTH });
+    expect(res.status).toBe(200);
+    const body = await readJson(res);
+    expect(body.format).toBe(IMPORT_FORMAT);
+    const byEmail = Object.fromEntries(
+      body.subscribers.map((r: { email: string }) => [r.email, r]),
+    );
+    expect(byEmail["native@x.io"]).toMatchObject({
+      status: "subscribed",
+      origin: "kestrel",
+      opt_in: "double",
+      confirmed_at: "2025-06-01T10:00:00.000Z",
+      evidence: '{"confirmed_ip":"203.0.113.7"}',
+      suppression: null,
+    });
+    expect(byEmail["bouncy@x.io"]).toMatchObject({ status: "subscribed", suppression: "bounce" });
+    expect(byEmail["complainer@x.io"]).toMatchObject({ status: "none", suppression: "complaint" });
+    expect(byEmail["erased@x.io"]).toMatchObject({ status: "none", suppression: "erased" });
+    expect(Object.keys(byEmail).sort()).toEqual([
+      "bouncy@x.io",
+      "complainer@x.io",
+      "erased@x.io",
+      "left@x.io",
+      "native@x.io",
+      "waiting@x.io",
+    ]);
+    expect(
+      (await SELF.fetch(`${base}/api/subscribers/export?format=xml`, { headers: AUTH })).status,
+    ).toBe(400);
+  });
+
+  it("imports into a fresh instance with the same states and suppressions, confirmations arriving as imported", async () => {
+    await seedList();
+    const exported = await SELF.fetch(`${base}/api/subscribers/export`, { headers: AUTH });
+    expect(exported.headers.get("content-type")).toBe("text/csv; charset=utf-8");
+    const text = await exported.text();
+    await resetDatabase();
+
+    const result = await importFile({ name: "export.csv", text });
+    expect(result.counts).toEqual(
+      counts({ create_confirmed: 2, create_unsubscribed: 1, suppression_added: 2, left_out: 1 }),
+    );
+    const { results: states } = await env.DB.prepare(
+      "SELECT email, status FROM subscribers ORDER BY email",
+    ).all();
+    expect(states).toEqual([
+      { email: "bouncy@x.io", status: "confirmed" },
+      { email: "left@x.io", status: "unsubscribed" },
+      { email: "native@x.io", status: "confirmed" },
+    ]);
+    const { results: suppressions } = await env.DB.prepare(
+      "SELECT email, reason FROM suppressions ORDER BY email",
+    ).all();
+    expect(suppressions).toEqual([
+      { email: "bouncy@x.io", reason: "import_bounce" },
+      { email: "complainer@x.io", reason: "import_complaint" },
+      { email: "erased@x.io", reason: "erased" },
+    ]);
+    expect(await subscriberRow("native@x.io")).toMatchObject({
+      origin: "kestrel",
+      opt_in: "double",
+      import_id: result.import.id,
+      consent_evidence: '{"confirmed_ip":"203.0.113.7"}',
+      confirmed_at: Date.parse("2025-06-01T10:00:00Z"),
+    });
+  });
+});
+
+describe("a 10,000-row import (SPEC §7)", () => {
+  it("plans and commits within the batch's statement count and D1's per-value size", async () => {
+    const evidence = JSON.stringify({ note: "x".repeat(400) }).replace(/"/g, '""');
+    const lines = Array.from(
+      { length: IMPORT_LIMITS.maxRows },
+      (_, i) =>
+        `r${String(i).padStart(5, "0")}@example.com,${i % 10 === 0 ? "unsubscribed" : "subscribed"},single,sendy,${i % 50 === 0 ? "bounce" : ""},2024-01-01T00:00:00Z,,,,"${evidence}"`,
+    );
+    const input = { ...csvFile(lines), plainListStatus: null };
+    expect(input.text.length).toBeGreaterThan(4_000_000);
+
+    const guarded = guardD1(env.DB);
+    const p = await planImport(guarded.db, input, planOptions);
+    expect(p.counts.create_confirmed).toBe(9_000);
+    const planStatements = guarded.statements;
+    const result = await commitImport(guarded.db, p, HUMAN, Date.now());
+    const commitStatements = guarded.statements - planStatements;
+    expect(result.counts).toMatchObject({ create_confirmed: 9_000, create_unsubscribed: 1_000 });
+    expect(result.suppressions_added).toBe(200);
+    // A few dozen statements at most: inside Workers Free's 50 queries per invocation.
+    expect(planStatements + commitStatements).toBeLessThanOrEqual(50);
+    expect(await count("SELECT COUNT(*) AS n FROM subscribers")).toBe(10_000);
+  });
+
+  it("is refused on Workers Free above its lower limit, and taken on Paid", async () => {
+    expect(maxImportRows(getConfig(env).subrequestBudget).maxRows).toBe(IMPORT_LIMITS.maxRowsFree);
+    expect(maxImportRows(1000).maxRows).toBe(IMPORT_LIMITS.maxRows);
+  });
+});

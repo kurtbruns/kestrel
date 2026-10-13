@@ -81,6 +81,7 @@ describe("API reference is generated from the route registration", () => {
       "posts",
       "sends",
       "subscribers",
+      "imports",
       "suppressions",
       "settings",
       "system",
