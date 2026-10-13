@@ -191,7 +191,7 @@ describe("settings view", () => {
     expect(value.textContent?.trim()).toBe(
       "No email provider connected. Connect an email provider to start sending.",
     );
-    expect($<HTMLAnchorElement>("a", value).getAttribute("href")).toBe("#/docs/resend");
+    expect($<HTMLAnchorElement>("a", value).getAttribute("href")).toBe("#/docs/ses");
     // Ways to subscribe keeps the address and the code, and says signups are closed.
     const closed = $(".set-sub-not-connected");
     expect(closed.classList.contains("amber")).toBe(true);

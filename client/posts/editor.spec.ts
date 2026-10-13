@@ -513,7 +513,7 @@ describe("editor view", () => {
     expect(note.textContent).toBe(
       "⚠️No email provider connected: you can write and preview, not send. Connect an email provider.",
     );
-    expect($<HTMLAnchorElement>("a", note).getAttribute("href")).toBe("#/docs/resend");
+    expect($<HTMLAnchorElement>("a", note).getAttribute("href")).toBe("#/docs/ses");
     expect(note.nextElementSibling?.classList.contains("actions-bar")).toBe(true);
     for (const provider of ["resend", "fake"] as const) {
       unmount();
@@ -1298,7 +1298,7 @@ describe("editor view", () => {
     expect(line.textContent).toBe(
       "No email provider connected, so a test can’t be sent yet. Connect an email provider to send one.",
     );
-    expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/resend");
+    expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/ses");
     expect($<HTMLButtonElement>("#tGo").disabled).toBe(true);
     expect(document.querySelector(".modal #testTo")).toBeNull();
     expect(fake.unhandled).toEqual([]);
@@ -1705,7 +1705,7 @@ describe("editor view", () => {
     expect(line.textContent).toBe(
       "No email provider connected, so this can’t be scheduled yet. Connect an email provider to schedule it.",
     );
-    expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/resend");
+    expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/ses");
     expect($<HTMLButtonElement>("#schGo").disabled).toBe(true);
     expect(document.querySelector(".modal #schWhen")).toBeNull();
     expect(document.querySelector(".modal #toSendNow")).toBeNull();

@@ -74,7 +74,7 @@ describe("addSubscriberModal", () => {
     expect(line.textContent).toBe(
       "No email provider connected, so a confirmation can’t be sent yet. Connect an email provider to add subscribers.",
     );
-    expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/resend");
+    expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/ses");
     expect(document.querySelector("#addEmail")).toBeNull();
     expect($<HTMLButtonElement>("#aGo").disabled).toBe(true);
     expect(document.activeElement).toBe($("#aCancel"));

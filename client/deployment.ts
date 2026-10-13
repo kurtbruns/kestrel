@@ -104,9 +104,8 @@ export function notConnectedPreview(): boolean {
   return providerNotConnected() && appState.appConfig?.deployment.notConnectedPreview === true;
 }
 
-/** The setup step that connects a provider: Get started's Connect an email provider, whose first
- *  paragraph sends an SES operator to the SES guide instead. */
-export const CONNECT_PROVIDER_HREF = "#/docs/resend";
+/** The setup step that connects a provider: Get started's Connect Amazon SES. */
+export const CONNECT_PROVIDER_HREF = "#/docs/ses";
 
 /** The one link every not-connected line carries, worded for any provider. */
 export function connectProviderLink(cls?: string): Html {

@@ -6,7 +6,7 @@ In this guide, you send yourself a test email and check that it passes authentic
 
 ## Before you begin
 
-- Two email addresses you own, such as a personal address and a work address. Some steps use both.
+- Two email addresses you own, such as a personal address and a work address. Some steps use both. While your SES account is in the sandbox, verify both in SES first, as [Connect Amazon SES](04-ses.md#4-request-production-access) describes.
 - A Gmail address, or another mail client that shows a message's original source and an **Unsubscribe** button.
 
 ## 1. Send yourself a test email
@@ -31,9 +31,9 @@ Inboxes trust mail that passes DKIM and DMARC for the domain it's from. Passing 
     - `dmarc=pass` for `send.example.com`
     - `spf=pass`, for a hostname under `send.example.com`
 
-    With Amazon SES and no custom MAIL FROM domain, SPF passes for `amazonses.com` instead. That's expected, and DMARC still passes.
+    With no custom MAIL FROM domain, SPF passes for `amazonses.com` instead. That's expected, and DMARC still passes.
 
-If a check fails, compare your DNS records with the ones in [Connect an email provider](04-resend.md#1-verify-your-sending-hostname). [Sending-domain DNS](../reference/02-sending-domain-dns.md#verify-alignment) explains each result.
+If a check fails, compare your DNS records with the ones in [Connect Amazon SES](04-ses.md#1-verify-your-sending-hostname). [Sending-domain DNS](../reference/02-sending-domain-dns.md#verify-alignment) explains each result.
 
 ## 3. Set up your notifications
 
@@ -69,20 +69,18 @@ Every email carries an unsubscribe link, and a header that lets mail clients sho
 
 ## 6. Check that bounces and complaints come back
 
-When an address bounces or marks your mail as spam, your provider tells the app through the webhook. The app then stops mailing that address. Your provider has test addresses that act out each case without reaching a real person.
+When an address bounces or marks your mail as spam, SES tells the app through SNS. The app then stops mailing that address. SES has test addresses that act out each case without reaching a real person, and the sandbox lets you mail them.
 
-1. Open `https://newsletter.example.com/subscribe`, and subscribe each test address for your provider:
+1. Open `https://newsletter.example.com/subscribe`, and subscribe each test address:
 
-    | Provider | Bounces | Marks as spam |
-    | --- | --- | --- |
-    | Resend | `bounced@resend.dev` | `complained@resend.dev` |
-    | Amazon SES | `bounce@simulator.amazonses.com` | `complaint@simulator.amazonses.com` |
+    - `bounce@simulator.amazonses.com`, which bounces
+    - `complaint@simulator.amazonses.com`, which marks your mail as spam
 
     Each one gets a confirmation email, which bounces or is marked as spam.
 
 1. In the editor, **Subscribers** lists both addresses as **Pending**, each with a **Suppressed** flag. The app never mails a suppressed address again.
 
-If an address has no flag, the webhook isn't reaching the app. Check its URL and signing secret in [Connect an email provider](04-resend.md#4-add-the-webhook).
+If an address has no flag, SES's events aren't reaching the app. Check the configuration set and the SNS subscription in [Connect Amazon SES](04-ses.md#5-send-bounces-and-complaints-to-sns).
 
 ## 7. Read the logs
 

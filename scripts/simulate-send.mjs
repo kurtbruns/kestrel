@@ -90,14 +90,14 @@ async function main() {
     fail(
       TAG,
       "this dev server runs not connected (SIMULATE_SENDS=not-connected), so it refuses every send.",
-      `Restart it with a profile: SIMULATE_SENDS=${wanted ?? "resend"} npm run dev`,
+      `Restart it with a profile: SIMULATE_SENDS=${wanted ?? "ses"} npm run dev`,
     );
   }
   if (!simulation) {
     fail(
       TAG,
       "this dev server isn't simulating sends (SIMULATE_SENDS is off), so a send would finish at once with nothing to watch.",
-      `Restart it with a profile: SIMULATE_SENDS=${wanted ?? "resend"} npm run dev`,
+      `Restart it with a profile: SIMULATE_SENDS=${wanted ?? "ses"} npm run dev`,
     );
   }
   if (wanted !== undefined && wanted !== simulation.profile) {

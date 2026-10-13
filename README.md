@@ -24,7 +24,7 @@ cp .dev.vars.example .dev.vars
 npm run dev
 ```
 
-Open the editor at http://localhost:8787/dashboard/. There's nothing to sign in with locally, and email goes to a stand-in that never reaches a real inbox. `.dev.vars.example` explains each local setting, including how the stand-in mimics Resend or SES on a send.
+Open the editor at http://localhost:8787/dashboard/. There's nothing to sign in with locally, and email goes to a stand-in that never reaches a real inbox. `.dev.vars.example` explains each local setting, including how the stand-in mimics SES on a send.
 
 ### Demo data
 

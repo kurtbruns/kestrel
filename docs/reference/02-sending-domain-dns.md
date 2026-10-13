@@ -1,6 +1,6 @@
 # Sending-domain DNS
 
-Inboxes decide whether to trust your mail by checking records in the DNS of the domain it comes from. This page explains the records that [Connect an email provider](../get-started/04-resend.md) and [Use Amazon SES instead of Resend](../guides/02-ses.md) have you add. It covers what each one proves, how to check them, and when to tighten DMARC.
+Inboxes decide whether to trust your mail by checking records in the DNS of the domain it comes from. This page explains the records that [Connect Amazon SES](../get-started/04-ses.md) has you add. It covers what each one proves, how to check them, and when to tighten DMARC.
 
 ## Why all three
 
@@ -30,7 +30,7 @@ Your provider generates the SPF and DKIM values. Copy them exactly as its dashbo
 SPF checks the message's return path, the address bounces go back to, not its `From:` header. DMARC passes when SPF or DKIM passes and aligns with the `From:` domain. DKIM aligns with either provider, so an aligned SPF is a second check in your favor, not a requirement.
 
 - **Resend** uses a return path on a subdomain of your sending name, `send.send.example.com` by default. Its dashboard lists an MX record and an SPF `TXT` record for it. In Cloudflare, both are named `send.send`. That name looks doubled because your sending name is itself `send`.
-- **SES** uses its own domain, `amazonses.com`, as the return path by default. SPF then passes for `amazonses.com` but doesn't align, and DMARC passes through DKIM alone. A custom MAIL FROM domain, such as `bounce.send.example.com`, aligns SPF too. [Use Amazon SES instead of Resend](../guides/02-ses.md#3-optional-set-a-custom-mail-from-domain) sets one up, with an MX record that names your region and an SPF record:
+- **SES** uses its own domain, `amazonses.com`, as the return path by default. SPF then passes for `amazonses.com` but doesn't align, and DMARC passes through DKIM alone. A custom MAIL FROM domain, such as `bounce.send.example.com`, aligns SPF too. [Connect Amazon SES](../get-started/04-ses.md#3-optional-set-a-custom-mail-from-domain) sets one up, with an MX record that names your region and an SPF record:
 
     ```
     bounce.send.example.com.  MX   10 feedback-smtp.us-east-1.amazonses.com.

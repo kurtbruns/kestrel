@@ -404,7 +404,7 @@ describe("dashboard", () => {
         "Write your first post",
         "Share your subscribe link",
       ]);
-      expect($(".setup-connect button").dataset.nav).toBe("#/docs/resend");
+      expect($(".setup-connect button").dataset.nav).toBe("#/docs/ses");
       expect($(".setup-connect button").textContent).toBe("Connect an email provider");
       expect($(".setup-subscribe").textContent).toMatch(
         /Signups open once an email provider is connected/,
@@ -426,7 +426,7 @@ describe("dashboard", () => {
       expect(line.textContent).toBe(
         "No email provider connected, so nothing can be sent yet. Connect an email provider to start sending.",
       );
-      expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/resend");
+      expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/ses");
       expect(line.querySelector("button")).toBeNull(); // a standing line: nothing to dismiss
       expect(fake.unhandled).toEqual([]);
     });
@@ -466,7 +466,7 @@ describe("dashboard", () => {
         "No email provider connected, so nothing can be sent and Swifts is held, with no one marked unsent; it goes out at its first retry once one is connected. Connect an email provider, then deploy.",
       ]);
       const links = $$<HTMLAnchorElement>("a", block).map((a) => a.getAttribute("href"));
-      expect(links).toEqual(["#/sent/h1", "#/docs/resend"]);
+      expect(links).toEqual(["#/sent/h1", "#/docs/ses"]);
       expect(fake.unhandled).toEqual([]);
     });
 

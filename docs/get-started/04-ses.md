@@ -1,28 +1,14 @@
-# Use Amazon SES instead of Resend
+# Connect Amazon SES
 
-Amazon SES costs less than Resend for a large list, but takes more setup. AWS reviews your account before it lets you send to anyone but yourself.
+Kestrel sends your posts through Amazon SES, Amazon's email service. SES only delivers the mail: Kestrel keeps your list, each subscriber's consent, and the record of every send. AWS reviews your account before it lets you send to anyone but yourself. This page asks for that early, and you test in the sandbox while you wait.
 
-In this guide, you verify your sending hostname with SES, ask AWS for production access, and route bounces and complaints to the app through SNS. Then you give the app its AWS credentials, switch it to SES, and deploy. Follow it in place of [Connect an email provider](../get-started/04-resend.md).
+In this guide, you verify your sending hostname with SES, add a DMARC record, and ask AWS for production access. You also route bounces and complaints to the app through SNS. Then you give the app its AWS credentials, set the provider, and deploy.
 
 ## Before you begin
 
-You need:
-
 - An [AWS account](https://portal.aws.amazon.com/billing/signup).
-- The app deployed and locked, from [Deploy the app](../get-started/02-deploy.md) and [Lock the dashboard with Access](../get-started/03-access.md).
 
-To move an instance that already sends through Resend, read [Switch an instance that already sends](#switch-an-instance-that-already-sends) first.
-
-## How fast SES sends
-
-A send goes out a slice at a time, one slice a minute. Each slice stays inside the subrequests Cloudflare allows one run of the Worker, which [`SUBREQUEST_BUDGET`](../reference/01-configuration.md#subrequest_budget) sets. One SES request carries up to 50 recipients. SES takes one such request a second, and no more recipients a second than your account's maximum send rate. So each request carries one second of your send rate, up to 50.
-
-- **Workers Free:** four requests a minute. At 14 messages a second, that's 56 recipients a minute, and a send to 1,000 subscribers takes about 18 minutes. At 50 a second or more, it's 200 a minute.
-- **Workers Paid, with `SUBREQUEST_BUDGET` set to `10000`:** about 50 requests a minute, one a second. At 14 messages a second, that's about 700 recipients a minute, and 10,000 subscribers take about fifteen minutes. At 50 a second or more, it's about 2,500 a minute.
-
-To send faster, raise your SES sending rate before you change Cloudflare plans. AWS sets the rate when it grants production access, and raising it costs nothing. Ask for 50 messages a second, the most one request carries: on Workers Free, that sends nearly four times as many recipients a minute as 14 does. A rate above 50 adds nothing on Workers Free. Move to Workers Paid when a send at 200 recipients a minute still takes longer than you want, such as a list of more than about 12,000 that should go out within an hour.
-
-In the sandbox, at one message a second, each request carries one recipient.
+To move an instance that already sends through another provider or another SES account, read [Switch an instance that already sends](#switch-an-instance-that-already-sends) first.
 
 ## 1. Verify your sending hostname
 
@@ -82,9 +68,9 @@ A new SES account starts in the sandbox. It sends only to addresses you've verif
 
 1. Check the acknowledgement, and select **Submit request**. AWS Support answers by email, and may ask how you collect addresses and handle bounces. Kestrel confirms every signup by email, and stops mailing an address that bounces or complains.
 
-1. While you wait, verify the two addresses you test with in [Verify it works](../get-started/05-verify.md#before-you-begin), so the sandbox lets you mail them. For each, under **Identities**, choose **Create identity**, select **Email address**, and follow the link in the email AWS sends.
+1. While you wait, verify the two addresses you test with in [Verify it works](05-verify.md#before-you-begin), so the sandbox lets you mail them. For each, under **Identities**, choose **Create identity**, select **Email address**, and follow the link in the email AWS sends.
 
-When AWS grants access, the **Account dashboard** shows your daily quota and your maximum send rate. You set the rate in the app in section 7.
+When AWS grants access, the **Account dashboard** shows your daily quota and your maximum send rate. You set the rate in the app in section 7. The rate decides how fast a send goes out, and [As your list grows](06-go-live.md#as-your-list-grows) says when to ask AWS to raise it.
 
 ## 5. Send bounces and complaints to SNS
 
@@ -150,9 +136,9 @@ The app sends through an IAM user whose key can only send email. That limits the
 
 1. Copy the access key ID and the secret access key. AWS shows the secret only once.
 
-## 7. Switch the provider and deploy
+## 7. Set the provider and deploy
 
-Store the secrets before you switch. With `PROVIDER` set to `ses` and a required secret missing, the app refuses to run, and sends nothing, until you store it. `/health` and the editor's **A setting needs fixing** page name the missing secret, and reader pages say the newsletter is temporarily unavailable. `SES_CONFIGURATION_SET` is the one optional secret.
+Until now the app has run with no email provider connected, refusing to send. Setting `PROVIDER` connects SES. Store the secrets before you set it. With `PROVIDER` set to `ses` and a required secret missing, the app refuses to run, and sends nothing, until you store it. `/health` and the editor's **A setting needs fixing** page name the missing secret, and reader pages say the newsletter is temporarily unavailable. `SES_CONFIGURATION_SET` is the one optional secret.
 
 1. Store the access key ID, and paste it at the prompt:
 
@@ -178,7 +164,7 @@ Store the secrets before you switch. With `PROVIDER` set to `ses` and a required
     npx wrangler secret put SES_CONFIGURATION_SET --env production
     ```
 
-1. In `wrangler.jsonc`, edit the `production` block's `vars`. Change `PROVIDER` to `ses` (it's `""` on a new instance; add it if your block has none), change `AWS_REGION` to your SES region, and and add `SES_MAX_SEND_RATE`. Your other values stay as they are. The block ends up like this:
+1. In `wrangler.jsonc`, edit the `production` block's `vars`. Change `PROVIDER` to `ses` (it's `""` on a new instance; add it if your block has none), change `AWS_REGION` to your SES region, and add `SES_MAX_SEND_RATE`. Your other values stay as they are. The block ends up like this:
 
     ```jsonc
     "vars": {
@@ -192,7 +178,7 @@ Store the secrets before you switch. With `PROVIDER` set to `ses` and a required
     }
     ```
 
-    On Workers Paid, also add `"SUBREQUEST_BUDGET": "10000"`, the plan's limit, so each minute sends more. Leave it out on Workers Free. [How fast SES sends](#how-fast-ses-sends) says when the plan is worth it.
+    On Workers Paid, also add `"SUBREQUEST_BUDGET": "10000"`, the plan's limit, so each minute sends more. Leave it out on Workers Free. [As your list grows](06-go-live.md#as-your-list-grows) says when the plan is worth it.
 
     When AWS grants production access, set `SES_MAX_SEND_RATE` to the maximum send rate on the **Account dashboard**, and deploy again. The app keeps to that rate, so SES doesn't throttle your send.
 
@@ -233,6 +219,12 @@ If it stays **Pending confirmation**, the request never reached the app, or the 
 
 Then delete the subscription, and create it again.
 
+## Switch an instance that already sends
+
+Change `PROVIDER`, or move to another account with the same provider, only while no send is sending. The dashboard lists any send in progress.
+
+When a request to a provider gets no answer, Kestrel can't know whether its recipients were mailed. Moving to SES, from another provider or another SES account, mails none of them twice. Kestrel never repeats an unanswered request to SES, so those recipients wait for you to decide whether they were mailed. Use **Resolve** on the send's page.
+
 ## Check it
 
 1. The app answers on your hostname:
@@ -259,19 +251,12 @@ Then delete the subscription, and create it again.
 
 1. The SNS subscription shows **Confirmed**.
 
-1. In the editor, **Settings → Email sender** shows Amazon SES as the email provider, and your From address.
+1. In the editor, **Settings → Email sender** shows Amazon SES and your From address, where it said **No email provider connected** before.
+
+1. In a browser, `https://newsletter.example.com/subscribe` shows the subscribe form, where it said signups aren't open yet.
 
 The test sends in the next step prove the rest. In the sandbox, send them only to the addresses you verified in section 4, and to the SES test addresses that page lists.
 
-Next, [verify it works](../get-started/05-verify.md).
+SES charges for each email it sends, test emails included. [Amazon SES pricing](https://aws.amazon.com/ses/pricing/) lists the rates.
 
-## Switch an instance that already sends
-
-Change `PROVIDER`, or move to another account with the same provider, only while no send is sending. The dashboard lists any send in progress.
-
-When a request to a provider gets no answer, Kestrel can't know whether its recipients were mailed. What happens to them depends on the provider you move to:
-
-- **To SES,** from Resend or another SES account, no one is mailed twice. SES can't tell a repeated request from a new one, so Kestrel never repeats an unanswered request to it. Those recipients wait for you to decide whether they were mailed, with **Resolve** on the send's page.
-- **To Resend,** from SES or another Resend account, those recipients can get the post twice. Kestrel repeats an unanswered request under the key Kestrel gave it, and Resend sends a request only once per key. But only the account that took the key knows it, so the new account delivers the post again. That's at most the recipients of one unanswered request.
-
-To have Resend finish a send that halted on another provider or account, accept that risk. Otherwise, fix the old account, and let the send resume there.
+Next, [verify it works](05-verify.md).

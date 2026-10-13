@@ -28,14 +28,14 @@ The setup guide is the documentation for deploying and running your own instance
 
 ## Structure
 
-- **Get started:** the main path, numbered: Deploy the app, Lock the dashboard with Access, Connect an email provider (it walks through Resend), Verify it works, Go live. There is no overview page: what the whole path needs opens Deploy the app as its Before you begin, and the docs landing lists the steps.
-- **Guides:** picked from, not read in order: Connect Claude, trying Kestrel locally first, SES, notifications through Cloudflare's email, rate limiting, upgrading. The docs landing's list sets the order, not the file prefixes. Possible guides wait as GitHub issues until they've been run end to end, such as staging and the archive on your website.
+- **Get started:** the main path, numbered: Deploy the app, Lock the dashboard with Access, Connect Amazon SES, Verify it works, Go live. There is no overview page: what the whole path needs opens Deploy the app as its Before you begin, and the docs landing lists the steps.
+- **Guides:** picked from, not read in order: Connect Claude, trying Kestrel locally first, notifications through Cloudflare's email, rate limiting, upgrading. The docs landing's list sets the order, not the file prefixes. Possible guides wait as GitHub issues until they've been run end to end, such as staging and the archive on your website.
 - **Reference:** the detail and the why: configuration, sending-domain DNS.
 - Previous and Next stay within a section.
 
 ## Main path defaults
 
-- **Email provider:** Resend. The SES guide replaces step 3, Connect an email provider.
+- **Email provider:** Amazon SES, the only provider the guide covers. Step 3, Connect Amazon SES, walks through it.
 - **App hostname:** a subdomain, `newsletter.example.com`. The apex works when it has no website of its own; Deploy the app says so in one sentence, in its Choose your hostnames section.
 - **Sending hostname:** `send.example.com`. Phrase it as a recommendation ("It's recommended to send from a subdomain…"), not a prohibition.
 
@@ -68,7 +68,7 @@ After Linode's guides:
 
 ## Links
 
-- **Between pages:** relative links to the file, `[Deploy the app](02-deploy.md)` or `[SES](../guides/02-ses.md)`. They work on GitHub, the Worker rewrites them to the Docs tab's routes, and getkestrel.dev's sync rewrites them to its URLs. A spec fails on a link to a page that doesn't exist.
+- **Between pages:** relative links to the file, `[Deploy the app](02-deploy.md)` or `[Notifications](../guides/03-notifications.md)`. They work on GitHub, the Worker rewrites them to the Docs tab's routes, and getkestrel.dev's sync rewrites them to its URLs. A spec fails on a link to a page that doesn't exist.
 - **Anchors work everywhere:** the Docs tab gives each heading GitHub's id, so `02-deploy.md#check-it` lands on the same heading on GitHub, in the app, and on the site. Link to a section when the reader needs that section.
 - **Outside the guide** (the README, provider docs): absolute URLs. They open in a new tab in the app.
 

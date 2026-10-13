@@ -28,10 +28,14 @@ Readers subscribe on a page the app hosts. Every signup confirms by email before
 
 ## As your list grows
 
-A new instance runs on free plans. As your list grows, two limits come into play.
+A new instance runs on Cloudflare's free Workers plan. As your list grows, two limits come into play.
 
-- **Your email provider's limits.** Resend's free plan sends up to 100 emails a day. A send that hits the limit waits, and the app emails you. It resumes on its own once the limit lifts, or after you upgrade your Resend plan. For a large list, [Amazon SES](../guides/02-ses.md) may cost less.
-- **How fast a send goes out.** On Cloudflare's free Workers plan, Resend sends about 400 recipients a minute. On the $5 Workers Paid plan, set [`SUBREQUEST_BUDGET`](../reference/01-configuration.md#subrequest_budget) to send far more each minute.
+- **Your SES quota.** AWS caps how many emails your account sends a day. A send that hits the cap waits, and the app emails you. It resumes on its own once the quota frees up, or after AWS raises it.
+- **How fast a send goes out.** A send goes out a slice at a time, one slice a minute. SES takes one request a second, of up to 50 recipients, and no more recipients a second than your account's maximum send rate. So each request carries one second of that rate, up to 50.
+
+The free Workers plan sends four requests a minute. At 14 messages a second, a common starting rate, that's 56 recipients a minute, and 1,000 subscribers take about 18 minutes. At 50 a second or more, it's 200 a minute.
+
+To send faster, first ask AWS to raise your maximum send rate to 50, which costs nothing, then set [`SES_MAX_SEND_RATE`](../reference/01-configuration.md#ses_max_send_rate) to match, and deploy again. A rate above 50 adds nothing on the free plan, where a rate of 50 sends a list of about 12,000 in an hour. If a send still takes longer than you want, move to the $5 Workers Paid plan, and set [`SUBREQUEST_BUDGET`](../reference/01-configuration.md#subrequest_budget) to `10000`. It sends about 50 requests a minute: about 700 recipients at 14 a second, and about 2,500 at 50 or more.
 
 ## Check it
 

@@ -29,11 +29,11 @@ MIN_LEAD_SECONDS="60"
 # arrive after the send (delivered, bounced, complained), all through the real send loop.
 # Test sends and confirmations go straight to the dev outbox (GET /api/dev/outbox),
 # unsimulated. The profile names the provider modeled:
-#   resend   Resend: 100 recipients a request, an idempotency key (a lost request is re-sent)
 #   ses      Amazon SES: a second of its send rate a request (up to 50), one request a
 #            second, no key (a lost request waits for Resolve), and its daily quota running
 #            out once a send; a slice a minute on the default SUBREQUEST_BUDGET, as SES is
 #            on Workers Free
+#   resend   Resend: 100 recipients a request, an idempotency key (a lost request is re-sent)
 #   1        a generic provider paced to be watched: small, slow batches
 # Add ":none" (e.g. "ses:none") for a clean run with no failures, or set "off" for the
 # plain instant fake. "not-connected" runs the app as a deployment with no email provider
@@ -41,4 +41,4 @@ MIN_LEAD_SECONDS="60"
 # goes out at its next retry, a few minutes later.
 # For one run, set it in the shell instead: SIMULATE_SENDS=ses npm run dev
 # Only honored in a dev-shaped env (fake transport, no Access, APP_ORIGIN on localhost).
-SIMULATE_SENDS="resend"
+SIMULATE_SENDS="ses"

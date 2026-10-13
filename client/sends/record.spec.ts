@@ -704,7 +704,7 @@ describe("sent record", () => {
       expect($(".refused-advice", alert).textContent, label).toBe(words);
       expect(alert.textContent).not.toContain("setup guide");
       const link = alert.querySelector("a");
-      expect(link?.getAttribute("href") ?? null, label).toBe(preview ? null : "#/docs/resend");
+      expect(link?.getAttribute("href") ?? null, label).toBe(preview ? null : "#/docs/ses");
       unmount();
       fake.restore();
     }

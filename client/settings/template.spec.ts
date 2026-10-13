@@ -271,7 +271,7 @@ describe("template view", () => {
     $("#tplTest").click();
     const line = $(".modal .not-connected");
     expect(line.textContent).toMatch(/^No email provider connected/);
-    expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/resend");
+    expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/ses");
     expect($<HTMLButtonElement>("#ttGo").disabled).toBe(true);
     expect(document.querySelector(".modal #tplTestTo")).toBeNull();
     $("#ttCancel").click();

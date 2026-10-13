@@ -8,7 +8,7 @@ Follow these steps, from an empty repository to a live newsletter. Each one ends
 
 1. [Deploy the app](get-started/02-deploy.md)
 1. [Lock the dashboard with Access](get-started/03-access.md)
-1. [Connect an email provider](get-started/04-resend.md)
+1. [Connect Amazon SES](get-started/04-ses.md)
 1. [Verify it works](get-started/05-verify.md)
 1. [Go live](get-started/06-go-live.md)
 
@@ -18,7 +18,6 @@ Each one stands on its own. Pick the ones you need.
 
 - [Connect Claude to the API](guides/01-connect-claude.md)
 - [Try Kestrel locally first](guides/08-try-locally.md)
-- [Use Amazon SES instead of Resend](guides/02-ses.md)
 - [Notifications through Cloudflare's email](guides/03-notifications.md)
 - [Rate-limit the subscribe form](guides/05-rate-limit.md)
 - [Upgrade to a new release](guides/07-upgrade.md)

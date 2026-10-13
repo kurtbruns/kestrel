@@ -11,12 +11,11 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
     expect(docs.map((d) => `${d.section}/${d.slug}`)).toEqual([
       "get-started/deploy",
       "get-started/access",
-      "get-started/resend",
+      "get-started/ses",
       "get-started/verify",
       "get-started/go-live",
       "guides/connect-claude",
       "guides/try-locally",
-      "guides/ses",
       "guides/notifications",
       "guides/rate-limit",
       "guides/upgrade",
@@ -78,7 +77,7 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
       }
     }
     const start = docs.find((d) => d.slug === "deploy");
-    expect(start?.html).toContain('href="#/docs/resend"');
+    expect(start?.html).toContain('href="#/docs/ses"');
     expect(start?.html).toContain('href="#/docs/configuration"');
     // An anchor rides along as the route's last segment, for the room to scroll to.
     expect(start?.html).toContain('href="#/docs/sending-domain-dns/choose-your-sending-name"');
@@ -106,12 +105,10 @@ describe("docs API serves the setup content when authed", () => {
     const body = (await res.json()) as DocsResponse;
     expect(body.docs.every((d) => d.title.length > 0)).toBe(true);
 
-    // Markdown was rendered (the doc's H1) and the exact operator facts survive: each
-    // provider's real webhook path (from src/routes/webhooks.ts).
-    const resend = body.docs.find((d) => d.slug === "resend");
-    expect(resend?.html).toContain("Connect an email provider");
-    expect(resend?.html).toContain("/webhooks/resend");
+    // Markdown was rendered (the doc's H1) and the exact operator facts survive: the SES
+    // webhook's real path (from src/routes/webhooks.ts).
     const ses = body.docs.find((d) => d.slug === "ses");
+    expect(ses?.html).toContain("Connect Amazon SES");
     expect(ses?.html).toContain("/webhooks/ses");
     // Fragments are sanitized (no scripts) and carry no page wrapper.
     for (const d of body.docs) {

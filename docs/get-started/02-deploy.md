@@ -9,7 +9,7 @@ In this guide, you choose your hostnames, create your instance's repository, cre
 - A [Cloudflare account](https://dash.cloudflare.com/sign-up), with your domain's DNS on Cloudflare. Your app's hostname and its login both live there.
 - [Node.js](https://nodejs.org/) 22 or later, and [Git](https://git-scm.com/).
 - A GitHub account, or another Git host, for your instance's repository.
-- A provider for sending email. [Resend](https://resend.com/signup) is a good default, and the one these guides walk through.
+- An [AWS account](https://portal.aws.amazon.com/billing/signup), for Amazon SES, which sends your email.
 
 ## Choose your hostnames
 
@@ -130,7 +130,7 @@ Name `--env production` on every Wrangler command that creates or binds a resour
     What each one does:
 
     - **`routes`** puts the app on your hostname when you deploy. Cloudflare creates the DNS record and the certificate. Your domain must be in the same Cloudflare account, and the hostname can't already have a CNAME record; delete one if it does. The block also turns off the `workers.dev` addresses, so the app answers only on your hostname.
-    - **`PROVIDER` stays empty.** Step 3, [Connect an email provider](04-resend.md), sets it. Until then the app runs without an email provider: you can write and preview posts, but scheduling, test emails, and signups are refused. Never set it to `fake`, the top level's value, even when a wrangler warning suggests copying it: `fake` delivers nothing, and the app refuses it on your hostname.
+    - **`PROVIDER` stays empty.** Step 3, [Connect Amazon SES](04-ses.md), sets it. Until then the app runs without an email provider: you can write and preview posts, but scheduling, test emails, and signups are refused. Never set it to `fake`, the top level's value, even when a wrangler warning suggests copying it: `fake` delivers nothing, and the app refuses it on your hostname.
     - **`ARCHIVE_BASE_PATH`** is permanent once you send. Every post you send carries its `/archive/…` link, and changing the prefix later breaks the links you've already mailed. Keep `/archive` unless you have a reason not to.
     - **`FROM_ADDRESS`** is the address every email comes from. Keep it on your sending hostname, and set `SENDING_DOMAIN` to the part after the `@`.
 
@@ -195,7 +195,7 @@ This deploys the release your instance runs, with your settings. The output ends
 
     In a browser, `https://newsletter.example.com/dashboard/` says the editor is locked until you set up Access. That's expected.
 
-1. In a browser, `https://newsletter.example.com/` shows your newsletter's public landing page. Its subscribe page, `/subscribe`, says signups aren't open yet, until step 3, Connect an email provider.
+1. In a browser, `https://newsletter.example.com/` shows your newsletter's public landing page. Its subscribe page, `/subscribe`, says signups aren't open yet, until step 3, Connect Amazon SES.
 
 If the public pages instead say the newsletter is temporarily unavailable, and `/health` answers `500` with a body like `{"error":"invalid_config","variable":"APP_ORIGIN",…}`, the setting it names is missing, malformed, or still on `example.com`. Fix it in `wrangler.jsonc`, commit, and deploy again.
 

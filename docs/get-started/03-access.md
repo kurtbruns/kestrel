@@ -105,4 +105,4 @@ The app verifies each login against your team domain, and checks that it was iss
 
 If the editor says the configuration needs a fix, store the secret it names. If Cloudflare lets you in but the editor answers `401`, check the two secrets for a typo, or `ACCESS_ALLOWED_EMAILS` may leave out your address.
 
-Next, [connect an email provider](04-resend.md).
+Next, [connect Amazon SES](04-ses.md).

@@ -22,11 +22,10 @@
 import { Lexer, type Token, type Tokens } from "marked";
 import deploy from "../../docs/get-started/02-deploy.md";
 import access from "../../docs/get-started/03-access.md";
-import resend from "../../docs/get-started/04-resend.md";
+import ses from "../../docs/get-started/04-ses.md";
 import verify from "../../docs/get-started/05-verify.md";
 import goLive from "../../docs/get-started/06-go-live.md";
 import connectClaude from "../../docs/guides/01-connect-claude.md";
-import ses from "../../docs/guides/02-ses.md";
 import notifications from "../../docs/guides/03-notifications.md";
 import rateLimit from "../../docs/guides/05-rate-limit.md";
 import upgrade from "../../docs/guides/07-upgrade.md";
@@ -42,11 +41,10 @@ import { sanitizeEmailHtml } from "../render/sanitize";
 const PAGES: Record<string, string> = {
   "get-started/02-deploy.md": deploy,
   "get-started/03-access.md": access,
-  "get-started/04-resend.md": resend,
+  "get-started/04-ses.md": ses,
   "get-started/05-verify.md": verify,
   "get-started/06-go-live.md": goLive,
   "guides/01-connect-claude.md": connectClaude,
-  "guides/02-ses.md": ses,
   "guides/03-notifications.md": notifications,
   "guides/05-rate-limit.md": rateLimit,
   "guides/07-upgrade.md": upgrade,
@@ -136,7 +134,7 @@ const DOCS = SOURCES.map((s) => ({ ...s, title: extractTitle(s.markdown, s.slug)
 export type { DocFragment };
 
 // A link from one guide page to another, as the Markdown writes it so it also works on
-// GitHub: a relative path to the file, `02-deploy.md` or `../guides/02-ses.md`, maybe with
+// GitHub: a relative path to the file, `02-deploy.md` or `../guides/03-notifications.md`, maybe with
 // an anchor. Captures the slug (the file name without its NN- prefix) and the anchor.
 const DOC_LINK = /href="(?:\.\.\/[a-z-]+\/|[a-z-]+\/)?\d{2}-([a-z0-9-]+)\.md(?:#([^"]*))?"/g;
 // A link to a heading on the same page: `[Check it](#check-it)`.

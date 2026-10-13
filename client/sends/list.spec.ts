@@ -243,7 +243,7 @@ describe("sent view", () => {
     expect(warning.textContent?.replace("⚠️", "")).toBe(
       "No email provider connected, so nothing can be sent yet. Connect an email provider to start sending.",
     );
-    expect($<HTMLAnchorElement>("a", warning).getAttribute("href")).toBe("#/docs/resend");
+    expect($<HTMLAnchorElement>("a", warning).getAttribute("href")).toBe("#/docs/ses");
     $("[data-reschedule='sch']").click();
     expect($(".modal .not-connected").textContent).toBe(
       "No email provider connected, so this send is held when it fires, until one is. Connect an email provider to send it.",
@@ -275,7 +275,7 @@ describe("sent view", () => {
     );
     expect($$<HTMLAnchorElement>("a", cards[0]!).map((a) => a.getAttribute("href"))).toEqual([
       "#/sent/h1",
-      "#/docs/resend",
+      "#/docs/ses",
     ]);
     expect(fake.unhandled).toEqual([]);
   });

@@ -101,7 +101,7 @@ describe("the per-invocation budget", () => {
 
 describe("SES's bulk batches on the Workers Free budget", { timeout: 30_000 }, () => {
   // The real adapter, so its batch size and its one request a second are what run; the
-  // figures the SES guide and the configuration reference give are these (SPEC §6). The
+  // figures Go live and the configuration reference give are these (SPEC §6). The
   // sweep holds back its checks and the notification reserve, and the run its opening, its
   // close, and each batch's worst case, which leaves four requests a tick.
   it.each([
