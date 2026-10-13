@@ -426,7 +426,7 @@ describe("dashboard", () => {
         "No email provider connected, so nothing can be sent yet. Connect an email provider to start sending.",
       );
       expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/resend");
-      expect(line.querySelector("button")).toBeNull(); // not a Notice: nothing to dismiss
+      expect(line.querySelector("button")).toBeNull(); // a standing line: nothing to dismiss
       expect(fake.unhandled).toEqual([]);
     });
 

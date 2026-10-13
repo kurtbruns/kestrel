@@ -2985,11 +2985,10 @@ textarea.is-invalid {
 #f-slug.slug-auto {
   color: var(--muted);
 }
-/* --- Editor-state banner (DESIGN §5): one persistent, in-flow notice at the
-   top of the editor, in three variants. `scheduled` marks a frozen/soft-locked post
-   (SPEC §6); `conflict` warns the draft changed elsewhere (another tab, or Claude) —
-   its two actions are equal-weight Ghost, since both choices lose something; `info` is
-   a neutral notice. It replaces the old `.sched-banner` + `.fresh-banner` pair. --- */
+/* --- Editor-state banner (DESIGN §5): a standing, in-flow line at the top of the
+   editor, in two variants. `scheduled` marks a frozen, soft-locked post (SPEC §6);
+   `conflict` warns the draft changed elsewhere (another tab, or Claude), and its two
+   actions are equal-weight Ghost, since both choices lose something. --- */
 .banner {
   display: flex;
   align-items: center;
@@ -3020,7 +3019,7 @@ textarea.is-invalid {
 }
 
 /* Re-made since its last test (SPEC §8): the server's condition, a line in the scheduled
-   banner with the test it asks for, and a mark on the dashboard's scheduled card. */
+   banner that says to send a new test, and a mark on the dashboard's scheduled card. */
 .sched-remade {
   display: flex;
   flex-wrap: wrap;

@@ -1,5 +1,5 @@
-// The re-make confirmation (SPEC §6, §9; DESIGN §4): the in-use chip, the applied
-// notice, and the confirm-then-save flow the Template and Settings pages share.
+// The re-make confirmation (SPEC §6, §9; DESIGN §4): the in-use chip and the
+// confirm-then-save flow the Template and Settings pages share.
 
 import type { InUseView, RemakeRequiredError, ScheduledSendRef } from "../../shared/settings";
 import { ApiError } from "../api";

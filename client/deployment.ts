@@ -124,7 +124,7 @@ export function heldSendsHtml(which: Html, count: number): Html {
 
 /**
  * A page's standing not-connected warning (DESIGN §4): the health block's amber treatment,
- * not a Notice and not dismissible, since the state holds every time the page is read.
+ * not dismissible, since the state holds every time the page is read.
  * `cls` names the surface's line; null when a provider is connected.
  */
 export function notConnectedWarning(cls: string, words: Html): Html | null {
@@ -145,8 +145,8 @@ export function heldWhenFiresHtml(): Html | null {
 }
 
 /**
- * The standing line a dialog carries while no provider is connected (DESIGN §4): not a
- * Notice and not dismissible, since the state holds every time the dialog opens, and gone
+ * The standing line a dialog carries while no provider is connected (DESIGN §4): not
+ * dismissible, since the state holds every time the dialog opens, and gone
  * once a provider is set. `why` says what the state stops; `after` ends the sentence the
  * link starts. Null otherwise.
  */

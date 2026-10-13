@@ -416,8 +416,8 @@ function patchDelivered(root: HTMLElement, sends: SendView[]): void {
 
 /** The dashboard's scheduled cards are read-only summaries: the whole card links into the
  *  editor, where the schedule is actually managed. A send the server reports as re-made
- *  since its last test says so, and the editor, where the test is, says what to do. The Sent page keeps the one-call cancel
- *  the review window needs (SPEC §8). */
+ *  since its last test says so, and the editor, where the test is, says what to do. The
+ *  Sent page keeps the one-call cancel the review window needs (SPEC §8). */
 function dashScheduledHtml(scheduled: SendView[]): Html {
   if (!scheduled.length) {
     return html`<p class="muted">Nothing scheduled.</p>`;
