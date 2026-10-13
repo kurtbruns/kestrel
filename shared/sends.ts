@@ -53,13 +53,13 @@ export const NOT_CONNECTED_ADVICE = {
 export function refusalAdvice(cause: HaltCause | null): string {
   switch (cause) {
     case "credentials":
-      return "Replace the SES access key in the deployment's secrets, or give it ses:SendEmail and ses:SendBulkEmail in its IAM policy.";
+      return "Replace the SES access key in the deployment’s secrets, or give it ses:SendEmail and ses:SendBulkEmail in its IAM policy.";
     case "sender":
       return "Verify the sending domain or from-address with the provider.";
     case "quota":
-      return "Wait for SES's 24-hour quota to free up, or ask AWS to raise it in the Service Quotas console.";
+      return "Wait for SES’s 24-hour quota to free up, or ask AWS to raise it in the Service Quotas console.";
     case "suspended":
-      return "Settle the account's standing with the provider (for SES, in the SES console).";
+      return "Settle the account’s standing with the provider (for SES, in the SES console).";
     case "not_connected":
       return `${NOT_CONNECTED_ADVICE.step}${NOT_CONNECTED_ADVICE.guide}${NOT_CONNECTED_ADVICE.after}`;
     default:
@@ -184,6 +184,15 @@ export function formatLead(ms: number): string {
     return `${minutes} minute${minutes === 1 ? "" : "s"}`;
   }
   return `${seconds} seconds`;
+}
+
+/**
+ * Why a requested fire time is refused for being inside the minimum lead (SPEC §6), the one
+ * wording for the server's `fire_at_too_soon` and the editor's own check before it asks, on
+ * scheduling and rescheduling alike: the lead is what keeps time to cancel.
+ */
+export function tooSoonMessage(minLeadMs: number): string {
+  return `Pick a time at least ${formatLead(minLeadMs)} from now, so there’s time to cancel.`;
 }
 
 /** GET /api/sends */

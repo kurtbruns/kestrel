@@ -174,6 +174,7 @@ describe("resolve a wedged send", () => {
 
     await expect(resolveStuckSend(env, send.id, "unsent", "t")).rejects.toMatchObject({
       code: "not_wedged",
+      message: "This send hasn’t started, so there’s nothing to resolve.",
     });
   });
 
@@ -187,6 +188,7 @@ describe("resolve a wedged send", () => {
     await expect(resolveStuckSend(env, send.id, "accepted", "t")).rejects.toMatchObject({
       status: 409,
       code: "not_wedged",
+      message: "This send has finished, so there’s nothing to resolve.",
     });
   });
 

@@ -102,7 +102,9 @@ describe("render (the single render path)", async () => {
       { post: post(), revision: revision("![](cat.png)"), images: [image()] },
       config,
     );
-    expect(result.warnings.join(" ")).toMatch(/missing alt/i);
+    expect(result.warnings).toEqual([
+      "The image “cat.png” has no alt text. Describe it between the square brackets.",
+    ]);
   });
 
   it("warns on an empty or whitespace-only subject and falls back to (no subject)", async () => {
@@ -112,7 +114,9 @@ describe("render (the single render path)", async () => {
         config,
       );
       expect(result.subject).toBe("(no subject)");
-      expect(result.warnings.join(" ")).toMatch(/no subject/i);
+      expect(result.warnings).toEqual([
+        "There’s no subject, so the email will show “(no subject)”. Add one before you schedule.",
+      ]);
     }
   });
 
@@ -121,7 +125,9 @@ describe("render (the single render path)", async () => {
       { post: post(), revision: revision("![x](ghost.png)"), images: [] },
       config,
     );
-    expect(result.warnings.join(" ")).toMatch(/not found/i);
+    expect(result.warnings).toEqual([
+      "The image “ghost.png” isn’t on this post. Upload it, or check the file name.",
+    ]);
   });
 
   it("prints the mailing address in the built-in template's footer only when one is set (SPEC §9)", async () => {
@@ -347,7 +353,9 @@ describe("render (the single render path)", async () => {
     );
     // Defense in depth: an unsubscribe-less template can never ship (I2).
     expect(result.html).toContain(UNSUB_SENTINEL);
-    expect(result.warnings.join(" ")).toMatch(/template invalid/i);
+    expect(result.warnings.join(" ")).toMatch(
+      /^The email template can’t be used, so this shows the default template\. Every email must carry an unsubscribe link\./,
+    );
   });
 });
 
@@ -361,7 +369,9 @@ describe("email-only regions the HTML parser rearranges", () => {
     const result = await withTemplate(
       '{{ if .IsEmail }}<table><tr><td><a href="{{ .Email.UnsubscribeURL }}">u</a></td></tr>{{ end }}{{ .Post.Body }}</table>',
     );
-    expect(result.warnings.join(" ")).toMatch(/doesn't wrap whole elements, using the default/);
+    expect(result.warnings.join(" ")).toMatch(
+      /doesn’t wrap whole elements, so this shows the default template\./,
+    );
     expect(result.html).toBe((await withTemplate(DEFAULT_EMAIL_TEMPLATE)).html);
     expect(omitEmailOnly(result.html)).toContain("POSTBODY");
   });
@@ -370,7 +380,7 @@ describe("email-only regions the HTML parser rearranges", () => {
     const result = await withTemplate(
       '{{ .Post.Body }}<a title="{{ if .IsEmail }}">x</a><a href="{{ .Email.UnsubscribeURL }}">u</a>{{ end }}',
     );
-    expect(result.warnings.join(" ")).toMatch(/using the default/);
+    expect(result.warnings.join(" ")).toMatch(/shows the default template/);
   });
 
   it("renders the built-in template's own region whole, since the fallback trusts it", async () => {
@@ -381,7 +391,7 @@ describe("email-only regions the HTML parser rearranges", () => {
     const result = await withTemplate(
       '{{ .Post.Body }}<table><tr><td>{{ if .IsEmail }}<a href="{{ .Email.UnsubscribeURL }}">u</a><br>{{ end }}</td></tr></table>',
     );
-    expect(result.warnings.join(" ")).not.toMatch(/using the default/);
+    expect(result.warnings.join(" ")).not.toMatch(/shows the default template/);
     expect(omitEmailOnly(result.html)).toContain("POSTBODY");
     expect(omitEmailOnly(result.html)).not.toContain(">u</a>");
   });

@@ -18,7 +18,7 @@ export async function create(c: RequestContext): Promise<Response> {
   const raw = optString(await readJsonObject(c), "email");
   const email = raw === undefined ? "" : normalizeEmail(raw);
   if (!email || !isValidEmail(email)) {
-    throw fieldError("email", "a valid email is required");
+    throw fieldError("email", "Enter a valid email address.");
   }
   const outcome = await requestSubscription(c, email);
   if (outcome.kind === "failed") {

@@ -65,7 +65,7 @@ function remakeRequired(sends: ScheduledSendRef[]): HttpError {
   return new HttpError(
     409,
     "remake_required",
-    `saving this change re-makes ${n} scheduled email${n === 1 ? "" : "s"}; pass their ids in \`remake\` to confirm`,
+    `Saving this change re-makes ${n} scheduled email${n === 1 ? "" : "s"}. Pass their ids in \`remake\` to confirm.`,
     details,
   );
 }
@@ -76,7 +76,7 @@ function remakeTooClose(sends: ScheduledSendRef[], retryAfter: number, now: numb
   return new HttpError(
     409,
     "remake_too_close",
-    `"${first.subject}" sends in ${minutes} minute${minutes === 1 ? "" : "s"}; try again once it has sent`,
+    `“${first.subject}” sends in ${minutes} minute${minutes === 1 ? "" : "s"}. Try again once it has sent.`,
     { retry_after: retryAfter, sends },
   );
 }

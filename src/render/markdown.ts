@@ -20,11 +20,15 @@ export function markdownToHtml(md: string, ctx: MarkdownContext): string {
         const href = token.href ?? "";
         const alt = token.text ?? "";
         if (!alt.trim()) {
-          ctx.warnings.push(`image "${href}" is missing alt text`);
+          ctx.warnings.push(
+            `The image “${href}” has no alt text. Describe it between the square brackets.`,
+          );
         }
         const { url, image } = resolveImageSrc(href, ctx.images, ctx.mediaBase);
         if (!image && !/^https?:\/\//i.test(url)) {
-          ctx.warnings.push(`image "${href}" was not found on this post`);
+          ctx.warnings.push(
+            `The image “${href}” isn’t on this post. Upload it, or check the file name.`,
+          );
         }
         const size = sizeAttrs(image?.width ?? null, image?.height ?? null, ctx.maxWidth);
         const title = token.title ? ` title="${escapeHtmlAttr(token.title)}"` : "";

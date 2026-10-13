@@ -239,14 +239,41 @@ describe("web version", () => {
   it("says what went wrong in the server's words when the page can't be read", async () => {
     location.hash = "#/web/post/empty";
     const empty = () =>
-      jsonResponse({ error: "bad_request", message: "post has no content yet" }, 400);
+      jsonResponse(
+        {
+          error: "bad_request",
+          message: "This post has no content yet. Write something, then try again.",
+        },
+        400,
+      );
     fake = fakeApi([
       { path: "/api/posts/empty/web", reply: empty },
       { path: "/api/posts/empty", reply: postReply("draft") },
     ]);
     await mount((r, s) => renderWebVersion("empty", r, s));
     await settle();
-    expect($(".web-error .error span").textContent).toBe("post has no content yet");
+    expect($(".web-error .error span").textContent).toBe(
+      "This post has no content yet. Write something, then try again.",
+    );
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("says a dropped connection plainly, not in the browser's words", async () => {
+    location.hash = "#/web/post/p1";
+    fake = fakeApi([
+      {
+        path: "/api/posts/p1/web",
+        reply: () => {
+          throw new TypeError("Failed to fetch");
+        },
+      },
+      { path: "/api/posts/p1", reply: postReply("draft") },
+    ]);
+    await mount((r, s) => renderWebVersion("p1", r, s));
+    await settle();
+    expect($(".web-error .error span").textContent).toBe(
+      "Couldn’t reach Kestrel. Check your connection and try again.",
+    );
     expect(fake.unhandled).toEqual([]);
   });
 

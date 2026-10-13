@@ -464,7 +464,7 @@ describe("editor view", () => {
     const linked = scheduledPost(Date.now() + 65_000);
     await open(linked.routes);
     const when = () => $("#schedWhen").textContent;
-    expect(when()).toMatch(/^Scheduled for .+ · Sends in 1m 05s · cancelable until then\.$/);
+    expect(when()).toMatch(/^Scheduled for .+ · Sends in 1m 05s$/);
     await vi.advanceTimersByTimeAsync(1_000);
     expect(when()).toMatch(/Sends in 1m 04s/);
     expect($<HTMLElement>("#schedControls").hidden).toBe(false);
@@ -658,7 +658,37 @@ describe("editor view", () => {
     expect(when.classList.contains("is-invalid")).toBe(true);
     // No Send now in this dialog, so the reason says only why.
     expect($(".modal .field-error").textContent).toBe(
-      "!Pick a time at least 5 minutes from now, so there’s a window to cancel in.",
+      "!Pick a time at least 5 minutes from now, so there’s time to cancel.",
+    );
+  });
+
+  it("shows the server's own minimum-lead refusal of a reschedule under its picker as it stands", async () => {
+    const linked = scheduledPost();
+    await open([
+      {
+        method: "POST",
+        path: "/api/sends/s1/reschedule",
+        // The server's lead, not the page's default five minutes.
+        reply: () =>
+          jsonResponse(
+            {
+              error: "fire_at_too_soon",
+              message: "Pick a time at least 90 seconds from now, so there’s time to cancel.",
+              field: "fire_at",
+            },
+            400,
+          ),
+      },
+      ...linked.routes,
+    ]);
+    $("#rescheduleSchedule").click();
+    const when = $<HTMLInputElement>("#rsWhen");
+    when.value = toLocalInput(new Date(Date.now() + 86_400_000));
+    $("#rsGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(when.classList.contains("is-invalid")).toBe(true);
+    expect($(".modal .field-error").textContent).toBe(
+      "!Pick a time at least 90 seconds from now, so there’s time to cancel.",
     );
   });
 
@@ -1062,12 +1092,20 @@ describe("editor view", () => {
       {
         path: "/api/posts/p1/preview",
         reply: () =>
-          jsonResponse({ error: "bad_request", message: "post has no content yet" }, 400),
+          jsonResponse(
+            {
+              error: "bad_request",
+              message: "This post has no content yet. Write something, then try again.",
+            },
+            400,
+          ),
       },
     ]);
     $(".ctab[data-tab='preview']").click();
     await vi.advanceTimersByTimeAsync(0);
-    expect($("#toasts").textContent).toBe("post has no content yet");
+    expect($("#toasts").textContent).toBe(
+      "This post has no content yet. Write something, then try again.",
+    );
     expect(fake.unhandled).toEqual([]);
   });
 
@@ -1386,6 +1424,96 @@ describe("editor view", () => {
     expect(puts()).toHaveLength(3);
   });
 
+  it("tries a save again after a dropped connection, but not after a failure in the page itself", async () => {
+    const server = draftServer();
+    const failures = [
+      new TypeError("Failed to fetch"), // no answer: the browser's network failure
+      new TypeError("Cannot read properties of undefined (reading 'slug')"), // a bug
+    ];
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/api/posts/p1",
+        reply: () => {
+          throw failures.shift() ?? new Error("no more saves were expected");
+        },
+      },
+    ]);
+    typeInto(body(), "mine");
+    $("#saveBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#saveStatus").textContent).toBe(
+      "Not saved: Couldn’t reach Kestrel. Check your connection and try again.",
+    );
+    await vi.advanceTimersByTimeAsync(5_000); // the dropped connection is tried again
+    expect(puts()).toHaveLength(2);
+    // The bug would fail the same way every time, so nothing more is sent.
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(puts()).toHaveLength(2);
+    expect($("#saveStatus").classList.contains("is-error")).toBe(true);
+  });
+
+  it("calls off a retry an earlier failure armed once a save is refused on a field", async () => {
+    const server = draftServer();
+    const replies = [
+      () => jsonResponse({ error: "internal_error" }, 503),
+      () =>
+        jsonResponse(
+          { error: "bad_request", message: "That address is taken.", field: "slug" },
+          400,
+        ),
+    ];
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/api/posts/p1",
+        reply: (req) => (replies.shift() ?? (() => server.put(req)))(),
+      },
+    ]);
+    typeInto(body(), "one");
+    $("#saveBtn").click(); // fails on the server's side: a retry is armed for five seconds on
+    await vi.advanceTimersByTimeAsync(0);
+    typeInto(body(), "two");
+    $("#saveBtn").click(); // refused on the slug, before the retry is due
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts()).toHaveLength(2);
+    expect($("#saveStatus").textContent).toBe("Not saved: fix the field marked above.");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(puts()).toHaveLength(2); // the refused slug is not sent again
+  });
+
+  it("spaces a later dropped connection's retries from the start once a refusal called off the last", async () => {
+    const server = draftServer();
+    const replies = [
+      () => jsonResponse({ error: "internal_error" }, 503),
+      () => jsonResponse({ error: "bad_request", message: "That isn’t allowed." }, 400),
+      () => jsonResponse({ error: "internal_error" }, 503),
+    ];
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/api/posts/p1",
+        reply: (req) => (replies.shift() ?? (() => server.put(req)))(),
+      },
+    ]);
+    typeInto(body(), "one");
+    $("#saveBtn").click(); // fails on the server's side: a retry is armed for five seconds on
+    await vi.advanceTimersByTimeAsync(0);
+    typeInto(body(), "two");
+    $("#saveBtn").click(); // refused, before the retry is due, which calls it off
+    await vi.advanceTimersByTimeAsync(0);
+    typeInto(body(), "three");
+    $("#saveBtn").click(); // the server's trouble again: a fresh start, not twice as far off
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts()).toHaveLength(3);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(puts()).toHaveLength(4);
+    expect($("#saveStatus").textContent).toBe("Saved");
+  });
+
   it("drops a failed save's reason once the text is back to what was saved", async () => {
     const server = draftServer();
     await open([
@@ -1538,12 +1666,12 @@ describe("editor view", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/schedule")).toBe(false);
     expect(when.classList.contains("is-invalid")).toBe(true);
-    expect($(".modal .field-error").textContent).toContain(
-      "Pick a time at least 5 minutes from now, so there’s a window to cancel in. For the soonest send, use Send now below.",
+    expect($(".modal .field-error").textContent).toBe(
+      "!Pick a time at least 5 minutes from now, so there’s time to cancel.",
     );
   });
 
-  it("says the server's own minimum-lead refusal the same way, not in the API's words", async () => {
+  it("shows the server's own minimum-lead refusal under the picker as it stands (DESIGN §10)", async () => {
     const server = draftServer(draft({ subject: "Owls" }));
     await open([
       { path: "/api/posts/p1", reply: server.get },
@@ -1552,13 +1680,13 @@ describe("editor view", () => {
       {
         method: "POST",
         path: "/api/posts/p1/schedule",
-        // The server's clock disagrees with the page's.
+        // The server's clock disagrees with the page's, and its words name its own lead,
+        // which the page (on the default five minutes) would not have said.
         reply: () =>
           jsonResponse(
             {
               error: "fire_at_too_soon",
-              message:
-                "fire_at must be at least 5 minutes in the future, this deployment's minimum lead; use POST /api/posts/:id/send for the soonest send",
+              message: "Pick a time at least 90 seconds from now, so there’s time to cancel.",
               field: "fire_at",
             },
             400,
@@ -1569,9 +1697,9 @@ describe("editor view", () => {
     $<HTMLInputElement>("#schWhen").value = toLocalInput(new Date(Date.now() + 86_400_000));
     $("#schGo").click();
     await vi.advanceTimersByTimeAsync(0);
-    const err = $(".modal .field-error");
-    expect(err.textContent).toContain("Pick a time at least 5 minutes from now");
-    expect(err.textContent).not.toContain("POST /api");
+    expect($(".modal .field-error").textContent).toBe(
+      "!Pick a time at least 90 seconds from now, so there’s time to cancel.",
+    );
     expect($<HTMLInputElement>("#schWhen").classList.contains("is-invalid")).toBe(true);
   });
 
@@ -1638,7 +1766,7 @@ describe("editor view", () => {
     const scheduled = fake.calls.find((c) => c.url.pathname === "/api/posts/p1/schedule");
     expect(scheduled?.json()).toEqual({ fire_at: new Date("2026-09-25T15:00").toISOString() });
     expect($("#toasts").textContent).toMatch(/Scheduled for/);
-    expect($(".banner-scheduled").textContent).toMatch(/cancelable until then/);
+    expect($(".banner-scheduled").textContent).toMatch(/Scheduled for .+ · Sends in /);
     expect(body().readOnly).toBe(true);
   });
 
@@ -1759,7 +1887,7 @@ describe("editor view", () => {
     $("#scheduleBtn").click();
     $("#toSendNow").click();
     await vi.advanceTimersByTimeAsync(0);
-    expect($("#snWho").textContent).toBe("40 confirmed subscribers");
+    expect($("#snWho").textContent).toBe("40 recipients");
     $("#toSchedule").click();
     expect($("#schGo")).toBeTruthy(); // back to the schedule view, re-wired
     $("#toSendNow").click();
@@ -1790,13 +1918,15 @@ describe("editor view", () => {
       },
     ]);
     $("#scheduleBtn").click();
-    expect($(".modal .hint").textContent).toMatch(/at least 1 minute out/);
+    expect($(".modal .hint").textContent).toBe(
+      "It sends at the time you pick, with a cancelable window until then.",
+    );
     // One lead plus the minute the picker can't show: 10:00:30 + 2 min, to the minute.
     expect($<HTMLInputElement>("#schWhen").min).toBe("2026-09-23T10:02");
     $("#toSendNow").click();
     await vi.advanceTimersByTimeAsync(0);
-    expect($(".modal .hint").textContent).toMatch(
-      /cancelable window of at least 1 minute, on the minute/,
+    expect($(".modal .hint").textContent).toBe(
+      "Sends this draft, as it is now, to your subscribers in 1 to 2 minutes. The post locks until then, and you can cancel any time before it starts sending.",
     );
     $("#snGo").click();
     await vi.advanceTimersByTimeAsync(0);

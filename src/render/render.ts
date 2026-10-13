@@ -108,7 +108,9 @@ export async function render(
   // value — keeping the warning honest and the placeholder shown for either case.
   const hasSubject = meta.subject.trim() !== "";
   if (!hasSubject) {
-    warnings.push('no subject — the email will show "(no subject)"');
+    warnings.push(
+      "There’s no subject, so the email will show “(no subject)”. Add one before you schedule.",
+    );
   }
   const subject = hasSubject ? meta.subject : "(no subject)";
   const viewInBrowserUrl = archiveUrl(config, meta.slug);
@@ -120,7 +122,9 @@ export async function render(
   const validation = validateEmailTemplate(branding.template);
   let template = branding.template;
   if (validation.errors.length > 0) {
-    warnings.push(`email template invalid, using the default — ${validation.errors.join(" ")}`);
+    warnings.push(
+      `The email template can’t be used, so this shows the default template. ${validation.errors.join(" ")}`,
+    );
     template = DEFAULT_EMAIL_TEMPLATE;
   } else {
     warnings.push(...validation.warnings);
@@ -153,7 +157,7 @@ export async function render(
   // an invalid template, and say so on preview and test.
   if (template !== DEFAULT_EMAIL_TEMPLATE && !emailOnlyRegionsWhole(html)) {
     warnings.push(
-      "email template's {{ if .IsEmail }} region doesn't wrap whole elements, using the default — keep each region's {{ if .IsEmail }} and {{ end }} inside the same element, outside any attribute, and not directly inside a <table> or <tr>.",
+      "The email template’s {{ if .IsEmail }} region doesn’t wrap whole elements, so this shows the default template. Keep each region’s {{ if .IsEmail }} and {{ end }} inside the same element, outside any attribute, and not directly inside a <table> or <tr>.",
     );
     template = DEFAULT_EMAIL_TEMPLATE;
     html = await renderWith(template);

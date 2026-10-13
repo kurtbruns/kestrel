@@ -182,7 +182,7 @@ describe("settings surface", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
       error: "bad_request",
-      message: "not a valid email address: not-an-email",
+      message: "“not-an-email” isn’t a valid email address. Fix or remove it, then save.",
       field: "testRecipients",
     });
   });
@@ -190,7 +190,12 @@ describe("settings surface", () => {
   it("names the nested field of a refused value, as the API names it", async () => {
     const res = await putSettings({ notifications: { to: "nope" } });
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { field?: string }).field).toBe("notifications.to");
+    expect(await res.json()).toEqual({
+      error: "bad_request",
+      message:
+        "“nope” isn’t a valid email address. Fix it, or clear the field to turn notifications off.",
+      field: "notifications.to",
+    });
   });
 
   it("rejects a non-list testRecipients with 400", async () => {
@@ -286,7 +291,7 @@ describe("email template (wired to the render path)", () => {
   describe("a mailing address the template doesn't print (SPEC §9)", () => {
     const ADDRESS = "PO Box 1142, Portland, OR 97207";
     const notPrinted =
-      /mailing address in Settings, but this template doesn't include the \{\{ \.Publication\.Address \}\} field/;
+      /mailing address in Settings, but this template doesn’t include the \{\{ \.Publication\.Address \}\} field/;
     const warningsOf = async (res: Response) =>
       ((await res.json()) as { warnings: string[] }).warnings;
     const printsAddress = withUnsub(

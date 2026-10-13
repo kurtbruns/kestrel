@@ -3,13 +3,7 @@
 
 import type { ResolveResponse, SendSummary, StuckResolution } from "../../shared/sends";
 import { ApiError, api, describeError } from "../api";
-import {
-  earliestFireAt,
-  isTooSoon,
-  minLeadText,
-  notConnectedRescheduleLine,
-  tooSoonText,
-} from "../deployment";
+import { earliestFireAt, isTooSoon, notConnectedRescheduleLine, tooSoonText } from "../deployment";
 import { readSendsNow } from "../send_state";
 import { $ } from "../ui/dom";
 import { toLocalInput } from "../ui/format";
@@ -79,7 +73,7 @@ export function openRescheduleModal(
   const cur = toLocalInput(new Date(currentFireAt));
   const m = modal(
     html`<h3 id="rsHead">Reschedule this post</h3>
-      <p class="hint">Move when it sends (at least ${minLeadText()} out). The content stays frozen and the cancelable window is kept. Only the time changes.</p>
+      <p class="hint">Move when it sends. The content stays frozen and the cancelable window is kept. Only the time changes.</p>
       ${notConnectedRescheduleLine()}
       <label for="rsWhen">Send at</label><input type="datetime-local" id="rsWhen" min="${minStr}" value="${cur}">
       <div class="actions"><button type="button" id="rsCancel">Cancel</button><button type="button" class="primary" id="rsGo">Reschedule</button></div>`,
@@ -100,7 +94,7 @@ export function openRescheduleModal(
         return;
       }
       if (isTooSoon(t)) {
-        m.error(tooSoonText(false), when);
+        m.error(tooSoonText(), when);
         return;
       }
       try {
@@ -122,7 +116,7 @@ export function openRescheduleModal(
           return;
         }
         if (e instanceof ApiError && e.field === "fire_at") {
-          m.error(e.code === "fire_at_too_soon" ? tooSoonText(false) : message(e), when);
+          m.error(message(e), when);
           return;
         }
         m.error(message(e));

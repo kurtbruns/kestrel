@@ -141,12 +141,12 @@ export const condition = {
     kind: "refused",
     severity: "action",
     since: 1_000,
-    message: `The provider is refusing the account: ${error} Replace the SES access key in the deployment's secrets, or give it ses:SendEmail and ses:SendBulkEmail in its IAM policy.`,
+    message: `The provider is refusing the account: ${error} Replace the SES access key in the deployment’s secrets, or give it ses:SendEmail and ses:SendBulkEmail in its IAM policy.`,
     action: null,
     cause: "credentials",
     error,
     advice:
-      "Replace the SES access key in the deployment's secrets, or give it ses:SendEmail and ses:SendBulkEmail in its IAM policy.",
+      "Replace the SES access key in the deployment’s secrets, or give it ses:SendEmail and ses:SendBulkEmail in its IAM policy.",
     retry_at: retryAt,
   }),
   bounceSpike: (bounced: number, rate: number): SendCondition => ({

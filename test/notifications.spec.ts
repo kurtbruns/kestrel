@@ -138,7 +138,7 @@ describe("a send that needs the publisher", () => {
     );
     expect(refused!.text).toContain("security token included in the request is invalid");
     expect(refused!.text).toContain(
-      "Replace the SES access key in the deployment's secrets, or give it ses:SendEmail and ses:SendBulkEmail in its IAM policy.",
+      "Replace the SES access key in the deployment’s secrets, or give it ses:SendEmail and ses:SendBulkEmail in its IAM policy.",
     );
     expect(refused!.text).toContain("No one has been marked unsent");
 

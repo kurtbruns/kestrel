@@ -14,7 +14,7 @@
  * can be undone before the fire time, and its answer shows the send as it now stands (SPEC §1).
  */
 
-import { formatLead } from "../../shared/sends";
+import { tooSoonMessage } from "../../shared/sends";
 import { listImages } from "../db/images";
 import type { PostRow } from "../db/posts";
 import { getCurrentRevision, setPostStatusStmt } from "../db/posts";
@@ -51,7 +51,7 @@ export async function renderPost(
 ): Promise<FrozenRender> {
   const revision = await getCurrentRevision(env.DB, post);
   if (!revision) {
-    throw badRequest("post has no content to send");
+    throw badRequest("This post has no content yet. Write something, then schedule it.");
   }
   const images = await listImages(env.DB, post.id);
   const rendered = await render({ post, revision, images }, config, branding);
@@ -79,21 +79,17 @@ export function onTheMinute(fireAt: number): number {
  * (`fire_at_too_soon`), and answer the time to store, on the minute (`onTheMinute`). The lead
  * is checked on the time as requested, before rounding, so rounding can only add to a window
  * that was already long enough (I6). `now` is the caller's own reading of the clock when it
- * has one (Send now asks for exactly `now` plus the lead, which a later reading would refuse);
- * `hint` is appended to the refusal's message.
+ * has one (Send now asks for exactly `now` plus the lead, which a later reading would refuse).
  */
 export function acceptFireAt(
   requested: number,
   minLeadMs: number,
-  { now = Date.now(), hint = "" }: { now?: number; hint?: string } = {},
+  { now = Date.now() }: { now?: number } = {},
 ): number {
   if (requested < now + minLeadMs) {
-    throw refusal(
-      400,
-      "fire_at_too_soon",
-      `fire_at must be at least ${formatLead(minLeadMs)} in the future, this deployment's minimum lead${hint}`,
-      { field: "fire_at" },
-    );
+    throw refusal(400, "fire_at_too_soon", tooSoonMessage(minLeadMs), {
+      field: "fire_at",
+    });
   }
   return onTheMinute(requested);
 }
@@ -101,6 +97,10 @@ export function acceptFireAt(
 /** How many times a freeze re-reads and re-renders when the settings changed under it.
  *  A template save landing in that gap is rare; a couple of retries settles it. */
 const FREEZE_RETRIES = 3;
+
+/** The refusal for a post that already has its one active send (SPEC §6). */
+const ACTIVE_SEND_EXISTS =
+  "This post already has a send scheduled or going out. Reschedule or cancel that send instead.";
 
 /** Create a scheduled Send from the post's current content and lock the post. */
 export async function freeze(
@@ -114,13 +114,21 @@ export async function freeze(
     throw await activeSendExists(env, active);
   }
   if (post.status !== "draft") {
-    throw refusal(409, "post_not_draft", `post is ${post.status}, not a draft`);
+    throw refusal(
+      409,
+      "post_not_draft",
+      post.status === "sent"
+        ? "This post has already been sent, so it can’t be scheduled again."
+        : "This post is already scheduled. Reschedule or cancel its send instead.",
+    );
   }
   // The subject is the one field the reader sees in their inbox (SPEC §6). One
   // check here covers both Schedule and Send-now and both clients (editor + API);
   // whitespace-only counts as empty.
   if (!post.subject.trim()) {
-    throw refusal(400, "subject_required", "add a subject before sending", { field: "subject" });
+    throw refusal(400, "subject_required", "Add a subject before you schedule or send this post.", {
+      field: "subject",
+    });
   }
 
   for (let attempt = 0; attempt < FREEZE_RETRIES; attempt++) {
@@ -163,7 +171,7 @@ export async function freeze(
         const winner = await getActiveSendForPost(env.DB, post.id);
         throw winner
           ? await activeSendExists(env, winner)
-          : refusal(409, "active_send_exists", "post already has an active send");
+          : refusal(409, "active_send_exists", ACTIVE_SEND_EXISTS);
       }
       throw err;
     }
@@ -174,13 +182,13 @@ export async function freeze(
   throw refusal(
     409,
     "settings_changed",
-    "the template or identity changed while scheduling; try again",
+    "The template or the publication’s details changed while this was being scheduled. Try again.",
   );
 }
 
 /** The refusal for a post that already has its one active send, carrying that send. */
 async function activeSendExists(env: AppEnv, send: SendRow) {
-  return refusal(409, "active_send_exists", "post already has an active send", {
+  return refusal(409, "active_send_exists", ACTIVE_SEND_EXISTS, {
     send: await viewSend(env, send.id),
   });
 }
@@ -210,9 +218,9 @@ async function readForAction(env: AppEnv, sendId: string): Promise<SendRow> {
 async function windowClosed(env: AppEnv, send: SendRow, what: string) {
   const why =
     send.status === "scheduled"
-      ? "its fire time has passed and it is about to send"
-      : `it is ${send.status}`;
-  return refusal(409, "window_closed", `send can no longer be ${what}: ${why}`, {
+      ? "its fire time has passed and it’s about to send"
+      : `it’s ${send.status}`;
+  return refusal(409, "window_closed", `This send can no longer be ${what}: ${why}.`, {
     send: await viewSend(env, send.id),
   });
 }
@@ -241,9 +249,14 @@ export async function reschedule(
   const send = await readForAction(env, sendId);
   const now = Date.now();
   if (send.status === "canceled") {
-    throw refusal(409, "send_canceled", "send is canceled; schedule the post again instead", {
-      send: await viewSend(env, send.id),
-    });
+    throw refusal(
+      409,
+      "send_canceled",
+      "This send was canceled. Schedule the post again instead.",
+      {
+        send: await viewSend(env, send.id),
+      },
+    );
   }
   if (send.status !== "scheduled" || send.fire_at <= now) {
     throw await windowClosed(env, send, "rescheduled");
