@@ -87,6 +87,10 @@ describe("conditions: one server rule for each kind", () => {
     expect(missed.map((c) => [c.kind, c.severity, c.action])).toEqual([["missed", "action", null]]);
     const remade = { status: "scheduled" as const, fire_at: NOW + 60_000, remade_at: NOW - 10 };
     expect(kinds(row(remade))).toEqual(["remade"]);
+    // The editor shows this message as is, so its wording is pinned here, not only in the client's copy.
+    expect(sendConditions(row(remade), NOW)[0]?.message).toBe(
+      "The template or publication details changed this email’s look after your last test. Its content and send time are the same. Send a new test to check what will go out.",
+    );
     expect(kinds(row({ ...remade, tested_at: NOW - 20 }))).toEqual(["remade"]);
     expect(kinds(row({ ...remade, tested_at: NOW - 5 }))).toEqual([]);
   });

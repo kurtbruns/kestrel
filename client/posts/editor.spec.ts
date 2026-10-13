@@ -537,7 +537,9 @@ describe("editor view", () => {
     linked.remake(Date.now());
     await vi.advanceTimersByTimeAsync(60_000);
     expect($("#schedRemade").hidden).toBe(false);
-    expect($("#schedRemadeMsg").textContent).toMatch(/re-made this email after its last test/);
+    expect($("#schedRemadeMsg").textContent).toBe(
+      "The template or publication details changed this email’s look after your last test. Its content and send time are the same. Send a new test to check what will go out.",
+    );
 
     linked.cancel();
     await vi.advanceTimersByTimeAsync(60_000);
@@ -2026,7 +2028,9 @@ describe("editor view", () => {
         },
       },
     ]);
-    expect($("#schedRemadeMsg").textContent).toMatch(/re-made this email after its last test/);
+    expect($("#schedRemadeMsg").textContent).toBe(
+      "The template or publication details changed this email’s look after your last test. Its content and send time are the same. Send a new test to check what will go out.",
+    );
     body().dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
     await vi.advanceTimersByTimeAsync(16);
     expect($("#lockFoot").classList.contains("nudge")).toBe(true);

@@ -61,6 +61,8 @@ SES sends with its own return path by default, so SPF passes for `amazonses.com`
 
 A new SES account starts in the sandbox. It sends only to addresses you've verified in SES, up to 200 emails a day and one a second. Ask AWS to lift those limits now, and test while you wait.
 
+1. Name your publication first, since AWS may visit your website to review the request. In the editor, open **Settings → Publication identity**, and enter the name and tagline. Until you do, your public pages show the name in your From address. The subscribe form stays closed until section 7 sets the provider.
+
 1. In SES, open the **Account dashboard**, select **View Get set up page**, and then **Request production access**.
 
 1. Fill in the request:
@@ -68,9 +70,18 @@ A new SES account starts in the sandbox. It sends only to addresses you've verif
     - **Mail type:** Marketing
     - **Website URL:** `https://newsletter.example.com/`
 
-1. Check the acknowledgement, and select **Submit request**. AWS Support answers by email, and may ask how you collect addresses and handle bounces. Kestrel confirms every signup by email, and stops mailing an address that bounces or complains.
+1. Check the acknowledgement, and select **Submit request**. AWS Support answers by email, and may ask how you collect addresses and handle bounces.
 
 1. While you wait, verify the two addresses you test with in [Verify it works](05-verify.md#before-you-begin), so the sandbox lets you mail them. For each, under **Identities**, choose **Create identity**, select **Email address**, and follow the link in the email AWS sends.
+
+If AWS asks for more detail, reply in the support case. If it denies the request, reply there, or open a new request from the **Account dashboard**. Either way, say how Kestrel handles your list:
+
+- Signups use double opt-in: each subscriber confirms by email before joining the list.
+- Every post offers one-click unsubscribe.
+- Bounces and complaints reach the app through SNS, and it stops mailing those addresses automatically.
+- How many subscribers you expect, and how often you send.
+
+Your account stays in the sandbox until AWS grants access, so don't go live before then. In the sandbox, a signup from any address you haven't verified fails, and a post reaches only your verified addresses.
 
 When AWS grants access, the **Account dashboard** shows your daily quota and your maximum send rate. You set the rate in the app in section 7. The rate decides how fast a send goes out, and [As your list grows](06-go-live.md#as-your-list-grows) says when to ask AWS to raise it.
 
@@ -232,6 +243,8 @@ Once you've fixed the cause, select the subscription, and choose **Request confi
 Change `PROVIDER`, or move to another account with the same provider, only while no send is sending. The dashboard lists any send in progress.
 
 When a request to a provider gets no answer, Kestrel can't know whether its recipients were mailed. Moving to SES, from another provider or another SES account, mails none of them twice. Kestrel never repeats an unanswered request to SES, so those recipients wait for you to decide whether they were mailed. Use **Resolve** on the send's page.
+
+Kestrel can't tell whether those emails went out. SES's console shows sent messages only if you've turned on Virtual Deliverability Manager, which this guide doesn't set up. So **Assume not sent** is the safe default. Those readers may miss this post, but they get your next one. No one is mailed twice. Choose **Assume sent** only when you know otherwise, such as a reader who says they got it.
 
 ## Check it
 
