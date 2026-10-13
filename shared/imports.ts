@@ -38,7 +38,7 @@ export type ImportFileKind = "csv" | "txt";
 /** The limits on one import. A deployment on Workers Free gets `maxRowsFree` (the format route says which applies). */
 export const IMPORT_LIMITS = {
   maxRows: 10_000,
-  maxRowsFree: 2_000,
+  maxRowsFree: 1_000,
   /** The request body, in bytes: 10,000 rows of about 700 bytes, evidence included. */
   maxBodyBytes: 10 * 1024 * 1024,
   /** One row's `evidence`, in bytes of its JSON. */

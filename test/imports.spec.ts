@@ -221,7 +221,7 @@ describe("refusals name what was wrong and what was expected (SPEC §7)", () => 
     expect(res.status).toBe(400);
     const body = await readJson(res);
     expect(body).toMatchObject({ error: "too_many_rows", limit: IMPORT_LIMITS.maxRowsFree });
-    expect(body.message).toContain("2,000");
+    expect(body.message).toContain("has 1,001 rows; one import takes at most 1,000.");
   });
 
   it("body_too_large: a request over 10 MB", async () => {
@@ -673,6 +673,22 @@ describe("the list moving between the plan and the commit (SPEC §7)", () => {
       { row: 1, email: "reader@x.io", outcome: "kept_unsubscribed", suppression_added: false },
     ]);
     expect(await subscriberRow("reader@x.io")).toMatchObject({ status: "unsubscribed" });
+  });
+
+  it("keeps a suppression added here in between, never replacing it with the file's", async () => {
+    const p = await planImport(
+      env.DB,
+      { ...csvFile(["a@x.io,none,unknown,sendy,bounce,,,,,"]), plainListStatus: null },
+      planOptions,
+    );
+    expect(p.counts.suppression_added).toBe(1);
+    await subscribers.addSuppression(env.DB, "a@x.io", "manual");
+    const result = await commitImport(env.DB, p, HUMAN, Date.now());
+    expect(await suppressionOf("a@x.io")).toBe("manual");
+    expect(result.differed).toEqual([
+      { row: 1, email: "a@x.io", planned: "suppression_added", applied: "left_out" },
+    ]);
+    expect(result.suppressions_added).toBe(0);
   });
 
   it("confirms an address that subscribed here in between, rather than adding it twice", async () => {

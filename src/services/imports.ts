@@ -38,7 +38,7 @@ import type { ListEntry, ListState } from "../db/imports";
 import * as imports from "../db/imports";
 import { DEFAULT_SUBREQUEST_BUDGET } from "../env";
 import { HttpError, refusal } from "../lib/errors";
-import { newId, newToken } from "../lib/ids";
+import { newId, newTokens } from "../lib/ids";
 import type { Principal } from "../router";
 
 /** A file to import, as a request carries it. */
@@ -370,6 +370,8 @@ export async function commitImport(
     suppress: [],
     notice: principal.kind === "service",
   };
+  const tokens = newTokens(plan.counts.create_confirmed + plan.counts.create_unsubscribed);
+  const token = (): string => tokens.pop() ?? "";
   for (const { row, outcome, suppressionAdded } of plan.planned) {
     const consent = {
       e: row.email,
@@ -379,7 +381,7 @@ export async function commitImport(
       cat: row.confirmed_at ?? row.subscribed_at,
     };
     if (outcome === "create_confirmed") {
-      writes.addConfirmed.push({ ...consent, id: newId(), tok: newToken(), uat: null });
+      writes.addConfirmed.push({ ...consent, id: newId(), tok: token(), uat: null });
     } else if (outcome === "confirm_pending") {
       writes.confirm.push(consent);
     } else if (outcome === "mark_unsubscribed") {
@@ -391,7 +393,7 @@ export async function commitImport(
         ...consent,
         cat: row.confirmed_at,
         id: newId(),
-        tok: newToken(),
+        tok: token(),
         uat: row.unsubscribed_at,
       });
     }

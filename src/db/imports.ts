@@ -21,6 +21,7 @@ import { importNotice } from "./notifications";
 export const MAX_VALUE_BYTES = 1_000_000;
 
 const encoder = new TextEncoder();
+const NON_ASCII = /[^\x00-\x7f]/;
 
 /** Items as JSON arrays, each under `MAX_VALUE_BYTES`, in order. */
 export function jsonChunks(items: readonly unknown[], maxBytes = MAX_VALUE_BYTES): string[] {
@@ -29,7 +30,8 @@ export function jsonChunks(items: readonly unknown[], maxBytes = MAX_VALUE_BYTES
   let bytes = 2;
   for (const item of items) {
     const part = JSON.stringify(item);
-    const size = encoder.encode(part).length + 1;
+    // Most rows are ASCII, whose length is its size; only the rest are encoded to count.
+    const size = (NON_ASCII.test(part) ? encoder.encode(part).length : part.length) + 1;
     if (parts.length > 0 && bytes + size > maxBytes) {
       chunks.push(`[${parts.join(",")}]`);
       parts = [];
