@@ -5,6 +5,7 @@ paths:
   - "scripts/dev.mjs"
   - "client/dev_reload.ts"
   - "client/globals.d.ts"
+  - "vitest.config.ts"
 ---
 
 # Building the admin SPA
@@ -20,16 +21,22 @@ paths:
 
 ## Production and dev builds
 
-- The production build (the default, and what a deploy gets) is minified with `__DEV__` false, so dev-only code compiles out. The dev build (`--dev`, or `KESTREL_CLIENT_DEV=1`, which `scripts/dev.mjs` sets for every builder, wrangler's flagless `build.command` included) is readable with `__DEV__` true.
+- The production build is the default and what a deploy gets: minified, with `__DEV__` false, so dev-only code compiles out.
+- The dev build is readable, with `__DEV__` true. Ask for it with `--dev` or `KESTREL_CLIENT_DEV=1`; `scripts/dev.mjs` sets the variable for every builder it starts, including wrangler's `build.command`, which takes no flag.
 - Declare a new build constant in `client/globals.d.ts`.
-- Both link a sourcemap, which sits behind Access with the rest of `/dashboard`.
+- Both link a sourcemap: readable stack traces from a deployed editor are worth the file, and it sits behind Access with the rest of `/dashboard`.
 
 ## Where the build runs
 
-- `npm run dev` watches `client/` and `public/`. Wrangler's `build.command` runs it so a bare `wrangler deploy` never ships a stale tree, and `watch_dir` leaves `client/` out so `wrangler dev` does not double-build.
-- `pretest` runs `--check` (in memory, nothing written) and `wrangler types` is a no-op, so a gate run beside `npm run dev` never overwrites the dev build. Only `npm run client:build` or a deploy writes the production build.
+- `npm run dev` watches `client/` and `public/`. Wrangler's `build.command` runs the build too, so a bare `wrangler deploy` never ships a stale tree, and `watch_dir` leaves `client/` out so `wrangler dev` does not build twice.
+- `pretest` runs the build with `--check` (in memory, nothing written), and the build exits at once when `wrangler types` runs it, so a gate run beside `npm run dev` never overwrites the dev build. Only `npm run client:build` or a deploy writes the production build.
 
 ## Live reload in the dev build
 
 - `client/dev_reload.ts` polls `index.html` once a second: a new `app.js` stamp reloads the page once (a declined leave prompt is not re-asked), a new `styles.css` stamp hot-swaps the `<link>` so editor state survives.
 - It fetches with cache mode `reload` because `wrangler dev` keeps a regenerated `index.html`'s original ETag, so a plain reload would get a 304 and the stale page.
+
+## Icons in the build
+
+- The build inlines icon files with esbuild's `text` loader, and the client tests do the same with the `svg-as-text` plugin in `vitest.config.ts`; keep the two in step.
+- The sidebar sprite in `public/dashboard/index.html` is the one icon that isn't a file in `client/ui/icons/`, since it paints before any script runs.

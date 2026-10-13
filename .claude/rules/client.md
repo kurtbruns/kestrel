@@ -12,7 +12,7 @@ Framework-free, strict TypeScript in `client/`. The build is `.claude/rules/clie
 - Feature folders (`posts/`, `sends/`, `settings/`, …) hold their views, dialogs, and pure logic; flat in `client/` is the app itself (`main`, `router`, `lifecycle`, `state`, `api`, …) and the reads every feature shares, such as `send_state`. Names inside a folder drop the folder's word (`sends/list.ts`), except a namesake view (`dashboard/dashboard.ts`).
 - `ui/` knows no feature or route: a `ui/` module imports only `ui/`, `shared/`, and the shell's roots. A widget that lives for a mount takes the mount's `AbortSignal` rather than importing `lifecycle`.
 - Imports run one way, with no cycle: a flat module never imports a feature except `main.ts` (installs) and `router.ts` (mounts), and one feature imports another only through its exported shared pieces. A cycle breaks once a top-level statement reads across it, because esbuild hoists module scopes into one and that read sees `undefined`.
-- Code the Worker also needs comes from `shared/`, never `src/`; move a Worker function there rather than mirror it. A new route's wire types go there too (`.claude/CLAUDE.md`).
+- Code the Worker also needs comes from `shared/`, never `src/`; move a Worker function there rather than mirror it.
 - No module does anything at load but define things. A long-lived listener is registered by an `install…()` that `boot()` (`main.ts`) calls by name; one a single view owns registers on its first render. The shell's root lookups are the one load-time read. Check: `grep -rn addEventListener client --include='*.ts'` finds none at module scope.
 - A module's header names one responsibility; one that needs "and" twice is two modules. `ui/widgets` and `ui/format` are catalogs of small pieces, not a home for a subsystem.
 - Nothing carries `// @ts-nocheck`; `client/tsconfig.json` (DOM lib, no Worker or Vitest types) is typechecked as a second program.
@@ -28,7 +28,7 @@ Framework-free, strict TypeScript in `client/`. The build is `.claude/rules/clie
 
 ## Following sends
 
-- A page follows sends through `send_state` (`followSends` from its list read, `followSend` from its send read), never a poll of its own; the pace is the server's. After acting, it calls `readSendsNow()`.
+- A page follows sends through `send_state` (`followSends` from its list read, which for Drafts is `GET /api/posts`, carrying the same cursor; `followSend` from its send read), never a poll of its own; the pace is the server's. After acting, it calls `readSendsNow()`.
 - A follower's `stale()` means the server answered `cursor_ahead` (database reset or restored): the page re-reads its own list or send and follows again from that read.
 - Every send a page holds is one `SendView` (`shared/sends.ts`), so a feed report replaces a row as is. Read the frozen email at `links.email_html`; it is never carried on a send.
 - What is wrong with a send and what can be done to it are the server's: read its `conditions` and `actions` (`sends/progress.ts`), never derive a condition, threshold, or whether a control would work. The one clock rule a page applies is hiding a scheduled send's window controls at its fire time.
@@ -51,5 +51,4 @@ Framework-free, strict TypeScript in `client/`. The build is `.claude/rules/clie
 ## Icons
 
 - An icon is a complete SVG file in `client/ui/icons/` (`xmlns`, its own `viewBox`, `aria-hidden="true"`, `currentColor` to follow the text). Add one with the file, its entry in `ui/icons.ts`, and its line in `ui/icons.spec.ts`.
-- The build inlines them with esbuild's `text` loader and the client tests with the `svg-as-text` plugin in `vitest.config.ts`; keep the two in step.
-- The sidebar sprite in `public/dashboard/index.html` is the one exception, since it paints before any script runs. A generated image (the letter avatar) is code, not an icon.
+- A generated image (the letter avatar) is code, not an icon. How icons are inlined, and the sidebar sprite's exception, are in `client-build.md`.
