@@ -10,12 +10,14 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+## [1.9.0] - 2026-10-13
+
 **Upgrading from 1.8.0.** Two database migrations: run `npm run sync-migrations`, then `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development) before deploying. The first (`0005_imports`) adds the record of each import and how each subscriber joined, reading every existing subscriber as joined through Kestrel's double opt-in, and rebuilds the notifications table so an import can be told to you. The second (`0006_deliveries_fewer_indexes`) drops two indexes no query reads; it writes no rows, so it costs nothing against D1's daily allowance at any size.
 
 ### Added
 
-- On the Workers Free plan's limits (`SUBREQUEST_BUDGET` unset), where D1 refuses every query once a day's 100,000 written rows are spent and the instance stops until midnight UTC, the app now warns before it gets there. A send to more than 5,000 recipients says so in the Schedule dialog, on the scheduled post, and to Claude as the send's `daily_writes` condition. An import plan that would leave more than 3,000 confirmed subscribers advises sending the next day (UTC). Neither warning ever refuses. The setup guide now recommends Workers Paid from about 5,000 subscribers, for the database's writes as well as send speed (SPEC §7, §8).
 - Bring an existing list in, and take the whole list out, through the API, in one documented format, `kestrel-subscribers/1` (a CSV, or a plain `.txt` list of addresses). A plan shows what the import would do to every address before anything changes; the commit applies it whole, with your attestation that everyone imported as subscribed opted in, and imports them as confirmed with how and where they joined, never reversing an unsubscribe (even for a reader the subscribe form has put back to pending) or lifting a suppression here, and sending no email. Each subscriber now records how they joined beside their state; Claude may attest for you, and you're emailed when it does, but only a person can let an import grow a scheduled send. The export reads the list out in the same format, a page at a time (1,000 rows on the Workers Free plan's limits, 10,000 otherwise), with every address on the list for the whole export appearing exactly once, so another instance imports it back; in the CSV written from its pages, a value a spreadsheet would run as a formula is written as text. One import takes up to 10,000 rows, or 1,000 on the Workers Free plan's limits (`SUBREQUEST_BUDGET` unset). The format's reference is in the Docs tab and at `GET /api/imports/format` (SPEC §7, §8).
+- On the Workers Free plan's limits (`SUBREQUEST_BUDGET` unset), where D1 refuses every query once a day's 100,000 written rows are spent and the instance stops until midnight UTC, the app now warns before it gets there. A send to more than 5,000 recipients says so in the Schedule dialog, on the scheduled post, and to Claude as the send's `daily_writes` condition. An import plan that would leave more than 3,000 confirmed subscribers advises sending the next day (UTC). Neither warning ever refuses. The setup guide now recommends Workers Paid from about 5,000 subscribers, for the database's writes as well as send speed (SPEC §7, §8).
 
 ### Changed
 
@@ -377,7 +379,8 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
-[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.9.0
 [1.8.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.8.0
 [1.7.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.7.0
 [1.6.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.6.0
