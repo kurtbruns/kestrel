@@ -38,7 +38,7 @@ export type HaltCause =
  * "Deploy" is the step's own last one.
  */
 export const NOT_CONNECTED_ADVICE = {
-  step: "Connect an email provider",
+  step: "Connect Amazon SES",
   guide: " (the setup guide walks through it)",
   after: ", then deploy.",
 } as const;
@@ -57,7 +57,7 @@ export function refusalAdvice(cause: HaltCause | null): string {
     case "sender":
       return "Verify the sending domain or from-address with the provider.";
     case "quota":
-      return "Wait for the provider's sending quota to reset, or raise it on your plan.";
+      return "Wait for SES's daily quota to reset, or ask AWS to raise it in the SES console.";
     case "suspended":
       return "Settle the account's standing with the provider (for SES, in the SES console).";
     case "not_connected":

@@ -317,9 +317,9 @@ A send that needs the operator leaves the active-send cards and In progress, so 
 
 Two states have no real provider (SPEC §9), and each is worded for who meets it.
 
-**Local development** (and the tests, and a hosted demo) sends through a stand-in that records a send but delivers nothing. A confirmation like "Test sent to 2 addresses" would read exactly like a real send, so send-action toasts end with "(no email provider configured, so nothing is delivered)", and the Sent page carries a muted line saying the same. The copy never says "fake transport".
+**Local development** (and the tests, and a hosted demo) sends through a stand-in that records a send but delivers nothing. A confirmation like "Test sent to 2 addresses" would read exactly like a real send, so send-action toasts end with "(local stand-in: nothing is delivered)", and the Sent page carries a muted line saying the same. The copy never says "fake transport".
 
-**A deployment partway through setup is not connected.** It refuses every send, so there's nothing to confirm; the operator needs the way out. Every mention names the state ("No email provider connected"), says what it stops, and links **Connect an email provider** to the guide. It is a standing state, true every time the reader looks, so it is never dismissible. It shows wherever a send would be refused, before the publisher tries:
+**A deployment partway through setup is not connected.** It refuses every send, so there's nothing to confirm; the operator needs the way out. Every mention names the state ("No email provider connected"), says what it stops, and links **Connect Amazon SES** to the guide. It is a standing state, true every time the reader looks, so it is never dismissible. It shows wherever a send would be refused, before the publisher tries:
 
 - **Dashboard and Sent**: an amber line, the one health line with no send behind it. The first-run checklist's provider step replaces the sending-domain step, and its subscribe-link step says signups open once a provider is connected.
 - **A draft's page**: the same amber line above the actions, "No email provider connected: you can write and preview, not send", so the publisher knows before opening a dialog.

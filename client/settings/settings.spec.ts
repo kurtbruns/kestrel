@@ -189,14 +189,14 @@ describe("settings view", () => {
     await open([{ path: "/api/settings", reply: () => notConnected }]);
     const value = $("#providerValue");
     expect(value.textContent?.trim()).toBe(
-      "No email provider connected. Connect an email provider to start sending.",
+      "No email provider connected. Connect Amazon SES to start sending.",
     );
     expect($<HTMLAnchorElement>("a", value).getAttribute("href")).toBe("#/docs/ses");
     // Ways to subscribe keeps the address and the code, and says signups are closed.
     const closed = $(".set-sub-not-connected");
     expect(closed.classList.contains("amber")).toBe(true);
     expect(closed.textContent?.replace("⚠️", "")).toBe(
-      "No email provider connected, so signups aren’t open yet: the page below says so, and the form takes no address. Connect an email provider to open signups.",
+      "No email provider connected, so signups aren’t open yet: the page below says so, and the form takes no address. Connect Amazon SES to open signups.",
     );
     expect($("#embedCode").textContent).toContain("/subscribe");
     // Notifications would go through that provider, once there is one.

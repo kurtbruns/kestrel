@@ -511,7 +511,7 @@ describe("editor view", () => {
     expect(note.classList.contains("health")).toBe(true);
     expect(note.classList.contains("amber")).toBe(true);
     expect(note.textContent).toBe(
-      "⚠️No email provider connected: you can write and preview, not send. Connect an email provider.",
+      "⚠️No email provider connected: you can write and preview, not send. Connect Amazon SES.",
     );
     expect($<HTMLAnchorElement>("a", note).getAttribute("href")).toBe("#/docs/ses");
     expect(note.nextElementSibling?.classList.contains("actions-bar")).toBe(true);
@@ -1296,7 +1296,7 @@ describe("editor view", () => {
     await vi.advanceTimersByTimeAsync(0);
     const line = $(".modal .not-connected");
     expect(line.textContent).toBe(
-      "No email provider connected, so a test can’t be sent yet. Connect an email provider to send one.",
+      "No email provider connected, so a test can’t be sent yet. Connect Amazon SES to send one.",
     );
     expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/ses");
     expect($<HTMLButtonElement>("#tGo").disabled).toBe(true);
@@ -1703,7 +1703,7 @@ describe("editor view", () => {
     $("#scheduleBtn").click();
     const line = $(".modal .not-connected");
     expect(line.textContent).toBe(
-      "No email provider connected, so this can’t be scheduled yet. Connect an email provider to schedule it.",
+      "No email provider connected, so this can’t be scheduled yet. Connect Amazon SES to schedule it.",
     );
     expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/ses");
     expect($<HTMLButtonElement>("#schGo").disabled).toBe(true);

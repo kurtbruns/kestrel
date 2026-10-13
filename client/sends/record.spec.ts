@@ -689,7 +689,7 @@ describe("sent record", () => {
       ],
     });
     for (const [preview, words] of [
-      [false, "Connect an email provider, then deploy."],
+      [false, "Connect Amazon SES, then deploy."],
       [true, "Restart npm run dev without SIMULATE_SENDS=not-connected to send."],
     ] as const) {
       const label = preview ? "preview" : "deployed";

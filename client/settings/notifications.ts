@@ -29,7 +29,7 @@ function notifyChannelLabel(
         ? "Your email provider, once one is connected"
         : `Your email provider (${providerLabel(provider)})`;
     default:
-      return "No email provider configured, so nothing is delivered";
+      return "Local stand-in: nothing is delivered";
   }
 }
 
@@ -114,7 +114,7 @@ export function mountNotifications(root: HTMLElement, page: SettingsPage): Secti
         });
         toast(
           r.channel === "fake"
-            ? `Test notification recorded for ${r.to} (no email provider configured, so nothing is delivered)`
+            ? `Test notification recorded for ${r.to} (local stand-in: nothing is delivered)`
             : `Test notification sent to ${r.to}`,
         );
         setHtml(
