@@ -1,11 +1,11 @@
 /**
  * Operator adjudication of a wedged send (SPEC §12).
  *
- * On a non-idempotent provider (e.g. SES) a mid-batch transport error — the
- * request left but no response came back — leaves its recipients `dispatched`:
+ * A mid-batch transport error — the request left but no response came back —
+ * leaves its recipients `dispatched`:
  * genuinely ambiguous, because we cannot know whether the provider accepted them.
  * The send loop deliberately refuses to blind-retry those rows (that refusal is
- * what protects I4 without a provider idempotency key), so the send can never
+ * what protects I4, since no provider dedupes a repeat), so the send can never
  * satisfy its completion gate (`pending == 0 && dispatched == 0`). Once the run that left
  * them releases the send it is wedged (`WEDGED_SEND`): it stays `sending`, the sweep no
  * longer runs it, and it is flagged (`send.wedged`, then `send.stuck`), with no way to act

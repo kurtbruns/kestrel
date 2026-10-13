@@ -25,7 +25,6 @@ export class NotConnectedProvider implements EmailProvider {
   // Traits the send loop reads before its first batch; nothing is ever carried, so they
   // only need to be valid.
   readonly maxBatch = 100;
-  readonly idempotentRetry = false;
 
   async sendBatch(
     _rendered: RenderedEmail,
@@ -38,7 +37,6 @@ export class NotConnectedProvider implements EmailProvider {
         reason: "account",
         cause: "not_connected",
         error: NOT_CONNECTED_ERROR,
-        mayHaveSent: false,
       },
     };
   }

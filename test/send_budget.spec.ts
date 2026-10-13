@@ -19,10 +19,10 @@ import { MIN_RUN_COST, runSend } from "../src/send/loop";
 import { SendWindow } from "../src/send/pace";
 import { resolveStuckSend } from "../src/send/resolve";
 import { sweep } from "../src/send/sweep";
+import { BatchProvider, SesLikeProvider } from "./support/batching";
 import { guardD1 } from "./support/d1_guard";
 import { addresses, dueSend, resetDatabase, seedConfirmed, tick } from "./support/fixtures";
 import { allowErrorLogs } from "./support/log";
-import { NoKeyProvider, ResendLikeProvider, SesLikeProvider } from "./support/resend_like";
 import { answerSes } from "./support/ses";
 
 /** The test env with its D1 held to the 100-bind cap and counted. */
@@ -31,14 +31,14 @@ function guarded() {
   return { guard, env: { ...env, DB: guard.db } as AppEnv };
 }
 
-let resend: ResendLikeProvider;
+let transport: BatchProvider;
 
 beforeEach(async () => {
   await resetDatabase();
   // Only Date is faked, so `tick` can move the clock past a halt's backoff.
   vi.useFakeTimers({ toFake: ["Date"] });
-  resend = new ResendLikeProvider();
-  vi.spyOn(providers, "getProvider").mockReturnValue(resend);
+  transport = new BatchProvider();
+  vi.spyOn(providers, "getProvider").mockReturnValue(transport);
 });
 
 afterEach(() => {
@@ -47,7 +47,7 @@ afterEach(() => {
 });
 
 describe("D1's 100-parameter cap", () => {
-  it("a Resend-shaped send of full 100-recipient batches binds under the cap", async () => {
+  it("a send of full 100-recipient batches binds under the cap", async () => {
     const emails = addresses(250);
     await seedConfirmed(emails);
     const send = await dueSend();
@@ -57,8 +57,8 @@ describe("D1's 100-parameter cap", () => {
 
     expect(result.finished).toBe(true);
     expect(result.accepted).toBe(250);
-    expect(resend.requests).toBe(3);
-    expect(emails.every((e) => resend.timesMailed(e) === 1)).toBe(true);
+    expect(transport.requests).toBe(3);
+    expect(emails.every((e) => transport.timesMailed(e) === 1)).toBe(true);
   });
 
   it("the re-make guard binds a fixed number of parameters however many sends it acknowledges", async () => {
@@ -85,17 +85,17 @@ describe("the per-invocation budget", () => {
     let ticks = 0;
     while ((await sends.getSend(env.DB, send.id))!.status !== "sent" && ticks < 20) {
       const statementsBefore = guard.statements;
-      const requestsBefore = resend.requests;
+      const requestsBefore = transport.requests;
       await sweep(capped);
       ticks += 1;
-      const spent = guard.statements - statementsBefore + (resend.requests - requestsBefore);
+      const spent = guard.statements - statementsBefore + (transport.requests - requestsBefore);
       expect(spent).toBeLessThanOrEqual(limit);
     }
 
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
     expect(ticks).toBeGreaterThan(1);
     expect(await sends.deliveryRollup(env.DB, send.id)).toMatchObject({ accepted: 450 });
-    expect(emails.every((e) => resend.timesMailed(e) === 1)).toBe(true);
+    expect(emails.every((e) => transport.timesMailed(e) === 1)).toBe(true);
   });
 });
 
@@ -152,13 +152,13 @@ describe("SUBREQUEST_BUDGET", () => {
   });
 });
 
-describe("a Resend batch interrupted after acceptance", () => {
+describe("a batch interrupted after acceptance", () => {
   // The batch was accepted but its answer never recorded: either the response was lost
   // (the request throws), or the run was cut off while recording it (the write throws,
   // as hitting the invocation cap does). Either way its rows' fate is unknown to us.
   const interruptions = {
     "its answer is lost": () => {
-      resend.loseAnswers = 1;
+      transport.loseAnswers = 1;
     },
     "the run is cut off while recording it": () => {
       // The run dies on the write, which the loop reports as an unhandled send failure.
@@ -176,7 +176,8 @@ describe("a Resend batch interrupted after acceptance", () => {
   };
 
   for (const [name, interrupt] of Object.entries(interruptions)) {
-    it(`re-mails nobody when ${name} and the batches are composed differently on resume`, async () => {
+    it(`re-mails nobody when ${name}: the batch waits for Resolve and the rest goes out (I4, SPEC §12)`, async () => {
+      allowErrorLogs("send.ambiguous", "send.wedged");
       const emails = addresses(150);
       await seedConfirmed(emails);
       const send = await dueSend();
@@ -184,10 +185,10 @@ describe("a Resend batch interrupted after acceptance", () => {
       interrupt();
       await tick();
       expect((await sends.getSend(env.DB, send.id))!.status).toBe("sending");
-      expect(resend.mailed.length).toBe(100); // the first batch went out
+      expect(transport.mailed.length).toBe(100); // the first batch went out
 
       // In between, one recipient of the handed-off batch and one not yet handed off
-      // unsubscribe, so any batch re-made from the queue would be composed differently.
+      // unsubscribe.
       const { results } = await env.DB.prepare(
         "SELECT email FROM deliveries WHERE send_id = ? AND dispatch_key IS NOT NULL ORDER BY email",
       )
@@ -208,54 +209,27 @@ describe("a Resend batch interrupted after acceptance", () => {
 
       await tick();
 
+      // The batch whose fate is unknown is never re-sent; everyone else went out.
+      expect(emails.every((e) => transport.timesMailed(e) <= 1)).toBe(true);
+      expect(transport.timesMailed(handedOff)).toBe(1); // mailed once, before the unsubscribe
+      expect(transport.timesMailed(notYet)).toBe(0); // I2: not yet handed off, so skipped
+      expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({
+        dispatched: 100,
+        accepted: 49,
+        skipped: 1,
+      });
+      const resolved = await resolveStuckSend(env, send.id, "accepted", "op@example.com");
+      expect(resolved.completed).toBe(true);
       expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
-      expect(emails.every((e) => resend.timesMailed(e) <= 1)).toBe(true);
-      expect(resend.timesMailed(handedOff)).toBe(1); // mailed once, before the unsubscribe
-      expect(resend.timesMailed(notYet)).toBe(0); // I2: not yet handed off, so skipped
-      expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 149, skipped: 1 });
     });
   }
 });
 
-describe("a retryable answer to a handed-off batch", () => {
-  it("keeps the batch's key, so a 429 on the re-send doesn't re-mail it under a new one", async () => {
-    const emails = addresses(3);
-    await seedConfirmed(emails);
-    const send = await dueSend();
-
-    resend.loseAnswers = 1; // accepted, answer lost
-    await tick();
-    resend.rateLimit = 1; // the re-send is rate-limited
-    await tick();
-    await tick(); // re-sent again under the same key: Resend returns its first answer
-
-    expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
-    expect(emails.every((e) => resend.timesMailed(e) === 1)).toBe(true);
-    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 3 });
-  });
-
-  it("on a provider switched to one without idempotency, goes to Resolve instead of stalling", async () => {
+describe("a request with no answer", () => {
+  it("leaves its batch in flight untouched and keeps delivering the rest (SPEC §12)", async () => {
     allowErrorLogs("send.ambiguous", "send.wedged");
-    await seedConfirmed(addresses(3));
-    const send = await dueSend();
-    resend.loseAnswers = 1;
-    await tick();
-
-    // The operator moves the deployment to a provider that can't dedupe a re-send.
-    const plain = new NoKeyProvider();
-    vi.mocked(providers.getProvider).mockReturnValue(plain);
-    await tick();
-
-    expect(plain.requests).toBe(0); // never re-sent blind
-    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ dispatched: 3 });
-    const resolved = await resolveStuckSend(env, send.id, "accepted", "op@example.com");
-    expect(resolved.completed).toBe(true);
-  });
-
-  it("on a provider without idempotency, leaves in-flight batches untouched and keeps delivering", async () => {
-    allowErrorLogs("send.ambiguous", "send.wedged");
-    // SES-shaped: one recipient per request, no idempotency, so a request with no answer
-    // leaves its recipient in flight for Resolve. That must neither stall the rest of
+    // One recipient a request, so a request with no answer leaves its recipient in flight
+    // for Resolve. That must neither stall the rest of
     // the send nor refresh the row, which would hide it from the stale-delivery flag.
     const emails = addresses(4);
     await seedConfirmed(emails);
@@ -329,7 +303,7 @@ describe("lease ownership", () => {
     expect(await sends.renewLease(env.DB, send.id, successor!, now + LEASE_TTL_MS)).toBe(true);
   });
 
-  it("a stale run can't re-send, return, or record the successor's in-flight batch", async () => {
+  it("a stale run can't return or record the successor's in-flight batch", async () => {
     await seedConfirmed(addresses(2));
     const send = await dueSend();
     const now = Date.now();
@@ -344,12 +318,11 @@ describe("lease ownership", () => {
       await sends.dispatchFresh(env.DB, send.id, successor, [{ key: "k1", ids }], now),
     ).toHaveLength(2);
 
-    expect(await sends.redispatch(env.DB, send.id, stale, "k1", now)).toEqual([]);
     await sends.holdBatch(
       env.DB,
       send.id,
       stale,
-      [{ key: "k1", keepKey: true }],
+      ["k1"],
       { reason: "unavailable", cause: "outage", error: "stale" },
       HALT_BACKOFF_MS.unavailable,
       now,
@@ -367,9 +340,12 @@ describe("lease ownership", () => {
     expect(row.c_in_flight).toBe(2);
     expect(row.c_pending).toBe(0);
     expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ dispatched: 2 });
-    expect(await sends.unansweredDispatchKeys(env.DB, send.id)).toEqual([
-      { key: "k1", keyedAt: now },
-    ]);
+    const keyed = await env.DB.prepare(
+      "SELECT DISTINCT dispatch_key AS k FROM deliveries WHERE send_id = ?",
+    )
+      .bind(send.id)
+      .all<{ k: string }>();
+    expect(keyed.results).toEqual([{ k: "k1" }]); // still the successor's batch
     expect(row.halt_reason).toBeNull(); // nor record a halt on the successor's send
   });
 });
@@ -613,15 +589,7 @@ describe("a group whose requests are answered differently", () => {
     const ids = await sends.pendingDeliveryIds(env.DB, send.id, 10);
     await sends.dispatchFresh(env.DB, send.id, lease, [{ key: "k1", ids }], now);
 
-    await sends.holdBatch(
-      env.DB,
-      send.id,
-      lease,
-      [{ key: "k1", keepKey: false }],
-      null,
-      HALT_BACKOFF_MS.unavailable,
-      now,
-    );
+    await sends.holdBatch(env.DB, send.id, lease, ["k1"], null, HALT_BACKOFF_MS.unavailable, now);
 
     const row = (await sends.getSend(env.DB, send.id))!;
     expect([row.halt_reason, row.halt_cause, row.halt_retries]).toEqual([

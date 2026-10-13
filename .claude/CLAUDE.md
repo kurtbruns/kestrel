@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Kestrel is a self-contained newsletter app: write a post in Markdown, preview it exactly as the email, schedule it behind a cancelable review window, and send it to a double-opt-in list. The app owns the list, the consent, the delivery record, and a permanent per-post archive. One HTTP API has two clients, a web editor and Claude, and neither reaches past it.
 
-It runs on a Cloudflare Worker over D1 (database) and R2 (images), with a Cron Trigger driving the send sweep once a minute. Email goes through a swappable provider: `ses` and `resend` are the real transports, and the in-memory `fake` serves local dev and tests. TypeScript under `strict`.
+It runs on a Cloudflare Worker over D1 (database) and R2 (images), with a Cron Trigger driving the send sweep once a minute. Email goes through a swappable provider: `ses` (Amazon SES) is the real transport, and the in-memory `fake` serves local dev and tests. TypeScript under `strict`.
 
 `docs/SPEC.md` is the contract: the invariants (I1 to I6), the model, and the intended behavior. Read it before changing sending, consent, the record, or the reader surface.
 

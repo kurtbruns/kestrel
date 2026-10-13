@@ -82,7 +82,7 @@ describe("addSubscriberModal", () => {
   });
 
   it("takes an address as usual once a provider is set, and on the local stand-in", () => {
-    for (const provider of ["resend", "fake"] as const) {
+    for (const provider of ["ses", "fake"] as const) {
       appState.appConfig = settingsResponse({ deployment: { provider } });
       fake = fakeApi([]);
       addSubscriberModal(() => {}, live);

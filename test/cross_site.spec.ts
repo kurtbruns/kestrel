@@ -221,7 +221,7 @@ describe("public and webhook routes are outside these checks", () => {
   });
 
   it("a webhook is answered by its adapter, not refused as cross-site", async () => {
-    const res = await SELF.fetch(`${base}/webhooks/resend`, {
+    const res = await SELF.fetch(`${base}/webhooks/ses`, {
       method: "POST",
       headers: { "content-type": "text/plain", "sec-fetch-site": "cross-site" },
       body: "{}",

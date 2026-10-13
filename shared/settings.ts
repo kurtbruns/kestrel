@@ -48,11 +48,10 @@ export interface SettingsView {
 }
 
 /**
- * The providers the local send simulation can model (SPEC §10): `resend` and `ses` take
- * their traits from the real adapters, and `generic` is a small-batch provider paced to be
- * watched.
+ * The providers the local send simulation can model (SPEC §10): `ses` takes its traits from
+ * the real adapter, and `generic` is a small-batch provider paced to be watched.
  */
-export const SIMULATION_PROFILES = ["generic", "resend", "ses"] as const;
+export const SIMULATION_PROFILES = ["generic", "ses"] as const;
 export type SimulationProfile = (typeof SIMULATION_PROFILES)[number];
 
 /** Which of a provider's failures the simulation injects: a real provider's mix, or none for a clean demo. */
@@ -70,7 +69,7 @@ export interface SimulationView {
  * when every send is refused; `fake`, named for local development, the tests, or a demo,
  * which records a send and delivers nothing; or a real provider.
  */
-export type DeploymentProvider = "none" | "fake" | "ses" | "resend";
+export type DeploymentProvider = "none" | "fake" | "ses";
 
 /** The deploy-time configuration, reflected read-only: origins, provider, and whether Access gates the surface. Never a secret. */
 export interface DeploymentView {

@@ -62,12 +62,9 @@ export interface Secrets {
   /** The SES account's maximum send rate, in messages a second (optional). */
   SES_MAX_SEND_RATE?: string;
   SNS_TOPIC_ARN?: string;
-  /** Resend. */
-  RESEND_API_KEY?: string;
-  RESEND_WEBHOOK_SECRET?: string;
   /**
    * What stands in for the provider in local dev (SPEC §10): the send simulation, naming the
-   * provider it models, `resend`, `ses`, or `generic` (`1`), optionally with `:none` for no
+   * provider it models, `ses` or `generic` (`1`), optionally with `:none` for no
    * injected failures; `not-connected` to run as a deployment with no provider (SPEC §9);
    * `off` or unset for the plain, instant fake. Honored only in a dev-shaped env, so never
    * in a deployed one. `.dev.vars.example` ships it on.
@@ -425,6 +422,13 @@ function readProvider(v: string | undefined): ProviderName {
   if (raw === undefined) {
     return "none";
   }
+  if (raw === "resend") {
+    // An instance made before Resend was removed: say what to do, not only what's allowed.
+    throw new ConfigError(
+      "PROVIDER",
+      'is "resend", which this release no longer supports. Set it to "ses": Connect Amazon SES in the setup guide walks through it, and its last section says how to switch an instance that already sends',
+    );
+  }
   if (!isProviderName(raw)) {
     throw new ConfigError("PROVIDER", `must be one of ${PROVIDER_NAMES.join(", ")}, not "${raw}"`);
   }
@@ -629,7 +633,7 @@ const SIMULATION_GENERIC = new Set(["1", "on", "true", "yes"]);
 
 /**
  * `SIMULATE_SENDS` as a profile and fault level, `not-connected`, or null for the plain
- * fake: `off` (or unset), `not-connected`, or a profile (`generic`, or `1`, `resend`, `ses`)
+ * fake: `off` (or unset), `not-connected`, or a profile (`generic`, or `1`, `ses`)
  * and optionally `:realistic` (the default) or `:none`. Anything else is refused rather than
  * read as off, so a typo can't quietly turn the simulation off or pick the wrong provider.
  */

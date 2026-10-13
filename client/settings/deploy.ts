@@ -13,7 +13,6 @@ const PROVIDER_LABELS: Record<string, string> = {
   none: "No email provider connected",
   fake: "Fake (dev, dead-end)",
   ses: "Amazon SES",
-  resend: "Resend",
 };
 
 /** The provider a deployment sends through, as Settings names it. */
@@ -35,7 +34,6 @@ function providerValue(d: DeploymentView): Html {
 /** The provider a local send simulation models, as the Email provider row names it. */
 const SIMULATION_LABELS: Record<SimulationProfile, string> = {
   generic: "a generic provider",
-  resend: "Resend",
   ses: "Amazon SES",
 };
 

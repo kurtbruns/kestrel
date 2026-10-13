@@ -11,7 +11,7 @@ import { confirmationEmail } from "../src/emails/system";
 import { type AppEnv, getConfig } from "../src/env";
 import type { RequestContext } from "../src/router";
 import * as settingsRoutes from "../src/routes/settings";
-import { RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
+import { SES_DEPLOY } from "./support/deploy";
 import { clearLogos, dueSend, logoKeys, resetDatabase, tick } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, PNG_1x1 } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
@@ -140,9 +140,9 @@ describe("settings surface", () => {
   // put in front of the handler directly: no value may surface under any key. Not through
   // the router, because the Access vars make the env non-dev, where the suite's dev token
   // no longer authenticates.
-  it("reflects no secret value of a deployed env, whatever its provider", async () => {
+  it("reflects no secret value of a deployed env", async () => {
     const ACCESS = { ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com", ACCESS_AUD: "aud-tag-7f3e" };
-    for (const deploy of [SES_DEPLOY, RESEND_DEPLOY]) {
+    for (const deploy of [SES_DEPLOY]) {
       const e = { ...env, ...deploy, ...ACCESS } as unknown as AppEnv;
       const req = new Request(`${base}/api/settings`);
       const res = await settingsRoutes.get({
@@ -161,8 +161,6 @@ describe("settings surface", () => {
         "test-dev-secret",
         SES_DEPLOY.AWS_ACCESS_KEY_ID,
         SES_DEPLOY.AWS_SECRET_ACCESS_KEY,
-        RESEND_DEPLOY.RESEND_API_KEY,
-        RESEND_DEPLOY.RESEND_WEBHOOK_SECRET,
         ACCESS.ACCESS_AUD,
       ]) {
         expect(text, deploy.PROVIDER).not.toContain(secret);

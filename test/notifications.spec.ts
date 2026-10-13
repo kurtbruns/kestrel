@@ -16,8 +16,9 @@ import { composeNotification, sendLink } from "../src/notify/compose";
 import { clearFakeNotifications, failFakeNotify, fakeNotifications } from "../src/notify/fake";
 import * as providers from "../src/providers";
 import { sweep } from "../src/send/sweep";
+import { BatchProvider } from "./support/batching";
 import { guardD1 } from "./support/d1_guard";
-import { RESEND_DEPLOY } from "./support/deploy";
+import { SES_DEPLOY } from "./support/deploy";
 import {
   addresses,
   dueSend,
@@ -28,7 +29,6 @@ import {
 } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
-import { ResendLikeProvider } from "./support/resend_like";
 
 // The publisher is told, by email, when a send goes out or runs into a problem (SPEC §8): once per
 // event, however many ticks the condition lasts, through a channel that is the fake here
@@ -52,7 +52,7 @@ async function rows(sendId?: string) {
   return results;
 }
 
-let resend: ResendLikeProvider;
+let transport: BatchProvider;
 let errors: MockInstance;
 let warnings: MockInstance;
 
@@ -62,8 +62,8 @@ beforeEach(async () => {
   clearFakeNotifications();
   // Only Date is faked, so `ticks` can move the clock past a halt's backoff.
   vi.useFakeTimers({ toFake: ["Date"] });
-  resend = new ResendLikeProvider();
-  vi.spyOn(providers, "getProvider").mockReturnValue(resend);
+  transport = new BatchProvider();
+  vi.spyOn(providers, "getProvider").mockReturnValue(transport);
   errors = vi.spyOn(console, "error");
   warnings = vi.spyOn(console, "warn");
 });
@@ -91,7 +91,7 @@ describe("a send finishing", () => {
     expect(await rows(send.id)).toMatchObject([{ kind: "finished", status: "sent", attempts: 1 }]);
     // Nothing about it reached the list: the subscribers were mailed once each, the
     // publisher not at all through the newsletter's provider.
-    expect(resend.mailed).toHaveLength(3);
+    expect(transport.mailed).toHaveLength(3);
   });
 
   it("with no address set, records the event as having nowhere to go and never mails a backlog", async () => {
@@ -128,14 +128,15 @@ describe("a send that needs the publisher", () => {
     allowErrorLogs("send.stuck");
     await seedConfirmed(addresses(5));
     const send = await dueSend({ subject: "Owls in winter" });
-    resend.refuse = "resend batch 401: API key is invalid";
+    transport.refuse =
+      "ses 403 UnrecognizedClientException: The security token included in the request is invalid";
 
     await ticks(1);
     const [refused] = fakeNotifications();
     expect(refused!.subject).toBe(
       'Problem with "Owls in winter": the provider is refusing your account',
     );
-    expect(refused!.text).toContain("API key is invalid");
+    expect(refused!.text).toContain("security token included in the request is invalid");
     expect(refused!.text).toContain("Replace the provider's API key");
     expect(refused!.text).toContain("No one has been marked unsent");
 
@@ -143,7 +144,7 @@ describe("a send that needs the publisher", () => {
     expect(fakeNotifications()).toHaveLength(1);
 
     // Fixed: the send resumes on its own and finishing is a notification of its own.
-    resend.refuse = null;
+    transport.refuse = null;
     await ticks(3);
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
     expect(fakeNotifications().map((n) => n.subject)).toEqual([
@@ -155,11 +156,11 @@ describe("a send that needs the publisher", () => {
   it("a refusal that lifts and returns is a new event", async () => {
     /** Answers one batch once `relapse` is set, then refuses again for that reason: the
      *  account fixed long enough for a batch to land, then refused once more. */
-    class Relapsing extends ResendLikeProvider {
+    class Relapsing extends BatchProvider {
       relapse: string | null = null;
       override async sendBatch(
-        ...args: Parameters<ResendLikeProvider["sendBatch"]>
-      ): ReturnType<ResendLikeProvider["sendBatch"]> {
+        ...args: Parameters<BatchProvider["sendBatch"]>
+      ): ReturnType<BatchProvider["sendBatch"]> {
         const result = await super.sendBatch(...args);
         if (result.kind === "answered" && this.relapse) {
           this.refuse = this.relapse;
@@ -173,7 +174,8 @@ describe("a send that needs the publisher", () => {
     // More than one batch, so the send is still going when the refusal returns.
     await seedConfirmed(addresses(3 * relapsing.maxBatch));
     const send = await dueSend({ subject: "Owls in winter" });
-    relapsing.refuse = "resend batch 401: API key is invalid";
+    relapsing.refuse =
+      "ses 403 UnrecognizedClientException: The security token included in the request is invalid";
 
     await ticks(2);
     const first = (await sends.getSend(env.DB, send.id))!.halted_at;
@@ -183,7 +185,8 @@ describe("a send that needs the publisher", () => {
     // The key is replaced: a batch is answered, which lifts the refusal, and the next is
     // refused again.
     relapsing.refuse = null;
-    relapsing.relapse = "resend batch 401: API key is invalid";
+    relapsing.relapse =
+      "ses 403 UnrecognizedClientException: The security token included in the request is invalid";
     await ticks(1);
     expect(relapsing.mailed).toHaveLength(relapsing.maxBatch);
     const second = (await sends.getSend(env.DB, send.id))!.halted_at;
@@ -330,7 +333,7 @@ describe("isolation", () => {
         error: "fake notification failure",
       },
     ]);
-    expect(resend.mailed).toHaveLength(2);
+    expect(transport.mailed).toHaveLength(2);
     const status = await notifications.notificationStatus(env.DB);
     expect(status.lastSent).toBeNull();
     expect(status.lastFailure).toMatchObject({
@@ -390,13 +393,13 @@ describe("isolation", () => {
 
     for (let i = 0; i < 6; i++) {
       const before = guard.statements;
-      const mailedBefore = resend.requests;
+      const mailedBefore = transport.requests;
       const notifiedBefore = fakeNotifications().length;
       await sweep(capped);
       const spent =
         guard.statements -
         before +
-        (resend.requests - mailedBefore) +
+        (transport.requests - mailedBefore) +
         (fakeNotifications().length - notifiedBefore);
       expect(spent).toBeLessThanOrEqual(limit);
       // At least one notification every tick, however much the sends spent.
@@ -430,14 +433,15 @@ describe("after the review", () => {
   it("a problem that clears before its notification gets through is dropped, not sent late", async () => {
     await seedConfirmed(addresses(2));
     const send = await dueSend({ subject: "Owls in winter" });
-    resend.refuse = "resend batch 401: API key is invalid";
+    transport.refuse =
+      "ses 403 UnrecognizedClientException: The security token included in the request is invalid";
     failFakeNotify(1);
     await ticks(1);
     expect(await rows(send.id)).toMatchObject([
       { kind: "refused", status: "pending", error: "fake notification failure" },
     ]);
 
-    resend.refuse = null;
+    transport.refuse = null;
     await ticks(3);
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
     expect(fakeNotifications().map((n) => n.subject)).toEqual(["Sent: Owls in winter"]);
@@ -528,12 +532,12 @@ describe("the channels", () => {
   });
 
   it("the provider fallback delivers through the newsletter's provider, and fails with its words when it refuses", async () => {
-    const config = { ...getConfig(env), provider: "resend" as const };
+    const config = { ...getConfig(env), provider: "ses" as const };
     const notifier = new ProviderNotifier(config, env as AppEnv);
     await notifier.send(PUBLISHER, { subject: "S", text: "T", html: "" }, "send1-finished-0");
-    expect(resend.mailed).toEqual([{ to: PUBLISHER, key: "notify-send1-finished-0:1" }]);
+    expect(transport.mailed).toEqual([{ to: PUBLISHER, key: "notify-send1-finished-0:1" }]);
 
-    resend.refuse = "resend batch 403: domain not verified";
+    transport.refuse = "ses 400 MailFromDomainNotVerifiedException: domain not verified";
     await expect(
       notifier.send(PUBLISHER, { subject: "S", text: "T", html: "" }, "send1-refused-5"),
     ).rejects.toThrow("domain not verified");
@@ -549,7 +553,7 @@ describe("the channel is deploy config", () => {
   });
 
   it("deployed: Cloudflare when bound, from kestrel@ the app's host unless NOTIFY_FROM says", () => {
-    const deployed = { ...RESEND_DEPLOY, APP_ORIGIN: "https://newsletter.birds.example" };
+    const deployed = { ...SES_DEPLOY, APP_ORIGIN: "https://newsletter.birds.example" };
     expect(cfg({ ...deployed, NOTIFY: binding })).toMatchObject({
       notifyChannel: "cloudflare",
       notifyFrom: "Kestrel <kestrel@newsletter.birds.example>",
@@ -560,7 +564,7 @@ describe("the channel is deploy config", () => {
     ).toBe("alerts@newsletter.birds.example");
     expect(cfg(deployed)).toMatchObject({
       notifyChannel: "provider",
-      notifyFrom: RESEND_DEPLOY.FROM_ADDRESS,
+      notifyFrom: SES_DEPLOY.FROM_ADDRESS,
     });
   });
 });

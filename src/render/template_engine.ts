@@ -63,7 +63,7 @@ type TokenSpec =
  *  inert, so they survive `fillEmailTemplate`'s escaping and CSS inlining untouched,
  *  frozen into the render verbatim until the delivery pass fills them.
  *
- *  They carry no `{{ }}` meaning for any provider either: the fake and Resend fill them in
+ *  They carry no `{{ }}` meaning for any provider either: the fake fills them in
  *  app before the wire, and the SES adapter turns each into a tag of its own inline template
  *  (providers/ses_template.ts), whose value this module's delivery pass computes, so the
  *  only constraints a sentinel must meet are the two above. */

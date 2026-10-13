@@ -4,7 +4,6 @@ import type { AppEnv, Config } from "../env";
 import { refusal } from "../lib/errors";
 import { FakeProvider } from "./fake";
 import { NotConnectedProvider } from "./none";
-import { ResendProvider } from "./resend";
 import { SesProvider } from "./ses";
 import { SimProvider } from "./simulate";
 import type { EmailProvider, PerRecipientResult, Recipient, SendBatchResult } from "./types";
@@ -20,8 +19,6 @@ export function getProvider(config: Config, env: AppEnv): EmailProvider {
       return config.simulation ? new SimProvider(config.simulation, config) : new FakeProvider();
     case "ses":
       return new SesProvider(config, env);
-    case "resend":
-      return new ResendProvider(config, env);
     default: {
       // getConfig admits only known names, so this is unreachable; the `never` makes a new
       // name a compile error here, and the throw keeps it from ever falling through to a

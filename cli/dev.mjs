@@ -139,12 +139,12 @@ export function simulationLine(value) {
   }
   const [name = "", faults = "realistic", ...rest] = v.split(":");
   const known =
-    ["generic", "resend", "ses", "1", "on", "true", "yes"].includes(name) &&
+    ["generic", "ses", "1", "on", "true", "yes"].includes(name) &&
     ["realistic", "none"].includes(faults) &&
     rest.length === 0;
   return known
     ? `[dev] simulating a provider for list sends (SIMULATE_SENDS=${v}); nothing is delivered`
-    : `[dev] SIMULATE_SENDS=${value.trim()} isn't a value the app accepts, so it will refuse to run: use off, resend, ses, or generic (optionally with :none), or not-connected`;
+    : `[dev] SIMULATE_SENDS=${value.trim()} isn't a value the app accepts, so it will refuse to run: use off, ses, or generic (optionally with :none), or not-connected`;
 }
 
 /**

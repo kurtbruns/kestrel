@@ -22,7 +22,7 @@ import * as scheduleRoutes from "../src/routes/schedule";
 import * as settingsRoutes from "../src/routes/settings";
 import * as subscriberRoutes from "../src/routes/subscribers";
 import { condition } from "./support/conditions";
-import { NOT_CONNECTED_DEPLOY, RESEND_DEPLOY } from "./support/deploy";
+import { NOT_CONNECTED_DEPLOY, SES_DEPLOY } from "./support/deploy";
 import { dueSend, resetDatabase, seedConfirmed, tick } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 import { logged } from "./support/log";
@@ -359,10 +359,8 @@ describe("the dev routes while not connected", () => {
 
 describe("the provider webhooks while not connected", () => {
   it("answer 404, since no provider is there to call them", async () => {
-    for (const path of ["/webhooks/resend", "/webhooks/ses"]) {
-      const res = await fetchWith(NOT_CONNECTED, path, { method: "POST", body: "{}" });
-      expect(res.status, path).toBe(404);
-    }
+    const res = await fetchWith(NOT_CONNECTED, "/webhooks/ses", { method: "POST", body: "{}" });
+    expect(res.status).toBe(404);
   });
 });
 
@@ -380,8 +378,8 @@ describe("local dev's not-connected preview, SIMULATE_SENDS=not-connected (SPEC 
   });
 
   it("is never honored outside local dev, and takes no fault suffix", () => {
-    const deployed = getConfig(withVars({ ...RESEND_DEPLOY, ...PREVIEW }));
-    expect(deployed.provider).toBe("resend");
+    const deployed = getConfig(withVars({ ...SES_DEPLOY, ...PREVIEW }));
+    expect(deployed.provider).toBe("ses");
     expect(deployed.notConnectedPreview).toBe(false);
     // A real deployment with no provider is not connected, but never the preview.
     expect(getConfig(withVars(NOT_CONNECTED)).notConnectedPreview).toBe(false);

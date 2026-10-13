@@ -12,20 +12,18 @@
  * when `config.simulation` is set, which `getConfig` allows only in a dev-shaped env.
  *
  * One simulator, a profile per provider (`SIMULATE_SENDS`):
- *   - `resend` and `ses` take their traits from the real adapters (`RESEND_TRAITS`,
- *     `sesTraits`: batch size, idempotency, how long a key is remembered, and SES's send
- *     rate, which the send loop paces to), and answer a failure the way the adapter answers
- *     it: the halt comes from the adapter's own classifier and wording. Each request takes
- *     a request's time, and carries a batch: up to 100 for Resend, and for SES a second of
- *     the account's send rate, up to 50, one request a second.
- *   - `generic` is a small-batch idempotent provider paced to be watched: slow batches and
- *     a transient refusal for a few recipients.
+ *   - `ses` takes its traits from the real adapter (`sesTraits`: a batch of one second of the
+ *     account's send rate, up to 50, at one request a second, which the send loop paces to),
+ *     and answers a failure the way the adapter answers it: the halt comes from the
+ *     adapter's own classifier and wording. Each request takes a request's time.
+ *   - `generic` is a small-batch provider paced to be watched: slow batches and a transient
+ *     refusal for a few recipients.
  *
  * Two fault levels. `realistic` injects what a real provider does: a rare permanent refusal,
  * a rare request that leaves with no answer (its fate unknown, §12), receipts with bounces
  * and complaints at real rates, and, so a demo shows them, each of the profile's edge states
  * at least once per send. For SES those are the two that need the publisher: a request lost
- * in flight, which on a provider with no idempotency key leaves the send wedged until Resolve,
+ * in flight, which leaves the send wedged until Resolve, since nothing re-sends it,
  * and the account's daily sending quota running out, an account-level halt whose retries are
  * spaced out as a real one's are. `none` runs clean: every recipient accepted and delivered.
  *
@@ -54,7 +52,6 @@ import { HALT_BACKOFF_MS, HALT_RETRY_SLACK_MS } from "../lib/time";
 import { unwrap } from "../lib/unwrap";
 import { applyDeliveryEvents } from "../services/webhook_events";
 import { deliverToOutbox, FakeProvider } from "./fake";
-import { RESEND_TRAITS } from "./resend";
 import { classifySesError, sesEntryErrorText, sesErrorText, sesTraits } from "./ses";
 import type {
   BatchHalt,
@@ -113,22 +110,12 @@ const SES_QUOTA = {
  */
 const PROFILES: Record<SimulationProfile, () => SimProfile> = {
   generic: () => ({
-    traits: () => ({ maxBatch: 8, idempotentRetry: true }),
+    traits: () => ({ maxBatch: 8 }),
     requestMs: 900,
     transientRate: 0.04,
     lostRate: 0,
     rejectRate: 0.001,
     rejectError: "simulated permanent transport failure (550)",
-    quota: null,
-    guaranteed: { lost: false, quota: false },
-  }),
-  resend: () => ({
-    traits: () => RESEND_TRAITS,
-    requestMs: 500,
-    transientRate: 0,
-    lostRate: 0.0005,
-    rejectRate: 0.001,
-    rejectError: "The `to` field is invalid. (simulated)",
     quota: null,
     guaranteed: { lost: false, quota: false },
   }),
@@ -163,8 +150,7 @@ const DRAIN_LIMIT = 400; // synthetic events fabricated per drain, to bound a bu
 // separately by the guaranteed floor below, so the rates never need juicing to stay
 // demonstrative.
 //
-// Bounces split into the taxonomy every real provider shares (SES `bounceType`, Resend
-// `data.bounce.type`): a PERMANENT (hard) bounce suppresses the address (I1); a TRANSIENT
+// Bounces split into the taxonomy real providers share (SES's `bounceType`): a PERMANENT (hard) bounce suppresses the address (I1); a TRANSIENT
 // (soft) bounce is tolerated and counted but never suppresses (SPEC §10).
 const HARD_BOUNCE_RATE = 0.015; // permanent (nonexistent mailbox / blocked) → suppression (I1)
 const SOFT_BOUNCE_RATE = 0.008; // transient (mailbox full / temporarily unavailable) → counted only
@@ -285,7 +271,7 @@ interface SendSim {
 
 /** `${sendId}:${email}` that already spent their one transient refusal. */
 const transientSeen = new Set<string>();
-/** Batch keys whose request was already lost once: a re-send under the key is answered. */
+/** Batch keys whose request was already lost once, so one batch is never lost twice. */
 const lostKeys = new Set<string>();
 const sendState = new Map<string, SendSim>();
 /** Per small send: the forced receipt outcomes of the guaranteed floor. */
@@ -333,8 +319,6 @@ export class SimProvider implements EmailProvider {
   // "no email provider configured" labeling (DESIGN §4) and the dev-shaped predicate hold.
   readonly name = "fake" as const;
   readonly maxBatch: number;
-  readonly idempotentRetry: boolean;
-  readonly idempotencyWindowMs?: number;
   readonly maxRequestRate?: number;
 
   private readonly profile: SimProfile;
@@ -348,8 +332,6 @@ export class SimProvider implements EmailProvider {
     this.faults = simulation.faults;
     const traits = this.profile.traits(config);
     this.maxBatch = traits.maxBatch;
-    this.idempotentRetry = traits.idempotentRetry;
-    this.idempotencyWindowMs = traits.idempotencyWindowMs;
     this.maxRequestRate = traits.maxRequestRate;
   }
 
@@ -362,8 +344,8 @@ export class SimProvider implements EmailProvider {
     if (opts.purpose !== "list") {
       return this.fake.sendBatch(rendered, recipients, opts);
     }
-    const sendId = opts.idempotencyKeyPrefix;
-    const key = opts.idempotencyKey ?? sendId;
+    const sendId = opts.tag;
+    const key = opts.batchKey ?? sendId;
     const realistic = this.faults === "realistic";
     const p = this.profile;
     const state = sendState.get(sendId) ?? {
@@ -417,7 +399,7 @@ export class SimProvider implements EmailProvider {
 
   /** Whether this request is lost in flight: once per send when the profile guarantees it,
    *  at its place after the quota lifts (`resumed`), otherwise at the profile's rate; never
-   *  twice under one key, so a re-send is answered. */
+   *  twice under one key. */
   private lost(sendId: string, key: string, state: SendSim, resumed: number): boolean {
     if (lostKeys.has(key)) {
       return false;

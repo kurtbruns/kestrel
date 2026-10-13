@@ -297,7 +297,7 @@ describe("sent view", () => {
   });
 
   it("says nothing of a provider once one is set", async () => {
-    appState.appConfig = settingsResponse({ deployment: { provider: "resend" } });
+    appState.appConfig = settingsResponse({ deployment: { provider: "ses" } });
     fake = world(sendServer([scheduled()]));
     await mount(renderSent);
     await vi.advanceTimersByTimeAsync(0);

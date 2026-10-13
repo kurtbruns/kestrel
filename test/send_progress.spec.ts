@@ -76,11 +76,17 @@ describe("send counters (sends.c_*)", () => {
     await seedConfirmed("y@example.com");
     const send = await frozenSend(Date.now() - 1000);
 
-    failFakeSendBatch(1); // first send call throws → the unanswered batch is returned
+    failFakeSendBatch(1); // the first request finds the provider down
     await runSend(env, send.id);
     let row = await expectCountersMatchAggregate(send.id);
     expect(row.status).toBe("sending");
-    expect(row.c_pending).toBe(2); // back in pending, under its key, for the re-send
+    expect(row.c_pending).toBe(2); // back in pending as fresh rows, to be handed off again
+    const keyed = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM deliveries WHERE send_id = ? AND dispatch_key IS NOT NULL",
+    )
+      .bind(send.id)
+      .first<{ n: number }>();
+    expect(keyed!.n).toBe(0);
     expect(row.c_in_flight).toBe(0);
 
     await runSend(env, send.id); // resume
@@ -282,12 +288,13 @@ describe("buildSendView — derived phase", () => {
         c_pending: 5,
         halt_reason: "account",
         halt_cause: "credentials",
-        halt_error: "resend batch 403: API key is not active",
+        halt_error:
+          "ses 403 UnrecognizedClientException: The security token included in the request is invalid",
         halted_at: since,
         halt_retries: 2,
         halt_retry_at: since + 20 * 60_000,
       }),
-      "resend",
+      "ses",
       false,
       Date.now(),
     );
@@ -297,7 +304,8 @@ describe("buildSendView — derived phase", () => {
     expect(prog.provider.halt).toEqual({
       reason: "account",
       cause: "credentials",
-      error: "resend batch 403: API key is not active",
+      error:
+        "ses 403 UnrecognizedClientException: The security token included in the request is invalid",
       retries: 2,
       since,
       retry_at: since + 20 * 60_000,
@@ -306,7 +314,7 @@ describe("buildSendView — derived phase", () => {
   it("backing-off, not refused, while the provider is only unavailable", () => {
     const prog = viewOf(
       mkSend({ status: "sending", c_pending: 5, halt_reason: "unavailable", halt_error: "503" }),
-      "resend",
+      "ses",
       false,
       Date.now(),
     );

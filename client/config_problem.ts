@@ -61,8 +61,6 @@ export const REFERENCE_ANCHORS: Readonly<Record<string, string>> = {
   ACCESS_TEAM_DOMAIN: "secrets",
   ACCESS_AUD: "secrets",
   ACCESS_ALLOWED_EMAILS: "secrets",
-  RESEND_API_KEY: "secrets",
-  RESEND_WEBHOOK_SECRET: "secrets",
   AWS_ACCESS_KEY_ID: "secrets",
   AWS_SECRET_ACCESS_KEY: "secrets",
   SNS_TOPIC_ARN: "secrets",

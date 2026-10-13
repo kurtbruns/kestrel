@@ -14,10 +14,10 @@
  * maximum send rate. So a batch is the send rate's worth of recipients, up to 50, and the
  * send loop starts one request a second (`sesTraits`).
  *
- * Idempotency: SESv2 has NO idempotency key, so `idempotentRetry` is false — a stuck
- * `dispatched` row must never be blindly re-sent (the send loop honors this flag and leaves
- * such rows for a human). At-most-once (I4) is upheld by never re-dispatching, not by
- * dedupe. A request lost in flight leaves its whole batch for Resolve.
+ * Idempotency: SESv2 has NO idempotency key, and the send loop never re-sends a request
+ * that got no answer: such a batch stays `dispatched` for a human (Resolve). At-most-once
+ * (I4) is upheld by never re-dispatching, not by dedupe. A request lost in flight leaves
+ * its whole batch for Resolve.
  *
  * Failures: SES answers a request either with an error that speaks for all of it, or with
  * one result an entry. An error, or an entry status, that is about SES or the account rather
@@ -81,7 +81,6 @@ export const SES_BULK_REQUEST_RATE = 1;
 export function sesTraits(config: Config): ProviderTraits & { maxRequestRate: number } {
   return {
     maxBatch: Math.max(1, Math.min(SES_BULK_MAX, Math.floor(config.sesMaxSendRate))),
-    idempotentRetry: false,
     maxRequestRate: SES_BULK_REQUEST_RATE,
   };
 }
@@ -125,7 +124,7 @@ const ACCOUNT_ERROR_TYPES = new Map<string, HaltCause>([
  * is not verified (`senderUnverified`, which the caller works out from the message) need
  * the operator, as does a spent daily quota, which SES reports as the same throttle as its
  * per-second rate and tells apart only by the message: it won't lift for up to a day, so
- * the operator hears "quota", as Resend's does. Any other throttling (a 429, or a
+ * the operator hears "quota". Any other throttling (a 429, or a
  * throttling type on a 400) and a 5xx are SES being unavailable: the next request would get
  * the same answer, so the batch waits for the next tick instead. An SES error response
  * always means SES did not accept the request, so none of these leaves the fate unknown.
@@ -145,13 +144,13 @@ export function classifySesError(
         ? "quota"
         : undefined);
   if (cause || status === 401 || status === 403) {
-    return { reason: "account", cause: cause ?? "credentials", mayHaveSent: false };
+    return { reason: "account", cause: cause ?? "credentials" };
   }
   if (throttled) {
-    return { reason: "unavailable", cause: "rate_limit", mayHaveSent: false };
+    return { reason: "unavailable", cause: "rate_limit" };
   }
   if (status >= 500) {
-    return { reason: "unavailable", cause: "outage", mayHaveSent: false };
+    return { reason: "unavailable", cause: "outage" };
   }
   return null;
 }
@@ -159,12 +158,10 @@ export function classifySesError(
 const account = (cause: HaltCause): Omit<BatchHalt, "error"> => ({
   reason: "account",
   cause,
-  mayHaveSent: false,
 });
 const unavailable = (cause: HaltCause): Omit<BatchHalt, "error"> => ({
   reason: "unavailable",
   cause,
-  mayHaveSent: false,
 });
 
 /** Entry statuses that are about SES, the account, or the deployment's settings, never the
@@ -213,7 +210,6 @@ function worse(a: BatchHalt | null, b: BatchHalt): BatchHalt {
 export class SesProvider implements EmailProvider {
   readonly name = "ses" as const;
   readonly maxBatch: number;
-  readonly idempotentRetry: boolean;
   readonly maxRequestRate: number;
 
   private readonly client: AwsClient;
@@ -226,7 +222,6 @@ export class SesProvider implements EmailProvider {
     this.from = config.fromAddress;
     const traits = sesTraits(config);
     this.maxBatch = traits.maxBatch;
-    this.idempotentRetry = traits.idempotentRetry;
     this.maxRequestRate = traits.maxRequestRate;
     this.configurationSet =
       env.SES_CONFIGURATION_SET && env.SES_CONFIGURATION_SET.length > 0

@@ -415,9 +415,8 @@ describe("a confirmation the provider does not take is not treated as sent", () 
   ): { calls: string[] } {
     const calls: string[] = [];
     const stub: EmailProvider = {
-      name: "resend",
+      name: "ses",
       maxBatch: 100,
-      idempotentRetry: true,
       async sendBatch(_rendered, recipients) {
         const to = recipients[0]!.email;
         calls.push(to);
@@ -479,18 +478,6 @@ describe("a confirmation the provider does not take is not treated as sent", () 
 
     vi.restoreAllMocks();
     expect((await confirmToken(before.confirm_token!)).status).toBe(200);
-  });
-
-  it("a halt after which the confirmation may have gone keeps its link and the cooldown", async () => {
-    const stub = stubProvider(() => ({
-      kind: "halted",
-      halt: { reason: "unavailable", cause: "outage", error: "502 bad gateway", mayHaveSent: true },
-    }));
-    const email = uniqueEmail();
-    await publicSubscribe(email);
-    expect((await subs.getByEmail(env.DB, email))?.confirm_token).not.toBeNull();
-    await publicSubscribe(email);
-    expect(stub.calls).toHaveLength(1);
   });
 
   it("a failure before the provider is asked changes nothing", async () => {
@@ -560,7 +547,6 @@ describe("a confirmation the provider does not take is not treated as sent", () 
         reason: "account",
         cause: "credentials",
         error: "API key is invalid",
-        mayHaveSent: false,
       },
     }));
     const email = uniqueEmail();

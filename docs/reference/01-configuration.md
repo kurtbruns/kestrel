@@ -14,12 +14,12 @@ None of these can be read or changed from inside the app, by the editor or by Cl
 
 | Var | What it is | Default |
 | --- | --- | --- |
-| `PROVIDER` | the email provider: `resend` or `ses`, or `fake` for local development | none: no provider connected |
+| `PROVIDER` | the email provider: `ses`, or `fake` for local development | none: no provider connected |
 | `APP_ORIGIN` | the origin the app is served from: scheme and host, no path | required |
 | `ARCHIVE_BASE_PATH` | the path the archive lives under | `/archive` |
 | `FROM_ADDRESS` | the `From:` of every email | required with a real provider |
 | `SENDING_DOMAIN` | the sending domain, shown in Settings | none |
-| `AWS_REGION` | the SES region; Resend ignores it | `us-east-1` in the template, required with SES |
+| `AWS_REGION` | the SES region | `us-east-1` in the template, required with SES |
 | `SES_MAX_SEND_RATE` | your SES account's maximum send rate, in messages a second | `14` |
 | `SUBREQUEST_BUDGET` | how many subrequests one minute's send work may use | `50` |
 | `MIN_LEAD_SECONDS` | the least time every send stays cancelable before it goes out | `300` |
@@ -58,8 +58,8 @@ Cloudflare caps how many subrequests one run of a Worker may make. Database quer
 
 This setting is the subrequest cap. The app keeps database queries under theirs on its own.
 
-- **The default, 50,** is the Workers Free limit, and safe on any plan. Through Resend, a minute sends about 400 recipients. Through SES, it sends four requests: 56 recipients at a send rate of 14, and 200 at a rate of 50 or more.
-- **On Workers Paid,** which allows 10,000, set `"SUBREQUEST_BUDGET": "10000"`. Resend then sends about 19,000 recipients a minute. SES sends about 50 requests a minute, one a second: about 700 recipients at a rate of 14, and about 2,500 at 50 or more.
+- **The default, 50,** is the Workers Free limit, and safe on any plan. A minute sends four SES requests: 56 recipients at a send rate of 14, and 200 at a rate of 50 or more.
+- **On Workers Paid,** which allows 10,000, set `"SUBREQUEST_BUDGET": "10000"`. A minute then sends about 50 SES requests, one a second: about 700 recipients at a rate of 14, and about 2,500 at 50 or more.
 - **If you raised the Worker's own limit** with `limits.subrequests`, you may set this to match.
 
 Never set it above your plan's limit. A minute that hits the cap is cut off mid-batch, and the send stalls until a later minute picks it up. A value below 30 is raised to 30, the least a minute needs to send anything and still send a notification.
@@ -89,8 +89,6 @@ Used only with the `NOTIFY` binding. It must be an address on a domain set up fo
 | `ACCESS_TEAM_DOMAIN` | your Zero Trust team domain, such as `your-team.cloudflareaccess.com`; an `https://` or trailing slash is dropped | every deployment |
 | `ACCESS_AUD` | the Access application's audience tag | every deployment |
 | `ACCESS_ALLOWED_EMAILS` | a comma-separated list of the people allowed to sign in | optional |
-| `RESEND_API_KEY` | the Resend API key | Resend |
-| `RESEND_WEBHOOK_SECRET` | the Resend webhook's signing secret | Resend |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | the IAM user's access key | SES |
 | `SNS_TOPIC_ARN` | the SNS topic the SES webhook accepts; it refuses every other topic | SES |
 | `SES_CONFIGURATION_SET` | the configuration set named on every email, so SES reports bounces and complaints | SES, recommended |
@@ -134,13 +132,13 @@ When declared, notifications go through Cloudflare's email instead of your provi
 
 The app checks its configuration on every request. It refuses to run on one that would do the wrong thing quietly:
 
-- `PROVIDER`, when set, must be exactly `resend`, `ses`, `fake`, or `none`. A misspelling, or `SES`, is refused, never taken for another.
+- `PROVIDER`, when set, must be exactly `ses`, `fake`, or `none`. A misspelling, or `SES`, is refused, never taken for another. `resend`, which earlier releases supported, is refused with a pointer to [Connect Amazon SES](../get-started/04-ses.md#switch-an-instance-that-already-sends).
 - `fake` runs only when `APP_ORIGIN` is on `localhost` or `127.0.0.1`, unless `ALLOW_FAKE_PROVIDER` is `true`. On a real hostname it would open signups whose confirmations go nowhere, and record every send as delivered. With `fake`, `ALLOW_FAKE_PROVIDER`, when set, must be `true`; every other provider ignores it.
 - `APP_ORIGIN` must be a plain `http` or `https` origin, with no path. So must `ARCHIVE_ORIGIN`, when set. `MEDIA_PUBLIC_BASE`, when set, must be a plain `http` or `https` URL, and may have a path. A trailing slash is dropped from each.
 - A real provider needs `FROM_ADDRESS`, and every secret the table marks for it. SES also needs `AWS_REGION`. `FROM_ADDRESS` must then be an email address, optionally with a display name in front, like `Name <address>`.
 - None of `APP_ORIGIN`, `ARCHIVE_ORIGIN`, `MEDIA_PUBLIC_BASE`, `SENDING_DOMAIN`, or `FROM_ADDRESS` may still be on `example.com` or a name under it, the template's placeholder. That holds with no provider connected too, since every link the app builds would name it. Only `fake` allows it.
 - `SUBREQUEST_BUDGET`, `MIN_LEAD_SECONDS`, and `SES_MAX_SEND_RATE` must be whole numbers above zero. `MIN_LEAD_SECONDS` must also be within its bounds. Any other value is refused, never adjusted. The one exception is a `SUBREQUEST_BUDGET` below 30, which is raised to 30.
-- In local development, `SIMULATE_SENDS` must be off (`off`, `0`, `false`, `no`, or empty), `not-connected` to run as a deployment with no email provider yet, or the provider a local send models: `resend`, `ses`, or `generic` (also `1`, `on`, `true`, or `yes`), optionally followed by `:none` for no injected failures or `:realistic`, the default. Case doesn't matter. A deployed instance ignores it.
+- In local development, `SIMULATE_SENDS` must be off (`off`, `0`, `false`, `no`, or empty), `not-connected` to run as a deployment with no email provider yet, or the provider a local send models: `ses` or `generic` (also `1`, `on`, `true`, or `yes`), optionally followed by `:none` for no injected failures or `:realistic`, the default. Case doesn't matter. A deployed instance ignores it.
 - `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` are set together or not at all. With only one, the app could verify no sign-in and would let no one into the editor, so it refuses and names the missing one. `ACCESS_TEAM_DOMAIN` must be your team's hostname, such as `your-team.cloudflareaccess.com`. An `https://` or `http://` in front and a trailing slash are dropped, but anything else, such as a path or a port, is refused, since it would fail every sign-in.
 
 Until it's fixed, no sends go out, and each place says what its reader can act on:

@@ -132,7 +132,7 @@ describe("send loop + sweep", () => {
     await seedConfirmed("y@example.com");
     const send = await frozenSend(Date.now() - 1000);
 
-    failFakeSendBatch(1); // first send call throws
+    failFakeSendBatch(1); // the first request finds the provider down
     await sweep(env);
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sending");
     expect(fakeOutbox().length).toBe(0);

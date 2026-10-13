@@ -5,7 +5,6 @@ import * as sends from "../src/db/sends";
 import { type AppEnv, type Config, ConfigError, getConfig } from "../src/env";
 import { getProvider } from "../src/providers";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
-import { ResendProvider } from "../src/providers/resend";
 import * as sesAdapter from "../src/providers/ses";
 import {
   drainSimulatedWebhooks,
@@ -18,7 +17,7 @@ import { UNSUB_SENTINEL } from "../src/render/render";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { has } from "./support/conditions";
-import { RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
+import { SES_DEPLOY } from "./support/deploy";
 import { resetDatabase } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
@@ -128,15 +127,14 @@ describe("SIMULATE_SENDS", () => {
     for (const generic of ["1", "on", "true", "yes", "generic"]) {
       expect(simulation(generic)).toEqual({ profile: "generic", faults: "realistic" });
     }
-    expect(simulation("resend")).toEqual({ profile: "resend", faults: "realistic" });
     expect(simulation("SES")).toEqual({ profile: "ses", faults: "realistic" });
     expect(simulation("ses:none")).toEqual({ profile: "ses", faults: "none" });
     expect(simulation("1:none")).toEqual({ profile: "generic", faults: "none" });
-    expect(simulation("resend:realistic")).toEqual({ profile: "resend", faults: "realistic" });
+    expect(simulation("ses:realistic")).toEqual({ profile: "ses", faults: "realistic" });
   });
 
   it("refuses a value it doesn't know rather than reading it as off", () => {
-    for (const value of ["sendgrid", "ses:loud", "ses:none:x", "resend:", ":none"]) {
+    for (const value of ["sendgrid", "resend", "ses:loud", "ses:none:x", "ses:", ":none"]) {
       expect(() => simulation(value)).toThrow(ConfigError);
     }
     expect(() => simulation("sesv2")).toThrow(
@@ -148,12 +146,12 @@ describe("SIMULATE_SENDS", () => {
     const deployed = { ...SES_DEPLOY, APP_ORIGIN: "https://newsletter.birds.example" };
     expect(simulation("ses", deployed)).toBeNull();
     expect(simulation("nonsense", deployed)).toBeNull();
-    expect(simulation("resend", { ...RESEND_DEPLOY })).toBeNull();
+    expect(simulation("ses", { ...SES_DEPLOY })).toBeNull();
     expect(
-      simulation("resend", { ACCESS_TEAM_DOMAIN: "birds.cloudflareaccess.com", ACCESS_AUD: "aud" }),
+      simulation("ses", { ACCESS_TEAM_DOMAIN: "birds.cloudflareaccess.com", ACCESS_AUD: "aud" }),
     ).toBeNull();
     expect(
-      simulation("resend", {
+      simulation("ses", {
         ALLOW_FAKE_PROVIDER: "true",
         APP_ORIGIN: "https://newsletter.birds.example",
       }),
@@ -172,7 +170,7 @@ describe("SIMULATE_SENDS", () => {
   it("swaps the provider only for the simulator, and the plain fake stays when it is off", () => {
     expect(simulationActive(getConfig(env))).toBe(false);
     expect(getProvider(getConfig(env), env)).not.toBeInstanceOf(SimProvider);
-    const on = withVars({ SIMULATE_SENDS: "resend" });
+    const on = withVars({ SIMULATE_SENDS: "ses" });
     expect(getProvider(getConfig(on), on)).toBeInstanceOf(SimProvider);
   });
 
@@ -184,8 +182,8 @@ describe("SIMULATE_SENDS", () => {
   });
 });
 
-describe("a profile per provider, with the real adapter's traits", () => {
-  it("takes batch size, idempotency, key memory, and send rate from SesProvider and ResendProvider", () => {
+describe("the SES profile, with the real adapter's traits", () => {
+  it("takes batch size and send rate from SesProvider", () => {
     // An account allowed three messages a second: the SES profile batches the same three a
     // request, at SES's one request a second.
     const sesVars = { ...SES_DEPLOY, SES_MAX_SEND_RATE: "3" };
@@ -193,24 +191,13 @@ describe("a profile per provider, with the real adapter's traits", () => {
       getConfig(withVars(sesVars)),
       withVars(sesVars),
     );
-    const resend: EmailProvider = new ResendProvider(
-      getConfig(withVars(RESEND_DEPLOY)),
-      withVars(RESEND_DEPLOY),
+    const sim = new SimProvider(
+      { profile: "ses", faults: "realistic" },
+      getConfig(withVars({ SES_MAX_SEND_RATE: "3" })),
     );
-    for (const [profile, real] of [
-      ["ses", ses],
-      ["resend", resend],
-    ] as const) {
-      const sim = new SimProvider(
-        { profile, faults: "realistic" },
-        getConfig(withVars({ SES_MAX_SEND_RATE: "3" })),
-      );
-      expect(sim.maxBatch).toBe(real.maxBatch);
-      expect(sim.idempotentRetry).toBe(real.idempotentRetry);
-      expect(sim.idempotencyWindowMs).toBe(real.idempotencyWindowMs);
-      expect(sim.maxRequestRate).toBe(real.maxRequestRate);
-      expect(sim.name).toBe("fake"); // a fake-family transport: nothing reaches an inbox
-    }
+    expect(sim.maxBatch).toBe(ses.maxBatch);
+    expect(sim.maxRequestRate).toBe(ses.maxRequestRate);
+    expect(sim.name).toBe("fake"); // a fake-family transport: nothing reaches an inbox
     expect(ses.maxBatch).toBe(3);
     expect(ses.maxRequestRate).toBe(1);
   });
@@ -222,7 +209,9 @@ describe("a profile per provider, with the real adapter's traits", () => {
     // startup.
     vi.spyOn(sesAdapter, "classifySesError").mockReturnValue(null);
     const config = getConfig(env);
-    expect(() => new SimProvider({ profile: "resend", faults: "realistic" }, config)).not.toThrow();
+    expect(
+      () => new SimProvider({ profile: "generic", faults: "realistic" }, config),
+    ).not.toThrow();
     expect(() => new SimProvider({ profile: "ses", faults: "realistic" }, config)).toThrow(
       "expected a halting error response to exist",
     );
@@ -238,7 +227,7 @@ describe("list sends only", () => {
       const started = Date.now();
       const answer = await sim.sendBatch(rendered, batch, {
         purpose,
-        idempotencyKeyPrefix: `${purpose}-1`,
+        tag: `${purpose}-1`,
       });
       // Not paced like a list batch, which spends about 20 ms a recipient here (two seconds
       // for these hundred; see the generic profile's own spec): the bound leaves a slow
@@ -280,13 +269,13 @@ describe("list sends only", () => {
   });
 
   it("records a simulated list batch in the outbox with each recipient's own link, once per key", async () => {
-    const sim = new SimProvider({ profile: "resend", faults: "none" }, getConfig(env));
+    const sim = new SimProvider({ profile: "generic", faults: "none" }, getConfig(env));
     const email = { ...rendered, html: `<p>hi</p><a href="${UNSUB_SENTINEL}">Unsubscribe</a>` };
     const batch = recipients(3);
-    const opts = { purpose: "list" as const, idempotencyKeyPrefix: "s-1", idempotencyKey: "s-1-k" };
+    const opts = { purpose: "list" as const, tag: "s-1", batchKey: "s-1-k" };
     const first = await sim.sendBatch(email, batch, opts);
     expect(first.kind === "answered" && first.results.every((r) => r.accepted)).toBe(true);
-    // Re-sent under its key, as the loop re-sends a batch whose answer was lost: deduped.
+    // The same batch under the same key is recorded once, as the fake records it.
     const again = await sim.sendBatch(email, batch, opts);
     expect(again).toEqual(first);
     expect(fakeOutbox().map((m) => m.to)).toEqual(batch.map((r) => r.email));
@@ -579,12 +568,11 @@ describe("the generic profile", () => {
   it("paces a batch, accepting the bulk and refusing a few once, retryably", async () => {
     const provider = new SimProvider({ profile: "generic", faults: "realistic" }, getConfig(env));
     expect(provider.maxBatch).toBe(8);
-    expect(provider.idempotentRetry).toBe(true);
 
     const started = Date.now();
     const answer = await provider.sendBatch(rendered, recipients(40), {
       purpose: "list",
-      idempotencyKeyPrefix: "sim-batch",
+      tag: "sim-batch",
     });
     expect(Date.now() - started).toBeGreaterThanOrEqual(800); // a batch takes real time
     expect(answer.kind).toBe("answered");

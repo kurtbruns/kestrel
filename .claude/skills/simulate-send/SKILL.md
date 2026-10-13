@@ -1,6 +1,6 @@
 ---
 name: simulate-send
-description: Run a simulated newsletter send on the local dev server and open its watch view, for a demo, a journey run, or checking how a send looks in flight. Use when asked to "simulate a send", "demo a send", "send the demo newsletter", watch a send go out locally, or see a send wedge, halt on a quota, or settle its receipts. Covers picking the provider profile (SES, Resend, generic), the fire time, and what to expect on the record view. Not for deployed environments.
+description: Run a simulated newsletter send on the local dev server and open its watch view, for a demo, a journey run, or checking how a send looks in flight. Use when asked to "simulate a send", "demo a send", "send the demo newsletter", watch a send go out locally, or see a send wedge, halt on a quota, or settle its receipts. Covers picking the provider profile (SES, generic), the fire time, and what to expect on the record view. Not for deployed environments.
 ---
 
 # Simulate a send
@@ -12,7 +12,6 @@ A local send is a real send through the real API, send loop, and receipt ingest;
 1. **A dev server must be running** for this worktree. If `npm run simulate-send` says it can't reach one, start it (`preview_start` with the `kestrel-dev` configuration, or `npm run dev`). The launcher runs the send sweep once a minute, on the minute, as the deployed cron does.
 2. **Pick the profile** the demo needs. The server's `SIMULATE_SENDS` decides it, fixed at start:
    - `ses` (the shipped default): a second of the account's send rate a request (up to 50), one request a second, no idempotency key. Each send runs out of its daily quota once (the send halts, "provider refusing the account", and retries five minutes later) and loses one request in flight, so it ends **wedged** until someone uses **Resolve**. On the default `SUBREQUEST_BUDGET` (Workers Free) a local SES send goes out as slowly as a deployed one on that plan (docs/get-started/06-go-live.md has the numbers); start the server with `SIMULATE_SENDS=ses SUBREQUEST_BUDGET=10000 npm run dev` to model Workers Paid.
-   - `resend`: 100 recipients a request; a lost request is re-sent under its idempotency key. A demo list goes out in one tick.
    - `1` (generic): small, slow batches that are easy to watch fill.
    - Append `:none` (for example `ses:none`) for a clean run: no failures, every receipt a delivery.
 

@@ -75,7 +75,6 @@ describe("SesProvider.sendBatch", () => {
     expect(newProvider().name).toBe("ses");
     expect([1, 14, 50, 200].map((rate) => at(rate).maxBatch)).toEqual([1, 14, 50, 50]);
     expect(at(14).maxRequestRate).toBe(1);
-    expect(at(14).idempotentRetry).toBe(false);
   });
 
   it("POSTs one SigV4-signed SendBulkEmail with an entry per recipient and its one-click headers (SPEC §10)", async () => {
@@ -101,7 +100,7 @@ describe("SesProvider.sendBatch", () => {
         { email: "a@example.com", unsubscribeUrl: UNSUB },
         { email: "b@example.com", unsubscribeUrl: other },
       ],
-      { purpose: "list", idempotencyKeyPrefix: "send-1" },
+      { purpose: "list", tag: "send-1" },
     );
 
     // Each entry's result, by position, with SES's MessageId as the providerId.
@@ -138,7 +137,7 @@ describe("SesProvider.sendBatch", () => {
     expect(a.subject).toBe("Weekly Update");
   });
 
-  // I5: the email SES builds from the template is the one the fake and Resend send, so a
+  // I5: the email SES builds from the template is the one the fake sends, so a
   // test through any of them is the send. Built from a real frozen render, with what an
   // author can put in a post that a template engine might read: a `{{`, a token typed as
   // text, a backslash before one, a stray `}}`, and a brace beside a delivery placeholder.
@@ -162,7 +161,7 @@ describe("SesProvider.sendBatch", () => {
     const reader = { email: "o'reilly&co@example.com", unsubscribeUrl: `${UNSUB}&x=1` };
     const { requests } = answerSes();
 
-    await newProvider().sendBatch(frozen, [reader], { purpose: "test", idempotencyKeyPrefix: "t" });
+    await newProvider().sendBatch(frozen, [reader], { purpose: "test", tag: "t" });
 
     const expected = substituteRecipient(frozen, {
       ".Email.UnsubscribeURL": reader.unsubscribeUrl,
@@ -180,7 +179,7 @@ describe("SesProvider.sendBatch", () => {
     const { requests } = answerSes();
     const one = [{ email: "reader@example.com", unsubscribeUrl: UNSUB }];
     for (const purpose of ["test", "list"] as const) {
-      await newProvider().sendBatch(renderedFixture(), one, { purpose, idempotencyKeyPrefix: "x" });
+      await newProvider().sendBatch(renderedFixture(), one, { purpose, tag: "x" });
     }
     // The test stays off SendBulkEmail's one-request-a-second throttle, which the list uses.
     expect(requests.map((r) => r.endpoint)).toEqual(["single", "bulk"]);
@@ -198,7 +197,7 @@ describe("SesProvider.sendBatch", () => {
       [{ email: "new@example.com", unsubscribeUrl: "" }],
       {
         purpose: "confirmation",
-        idempotencyKeyPrefix: "c",
+        tag: "c",
       },
     );
     expect(deliveredBy(requests[0]!, 0).headers).toEqual({});
@@ -210,7 +209,7 @@ describe("SesProvider.sendBatch", () => {
     await new SesProvider(config, sesEnv).sendBatch(
       renderedFixture(),
       [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
-      { purpose: "list", idempotencyKeyPrefix: "send-1" },
+      { purpose: "list", tag: "send-1" },
     );
     const from = requests[0]!.FromEmailAddress;
     expect(from).toMatch(/^=\?utf-8\?B\?[A-Za-z0-9+/=]+\?= <news@send\.example\.com>$/);
@@ -228,7 +227,7 @@ describe("SesProvider.sendBatch", () => {
         { email: "zoë@example.com", unsubscribeUrl: UNSUB },
         { email: "reader@example.com", unsubscribeUrl: UNSUB },
       ],
-      { purpose: "list", idempotencyKeyPrefix: "send-1" },
+      { purpose: "list", tag: "send-1" },
     );
     expect(
       requests.map((q) => q.BulkEmailEntries.map((e) => e.Destination.ToAddresses[0])),
@@ -250,7 +249,7 @@ describe("SesProvider.sendBatch", () => {
     }));
     const r = await newProvider().sendBatch(renderedFixture(), five, {
       purpose: "test",
-      idempotencyKeyPrefix: "t",
+      tag: "t",
     });
     expect(requests.map((q) => q.endpoint)).toEqual(Array(5).fill("single"));
     expect(r.kind === "answered" && r.results.every((x) => x.accepted)).toBe(true);
@@ -267,7 +266,7 @@ describe("SesProvider.sendBatch", () => {
     const r = await newProvider().sendBatch(
       renderedFixture(),
       [{ email: "me@example.com", unsubscribeUrl: UNSUB }],
-      { purpose: "test", idempotencyKeyPrefix: "t" },
+      { purpose: "test", tag: "t" },
     );
     expect(r).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "suspended" } });
   });
@@ -287,7 +286,7 @@ describe("SesProvider.sendBatch", () => {
         email,
         unsubscribeUrl: UNSUB,
       })),
-      { purpose: "test", idempotencyKeyPrefix: "t" },
+      { purpose: "test", tag: "t" },
     );
     expect(n).toBe(2);
     expect(r).toMatchObject({
@@ -315,7 +314,7 @@ describe("SesProvider.sendBatch", () => {
         email,
         unsubscribeUrl: UNSUB,
       })),
-      { purpose: "list", idempotencyKeyPrefix: "send-1" },
+      { purpose: "list", tag: "send-1" },
     );
     expect(r).toEqual({
       kind: "answered",
@@ -332,7 +331,6 @@ describe("SesProvider.sendBatch", () => {
         reason: "unavailable",
         cause: "rate_limit",
         error: "ses ACCOUNT_THROTTLED: slow",
-        mayHaveSent: false,
       },
     });
   });
@@ -351,7 +349,7 @@ describe("SesProvider.sendBatch", () => {
         email,
         unsubscribeUrl: UNSUB,
       })),
-      { purpose: "list", idempotencyKeyPrefix: "send-1" },
+      { purpose: "list", tag: "send-1" },
     );
     expect(r).toMatchObject({
       kind: "answered",
@@ -391,11 +389,11 @@ describe("SesProvider.sendBatch", () => {
         { email: "a@example.com", unsubscribeUrl: UNSUB },
         { email: "b@example.com", unsubscribeUrl: UNSUB },
       ],
-      { purpose: "list", idempotencyKeyPrefix: "send-1" },
+      { purpose: "list", tag: "send-1" },
     );
     expect(r).toEqual({
       kind: "halted",
-      halt: { reason, cause, error: `ses ${status}: SES's words`, mayHaveSent: false },
+      halt: { reason, cause, error: `ses ${status}: SES's words` },
     });
   });
 
@@ -408,7 +406,7 @@ describe("SesProvider.sendBatch", () => {
     const r = await newProvider().sendBatch(
       renderedFixture(),
       ["a@example.com", "b@example.com"].map((email) => ({ email, unsubscribeUrl: UNSUB })),
-      { purpose: "list", idempotencyKeyPrefix: "send-1" },
+      { purpose: "list", tag: "send-1" },
     );
     expect(r).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "suspended" } });
   });
@@ -423,14 +421,14 @@ describe("SesProvider.sendBatch", () => {
     expect(
       await newProvider().sendBatch(renderedFixture(), one, {
         purpose: "list",
-        idempotencyKeyPrefix: "s",
+        tag: "s",
       }),
     ).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "sender" } });
     answerSes(() => notVerified("reader@example.com"));
     expect(
       await newProvider().sendBatch(renderedFixture(), one, {
         purpose: "list",
-        idempotencyKeyPrefix: "s",
+        tag: "s",
       }),
     ).toMatchObject({ kind: "answered", results: [{ accepted: false, retryable: false }] });
   });
@@ -447,7 +445,7 @@ describe("SesProvider.sendBatch", () => {
     }));
     const short = await newProvider().sendBatch(renderedFixture(), two, {
       purpose: "list",
-      idempotencyKeyPrefix: "s",
+      tag: "s",
     });
     expect(short).toMatchObject({
       kind: "answered",
@@ -457,7 +455,7 @@ describe("SesProvider.sendBatch", () => {
     expect(
       await newProvider().sendBatch(renderedFixture(), two, {
         purpose: "list",
-        idempotencyKeyPrefix: "s",
+        tag: "s",
       }),
     ).toEqual({ kind: "answered", results: [] });
   });
@@ -483,9 +481,9 @@ describe("SesProvider.sendBatch", () => {
     const r = await newProvider().sendBatch(
       renderedFixture(),
       [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
-      { purpose: "list", idempotencyKeyPrefix: "send-1" },
+      { purpose: "list", tag: "send-1" },
     );
-    expect(r).toMatchObject({ kind: "halted", halt: { ...halt, mayHaveSent: false } });
+    expect(r).toMatchObject({ kind: "halted", halt: { ...halt } });
   });
 
   it("reads the quota wording only on a throttle, not on a rejected message", async () => {
@@ -498,7 +496,7 @@ describe("SesProvider.sendBatch", () => {
     const r = await newProvider().sendBatch(
       renderedFixture(),
       [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
-      { purpose: "list", idempotencyKeyPrefix: "send-1" },
+      { purpose: "list", tag: "send-1" },
     );
     expect(r).toMatchObject({ kind: "answered", results: [{ accepted: false, retryable: false }] });
   });
@@ -520,7 +518,7 @@ describe("SesProvider.sendBatch", () => {
       [{ email: "bad addr@example.com", unsubscribeUrl: UNSUB }],
       {
         purpose: "list",
-        idempotencyKeyPrefix: "send-1",
+        tag: "send-1",
       },
     );
     expect(r).toMatchObject({
@@ -536,7 +534,7 @@ describe("SesProvider.sendBatch", () => {
       [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
       {
         purpose: "list",
-        idempotencyKeyPrefix: "send-1",
+        tag: "send-1",
       },
     );
     expect(r).toMatchObject({ kind: "halted", halt: { reason: "unavailable" } });
@@ -556,7 +554,7 @@ describe("SesProvider.sendBatch", () => {
       const r = await newProvider().sendBatch(
         renderedFixture(),
         [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
-        { purpose: "list", idempotencyKeyPrefix: "send-1" },
+        { purpose: "list", tag: "send-1" },
       );
       expect(r).toEqual({
         kind: "halted",
@@ -564,7 +562,6 @@ describe("SesProvider.sendBatch", () => {
           reason: "account",
           cause,
           error: `ses ${status} ${type}: ${message}`,
-          mayHaveSent: false,
         },
       });
     },
@@ -583,7 +580,7 @@ describe("SesProvider.sendBatch", () => {
     const r = await newProvider().sendBatch(
       renderedFixture(),
       [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
-      { purpose: "list", idempotencyKeyPrefix: "send-1" },
+      { purpose: "list", tag: "send-1" },
     );
     expect(r).toMatchObject({
       kind: "halted",
@@ -615,7 +612,7 @@ describe("SesProvider.sendBatch", () => {
     expect(
       await newProvider().sendBatch(renderedFixture(), one, {
         purpose: "list",
-        idempotencyKeyPrefix: "s",
+        tag: "s",
       }),
     ).toMatchObject({
       kind: "halted",
@@ -624,7 +621,7 @@ describe("SesProvider.sendBatch", () => {
     expect(
       await newProvider().sendBatch(renderedFixture(), one, {
         purpose: "list",
-        idempotencyKeyPrefix: "s",
+        tag: "s",
       }),
     ).toMatchObject({
       kind: "answered",
@@ -644,7 +641,7 @@ describe("SesProvider.sendBatch", () => {
         [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
         {
           purpose: "list",
-          idempotencyKeyPrefix: "send-1",
+          tag: "send-1",
         },
       ),
     ).rejects.toThrow(/connection reset/);
@@ -658,7 +655,7 @@ describe("SesProvider.sendBatch", () => {
       newProvider().sendBatch(
         renderedFixture(),
         [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
-        { purpose: "list", idempotencyKeyPrefix: "send-1" },
+        { purpose: "list", tag: "send-1" },
       ),
     ).rejects.toBe(reason);
     expect(timeout).toHaveBeenCalledWith(PROVIDER_REQUEST_TIMEOUT_MS);

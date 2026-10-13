@@ -1,30 +1,27 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import keyedPendingToResolve from "../migrations/0004_keyed_pending_to_resolve.sql?raw";
 import { type SendFeedResponse, type SendView, STUCK_THRESHOLD_MS } from "../shared/sends";
 import * as sends from "../src/db/sends";
 import * as providers from "../src/providers";
 import { clearFakeOutbox } from "../src/providers/fake";
-import { Budget } from "../src/send/budget";
 import { nextChangeAt } from "../src/send/feed";
-import { runSend } from "../src/send/loop";
-import { SendWindow } from "../src/send/pace";
 import { resolveStuckSend } from "../src/send/resolve";
 import { sweep } from "../src/send/sweep";
 import { isWedged } from "../src/send/wedged";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
+import { BatchProvider } from "./support/batching";
 import { toNextTick } from "./support/clock";
 import { condition, has } from "./support/conditions";
 import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, base } from "./support/http";
 import { allowErrorLogs } from "./support/log";
-import { NoKeyProvider, ResendLikeProvider } from "./support/resend_like";
 
 // Wedged has one definition (SPEC §12): sending, nothing left to hand off, recipients in
 // flight, and the lease released by the run that left them there. The watch, the feed, the
-// sweep, and the notifications all read it, a wedged send is not run again until Resolve,
-// and a run on a provider that dedupes under its key never leaves a batch it could re-send
-// looking wedged.
+// sweep, and the notifications all read it, and a wedged send is not run again until
+// Resolve.
 
 const AUDIENCE = ["ada@example.com", "grace@example.com", "linus@example.org"];
 
@@ -55,7 +52,7 @@ describe("a wedged send", () => {
   it("is left alone by the sweep: its rev, its phase, and the feed stay still until Resolve", async () => {
     allowErrorLogs("send.ambiguous", "send.wedged");
     vi.useFakeTimers({ toFake: ["Date"] });
-    const provider = new NoKeyProvider();
+    const provider = new BatchProvider();
     provider.loseAnswers = 1;
     vi.spyOn(providers, "getProvider").mockReturnValue(provider);
     await seedConfirmed(AUDIENCE);
@@ -95,11 +92,48 @@ describe("a wedged send", () => {
   });
 });
 
+describe("a batch an earlier release left queued under its key", () => {
+  it("goes to Resolve once migrated, rather than holding the send open and silent (SPEC §12)", async () => {
+    allowErrorLogs("send.wedged");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.spyOn(providers, "getProvider").mockReturnValue(new BatchProvider());
+    await seedConfirmed(AUDIENCE);
+    const send = await frozenSend(Date.now() - 1000);
+    // As 1.7.0 left a batch whose answer was lost on Resend: two rows back in the queue
+    // under the key they were sent with, waiting to be re-sent under it.
+    const now = Date.now();
+    const lease = (await sends.acquireLease(env.DB, send.id, now, 60_000))!;
+    await sends.resolveAudience(env.DB, send.id, now);
+    await env.DB.prepare(
+      `UPDATE deliveries SET dispatch_key = 'k-old', keyed_at = ? WHERE send_id = ? AND email IN ('ada@example.com', 'grace@example.com')`,
+    )
+      .bind(now, send.id)
+      .run();
+    await sends.releaseLease(env.DB, send.id, lease);
+    await sends.recomputeSendCounters(env.DB, send.id);
+
+    for (const statement of keyedPendingToResolve
+      .split(";")
+      .filter((q) => q.trim() && !/^\s*(--[^\n]*\n?\s*)*$/.test(q))) {
+      await env.DB.prepare(statement).run();
+    }
+
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ dispatched: 2, pending: 1 });
+    expect([(await row(send.id)).c_pending, (await row(send.id)).c_in_flight]).toEqual([1, 2]);
+    await toNextTick(env.DB);
+    await sweep(env); // the fresh row goes out; the migrated batch is never re-sent
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ dispatched: 2, accepted: 1 });
+    expect(isWedged(await row(send.id))).toBe(true);
+    const resolved = await resolveStuckSend(env, send.id, "unsent", "tester");
+    expect(resolved.completed).toBe(true);
+  });
+});
+
 describe("a wedged send a receipt with no provider id reaches", () => {
   it("keeps every unknown recipient, its count, and Resolve: a receipt that cannot name its message never settles one", async () => {
     allowErrorLogs("send.ambiguous", "send.wedged", "send.stuck");
     vi.useFakeTimers({ toFake: ["Date"] });
-    const provider = new NoKeyProvider();
+    const provider = new BatchProvider();
     provider.loseAnswers = 1;
     vi.spyOn(providers, "getProvider").mockReturnValue(provider);
     await seedConfirmed(AUDIENCE);
@@ -170,47 +204,6 @@ describe("the one definition", () => {
       expect([c, sql === 1]).toEqual([c, isWedged(c)]);
     }
     expect(cases.filter(isWedged)).toHaveLength(1);
-  });
-});
-
-describe("a run on a provider that dedupes under its key", () => {
-  it("puts a cut-off run's batch it did not reach back in the queue under its key, so the send never reads wedged, and the next run re-sends it under that key", async () => {
-    const provider = new ResendLikeProvider();
-    vi.spyOn(providers, "getProvider").mockReturnValue(provider);
-    await seedConfirmed(AUDIENCE);
-    const send = await frozenSend(Date.now() - 1000);
-    // A first run fixes the audience and stops at once (its tick is over).
-    await runSend(env, send.id, new Budget(10_000), new SendWindow(undefined, -1));
-    // A run cut off mid-batch: every recipient handed off under one key, never answered,
-    // and its lease left to run out.
-    const now = Date.now();
-    await env.DB.batch([
-      env.DB.prepare(
-        "UPDATE deliveries SET status = 'dispatched', dispatch_key = 'k-cut', keyed_at = ? WHERE send_id = ?",
-      ).bind(now, send.id),
-      env.DB.prepare(
-        "UPDATE sends SET locked_until = ?, lease_token = 'cut-off' WHERE id = ?",
-      ).bind(now - 1000, send.id),
-    ]);
-    await sends.recomputeSendCounters(env.DB, send.id);
-
-    // The next run has no time left this tick to re-send it, and releases the send.
-    await runSend(env, send.id, new Budget(10_000), new SendWindow(undefined, -1));
-    const after = await row(send.id);
-    expect(after.locked_until).toBeNull();
-    expect(isWedged(after)).toBe(false);
-    expect([after.c_pending, after.c_in_flight]).toEqual([3, 0]);
-    const keys = await env.DB.prepare(
-      "SELECT DISTINCT status, dispatch_key FROM deliveries WHERE send_id = ?",
-    )
-      .bind(send.id)
-      .all<{ status: string; dispatch_key: string }>();
-    expect(keys.results).toEqual([{ status: "pending", dispatch_key: "k-cut" }]);
-
-    // The run after re-sends that exact batch under its key, and the send finishes.
-    await runSend(env, send.id);
-    expect(provider.mailed.map((m) => m.key)).toEqual(["k-cut", "k-cut", "k-cut"]);
-    expect((await row(send.id)).status).toBe("sent");
   });
 });
 

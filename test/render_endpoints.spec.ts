@@ -90,9 +90,9 @@ describe("preview + test endpoints", () => {
         body: JSON.stringify({ to }),
       });
     expect((await test()).status).toBe(200);
-    // The same test again: an idempotent provider would fold a reused key into nothing.
+    // The same test again: the fake records once per key, so a reused key would fold it into nothing.
     expect((await test()).status).toBe(200);
-    // An edited post: a reused key would be refused (Resend's 409 on a changed payload).
+    // An edited post: a fresh key again.
     const { post } = await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH }));
     const edit = await SELF.fetch(`${base}/api/posts/${id}`, {
       method: "PUT",

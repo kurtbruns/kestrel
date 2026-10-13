@@ -499,7 +499,7 @@ describe("editor view", () => {
     expect(document.querySelector(".editor-not-connected")).toBeNull(); // the draft's line
     unmount();
     fake.restore();
-    appState.appConfig = settingsResponse({ deployment: { provider: "resend" } });
+    appState.appConfig = settingsResponse({ deployment: { provider: "ses" } });
     await open(scheduledPost(Date.now() + 65_000).routes);
     expect(document.querySelector(".sched-held")).toBeNull();
   });
@@ -515,7 +515,7 @@ describe("editor view", () => {
     );
     expect($<HTMLAnchorElement>("a", note).getAttribute("href")).toBe("#/docs/ses");
     expect(note.nextElementSibling?.classList.contains("actions-bar")).toBe(true);
-    for (const provider of ["resend", "fake"] as const) {
+    for (const provider of ["ses", "fake"] as const) {
       unmount();
       fake.restore();
       appState.appConfig = settingsResponse({ deployment: { provider } });
@@ -1305,7 +1305,7 @@ describe("editor view", () => {
   });
 
   it("carries no such line once a provider is set, nor on the local stand-in", async () => {
-    for (const provider of ["resend", "fake"] as const) {
+    for (const provider of ["ses", "fake"] as const) {
       appState.appConfig = settingsResponse({ deployment: { provider } });
       await open([
         { path: "/api/posts/p1", reply: () => draft() },
@@ -1713,7 +1713,7 @@ describe("editor view", () => {
   });
 
   it("schedules as usual once a provider is set, and on the local stand-in", async () => {
-    for (const provider of ["resend", "fake"] as const) {
+    for (const provider of ["ses", "fake"] as const) {
       appState.appConfig = settingsResponse({ deployment: { provider } });
       const server = draftServer();
       await open([

@@ -14,7 +14,7 @@
  *   --in <duration>   when it fires: 90s, 2m, 1m30s, 1h (default: the server's minimum
  *                     lead, the soonest any send may fire), then rounded up to the minute
  *                     by the server, as every fire time is. Inside the lead is refused.
- *   --profile <name>  resend, ses, or generic: checks the server runs that profile. The
+ *   --profile <name>  ses or generic: checks the server runs that profile. The
  *                     profile is fixed when the server starts (`SIMULATE_SENDS=ses npm run
  *                     dev`), so this explains how to switch rather than switching.
  *   --size <n>        the list size to seed an empty database with (100 / 1k / 10k / 100k).
@@ -35,7 +35,7 @@ const DEMO_SCHEDULED_SLUG = "a-quick-note";
 /** Covers the request's trip, so a send asked for exactly one lead out isn't refused as
  *  just inside it by the time the server reads the clock. */
 const SLACK_MS = 2000;
-const PROFILES = { generic: "a generic provider", resend: "Resend", ses: "Amazon SES" };
+const PROFILES = { generic: "a generic provider", ses: "Amazon SES" };
 
 /** `90s`, `2m`, `1m30s`, `1h`, or a bare number of seconds, in milliseconds; null if not. */
 function parseDuration(raw) {

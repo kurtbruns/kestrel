@@ -14,7 +14,7 @@ import { logged } from "./support/log";
 
 // applyDeliveryEvents() is the ONLY thing that mutates state from provider events, so the
 // suppression rule (a deliverability rule apart from consent and unsubscribe, SPEC §7,
-// §10) is unit-tested here. The SES/Resend adapters both echo the recipient address in
+// §10) is unit-tested here. The SES adapter echoes the recipient address in
 // every event, so an event keyed by `provider_id` alone can't come through parseWebhook;
 // it's constructed directly to prove the service still recovers the address from the
 // matched delivery row and suppresses.

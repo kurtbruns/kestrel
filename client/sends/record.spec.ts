@@ -618,18 +618,22 @@ describe("sent record", () => {
     const refused = sendView(send({ status: "sending", completed_at: null }), {
       phase: "needs-attention",
       provider: {
-        name: "resend",
+        name: "ses",
         halt: {
           reason: "account",
           cause: "credentials",
-          error: "resend batch 403: API key is not active",
+          error:
+            "ses 403 UnrecognizedClientException: The security token included in the request is invalid",
           retries: 1,
           since: 1_000,
           retry_at: Date.now() + 12 * 60_000,
         },
       },
       conditions: [
-        condition.refused("resend batch 403: API key is not active", Date.now() + 12 * 60_000),
+        condition.refused(
+          "ses 403 UnrecognizedClientException: The security token included in the request is invalid",
+          Date.now() + 12 * 60_000,
+        ),
       ],
     });
     fake = fakeApi([
@@ -644,7 +648,9 @@ describe("sent record", () => {
     expect($(".phase-pill").textContent).toBe("Needs attention");
     const alert = $("#watchBody .health.red");
     expect(alert.textContent).toContain("The provider is refusing this account");
-    expect(alert.textContent).toContain("resend batch 403: API key is not active");
+    expect(alert.textContent).toContain(
+      "ses 403 UnrecognizedClientException: The security token included in the request is invalid",
+    );
     expect(alert.textContent).toContain("Replace the provider's API key or credentials");
     expect(document.querySelector("#resolveBtn")).toBeNull(); // Resolve is for a wedge only
     expect($(".wbar-sub").textContent).toMatch(/refusing this account/);

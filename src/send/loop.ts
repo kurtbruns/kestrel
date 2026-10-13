@@ -1,21 +1,21 @@
 /**
- * The idempotent, resumable send loop (I1, I2, I4). Only the sweep calls it.
+ * The resumable, at-most-once send loop (I1, I2, I4). Only the sweep calls it.
  *
- * `deliveries` is both the work queue and the idempotency ledger. A recipient is
+ * `deliveries` is both the work queue and the at-most-once ledger. A recipient is
  * only ever selected while `pending`; we flip it to `dispatched` BEFORE the
  * network call, under a dispatch key saved on the row, and to `accepted`/`unsent`
  * after, so a crash can never re-mail an accepted recipient. A batch whose answer
- * was never recorded is re-sent as the identical batch under its saved key, never
- * merged into a new one, so an idempotent provider dedupes it however the rest of
- * the send has changed since. Each invocation attempts each recipient at most once;
- * retryables go back to `pending` (on an idempotent provider, still under their key)
+ * was never recorded is never re-sent: no provider dedupes a re-send, so its
+ * recipients stay in flight until the publisher's Resolve (SPEC §12). Each invocation
+ * attempts each recipient at most once; retryables go back to `pending` as fresh rows
  * and wait for the next sweep tick (the backoff).
  *
  * A failure that is the provider's or the account's rather than a recipient's (the
- * adapter's halt, or a request with no answer) halts the run, not the recipients: the
- * batch goes back to `pending` with no attempt spent, the send records the halt and stays
- * open, and the sweep tries the same batch again once the halt's backoff (`HALT_BACKOFF_MS`)
- * has passed, however long the halt lasts; an answered batch ends it (SPEC §12).
+ * adapter's halt) halts the run, not the recipients: the batch goes back to `pending` as
+ * fresh rows with no attempt spent, the send records the halt and stays open, and the
+ * sweep tries again once the halt's backoff (`HALT_BACKOFF_MS`) has passed, however long
+ * the halt lasts; an answered batch ends it (SPEC §12). A request with no answer halts the
+ * run the same way, but its batch stays in flight for Resolve.
  * Only a recipient's own retryable failure counts toward `MAX_DELIVERY_ATTEMPTS`.
  *
  * A run spends against the invocation's subrequest budget (`budget.ts`) and stops
@@ -64,16 +64,15 @@ const MAX_CHUNK = 500;
  * otherwise pay a whole batch's D1 writes for every few recipients, so its requests go in
  * groups this size that share the writes: about half a D1 statement a recipient instead
  * of five at one recipient a request. It is also the most recipients a run cut off mid-group can
- * leave waiting for Resolve on such a provider, which has no idempotency key to re-send
- * under (SPEC §12). A provider that batches this many or more sends one batch a group.
+ * leave waiting for Resolve on such a provider (SPEC §12). A provider that batches this many or more sends one batch a group.
  */
 const GROUP_RECIPIENTS = 10;
 // What a run can cost, in D1 statements (and, where noted, provider requests), so it
 // only starts what it can finish. Each is an upper bound; the budget counts what is
 // actually spent.
-/** Opening: read the send, take the lease, resolve the audience (2), list the
- *  unanswered batches and the fresh rows. */
-const OPEN_COST = 6;
+/** Opening: read the send, take the lease, resolve the audience (2), list the fresh
+ *  rows. */
+const OPEN_COST = 5;
 /** One group, besides a request for each of its batches: read its rows, close any no
  *  longer to be mailed (2), renew the lease, hand off (2), record the outcomes (2). A
  *  group with a halted batch also records the hold (3), but then the run only releases
@@ -82,9 +81,6 @@ const GROUP_COST = 8;
 /** What a group usually costs, besides its requests: the read, the hand-off, and the
  *  record. Sizes the read of fresh rows, which may read more than a run gets to. */
 const GROUP_TYPICAL_COST = 5;
-/** Re-sending one unanswered batch, besides its request: renew the lease, hand it off
- *  again (2), read its rows, record the outcomes (2). */
-const REDO_COST = 6;
 /** Closing: count what is left, then complete the send (3) or release the lease. */
 const CLOSE_COST = 4;
 /** The least a run needs to be worth starting: its opening, one group of one request,
@@ -107,7 +103,7 @@ function chunk<T>(items: T[], size: number): T[][] {
   return out;
 }
 
-/** A batch's recipients in one fixed order, so a re-sent batch is byte-identical. */
+/** A batch's recipients in one fixed order, so a batch reads the same in the record and the log. */
 function byEmail(a: DeliveryWork, b: DeliveryWork): number {
   return a.email < b.email ? -1 : a.email > b.email ? 1 : 0;
 }
@@ -188,12 +184,10 @@ export async function runSend(
   };
   const rendered = { subject: send.subject, html: send.rendered_html, text: send.rendered_text };
 
-  /** One batch of a group: its rows, the key it goes out under, and whether this is its
-   *  first request under that key. */
+  /** One batch of a group: its rows, and the key it goes out under. */
   interface Batch {
     key: string;
     members: DeliveryWork[];
-    firstAttempt: boolean;
   }
 
   // The tick's clock when the sweep runs this, so every send it runs keeps one pace and
@@ -204,15 +198,10 @@ export async function runSend(
    * Send a group of handed-off batches, each under its own key, and record every answer
    * in one write. False when any batch got no per-recipient answer, which ends the run.
    *
-   * A halted batch goes back to the queue, no attempt spent, and the send records the
-   * halt. It keeps its key only while its fate is unknown: this attempt may have been
-   * accepted, or an earlier one may have (a batch is only ever re-sent under its key
-   * because an earlier attempt left its fate unknown). A batch refused on its first
-   * attempt provably reached no one, so it goes back as fresh rows, which re-checks each
-   * recipient's consent when it is handed off again (I2) and leaves nothing under a key
-   * for another provider to mistake for an ambiguous delivery. A request with no answer
-   * at all goes back the same way on an idempotent provider, under its key, to be re-sent
-   * as-is next tick; on any other it stays `dispatched`, the ambiguous case that waits for
+   * A halted batch provably reached no one, so it goes back to the queue as fresh rows,
+   * no attempt spent, which re-checks each recipient's consent when it is handed off
+   * again (I2), and the send records the halt. A request with no answer at all stays
+   * `dispatched`: its fate is unknown, and no provider dedupes a re-send, so it waits for
    * Resolve (§12).
    *
    * The group's requests go out together, each started no sooner than the provider's
@@ -220,7 +209,7 @@ export async function runSend(
    */
   const deliver = async (batches: Batch[]): Promise<boolean> => {
     const outcomes: DeliveryOutcome[] = [];
-    const held: sends.HeldBatch[] = [];
+    const held: string[] = [];
     let halt: BatchHalt | null = null;
     let requeued = 0;
     let answered = false;
@@ -243,7 +232,8 @@ export async function runSend(
           });
         } else {
           // Its subscriber record is gone, so there is no unsubscribe link to address the
-          // message with; never send without one (I2).
+          // message with; never send without one (I2). The hand-off already closes such a
+          // row as skipped, so this only guards a future caller that doesn't.
           outcomes.push({ id: m.id, status: "unsent", error: "no subscriber record" });
           result.unsent += 1;
         }
@@ -259,8 +249,8 @@ export async function runSend(
       try {
         const answer = await provider.sendBatch(rendered, call.recipients, {
           purpose: "list",
-          idempotencyKeyPrefix: sendId,
-          idempotencyKey: call.batch.key,
+          tag: sendId,
+          batchKey: call.batch.key,
         });
         return { call, answer, lost: undefined };
       } catch (err) {
@@ -282,10 +272,7 @@ export async function runSend(
       // provider on this attempt), since the first request found the provider refusing,
       // down, or not answering.
       for (const call of rest) {
-        held.push({
-          key: call.batch.key,
-          keepKey: provider.idempotentRetry && !call.batch.firstAttempt,
-        });
+        held.push(call.batch.key);
         requeued += call.batch.members.length;
         heldCount += call.recipients.length;
       }
@@ -296,25 +283,15 @@ export async function runSend(
       let batchHalt: BatchHalt | null = null;
       if (answer === null) {
         complete = false;
-        if (provider.idempotentRetry) {
-          batchHalt = {
-            reason: "unavailable",
-            cause: "outage",
-            error: lost ?? "no answer",
-            mayHaveSent: true,
-          };
-        } else {
-          unknown += call.recipients.length; // stays in flight, awaiting Resolve (§12)
-          // The provider may be down or unreachable: the send waits out the outage's
-          // backoff rather than strand a fresh batch every tick. Only the halt is taken;
-          // this batch stays in flight.
-          halt = worseHalt(halt, {
-            reason: "unavailable",
-            cause: "outage",
-            error: lost ?? "no answer",
-            mayHaveSent: true,
-          });
-        }
+        unknown += call.recipients.length; // stays in flight, awaiting Resolve (§12)
+        // The provider may be down or unreachable: the send waits out the outage's backoff
+        // rather than strand a fresh batch every tick. Only the halt is taken; this batch
+        // stays in flight.
+        halt = worseHalt(halt, {
+          reason: "unavailable",
+          cause: "outage",
+          error: lost ?? "no answer",
+        });
       } else if (answer.kind === "halted") {
         complete = false;
         batchHalt = answer.halt;
@@ -346,7 +323,6 @@ export async function runSend(
               id,
               status: "pending",
               error: r.error,
-              keepKey: provider.idempotentRetry,
               ...(r.held ? { attempt: false as const } : {}),
             });
             result.requeued += 1;
@@ -359,10 +335,7 @@ export async function runSend(
         unknown += Math.max(0, call.recipients.length - answeredFor);
       }
       if (batchHalt) {
-        held.push({
-          key: batch.key,
-          keepKey: provider.idempotentRetry && (batchHalt.mayHaveSent || !batch.firstAttempt),
-        });
+        held.push(batch.key);
         requeued += batch.members.length;
         heldCount += call.recipients.length;
         halt = worseHalt(halt, batchHalt);
@@ -429,98 +402,17 @@ export async function runSend(
     return complete;
   };
 
-  /**
-   * Hand the send back to the sweep. On a provider that dedupes a re-send under its key,
-   * any batch still in flight under a key it remembers (one a cut-off run left that this
-   * run did not reach) goes back to the queue first, key kept, so the next run re-sends it
-   * under that key and it never reads as wedged. What is left in flight is then only what
-   * nothing will re-send, awaiting Resolve (`WEDGED_SEND`).
-   */
-  const releaseRun = async (): Promise<void> => {
-    if (!provider.idempotentRetry) {
-      await sends.releaseLease(db, sendId, lease);
-      return;
-    }
-    const window = provider.idempotencyWindowMs;
-    await sends.releaseLease(db, sendId, lease, window === undefined ? null : Date.now() - window);
-  };
+  /** Hand the send back to the sweep. A batch still in flight stays there: nothing re-sends
+   *  it, so it waits for Resolve (`WEDGED_SEND`). */
   const release = async (): Promise<SendLoopResult> => {
-    await releaseRun();
+    await sends.releaseLease(db, sendId, lease);
     return result;
   };
 
-  // First, any batch a previous run handed off without recording the answer: re-send it
-  // whole, under its own key, before anything new. Its recipients were handed off
-  // already, so consent is not re-checked for them (I2 covers recipients not yet handed
-  // off), and re-sending a batch with someone removed would not be the same batch to the
-  // provider. Only an idempotent provider dedupes a re-send, and only while it still
-  // remembers the key. On any other, or once the key is older than the provider's memory
-  // of it, a batch waiting in the queue under its key goes back in flight, the ambiguous
-  // case that waits for Resolve (§12), rather than sitting where nothing sends or resolves
-  // it. Batches already in flight there are left exactly as they are, so they don't eat
-  // this run's budget; releasing the send leaves them in flight, which is what makes it
-  // wedged. A key is known only to the provider and account that took it, so a switch to
-  // another provider with keys mid-send would re-send these batches; that switch is the
-  // developer's to time (SPEC §10, appendix, *Trusted, not guarded*).
-  const keyWindow = provider.idempotencyWindowMs;
-  const keyedBefore = keyWindow === undefined ? null : Date.now() - keyWindow;
-  const unanswered = await sends.unansweredDispatchKeys(
-    db,
-    sendId,
-    !provider.idempotentRetry,
-    keyedBefore,
-  );
-  for (const { key, keyedAt } of unanswered) {
-    if (!budget.affords(REDO_COST + CLOSE_COST, 1) || clock.startsLeft() < 1) {
-      break;
-    }
-    if (!(await keepLease())) {
-      return leaseLost();
-    }
-    const forgotten = keyedBefore !== null && keyedAt !== null && keyedAt < keyedBefore;
-    const toResolve = !provider.idempotentRetry || forgotten;
-    const moved = new Set(await sends.redispatch(db, sendId, lease, key, Date.now(), toResolve));
-    if (moved.size === 0) {
-      if (!(await stillLeased())) {
-        return leaseLost();
-      }
-      continue;
-    }
-    if (toResolve) {
-      log.error("send.ambiguous", {
-        ...tags,
-        recipients: moved.size,
-        cause: provider.idempotentRetry ? "key_forgotten" : "no_idempotency",
-      });
-      continue;
-    }
-    const members = (await sends.fetchDispatchGroup(db, sendId, key))
-      .filter((m) => moved.has(m.id))
-      .sort(byEmail);
-    if (members.length === 0) {
-      continue;
-    }
-    // The batch retries as a unit, so the cap does too: once any member has used its
-    // attempts, the whole batch stops retrying.
-    if (members.some((m) => m.attempts >= MAX_DELIVERY_ATTEMPTS)) {
-      await sends.settleDeliveries(
-        db,
-        sendId,
-        lease,
-        "dispatched",
-        members.map((m) => ({ id: m.id, status: "unsent", error: "max attempts exceeded" })),
-        Date.now(),
-      );
-      result.unsent += members.length;
-      continue;
-    }
-    if (!(await deliver([{ key, members, firstAttempt: false }]))) {
-      return release();
-    }
-  }
-
-  // Then fresh rows, a group at a time, as many groups as the budget and the run's window
-  // leave room for. The read is sized by what a group usually costs, so the run spends its
+  // Fresh rows, a group at a time, as many groups as the budget and the run's window
+  // leave room for. A batch a previous run handed off without recording its answer is
+  // left in flight exactly as it is, the ambiguous case that waits for Resolve (§12), so
+  // it costs this run nothing. The read is sized by what a group usually costs, so the run spends its
   // whole budget; rows it doesn't reach stay `pending` for the next tick.
   const batchSize = Math.min(provider.maxBatch, MAX_CHUNK);
   const groupCalls = Math.max(1, Math.floor(GROUP_RECIPIENTS / batchSize));
@@ -594,7 +486,6 @@ export async function runSend(
       .map((h) => ({
         key: h.key,
         members: live.filter((l) => moved.get(l.id) === h.key).sort(byEmail),
-        firstAttempt: true,
       }))
       .filter((b) => b.members.length > 0);
     if (!(await deliver(batches))) {
@@ -608,7 +499,7 @@ export async function runSend(
     result.finished = true;
     log.info("send.completed", { ...tags, durationMs: Date.now() - (send.started_at ?? now) });
   } else {
-    await releaseRun();
+    await sends.releaseLease(db, sendId, lease);
   }
   // Dev-only: settle any now-due synthetic receipts from this run's fresh acceptances,
   // so the delivery bar starts filling without waiting for the next sweep. No-op unless

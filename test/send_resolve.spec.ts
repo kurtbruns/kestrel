@@ -1,7 +1,7 @@
 /**
  * Operator adjudication of a wedged send (SPEC §12).
  *
- * On a non-idempotent provider a mid-batch transport error leaves recipients
+ * A mid-batch transport error leaves recipients
  * `dispatched` — genuinely ambiguous — and the loop refuses to blind-retry them
  * (I4), so the send can never clear its completion gate and stays `sending`
  * forever. These tests cover the manual resolution that unwedges it: a lone
@@ -26,7 +26,7 @@ import { allowErrorLogs } from "./support/log";
 
 const config = () => getConfig(env);
 
-// A non-idempotent provider (SES) — the only kind that can wedge a send. Mirrors
+// The SES provider, whose lost requests are what wedge a send. Mirrors
 // the override in integration_delivery.spec.ts; no real network (fetch is mocked).
 const sesEnv = () => ({ ...env, ...SES_DEPLOY }) as unknown as AppEnv;
 

@@ -123,7 +123,7 @@ async function confirmationMessage(c: RequestContext, token: string): Promise<Re
 }
 
 /** Hand one confirmation to the provider and say whether it went: `yes`, `no` (refused,
- *  nothing sent), or `unknown` (no answer, or a halt after which it may have gone). */
+ *  nothing sent), or `unknown` (no answer). */
 async function sendConfirmation(
   c: RequestContext,
   message: RenderedEmail,
@@ -135,16 +135,16 @@ async function sendConfirmation(
   let result: SendBatchResult;
   try {
     result = await provider.sendBatch(message, recipients, {
-      // One key per confirmation sent, never reused: a provider that dedupes by key
-      // would otherwise swallow a deliberate resend as a repeat of the first.
+      // One tag per confirmation sent, never reused: the fake records once per tag and
+      // address, and would otherwise fold a deliberate resend into the first.
       purpose: "confirmation",
-      idempotencyKeyPrefix: `confirm-${subscriber.id}-${attemptAt}`,
+      tag: `confirm-${subscriber.id}-${attemptAt}`,
     });
   } catch (err) {
     return { delivered: "unknown", error: err instanceof Error ? err.message : String(err) };
   }
   if (result.kind === "halted") {
-    return { delivered: result.halt.mayHaveSent ? "unknown" : "no", error: result.halt.error };
+    return { delivered: "no", error: result.halt.error };
   }
   const [answer] = result.results;
   if (!answer) {

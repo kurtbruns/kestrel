@@ -11,10 +11,10 @@ import { runSend } from "../src/send/loop";
 import { cancel } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
+import { BatchProvider } from "./support/batching";
 import { toNextTick } from "./support/clock";
 import { dueSend, frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { allowErrorLogs, type LoggedLine, logged } from "./support/log";
-import { NoKeyProvider, ResendLikeProvider } from "./support/resend_like";
 import { fetchWith } from "./support/worker_env";
 
 // The structured log (SPEC §12): every line one JSON object, a send's lifecycle in order
@@ -87,42 +87,29 @@ describe("the send lifecycle in the log", () => {
     expectNoAddress();
   });
 
-  it("a batch's counts add up to its recipients, a reader with no subscriber record included", async () => {
+  it("a batch's counts add up to its recipients when its answer is lost", async () => {
+    allowErrorLogs("send.ambiguous", "send.wedged");
     vi.useFakeTimers({ toFake: ["Date"] });
-    const provider = new ResendLikeProvider();
+    const provider = new BatchProvider();
     provider.loseAnswers = 1;
     vi.spyOn(providers, "getProvider").mockReturnValue(provider);
     await seedConfirmed(AUDIENCE);
     const send = await dueSend();
-    // The first request's answer is lost, so the batch waits under its key to be re-sent
-    // whole; by then one reader's subscriber record is gone, so the re-send closes them
-    // unsent at hand-off rather than mail them with no unsubscribe link. Every member is
-    // still counted once, whatever the provider answers for the rest.
-    await sweep(env);
-    const fetchGroup = sends.fetchDispatchGroup;
-    vi.spyOn(sends, "fetchDispatchGroup").mockImplementation(async (db, sendId, key) =>
-      (await fetchGroup(db, sendId, key)).map((w) =>
-        w.email === "grace@example.com" ? { ...w, unsub_token: null } : w,
-      ),
-    );
-    await toNextTick(env.DB);
+    // The request's answer is lost, so every member's fate is unknown, and the batch waits
+    // for Resolve. Every member is still counted once.
     await sweep(env);
 
-    const [lost, resent] = lines().filter((l) => l.event === "send.batch" && l.sendId === send.id);
-    expect(lost).toMatchObject({ recipients: 3, held: 3 });
-    expect(resent).toMatchObject({ recipients: 3, requests: 1 });
-    expect(resent!.unsent).toBeGreaterThanOrEqual(1);
-    for (const batch of [lost!, resent!]) {
-      const n = (field: string) => batch[field] as number;
-      expect(n("accepted") + n("unsent") + n("retried") + n("held") + n("unknown")).toBe(
-        n("recipients"),
-      );
-    }
+    const [lost] = lines().filter((l) => l.event === "send.batch" && l.sendId === send.id);
+    expect(lost).toMatchObject({ recipients: 3, unknown: 3 });
+    const n = (field: string) => lost![field] as number;
+    expect(n("accepted") + n("unsent") + n("retried") + n("held") + n("unknown")).toBe(
+      n("recipients"),
+    );
   });
 
   it("a provider refusal logs send.halted at warn with the stored retry time, then send.resumed", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
-    const provider = new ResendLikeProvider();
+    const provider = new BatchProvider();
     vi.spyOn(providers, "getProvider").mockReturnValue(provider);
     // The provider's words may carry an address; the log keeps only its domain.
     provider.refuse = "The newsletter@send.example.com sender is not verified";
@@ -157,7 +144,7 @@ describe("the send lifecycle in the log", () => {
   it("a request lost on a provider with no key logs send.ambiguous once, then send.wedged each tick from the one that left it", async () => {
     allowErrorLogs("send.ambiguous", "send.wedged", "send.stuck");
     vi.useFakeTimers({ toFake: ["Date"] });
-    const provider = new NoKeyProvider();
+    const provider = new BatchProvider();
     provider.loseAnswers = 1;
     vi.spyOn(providers, "getProvider").mockReturnValue(provider);
     await seedConfirmed(AUDIENCE);
@@ -284,7 +271,7 @@ describe("the entry points group a tick's or a request's lines under one run", (
   });
 
   it("a request's run is its cf-ray, and reaches the work it leaves to waitUntil", async () => {
-    const provider = new ResendLikeProvider();
+    const provider = new BatchProvider();
     provider.refuse = "ada@example.com: the account is suspended";
     vi.spyOn(providers, "getProvider").mockReturnValue(provider);
 
@@ -306,7 +293,7 @@ describe("the entry points group a tick's or a request's lines under one run", (
   });
 
   it("a request with no cf-ray gets a run of its own", async () => {
-    await fetchWith({}, "/webhooks/resend", { method: "POST", body: "{}" });
+    await fetchWith({}, "/webhooks/ses", { method: "POST", body: "{}" });
 
     expect(lines()).toEqual([
       expect.objectContaining({

@@ -1,8 +1,7 @@
 /**
  * End-to-end delivery integration (pre-live confidence check).
  *
- * The per-adapter specs (`provider_ses`, `provider_resend`) exercise each adapter
- * in isolation. This spec instead drives the REAL wiring that a live run hits,
+ * The adapter spec (`provider_ses`) exercises the adapter in isolation. This spec instead drives the REAL wiring that a live run hits,
  * with only the outbound network mocked:
  *
  *   - the send loop (`runSend`) selecting the configured provider via `getConfig`
@@ -12,11 +11,10 @@
  *   - the full loop: send -> provider id recorded -> signed webhook bounce ->
  *     suppression -> the address is dropped from the NEXT send's audience (SPEC §7, §10).
  *
- * PROVIDER is switched per test by passing an env override to `runSend` /
- * `handle` (both resolve config from env), so this proves the reconciled factory
- * wires BOTH `ses` and `resend` and both `/webhooks/*` routes are live and public.
- * No real credentials or network: SES send/cert fetches and Resend batch calls
- * are mocked; Svix/SNS payloads are signed locally.
+ * PROVIDER is set per test by passing an env override to `runSend` / `handle` (both
+ * resolve config from env), so this proves the factory wires `ses` and its webhook route
+ * is live and public. No real credentials or network: SES send and cert fetches are
+ * mocked; SNS payloads are signed locally.
  */
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
@@ -26,10 +24,9 @@ import * as sends from "../src/db/sends";
 import * as subscribers from "../src/db/subscribers";
 import type { AppEnv } from "../src/env";
 import { getConfig } from "../src/env";
-import { signSvix } from "../src/providers/resend";
 import { _clearKeyCache, type SnsEnvelope } from "../src/providers/sns";
 import { runSend } from "../src/send/loop";
-import { RESEND_DEPLOY, SES_DEPLOY, SNS_TOPIC_ARN } from "./support/deploy";
+import { SES_DEPLOY, SNS_TOPIC_ARN } from "./support/deploy";
 import { dueSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { base } from "./support/http";
 import { answerSes, SES_BULK_ENDPOINT } from "./support/ses";
@@ -41,8 +38,6 @@ import { makeSigner, type Signer, signEnvelope } from "./support/sns";
 // events to the SNS topic in a real deploy, so a send names it.
 const sesEnv = () =>
   ({ ...env, ...SES_DEPLOY, SES_CONFIGURATION_SET: "kestrel-events" }) as unknown as AppEnv;
-
-const resendEnv = () => ({ ...env, ...RESEND_DEPLOY }) as unknown as AppEnv;
 
 // --- seeding helpers --------------------------------------------------------
 
@@ -78,25 +73,6 @@ function signedSnsBounce(signer: Signer, email: string, providerId: string): Pro
     },
     signer,
   );
-}
-
-// --- Svix signing (Resend) --------------------------------------------------
-
-async function signedResendWebhook(payload: unknown): Promise<Request> {
-  const id = `msg_${crypto.randomUUID()}`;
-  const timestamp = String(Math.floor(Date.now() / 1000));
-  const body = JSON.stringify(payload);
-  const signature = await signSvix(RESEND_DEPLOY.RESEND_WEBHOOK_SECRET, id, timestamp, body);
-  return new Request(`${base}/webhooks/resend`, {
-    method: "POST",
-    headers: {
-      "svix-id": id,
-      "svix-timestamp": timestamp,
-      "svix-signature": signature,
-      "content-type": "application/json",
-    },
-    body,
-  });
 }
 
 /** Dispatch a request through the real router with a given env. */
@@ -148,38 +124,8 @@ describe("send loop drives the real SES adapter", () => {
 });
 
 // ============================================================================
-describe("send loop drives the real Resend adapter", () => {
-  it("sends the whole audience in one batch (maxBatch=100) with Bearer + Idempotency-Key", async () => {
-    await seedConfirmed("r1@integ.test");
-    await seedConfirmed("r2@integ.test");
-    await seedConfirmed("r3@integ.test");
-    const send = await dueSend();
-
-    const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ data: [{ id: "re_a" }, { id: "re_b" }, { id: "re_c" }] }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
-    );
-
-    const result = await runSend(resendEnv(), send.id);
-
-    expect(result.accepted).toBe(3);
-    expect(result.finished).toBe(true);
-    // maxBatch=100 → the three recipients go in a single batch request.
-    expect(spy).toHaveBeenCalledTimes(1);
-    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://api.resend.com/emails/batch");
-    const headers = init.headers as Record<string, string>;
-    expect(headers.Authorization).toBe(`Bearer ${RESEND_DEPLOY.RESEND_API_KEY}`);
-    expect(headers["Idempotency-Key"]).toMatch(new RegExp(`^${send.id}-`));
-    expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
-  });
-});
-
-// ============================================================================
 describe("webhook routes are wired through the real router", () => {
-  it("POST /webhooks/ses (PROVIDER=ses): verified hard bounce suppresses via the route", async () => {
+  it("POST /webhooks/ses: a verified hard bounce suppresses the address, and the NEXT send leaves it out (SPEC §10)", async () => {
     await seedConfirmed("bounce@integ.test");
     const send = await dueSend();
     answerSes(() => ({ Status: "SUCCESS", MessageId: "ses-live-1" }));
@@ -212,37 +158,12 @@ describe("webhook routes are wired through the real router", () => {
       .bind(providerId)
       .first<{ event: string | null }>();
     expect(row?.event).toBe("bounced");
-  });
-
-  it("POST /webhooks/resend (PROVIDER=resend): a bounce webhook drops the address from the NEXT send (SPEC §10)", async () => {
-    await seedConfirmed("victim@integ.test");
-    const send1 = await dueSend();
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ data: [{ id: "re_victim" }] }), { status: 200 }),
-    );
-    await runSend(resendEnv(), send1.id);
-    expect(await providerIdFor("victim@integ.test")).toBe("re_victim");
-    vi.restoreAllMocks();
-
-    // Signed hard-bounce webhook through the real /webhooks/resend route.
-    const req = await signedResendWebhook({
-      type: "email.bounced",
-      data: {
-        email_id: "re_victim",
-        to: ["victim@integ.test"],
-        bounce: { type: "Permanent", message: "no such user" },
-      },
-    });
-    const res = await route(req, resendEnv());
-    expect(res.status).toBe(200);
-    expect(await subscribers.isSuppressed(env.DB, "victim@integ.test")).toBe(true);
 
     // Next send: the suppressed address must not be materialized or mailed.
+    vi.restoreAllMocks();
     const send2 = await dueSend();
-    const spy = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(new Response(JSON.stringify({ data: [] }), { status: 200 }));
-    const result2 = await runSend(resendEnv(), send2.id);
+    const { spy } = answerSes();
+    const result2 = await runSend(sesEnv(), send2.id);
 
     expect(result2.accepted).toBe(0);
     expect(spy).not.toHaveBeenCalled(); // no live recipients → no provider call
@@ -251,23 +172,16 @@ describe("webhook routes are wired through the real router", () => {
     expect((await sends.getSend(env.DB, send2.id))!.status).toBe("sent");
   });
 
-  it("both /webhooks/* routes are public (reach the adapter, never a 401/404)", async () => {
-    // An unsigned body gets each adapter's own refusal, status and words, which only the
+  it("the webhook route is public (reaches the adapter, never a 401/404)", async () => {
+    // An unsigned body gets the adapter's own refusal, status and words, which only the
     // adapter can produce: a 404 would mean the route is gone, and a 401 that requireAuth
     // stopped it before the adapter ever parsed it.
     const sesRes = await route(
       new Request(`${base}/webhooks/ses`, { method: "POST", body: "{}" }),
       sesEnv(),
     );
-    const resendRes = await route(
-      new Request(`${base}/webhooks/resend`, { method: "POST", body: "{}" }),
-      resendEnv(),
-    );
     // SES: the envelope parses but carries no signature, so SNS verification refuses it.
     expect(sesRes.status).toBe(403);
     expect(await sesRes.text()).toBe("invalid signature");
-    // Resend: no svix headers at all.
-    expect(resendRes.status).toBe(400);
-    expect(await resendRes.text()).toBe("missing signature headers");
   });
 });

@@ -936,9 +936,8 @@ export async function dueSends(db: D1Database, now: number): Promise<SendRow[]> 
  * A wedged send (SPEC §12), as SQL over a `sends` row: sending, nothing left to hand off,
  * recipients still in flight, and no run holding it, because the last run released its
  * lease having left them there. A run releases only once it has recorded every answer it
- * got, and puts back in the queue any batch it could still re-send under its key, so what
- * it leaves in flight is exactly what nothing will re-send: recipients whose fate is
- * unknown, awaiting Resolve. A run cut off mid-batch releases nothing (its lease runs out
+ * got, so what it leaves in flight is exactly what nothing will re-send: recipients whose
+ * fate is unknown, awaiting Resolve. A run cut off mid-batch releases nothing (its lease runs out
  * instead), so its batches are not wedged until the next run has looked at them. The one
  * definition: the watch (`isWedged`), the feed, the sweep, and the notifications read it.
  * It takes no clock, so a send turns wedged only by a write, which the feed reports.
@@ -1052,50 +1051,14 @@ export async function renewLease(
  * Release this run's lease so the next tick may resume the send; a no-op once another run
  * holds it. Unlike a renewal it stamps `rev`: a released lease with recipients left in
  * flight is what makes a send wedged (`WEDGED_SEND`).
- *
- * `requeueKeyedSince` is for a provider that dedupes a re-send under its key: every batch
- * still in flight under a key sent at or after it (or of unknown age) goes back to the
- * queue, key kept, in the same batch as the release, so the next run re-sends it under
- * that key rather than it reading as wedged. Those are batches a run cut off left behind
- * that this run did not reach; it never re-sends anyone under a new key (I4). Null
- * requeues whatever the key's age (a provider that remembers keys indefinitely); omit it
- * for any other provider, whose in-flight rows only Resolve may settle.
  */
-export async function releaseLease(
-  db: D1Database,
-  sendId: string,
-  lease: string,
-  requeueKeyedSince?: number | null,
-): Promise<void> {
-  const release = db
+export async function releaseLease(db: D1Database, sendId: string, lease: string): Promise<void> {
+  await db
     .prepare(
       `UPDATE sends SET locked_until = NULL, lease_token = NULL, rev = ${NEXT_REV} WHERE id = ? AND lease_token = ?`,
     )
-    .bind(sendId, lease);
-  if (requeueKeyedSince === undefined) {
-    await release.run();
-    return;
-  }
-  const guard = holdsLease(sendId, lease);
-  const resendable = `send_id = ? AND status = 'dispatched' AND dispatch_key IS NOT NULL
-      AND (? IS NULL OR keyed_at IS NULL OR keyed_at >= ?)`;
-  const binds = [sendId, requeueKeyedSince, requeueKeyedSince];
-  await db.batch([
-    // Before the move, so it counts the rows about to leave `dispatched`; a row a receipt
-    // already reached counts in its event's bucket, which the move does not change.
-    db
-      .prepare(
-        `UPDATE sends SET c_in_flight = c_in_flight - (SELECT COUNT(*) FROM deliveries WHERE ${resendable} AND event IS NULL),
-                c_pending = c_pending + (SELECT COUNT(*) FROM deliveries WHERE ${resendable} AND event IS NULL),
-                rev = ${NEXT_REV}
-          WHERE id = ? AND lease_token = ?`,
-      )
-      .bind(...binds, ...binds, sendId, lease),
-    db
-      .prepare(`UPDATE deliveries SET status = 'pending' WHERE ${resendable} AND ${guard.sql}`)
-      .bind(...binds, ...guard.binds),
-    release,
-  ]);
+    .bind(sendId, lease)
+    .run();
 }
 
 /**
@@ -1216,55 +1179,6 @@ export async function fetchDeliveryWork(db: D1Database, ids: number[]): Promise<
   return results;
 }
 
-/** An unanswered hand-off: its key, and when that key was first sent (null if unknown). */
-export interface UnansweredKey {
-  key: string;
-  keyedAt: number | null;
-}
-
-/**
- * The keys of a send's unanswered hand-offs, oldest first: batches handed off under a
- * key whose outcome was never recorded, because the request got no answer or one that
- * left its fate unknown (the rows are back in `pending`, key kept) or the run ended
- * before recording it (still `dispatched`). `queuedOnly` limits it to the first kind,
- * which is all a provider without idempotency may act on: its `dispatched` rows are
- * Resolve's. So is a batch still in flight under a key sent before `keyedBefore`, which
- * the provider no longer remembers, so it is left out too rather than listed every tick.
- */
-export async function unansweredDispatchKeys(
-  db: D1Database,
-  sendId: string,
-  queuedOnly = false,
-  keyedBefore: number | null = null,
-): Promise<UnansweredKey[]> {
-  const { results } = await db
-    .prepare(
-      `SELECT dispatch_key AS k, MIN(keyed_at) AS at FROM deliveries
-        WHERE send_id = ? AND dispatch_key IS NOT NULL
-          AND (status = 'pending'
-            OR (? = 0 AND status = 'dispatched' AND (? IS NULL OR keyed_at IS NULL OR keyed_at >= ?)))
-        GROUP BY dispatch_key ORDER BY MIN(rowid)`,
-    )
-    .bind(sendId, queuedOnly ? 1 : 0, keyedBefore, keyedBefore)
-    .all<{ k: string; at: number | null }>();
-  return results.map((r) => ({ key: r.k, keyedAt: r.at }));
-}
-
-/** The members of one unanswered hand-off, with their hand-off state. */
-export async function fetchDispatchGroup(
-  db: D1Database,
-  sendId: string,
-  key: string,
-): Promise<DeliveryWork[]> {
-  const { results } = await db
-    .prepare(
-      `${DELIVERY_WORK} WHERE d.send_id = ? AND d.dispatch_key = ? AND d.status IN ('pending', 'dispatched')`,
-    )
-    .bind(sendId, key)
-    .all<DeliveryWork>();
-  return results;
-}
-
 /** A statement moving every row of the hand-offs under `keys` that is in `status` between
  *  two counter buckets, lease-guarded like the row write it rides with. */
 function keyedCounterMove(
@@ -1342,49 +1256,10 @@ export async function dispatchFresh(
 }
 
 /**
- * Hand off an unanswered batch again, under its own key: rows an unanswered request sent
- * back to `pending` move to `dispatched` (rows a crash left `dispatched` already are).
- * `queuedOnly` moves only the `pending` ones and leaves rows already in flight untouched,
- * for a batch that is going to Resolve rather than to the provider. Lease-guarded;
- * returns the ids it moved (with `queuedOnly`) or now in flight under the key.
- */
-export async function redispatch(
-  db: D1Database,
-  sendId: string,
-  lease: string,
-  key: string,
-  now: number,
-  queuedOnly = false,
-): Promise<number[]> {
-  const guard = holdsLease(sendId, lease);
-  const [, moved] = await db.batch<{ id: number }>([
-    // Before the move, so it counts the rows about to leave `pending`.
-    keyedCounterMove(db, sendId, lease, [key], "pending", "c_pending", "c_in_flight"),
-    db
-      .prepare(
-        `UPDATE deliveries SET status = 'dispatched', updated_at = ?
-          WHERE send_id = ? AND dispatch_key = ?
-            AND status IN (${queuedOnly ? "'pending'" : "'pending', 'dispatched'"}) AND ${guard.sql}
-          RETURNING id`,
-      )
-      .bind(now, sendId, key, ...guard.binds),
-  ]);
-  return (moved?.results ?? []).map((r) => r.id);
-}
-
-/** A halted batch going back to the queue, and whether it keeps its dispatch key. */
-export interface HeldBatch {
-  key: string;
-  keepKey: boolean;
-}
-
-/**
- * Batches the provider refused as a whole, or requests that got no answer: the failure
- * is the provider's or the account's, not the recipients', so their rows go back to
- * `pending` with no attempt spent, and the send records the halt (SPEC §12). `keepKey`
- * keeps a batch's key, so the next run re-sends that exact batch under it instead of
- * folding the rows into a new one the provider could not recognize (I4); without it the
- * rows are fresh again, and go back through the consent check at hand-off (I2).
+ * Batches the provider refused as a whole, so provably reached no one: the failure is the
+ * provider's or the account's, not the recipients', so their rows go back to
+ * `pending` with no attempt spent, fresh again, so they go back through the consent check
+ * at hand-off (I2), and the send records the halt (SPEC §12).
  * `halted_at` keeps the start of an unbroken run of refusals for the same reason, and
  * `halt_retries` counts the run's halts, which picks the next retry's delay from `backoff`
  * (the reason's schedule, in ms, its last step repeating): the sweep leaves the send
@@ -1400,7 +1275,7 @@ export async function holdBatch(
   db: D1Database,
   sendId: string,
   lease: string,
-  held: HeldBatch[],
+  held: string[],
   halt: { reason: HaltReason; cause: HaltCause; error: string } | null,
   backoff: readonly number[],
   now: number,
@@ -1411,30 +1286,19 @@ export async function holdBatch(
   const guard = holdsLease(sendId, lease);
   // The halts before this one in an unbroken run for this reason, capped at the last step.
   const step = `MIN(CASE WHEN halt_reason IS ? THEN halt_retries ELSE 0 END, ${backoff.length - 1})`;
-  const rows = held.map((h) => ({ k: h.key, keep: h.keepKey ? 1 : 0 }));
   const statements: D1PreparedStatement[] = [];
   if (held.length > 0) {
     statements.push(
       // Before the move, so it counts the rows still under the keys.
-      keyedCounterMove(
-        db,
-        sendId,
-        lease,
-        held.map((h) => h.key),
-        "dispatched",
-        "c_in_flight",
-        "c_pending",
-      ),
+      keyedCounterMove(db, sendId, lease, held, "dispatched", "c_in_flight", "c_pending"),
       db
         .prepare(
           `UPDATE deliveries SET status = 'pending', error = ?, updated_at = ?,
-                dispatch_key = CASE WHEN json_extract(j.value, '$.keep') = 1 THEN dispatch_key END,
-                keyed_at = CASE WHEN json_extract(j.value, '$.keep') = 1 THEN keyed_at END
-           FROM json_each(?) AS j
-          WHERE deliveries.send_id = ? AND deliveries.dispatch_key = json_extract(j.value, '$.k')
-            AND deliveries.status = 'dispatched' AND ${guard.sql}`,
+                  dispatch_key = NULL, keyed_at = NULL
+            WHERE send_id = ? AND dispatch_key IN (SELECT value FROM json_each(?))
+              AND status = 'dispatched' AND ${guard.sql}`,
         )
-        .bind(halt?.error ?? null, now, JSON.stringify(rows), sendId, ...guard.binds),
+        .bind(halt?.error ?? null, now, sendId, JSON.stringify(held), ...guard.binds),
     );
   }
   if (halt) {
@@ -1468,16 +1332,13 @@ export async function holdBatch(
 
 /**
  * One recipient's recorded outcome. `pending` is a retryable rejection: back in the queue
- * for the next tick, one attempt spent. `keepKey` keeps its dispatch key, so the batch is
- * re-sent under that key rather than folded into a new one: on an idempotent provider a
- * retryable answer (a 429, a 5xx) does not prove the batch was not accepted, and only the
- * same key lets the provider dedupe it.
+ * for the next tick as a fresh row, one attempt spent.
  */
 export type DeliveryOutcome =
   | { id: number; status: "accepted"; providerId: string }
   | { id: number; status: "unsent"; error: string }
   | { id: number; status: "skipped" }
-  | { id: number; status: "pending"; error: string; keepKey: boolean; attempt?: false };
+  | { id: number; status: "pending"; error: string; attempt?: false };
 
 const OUTCOME_BUCKET: Record<DeliveryOutcome["status"], CounterCol> = {
   accepted: "c_accepted",
@@ -1490,11 +1351,10 @@ const OUTCOME_BUCKET: Record<DeliveryOutcome["status"], CounterCol> = {
  * Record a chunk's outcomes in one statement and its counter move, not a D1 call per
  * recipient. `from` is the status the rows leave: `pending` for a recipient closed before
  * hand-off (unsubscribed, suppressed, or out of attempts), `dispatched` for the
- * provider's answer. Every outcome but a `keepKey` retry clears the dispatch key, since
- * the hand-off is answered. `answered` says the provider actually answered this batch,
+ * provider's answer. Every outcome clears the dispatch key, since the hand-off is
+ * answered. `answered` says the provider actually answered this batch,
  * which ends any halt the send carried; closing rows without asking it does not. Lease-guarded: a
- * run that lost its lease records nothing, and the successor re-sends the batch under the
- * same key and records the provider's answer itself.
+ * run that lost its lease records nothing, and its batch stays in flight, for Resolve.
  */
 export async function settleDeliveries(
   db: D1Database,
@@ -1515,7 +1375,6 @@ export async function settleDeliveries(
     // no id, which the unique index on provider ids leaves out.
     p: o.status === "accepted" && o.providerId !== "" ? o.providerId : null,
     e: o.status === "unsent" || o.status === "pending" ? o.error : null,
-    k: o.status === "pending" && o.keepKey ? 1 : 0,
     // A recipient the provider held back for its own reasons spends no attempt.
     n: o.status === "pending" && o.attempt === false ? 1 : null,
   }));
@@ -1548,8 +1407,8 @@ export async function settleDeliveries(
            provider_id = COALESCE(json_extract(j.value, '$.p'), provider_id),
            error = json_extract(j.value, '$.e'),
            attempts = attempts + (json_extract(j.value, '$.s') = 'pending' AND json_extract(j.value, '$.n') IS NULL),
-           dispatch_key = CASE WHEN json_extract(j.value, '$.k') = 1 THEN dispatch_key END,
-           keyed_at = CASE WHEN json_extract(j.value, '$.k') = 1 THEN keyed_at END,
+           dispatch_key = NULL,
+           keyed_at = NULL,
            updated_at = ?
          FROM json_each(?) AS j
          WHERE deliveries.id = json_extract(j.value, '$.id')

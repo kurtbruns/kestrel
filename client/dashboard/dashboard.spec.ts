@@ -320,7 +320,8 @@ describe("dashboard", () => {
         c_pending: 40,
         halt_reason: "account",
         halt_cause: "credentials",
-        halt_error: "Resend 401 invalid_api_key: API key is invalid",
+        halt_error:
+          "ses 403 UnrecognizedClientException: The security token included in the request is invalid",
         halted_at: NOW - 60_000,
       });
     const srv = sendServer([refused("r1"), refused("r2")]);
@@ -341,7 +342,7 @@ describe("dashboard", () => {
     const health = $(".health");
     expect(health.classList.contains("red")).toBe(true);
     expect($$(":scope > div > div", health).map((d) => d.textContent)).toEqual([
-      "2 sends: The provider is refusing the account: Resend 401 invalid_api_key: API key is invalid. Replace the provider's API key or credentials in the deployment's secrets. No one has been marked unsent, and the send resumes on its own at its next retry once the account is fixed.",
+      "2 sends: The provider is refusing the account: ses 403 UnrecognizedClientException: The security token included in the request is invalid. Replace the provider's API key or credentials in the deployment's secrets. No one has been marked unsent, and the send resumes on its own at its next retry once the account is fixed.",
     ]);
     // Several refused sends link to the Sent page that lists them; one links to its watch.
     expect($("a", health).getAttribute("href")).toBe("#/sent");
@@ -388,7 +389,7 @@ describe("dashboard", () => {
   // developer lands, as a standing state, and its checklist puts connecting one first.
   const steps = () => $$(".setup-steps li strong").map((s) => s.textContent);
   describe("while no email provider is connected", () => {
-    const withProvider = (provider: "none" | "fake" | "resend") => {
+    const withProvider = (provider: "none" | "fake" | "ses") => {
       const c = config();
       c.deployment = { ...c.deployment, provider };
       appState.appConfig = c;
@@ -485,7 +486,7 @@ describe("dashboard", () => {
     });
 
     it("shows neither once a provider is set, nor on local development's stand-in", async () => {
-      for (const provider of ["resend", "fake"] as const) {
+      for (const provider of ["ses", "fake"] as const) {
         withProvider(provider);
         fake = world([], sendServer(), none);
         await mount(renderDashboard);

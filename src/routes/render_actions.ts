@@ -169,14 +169,13 @@ export async function test(c: RequestContext): Promise<Response> {
   const unsubscribeUrl = testUnsubscribeUrl(c.config);
   const recipients = [{ email: to, unsubscribeUrl }];
   // Each press is a deliberate new send, never a retry of the last one, so it carries a
-  // key of its own. A key derived from the post and recipient would be the same on every
-  // test within the provider's memory of it (Resend: a day), so a second test would be
-  // deduped into nothing, or refused outright once the post had changed.
+  // key of its own: the fake records once per key and address, and would fold a second
+  // test into the first.
   const [res] = perRecipient(
     await provider.sendBatch(email, recipients, {
       purpose: "test",
-      idempotencyKeyPrefix: `test-${input.post.id}`,
-      idempotencyKey: `test-${input.post.id}-${crypto.randomUUID()}`,
+      tag: `test-${input.post.id}`,
+      batchKey: `test-${input.post.id}-${crypto.randomUUID()}`,
     }),
     recipients,
   );
@@ -314,17 +313,15 @@ export async function templateTest(c: RequestContext): Promise<Response> {
   const provider = getProvider(c.config, c.env);
   const unsubscribeUrl = testUnsubscribeUrl(c.config);
   // A deliberate manual test is a fresh send each press (not a retry), so it carries a
-  // key of its own, as a post test does: an idempotent provider won't fold two
-  // intentional tests into one.
-  // The prefix names the send too (the dev simulation keys its rolls on it), so it is as
-  // fresh as the key.
+  // key of its own, as a post test does. The tag names the send too (the dev simulation
+  // keys its rolls on it), so it is as fresh as the key.
   const testId = `template-test-${crypto.randomUUID()}`;
   const batch = recipients.map((email) => ({ email, unsubscribeUrl }));
   const results = perRecipient(
     await provider.sendBatch(result, batch, {
       purpose: "test",
-      idempotencyKeyPrefix: testId,
-      idempotencyKey: testId,
+      tag: testId,
+      batchKey: testId,
     }),
     batch,
   );

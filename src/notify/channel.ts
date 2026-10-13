@@ -21,7 +21,7 @@ export interface Notifier {
   readonly channel: NotifyChannel;
   /**
    * Deliver one message to `to`. `key` names the notification, so a channel that
-   * deduplicates (the provider's idempotency key) never delivers the same one twice.
+   * records by it (the fake) never records the same one twice.
    * Throws with the channel's own words when it is not delivered.
    */
   send(to: string, message: RenderedEmail, key: string): Promise<void>;
@@ -93,7 +93,7 @@ export class ProviderNotifier implements Notifier {
     const recipients = [{ email: to, unsubscribeUrl: "" }];
     const answer = await provider.sendBatch(message, recipients, {
       purpose: "notification",
-      idempotencyKeyPrefix: `notify-${key}`,
+      tag: `notify-${key}`,
     });
     const [result] = perRecipient(answer, recipients);
     if (!result?.accepted) {

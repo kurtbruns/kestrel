@@ -20,7 +20,7 @@ describe("simulationLine", () => {
   });
 
   it("names a simulation profile", () => {
-    for (const value of ["ses:none", "resend", "1", "generic:realistic"]) {
+    for (const value of ["ses:none", "ses", "1", "generic:realistic"]) {
       expect(simulationLine(value), value).toBe(
         `[dev] simulating a provider for list sends (SIMULATE_SENDS=${value}); nothing is delivered`,
       );
@@ -43,7 +43,7 @@ describe("simulationLine", () => {
   });
 
   it("says a value the app will refuse is not one it accepts, never that it simulates", () => {
-    for (const value of ["mailgun", "ses:sometimes", "ses:none:extra"]) {
+    for (const value of ["mailgun", "resend", "ses:sometimes", "ses:none:extra"]) {
       const line = simulationLine(value);
       expect(line, value).toContain(`SIMULATE_SENDS=${value} isn't a value the app accepts`);
       expect(line, value).not.toContain("simulating");
@@ -68,15 +68,15 @@ describe("effectiveSimulateSends", () => {
   const devVars = (value) => writeFileSync(join(dir, ".dev.vars"), `SIMULATE_SENDS="${value}"\n`);
 
   it("takes the shell's value over .dev.vars", () => {
-    devVars("resend");
+    devVars("ses");
     expect(effectiveSimulateSends("not-connected", dir)).toBe("not-connected");
   });
 
   it("falls through to .dev.vars when the shell's value is empty or unset", () => {
-    devVars("resend");
-    expect(effectiveSimulateSends("", dir)).toBe("resend");
-    expect(effectiveSimulateSends("  ", dir)).toBe("resend");
-    expect(effectiveSimulateSends(undefined, dir)).toBe("resend");
+    devVars("ses");
+    expect(effectiveSimulateSends("", dir)).toBe("ses");
+    expect(effectiveSimulateSends("  ", dir)).toBe("ses");
+    expect(effectiveSimulateSends(undefined, dir)).toBe("ses");
   });
 
   it("lets the shell's off beat .dev.vars", () => {

@@ -286,7 +286,7 @@ export function createRouter({
       summary:
         "Runtime preferences, a read-only reflection of deploy config (no secrets), and `inUse`: the scheduled sends a template or identity change would re-make.",
       description:
-        "`deployment.provider` is `resend` or `ses`; `fake`, a stand-in that records a send and delivers nothing (local development, a demo); or `none` while no email provider is connected (SPEC §9), when everything that would send is refused with 409 `provider_not_connected`. `deployment.notConnectedPreview` is true when that `none` is local development previewing the state (SPEC §10), whose way out is a restart rather than a deploy; it is false once deployed. `inUse.sends` is every scheduled send, soonest first; `inUse.retry_after` is the moment after which a save is no longer refused for the minimum lead (null when none is inside it); `inUse.identityFields` is the identity fields the current template renders, the only ones whose change reaches the email.",
+        "`deployment.provider` is `ses`; `fake`, a stand-in that records a send and delivers nothing (local development, a demo); or `none` while no email provider is connected (SPEC §9), when everything that would send is refused with 409 `provider_not_connected`. `deployment.notConnectedPreview` is true when that `none` is local development previewing the state (SPEC §10), whose way out is a restart rather than a deploy; it is false once deployed. `inUse.sends` is every scheduled send, soonest first; `inUse.retry_after` is the moment after which a save is no longer refused for the minimum lead (null when none is inside it); `inUse.identityFields` is the identity fields the current template renders, the only ones whose change reaches the email.",
       example: {
         response: {
           settings: { emailTemplate: "…", publication: { name: "Marsh Lane" } },
@@ -910,7 +910,7 @@ export function createRouter({
       summary:
         "Resolve a send wedged on ambiguous (dispatched) deliveries; body {resolution: 'unsent'|'accepted'}.",
       description:
-        "On a non-idempotent provider a mid-batch transport error leaves recipients `dispatched` — the loop won't blind-retry them (I4), so the send can't reach its completion gate. This adjudicates those rows: 'unsent' (assume not sent; the address is picked up by the next post) or 'accepted' (assume sent, operator-confirmed), then completes the send. Never re-mails an already-accepted recipient. Offered in `actions` exactly while the send is wedged. Refusals: 409 `run_in_progress` while a run holds the send (its in-flight rows may still get the provider's answer, so try again a moment later), 409 `not_wedged` when the send is not wedged (nothing ambiguous, recipients still to hand off, or a run yet to look at them) and when another Resolve has settled it. Once a send is wedged no run touches it, so the recipients Resolve settles are the ones the send showed; an `expected_count` in the body is ignored. " +
+        "A request that got no answer leaves its recipients `dispatched` — the loop never re-sends it (I4), so the send can't reach its completion gate. This adjudicates those rows: 'unsent' (assume not sent; the address is picked up by the next post) or 'accepted' (assume sent, operator-confirmed), then completes the send. Never re-mails an already-accepted recipient. Offered in `actions` exactly while the send is wedged. Refusals: 409 `run_in_progress` while a run holds the send (its in-flight rows may still get the provider's answer, so try again a moment later), 409 `not_wedged` when the send is not wedged (nothing ambiguous, recipients still to hand off, or a run yet to look at them) and when another Resolve has settled it. Once a send is wedged no run touches it, so the recipients Resolve settles are the ones the send showed; an `expected_count` in the body is ignored. " +
         actionText,
       example: {
         request: { resolution: "unsent" },
@@ -1133,14 +1133,6 @@ export function createRouter({
     },
 
     // --- delivery webhooks (public; provider-signature-verified, not requireAuth) ---
-    {
-      method: "POST",
-      path: "/webhooks/resend",
-      access: "webhook",
-      resource: "delivery",
-      summary: "Resend delivery + bounce + complaint events (signature-verified in the adapter).",
-      handler: webhookRoutes.resend,
-    },
 
     // --- archive / view-in-browser (public; serves the frozen record, I3) ---
     // Registered at ARCHIVE_BASE_PATH (default /archive) so the index, the post

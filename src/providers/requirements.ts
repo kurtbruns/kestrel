@@ -8,7 +8,7 @@
  */
 import type { AppEnv } from "../env";
 
-export const PROVIDER_NAMES = ["none", "fake", "ses", "resend"] as const;
+export const PROVIDER_NAMES = ["none", "fake", "ses"] as const;
 
 export type ProviderName = (typeof PROVIDER_NAMES)[number];
 
@@ -16,7 +16,7 @@ export type ProviderName = (typeof PROVIDER_NAMES)[number];
 export type RealProviderName = Exclude<ProviderName, "fake" | "none">;
 
 export function isRealProvider(name: ProviderName): name is RealProviderName {
-  return name === "ses" || name === "resend";
+  return name === "ses";
 }
 
 /**
@@ -25,7 +25,6 @@ export function isRealProvider(name: ProviderName): name is RealProviderName {
  */
 export const REQUIRED_VARS: Record<RealProviderName, readonly (keyof AppEnv)[]> = {
   ses: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION", "SNS_TOPIC_ARN"],
-  resend: ["RESEND_API_KEY", "RESEND_WEBHOOK_SECRET"],
 };
 
 export function isProviderName(v: string): v is ProviderName {

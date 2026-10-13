@@ -6,12 +6,11 @@
  * simulation records into the same outbox (`deliverToOutbox`), so `GET /api/dev/outbox`
  * shows everything a local server sent, simulated or not.
  *
- * `idempotentRetry` is true, so it dedupes per recipient under the batch's key (the
- * send loop's dispatch key, else the caller's prefix): re-sending a batch after a crash
- * records each recipient once (I4), and a recipient re-sent under a different key would
- * show up twice, as it would at a real provider.
- * `failFakeSendBatch(n)` makes the next n sendBatch calls throw at the start
- * (a transient-outage stand-in) so the resume path is testable.
+ * It records each recipient once under the batch's key (the send loop's dispatch key, else
+ * the caller's tag), and a recipient sent again under a different key shows up twice, as
+ * it would at a real provider.
+ * `failFakeSendBatch(n)` makes the next n sendBatch calls answer as a provider that is
+ * down (an outage halt, nothing sent) so the resume path is testable.
  */
 import type { AppEnv } from "../env";
 import { substituteRecipient } from "../render/render";
@@ -35,7 +34,7 @@ export interface FakeMessage {
 }
 
 const outbox: FakeMessage[] = [];
-const sentKeys = new Map<string, string>(); // idempotency key -> providerId
+const sentKeys = new Map<string, string>(); // batch key + address -> providerId
 let failCount = 0;
 
 export function fakeOutbox(): readonly FakeMessage[] {
@@ -48,7 +47,7 @@ export function clearFakeOutbox(): void {
   failCount = 0;
 }
 
-/** Make the next `n` sendBatch calls throw (simulates a transient outage). */
+/** Make the next `n` sendBatch calls answer with an outage, sending nothing. */
 export function failFakeSendBatch(n: number): void {
   failCount = n;
 }
@@ -56,7 +55,7 @@ export function failFakeSendBatch(n: number): void {
 /**
  * Deliver each recipient's message into the outbox, as a real provider would send it, and
  * accept them all. Once per recipient under the batch's key (the dispatch key, else the
- * caller's prefix): a batch re-sent under its key is deduped, as at an idempotent provider.
+ * caller's tag).
  */
 export function deliverToOutbox(
   rendered: RenderedEmail,
@@ -64,14 +63,13 @@ export function deliverToOutbox(
   opts: SendBatchOptions,
 ): PerRecipientResult[] {
   return recipients.map((r) => {
-    const key = `${opts.idempotencyKey ?? opts.idempotencyKeyPrefix}:${r.email}`;
+    const key = `${opts.batchKey ?? opts.tag}:${r.email}`;
     const existing = sentKeys.get(key);
     if (existing) {
-      // Deduped: a real idempotent provider would not re-deliver.
       return { email: r.email, accepted: true as const, providerId: existing };
     }
     // Named by the caller and address, not the key, so a test can predict it.
-    const providerId = `fake-${opts.idempotencyKeyPrefix}:${r.email}`;
+    const providerId = `fake-${opts.tag}:${r.email}`;
     const final = substituteRecipient(rendered, {
       ".Email.UnsubscribeURL": r.unsubscribeUrl,
       ".Email.SentTo": r.email,
@@ -92,7 +90,6 @@ export function deliverToOutbox(
 export class FakeProvider implements EmailProvider {
   readonly name = "fake" as const;
   readonly maxBatch = Number.MAX_SAFE_INTEGER;
-  readonly idempotentRetry = true;
 
   async sendBatch(
     rendered: RenderedEmail,
@@ -101,7 +98,10 @@ export class FakeProvider implements EmailProvider {
   ): Promise<SendBatchResult> {
     if (failCount > 0) {
       failCount -= 1;
-      throw new Error("fake transient failure");
+      return {
+        kind: "halted",
+        halt: { reason: "unavailable", cause: "outage", error: "fake transient failure" },
+      };
     }
     return { kind: "answered", results: deliverToOutbox(rendered, recipients, opts) };
   }

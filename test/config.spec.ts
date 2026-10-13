@@ -14,7 +14,7 @@ import * as devRoutes from "../src/routes/dev";
 import * as renderRoutes from "../src/routes/render_actions";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
-import { NOT_CONNECTED_DEPLOY, RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
+import { NOT_CONNECTED_DEPLOY, SES_DEPLOY } from "./support/deploy";
 import { resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, base } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
@@ -197,12 +197,11 @@ describe("getConfig — deploy config is validated", () => {
   it("ignores ALLOW_FAKE_PROVIDER on every other provider", () => {
     const allow = { ALLOW_FAKE_PROVIDER: "true", APP_ORIGIN: "https://newsletter.birds.example" };
     expect(getConfig(varsOnly({ ...allow, PROVIDER: "" })).provider).toBe("none");
-    expect(getConfig(varsOnly({ ...allow, ...RESEND_DEPLOY })).provider).toBe("resend");
     expect(getConfig(varsOnly({ ...allow, ...SES_DEPLOY })).provider).toBe("ses");
     // It lifts nothing the fake's exemption covers: the placeholder is still refused.
     refuses(
       {
-        ...RESEND_DEPLOY,
+        ...SES_DEPLOY,
         ALLOW_FAKE_PROVIDER: "true",
         APP_ORIGIN: "https://newsletter.example.com",
       },
@@ -243,11 +242,14 @@ describe("getConfig — deploy config is validated", () => {
     ]) {
       refuses({ ...SES_DEPLOY, [name]: undefined }, name);
     }
-    for (const name of ["RESEND_API_KEY", "RESEND_WEBHOOK_SECRET", "FROM_ADDRESS"]) {
-      refuses({ ...RESEND_DEPLOY, [name]: "" }, name);
-    }
     expect(getConfig(varsOnly({ ...SES_DEPLOY })).provider).toBe("ses");
-    expect(getConfig(varsOnly({ ...RESEND_DEPLOY })).provider).toBe("resend");
+  });
+
+  it("refuses PROVIDER=resend, naming the SES step to switch with", () => {
+    expect(() => getConfig(varsOnly({ ...SES_DEPLOY, PROVIDER: "resend" }))).toThrow(
+      /"resend", which this release no longer supports\. Set it to "ses": Connect Amazon SES/,
+    );
+    refuses({ ...SES_DEPLOY, PROVIDER: "resend" }, "PROVIDER");
   });
 
   // Each setting on its own placeholder, one at a time, the rest real.
@@ -272,7 +274,6 @@ describe("getConfig — deploy config is validated", () => {
   it("refuses each setting still on the template's example.com placeholder with a real provider (SPEC §9)", () => {
     for (const [name, value] of PLACEHOLDERS) {
       refuses({ ...SES_DEPLOY, [name]: value }, name);
-      refuses({ ...RESEND_DEPLOY, [name]: value }, name);
     }
     refuses({ ...SES_DEPLOY, FROM_ADDRESS: "no address here" }, "FROM_ADDRESS");
     // The reason names the provider, which a not-connected deployment has none of.
@@ -356,7 +357,7 @@ describe("getConfig — deploy config is validated", () => {
   it("refuses a minimum lead under the one-minute floor instead of raising it, in every environment", () => {
     for (const value of ["59", "30", "1", "0", "-60", "1.5", "five", "5m"]) {
       refuses({ MIN_LEAD_SECONDS: value }, "MIN_LEAD_SECONDS");
-      refuses({ ...RESEND_DEPLOY, MIN_LEAD_SECONDS: value }, "MIN_LEAD_SECONDS");
+      refuses({ ...SES_DEPLOY, MIN_LEAD_SECONDS: value }, "MIN_LEAD_SECONDS");
     }
     let message = "";
     try {
@@ -372,7 +373,7 @@ describe("getConfig — deploy config is validated", () => {
     expect(getConfig(varsOnly({ MIN_LEAD_SECONDS: "86400" })).minLeadMs).toBe(MIN_LEAD_CEILING_MS);
     for (const value of ["86401", "300000", "9999999999999", "1e306"]) {
       refuses({ MIN_LEAD_SECONDS: value }, "MIN_LEAD_SECONDS");
-      refuses({ ...RESEND_DEPLOY, MIN_LEAD_SECONDS: value }, "MIN_LEAD_SECONDS");
+      refuses({ ...SES_DEPLOY, MIN_LEAD_SECONDS: value }, "MIN_LEAD_SECONDS");
     }
     let message = "";
     try {
@@ -387,9 +388,9 @@ describe("getConfig — deploy config is validated", () => {
   it("refuses half an Access config, naming the half that is missing", () => {
     refuses({ ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com" }, "ACCESS_AUD");
     refuses({ ACCESS_AUD: "aud-tag" }, "ACCESS_TEAM_DOMAIN");
-    refuses({ ...RESEND_DEPLOY, ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com" }, "ACCESS_AUD");
+    refuses({ ...SES_DEPLOY, ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com" }, "ACCESS_AUD");
     refuses(
-      { ...RESEND_DEPLOY, ACCESS_AUD: "aud-tag", ACCESS_TEAM_DOMAIN: " " },
+      { ...SES_DEPLOY, ACCESS_AUD: "aud-tag", ACCESS_TEAM_DOMAIN: " " },
       "ACCESS_TEAM_DOMAIN",
     );
     // Both, or neither, runs.
@@ -461,7 +462,7 @@ describe("a refused config, on each surface", () => {
       ["GET", "/api/docs"],
       ["GET", "/api/dev/token"],
       ["GET", "/health"],
-      ["POST", "/webhooks/resend"],
+      ["POST", "/webhooks/ses"],
     ] as const) {
       const res = await fetchWith(REFUSED, path, { method, headers: AUTH });
       expect(res.status, `${method} ${path}`).toBe(500);

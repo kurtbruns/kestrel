@@ -25,10 +25,3 @@ export const SES_DEPLOY = {
   AWS_SECRET_ACCESS_KEY: "test-secret-key-abc123",
   SNS_TOPIC_ARN,
 } as const;
-
-export const RESEND_DEPLOY = {
-  ...SENDER,
-  PROVIDER: "resend",
-  RESEND_API_KEY: "re_test_key",
-  RESEND_WEBHOOK_SECRET: `whsec_${btoa("test-svix-signing-key-0123456789")}`,
-} as const;

@@ -6,7 +6,7 @@
  * the one path: each delivery sentinel the frozen render holds becomes a tag, and that tag's
  * value is what the render's own delivery pass (`fillDeliveryTokens`) would put there for
  * that recipient and surface. What SES produces is then byte for byte what
- * `substituteRecipient` produces for the fake and Resend.
+ * `substituteRecipient` produces for the fake.
  *
  * Escaping: every literal `{`, `}`, and `\` in the subject and both parts becomes a tag too,
  * filled with the character itself. The template SES reads then holds no brace or backslash
