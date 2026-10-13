@@ -139,11 +139,18 @@ export async function unsubscribe(c: RequestContext): Promise<Response> {
  * undoable, and a repeat finds no subscriber (404), since nothing is kept to know the id by.
  */
 export async function erase(c: RequestContext): Promise<Response> {
-  const erased = await subscribers.erase(c.env.DB, param(c, "id"));
-  if (!erased) {
+  const outcome = await subscribers.erase(c.env.DB, param(c, "id"));
+  if (outcome.kind === "not_found") {
     throw notFound("subscriber");
   }
-  log.info("subscriber.erased", { deliveries: erased.deliveries });
-  const body: EraseResponse = { erased };
+  if (outcome.kind === "in_flight") {
+    throw refusal(
+      409,
+      "run_in_progress",
+      "A send is handing this subscriber to the email provider right now, so they can’t be erased this moment. Try again in a minute.",
+    );
+  }
+  log.info("subscriber.erased", { deliveries: outcome.erased.deliveries });
+  const body: EraseResponse = { erased: outcome.erased };
   return json(body);
 }

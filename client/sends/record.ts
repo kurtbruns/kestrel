@@ -10,6 +10,7 @@ import type {
   SendResponse,
   SendView,
 } from "../../shared/sends";
+import { isErasedPlaceholder } from "../../shared/subscribers";
 import { ApiError, api, apiFile, describeError } from "../api";
 import { heldAdviceHtml, noEmailProvider, providerNotConnected } from "../deployment";
 import { every, mount } from "../lifecycle";
@@ -477,7 +478,12 @@ function deliveryRowsHtml(rows: DeliveryRecord[], dstate: DeliveryListState): Ht
       : html`<span class="rec-out"><span class="rec-sw sw-${o.sw}"></span>${o.label}</span>`;
     const detail = r.error || r.event_detail || "";
     const when = r.event_at ? fmt(r.event_at) : "";
-    return html`<tr><td class="rec-email">${r.email}</td><td>${outcome}</td><td class="muted">${detail || "—"}</td><td class="muted">${when || "—"}</td></tr>`;
+    // An erased person's row keeps its place in the record, named for what it is rather
+    // than by its placeholder (SPEC §7); the CSV keeps the placeholder itself.
+    const who = isErasedPlaceholder(r.email)
+      ? html`<span class="muted">Erased recipient</span>`
+      : r.email;
+    return html`<tr><td class="rec-email">${who}</td><td>${outcome}</td><td class="muted">${detail || "—"}</td><td class="muted">${when || "—"}</td></tr>`;
   });
   return html`<div class="table-wrap"><table class="list-table rec-people-table"><colgroup><col><col class="c-out"><col><col class="c-date"></colgroup><thead><tr>${th(
     "Recipient",

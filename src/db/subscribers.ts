@@ -1,11 +1,12 @@
 /** Subscriber + suppression queries, and audience selection (I1/I2). */
 import { normalizeEmail } from "../../shared/email";
-import type {
-  EraseResponse,
-  SubscribeAction,
-  Subscriber,
-  SubscriberCounts,
-  SubscriberStatus,
+import {
+  ERASED_PREFIX,
+  type EraseResponse,
+  type SubscribeAction,
+  type Subscriber,
+  type SubscriberCounts,
+  type SubscriberStatus,
 } from "../../shared/subscribers";
 import { newId, newToken } from "../lib/ids";
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
@@ -385,6 +386,23 @@ export function suppressionOf(
 /** What an erasure did, as `EraseResponse` carries it. */
 export type Erasure = EraseResponse["erased"];
 
+/** What `erase` came to: done, no such subscriber (an erased one included), or refused for
+ *  now because a send run is handing the address to the provider. */
+export type EraseOutcome =
+  | { kind: "erased"; erased: Erasure }
+  | { kind: "not_found" }
+  | { kind: "in_flight" };
+
+/** `text` with every occurrence of `email` replaced by `placeholder`, matched whatever its
+ *  case and leaving the rest of the text as it was; null stays null. */
+function withoutAddress(text: string | null, email: string, placeholder: string): string | null {
+  if (text === null) {
+    return null;
+  }
+  const pattern = new RegExp(email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "giu");
+  return text.replace(pattern, placeholder);
+}
+
 /**
  * Erase a subscriber (SPEC §7): delete their row, which takes how they joined and the
  * evidence for it along; put one random placeholder, `erased:<hex>`, in place of their
@@ -392,38 +410,80 @@ export type Erasure = EraseResponse["erased"];
  * the address only as an `erased` suppression with no detail. A suppression already there
  * stays as it is (a bounce is still a bounce), and an earlier erasure's marker takes this
  * one's time. A provider's words or message id on a delivery row that name the address get
- * the placeholder in its place too, lowercased, since that is the form the address is
- * matched in. A real provider's message id is opaque and never matches; the local stand-in's
- * spells out the address, and it is still unique with the placeholder in it.
+ * the placeholder in its place too, in whatever case it was written, the rest of the text
+ * kept as it was. A real provider's message id is opaque and never matches; the local
+ * stand-in's spells out the address, and it is still unique with the placeholder in it.
  *
- * One batch, so the three land together or not at all. A pending delivery row of a send in
- * flight becomes the placeholder too, which no subscriber holds, so the send skips it
- * rather than mail it (I1). Null for an unknown id, including one already erased.
+ * One batch, so it all lands together or not at all. It is refused (`in_flight`) while a
+ * send run holding its lease has one of the address's rows pending or dispatched: that run
+ * holds the real address in hand and would write the provider's answer, which may name it,
+ * back onto the row. Every write carries that condition, so a run that takes its lease
+ * between the check and the batch is still caught. A pending row of a send between runs
+ * becomes the placeholder, which no subscriber holds, so the send skips it (I1).
  */
-export async function erase(db: D1Database, id: string): Promise<Erasure | null> {
+export async function erase(db: D1Database, id: string): Promise<EraseOutcome> {
   const row = await getById(db, id);
   if (!row) {
-    return null;
+    return { kind: "not_found" };
   }
   const email = row.email;
-  const placeholder = `erased:${newToken(8)}`;
-  const scrubbed = (column: string) =>
-    `${column} = CASE WHEN instr(lower(${column}), ?1) > 0 THEN replace(lower(${column}), ?1, ?2) ELSE ${column} END`;
-  const [, deliveries] = await db.batch([
-    db.prepare("DELETE FROM subscribers WHERE id = ? AND email = ?").bind(id, email),
+  const now = Date.now();
+  const placeholder = `${ERASED_PREFIX}${newToken(8)}`;
+  // Through idx_deliveries_email: the rows whose provider text or id names the address.
+  const { results } = await db
+    .prepare("SELECT id, error, event_detail, provider_id FROM deliveries WHERE email = ?")
+    .bind(email)
+    .all<{
+      id: number;
+      error: string | null;
+      event_detail: string | null;
+      provider_id: string | null;
+    }>();
+  const rewritten = results.flatMap((r) => {
+    const next = {
+      id: r.id,
+      error: withoutAddress(r.error, email, placeholder),
+      event_detail: withoutAddress(r.event_detail, email, placeholder),
+      provider_id: withoutAddress(r.provider_id, email, placeholder),
+    };
+    const changed =
+      next.error !== r.error ||
+      next.event_detail !== r.event_detail ||
+      next.provider_id !== r.provider_id;
+    return changed ? [next] : [];
+  });
+  // Every statement binds ?1 the address and ?2 the time, for this condition: no run holding
+  // its lease has the address in hand.
+  const idle =
+    "NOT EXISTS (SELECT 1 FROM deliveries d JOIN sends s ON s.id = d.send_id WHERE d.email = ?1 AND d.status IN ('pending', 'dispatched') AND s.locked_until >= ?2)";
+  const field = (name: string) =>
+    `${name} = (SELECT json_extract(value, '$.${name}') FROM json_each(?3) WHERE json_extract(value, '$.id') = deliveries.id)`;
+  const [deleted, , , moved] = await db.batch([
+    db
+      .prepare(`DELETE FROM subscribers WHERE id = ?3 AND email = ?1 AND ${idle}`)
+      .bind(email, now, id),
     db
       .prepare(
-        `UPDATE deliveries SET email = ?2, ${scrubbed("error")}, ${scrubbed("event_detail")}, ${scrubbed("provider_id")} WHERE email = ?1`,
+        `INSERT INTO suppressions (email, reason, detail, created_at) SELECT ?1, ?3, NULL, ?2 WHERE ${idle} ON CONFLICT (email) DO UPDATE SET created_at = excluded.created_at, detail = NULL WHERE suppressions.reason = excluded.reason`,
       )
-      .bind(email, placeholder),
+      .bind(email, now, ERASED),
     db
       .prepare(
-        "INSERT INTO suppressions (email, reason, detail, created_at) VALUES (?, ?, NULL, ?) ON CONFLICT (email) DO UPDATE SET created_at = excluded.created_at, detail = NULL WHERE suppressions.reason = excluded.reason",
+        `UPDATE deliveries SET ${field("error")}, ${field("event_detail")}, ${field("provider_id")} WHERE id IN (SELECT json_extract(value, '$.id') FROM json_each(?3)) AND email = ?1 AND ${idle}`,
       )
-      .bind(email, ERASED, Date.now()),
+      .bind(email, now, JSON.stringify(rewritten)),
+    db
+      .prepare(`UPDATE deliveries SET email = ?3 WHERE email = ?1 AND ${idle}`)
+      .bind(email, now, placeholder),
   ]);
+  if ((deleted?.meta.changes ?? 0) === 0) {
+    return (await getById(db, id)) ? { kind: "in_flight" } : { kind: "not_found" };
+  }
   const kept = await suppressionOf(db, email);
-  return { email, deliveries: deliveries?.meta.changes ?? 0, suppression: kept?.reason ?? ERASED };
+  return {
+    kind: "erased",
+    erased: { email, deliveries: moved?.meta.changes ?? 0, suppression: kept?.reason ?? ERASED },
+  };
 }
 
 /** Whether a suppression forbids sending this address a confirmation. Every reason does

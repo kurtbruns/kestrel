@@ -188,7 +188,7 @@ While a send is paused, the watch gives no rate or time to finish, which would p
 
 - **Outcome tiles** (Recipients, Delivered, Bounced, Complained, Unsent) go on settling as receipts arrive, while the render and the audience stay fixed. A muted caption above them says which is which, and a phase pill reads **Settling**, then **Complete**.
 - **A reconciliation line** accounts for every recipient by name: delivered, awaiting a receipt, skipped, or in flight.
-- **The recipient list** opens on **Failures** (bounced, complained, and unsent), since what went wrong leads; Delivered and All are one switch away, and any address can be searched. A bounce row says hard or soft by the kind recorded on it (SPEC §8), not by color.
+- **The recipient list** opens on **Failures** (bounced, complained, and unsent), since what went wrong leads; Delivered and All are one switch away, and any address can be searched. A bounce row says hard or soft by the kind recorded on it (SPEC §8), not by color. An erased person's row reads **Erased recipient**, muted, in place of the address (SPEC §7); the CSV keeps the row's placeholder.
 - **Keeping its place.** When a refresh moves the counts, the list reloads on the page, view, search, and sort the reader chose, keeping keyboard focus where it was. A refresh that fails leaves the list as it is and says nothing; only a load the reader started shows an error.
 
 **A canceled send** never fired, so its page is not a record: a **Canceled** pill, when it was canceled, and that no one was mailed.

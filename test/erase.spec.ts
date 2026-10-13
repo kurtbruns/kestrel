@@ -10,6 +10,7 @@ import * as subs from "../src/db/subscribers";
 import { type AppEnv, getConfig } from "../src/env";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { sweep } from "../src/send/sweep";
+import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 
@@ -138,7 +139,7 @@ describe("erasing a subscriber (SPEC §7)", () => {
     await env.DB.prepare(
       "UPDATE deliveries SET event = 'bounced', bounce_kind = 'soft', event_detail = ? WHERE send_id = ? AND email = ?",
     )
-      .bind("smtp; 452 Ada@Example.com mailbox full", second, email)
+      .bind("SMTP; 452 <Ada@Example.com> Mailbox Full", second, email)
       .run();
     expect((await everyRow()).some((l) => l.toLowerCase().includes(email))).toBe(true);
 
@@ -157,7 +158,7 @@ describe("erasing a subscriber (SPEC §7)", () => {
     expect(results[0]!.email).toMatch(PLACEHOLDER);
     expect(results.map((r) => r.event_detail)).toEqual([
       null,
-      `smtp; 452 ${results[0]!.email} mailbox full`,
+      `SMTP; 452 <${results[0]!.email}> Mailbox Full`,
     ]);
   });
 
@@ -253,6 +254,102 @@ describe("erasing a subscriber (SPEC §7)", () => {
     const again = await erase("id-ada@example.com");
     expect(again.status).toBe(404);
     expect((await readJson(again)).error).toBe("not_found");
+  });
+});
+
+describe("a receipt that lands after an erasure (SPEC §7)", () => {
+  /** A sent send to `email`, then its erasure; the delivery row's placeholder and message id. */
+  async function erasedAfterSend(email: string) {
+    await seedConfirmed(email);
+    const sendId = await sentSend();
+    await eraseOk(email);
+    const row = await env.DB.prepare("SELECT email, provider_id FROM deliveries WHERE send_id = ?")
+      .bind(sendId)
+      .first<{ email: string; provider_id: string }>();
+    // The message id keeps its own form, with only the address in it replaced.
+    expect(row!.provider_id).toBe(`fake-${sendId}:${row!.email}`);
+    return row!;
+  }
+
+  for (const [event, reason] of [
+    [
+      { type: "bounced", hard: true, detail: "smtp; 550 5.1.1 <Ada@Example.com> user unknown" },
+      "bounce",
+    ],
+    [{ type: "complained", detail: "abuse report for ada@example.com" }, "complaint"],
+  ] as const) {
+    it(`a ${reason} by message id replaces the marker and writes the address nowhere else`, async () => {
+      const email = "ada@example.com";
+      const row = await erasedAfterSend(email);
+
+      await applyDeliveryEvents(env.DB, [{ ...event, providerId: row.provider_id, email }]);
+
+      expect((await suppressionOf(email))?.reason).toBe(reason);
+      expect(await suppressionOf(row.email)).toBeNull();
+      const delivery = await env.DB.prepare(
+        "SELECT event, event_detail FROM deliveries WHERE email = ?",
+      )
+        .bind(row.email)
+        .first();
+      expect(delivery).toEqual({ event: event.type, event_detail: null });
+      expect(
+        (await everyRow())
+          .filter((l) => l.toLowerCase().includes(email))
+          .map((l) => l.split(":")[0]),
+      ).toEqual(["suppressions"]);
+    });
+  }
+
+  it("suppresses nothing new when the receipt carries no address, leaving the marker", async () => {
+    const email = "ada@example.com";
+    const row = await erasedAfterSend(email);
+
+    await applyDeliveryEvents(env.DB, [
+      { type: "bounced", hard: true, providerId: row.provider_id, detail: "550 <ada@example.com>" },
+    ]);
+
+    expect((await env.DB.prepare("SELECT email, reason FROM suppressions").all()).results).toEqual([
+      { email, reason: "erased" },
+    ]);
+    expect((await everyRow()).filter((l) => l.includes(email))).toHaveLength(1);
+  });
+});
+
+describe("erasing someone a send run is handing off (SPEC §7)", () => {
+  /** A send whose run holds its lease until `until`, with `email`'s row handed off. */
+  async function inFlight(email: string, until: number): Promise<string> {
+    await seedConfirmed(email);
+    const send = await frozenSend(Date.now() - 1000);
+    await sends.resolveAudience(env.DB, send.id, Date.now());
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE sends SET status = 'sending', locked_until = ?, lease_token = 'run' WHERE id = ?",
+      ).bind(until, send.id),
+      env.DB.prepare(
+        "UPDATE deliveries SET status = 'dispatched', dispatch_key = 'k' WHERE send_id = ?",
+      ).bind(send.id),
+    ]);
+    return send.id;
+  }
+
+  it("is refused for now, changing nothing, while the run holds its lease", async () => {
+    const email = "ada@example.com";
+    await inFlight(email, Date.now() + 60_000);
+    const before = await everyRow();
+
+    const res = await erase("id-ada@example.com");
+
+    expect(res.status).toBe(409);
+    expect((await readJson(res)).error).toBe("run_in_progress");
+    expect(await everyRow()).toEqual(before);
+  });
+
+  it("goes ahead once the run has let go of its lease", async () => {
+    const email = "ada@example.com";
+    await inFlight(email, Date.now() - 1000);
+
+    expect((await erase("id-ada@example.com")).status).toBe(200);
+    expect((await everyRow()).filter((l) => l.includes(email))).toHaveLength(1);
   });
 });
 

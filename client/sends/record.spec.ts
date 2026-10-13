@@ -99,6 +99,26 @@ describe("sent record", () => {
   };
   const SETTLING = { c_delivered: 5, c_bounced: 0, c_unsent: 0, c_accepted: 5 };
 
+  it("names an erased person's row Erased recipient, muted, in place of its placeholder (SPEC §7)", async () => {
+    fake = fakeApi([
+      ...sentSend().routes,
+      {
+        path: "/api/sends/x1/deliveries",
+        reply: () => ({
+          deliveries: [{ ...rows[0], email: "erased:0f3a9c2e7b1d4e8f" }, rows[1]],
+          view: "failures",
+          page,
+        }),
+      },
+    ]);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(0);
+    const cells = $$(".rec-people-table .rec-email");
+    expect(cells.map((c) => c.textContent)).toEqual(["Erased recipient", "u@x.y"]);
+    expect(cells[0]!.querySelector(".muted")).not.toBeNull();
+    expect($(".rec-people-table").textContent).not.toContain("erased:");
+  });
+
   it("renders the frozen record: tiles, the reconciliation line, and the failures list first", async () => {
     fake = fakeApi([
       ...sentSend().routes,

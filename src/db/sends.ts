@@ -15,6 +15,7 @@ import type {
   SendSummary,
 } from "../../shared/sends";
 import type { ScheduledSendRef } from "../../shared/settings";
+import { isErasedPlaceholder } from "../../shared/subscribers";
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
 import { log } from "../lib/log";
 import { unwrap } from "../lib/unwrap";
@@ -1609,7 +1610,9 @@ export async function markDeliveryEvent(
         .prepare(
           `UPDATE deliveries SET event = ?, event_detail = ?, event_at = ?, bounce_kind = ? WHERE ${unchanged}`,
         )
-        .bind(u.event, detail, u.at, bounceKind, ...was),
+        // The provider's words often name the address, which an erased row must never
+        // hold again (SPEC §7), so a receipt on one records its outcome without them.
+        .bind(u.event, isErasedPlaceholder(row.email) ? null : detail, u.at, bounceKind, ...was),
     );
     if (fromCol === "c_accepted") {
       // The receipt that may have confirmed a sent send's last accepted recipient: check

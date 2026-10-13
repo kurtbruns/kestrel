@@ -89,6 +89,15 @@ export interface SubscriberResponse {
   suppressed: boolean;
 }
 
+/** What an erasure puts in place of the address on a person's past delivery rows (SPEC §7),
+ *  followed by random hex shared by that person's rows. */
+export const ERASED_PREFIX = "erased:";
+
+/** Whether a delivery row's address is an erasure's placeholder rather than an address. */
+export function isErasedPlaceholder(email: string): boolean {
+  return email.startsWith(ERASED_PREFIX);
+}
+
 /**
  * POST /api/subscribers/:id/erase (SPEC §7). The subscriber is gone, so the answer is what
  * was done: the address, which the list now keeps only as a do-not-contact suppression;
