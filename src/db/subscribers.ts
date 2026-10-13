@@ -101,6 +101,10 @@ export async function claimConfirmation(
  * Only the claim that sent it may arm it, and only if the subscriber is still in the state
  * the claim saw: a confirm or an unsubscribe that landed during the send wins, so an
  * unsubscribe is never quietly turned back into pending (I2). False when it did not arm.
+ *
+ * `unsubscribed_at` is kept: anyone can put an address back to pending through the public
+ * form, so a pending row that once left must still read as having left until its owner
+ * confirms. An import reads it, and never confirms such a row (SPEC §7).
  */
 export async function armConfirmation(
   db: D1Database,
@@ -111,7 +115,7 @@ export async function armConfirmation(
 ): Promise<boolean> {
   const res = await db
     .prepare(
-      "UPDATE subscribers SET status = 'pending', confirm_token = ?, confirm_sent_at = ?, confirmed_at = NULL, unsubscribed_at = NULL WHERE id = ? AND confirm_attempt_at = ? AND status = ?",
+      "UPDATE subscribers SET status = 'pending', confirm_token = ?, confirm_sent_at = ?, confirmed_at = NULL WHERE id = ? AND confirm_attempt_at = ? AND status = ?",
     )
     .bind(token, claimedAt, id, claimedAt, statusAtClaim)
     .run();

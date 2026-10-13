@@ -11,6 +11,7 @@ import {
   type ImportPlanResponse,
   type OutcomeCounts,
 } from "../shared/imports";
+import * as importsDb from "../src/db/imports";
 import { updateSettings } from "../src/db/settings";
 import * as subscribers from "../src/db/subscribers";
 import { getConfig } from "../src/env";
@@ -22,6 +23,7 @@ import { commitImport, maxImportRows, planImport } from "../src/services/imports
 import { guardD1 } from "./support/d1_guard";
 import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, adminAuth, base, JSON_AUTH, readJson } from "./support/http";
+import { logged } from "./support/log";
 import { fetchWith } from "./support/worker_env";
 
 // Bringing a list in and taking it out (SPEC §7, §8): one format, a plan that writes nothing,
@@ -445,11 +447,56 @@ describe("what an import does to each address (SPEC §7)", () => {
   });
 
   it("never replaces a suppression already here, the first one standing", async () => {
-    await subscribers.addSuppression(env.DB, "a@x.io", "erased");
-    const p = await planOk({ file: csvFile(["a@x.io,none,unknown,sendy,bounce,,,,,"]) });
+    await subscribers.addSuppression(env.DB, "a@x.io", "manual");
+    const p = await planOk({ file: csvFile(["a@x.io,none,unknown,sendy,complaint,,,,,"]) });
     expect(p.counts).toEqual(counts({ left_out: 1 }));
-    await importFile(csvFile(["a@x.io,none,unknown,sendy,bounce,,,,,"]));
-    expect(await suppressionOf("a@x.io")).toBe("erased");
+    await importFile(csvFile(["a@x.io,none,unknown,sendy,complaint,,,,,"]));
+    expect(await suppressionOf("a@x.io")).toBe("manual");
+  });
+
+  it("replaces an erased marker with a bounce or complaint, so the address is still sent no confirmation", async () => {
+    await subscribers.addSuppression(env.DB, "a@x.io", "erased");
+    await subscribers.addSuppression(env.DB, "b@x.io", "erased");
+    const file = csvFile([
+      "a@x.io,none,unknown,sendy,complaint,,,,,",
+      "b@x.io,subscribed,double,sendy,erased,,,,,",
+    ]);
+    const p = await planOk({ file });
+    expect(p.counts).toEqual(counts({ suppression_added: 1, blocked_by_suppression: 1 }));
+    await importFile(file);
+    expect(await suppressionOf("a@x.io")).toBe("import_complaint");
+    expect(await subscribers.blocksConfirmation(env.DB, "a@x.io")).toBe(true);
+    expect(await suppressionOf("b@x.io")).toBe("erased");
+    expect(await subscriberRow("b@x.io")).toBeNull();
+  });
+
+  it("never confirms a reader who left and was put back to pending by the form (I2)", async () => {
+    await seedUnsubscribed("left@x.io");
+    // Anyone can type the address into the public form, which re-arms it as pending.
+    const claimedAt = Date.now();
+    await env.DB.prepare("UPDATE subscribers SET confirm_attempt_at = ? WHERE email = 'left@x.io'")
+      .bind(claimedAt)
+      .run();
+    expect(
+      await subscribers.armConfirmation(env.DB, "id-left@x.io", "tok", claimedAt, "unsubscribed"),
+    ).toBe(true);
+    expect(await subscriberRow("left@x.io")).toMatchObject({ status: "pending" });
+
+    const file = csvFile(["left@x.io,subscribed,double,sendy,,,,,,"]);
+    const p = await planOk({ file });
+    expect(p.counts).toEqual(counts({ kept_unsubscribed: 1 }));
+    expect(p.attestation).toBeNull();
+    await importFile(file);
+    expect(await subscriberRow("left@x.io")).toMatchObject({ status: "pending" });
+    // Its owner's own confirmation still brings it back.
+    expect((await subscribers.confirm(env.DB, "tok", 0))?.status).toBe("confirmed");
+  });
+
+  it("unsubscribes a reader confirmed here when the file gives no time for the unsubscribe", async () => {
+    await seedConfirmed("a@x.io");
+    const p = await planOk({ file: csvFile(["a@x.io,unsubscribed,unknown,sendy,,,,,,"]) });
+    // With no time to compare, leaving wins: no mail to someone the source says left.
+    expect(p.counts).toEqual(counts({ mark_unsubscribed: 1 }));
   });
 
   it("confirms a subscribed row that brings its own bounce, suppressed, so it never joins an audience", async () => {
@@ -591,6 +638,21 @@ describe("a person sees every send an import would grow (SPEC §7, I6)", () => {
     expect(await subscribers.audienceCount(env.DB)).toBe(2);
   });
 
+  it("counts a send that fired but stopped before fixing its audience as one that would grow", async () => {
+    const send = await frozenSend(Date.now() - 60_000);
+    await env.DB.prepare("UPDATE sends SET status = 'sending', started_at = ? WHERE id = ?")
+      .bind(Date.now(), send.id)
+      .run();
+    const p = await planOk({ file: csvFile(["a@x.io,subscribed,double,sendy,,,,,,"]) });
+    expect(p.sends_growing.map((s) => s.id)).toEqual([send.id]);
+    await env.DB.prepare("UPDATE sends SET audience_resolved_at = ? WHERE id = ?")
+      .bind(Date.now(), send.id)
+      .run();
+    expect(
+      (await planOk({ file: csvFile(["a@x.io,subscribed,double,sendy,,,,,,"]) })).sends_growing,
+    ).toEqual([]);
+  });
+
   it("refuses a service token's commit that would grow one, acknowledged or not, until a person does it", async () => {
     const send = await frozenSend(Date.now() + 3_600_000);
     const service = { ...(await adminAuth({})), "content-type": "application/json" };
@@ -630,6 +692,61 @@ describe("a commit is idempotent and atomic (SPEC §7)", () => {
     expect(replay).toMatchObject({ replayed: true, import: first.import, counts: first.counts });
     expect(await count("SELECT COUNT(*) AS n FROM imports")).toBe(1);
     expect(await count("SELECT COUNT(*) AS n FROM subscribers")).toBe(1);
+  });
+
+  it("plans the same file afresh after the list has moved, rather than replaying its first import", async () => {
+    await subscribers.addSuppression(env.DB, "b@x.io", "manual");
+    const file = csvFile([
+      "a@x.io,subscribed,double,sendy,,,,,,",
+      "b@x.io,subscribed,double,sendy,,,,,,",
+    ]);
+    const first = await importFile(file);
+    expect(first.counts.blocked_by_suppression).toBe(1);
+    await subscribers.clearSuppression(env.DB, "b@x.io");
+    const again = await importFile(file);
+    expect(again.replayed).toBe(false);
+    expect(again.counts).toEqual(counts({ unchanged: 1, create_confirmed: 1 }));
+    expect(await subscriberRow("b@x.io")).toMatchObject({ status: "confirmed" });
+  });
+
+  it("refuses a plan made before another import was committed", async () => {
+    const file = csvFile(["a@x.io,unsubscribed,unknown,sendy,,,,,,"]);
+    const p = await planOk({ file });
+    await importFile(csvFile(["b@x.io,unsubscribed,unknown,sendy,,,,,,"]));
+    const res = await commit({ file, plan_hash: p.plan_hash });
+    expect(res.status).toBe(409);
+    expect((await readJson(res)).error).toBe("plan_stale");
+  });
+
+  it("answers a commit that lost the race to the same plan with the winner's record", async () => {
+    const p = await planImport(
+      env.DB,
+      { ...csvFile(["a@x.io,subscribed,double,sendy,,,,,,"]), plainListStatus: null },
+      planOptions,
+    );
+    const winner = await commitImport(env.DB, p, HUMAN, Date.now());
+    const loser = await commitImport(env.DB, p, HUMAN, Date.now());
+    expect(loser).toMatchObject({ replayed: true, import: { id: winner.import.id } });
+    expect(await count("SELECT COUNT(*) AS n FROM imports")).toBe(1);
+    expect(await count("SELECT COUNT(*) AS n FROM subscribers")).toBe(1);
+  });
+
+  it("answers what was applied when correcting the record fails after the batch, never a replay", async () => {
+    await seedPending("reader@x.io");
+    const file = csvFile([
+      "reader@x.io,subscribed,double,sendy,,,,,,",
+      "new@x.io,subscribed,double,sendy,,,,,,",
+    ]);
+    const p = await planImport(env.DB, { ...file, plainListStatus: null }, planOptions);
+    await env.DB.prepare(
+      "UPDATE subscribers SET status = 'unsubscribed' WHERE email = 'reader@x.io'",
+    ).run();
+    vi.spyOn(importsDb, "setImportCounts").mockRejectedValue(new Error("D1 went away"));
+    const warn = vi.spyOn(console, "warn");
+    const result = await commitImport(env.DB, p, HUMAN, Date.now());
+    expect(result.replayed).toBe(false);
+    expect(result.counts).toEqual(counts({ create_confirmed: 1, kept_unsubscribed: 1 }));
+    expect(logged(warn).map((l) => [l.event, l.step])).toEqual([["import.incomplete", "counts"]]);
   });
 
   it("writes nothing when a write fails part-way", async () => {
@@ -710,6 +827,27 @@ describe("the list moving between the plan and the commit (SPEC §7)", () => {
       { row: 1, email: "reader@x.io", outcome: "kept_unsubscribed", suppression_added: false },
     ]);
     expect(await subscriberRow("reader@x.io")).toMatchObject({ status: "unsubscribed" });
+  });
+
+  it("never confirms a pending reader who left and was re-armed in between (I2)", async () => {
+    await seedPending("reader@x.io");
+    const p = await planImport(
+      env.DB,
+      { ...csvFile(["reader@x.io,subscribed,double,sendy,,,,,,"]), plainListStatus: null },
+      planOptions,
+    );
+    expect(p.counts.confirm_pending).toBe(1);
+    // The reader unsubscribes, and the form puts them back to pending, before the commit.
+    await env.DB.prepare(
+      "UPDATE subscribers SET status = 'pending', unsubscribed_at = ? WHERE email = 'reader@x.io'",
+    )
+      .bind(Date.now())
+      .run();
+    const result = await commitImport(env.DB, p, HUMAN, Date.now());
+    expect(await subscriberRow("reader@x.io")).toMatchObject({ status: "pending" });
+    expect(result.differed).toEqual([
+      { row: 1, email: "reader@x.io", planned: "confirm_pending", applied: "kept_unsubscribed" },
+    ]);
   });
 
   it("keeps a suppression added here in between, never replacing it with the file's", async () => {

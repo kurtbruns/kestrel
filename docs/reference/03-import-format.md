@@ -61,7 +61,7 @@ The commit needs two things from you when they apply:
 - **Your attestation,** when anyone would be confirmed: "Everyone I'm importing as subscribed opted in to receive [your publication]. This isn't a purchased, rented, or scraped list." It is kept with the import, with who gave it and when. An import that only unsubscribes or suppresses needs none.
 - **Each scheduled send that would grow,** acknowledged by a person. A scheduled post goes to the list as it stands when it fires, so an import can add to its audience. Claude can attest for you, but can't acknowledge a growing send: you finish that import in the dashboard.
 
-If your list changes between the plan and the commit, such as a reader unsubscribing, the commit still goes ahead. Every write checks the list as it stands, and the answer reports any row that turned out differently.
+If another import is committed after you plan, plan again. If your list changes between the plan and the commit in any other way, such as a reader unsubscribing, the commit still goes ahead. Every write checks the list as it stands, and the answer reports any row that turned out differently.
 
 ## What an import does to each address
 
@@ -75,14 +75,16 @@ Each row gets exactly one outcome. A row that both changes its status and adds a
 | `mark_unsubscribed` | `unsubscribed`, and confirmed or pending in Kestrel, with no confirmation in Kestrel newer than the row's `unsubscribed_at`: unsubscribed. |
 | `create_unsubscribed` | `unsubscribed`, with no subscriber in Kestrel: recorded as unsubscribed, so the list remembers they left. |
 | `kept_confirmed_newer` | `unsubscribed`, but the reader confirmed in Kestrel after the source's `unsubscribed_at`: their newer action stands. |
-| `kept_unsubscribed` | `subscribed`, but unsubscribed in Kestrel. An unsubscribe is never reversed. |
+| `kept_unsubscribed` | `subscribed`, but unsubscribed in Kestrel, or pending again after leaving until they confirm in Kestrel themselves. An unsubscribe is never reversed. |
 | `blocked_by_suppression` | `subscribed`, but the address carries a suppression in Kestrel, a do-not-contact marker included: never added or confirmed. |
-| `suppression_added` | The row carries a suppression and the address has none in Kestrel, and nothing else changes. Applied whatever the row's `status`. |
+| `suppression_added` | The row carries a suppression and the address has none in Kestrel, or only a do-not-contact marker, and nothing else changes. Applied whatever the row's `status`. |
 | `left_out` | `pending` or `none` with nothing to apply: counted, never confirmed. An import sends no email, so it can't start a confirmation either. |
 | `invalid` | The address isn't valid. |
 | `merged` | A repeat of an address earlier in the file, folded into it. |
 
-A suppression already in Kestrel is never replaced. An imported bounce or complaint is kept apart from one Kestrel saw itself, so the list says where each came from.
+A suppression already in Kestrel is never replaced, with one exception: a bounce, a complaint, or a manual suppression replaces a do-not-contact marker left by an erasure, so a known bad address still gets no confirmation. An imported bounce or complaint is kept apart from one Kestrel saw itself, so the list says where each came from.
+
+Anyone can type an address into your subscribe form, which puts a reader who left back to pending until they confirm. An import treats such a reader as unsubscribed, so it never confirms someone who left in Kestrel.
 
 **Repeats of an address** are folded into one row first. Its status is the first of unsubscribed, subscribed, pending, and none that any repeat claims, and its suppression the first of erased, complaint, bounce, and manual. Its opt-in is the weakest claim. It keeps the earliest consent times and the latest unsubscribe and suppression times, and the origin and evidence of the row whose status won.
 
@@ -98,4 +100,4 @@ A subscriber an import confirmed is **confirmed**, like anyone who confirmed in 
 
 ## Exporting
 
-The export writes your whole list in this format, as a CSV or as JSON. It includes every subscriber with how they joined, their evidence, and their suppression, and every address suppressed with no subscriber behind it, written as `status: none`. A confirmed subscriber is written as `subscribed`. Importing an export into another Kestrel carries the list over: the same states and suppressions, with every confirmation arriving as imported, carrying its original evidence. Pending subscribers are left out on the way in, since an import sends no confirmation.
+The export writes your whole list in this format, as a CSV or as JSON. In the CSV, a value that starts with `=`, `+`, `-`, or `@` is written with an apostrophe before it, so a spreadsheet shows it as text rather than running it as a formula; an import takes the apostrophe off again. It includes every subscriber with how they joined, their evidence, and their suppression, and every address suppressed with no subscriber behind it, written as `status: none`. A confirmed subscriber is written as `subscribed`. Importing an export into another Kestrel carries the list over: the same states and suppressions, with every confirmation arriving as imported, carrying its original evidence. Pending subscribers are left out on the way in, since an import sends no confirmation.

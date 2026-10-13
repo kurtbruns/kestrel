@@ -51,6 +51,8 @@ export interface ListEntry {
   status: SubscriberStatus;
   import_id: string | null;
   confirmed_at: number | null;
+  /** When they last left, kept while they are pending again. */
+  unsubscribed_at: number | null;
 }
 
 /** The list as it stands for some addresses: their subscribers, and their suppressions' reasons. */
@@ -69,7 +71,7 @@ export async function readListState(db: D1Database, emails: readonly string[]): 
   const statements = chunks.flatMap((chunk) => [
     db
       .prepare(
-        "SELECT email, status, import_id, confirmed_at FROM subscribers WHERE email IN (SELECT value FROM json_each(?))",
+        "SELECT email, status, import_id, confirmed_at, unsubscribed_at FROM subscribers WHERE email IN (SELECT value FROM json_each(?))",
       )
       .bind(chunk),
     db
@@ -86,6 +88,7 @@ export async function readListState(db: D1Database, emails: readonly string[]): 
           status: r.status as SubscriberStatus,
           import_id: r.import_id as string | null,
           confirmed_at: r.confirmed_at as number | null,
+          unsubscribed_at: r.unsubscribed_at as number | null,
         });
       } else {
         state.suppressions.set(r.email as string, r.reason as string);
@@ -95,13 +98,18 @@ export async function readListState(db: D1Database, emails: readonly string[]): 
   return state;
 }
 
-/** The scheduled sends, whose audiences are resolved when they fire, so an import can grow them. */
+/**
+ * The sends whose audience is not fixed yet, so an import can grow them: every scheduled send,
+ * and a send that has fired but whose run stopped before it resolved its audience.
+ */
 export async function scheduledSends(
   db: D1Database,
 ): Promise<{ id: string; subject: string; fire_at: number }[]> {
   const { results } = await db
     .prepare(
-      "SELECT id, subject, fire_at FROM sends WHERE status = 'scheduled' ORDER BY fire_at ASC, id ASC",
+      `SELECT id, subject, fire_at FROM sends
+        WHERE status = 'scheduled' OR (status = 'sending' AND audience_resolved_at IS NULL)
+        ORDER BY fire_at ASC, id ASC`,
     )
     .all<{ id: string; subject: string; fire_at: number }>();
   return results;
@@ -132,6 +140,14 @@ function toRecord(row: ImportRow): ImportRecord {
     counts: JSON.parse(row.counts) as OutcomeCounts,
     suppressions_added: row.suppressions_added,
   };
+}
+
+/** The id of the import committed last, or null before the first. */
+export async function latestImportId(db: D1Database): Promise<string | null> {
+  const row = await db
+    .prepare("SELECT id FROM imports ORDER BY created_at DESC, id DESC LIMIT 1")
+    .first<{ id: string }>();
+  return row?.id ?? null;
 }
 
 /** The import a plan was committed as, if it was. */
@@ -269,7 +285,9 @@ export async function applyImport(
     now,
     r.id,
   );
-  // Confirm a subscriber still pending here, with no suppression here; its link stops working.
+  // Confirm a subscriber still pending here who never left, with no suppression here; its
+  // link stops working. A pending row that once left was put back by whoever typed its
+  // address into the form, not by its owner, so its unsubscribe stands (I2).
   add(
     "confirmed",
     `UPDATE subscribers SET status = 'confirmed', confirmed_at = ${v("cat")}, confirm_token = NULL,
@@ -277,6 +295,7 @@ export async function applyImport(
                             import_id = ?2
        FROM json_each(?1) AS j
       WHERE subscribers.email = ${v("e")} AND subscribers.status = 'pending'
+        AND subscribers.unsubscribed_at IS NULL
         AND NOT EXISTS (SELECT 1 FROM suppressions s WHERE s.email = subscribers.email)
       RETURNING email`,
     [...writes.confirm, ...writes.addConfirmed],
@@ -297,12 +316,16 @@ export async function applyImport(
     now,
     r.id,
   );
-  // Suppress an address with no suppression here; the first one stands.
+  // Suppress an address with no suppression here; the first one stands, except over an
+  // erased marker, which any other reason replaces, as `addSuppression` rules: a bounce or a
+  // complaint must still stop the address being sent confirmations.
   add(
     "suppressed",
     `INSERT INTO suppressions (email, reason, detail, created_at)
      SELECT ${v("e")}, ${v("r")}, ?2, COALESCE(${v("at")}, ?3) FROM json_each(?1) AS j WHERE true
-     ON CONFLICT (email) DO NOTHING
+     ON CONFLICT (email) DO UPDATE SET reason = excluded.reason, detail = excluded.detail,
+                                       created_at = excluded.created_at
+      WHERE suppressions.reason = 'erased' AND excluded.reason <> 'erased'
      RETURNING email`,
     writes.suppress,
     suppressionDetail,

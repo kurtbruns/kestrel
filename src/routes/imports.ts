@@ -196,17 +196,9 @@ export async function commit(c: RequestContext): Promise<Response> {
     }
   }
 
-  let result: Awaited<ReturnType<typeof commitImport>>;
-  try {
-    result = await commitImport(c.env.DB, p, principal, Date.now());
-  } catch (err) {
-    // Another commit of this plan got there first: its batch wrote the record, this one
-    // wrote nothing.
-    const raced = await imports.getImportByPlanHash(c.env.DB, planHash);
-    if (raced) {
-      return json(replayResponse(raced));
-    }
-    throw err;
+  const result = await commitImport(c.env.DB, p, principal, Date.now());
+  if (result.replayed) {
+    return json(result);
   }
   log.info("import.committed", {
     importId: result.import.id,

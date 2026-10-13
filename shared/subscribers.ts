@@ -21,6 +21,7 @@ export interface Subscriber {
   unsub_token: string;
   created_at: number;
   confirmed_at: number | null;
+  /** When they last left; kept while they are pending again, so a row that left still reads so until its owner confirms. */
   unsubscribed_at: number | null;
   /** Where consent was collected (SPEC §7): `kestrel` for this app's own double opt-in, or the source an import claimed. */
   origin: string;

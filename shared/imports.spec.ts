@@ -346,6 +346,15 @@ describe("the templates and the writer", () => {
     expect(rowsOf(parseImportFile({ name: "template.txt", text: TEMPLATE_TXT }))).toHaveLength(3);
   });
 
+  it("write a value a spreadsheet would run as a formula as text, and read it back as it was", () => {
+    const row: ExportRow = { ...(TEMPLATE_ROWS[0] as ExportRow), email: "=cmd@x.io", origin: "-x" };
+    const text = toImportCsv([row]);
+    expect(text).toContain("'=cmd@x.io,");
+    expect(text).toContain(",'-x,");
+    // The reader takes the apostrophe off again.
+    expect(rowsOf(csv(text.replace(",'-x,", ",x,")))[0]?.email).toBe("=cmd@x.io");
+  });
+
   it("quote a value that holds a comma, a quote, a line break, or outer spaces", () => {
     const row: ExportRow = {
       ...(TEMPLATE_ROWS[0] as ExportRow),

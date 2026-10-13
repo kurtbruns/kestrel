@@ -39,6 +39,7 @@ import * as imports from "../db/imports";
 import { DEFAULT_SUBREQUEST_BUDGET } from "../env";
 import { HttpError, refusal } from "../lib/errors";
 import { newId, newTokens } from "../lib/ids";
+import { errorText, log } from "../lib/log";
 import type { Principal } from "../router";
 
 /** A file to import, as a request carries it. */
@@ -102,26 +103,38 @@ const WRITE_OUTCOMES: ReadonlySet<ImportOutcome> = new Set([
 
 /**
  * What an import does to one address (SPEC §7), from its merged row and the address's
- * subscriber and suppression here. Only `subscribed` confirms, and never past an unsubscribe
- * or a suppression here; leaving and suppressions apply whatever the row's status.
+ * subscriber and suppression reason here. Only `subscribed` confirms, and never past an
+ * unsubscribe or a suppression here; leaving and suppressions apply whatever the row's status.
+ *
+ * A pending subscriber who once left counts as unsubscribed: anyone can put an address back
+ * to pending through the public form, so only its owner's confirmation undoes the leaving
+ * (I2). A suppression here stands, except that an erased marker gives way to any other
+ * reason, so a known bounce or complaint still stops the address being sent confirmations.
  */
 export function classify(
   row: ImportRow,
   here: ListEntry | undefined,
-  suppressedHere: boolean,
+  suppressionHere: string | undefined,
 ): { outcome: ImportOutcome; suppressionAdded: boolean } {
-  const suppressionAdded = row.suppression !== null && !suppressedHere;
+  const suppressionAdded =
+    row.suppression !== null &&
+    (suppressionHere === undefined ||
+      (suppressionHere === "erased" && row.suppression !== "erased"));
+  const leftHere =
+    here?.status === "unsubscribed" ||
+    (here?.status === "pending" && here.unsubscribed_at !== null);
   let outcome: ImportOutcome;
   if (row.status === "subscribed") {
-    outcome = suppressedHere
-      ? "blocked_by_suppression"
-      : here === undefined
-        ? "create_confirmed"
-        : here.status === "pending"
-          ? "confirm_pending"
-          : here.status === "confirmed"
-            ? "unchanged"
-            : "kept_unsubscribed";
+    outcome =
+      suppressionHere !== undefined
+        ? "blocked_by_suppression"
+        : here === undefined
+          ? "create_confirmed"
+          : leftHere
+            ? "kept_unsubscribed"
+            : here.status === "pending"
+              ? "confirm_pending"
+              : "unchanged";
   } else if (row.status === "unsubscribed") {
     // Only a confirmation recorded here can be newer than the source's unsubscribe: an
     // imported one is the source's own word.
@@ -229,7 +242,7 @@ export async function planImport(
   );
   const planned = merged.rows.map((row) => ({
     row,
-    ...classify(row, state.subscribers.get(row.email), state.suppressions.has(row.email)),
+    ...classify(row, state.subscribers.get(row.email), state.suppressions.get(row.email)),
   }));
   const counts = emptyCounts();
   const confirmed: ConfirmedBreakdown = {
@@ -253,6 +266,10 @@ export async function planImport(
 
   const sendsGrowing =
     gains === 0 ? [] : (await imports.scheduledSends(db)).map((s) => ({ ...s, gains }));
+  // The import committed last, so a plan made before another import landed can't be
+  // committed after it, and the same file planned again against a list that has moved since
+  // its first import is a new plan rather than a replay of that one.
+  const after = await imports.latestImportId(db);
   const needsAttestation = counts.create_confirmed + counts.confirm_pending > 0;
   const sha = await fileSha256(input.text);
   const planHash = await sha256Hex(
@@ -263,6 +280,7 @@ export async function planImport(
       input.plainListStatus,
       needsAttestation,
       sendsGrowing.map((s) => s.id).sort(),
+      after,
     ]),
   );
   return {
@@ -418,7 +436,20 @@ export async function commitImport(
     }
   }
 
-  const applied = await imports.applyImport(db, writes, `imported from ${plan.input.name}`);
+  let applied: imports.AppliedWrites;
+  try {
+    applied = await imports.applyImport(db, writes, `imported from ${plan.input.name}`);
+  } catch (err) {
+    // Another commit of this plan got there first: its batch wrote the record, this one
+    // wrote nothing.
+    const raced = await imports.getImportByPlanHash(db, plan.planHash);
+    if (raced) {
+      return replayResponse(raced);
+    }
+    throw err;
+  }
+  // From here the import is written: nothing below may fail the commit, or a retry would
+  // read as a replay of a commit that answered nothing.
 
   // What each row's writes actually did, against what the plan meant them to.
   const actual: PlannedRow[] = [];
@@ -446,16 +477,21 @@ export async function commitImport(
   // A planned write the list held back: read the address as it now stands, setting aside a
   // suppression this import itself just added, and say what that means for it.
   if (unsettled.length > 0) {
-    const state: ListState = await imports.readListState(
-      db,
-      unsettled.map((p) => p.row.email),
-    );
+    let state: ListState = { subscribers: new Map(), suppressions: new Map() };
+    try {
+      state = await imports.readListState(
+        db,
+        unsettled.map((p) => p.row.email),
+      );
+    } catch (err) {
+      log.warn("import.incomplete", { importId: id, step: "reread", error: errorText(err) });
+    }
     for (const p of unsettled) {
       const e = p.row.email;
       const { outcome } = classify(
         { ...p.row, suppression: null },
         state.subscribers.get(e),
-        state.suppressions.has(e) && !applied.suppressed.has(e),
+        applied.suppressed.has(e) ? undefined : state.suppressions.get(e),
       );
       // The guard held the write back, so whatever the list would allow now did not happen.
       actual.push({ ...p, outcome: WRITE_OUTCOMES.has(outcome) ? "unchanged" : outcome });
@@ -486,7 +522,12 @@ export async function commitImport(
   }
   differed.sort((a, b) => a.row - b.row);
   if (differed.length > 0) {
-    await imports.setImportCounts(db, id, counts, suppressionsAdded);
+    try {
+      await imports.setImportCounts(db, id, counts, suppressionsAdded);
+    } catch (err) {
+      // The record keeps the planned counts; the answer still says what was applied.
+      log.warn("import.incomplete", { importId: id, step: "counts", error: errorText(err) });
+    }
   }
 
   return {
@@ -514,6 +555,6 @@ export function planStale(): HttpError {
   return refusal(
     409,
     "plan_stale",
-    "The import would no longer do what its plan said: the file, its declared meaning, whether an attestation is needed, or the scheduled sends it would grow have changed. Plan it again and review the new plan.",
+    "The import would no longer do what its plan said: the file, its declared meaning, whether an attestation is needed, or the scheduled sends it would grow have changed, or another import was committed since. Plan it again and review the new plan.",
   );
 }

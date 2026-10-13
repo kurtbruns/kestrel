@@ -443,7 +443,7 @@ function parseCsvFile(text: string): ParseResult {
         { row: r },
       );
     }
-    const cell = (i: number): string => (i < 0 ? "" : (record[i] ?? "").trim());
+    const cell = (i: number): string => (i < 0 ? "" : unguardFormula((record[i] ?? "").trim()));
     const pick = <T extends string>(name: string, i: number, allowed: readonly T[]): T => {
       const v = cell(i);
       if ((allowed as readonly string[]).includes(v)) {
@@ -631,7 +631,22 @@ export interface ExportRow {
   format: string;
 }
 
-function csvField(value: string): string {
+// A spreadsheet runs a cell that starts with one of these as a formula, and anyone can put
+// such an address on the list through the public form. The export writes the cell with an
+// apostrophe before it, which a spreadsheet shows as text, and the reader takes it off again,
+// so the file still round-trips.
+const FORMULA_START = /^[=+\-@\t\r]/;
+
+function guardFormula(value: string): string {
+  return FORMULA_START.test(value) ? `'${value}` : value;
+}
+
+function unguardFormula(value: string): string {
+  return value.startsWith("'") && FORMULA_START.test(value.slice(1)) ? value.slice(1) : value;
+}
+
+function csvField(raw: string): string {
+  const value = guardFormula(raw);
   return /[",\r\n]/.test(value) || value !== value.trim()
     ? `"${value.replace(/"/g, '""')}"`
     : value;
@@ -745,11 +760,11 @@ export const IMPORT_OUTCOME_MEANINGS: Record<ImportOutcome, string> = {
   kept_confirmed_newer:
     "`unsubscribed`, but the reader confirmed here after the source's `unsubscribed_at`: their newer action stands.",
   kept_unsubscribed:
-    "`subscribed`, but unsubscribed here. An unsubscribe here is never reversed (I2).",
+    "`subscribed`, but unsubscribed here, or pending again after leaving until they confirm here themselves. An unsubscribe here is never reversed (I2).",
   blocked_by_suppression:
     "`subscribed`, but the address carries a suppression here, a do-not-contact marker included: never added or confirmed.",
   suppression_added:
-    "The row carries a suppression and the address has none here, and nothing else changes. Applied whatever the row's `status`.",
+    "The row carries a suppression and the address has none here (or only a do-not-contact marker, which a bounce, a complaint, or a manual suppression replaces), and nothing else changes. Applied whatever the row's `status`.",
   left_out:
     "`pending` or `none` with nothing to apply: counted, never confirmed. An import sends no email.",
   invalid: "The address isn't valid.",
