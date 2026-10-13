@@ -3039,7 +3039,7 @@ textarea.is-invalid {
   border-color: var(--warn-line);
 }
 
-/* Re-made since its last test (SPEC §8): the server's condition, a line in the scheduled
+/* Look changed since your last test (SPEC §8): the server's condition, a line in the scheduled
    banner that says to send a new test, and a mark on the dashboard's scheduled card. */
 .sched-remade {
   display: flex;

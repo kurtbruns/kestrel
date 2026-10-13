@@ -742,7 +742,9 @@ describe("dashboard", () => {
         (m) => m.closest<HTMLElement>(".sched-card")?.dataset.post,
       );
     expect(marked()).toEqual(["p2", "p5"]);
-    expect($("#dashScheduled .sched-remade-mark").textContent).toBe("Re-made since its last test");
+    expect($("#dashScheduled .sched-remade-mark").textContent).toBe(
+      "Look changed since your last test",
+    );
     srv.edit("x4", { tested_at: Date.now() }); // a test of the re-made copy, sent from the post
     await vi.advanceTimersByTimeAsync(60_000);
     expect(marked()).toEqual(["p2"]);
