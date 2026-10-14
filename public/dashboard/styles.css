@@ -1545,6 +1545,16 @@ td a:hover {
   color: var(--danger-fg);
   border-color: var(--danger-line);
 }
+/* A suppressed address's consent status, kept but not in effect, takes the unsubscribed
+   grey: grey is "not mailed", whatever the label says, so a confirmed-but-suppressed row
+   never reads as one that is mailed. The red flag says why. It overrides the status's own
+   hue (.badge.confirmed and the rest, same specificity) by coming after them, so keep it
+   below them. */
+.badge.held {
+  background: var(--status-draft-bg);
+  color: var(--status-draft-fg);
+  border-color: var(--status-draft-line);
+}
 /* Suppression is an overlay on the address, not a consent status, so it rides next to
    the email rather than in the Status column — sized down to read as secondary. */
 .row-flag {

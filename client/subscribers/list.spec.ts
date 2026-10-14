@@ -88,6 +88,9 @@ describe("subscribers view", () => {
     const flag = $("tr[data-id='s2'] .row-flag");
     expect(flag.textContent).toBe("bounced");
     expect(flag.getAttribute("title")).toMatch(/Hard bounce.*\(550 no such user\)/);
+    // A suppressed row keeps its consent status, greyed; an unsuppressed one is not.
+    expect($("tr[data-id='s2'] .badge.confirmed").classList.contains("held")).toBe(true);
+    expect($("tr[data-id='s1'] .badge.confirmed").classList.contains("held")).toBe(false);
     expect($("tr[data-id='s3'] td").textContent).toBe("<script>@b.c"); // shown as text
     const menuOf = (id: string) => {
       $(`tr[data-id='${id}'] [data-menu]`).click();
@@ -181,6 +184,10 @@ describe("subscribers view", () => {
       const flag = $("tr[data-id='s3'] .row-flag");
       expect(flag.textContent).toBe("erased");
       expect(flag.getAttribute("title")).toBe(tip);
+      // Only a pending sign-up's own confirmation lifts the marker, so only its status is live.
+      expect($(`tr[data-id='s3'] .badge.${status}`).classList.contains("held")).toBe(
+        status !== "pending",
+      );
       expect(fake.unhandled).toEqual([]);
     });
   }

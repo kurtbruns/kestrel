@@ -12,14 +12,18 @@ const config = () => getConfig(env);
 
 // The seeded publication's shape. The list is imported, grows in a continuous confirmed
 // stream to today, and churns across four completed sends, so the mailable audience
-// fluctuates 140 → 141 → 142 → 148 and settles at 155 today (157 confirmed − 2 suppressed). These
+// fluctuates 140 → 141 → 142 → 148 and settles at 155 today (157 confirmed, 2 of them suppressed). These
 // are the numbers the lifecycle produces; they lock the "frozen at send time" behavior, so a
 // regression is obvious.
 const CONFIRMED = 157;
 const PENDING = 3;
 const UNSUBSCRIBED = 15;
-const SUPPRESSED = 2;
-const AUDIENCE_NOW = CONFIRMED - SUPPRESSED; // 155
+// A bounce and a complaint on confirmed subscribers, plus a suppression on each other consent
+// state (an unsubscribed and a pending address blocked by hand, and an erased person who
+// subscribed again), which shadow no one.
+const SUPPRESSED_CONFIRMED = 2;
+const SUPPRESSED = 5;
+const AUDIENCE_NOW = CONFIRMED - SUPPRESSED_CONFIRMED; // 155
 const SENT_RECIPIENTS = [140, 141, 142, 148]; // oldest → newest
 const TOTAL_DELIVERIES = SENT_RECIPIENTS.reduce((a, b) => a + b, 0); // 571
 
@@ -92,6 +96,40 @@ describe("dev seed (Field Notes dataset)", () => {
     expect(scheduled.recipient_count).toBe(AUDIENCE_NOW);
   });
 
+  it("puts a suppression on every consent state, each reason once or more", async () => {
+    await seedDatabase(env, config());
+    const { results } = await env.DB.prepare(
+      `SELECT s.status, x.reason, x.detail, x.created_at, s.created_at AS joined
+       FROM suppressions x JOIN subscribers s ON s.email = x.email ORDER BY s.status, x.reason`,
+    ).all<{
+      status: string;
+      reason: string;
+      detail: string | null;
+      created_at: number;
+      joined: number;
+    }>();
+    expect(results.map((r) => `${r.status}/${r.reason}`)).toEqual([
+      "confirmed/bounce",
+      "confirmed/complaint",
+      "pending/erased",
+      "pending/manual",
+      "unsubscribed/manual",
+    ]);
+    // The erasure's marker predates the sign-up that came after it, and holds nothing more.
+    const erased = results.find((r) => r.reason === "erased")!;
+    expect(erased.created_at).toBeLessThan(erased.joined);
+    expect(erased.detail).toBeNull();
+    // A block by hand comes after the unsubscribe it follows, and nothing is dated ahead.
+    const blocked = await env.DB.prepare(
+      `SELECT x.created_at, s.unsubscribed_at FROM suppressions x
+       JOIN subscribers s ON s.email = x.email WHERE s.status = 'unsubscribed'`,
+    ).first<{ created_at: number; unsubscribed_at: number }>();
+    expect(blocked!.created_at).toBeGreaterThan(blocked!.unsubscribed_at);
+    for (const r of results) {
+      expect(r.created_at).toBeLessThanOrEqual(Date.now());
+    }
+  });
+
   it("freezes each send's audience as it was AT THAT MOMENT, not the final list", async () => {
     await seedDatabase(env, config());
 
@@ -126,7 +164,7 @@ describe("dev seed (Field Notes dataset)", () => {
     // that produced their suppression.
     const secondRows = await deliveriesFor(sent[1]!.id);
     const shadowed = secondRows.filter((r) => r.event === "bounced" || r.event === "complained");
-    expect(shadowed).toHaveLength(SUPPRESSED);
+    expect(shadowed).toHaveLength(SUPPRESSED_CONFIRMED);
     for (const r of shadowed) {
       expect(nowMailable.has(r.email)).toBe(false);
     }
