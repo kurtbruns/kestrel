@@ -692,7 +692,7 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     expect(body.page).toMatchObject({ total: 1, offset: 0 });
   });
 
-  it("GET /api/subscribers flags a row's suppression however many newer suppressions there are", async () => {
+  it("GET /api/subscribers flags a row's suppression however many newer suppressions there are (SPEC §7)", async () => {
     await resetDatabase();
     await seedConfirmed(["old@example.com"]);
     await env.DB.prepare(

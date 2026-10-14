@@ -30,7 +30,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
-- On a list with more than 1,000 suppressions, the Subscribers page flags every suppressed address again: an address suppressed before the newest 1,000 showed as not suppressed, with no red flag, a live-coloured status, and Block offered in its row menu. `GET /api/subscribers` now reads each row's suppression for the page's own addresses.
+- On a list with more than 1,000 suppressions, the Subscribers page now flags every suppressed address: one suppressed before the newest 1,000 showed as not suppressed, with no red flag, a live-coloured status, and Block offered in its row menu. `GET /api/subscribers` now reads each row's suppression for the page's own addresses.
 
 ## [1.9.0] - 2026-10-13
 
