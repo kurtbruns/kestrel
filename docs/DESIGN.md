@@ -188,7 +188,7 @@ While a send is paused, the watch gives no rate or time to finish, which would p
 
 - **Outcome tiles** (Recipients, Delivered, Bounced, Complained, Unsent) go on settling as receipts arrive, while the render and the audience stay fixed. A muted caption above them says which is which, and a phase pill reads **Settling**, then **Complete**.
 - **A reconciliation line** accounts for every recipient by name: delivered, awaiting a receipt, skipped, or in flight.
-- **The recipient list** opens on **Failures** (bounced, complained, and unsent), since what went wrong leads; Delivered and All are one switch away, and any address can be searched. A bounce row says hard or soft by the kind recorded on it (SPEC §8), not by color.
+- **The recipient list** opens on **Failures** (bounced, complained, and unsent), since what went wrong leads; Delivered and All are one switch away, and any address can be searched. A bounce row says hard or soft by the kind recorded on it (SPEC §8), not by color. An erased person's row reads **Erased recipient**, muted, in place of the address (SPEC §7); the CSV keeps the row's placeholder.
 - **Keeping its place.** When a refresh moves the counts, the list reloads on the page, view, search, and sort the reader chose, keeping keyboard focus where it was. A refresh that fails leaves the list as it is and says nothing; only a load the reader started shows an error.
 
 **A canceled send** never fired, so its page is not a record: a **Canceled** pill, when it was canceled, and that no one was mailed.
@@ -198,6 +198,10 @@ While a send is paused, the watch gives no rate or time to finish, which would p
 The list as a whole (SPEC §8). The head has **Add subscriber** (Primary). A summary card gives the composition of the whole list, with an info tip defining each state; it doesn't change with the filter. The list filters by consent state and, separately, by suppression, because suppression is an overlay on an address, not a consent state (SPEC §7). A suppressed address carries a small red flag beside it naming why, never a value in the Status column.
 
 **Add subscriber** starts double opt-in and says so. Its act is **Send confirmation**, not "Add", because no one joins the audience until they confirm (I1). **Unsubscribe**, from a confirmed subscriber's row menu, is immediate (I2) and confirmed in a dialog with a Danger button.
+
+**Erase** is in every subscriber's row menu, below Unsubscribe, since anyone on the list can ask to be erased (SPEC §7). It can't be undone, so it is confirmed in a dialog with a Danger **Erase** that says what goes (the subscriber and how they joined), what stays (past sends, showing an erased recipient; the address, kept only so it's never mailed), that it can't be undone, and that the person can still rejoin themselves. Its toast names the address, and says so when a bounce, complaint, or block the address already had still stands. An erased address that subscribed again is flagged **erased** like any suppression, its tip saying it isn't mailed until they confirm.
+
+**Adding an erased address** asks before sending. When Send confirmation meets an erased address, a second dialog stacks over Add subscriber: "Send to an erased address?", naming the address and when it was erased, and saying to send only if the person asked to join again, and that they rejoin only by confirming. Its Primary is **Send confirmation**; Cancel, the default focus, returns to the Add dialog with nothing sent. The public form never asks.
 
 ### Template
 

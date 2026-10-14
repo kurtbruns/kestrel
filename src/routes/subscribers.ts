@@ -2,23 +2,46 @@
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
 import type {
+  EraseResponse,
+  ErasureAcknowledgementRequired,
   SubscribeResponse,
   SubscriberListResponse,
   SubscriberResponse,
 } from "../../shared/subscribers";
 import * as subscribers from "../db/subscribers";
-import { fieldError, optString, readJsonObject } from "../lib/body";
-import { HttpError, json, notFound } from "../lib/errors";
+import { fieldError, optBoolean, optString, readJsonObject } from "../lib/body";
+import { HttpError, json, notFound, refusal } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
+import { log } from "../lib/log";
+import { requireConnectedProvider } from "../providers";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { requestSubscription } from "../services/subscriptions";
 
 export async function create(c: RequestContext): Promise<Response> {
-  const raw = optString(await readJsonObject(c), "email");
+  const body = await readJsonObject(c);
+  const raw = optString(body, "email");
+  const acknowledged = optBoolean(body, "acknowledge_erasure") === true;
   const email = raw === undefined ? "" : normalizeEmail(raw);
   if (!email || !isValidEmail(email)) {
     throw fieldError("email", "Enter a valid email address.");
+  }
+  // An erased person may come back, but by their own wish (SPEC §7): the publisher adding
+  // them is asked first. Only here; the public form is the person asking for themselves.
+  if (!acknowledged) {
+    requireConnectedProvider(c.config);
+    const suppression = await subscribers.suppressionOf(c.env.DB, email);
+    if (suppression?.reason === subscribers.ERASED) {
+      const details: Omit<ErasureAcknowledgementRequired, "error" | "message"> = {
+        erased_at: suppression.created_at,
+      };
+      throw refusal(
+        409,
+        "erasure_acknowledgement_required",
+        `${email} was erased at the person’s request. Send a confirmation only if they have asked to join again; confirming it lifts the erasure. To send it, add acknowledge_erasure: true.`,
+        details,
+      );
+    }
   }
   const outcome = await requestSubscription(c, email);
   if (outcome.kind === "failed") {
@@ -107,5 +130,27 @@ export async function unsubscribe(c: RequestContext): Promise<Response> {
     subscriber,
     suppressed: await subscribers.isSuppressed(c.env.DB, subscriber.email),
   };
+  return json(body);
+}
+
+/**
+ * Authed admin erasure (SPEC §7): the subscriber's row goes, their past delivery rows show
+ * an erased recipient, and the address stays only as a do-not-contact suppression. Not
+ * undoable, and a repeat finds no subscriber (404), since nothing is kept to know the id by.
+ */
+export async function erase(c: RequestContext): Promise<Response> {
+  const outcome = await subscribers.erase(c.env.DB, param(c, "id"));
+  if (outcome.kind === "not_found") {
+    throw notFound("subscriber");
+  }
+  if (outcome.kind === "in_flight") {
+    throw refusal(
+      409,
+      "run_in_progress",
+      "A send is handing this subscriber to the email provider right now, so they can’t be erased this moment. Try again in a minute.",
+    );
+  }
+  log.info("subscriber.erased", { deliveries: outcome.erased.deliveries });
+  const body: EraseResponse = { erased: outcome.erased };
   return json(body);
 }

@@ -1,11 +1,18 @@
 // The subscriber actions taken from more than one surface: adding one (the list, the
-// dashboard's quick actions) and unsubscribing one (the list's row menu, the dashboard).
+// dashboard's quick actions), and unsubscribing or erasing one (the list's row menu).
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
-import type { SubscribeAction, SubscribeResponse, Subscriber } from "../../shared/subscribers";
+import type {
+  EraseResponse,
+  ErasureAcknowledgementRequired,
+  SubscribeAction,
+  SubscribeResponse,
+  Subscriber,
+} from "../../shared/subscribers";
 import { ApiError, api, describeError } from "../api";
 import { notConnectedAddLine, providerNotConnected } from "../deployment";
 import { $ } from "../ui/dom";
+import { fmt } from "../ui/format";
 import { html } from "../ui/html";
 import { busy, modal, toast } from "../ui/widgets";
 
@@ -39,10 +46,24 @@ export function addSubscriberModal(onDone: () => void, signal: AbortSignal): voi
         return;
       }
       try {
-        const r = await api<SubscribeResponse>("/api/subscribers", {
-          method: "POST",
-          json: { email: addr },
-        });
+        const add = (acknowledge: boolean) =>
+          api<SubscribeResponse>("/api/subscribers", {
+            method: "POST",
+            json: acknowledge ? { email: addr, acknowledge_erasure: true } : { email: addr },
+          });
+        let r: SubscribeResponse;
+        try {
+          r = await add(false);
+        } catch (e) {
+          const erased = erasureRefusal(e);
+          if (!erased) {
+            throw e;
+          }
+          if (!(await confirmErasedAdd(addr, erased.erased_at, signal))) {
+            return;
+          }
+          r = await add(true);
+        }
         m.close();
         toast(addedMessage(addr, r.action));
         onDone();
@@ -51,6 +72,47 @@ export function addSubscriberModal(onDone: () => void, signal: AbortSignal): voi
         m.error(describeError(e), e instanceof ApiError && e.field === "email" ? input : undefined);
       }
     });
+}
+
+/** The server's refusal to mail an erased address without the publisher's say-so, or null. */
+function erasureRefusal(e: unknown): ErasureAcknowledgementRequired | null {
+  return e instanceof ApiError && e.status === 409 && e.code === "erasure_acknowledgement_required"
+    ? (e.data as ErasureAcknowledgementRequired)
+    : null;
+}
+
+/**
+ * Asked over the Add dialog when the address was erased (SPEC §7): the person may come back,
+ * but on their own wish, so the publisher confirms they asked. Resolves true to send the
+ * confirmation; false (Cancel, Escape, or leaving the page) leaves the Add dialog as it was.
+ */
+function confirmErasedAdd(addr: string, erasedAt: number, signal: AbortSignal): Promise<boolean> {
+  return new Promise((resolve) => {
+    const m = modal(
+      html`<h3>Send to an erased address?</h3><p class="hint"><strong>${addr}</strong> was erased at the person’s request on ${fmt(erasedAt)}. Send a confirmation only if they’ve asked to join again. They rejoin only by confirming it, which lifts the erasure.</p><div class="actions"><button type="button" id="eaCancel">Cancel</button><button type="button" class="primary" id="eaGo">Send confirmation</button></div>`,
+      signal,
+    );
+    // The page is already gone, so the dialog never showed: nothing was confirmed.
+    if (!m.el.isConnected) {
+      resolve(false);
+      return;
+    }
+    let answer = false;
+    $("#eaCancel", m.el).onclick = m.close;
+    $("#eaGo", m.el).onclick = () => {
+      answer = true;
+      m.close();
+    };
+    // However it closes (a button, Escape, the backdrop, the page going), it answers once.
+    const obs = new MutationObserver(() => {
+      if (!m.el.isConnected) {
+        obs.disconnect();
+        resolve(answer);
+      }
+    });
+    obs.observe(document.body, { childList: true });
+    $("#eaCancel", m.el).focus();
+  });
 }
 
 /** What the Add told the admin: a confirmation went, or why none was due. A refused
@@ -87,4 +149,45 @@ export function confirmUnsubscribe(sub: Subscriber, onDone: () => void, signal: 
         m.error(describeError(e));
       }
     });
+}
+
+/**
+ * Erase removes the person's data for good (SPEC §7), so it is confirmed in a dialog that
+ * says what goes, what stays, and that it can't be undone (DESIGN §7).
+ */
+export function confirmErase(sub: Subscriber, onDone: () => void, signal: AbortSignal): void {
+  const m = modal(
+    html`<h3>Erase this subscriber?</h3><p class="hint">Deletes <strong>${sub.email}</strong> and how they joined, and past sends show an erased recipient in its place. The address is kept only so it’s never mailed again. This can’t be undone. They can still rejoin by subscribing and confirming themselves.</p><div class="actions"><button type="button" id="eCancel">Cancel</button><button type="button" class="danger" id="eGo">Erase</button></div>`,
+    signal,
+  );
+  const go = $<HTMLButtonElement>("#eGo", m.el);
+  $("#eCancel", m.el).onclick = m.close;
+  go.onclick = () =>
+    busy(go, "Erasing…", async () => {
+      m.clearError();
+      try {
+        const r = await api<EraseResponse>(`/api/subscribers/${sub.id}/erase`, { method: "POST" });
+        m.close();
+        toast(erasedMessage(r));
+        onDone();
+      } catch (e) {
+        m.error(describeError(e));
+      }
+    });
+}
+
+// What a suppression the erasure kept is called, for the toast.
+const KEPT_SUPPRESSION: Record<string, string> = {
+  bounce: "bounce",
+  import_bounce: "bounce",
+  complaint: "complaint",
+  import_complaint: "complaint",
+  manual: "block",
+};
+
+/** What the erasure left: the marker, or the bounce, complaint, or block the address had. */
+function erasedMessage({ erased }: EraseResponse): string {
+  return erased.suppression === "erased"
+    ? `Erased ${erased.email}`
+    : `Erased ${erased.email}. Its ${KEPT_SUPPRESSION[erased.suppression] ?? "suppression"} still stands`;
 }

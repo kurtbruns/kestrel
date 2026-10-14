@@ -944,7 +944,7 @@ export function createRouter({
       accepts: JSON_BODY,
       resource: "subscribers",
       summary: "Add a subscriber via the normal double opt-in (never an auto-confirm).",
-      description: `${notConnected} Nothing is stored then, since the confirmation could not go.`,
+      description: `An address that was erased (SPEC §7) is refused 409 \`erasure_acknowledgement_required\`, with \`erased_at\`, until the request carries \`acknowledge_erasure: true\`: the publisher confirms the person asked to join again. The confirmation then goes as usual, and the person's own confirming lifts the marker. The public form never asks. ${notConnected} Nothing is stored then, since the confirmation could not go.`,
       example: { request: { email: "reader@example.com" } },
       handler: subscriberRoutes.create,
     },
@@ -1041,6 +1041,22 @@ export function createRouter({
       resource: "subscribers",
       summary: "Unsubscribe a subscriber (admin-initiated).",
       handler: subscriberRoutes.unsubscribe,
+    },
+    {
+      method: "POST",
+      path: "/api/subscribers/:id/erase",
+      access: "admin",
+      resource: "subscribers",
+      summary:
+        "Erase a subscriber (SPEC §7): remove their data and keep only a do-not-contact marker. Can't be undone.",
+      description:
+        "One batch: deletes the subscriber's row, with how they joined and its evidence; replaces their address on every past delivery row with one placeholder, `erased:` and random hex, so each send's record still sums to its audience; and suppresses the address with reason `erased`, holding only the address and the time. A bounce, complaint, or manual suppression the address already has is kept as it is. Answers `erased`: the `email`, how many `deliveries` now show the placeholder, and the `suppression` the address is left with. The person can come back by subscribing again: their own confirmation lifts the marker, an import never does, and `POST /api/subscribers` asks for `acknowledge_erasure: true` first. Nothing about the id is kept, so erasing it again answers 404 `not_found`. While a send run is handing the subscriber to the provider (their row pending or dispatched under the run's lease) it refuses 409 `run_in_progress` and changes nothing: try again a moment later. A receipt that later lands on an erased row records its outcome without the provider's words, and a bounce or complaint suppresses the address the receipt names, replacing the marker.",
+      example: {
+        response: {
+          erased: { email: "reader@example.com", deliveries: 12, suppression: "erased" },
+        },
+      },
+      handler: subscriberRoutes.erase,
     },
 
     // --- imports (authed admin) ---

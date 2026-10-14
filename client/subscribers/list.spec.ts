@@ -44,7 +44,7 @@ describe("subscribers view", () => {
     fake?.restore();
   });
 
-  it("shows the counts, the roster with the suppression flag and its reason, and actions only for the confirmed", async () => {
+  it("shows the counts, the roster with the suppression flag and its reason, and the actions each row allows", async () => {
     fake = fakeApi([
       { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
     ]);
@@ -58,9 +58,65 @@ describe("subscribers view", () => {
     expect(flag.textContent).toBe("bounced");
     expect(flag.getAttribute("title")).toMatch(/Hard bounce.*\(550 no such user\)/);
     expect($("tr[data-id='s3'] td").textContent).toBe("<script>@b.c"); // shown as text
-    expect($$("tr[data-id='s1'] [data-menu]")).toHaveLength(1);
-    expect($$("tr[data-id='s3'] [data-menu]")).toHaveLength(0); // pending: nothing to unsubscribe
+    $("tr[data-id='s1'] [data-menu]").click();
+    expect($$(".menu .menu-item").map((b) => b.textContent)).toEqual(["Unsubscribe", "Erase"]);
+    $(".menu-overlay").click();
+    // Pending: nothing to unsubscribe, but anyone can be erased (SPEC §7).
+    $("tr[data-id='s3'] [data-menu]").click();
+    expect($$(".menu .menu-item").map((b) => b.textContent)).toEqual(["Erase"]);
     expect(fake.unhandled).toEqual([]);
+  });
+
+  it("erases from the row menu after the dialog's confirmation, and reloads the list", async () => {
+    let erased = false;
+    fake = fakeApi([
+      {
+        path: "/api/subscribers",
+        reply: () => ({
+          counts,
+          subscribers: erased ? subs.filter((s) => s.id !== "s3") : subs,
+          page,
+        }),
+      },
+      {
+        method: "POST",
+        path: "/api/subscribers/s3/erase",
+        reply: () => {
+          erased = true;
+          return { erased: { email: "<script>@b.c", deliveries: 0, suppression: "erased" } };
+        },
+      },
+    ]);
+    await mount((r, s) => renderSubscribers(undefined, r, s));
+    await settle();
+    $("tr[data-id='s3'] [data-menu]").click();
+    $(".menu .danger-item").click();
+    expect($(".modal h3").textContent).toBe("Erase this subscriber?");
+    $("#eGo").click();
+    await settle();
+    expect($("#toasts").textContent).toMatch(/Erased <script>@b\.c/);
+    expect($$("tr[data-id]")).toHaveLength(2);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("names an erased address's flag, for one that subscribed again", async () => {
+    fake = fakeApi([
+      {
+        path: "/api/subscribers",
+        reply: () => ({
+          counts,
+          subscribers: [
+            { ...subs[2], suppressed: true, suppression_reason: "erased", status: "pending" },
+          ],
+          page,
+        }),
+      },
+    ]);
+    await mount((r, s) => renderSubscribers(undefined, r, s));
+    await settle();
+    const flag = $("tr[data-id='s3'] .row-flag");
+    expect(flag.textContent).toBe("erased");
+    expect(flag.getAttribute("title")).toMatch(/^Erased at the person’s request/);
   });
 
   it("seeds the filter from the dashboard's deep link", async () => {

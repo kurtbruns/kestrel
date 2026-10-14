@@ -27,5 +27,5 @@ Each one stands on its own. Pick the ones you need.
 The detail behind the steps, for when you need it.
 
 - [Configuration](reference/01-configuration.md)
-- [Sending-domain DNS](reference/02-sending-domain-dns.md)
-- [Import format](reference/03-import-format.md)
+- [Sending-domain DNS: SPF, DKIM, and DMARC](reference/02-sending-domain-dns.md)
+- [Subscriber import format](reference/03-import-format.md)

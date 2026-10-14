@@ -13,6 +13,7 @@
  * `suppression.added` when it suppressed), never an address: the counts are the story.
  */
 
+import { isErasedPlaceholder } from "../../shared/subscribers";
 import { markDeliveryEvent } from "../db/sends";
 import { addSuppression } from "../db/subscribers";
 import { log } from "../lib/log";
@@ -76,8 +77,12 @@ export async function applyDeliveryEvents(
     // Prefer the matched delivery row's address, the form the list stores; fall back to
     // the event's own when nothing matched (a test send or a confirmation email). An
     // id-keyed hard bounce or complaint thus still suppresses (I1) rather than slipping
-    // through and letting the address be mailed again next post.
-    const email = matched.email ?? e.email;
+    // through and letting the address be mailed again next post. A row an erasure left holds
+    // a placeholder, not an address, so the event's own address is the one suppressed: a
+    // bounce or complaint replaces the erased marker (SPEC §7), and with no address in the
+    // event there is nothing to suppress.
+    const email =
+      matched.email !== null && !isErasedPlaceholder(matched.email) ? matched.email : e.email;
     if (email && ((e.type === "bounced" && e.hard) || e.type === "complained")) {
       const reason = e.type === "bounced" ? "bounce" : "complaint";
       await addSuppression(db, email, reason, eventDetail(e) ?? undefined);

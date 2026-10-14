@@ -1,4 +1,4 @@
-# Sending-domain DNS
+# Sending-domain DNS: SPF, DKIM, and DMARC
 
 Inboxes decide whether to trust your mail by checking records in the DNS of the domain it comes from. This page explains the three checks they run: SPF, DKIM, and DMARC. It covers the records [Connect Amazon SES](../get-started/04-ses.md) has you add, what each proves, how to check them, and when to tighten DMARC.
 

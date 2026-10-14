@@ -1,10 +1,13 @@
 import { env } from "cloudflare:workers";
 import type { D1Migration } from "@cloudflare/vitest-pool-workers";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { SHIPPED_MIGRATIONS } from "../src/db/migrations";
+import { resetDatabase } from "./support/fixtures";
 
 // The migrations folder as vitest.config.ts read it, the same files the setup applied.
 const FOLDER = (env as unknown as { TEST_MIGRATIONS: D1Migration[] }).TEST_MIGRATIONS;
+
+beforeEach(resetDatabase);
 
 describe("the migrations the schema gate expects (SPEC §9)", () => {
   it("are exactly the files in migrations/, in order, so a new migration can't be left out", () => {
@@ -90,7 +93,6 @@ describe("schema (0005_imports)", () => {
       consent_evidence: null,
       import_id: null,
     });
-    await env.DB.prepare("DELETE FROM subscribers").run();
   });
 
   it("refuses an opt-in method outside the three, and evidence that isn't JSON", async () => {
@@ -123,10 +125,6 @@ describe("schema (0005_imports)", () => {
         "INSERT INTO notifications (import_id, kind, created_at, updated_at) VALUES ('i1', 'finished', 1, 1)",
       ).run(),
     ).rejects.toThrow();
-    await env.DB.batch([
-      env.DB.prepare("DELETE FROM notifications"),
-      env.DB.prepare("DELETE FROM imports"),
-    ]);
   });
 
   it("keeps one import per plan, the commit's idempotency key", async () => {
@@ -138,7 +136,6 @@ describe("schema (0005_imports)", () => {
         .run();
     await insert("i1");
     await expect(insert("i2")).rejects.toThrow();
-    await env.DB.prepare("DELETE FROM imports").run();
   });
 });
 

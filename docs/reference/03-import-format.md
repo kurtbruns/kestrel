@@ -1,4 +1,4 @@
-# Import format
+# Subscriber import format
 
 Kestrel imports a subscriber list in one documented format, `kestrel-subscribers/1`, and exports the whole list in the same format. This page describes the format, what an import does to each address, and the limits.
 

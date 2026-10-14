@@ -15,7 +15,7 @@ import {
   wireToolbar,
 } from "../ui/list_controls";
 import { badge, infoTip, openMenu, renderError } from "../ui/widgets";
-import { addSubscriberModal, confirmUnsubscribe } from "./dialogs";
+import { addSubscriberModal, confirmErase, confirmUnsubscribe } from "./dialogs";
 
 // The story of the list as a whole: its composition (by-status counts) and the roster,
 // filterable, sortable, and searchable. Consent status and suppression are separate
@@ -76,7 +76,7 @@ export async function renderSubscribers(
       setHtml(
         $("#subCounts"),
         html`<div class="card row" style="gap:24px"><span><strong>${c.confirmed}</strong> confirmed</span><span>${c.pending} pending</span><span>${c.unsubscribed} unsubscribed</span><span>${c.suppressed} suppressed</span>${infoTip(
-          "Pending: subscribed but hasn’t clicked the confirmation email. Confirmed: consented, and receives sends. Unsubscribed: opted out. Suppressed: bounced or complained, and never mailed, whatever the consent state.",
+          "Pending: subscribed but hasn’t clicked the confirmation email. Confirmed: consented, and receives sends. Unsubscribed: opted out. Suppressed: bounced, complained, blocked, or erased, and never mailed, whatever the consent state.",
           { below: true },
         )}</div>`,
       );
@@ -100,11 +100,14 @@ const SUPPRESSION_LABELS: Record<string, string> = {
   bounce: "bounced",
   complaint: "complaint",
   manual: "blocked",
+  erased: "erased",
 };
 const SUPPRESSION_TIPS: Record<string, string> = {
   bounce: "Hard bounce: mail to this address failed, so it won’t be mailed again.",
   complaint: "Marked as spam, so it won’t be mailed again, whatever the consent state.",
   manual: "Manually blocked, so it won’t be mailed.",
+  erased:
+    "Erased at the person’s request, then subscribed again. Not mailed until they confirm, which lifts the erasure.",
 };
 function suppressionFlag(s: SubscriberListItem): Html | null {
   if (!s.suppressed) {
@@ -134,11 +137,7 @@ function renderSubTable(
     listEl,
     html`<div class="table-wrap"><table class="list-table subs-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Email", "email", state)}${th("Status", null, state)}${th("Joined", "joined", state)}<th></th></tr></thead><tbody>${rows.map(
       (s) =>
-        html`<tr data-id="${s.id}"><td>${s.email}${suppressionFlag(s)}</td><td>${badge(s.status)}</td><td class="muted joined">${fmt(s.created_at)}</td><td class="act">${
-          s.status === "confirmed"
-            ? html`<button class="icon" data-menu="${s.id}" aria-label="Subscriber actions" aria-haspopup="menu">⋯</button>`
-            : null
-        }</td></tr>`,
+        html`<tr data-id="${s.id}"><td>${s.email}${suppressionFlag(s)}</td><td>${badge(s.status)}</td><td class="muted joined">${fmt(s.created_at)}</td><td class="act"><button class="icon" data-menu="${s.id}" aria-label="Subscriber actions" aria-haspopup="menu">⋯</button></td></tr>`,
     )}</tbody></table></div>`,
   );
   wireSort(listEl, state, reload);
@@ -149,14 +148,20 @@ function renderSubTable(
       if (!row) {
         return;
       }
+      // Unsubscribe only while they're confirmed; anyone can be erased (SPEC §7).
       openMenu(
         b,
         [
-          {
-            label: "Unsubscribe",
-            danger: true,
-            onClick: () => confirmUnsubscribe(row, reload, signal),
-          },
+          ...(row.status === "confirmed"
+            ? [
+                {
+                  label: "Unsubscribe",
+                  danger: true,
+                  onClick: () => confirmUnsubscribe(row, reload, signal),
+                },
+              ]
+            : []),
+          { label: "Erase", danger: true, onClick: () => confirmErase(row, reload, signal) },
         ],
         signal,
       );
