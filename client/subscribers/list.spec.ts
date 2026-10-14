@@ -474,7 +474,7 @@ describe("subscribers view", () => {
     expect($$("#subLegend h2").map((h) => h.textContent)).toEqual([
       "Status",
       "Suppressed",
-      "Subscriber actions",
+      "What you can do",
     ]);
     expect($$("#subLegend p").map((p) => p.textContent)).toEqual([
       "The address isn’t sent your posts, whatever its status. The status stays as it was, greyed while the suppression keeps it from taking effect. The red flag beside the address says why:",
