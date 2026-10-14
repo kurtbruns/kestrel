@@ -134,6 +134,17 @@ function suppressionFlag(s: SubscriberListItem): Html | null {
   return html` <span class="badge suppressed row-flag" title="${tip}">${label}</span>`;
 }
 
+// A suppressed address keeps its consent status, but the status isn't in effect while the
+// suppression stands, so its badge takes the not-mailed grey (DESIGN §3). An erasure's
+// marker is the one exception: the person's own confirmation lifts it, so their pending
+// status is still live.
+function statusBadge(s: SubscriberListItem): Html {
+  if (!s.suppressed || s.suppression_reason === "erased") {
+    return badge(s.status);
+  }
+  return html`<span class="badge ${s.status} held" title="Not mailed while suppressed">${s.status}</span>`;
+}
+
 function renderSubTable(
   listEl: Element,
   rows: SubscriberListItem[],
@@ -150,7 +161,7 @@ function renderSubTable(
     listEl,
     html`<div class="table-wrap"><table class="list-table subs-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Email", "email", state)}${th("Status", null, state)}${th("Joined", "joined", state)}<th></th></tr></thead><tbody>${rows.map(
       (s) =>
-        html`<tr data-id="${s.id}"><td>${s.email}${suppressionFlag(s)}</td><td>${badge(s.status)}</td><td class="muted joined">${fmt(s.created_at)}</td><td class="act"><button class="icon" data-menu="${s.id}" aria-label="Subscriber actions" aria-haspopup="menu">⋯</button></td></tr>`,
+        html`<tr data-id="${s.id}"><td>${s.email}${suppressionFlag(s)}</td><td>${statusBadge(s)}</td><td class="muted joined">${fmt(s.created_at)}</td><td class="act"><button class="icon" data-menu="${s.id}" aria-label="Subscriber actions" aria-haspopup="menu">⋯</button></td></tr>`,
     )}</tbody></table></div>`,
   );
   wireSort(listEl, state, reload);

@@ -70,6 +70,9 @@ describe("subscribers view", () => {
     const flag = $("tr[data-id='s2'] .row-flag");
     expect(flag.textContent).toBe("bounced");
     expect(flag.getAttribute("title")).toMatch(/Hard bounce.*\(550 no such user\)/);
+    // A suppressed row keeps its consent status, greyed; an unsuppressed one is not.
+    expect($("tr[data-id='s2'] .badge.confirmed").classList.contains("held")).toBe(true);
+    expect($("tr[data-id='s1'] .badge.confirmed").classList.contains("held")).toBe(false);
     expect($("tr[data-id='s3'] td").textContent).toBe("<script>@b.c"); // shown as text
     $("tr[data-id='s1'] [data-menu]").click();
     expect($$(".menu .menu-item").map((b) => b.textContent)).toEqual(["Unsubscribe", "Erase"]);
@@ -130,6 +133,8 @@ describe("subscribers view", () => {
     const flag = $("tr[data-id='s3'] .row-flag");
     expect(flag.textContent).toBe("erased");
     expect(flag.getAttribute("title")).toMatch(/^Erased at the person’s request/);
+    // Their confirmation lifts the marker, so the pending status is live, not greyed.
+    expect($("tr[data-id='s3'] .badge.pending").classList.contains("held")).toBe(false);
   });
 
   it("seeds the filter from the dashboard's deep link", async () => {

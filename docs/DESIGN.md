@@ -195,7 +195,7 @@ While a send is paused, the watch gives no rate or time to finish, which would p
 
 ### Subscribers
 
-The list as a whole (SPEC §8). The head has **Export** (Ghost) beside **Add subscriber** (Primary). A summary card gives the composition of the whole list, with an info tip defining each state; it doesn't change with the filter. The list filters by consent state and, separately, by suppression, because suppression is an overlay on an address, not a consent state (SPEC §7). A suppressed address carries a small red flag beside it naming why, never a value in the Status column.
+The list as a whole (SPEC §8). The head has **Export** (Ghost) beside **Add subscriber** (Primary). A summary card gives the composition of the whole list, with an info tip defining each state; it doesn't change with the filter. The list filters by consent state and, separately, by suppression, because suppression is an overlay on an address, not a consent state (SPEC §7). A suppressed address carries a small red flag beside it naming why, never a value in the Status column. Its consent state stays in the Status column in the unsubscribed grey: still true, but not in effect while the suppression stands, so a confirmed address that bounced never reads as one that is mailed. An erasure's marker alone doesn't grey it, since the person's own confirmation lifts the marker and their pending state is still live.
 
 **Add subscriber** starts double opt-in and says so. Its act is **Send confirmation**, not "Add", because no one joins the audience until they confirm (I1). **Unsubscribe**, from a confirmed subscriber's row menu, is immediate (I2) and confirmed in a dialog with a Danger button.
 
@@ -449,7 +449,7 @@ A color means one thing, and a token names one color. A second token for a color
 | **Grey** | Inert, or a fact about where something lives | Draft, unsubscribed, unsent, skipped, canceled; Read-only · set at deploy. |
 | **Ink** | Strong text | Headings and strong labels. Never a button fill, except the inert reader mockups (§7). |
 
-**Lifecycle hues are facts, not verdicts.** Draft grey, scheduled violet, sending blue, and sent green are kept apart from the feedback scales: a scheduled badge is neither good nor bad. A state borrows a feedback hue only when it really carries that reading. A pending subscriber is waiting on the reader, so it takes amber, never sending blue, which would read as a send in flight. A suppressed address takes red.
+**Lifecycle hues are facts, not verdicts.** Draft grey, scheduled violet, sending blue, and sent green are kept apart from the feedback scales: a scheduled badge is neither good nor bad. A state borrows a feedback hue only when it really carries that reading. A pending subscriber is waiting on the reader, so it takes amber, never sending blue, which would read as a send in flight. A suppressed address takes red, and its consent state the grey of unsubscribed: a subscriber's grey means not mailed, and the label still names the state.
 
 **Delivery outcomes are verdicts.** On the record, delivered is green, bounced amber, and complained red, sitting beside the lifecycle `sent` badge; the two scales together are why they mustn't be conflated. Each recipient row uses the same swatch as its tile, plus sending blue for accepted-not-yet-confirmed and grey for unsent or skipped. The send lists compress the same outcomes to a **Delivered** count, with any complaints, bounces, or unsent named beneath it in words, worst first. A clean send prints nothing there.
 
