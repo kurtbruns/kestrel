@@ -4,32 +4,28 @@
 import type { InUseView, LogoResponse } from "../../shared/settings";
 import { api } from "../api";
 import { $ } from "../ui/dom";
-import { fmt } from "../ui/format";
 import { type Html, html } from "../ui/html";
 import { icon } from "../ui/icons";
 import { squareImage } from "../ui/square_image";
 import { busy, toast } from "../ui/widgets";
 import { chip, HIDDEN, message, type SectionHandle, type SettingsPage, secHead } from "./page";
-import { remakeIdentity, savedToast, withRemakeConfirm } from "./remake";
+import { remakeIdentity, remakeWaitHtml, savedToast, withRemakeConfirm } from "./remake";
 
 /** The note under the card: where the identity shows up (the sample email shows which
- *  fields) and, only while posts are scheduled, that a save reaches them too (SPEC §9).
- *  The confirmation dialog carries the rest, at the moment it matters, so the standing
- *  note stays one or two short lines. */
-function identityNote(inUse: InUseView): string {
+ *  fields), only while posts are scheduled that a save reaches them too, and only while
+ *  one is about to send that a save has to wait for it (SPEC §9). The confirmation dialog
+ *  carries the rest, at the moment it matters, so the standing note stays short. */
+function identityNote(inUse: InUseView): Html {
   if (!(inUse.identityFields || []).length) {
-    return "Your email template doesn’t show any of these.";
+    return html`Your email template doesn’t show any of these.`;
   }
   const shown = "Shown in every email.";
   const n = inUse.sends.length;
   if (!n) {
-    return shown;
+    return html`${shown}`;
   }
   const reach = `Saving a change updates ${n} scheduled email${n === 1 ? "" : "s"} too; you’ll confirm first.`;
-  const wait = inUse.retry_after
-    ? ` One sends at ${fmt(inUse.retry_after)}, so saving waits until it has sent.`
-    : "";
-  return `${shown} ${reach}${wait}`;
+  return html`${shown} ${reach}${remakeWaitHtml(inUse)}`;
 }
 
 /** The side of the square PNG a logo uploads as: sharp at 3× the largest place it shows

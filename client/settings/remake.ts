@@ -3,6 +3,7 @@
 
 import type { InUseView, RemakeRequiredError, ScheduledSendRef } from "../../shared/settings";
 import { ApiError } from "../api";
+import { at } from "../lifecycle";
 import { fmt } from "../ui/format";
 import { type Html, html } from "../ui/html";
 import { icon } from "../ui/icons";
@@ -172,7 +173,8 @@ export const remakeIdentity = (action: string, gerund: string): RemakeVerb => ({
 
 /**
  * The standing in-use chip (DESIGN §8): the state a template or identity change would
- * reach, read from GET /api/settings `inUse`.
+ * reach, read from GET /api/settings `inUse`. A plain label (DESIGN §11): while a save
+ * would be refused for a post about to send, `remakeWait` says so in words beside it.
  */
 export function inUseChip(inUse: InUseView | null | undefined): Html {
   const sends = inUse?.sends || [];
@@ -180,12 +182,55 @@ export function inUseChip(inUse: InUseView | null | undefined): Html {
     return html`<span class="set-chip">${icon("info")}No posts scheduled</span>`;
   }
   const n = sends.length;
-  const title = inUse?.retry_after
-    ? `One sends at ${fmt(inUse.retry_after)}; saving waits until it has sent.`
-    : null;
-  return title
-    ? html`<span class="set-chip inuse" title="${title}"><span class="set-chip-dot"></span>In use by ${n} scheduled post${n === 1 ? "" : "s"}</span>`
-    : html`<span class="set-chip inuse"><span class="set-chip-dot"></span>In use by ${n} scheduled post${n === 1 ? "" : "s"}</span>`;
+  return html`<span class="set-chip inuse"><span class="set-chip-dot"></span>In use by ${n} scheduled post${n === 1 ? "" : "s"}</span>`;
+}
+
+/**
+ * What a surface says while scheduled posts are inside the minimum lead (SPEC §9): a save
+ * is refused until they have sent, so it names when and the next step. Empty when none is,
+ * or once `retry_after` has passed and a save would go through.
+ */
+export function remakeWait(inUse: InUseView | null | undefined, now = Date.now()): string {
+  const until = inUse?.retry_after;
+  if (!inUse || !until || now >= until) {
+    return "";
+  }
+  // retry_after is the last of them to fire, so every send at or before it is inside.
+  const n = Math.max(1, inUse.sends.filter((s) => s.fire_at <= until).length);
+  return n === 1
+    ? `A scheduled post sends at ${fmt(until)}. You can save once it has sent.`
+    : `${n} scheduled posts send by ${fmt(until)}. You can save once they have sent.`;
+}
+
+/** `remakeWait` as markup to append to a lede or note, marked so `expireRemakeWait` can
+ *  take it down; nothing when there is nothing to say. */
+export function remakeWaitHtml(inUse: InUseView | null | undefined): Html | null {
+  const wait = remakeWait(inUse);
+  return wait ? html`<span data-remake-wait> ${wait}</span>` : null;
+}
+
+/**
+ * Take down every `remakeWaitHtml` sentence under `root` at `retry_after`, when a save
+ * would go through, so a page left open never names a time that has passed.
+ */
+export function expireRemakeWait(
+  root: HTMLElement,
+  inUse: InUseView | null | undefined,
+  signal: AbortSignal,
+): void {
+  const until = inUse?.retry_after;
+  if (!until) {
+    return;
+  }
+  at(
+    until,
+    () => {
+      for (const el of root.querySelectorAll("[data-remake-wait]")) {
+        el.remove();
+      }
+    },
+    signal,
+  );
 }
 
 /**

@@ -8,7 +8,7 @@ import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { fieldError } from "../ui/widgets";
 import { chip, type SectionHandle, type SettingsPage, secHead } from "./page";
-import { inUseChip } from "./remake";
+import { inUseChip, remakeWaitHtml } from "./remake";
 import { mountSampleEmailPreview } from "./template";
 
 /** The template as what a publication's email looks like: a sample email in the saved
@@ -18,7 +18,7 @@ export function templateSection(page: SettingsPage): Html {
   return html`
     <section class="set-sec">
       ${secHead("Email template", chip("editable", "Editable"), inUseChip(page.data.inUse))}
-      <p class="set-lede">The template controls the look and feel of the emails you send. Edit it on the Template page.</p>
+      <p class="set-lede">The template controls the look and feel of the emails you send. Edit it on the Template page.${remakeWaitHtml(page.data.inUse)}</p>
       <div class="set-preview set-tpl-sample">
         <div class="set-preview-bar">
           <span class="set-preview-lbl">Sample email</span>
