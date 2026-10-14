@@ -51,3 +51,16 @@ export function headingAnchor(text: string): string {
     .replace(/[^\p{L}\p{N}\s_-]/gu, "")
     .replace(/\s/g, "-");
 }
+
+/** Each heading's anchor, in document order, as the editor names them: the anchor rule,
+ *  with a repeat taking GitHub's -1, -2. One rule for the editor and the suite that checks
+ *  links against it. */
+export function headingAnchors(texts: readonly string[]): string[] {
+  const seen = new Map<string, number>();
+  return texts.map((text) => {
+    const base = headingAnchor(text);
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return n ? `${base}-${n}` : base;
+  });
+}

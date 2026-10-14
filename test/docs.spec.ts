@@ -2,7 +2,7 @@
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import readme from "../docs/README.md";
-import { type DocsResponse, headingAnchor } from "../shared/docs";
+import { type DocsResponse, headingAnchors } from "../shared/docs";
 import { bundledPages, renderDocs } from "../src/docs";
 import { AUTH, base } from "./support/http";
 
@@ -90,7 +90,7 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
     // breaks silently when the heading is renamed or renumbered: the room opens the doc at its
     // top. The editor's links are read from its source, specs left out.
     const { docs } = renderDocs();
-    const anchors = new Map(docs.map((d) => [d.slug, headingAnchors(d.html)]));
+    const anchors = new Map(docs.map((d) => [d.slug, anchorsIn(d.html)]));
     const links: [from: string, slug: string, anchor: string][] = [];
     for (const d of docs) {
       for (const [, slug, anchor] of d.html.matchAll(/href="#\/docs\/([a-z0-9-]+)\/([^"]+)"/g)) {
@@ -122,24 +122,33 @@ const editorSources = import.meta.glob<string>(["../client/**/*.ts", "!../client
   eager: true,
 });
 
-/** A doc's heading anchors as the editor names them: the anchor rule, a repeat taking -1, -2. */
-function headingAnchors(fragment: string): string[] {
-  const seen = new Map<string, number>();
-  const out: string[] = [];
-  for (const [, inner] of fragment.matchAll(/<h[1-4][^>]*>([\s\S]*?)<\/h[1-4]>/g)) {
-    const text = (inner as string)
-      .replace(/<[^>]+>/g, "")
-      .replace(/&#39;|&#x27;/g, "'")
-      .replace(/&quot;/g, '"')
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&amp;/g, "&");
-    const base = headingAnchor(text);
-    const n = seen.get(base) ?? 0;
-    seen.set(base, n + 1);
-    out.push(n ? `${base}-${n}` : base);
-  }
-  return out;
+/** A doc's heading anchors as the editor names them, from the fragment's heading text. */
+function anchorsIn(fragment: string): string[] {
+  const texts = [...fragment.matchAll(/<h[1-4][^>]*>([\s\S]*?)<\/h[1-4]>/g)].map(([, inner]) =>
+    decodeEntities((inner as string).replace(/<[^>]+>/g, "")),
+  );
+  return headingAnchors(texts);
+}
+
+// The heading text the editor reads is the DOM's, with every entity decoded; the rule drops
+// punctuation, so a stray entity left encoded would put its letters into the anchor.
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: "\u00a0",
+};
+function decodeEntities(text: string): string {
+  return text.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (whole, ref: string) => {
+    if (ref[0] === "#") {
+      const code =
+        ref[1] === "x" || ref[1] === "X" ? Number.parseInt(ref.slice(2), 16) : Number(ref.slice(1));
+      return String.fromCodePoint(code);
+    }
+    return NAMED_ENTITIES[ref.toLowerCase()] ?? whole;
+  });
 }
 
 describe("docs API is gated like the rest of the authoring API", () => {

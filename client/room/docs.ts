@@ -4,7 +4,7 @@ import {
   type DocFragment,
   type DocsLanding,
   type DocsResponse,
-  headingAnchor,
+  headingAnchors,
 } from "../../shared/docs";
 import { api, describeError } from "../api";
 import { mount } from "../lifecycle";
@@ -231,13 +231,12 @@ function renderDocPage(
   // GitHub's -1, -2), and collect the H1 and H2s for "On this page". The H1 leads so
   // there's a way back to the top.
   const sec = $("section.doc-part", mainEl);
-  const seen = new Map<string, number>();
-  for (const h of $$<HTMLHeadingElement>("h1, h2, h3, h4", sec)) {
-    const base = headingAnchor(h.textContent || "");
-    const n = seen.get(base) ?? 0;
-    seen.set(base, n + 1);
-    h.dataset.anchor = n ? `${base}-${n}` : base;
-    h.id = headingId(h.dataset.anchor);
+  const headings = $$<HTMLHeadingElement>("h1, h2, h3, h4", sec);
+  const anchors = headingAnchors(headings.map((h) => h.textContent || ""));
+  for (const [i, h] of headings.entries()) {
+    const anchor = anchors[i] ?? "";
+    h.dataset.anchor = anchor;
+    h.id = headingId(anchor);
   }
   const h1 = sec.querySelector("h1");
   const sections: DocSection[] = [];
