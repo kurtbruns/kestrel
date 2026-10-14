@@ -22,7 +22,14 @@ import { escapeHtml, type Html, html, setHtml, unsafeHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { savebar } from "../ui/savebar";
 import { busy, modal, openMenu, renderError, toast } from "../ui/widgets";
-import { inUseChip, REMAKE_TEMPLATE, remakeWait, savedToast, withRemakeConfirm } from "./remake";
+import {
+  expireRemakeWait,
+  inUseChip,
+  REMAKE_TEMPLATE,
+  remakeWaitHtml,
+  savedToast,
+  withRemakeConfirm,
+} from "./remake";
 
 const message = describeError;
 
@@ -462,9 +469,10 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
   const defaultRecipients = Array.isArray(s.testRecipients) ? s.testRecipients : [];
   // Standing: whether scheduled posts are using this template (SPEC §9, DESIGN §8).
   setHtml($("#tplInUse"), inUseChip(data.inUse));
-  // While one is about to send, the lede says the save waits (DESIGN §11: not on the chip).
-  const wait = remakeWait(data.inUse);
-  $("#tplWait").textContent = wait ? ` ${wait}` : "";
+  // While one is about to send, the lede says saving has to wait for it (DESIGN §11: not
+  // on the chip), until it no longer does.
+  setHtml($("#tplWait"), html`${remakeWaitHtml(data.inUse)}`);
+  expireRemakeWait(root, data.inUse, signal);
 
   setHtml(
     bodyEl,

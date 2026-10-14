@@ -34,7 +34,7 @@ import {
   secHead,
 } from "./page";
 import { mountReaderPages, readerPagesSection } from "./reader_pages";
-import { remakeIdentity, savedToast, withRemakeConfirm } from "./remake";
+import { expireRemakeWait, remakeIdentity, savedToast, withRemakeConfirm } from "./remake";
 import { mountSubscribe, subscribeSection } from "./subscribe";
 
 /** One group of sections, kept together by whom they serve: no heading of its own, since
@@ -153,6 +153,8 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     mountRecipients(body, page),
     mountNotifications(body, page),
   );
+  // The template lede's and the identity note's word that saving has to wait, until it no longer does.
+  expireRemakeWait(body, data.inUse, signal);
   const readerPages = mountReaderPages(body, data.deployment, signal);
   refreshReaderPages = readerPages.refresh;
 

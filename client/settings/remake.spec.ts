@@ -204,13 +204,33 @@ describe("inUseChip", () => {
 });
 
 describe("remakeWait", () => {
-  it("says in words when saving waits for a post about to send, and nothing otherwise (SPEC §9)", () => {
-    const at = Date.now() + 120_000;
-    expect(remakeWait({ sends: [ref("a", "A")], retry_after: at, identityFields: [] })).toBe(
-      `A scheduled post sends at ${fmt(at)}, so saving waits until it has sent.`,
+  const inside = (fireAts: number[], until: number | null) => ({
+    sends: fireAts.map((t, i) => ({ ...ref(`s${i}`, `S${i}`), fire_at: t })),
+    retry_after: until,
+    identityFields: [],
+  });
+
+  it("names when a post about to send has gone, and that a save can follow (SPEC §9)", () => {
+    const now = Date.now();
+    const at = now + 120_000;
+    expect(remakeWait(inside([at, at + 3_600_000], at), now)).toBe(
+      `A scheduled post sends at ${fmt(at)}. You can save once it has sent.`,
     );
-    expect(remakeWait({ sends: [ref("a", "A")], retry_after: null, identityFields: [] })).toBe("");
-    expect(remakeWait(null)).toBe("");
+  });
+
+  it("counts every post inside the lead and names when the last of them sends", () => {
+    const now = Date.now();
+    const at = now + 120_000;
+    expect(remakeWait(inside([now + 60_000, at, at + 3_600_000], at), now)).toBe(
+      `2 scheduled posts send by ${fmt(at)}. You can save once they have sent.`,
+    );
+  });
+
+  it("says nothing with none inside the lead, or once that time has passed", () => {
+    const now = Date.now();
+    expect(remakeWait(inside([now + 3_600_000], null), now)).toBe("");
+    expect(remakeWait(null, now)).toBe("");
+    expect(remakeWait(inside([now - 1], now - 1), now)).toBe("");
   });
 });
 
