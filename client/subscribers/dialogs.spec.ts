@@ -257,7 +257,7 @@ describe("consentRecordModal", () => {
     );
   };
 
-  it("dates an imported subscriber by the import, and their confirmation by the file (SPEC §7)", () => {
+  it("dates every subscriber Joined, as the roster does, and says an import's confirmation date is the file's (SPEC §7)", () => {
     fake = fakeApi([]);
     const importedAt = Date.UTC(2026, 9, 13, 12);
     const fileSaid = Date.UTC(2024, 2, 1, 9, 30);
@@ -275,17 +275,18 @@ describe("consentRecordModal", () => {
       live,
     );
     const rows = recordRows();
-    expect(rows.Imported).toBe(fmt(importedAt));
+    expect(rows.Joined).toBe(fmt(importedAt));
     expect(rows.Confirmed).toBe(fmt(fileSaid));
-    expect("Subscribed" in rows).toBe(false);
+    expect("Imported" in rows || "Subscribed" in rows).toBe(false);
     expect($(".consent-note").textContent).toBe(
       "The origin, opt-in, confirmation date, and evidence are what the imported file said. Kestrel didn’t record this consent itself.",
     );
     $("#crClose").click();
-    // Someone who joined here keeps "Subscribed", and no line about a file.
+    // Someone who joined here reads the same way, with no line about a file.
     consentRecordModal({ ...signedUp, status: "confirmed", created_at: 5, confirmed_at: 6 }, live);
-    expect(recordRows().Subscribed).toBe(fmt(5));
-    expect("Imported" in recordRows()).toBe(false);
+    const here = recordRows();
+    expect(here.Joined).toBe(fmt(5));
+    expect("Imported" in here || "Subscribed" in here).toBe(false);
     expect(document.querySelector(".consent-note")).toBeNull();
     expect(fake.calls).toEqual([]);
   });

@@ -156,13 +156,12 @@ export function consentRecordModal(sub: Subscriber, signal: AbortSignal): void {
             <dt>Import</dt><dd><code>${sub.import_id ?? ""}</code></dd>`
           : null
       }
-      ${
-        // An import writes the row when it lands, and the file's own date (its confirmed_at,
-        // else its subscribed_at) as the confirmation, so the row's date is the import's.
-        imported
-          ? html`<dt>Imported</dt><dd>${fmt(sub.created_at)}</dd>`
-          : html`<dt>Subscribed</dt><dd>${fmt(sub.created_at)}</dd>`
-      }
+      <dt>Joined</dt><dd>${
+        // When the row was added here, as the roster's Joined column shows it. An import
+        // records the file's own date (its confirmed_at, else its subscribed_at) as the
+        // confirmation below, which the note says is the file's.
+        fmt(sub.created_at)
+      }</dd>
       <dt>Confirmed</dt><dd>${fmt(sub.confirmed_at)}</dd>
       ${sub.unsubscribed_at ? html`<dt>Left</dt><dd>${fmt(sub.unsubscribed_at)}</dd>` : null}
       <dt>Evidence</dt><dd>${evidence ? html`<pre class="consent-evidence">${evidence}</pre>` : "None recorded"}</dd>
