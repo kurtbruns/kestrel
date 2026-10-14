@@ -88,7 +88,12 @@ describe("subscribers view", () => {
     const flag = $("tr[data-id='s2'] .row-flag");
     expect(flag.textContent).toBe("bounced");
     expect(flag.getAttribute("title")).toMatch(/Hard bounce.*\(550 no such user\)/);
+    // A suppressed row keeps its consent status, greyed; an unsuppressed one is not.
+    expect($("tr[data-id='s2'] .badge.confirmed").classList.contains("held")).toBe(true);
+    expect($("tr[data-id='s1'] .badge.confirmed").classList.contains("held")).toBe(false);
     expect($("tr[data-id='s3'] td").textContent).toBe("<script>@b.c"); // shown as text
+    // A wrapping address breaks before its "@", not mid-word.
+    expect($("tr[data-id='s1'] td").innerHTML).toBe("a<wbr>@b.c");
     const menuOf = (id: string) => {
       $(`tr[data-id='${id}'] [data-menu]`).click();
       const items = $$(".menu .menu-item").map((b) => b.textContent);
@@ -172,6 +177,24 @@ describe("subscribers view", () => {
     const flag = $("tr[data-id='s3'] .row-flag");
     expect(flag.textContent).toBe("erased");
     expect(flag.getAttribute("title")).toMatch(/^Erased at the person’s request/);
+    // Their confirmation lifts the marker, so the pending status is live, not greyed.
+    expect($("tr[data-id='s3'] .badge.pending").classList.contains("held")).toBe(false);
+  });
+
+  it("greys a confirmed status under an erasure's marker, which no confirmation lifts", async () => {
+    fake = fakeApi([
+      {
+        path: "/api/subscribers",
+        reply: () => ({
+          counts,
+          subscribers: [{ ...subs[0], suppressed: true, suppression_reason: "erased" }],
+          page,
+        }),
+      },
+    ]);
+    await mount((r, s) => renderSubscribers(undefined, r, s));
+    await settle();
+    expect($("tr[data-id='s1'] .badge.confirmed").classList.contains("held")).toBe(true);
   });
 
   it("points a list with no subscribers (suppressions alone count for none) at the import, and opens the import from the head", async () => {

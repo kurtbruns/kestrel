@@ -8,8 +8,8 @@
  * an initial import of already-confirmed subscribers backdated before the first post,
  * four completed sends spread over time, and — in between — new confirmations (the
  * list grows) and unsubscribes (the list churns), plus a hard bounce and a spam
- * complaint that become suppressions. The upshot is that every completed send freezes
- * the audience AS IT WAS at that moment: someone who unsubscribes after post #2 is
+ * complaint that become suppressions, and a suppression on each other consent state.
+ * The upshot is that every completed send freezes the audience AS IT WAS at that moment: someone who unsubscribes after post #2 is
  * still recorded as mailed by posts #1–#2, and a later suppression shadows the current
  * audience (confirmed − suppressed = mailable, I1) without rewriting any past send.
  *
@@ -376,9 +376,11 @@ function mailableAt(subs: SeedSubscriber[], sups: SeedSuppression[], t: number):
  * Build the whole audience as a lifecycle: an imported core, a continuous stream of later
  * confirmations (the list keeps growing to today), three churn waves that each unsubscribe in
  * the days after a post lands, a few still-pending sign-ups biased toward the recent past,
- * and two suppressions (a bounce and a complaint) drawn from the core so they visibly shadow
- * the current audience. The counts are chosen so the mailable audience genuinely fluctuates
- * from send to send (140 → 147 → 151) and settles at 155 today (157 confirmed − 2 suppressed).
+ * two suppressions (a bounce and a complaint) drawn from the core so they visibly shadow
+ * the current audience, and three more on unsubscribed and pending rows that shadow
+ * nothing. The counts are chosen so the mailable audience genuinely fluctuates from send
+ * to send (140 → 141 → 142 → 148) and settles at 155 today (157 confirmed, 2 of them
+ * suppressed).
  */
 function buildAudience(t: Timeline): BuiltAudience {
   let seq = 0;
@@ -440,11 +442,14 @@ function buildAudience(t: Timeline): BuiltAudience {
     churnBySlot.set(Math.round(((j + 0.5) * IMPORT) / churnEntries.length), entry);
   });
   const coreEmails: string[] = [];
+  const churnEmails: string[] = [];
   for (let slot = 0; slot < IMPORT; slot++) {
     const createdAt = Math.round(t.importAt + slot * importStep); // imported already confirmed
     const churn = churnBySlot.get(slot);
     if (churn) {
-      make("unsubscribed", createdAt, createdAt, unsubscribedAfter(churn.sentAt, churn.inWave));
+      churnEmails.push(
+        make("unsubscribed", createdAt, createdAt, unsubscribedAfter(churn.sentAt, churn.inWave)),
+      );
     } else {
       coreEmails.push(make("confirmed", createdAt, createdAt, null));
     }
@@ -469,9 +474,11 @@ function buildAudience(t: Timeline): BuiltAudience {
   // month-old pending is unusual). A cubic recency bias packs most into the last day or two,
   // with a thin tail reaching back a couple of weeks. (`confirmed_at` null → no audience effect.)
   const PENDING = 3;
+  const pending: { email: string; createdAt: number }[] = [];
   for (let i = 0; i < PENDING; i++) {
     const u = (i + 0.5) / PENDING;
-    make("pending", Math.round(t.now - u * u * u * (14 * DAY)), null, null);
+    const createdAt = Math.round(t.now - u * u * u * (14 * DAY));
+    pending.push({ email: make("pending", createdAt, null, null), createdAt });
   }
 
   // Two core subscribers draw a hard bounce and a spam complaint just after post #2.
@@ -493,6 +500,41 @@ function buildAudience(t: Timeline): BuiltAudience {
       created_at: t.complaintAt,
     },
   ];
+  // The other ways an address comes to be suppressed, one each, so the roster shows a
+  // suppression on every consent state. None is on a confirmed subscriber, so the audience
+  // and every past send are as above.
+  //  - An unsubscribed reader the publisher later blocked by hand.
+  //  - A pending sign-up blocked by hand before it confirmed.
+  //  - An erased person who has since subscribed again: the do-not-contact marker predates
+  //    the import and so every send (they were never mailed, so no record shows an erased
+  //    recipient), carries no detail, and their own confirmation will lift it (§7).
+  const newestPending = unwrap(pending[0], "pending subscriber");
+  const oldestPending = unwrap(pending[PENDING - 1], "pending subscriber");
+  const blockedEmail = unwrap(churnEmails[0], "unsubscribed subscriber");
+  const blocked = unwrap(
+    subscribers.find((s) => s.email === blockedEmail),
+    "unsubscribed subscriber",
+  );
+  suppressions.push(
+    {
+      email: blockedEmail,
+      reason: "manual",
+      detail: "Asked by reply not to be contacted again",
+      created_at: unwrap(blocked.unsubscribed_at, "unsubscribe time") + DAY,
+    },
+    {
+      email: oldestPending.email,
+      reason: "manual",
+      detail: "Signed up with a role address",
+      created_at: oldestPending.createdAt + 6 * HOUR,
+    },
+    {
+      email: newestPending.email,
+      reason: "erased",
+      detail: null,
+      created_at: t.importAt - 2 * DAY,
+    },
+  );
 
   const sentAudiences = t.sentAt.map((at) => mailableAt(subscribers, suppressions, at));
   // The bounce and complaint were reported just after post #2, so their delivery events
