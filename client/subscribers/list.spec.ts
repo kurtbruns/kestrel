@@ -154,25 +154,36 @@ describe("subscribers view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("names an erased address's flag, for one that subscribed again", async () => {
-    fake = fakeApi([
-      {
-        path: "/api/subscribers",
-        reply: () => ({
-          counts,
-          subscribers: [
-            { ...subs[2], suppressed: true, suppression_reason: "erased", status: "pending" },
-          ],
-          page,
-        }),
-      },
-    ]);
-    await mount((r, s) => renderSubscribers(undefined, r, s));
-    await settle();
-    const flag = $("tr[data-id='s3'] .row-flag");
-    expect(flag.textContent).toBe("erased");
-    expect(flag.getAttribute("title")).toMatch(/^Erased at the person’s request/);
-  });
+  for (const [status, tip] of [
+    [
+      "pending",
+      "Erased at the person’s request, then subscribed again. Not mailed until they confirm, which lifts the erasure.",
+    ],
+    ["confirmed", "Erased where this list came from. Not mailed. Erase here to remove their data."],
+    [
+      "unsubscribed",
+      "Erased where this list came from. Not mailed. Erase here to remove their data.",
+    ],
+  ] as const) {
+    it(`explains an erased flag on a ${status} subscriber by how they came to carry it`, async () => {
+      fake = fakeApi([
+        {
+          path: "/api/subscribers",
+          reply: () => ({
+            counts,
+            subscribers: [{ ...subs[2], suppressed: true, suppression_reason: "erased", status }],
+            page,
+          }),
+        },
+      ]);
+      await mount((r, s) => renderSubscribers(undefined, r, s));
+      await settle();
+      const flag = $("tr[data-id='s3'] .row-flag");
+      expect(flag.textContent).toBe("erased");
+      expect(flag.getAttribute("title")).toBe(tip);
+      expect(fake.unhandled).toEqual([]);
+    });
+  }
 
   it("points a list with no subscribers (suppressions alone count for none) at the import, and opens the import from the head", async () => {
     fake = fakeApi([
