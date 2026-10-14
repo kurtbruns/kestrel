@@ -233,7 +233,7 @@ describe("settings view", () => {
     for (const where of ["#addrAdd .field-hint", "#addrField .field-hint", "#addrWarn"]) {
       const link = $<HTMLAnchorElement>(`${where} a`);
       expect(link.getAttribute("href"), where).toBe(
-        "#/docs/sending-rules/when-to-provide-a-mailing-address",
+        "#/docs/name-your-publication/when-to-provide-a-mailing-address",
       );
       expect(link.target, where).toBe("_blank");
     }

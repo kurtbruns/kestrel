@@ -50,14 +50,14 @@ Sending now still goes through the review window. The **Send now?** view says ho
 
 A post goes to your list as it stands when it sends: every confirmed subscriber, except addresses that bounced, complained, or were blocked. Someone who confirms while the post is scheduled receives it. Someone who unsubscribes before their email is handed to your email provider doesn't, even partway through the send.
 
-So the recipient count the **Send now?** view shows is a snapshot, not a promise. An import that adds subscribers while a post is scheduled adds them to its audience too. The import asks you to acknowledge that first ([Your list](01-your-list.md#what-an-import-does)).
+So the recipient count the **Send now?** view shows is a snapshot, not a promise. An import that adds subscribers while a post is scheduled adds them to its audience too. The import asks you to acknowledge that first ([Bring your list](01-your-list.md#what-an-import-does)).
 
 ## Warnings in the Schedule dialog
 
 The Schedule dialog warns you about two things before you schedule.
 
 - **No email provider connected.** The dialog says the post can't be scheduled yet, and its buttons are unavailable. Connecting a provider is for whoever runs your Kestrel, as [Connect Amazon SES](../get-started/04-ses.md) describes. If the provider goes after a post is scheduled, its banner reads "Will be held: no email provider is connected." The post stays cancelable, and goes out once a provider is connected.
-- **Daily database writes.** On the Workers Free plan's limits, a large send may use up the day's database writes, which stops your newsletter until midnight UTC. The dialog warns you, and the post's banner repeats the warning for as long as it's scheduled. It never stops you from scheduling. [Your list](01-your-list.md#limits) explains the limit and when it's worth moving to Workers Paid.
+- **Daily database writes.** On the Workers Free plan's limits, a large send may use up the day's database writes, which stops your newsletter until midnight UTC. The dialog warns you, and the post's banner repeats the warning for as long as it's scheduled. It never stops you from scheduling. [Bring your list](01-your-list.md#limits) explains the limit and when it's worth moving to Workers Paid.
 
 ## When it sends
 

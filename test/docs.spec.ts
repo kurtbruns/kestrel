@@ -12,14 +12,14 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
     const { docs } = renderDocs();
     expect(docs.map((d) => `${d.set}/${d.section}/${d.slug}`)).toEqual([
       "publishing/setup/name-your-publication",
+      "publishing/setup/your-list",
       "publishing/setup/write-a-post",
       "publishing/setup/share-your-subscribe-link",
       "publishing/sending/scheduling-and-sending",
       "publishing/sending/after-a-send",
       "publishing/sending/sending-rules",
-      "publishing/guides/your-list",
-      "publishing/guides/working-with-claude",
-      "publishing/reference/import-format",
+      "publishing/more/working-with-claude",
+      "publishing/more/import-format",
       "self-hosting/get-started/deploy",
       "self-hosting/get-started/access",
       "self-hosting/get-started/ses",
@@ -52,8 +52,7 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
       [
         ["setup", "Setup", true],
         ["sending", "Sending", false],
-        ["guides", "Guides", false],
-        ["reference", "Reference", false],
+        ["more", "More", false],
       ],
       [
         ["get-started", "Get started", true],
@@ -161,7 +160,7 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
 describe("each doc as Markdown, for an agent (docMarkdown)", () => {
   it("serves a page's Markdown with its links pointed at the other docs' Markdown", () => {
     const md = docMarkdown("your-list") ?? "";
-    expect(md).toMatch(/^# Your list: importing and exporting/);
+    expect(md).toMatch(/^# Bring your list/);
     expect(md).toContain("](import-format.md)");
     expect(md).toContain("](go-live.md#as-your-list-grows)");
     expect(md).not.toMatch(/\]\([^)]*\d{2}-[a-z0-9-]+\.md/);

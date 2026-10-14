@@ -32,10 +32,10 @@ function identityNote(inUse: InUseView): string {
   return `${shown} ${reach}${wait}`;
 }
 
-/** The docs section that says when a publication needs a mailing address (SPEC §9), linked
- *  beside each place the address shows. It opens in a new tab, so a half-edited form stays
- *  as it was. */
-const ADDRESS_DOCS_HREF = "#/docs/sending-rules/when-to-provide-a-mailing-address";
+/** The docs section that says when a publication needs a mailing address (SPEC §9), on the
+ *  docs page for this section of Settings, linked beside each place the address shows. It
+ *  opens in a new tab, so a half-edited form stays as it was. */
+const ADDRESS_DOCS_HREF = "#/docs/name-your-publication/when-to-provide-a-mailing-address";
 
 export function addressDocsLink(): Html {
   return html`<a class="set-link" href="${ADDRESS_DOCS_HREF}" target="_blank" rel="noopener">When to provide a mailing address <span aria-hidden="true">↗</span><span class="visually-hidden"> (opens in a new tab)</span></a>`;

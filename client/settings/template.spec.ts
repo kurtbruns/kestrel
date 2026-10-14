@@ -159,7 +159,7 @@ describe("template view", () => {
     );
     const link = address!.querySelector("a")!;
     expect(link.getAttribute("href")).toBe(
-      "#/docs/sending-rules/when-to-provide-a-mailing-address",
+      "#/docs/name-your-publication/when-to-provide-a-mailing-address",
     );
     expect(link.target).toBe("_blank");
   });

@@ -1,8 +1,8 @@
-# Your list: importing and exporting
+# Bring your list
 
-Almost no one starts a newsletter with an empty list. Kestrel brings your existing subscribers over from another service with the consent they gave there, and lets you take the whole list out again at any time, in the same format.
+Almost no one starts a newsletter with an empty list. If your readers are on another service, bring them over before your first send, with the consent they gave there. If you're starting fresh, skip this step: new readers join through [Share your subscribe link](09-share-your-subscribe-link.md).
 
-This page covers the file Kestrel reads, what an import does and why, the limits, and getting your list back out. The dashboard's **Subscribers → Import** walks you through an import, and Claude reads this same page through the API.
+This page covers the file Kestrel reads, what an import does and why, and the limits. It also covers taking your whole list out again at any time, in the same format. The dashboard's **Subscribers → Import** walks you through an import, and Claude reads this same page through the API.
 
 ## The file Kestrel reads
 
@@ -82,3 +82,5 @@ When a reader asks you to delete their data, choose **Erase** from their ⋯ men
 **Subscribers → Export** downloads your whole list as one CSV in the same format: every subscriber with their state, how they joined and the evidence, and every bounced, complained, blocked, or erased address. It's yours to keep as a backup, or to import into another Kestrel, which carries the list over as it is. A value a spreadsheet would run as a formula is written as text, so the file is safe to open.
 
 Claude can read the same export a page at a time through the API, at `GET /api/subscribers/export`.
+
+Next, [Write a post](04-write-a-post.md).

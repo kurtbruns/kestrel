@@ -25,13 +25,27 @@ Your identity shows in four places:
 
 A post's page shows your publication as it is now at the top, and the sign-off as it was sent.
 
-## The mailing address
+## When to provide a mailing address
 
-The mailing address is optional, and Kestrel prints it only in your emails, in the footer. Whether you need one depends on what you send: [When to provide a mailing address](02-sending-rules.md#when-to-provide-a-mailing-address) explains.
+**Probably not, if your newsletter is mostly your own writing. Yes, if you use it to sell.** The address is optional, and you can add it or remove it at any time.
 
-To add one, choose **Add a mailing address** under **Settings → Publication identity**. The built-in template and both starting templates print it in the footer as soon as it's set, and print nothing while it isn't. They keep it out of each post's public page, so your address isn't on the web.
+US law (CAN-SPAM) requires a postal address in commercial email. That's email whose main purpose is to advertise or promote a product or service, at any volume. A newsletter people subscribed to usually isn't commercial email, as long as it's mainly content. A sponsor mention or an ad mixed in doesn't change that. The FTC said so in its [2008 rule](https://www.ftc.gov/sites/default/files/documents/federal_register_notices/definitions-and-implementation-under-can-spam-act-16-cfr-part-316/080521canspamact.pdf). A newsletter that's purely advertising, like a catalog, is commercial.
+
+You need an address in:
+
+- An email that's mainly selling, such as a launch, a sale, a paid course, or event tickets.
+- A post that's mostly sponsor content or promotions.
+- A mixed email whose subject line reads like an ad.
+
+A nonprofit isn't exempt as a kind of sender. What the email says decides it. Canada's anti-spam law (CASL) counts more email as commercial, and asks for an address in it too. Gmail and Yahoo don't ask for one: their [rules for bulk senders](https://support.google.com/a/answer/14229414) are authentication, one-click unsubscribe, and a low spam-complaint rate.
+
+**What counts.** A street address, a USPS P.O. box, or a private mailbox registered with the Postal Service. You never have to publish a home address.
+
+**Adding it.** Under **Settings → Publication identity**, choose **Add a mailing address**. The built-in template and both starting templates print it in the footer as soon as it's set, and print nothing while it isn't. They keep it off each post's public page, so your address isn't on the web.
 
 If you've added an address and your template doesn't include `{{ .Publication.Address }}`, Kestrel saves your change and warns you. A line under the address says so in Settings, and the **Template** page says so when you save. If you typed your address into the template yourself, or don't need one, you can ignore the warning.
+
+This is general information, not legal advice. The FTC's [CAN-SPAM compliance guide](https://www.ftc.gov/business-guidance/resources/can-spam-act-compliance-guide-business) is the plain-language source, and [Sending rules](02-sending-rules.md) covers the rest of what the law asks of a newsletter.
 
 ## The email template
 
@@ -89,4 +103,4 @@ Afterwards, each of those posts says its look changed since your last test. The 
 
 Whoever runs your Kestrel sets the From name and address your emails come from. You can't change them in the dashboard, and **Settings → Email sender** shows them read-only. [Connect Amazon SES](../get-started/04-ses.md#8-set-the-provider-and-deploy) covers setting them.
 
-Next, [Write a post](04-write-a-post.md).
+Next, [Bring your list](01-your-list.md), or if you're starting fresh, [Write a post](04-write-a-post.md).

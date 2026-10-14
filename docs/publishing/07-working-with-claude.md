@@ -14,7 +14,7 @@ Ask in plain words, the way you'd ask a colleague. Claude reads the API referenc
 - **Schedule a post.** Name the post and when it should go out. Claude schedules it, sends a test of exactly what will fire, and tells you when it fires and how to cancel. It can also cancel a send or move its fire time, as [Scheduling and sending](05-scheduling-and-sending.md) describes.
 - **Check a send's record.** Ask how a post did, and Claude reads the send and its recipients. It reports how many were accepted, delivered, and unsent, and any bounces or complaints. [After a send](06-after-a-send.md) says what each one means.
 - **Lift a suppression.** The dashboard has no control for it, so ask Claude when you know an address works again. [After a send](06-after-a-send.md#lifting-a-suppression) says when that's wise.
-- **Import a list.** Ask Claude to bring your subscribers over from another service. Its `/migrate-list` skill converts the export, checks it with you, and imports it. [Your list](01-your-list.md#let-claude-convert-your-export) says how that goes.
+- **Import a list.** Ask Claude to bring your subscribers over from another service. Its `/migrate-list` skill converts the export, checks it with you, and imports it. [Bring your list](01-your-list.md#let-claude-convert-your-export) says how that goes.
 
 If you have a post open when Claude saves it, the editor tells you, and names Claude as the one who changed it.
 
