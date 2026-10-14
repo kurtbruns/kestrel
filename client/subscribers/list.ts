@@ -226,8 +226,7 @@ function legend(): Html {
     <h2>Suppressed</h2>
     <p>${SUPPRESSED_MEANING} The red flag beside the address says why:</p>
     <dl>${flags.map((flag) => legendRow(html`<span class="badge suppressed">${flag}</span>`, FLAG_MEANING[flag]))}</dl>
-    <h2>Row actions</h2>
-    <p>From a subscriber’s ⋯ menu:</p>
+    <h2>Subscriber actions</h2>
     <dl>${Object.values(SUBSCRIBER_ACTIONS).map(({ label, when }) =>
       legendRow(html`<strong class="sub-legend-act">${label}</strong>`, when),
     )}</dl>
