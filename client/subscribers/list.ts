@@ -164,10 +164,13 @@ function legendRow(term: Html, means: string): Html {
 function legend(): Html {
   const flags = Object.keys(FLAG_MEANING) as SuppressionFlag[];
   return html`<div class="sub-legend" id="subLegend" role="region" aria-labelledby="subLegendToggle" hidden>
+    <h2>Status</h2>
     <dl>${SUB_STATUSES.map(({ value }) => legendRow(badge(value), STATUS_MEANING[value]))}</dl>
-    <p><strong>Suppressed.</strong> ${SUPPRESSED_MEANING} The red flag beside the address says why:</p>
+    <h2>Suppressed</h2>
+    <p>${SUPPRESSED_MEANING} The red flag beside the address says why:</p>
     <dl>${flags.map((flag) => legendRow(html`<span class="badge suppressed">${flag}</span>`, FLAG_MEANING[flag]))}</dl>
-    <p>What you can do, from a subscriber’s ⋯ menu:</p>
+    <h2>Row actions</h2>
+    <p>From a subscriber’s ⋯ menu:</p>
     <dl>${Object.values(SUBSCRIBER_ACTIONS).map(({ label, when }) =>
       legendRow(html`<strong>${label}</strong>`, when),
     )}</dl>

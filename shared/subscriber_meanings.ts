@@ -14,7 +14,7 @@ export const STATUS_MEANING: Record<SubscriberStatus, string> = {
 
 /** What being suppressed means, whatever the reason. */
 export const SUPPRESSED_MEANING =
-  "The address isn’t mailed, whatever its status, which stays as it was.";
+  "The address isn’t sent your posts, whatever its status. The status stays as it was, greyed while the suppression keeps it from taking effect.";
 
 /** The flag a suppression shows as. An import's bounce or complaint reads as one seen here. */
 export type SuppressionFlag = "bounced" | "complaint" | "blocked" | "erased";
@@ -33,7 +33,8 @@ export const FLAG_MEANING: Record<SuppressionFlag, string> = {
   bounced: "Mail to the address failed, here or at the service it was imported from.",
   complaint: "Marked as spam, here or at the service it was imported from.",
   blocked: "Stopped by hand, by you or at the service it was imported from. You can unblock it.",
-  erased: "Erased at their request, then signed up again. Not mailed unless they confirm.",
+  erased:
+    "Erased at their request, then signed up again. Only their confirmation email is sent, and confirming lifts this.",
 };
 
 /**

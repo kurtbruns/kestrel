@@ -1613,15 +1613,26 @@ td a:hover {
   margin-top: 3px;
   transform: rotate(-135deg);
 }
-/* One grid for both lists, each a subgrid, so every definition starts at the same edge. */
+/* One grid for every group, each list a subgrid, so every definition starts at the same
+   edge. Each group is named by an h2 in the app's label style, and the panel has no title of
+   its own: the Legend toggle already names it. A group's break (24px) is three times a
+   row's (8px), so the groups read as groups, and a definition stops near 68 characters. */
 .sub-legend {
   display: grid;
   grid-template-columns: max-content 1fr;
-  column-gap: 14px;
+  column-gap: 16px;
   margin-top: 14px;
-  padding-top: 14px;
+  padding-top: 16px;
   border-top: 1px solid var(--line-soft);
   font-size: 13px;
+  line-height: 1.45;
+}
+.sub-legend h2 {
+  grid-column: 1 / -1;
+  margin: 24px 0 8px;
+}
+.sub-legend h2:first-child {
+  margin-top: 0;
 }
 .sub-legend dl {
   grid-column: 1 / -1;
@@ -1633,11 +1644,16 @@ td a:hover {
 }
 .sub-legend dd {
   margin: 0;
-  line-height: 1.45;
+  max-width: 68ch;
+}
+/* An act's name is a term, not a heading: a step lighter than bold. */
+.sub-legend dt strong {
+  font-weight: 600;
 }
 .sub-legend p {
   grid-column: 1 / -1;
-  margin: 16px 0 10px;
+  margin: 0 0 8px;
+  max-width: 68ch;
   color: var(--muted);
 }
 
