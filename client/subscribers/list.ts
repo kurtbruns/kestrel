@@ -122,13 +122,20 @@ export async function renderSubscribers(
 
 // The inline suppression flag rides next to the email (suppression is a deliverability
 // overlay, not a consent status) and names WHY: bounced / complaint / blocked / erased.
-// Reasons come from the webhook (bounce, complaint), a manual block, or an erasure;
-// anything unrecognized falls back to a generic label. The pills carry no hover tooltip,
+// Reasons come from the webhook (bounce, complaint), an import that brought a bounce or
+// complaint from the previous service (shown as the same flag), a manual block, or an
+// erasure; anything unrecognized falls back to a generic label. The pills carry no hover tooltip,
 // which keyboard, screen-reader, and touch users can't reach: the legend under the counts
 // defines each label once, and a subscriber's own detail belongs on their page.
 const SUPPRESSIONS: Record<string, { label: string; means: string }> = {
-  bounce: { label: "bounced", means: "Mail to the address failed." },
-  complaint: { label: "complaint", means: "Marked as spam." },
+  bounce: {
+    label: "bounced",
+    means: "Mail to the address failed, here or at the service it was imported from.",
+  },
+  complaint: {
+    label: "complaint",
+    means: "Marked as spam, here or at the service it was imported from.",
+  },
   manual: { label: "blocked", means: "Suppressed by hand." },
   erased: {
     label: "erased",
@@ -136,11 +143,16 @@ const SUPPRESSIONS: Record<string, { label: string; means: string }> = {
       "A do-not-contact marker kept after an erasure. Only the person’s own confirmation lifts it.",
   },
 };
+const IMPORTED_AS: Record<string, string> = {
+  import_bounce: "bounce",
+  import_complaint: "complaint",
+};
 function suppressionFlag(s: SubscriberListItem): Html | null {
   if (!s.suppressed) {
     return null;
   }
-  const label = SUPPRESSIONS[s.suppression_reason ?? ""]?.label || "suppressed";
+  const reason = s.suppression_reason ?? "";
+  const label = SUPPRESSIONS[IMPORTED_AS[reason] ?? reason]?.label || "suppressed";
   return html` <span class="badge suppressed row-flag">${label}</span>`;
 }
 

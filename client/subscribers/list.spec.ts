@@ -185,8 +185,16 @@ describe("subscribers view", () => {
       ],
       ["badge pending", "pending", "Subscribed but hasn’t clicked the confirmation email."],
       ["badge unsubscribed", "unsubscribed", "Opted out."],
-      ["badge suppressed", "bounced", "Mail to the address failed."],
-      ["badge suppressed", "complaint", "Marked as spam."],
+      [
+        "badge suppressed",
+        "bounced",
+        "Mail to the address failed, here or at the service it was imported from.",
+      ],
+      [
+        "badge suppressed",
+        "complaint",
+        "Marked as spam, here or at the service it was imported from.",
+      ],
       ["badge suppressed", "blocked", "Suppressed by hand."],
       [
         "badge suppressed",
@@ -234,6 +242,27 @@ describe("subscribers view", () => {
     expect(flag.hasAttribute("title")).toBe(false);
     // Their confirmation lifts the marker, so the pending status is live, not greyed.
     expect($("tr[data-id='s3'] .badge.pending").classList.contains("held")).toBe(false);
+  });
+
+  it("flags a bounce or complaint an import brought as bounced or complaint, like one seen here", async () => {
+    fake = fakeApi([
+      {
+        path: "/api/subscribers",
+        reply: () => ({
+          counts,
+          subscribers: [
+            { ...subs[0], suppressed: true, suppression_reason: "import_bounce" },
+            { ...subs[1], suppressed: true, suppression_reason: "import_complaint" },
+          ],
+          page,
+        }),
+      },
+    ]);
+    await mount((r, s) => renderSubscribers(undefined, r, s));
+    await settle();
+    expect($("tr[data-id='s1'] .row-flag").textContent).toBe("bounced");
+    expect($("tr[data-id='s2'] .row-flag").textContent).toBe("complaint");
+    expect($("tr[data-id='s1'] .badge.confirmed").classList.contains("held")).toBe(true);
   });
 
   it("greys a confirmed status under an erasure's marker, which no confirmation lifts", async () => {
