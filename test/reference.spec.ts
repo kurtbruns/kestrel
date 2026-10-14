@@ -4,6 +4,12 @@ import { describe, expect, it } from "vitest";
 import { createRouter } from "../src/app";
 import { requireAuth } from "../src/auth/middleware";
 import { type AppEnv, getConfig } from "../src/env";
+import {
+  FLAG_MEANING,
+  STATUS_MEANING,
+  SUBSCRIBER_ACTIONS,
+  SUPPRESSED_MEANING,
+} from "../shared/subscriber_meanings";
 import { buildReference } from "../src/reference";
 import { type RouteDef, Router } from "../src/router";
 import { AUTH, base } from "./support/http";
@@ -67,6 +73,27 @@ describe("API reference is generated from the route registration", () => {
     ]) {
       expect(byKey.get(key)?.description ?? "").toMatch(/frozen copy/);
     }
+  });
+
+  it("tells a client what each subscriber status, suppression, and act means, in the editor legend's words (SPEC §7)", () => {
+    const byKey = new Map(defs.map((d) => [`${d.method} ${d.path}`, d]));
+    const describe = (key: string) => byKey.get(key)?.description ?? "";
+    for (const key of ["GET /api/subscribers", "GET /api/suppressions"]) {
+      expect(describe(key)).toContain(SUPPRESSED_MEANING);
+      for (const meaning of Object.values(FLAG_MEANING)) {
+        expect(describe(key)).toContain(meaning);
+      }
+    }
+    for (const meaning of Object.values(STATUS_MEANING)) {
+      expect(describe("GET /api/subscribers")).toContain(meaning);
+    }
+    // Each act says when it is the one to use, and so whose decision it records.
+    expect(describe("POST /api/subscribers/:id/unsubscribe")).toContain(
+      SUBSCRIBER_ACTIONS.unsubscribe.when,
+    );
+    expect(describe("POST /api/suppressions")).toContain(SUBSCRIBER_ACTIONS.block.when);
+    expect(describe("POST /api/subscribers/:id/erase")).toContain(SUBSCRIBER_ACTIONS.erase.when);
+    expect(describe("DELETE /api/suppressions/:email")).toContain("erasure_marker");
   });
 
   it("groups admin, public, and webhook tiers (mirroring app.ts)", () => {

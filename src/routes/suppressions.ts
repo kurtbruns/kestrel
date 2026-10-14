@@ -1,16 +1,26 @@
-/** Authed suppression admin: list, add (manual), clear. Webhooks add automatic
- *  suppressions in M9/M10; clearing is a deliberate, rare human action. */
+/** Authed suppression admin (SPEC §7): list, the publisher's block, and clearing one.
+ *  Webhooks add the provider's suppressions and an erasure adds its marker; a client adds
+ *  only a block, and clearing is a deliberate, rare human action that never lifts an
+ *  erasure's marker. */
 
 import { normalizeEmail } from "../../shared/email";
+import type {
+  BlockResponse,
+  ClearSuppressionResponse,
+  SuppressionListResponse,
+} from "../../shared/subscribers";
 import * as subscribers from "../db/subscribers";
 import { fieldError, optString, readJsonObject } from "../lib/body";
-import { json } from "../lib/errors";
+import { json, refusal } from "../lib/errors";
 import { log } from "../lib/log";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 
 export async function list(c: RequestContext): Promise<Response> {
-  return json({ suppressions: await subscribers.listSuppressions(c.env.DB) });
+  const body: SuppressionListResponse = {
+    suppressions: await subscribers.listSuppressions(c.env.DB),
+  };
+  return json(body);
 }
 
 export async function add(c: RequestContext): Promise<Response> {
@@ -19,16 +29,35 @@ export async function add(c: RequestContext): Promise<Response> {
   if (!email) {
     throw fieldError("email", "email is required");
   }
-  const reason = optString(body, "reason") ?? "manual";
+  // A client records only its own decision. A bounce or complaint is the provider's to
+  // report and an erasure's marker is Erase's to leave, so a reason claiming either would
+  // misstate whose decision the suppression was.
+  const reason = optString(body, "reason");
+  if (reason !== undefined && reason !== "manual") {
+    throw fieldError(
+      "reason",
+      "only a block (reason manual) can be added: bounces and complaints come from the provider, and an erasure from Erase",
+    );
+  }
   const detail = optString(body, "detail");
-  await subscribers.addSuppression(c.env.DB, email, reason, detail);
-  // Neither the address nor the reason, which is the publisher's own free text.
-  log.info("suppression.added", { source: "manual", count: 1 });
-  return json({ suppressed: email, reason }, 201);
+  const out: BlockResponse = await subscribers.block(c.env.DB, email, detail);
+  if (out.added) {
+    // Neither the address nor the detail, which is the publisher's own free text.
+    log.info("suppression.added", { source: "manual", count: 1 });
+  }
+  return json(out, out.added ? 201 : 200);
 }
 
 export async function clear(c: RequestContext): Promise<Response> {
   const email = normalizeEmail(param(c, "email"));
-  const cleared = await subscribers.clearSuppression(c.env.DB, email);
-  return json({ email, cleared });
+  const outcome = await subscribers.clearSuppression(c.env.DB, email);
+  if (outcome === "erased") {
+    throw refusal(
+      409,
+      "erasure_marker",
+      "This address was erased. Only the person’s own confirmation lifts its do-not-contact marker.",
+    );
+  }
+  const body: ClearSuppressionResponse = { email, cleared: outcome === "cleared" };
+  return json(body);
 }
