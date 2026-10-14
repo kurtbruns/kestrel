@@ -455,7 +455,7 @@ describe("subscribers view", () => {
       [
         "badge suppressed",
         "erased",
-        "Erased at their request, then signed up again. Not mailed unless they confirm.",
+        "Erased at their request, then signed up again. Only their confirmation email is sent, and confirming lifts this.",
       ],
     ]);
     expect(
@@ -471,9 +471,14 @@ describe("subscribers view", () => {
       ],
       ["Erase", "When they ask you to delete their data. It can’t be undone."],
     ]);
+    expect($$("#subLegend h2").map((h) => h.textContent)).toEqual([
+      "Status",
+      "Suppressed",
+      "Row actions",
+    ]);
     expect($$("#subLegend p").map((p) => p.textContent)).toEqual([
-      "Suppressed. The address isn’t mailed, whatever its status, which stays as it was. The red flag beside the address says why:",
-      "What you can do, from a subscriber’s ⋯ menu:",
+      "The address isn’t sent your posts, whatever its status. The status stays as it was, greyed while the suppression keeps it from taking effect. The red flag beside the address says why:",
+      "From a subscriber’s ⋯ menu:",
     ]);
     toggle.click();
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
