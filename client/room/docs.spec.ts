@@ -154,7 +154,9 @@ describe("docs room", () => {
       ["#/docs/self-hosting", "Self-hosting"],
     ]);
     expect($(".docs-tabs [aria-current='page']").textContent).toBe("Publishing");
-    expect($(".docs-set-intro").textContent).toBe("Write and send.");
+    // One intro covers both sets; a set's own intro, written for its index file, isn't repeated.
+    expect($(".docs-index-intro").textContent).toMatch(/^Kestrel's docs cover two jobs\./);
+    expect($(".docs-index").textContent).not.toContain("Write and send.");
     // Only the set's own pages: the Self-hosting steps stay on its index.
     expect($$(".doc-card").map((c) => c.getAttribute("href"))).toEqual(["#/docs/your-list"]);
   });
@@ -166,7 +168,6 @@ describe("docs room", () => {
     await settle();
     expect($(".room-switch [aria-current='page']").textContent).toBe("Docs");
     expect($(".docs-tabs [aria-current='page']").getAttribute("title")).toBe("Set up <and> run"); // a title is text
-    expect($(".docs-set-intro a").getAttribute("href")).toBe("#/docs/overview"); // markup
     expect($$(".doc-section-blurb").map((b) => b.textContent)).toEqual(["In order."]);
     const cards = $$<HTMLAnchorElement>(".doc-card");
     expect(cards.map((c) => c.getAttribute("href"))).toEqual([

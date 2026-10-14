@@ -123,13 +123,14 @@ function renderDocsIndex(
   });
   // One header for both sets, then a tab per set: links, since each set's index is its own
   // address, with the current one marked. They choose what you read, never who you are, so
-  // both sets stay one tap away. Below them, the set's own intro from its index file; its
-  // title names it as the tab's tooltip, since the tab already says which set this is.
+  // both sets stay one tap away. The header's intro describes both sets, so a set's own intro
+  // (written for its index file, where it links the other set) isn't repeated under the
+  // tabs; the set's title is the tab's tooltip.
   const tabs = html`<nav class="docs-tabs" aria-label="Doc sets">${sets.map(
     (s) =>
       html`<a href="#/docs/${s.id}" title="${s.title}"${s.id === landing.id ? html` aria-current="page"` : null}>${s.name}</a>`,
   )}</nav>`;
-  const main = html`<div class="docs-index"><h1>Kestrel docs</h1><p class="docs-index-intro">The docs come in two sets. <strong>Publishing</strong> covers writing and sending your newsletter in the dashboard. <strong>Self-hosting</strong> covers deploying and running Kestrel on your own Cloudflare account.</p>${tabs}<div class="docs-set-intro">${unsafeHtml(landing.intro)}</div>${sections}</div>`;
+  const main = html`<div class="docs-index"><h1>Kestrel docs</h1><p class="docs-index-intro">Kestrel's docs cover two jobs. <strong>Publishing</strong> is for whoever writes the newsletter: setting up your publication and list, then writing, sending, and following up on each post. <strong>Self-hosting</strong> is for whoever runs Kestrel: deploying it to your own Cloudflare account, connecting email, and keeping it up to date. One person often does both.</p>${tabs}${sections}</div>`;
   // Three uniform out-links under a "Kestrel" label — the same shape as the API rail's
   // label + tiers, so mobile can give both the same chip row. getkestrel.dev is the
   // project's home, the same for every instance, so it's a constant; the source and

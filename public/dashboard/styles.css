@@ -463,17 +463,6 @@ body.nav-resizing .sidebar {
   color: var(--fg);
   border-bottom-color: var(--accent);
 }
-/* A set's own intro, under the tabs. */
-.docs-set-intro {
-  color: var(--muted);
-  font-size: 14.5px;
-  line-height: 1.6;
-  margin: 0 0 24px;
-  max-width: 62ch;
-}
-.docs-set-intro p {
-  margin: 0;
-}
 /* A doc page's set, in the eyebrow over its title: the link back to that set's index. */
 .doc .doc-set a {
   color: var(--muted);
