@@ -1655,7 +1655,7 @@ td a:hover {
 /* Subscribers: how each joined ("Imported · Sendy, single opt-in"), which may wrap to two
    lines; the table takes a wider floor so the email column keeps room beside it. */
 .list-table .c-how {
-  width: 200px;
+  width: 152px;
 }
 .list-table.subs-table {
   min-width: 680px;
@@ -5959,6 +5959,57 @@ body.has-savebar .content {
   }
   .posts-table td.updated::before {
     content: " · edited ";
+  }
+}
+
+/* The Subscribers table has four fixed columns beside its email, so it runs out of room
+   well above phone width, and where depends on the sidebar (a rail up to 1024px, then
+   full), not the viewport. So it stacks by its own width, measured on its wrapper,
+   whenever the email would get less than about 250px: the same stacked row as the
+   phone layout above, repeated here because a container query can't share its rules. */
+.subs-wrap {
+  container-type: inline-size;
+}
+@container (max-width: 759px) {
+  .list-table.subs-table.stacks,
+  .list-table.subs-table.stacks tbody,
+  .list-table.subs-table.stacks tr {
+    display: block;
+    min-width: 0;
+  }
+  .list-table.subs-table.stacks colgroup,
+  .list-table.subs-table.stacks thead {
+    display: none;
+  }
+  .list-table.subs-table.stacks tr {
+    position: relative;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .list-table.subs-table.stacks tr:last-child {
+    border-bottom: 0;
+  }
+  .list-table.subs-table.stacks td {
+    display: inline;
+    padding: 0;
+    border: 0;
+    font-size: 13px;
+    text-align: left;
+  }
+  .list-table.subs-table.stacks td:first-child {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 14px;
+    padding-right: 36px;
+  }
+  .list-table.subs-table.stacks td.act {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: auto;
+  }
+  .list-table.subs-table.stacks td.empty {
+    display: none;
   }
   /* Subscribers: status pill · how they joined · joined <date>. */
   .subs-table td.how::before {

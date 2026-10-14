@@ -157,6 +157,13 @@ function statusBadge(s: SubscriberListItem): Html {
   return html`<span class="badge ${s.status} held" title="Not mailed while suppressed">${s.status}</span>`;
 }
 
+// An address that has to wrap breaks before its "@", keeping the mailbox and the domain
+// whole where they fit, rather than wherever the column runs out.
+function breakableEmail(email: string): Html {
+  const at = email.lastIndexOf("@");
+  return at > 0 ? html`${email.slice(0, at)}<wbr>${email.slice(at)}` : html`${email}`;
+}
+
 function renderSubTable(
   listEl: Element,
   rows: SubscriberListItem[],
@@ -175,13 +182,14 @@ function renderSubTable(
     );
     return;
   }
-  // The joined and how cells are named so the ≤720px layout can stack a row and label them.
+  // The joined and how cells are named so the stacked layout can label them. The wrapper is
+  // what the stacking measures: this table stacks by its own width, not the viewport's.
   setHtml(
     listEl,
-    html`<div class="table-wrap"><table class="list-table subs-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-how"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Email", "email", state)}${th("Status", null, state)}${th("How they joined", null, state)}${th("Joined", "joined", state)}<th></th></tr></thead><tbody>${rows.map(
+    html`<div class="table-wrap subs-wrap"><table class="list-table subs-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-how"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Email", "email", state)}${th("Status", null, state)}${th("How they joined", null, state)}${th("Joined", "joined", state)}<th></th></tr></thead><tbody>${rows.map(
       (s) => {
         const how = joinedVia(s);
-        return html`<tr data-id="${s.id}"><td>${s.email}${suppressionFlag(s)}</td><td>${statusBadge(s)}</td><td class="muted how${how ? "" : " empty"}">${how ?? "—"}</td><td class="muted joined">${fmt(s.created_at)}</td><td class="act"><button class="icon" data-menu="${s.id}" aria-label="Subscriber actions" aria-haspopup="menu">⋯</button></td></tr>`;
+        return html`<tr data-id="${s.id}"><td>${breakableEmail(s.email)}${suppressionFlag(s)}</td><td>${statusBadge(s)}</td><td class="muted how${how ? "" : " empty"}">${how ?? "—"}</td><td class="muted joined">${fmt(s.created_at)}</td><td class="act"><button class="icon" data-menu="${s.id}" aria-label="Subscriber actions" aria-haspopup="menu">⋯</button></td></tr>`;
       },
     )}</tbody></table></div>`,
   );

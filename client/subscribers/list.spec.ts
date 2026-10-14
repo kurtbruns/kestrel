@@ -92,6 +92,8 @@ describe("subscribers view", () => {
     expect($("tr[data-id='s2'] .badge.confirmed").classList.contains("held")).toBe(true);
     expect($("tr[data-id='s1'] .badge.confirmed").classList.contains("held")).toBe(false);
     expect($("tr[data-id='s3'] td").textContent).toBe("<script>@b.c"); // shown as text
+    // A wrapping address breaks before its "@", not mid-word.
+    expect($("tr[data-id='s1'] td").innerHTML).toBe("a<wbr>@b.c");
     const menuOf = (id: string) => {
       $(`tr[data-id='${id}'] [data-menu]`).click();
       const items = $$(".menu .menu-item").map((b) => b.textContent);
