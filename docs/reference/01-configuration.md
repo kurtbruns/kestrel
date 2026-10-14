@@ -64,7 +64,7 @@ This setting is the subrequest cap. The app keeps database queries under theirs 
 
 It's also how the app tells Workers Free from Workers Paid. At the default, the app runs on Free's limits:
 
-- One import takes up to 1,000 rows, since Free's 10 ms of CPU a request can't plan and commit more. Above it, up to 10,000 ([Import format](03-import-format.md#limits)).
+- One import takes up to 1,000 rows, since Free's 10 ms of CPU a request can't plan and commit more. Above it, up to 10,000 ([Import format](../publishing/08-import-format.md#limits)).
 - An export reads 1,000 rows a page. Above it, 10,000.
 - The app warns before a send to more than 5,000 recipients (fewer on a day you've imported), and on an import plan that, with the day's earlier imports, would use most of a day's writes. Either may use up D1's daily allowance of 100,000 rows written, which stops the app until midnight UTC ([As your list grows](../get-started/06-go-live.md#as-your-list-grows)). Neither warning stops you. Above the default, neither appears.
 

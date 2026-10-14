@@ -16,7 +16,7 @@ Kestrel reads one documented format, `kestrel-subscribers/1`: a CSV file with a 
 | `origin` | Where consent was collected, as a short name such as `sendy` or `mailchimp`. |
 | `subscribed_at` | When they subscribed, with its time zone, such as `2024-03-01T09:30:00Z`. Optional. |
 
-The optional columns carry the rest: a bounce or complaint (`suppression`), when someone confirmed or left, and `evidence`, the old service's own consent details, such as a signup IP or a form name. [Import format](../reference/03-import-format.md) describes every column and value.
+The optional columns carry the rest: a bounce or complaint (`suppression`), when someone confirmed or left, and `evidence`, the old service's own consent details, such as a signup IP or a form name. [Import format](08-import-format.md) describes every column and value.
 
 The import screen's **Download example file (CSV)** gives you `kestrel-import-example.csv`, a few rows that show each case. Open it in a spreadsheet to see the shape, and save your file as CSV UTF-8.
 

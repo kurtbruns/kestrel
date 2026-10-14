@@ -1,7 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import referencePage from "../docs/reference/03-import-format.md?raw";
+import referencePage from "../docs/publishing/08-import-format.md?raw";
 import { utcDayStart } from "../shared/daily_writes";
 import {
   EXPORT_PAGE_ROWS,

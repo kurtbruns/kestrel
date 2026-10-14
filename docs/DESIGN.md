@@ -68,7 +68,7 @@ The editor, the web version, the docs, and the walls hide the sidebar: writing w
 | Import subscribers | `#/subscribers/import` | What bringing a list in would do, before it does it. |
 | Template | `#/template` | The one email template every post is sent in. |
 | Settings | `#/settings` | The publication's preferences, and the deploy facts read-only. |
-| Docs and API | `#/docs`, `#/reference` | The setup guide, the publisher's pages, and the API reference, served by the instance. |
+| Docs and API | `#/docs`, `#/reference` | The docs, as two sets (Publishing and Self-hosting), and the API reference, served by the instance. |
 
 The admin UI may link out to public pages (View publication, Archive ↗, View published post ↗). No public page links or redirects into `/dashboard` (SPEC §11), apart from the dev-only pill above.
 
@@ -283,9 +283,9 @@ The groups have no headings, only a wider gap: each section's title, its **inten
 
 ### Docs and API
 
-The setup guide and the API reference share one room with its own bar (back to the dashboard, a Docs or API switch, and close) over a contents rail and the page. The build stamp sits at the rail's foot, and nowhere on the publication's screens: it's for a bug report, not the publisher's day.
+The docs and the API reference share one room with its own bar (back to the dashboard, a Docs or API switch, and close) over a contents rail and the page. The build stamp sits at the rail's foot, and nowhere on the publication's screens: it's for a bug report, not the publisher's day.
 
-- **Docs** renders the setup guide and the publisher's pages, one doc per page. The index lists the main path first, numbered because its pages are steps taken in order, then the guides, the reference, and the publisher's pages, unnumbered because a reader picks from them. A doc's Previous and Next stay within its section, so the main path ends at its last step.
+- **Docs** renders two sets, one doc per page: **Publishing**, for the publisher, and **Self-hosting**, for whoever runs the instance. Each set has its own index, and a **Publishing | Self-hosting** switch over the index moves between them. It's links, not a pressed toggle, since each index is its own address, and it chooses what you read, never who you are. `#/docs` opens on Publishing, since the Docs tab is read once Kestrel runs, mostly by the publisher; `#/docs/self-hosting` is the setup guide's index. The set stays a choice inside Docs, never a third tab in the room's bar, which chooses between kinds of document (guides, or the API). An index lists its sections in order; Self-hosting's main path is numbered because its pages are steps taken in order, and every other section is picked from. A doc names its set over its title, linking back to that set's index, since the rail holds only the doc's own headings. A doc's Previous and Next stay within its section, so the main path ends at its last step.
 - **API reference** lists each tier's routes under the resource they act on, whose heading stays pinned while its routes scroll by. Each route is one row (method badge, path, summary) that opens in place to its parameters, body types, JSON examples, and a curl command for this instance carrying the credential its tier needs. A filter above the first tier narrows the whole list, rail included, and `/` focuses it.
 
 ---
@@ -459,7 +459,7 @@ The roles differ by fill, border, and weight, **never by height**: every labelle
 
 - **Toggles and tabs** (**Edit | Preview**, **Styled | Plain**, **Desktop | Phone**, **Failures | Delivered | All**, **Full list | Plain list**) switch what you're looking at; they never commit an act. A plain list's **Subscribed | Unsubscribed | Bounced** is one too: it changes what the plan shows, and planning writes nothing. The small pill toggles mark the pressed segment in the Secondary palette, and a section's main toggle is a step more prominent than one that only changes a preview's width.
 - **The text link** (`linkbtn`) is an act styled as a link, for a choice that must read as clearly demoted below even Ghost: Send now → in the Schedule dialog. Use a real role anywhere a demotion isn't the point.
-- **Copy** is a utility on a value, not an act on the publication: the word and a glyph that turns to a check for a moment when the copy lands. It says it worked where it sits, never with a toast, unless the browser refuses the clipboard. The setup guide's code blocks still carry an older word-only button that reads "Copied".
+- **Copy** is a utility on a value, not an act on the publication: the word and a glyph that turns to a check for a moment when the copy lands. It says it worked where it sits, never with a toast, unless the browser refuses the clipboard. The docs' code blocks still carry an older word-only button that reads "Copied".
 - **Mockups** of reader controls (the embeddable form's Subscribe button) are inert and unfocusable, filled with the reader's ink rather than any role's color, because they show the reader's chrome rather than offer an act.
 
 ---

@@ -16,47 +16,77 @@ import {
 } from "../test/support";
 import { renderDocs } from "./docs";
 
-// The guide as the Worker serves it: sanitized fragments with no ids on the headings, three
-// steps of the main path and one reference page after them.
+// The docs as the Worker serves them: sanitized fragments with no ids on the headings. One
+// Publishing page, then Self-hosting's three steps of the main path and one reference page.
 const docs: DocFragment[] = [
+  {
+    slug: "your-list",
+    title: "Your list",
+    set: "publishing",
+    section: "before-your-first-send",
+    html: "<h1>Your list</h1><p>Bring your list.</p>",
+  },
   {
     slug: "overview",
     title: "Overview",
+    set: "self-hosting",
     section: "get-started",
     html: "<h1>Overview</h1><p>What a fresh instance needs, in order:</p><ul><li>an account</li></ul><h2>Before you start</h2><p>x</p><h2>What you get</h2><pre><code>npm run dev</code></pre>",
   },
   {
     slug: "provision",
     title: "Provision <the> Worker",
+    set: "self-hosting",
     section: "get-started",
     html: "<h1>Provision the Worker</h1><p>Create the Worker &amp; its database.</p><h2>Steps</h2>",
   },
   {
     slug: "verify",
     title: "Verify",
+    set: "self-hosting",
     section: "get-started",
     html: "<h1>Verify</h1><p>Send a test.</p>",
   },
   {
     slug: "configuration",
     title: "Configuration",
+    set: "self-hosting",
     section: "reference",
     html: "<h1>Configuration</h1><p>Every setting.</p>",
   },
 ];
 
-// The landing as the Worker reads it from docs/README.md: the main path numbered, a
-// section with no docs in this fixture, and the reference.
+// The sets as the Worker reads them from their index files: Publishing first, then
+// Self-hosting, with its main path numbered, a section with no docs in this fixture, and the
+// reference.
 const guide: DocsResponse = {
-  landing: {
-    title: "Set up <and> run",
-    intro: '<p>Start with the <a href="#/docs/overview">Overview</a>.</p>',
-    sections: [
-      { id: "get-started", title: "Get started", blurb: "<p>In order.</p>", numbered: true },
-      { id: "guides", title: "Guides", blurb: "<p>Pick one.</p>", numbered: false },
-      { id: "reference", title: "Reference", blurb: "", numbered: false },
-    ],
-  },
+  sets: [
+    {
+      id: "publishing",
+      name: "Publishing",
+      title: "Publishing",
+      intro: "<p>Write and send.</p>",
+      sections: [
+        {
+          id: "before-your-first-send",
+          title: "Before your first send",
+          blurb: "",
+          numbered: false,
+        },
+      ],
+    },
+    {
+      id: "self-hosting",
+      name: "Self-hosting",
+      title: "Set up <and> run",
+      intro: '<p>Start with the <a href="#/docs/overview">Overview</a>.</p>',
+      sections: [
+        { id: "get-started", title: "Get started", blurb: "<p>In order.</p>", numbered: true },
+        { id: "guides", title: "Guides", blurb: "<p>Pick one.</p>", numbered: false },
+        { id: "reference", title: "Reference", blurb: "", numbered: false },
+      ],
+    },
+  ],
   docs,
 };
 
@@ -113,10 +143,25 @@ describe("docs room", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders the index the landing lays out: its title and intro, each section's cards in reading order with blurbs from each doc's first paragraph, the numbered section numbered, and the project links in the rail", async () => {
+  it("opens on the first set, Publishing, with a switch to the other that reads as links", async () => {
+    fake = fakeApi([]);
+    await mount((r, s) => renderDocs(undefined, r, s));
+    expect($(".docs-index h1").textContent).toBe("Publishing");
+    expect(
+      $$<HTMLAnchorElement>(".docs-sets a").map((a) => [a.getAttribute("href"), a.textContent]),
+    ).toEqual([
+      ["#/docs/publishing", "Publishing"],
+      ["#/docs/self-hosting", "Self-hosting"],
+    ]);
+    expect($(".docs-sets [aria-current='page']").textContent).toBe("Publishing");
+    // Only the set's own pages: the Self-hosting steps stay on its index.
+    expect($$(".doc-card").map((c) => c.getAttribute("href"))).toEqual(["#/docs/your-list"]);
+  });
+
+  it("renders a set's index the way its index file lays it out: its title and intro, each section's cards in reading order with blurbs from each doc's first paragraph, the numbered section numbered, and the project links in the rail", async () => {
     const render = await freshDocs();
     fake = fakeApi([{ path: "/api/docs", reply: () => guide }]);
-    await render();
+    await render("self-hosting");
     await settle();
     expect($(".room-switch [aria-current='page']").textContent).toBe("Docs");
     expect($(".docs-index h1").textContent).toBe("Set up <and> run"); // a title is text
@@ -162,6 +207,9 @@ describe("docs room", () => {
     expect(fake.calls).toEqual([]);
     const main = $("#docsMain");
     expect($("section.doc-part", main).id).toBe("doc-overview");
+    // Its set over the title, as the way back to that set's index.
+    expect($(".doc-set a", main).getAttribute("href")).toBe("#/docs/self-hosting");
+    expect($(".doc-set a", main).textContent).toBe("Self-hosting");
     expect($("ul li", main).textContent).toBe("an account"); // inserted as markup, not text
     // Each heading takes GitHub's anchor for it, so links written for GitHub land here.
     expect($("h1", main).id).toBe("doc-h-overview");
@@ -243,7 +291,7 @@ describe("docs room", () => {
     location.hash = "#/docs/nope";
     await mount((r, s) => renderDocs("nope", r, s));
     expect($("#toasts").textContent).toMatch(/No doc named “nope”/);
-    expect($$(".doc-card")).toHaveLength(4);
+    expect($$(".doc-card")).toHaveLength(1); // the first set's index
     expect(location.hash).toBe("#/docs");
   });
 
@@ -282,7 +330,7 @@ describe("docs room", () => {
     await pending;
     expect($$(".doc-card")).toHaveLength(0); // nothing painted over what replaced it
     await render();
-    expect($$(".doc-card")).toHaveLength(4);
+    expect($$(".doc-card")).toHaveLength(1);
     expect(fake.calls).toHaveLength(2); // the cut-off read filled no cache
   });
 });

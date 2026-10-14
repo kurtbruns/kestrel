@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { createRouter } from "../src/app";
 import { requireAuth } from "../src/auth/middleware";
 import { type AppEnv, getConfig } from "../src/env";
-import { buildReference } from "../src/reference";
+import { buildReference, referenceMarkdown } from "../src/reference";
 import { type RouteDef, Router } from "../src/router";
 import { AUTH, base } from "./support/http";
 
@@ -175,5 +175,31 @@ describe("/api/reference is served like the rest of the authed admin surface", (
     expect(routes.some((r) => r.method === "POST")).toBe(true);
     // A hand-authored example made it through (the create-post request body).
     expect(JSON.stringify(body)).toContain("Hello, world");
+  });
+});
+
+describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
+  const router = createRouter(getConfig(env as AppEnv));
+  const defs = router.routes.map((r) => r.def);
+
+  it("gives every registered route its own heading, under its tier and resource, from the same groups", () => {
+    const md = referenceMarkdown(buildReference(defs), "https://newsletter.example.com");
+    const headings = [...md.matchAll(/^### (\S+) (\S+)$/gm)].map(([, m, p]) => `${m} ${p}`);
+    expect(headings.sort()).toEqual(defs.map((d) => `${d.method} ${d.path}`).sort());
+    expect(md).toContain("Base URL `https://newsletter.example.com`");
+    expect(md).toContain("## Admin: Posts");
+    // A route's query table and example come through.
+    expect(md).toMatch(/\| Query parameter \| Description \|/);
+    expect(md).toContain("Example response:");
+  });
+
+  it("is served as text/markdown when authed, matching the JSON's routes", async () => {
+    const res = await SELF.fetch(`${base}/api/reference.md`, { headers: AUTH });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
+    const md = await res.text();
+    expect(md).toMatch(/^# API reference/);
+    expect(md).toContain("### GET /api/docs/:name.md");
+    expect(md).toContain(`Base URL \`${base}\``);
   });
 });

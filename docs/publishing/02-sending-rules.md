@@ -36,7 +36,7 @@ US law requires a postal address in commercial email. That's email whose main pu
 You need an address in:
 
 - An email that's mainly selling, such as a launch, a sale, a paid course, or event tickets.
-- An issue that's mostly sponsor content or promotions.
+- A post that's mostly sponsor content or promotions.
 - A mixed email whose subject line reads like an ad.
 
 A nonprofit isn't exempt as a kind of sender. What the email says decides it.

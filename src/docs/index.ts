@@ -1,23 +1,24 @@
 /**
- * The in-app docs (the publisher's pages, and the setup guide beside them): the repo's
- * `docs/README.md` and the section folders it lists, bundled into the Worker as Text
- * modules (the `rules` entry in wrangler.jsonc) and served read-only through the authed
- * docs API. The markdown in `docs/` is the single source of truth — the pages are NOT
- * editable in the app.
+ * The in-app docs: two sets, one per reader. **Publishing** (`docs/publishing/README.md` and
+ * its pages) is for the publisher who writes and sends the newsletter; **Self-hosting**
+ * (`docs/README.md` and the section folders it lists) is for whoever deploys and runs the
+ * instance. The Markdown is bundled into the Worker as Text modules (the `rules` entry in
+ * wrangler.jsonc) and served read-only through the authed docs API. The Markdown in `docs/` is
+ * the single source of truth — the pages are NOT editable in the app.
  *
- * `docs/README.md` is the landing page and the table of contents both: its H1 and intro,
- * then a `##` heading per section with a blurb and a list of the section's pages, numbered
- * when they are steps taken in order. The same file is what GitHub shows for the folder and
- * what getkestrel.dev builds its docs landing from, so the order and the sections are
- * written once. The imports below only make each page's Markdown available by its path.
+ * Each set's index file is its landing page and its table of contents both: its H1 and
+ * intro, then a `##` heading per section with a blurb and a list of the section's pages,
+ * numbered when they are steps taken in order. The same files are what GitHub shows and what
+ * getkestrel.dev builds its docs from, so the order and the sections are written once. The
+ * imports below only make each page's Markdown available by its path.
  *
- * Rendering reuses the low-level `markdownToHtml` util plus the HTML hygiene
- * pass, and returns a sanitized HTML *fragment* per doc (no page wrapper): the
- * SPA injects the guide directly into its own DOM as one native scrollable page
- * with a scroll-spy contents rail (no iframe). The content is trusted (the repo's
- * own markdown, hygiene-passed), so injecting the fragments is safe. This is a
- * Markdown→web-page path, deliberately separate from the single Markdown→email
- * render path (I5, see render/render.ts). See docs/SPEC.md §5 / §11.
+ * Two projections of the same Markdown: a sanitized HTML *fragment* per doc (no page wrapper)
+ * that the SPA injects into its own DOM, and the Markdown itself for an agent to read, with
+ * its links pointed at the other pages' Markdown routes. The HTML reuses the low-level
+ * `markdownToHtml` util plus the HTML hygiene pass. The content is trusted (the repo's own
+ * Markdown, hygiene-passed), so injecting the fragments is safe. This is a Markdown→web-page
+ * path, deliberately separate from the single Markdown→email render path (I5, see
+ * render/render.ts). See docs/SPEC.md §5 / §11.
  */
 
 import { Lexer, type Token, type Tokens } from "marked";
@@ -33,16 +34,36 @@ import upgrade from "../../docs/guides/07-upgrade.md";
 import tryLocally from "../../docs/guides/08-try-locally.md";
 import yourList from "../../docs/publishing/01-your-list.md";
 import sendingRules from "../../docs/publishing/02-sending-rules.md";
-import readme from "../../docs/README.md";
+import yourPublication from "../../docs/publishing/03-your-publication.md";
+import writingAPost from "../../docs/publishing/04-writing-a-post.md";
+import schedulingAndSending from "../../docs/publishing/05-scheduling-and-sending.md";
+import afterASend from "../../docs/publishing/06-after-a-send.md";
+import workingWithClaude from "../../docs/publishing/07-working-with-claude.md";
+import importFormat from "../../docs/publishing/08-import-format.md";
+import publishingIndex from "../../docs/publishing/README.md";
+import selfHostingIndex from "../../docs/README.md";
 import configuration from "../../docs/reference/01-configuration.md";
 import sendingDomain from "../../docs/reference/02-sending-domain-dns.md";
-import importFormat from "../../docs/reference/03-import-format.md";
-import type { DocFragment, DocSection, DocsLanding, DocsResponse } from "../../shared/docs";
+import {
+  type DocFragment,
+  type DocSection,
+  type DocSet,
+  type DocsResponse,
+  headingAnchor,
+} from "../../shared/docs";
 import { markdownToHtml } from "../render/markdown";
 import { sanitizeEmailHtml } from "../render/sanitize";
 
-// Each page's Markdown by its path under docs/, the path the README links it by.
+// Each page's Markdown by its path under docs/, the path an index links it by.
 const PAGES: Record<string, string> = {
+  "publishing/01-your-list.md": yourList,
+  "publishing/02-sending-rules.md": sendingRules,
+  "publishing/03-your-publication.md": yourPublication,
+  "publishing/04-writing-a-post.md": writingAPost,
+  "publishing/05-scheduling-and-sending.md": schedulingAndSending,
+  "publishing/06-after-a-send.md": afterASend,
+  "publishing/07-working-with-claude.md": workingWithClaude,
+  "publishing/08-import-format.md": importFormat,
   "get-started/02-deploy.md": deploy,
   "get-started/03-access.md": access,
   "get-started/04-ses.md": ses,
@@ -55,14 +76,35 @@ const PAGES: Record<string, string> = {
   "guides/08-try-locally.md": tryLocally,
   "reference/01-configuration.md": configuration,
   "reference/02-sending-domain-dns.md": sendingDomain,
-  "reference/03-import-format.md": importFormat,
-  "publishing/01-your-list.md": yourList,
-  "publishing/02-sending-rules.md": sendingRules,
 };
 
-// A page's path under docs/: its section's folder, then the file. The slug is the file's
-// name without its NN- prefix, so a link to a page never names its section.
+// The sets, Publishing first: the editor's Docs tab is read once Kestrel is running, mostly
+// by the publisher. Each index's links resolve against the folder it sits in.
+const SET_SOURCES: { id: string; name: string; index: string; path: string }[] = [
+  { id: "publishing", name: "Publishing", index: publishingIndex, path: "publishing/README.md" },
+  { id: "self-hosting", name: "Self-hosting", index: selfHostingIndex, path: "README.md" },
+];
+
+// A page's path under docs/: its folder, then the file. The slug is the file's name without
+// its NN- prefix, so a link to a page never names its folder.
 const PAGE_PATH = /^([a-z0-9-]+)\/\d{2}-([a-z0-9-]+)\.md$/;
+
+/** `href` resolved against the folder of the file at `from` (both relative to docs/), or
+ *  null when it climbs out of docs/. */
+function resolvePath(from: string, href: string): string | null {
+  const parts = from.split("/").slice(0, -1);
+  for (const seg of href.split("/")) {
+    if (seg === "..") {
+      if (!parts.length) {
+        return null;
+      }
+      parts.pop();
+    } else if (seg && seg !== ".") {
+      parts.push(seg);
+    }
+  }
+  return parts.join("/");
+}
 
 /** Every link in a token tree, in document order. */
 function linksIn(tokens: Token[] | undefined): string[] {
@@ -77,54 +119,57 @@ function linksIn(tokens: Token[] | undefined): string[] {
   return out;
 }
 
-interface DocSource {
-  slug: string;
-  section: string;
-  markdown: string;
+interface IndexSection extends Omit<DocSection, "blurb"> {
+  blurb: string;
+  pages: string[];
 }
 
-/** Read the README: the landing's title and intro, its sections, and the pages each one
- *  lists, in order. A link to a path no import provides is skipped here; a spec fails on it. */
-function readIndex(readme: string): {
-  title: string;
-  intro: string;
-  sections: (Omit<DocSection, "id"> & { pages: string[] })[];
-} {
+/** Read an index: the landing's title and intro, its sections, and the pages each one lists,
+ *  as paths under docs/, in order. A link to a path no import provides is skipped here; a
+ *  spec fails on it. */
+function readIndex(
+  index: string,
+  path: string,
+): { title: string; intro: string; sections: IndexSection[] } {
   let title = "";
   let intro = "";
-  const sections: (Omit<DocSection, "id"> & { pages: string[] })[] = [];
-  for (const t of Lexer.lex(readme)) {
+  const sections: IndexSection[] = [];
+  for (const t of Lexer.lex(index)) {
     const current = sections[sections.length - 1];
     if (t.type === "heading" && (t as Tokens.Heading).depth === 1) {
       title = (t as Tokens.Heading).text;
     } else if (t.type === "heading" && (t as Tokens.Heading).depth === 2) {
-      sections.push({ title: (t as Tokens.Heading).text, blurb: "", numbered: false, pages: [] });
+      const text = (t as Tokens.Heading).text;
+      sections.push({
+        id: headingAnchor(text),
+        title: text,
+        blurb: "",
+        numbered: false,
+        pages: [],
+      });
     } else if (t.type === "paragraph" && !current) {
       intro += t.raw;
     } else if (t.type === "paragraph" && current && !current.blurb) {
       current.blurb = t.raw;
     } else if (t.type === "list" && current) {
       current.numbered = (t as Tokens.List).ordered;
-      current.pages.push(...linksIn([t]).filter((href) => href in PAGES));
+      for (const href of linksIn([t])) {
+        const page = resolvePath(path, href);
+        if (page && page in PAGES) {
+          current.pages.push(page);
+        }
+      }
     }
   }
   return { title, intro, sections };
 }
 
-const INDEX = readIndex(readme);
+const INDEXES = SET_SOURCES.map((s) => ({ ...s, ...readIndex(s.index, s.path) }));
 
-/** The path of every bundled page, for a spec to hold against what the README lists. */
+/** The path of every bundled page, for a spec to hold against what the indexes list. */
 export function bundledPages(): string[] {
   return Object.keys(PAGES);
 }
-
-const SOURCES: DocSource[] = INDEX.sections.flatMap((sec) =>
-  sec.pages.flatMap((path) => {
-    const m = path.match(PAGE_PATH);
-    const markdown = PAGES[path];
-    return m?.[1] && m[2] && markdown ? [{ slug: m[2], section: m[1], markdown }] : [];
-  }),
-);
 
 /** Title = the doc's first `# H1`, so titles live in the source markdown. */
 function extractTitle(markdown: string, slug: string): string {
@@ -132,38 +177,63 @@ function extractTitle(markdown: string, slug: string): string {
   return m?.[1]?.trim() || slug;
 }
 
-const SLUGS = new Set(SOURCES.map((s) => s.slug));
+const DOCS = INDEXES.flatMap((set) =>
+  set.sections.flatMap((sec) =>
+    sec.pages.flatMap((path) => {
+      const slug = path.match(PAGE_PATH)?.[2];
+      const markdown = PAGES[path];
+      return slug && markdown
+        ? [
+            {
+              slug,
+              path,
+              set: set.id,
+              section: sec.id,
+              markdown,
+              title: extractTitle(markdown, slug),
+            },
+          ]
+        : [];
+    }),
+  ),
+);
 
-const DOCS = SOURCES.map((s) => ({ ...s, title: extractTitle(s.markdown, s.slug) }));
+// Where a link between docs lands, by the target's path under docs/: a page by its slug, an
+// index by its set's id. Both name a route of the same shape, `#/docs/<name>` in the editor
+// and `/api/docs/<name>.md` for an agent, so a set's id never collides with a slug (a spec
+// holds that).
+const TARGETS = new Map<string, string>([
+  ...DOCS.map((d): [string, string] => [d.path, d.slug]),
+  ...SET_SOURCES.map((s): [string, string] => [s.path, s.id]),
+]);
 
 // The fragment shape lives in shared/ so the editor reads the same definition; re-exported
 // here as the guide's own.
 export type { DocFragment };
 
-// A link from one guide page to another, as the Markdown writes it so it also works on
-// GitHub: a relative path to the file, `02-deploy.md` or `../guides/03-notifications.md`, maybe with
-// an anchor. Captures the slug (the file name without its NN- prefix) and the anchor.
-const DOC_LINK = /href="(?:\.\.\/[a-z-]+\/|[a-z-]+\/)?\d{2}-([a-z0-9-]+)\.md(?:#([^"]*))?"/g;
+// A relative link to a Markdown file, as the HTML carries it, with its anchor. Written
+// relative to the file it sits in so the same file works on GitHub.
+const MD_HREF = /href="([^"#:]+\.md)(?:#([^"]*))?"/g;
 // A link to a heading on the same page: `[Check it](#check-it)`.
 const SAME_PAGE_LINK = /href="#([^"/][^"]*)"/g;
 
-/** Point each link between guide pages at the doc's in-app route, `#/docs/<slug>`, with
- *  its anchor as one more segment. The room gives each heading GitHub's id for it, so an
- *  anchor that works on GitHub lands on the same heading in the app. A link to a file that
- *  is not a doc is left as written, and a spec catches it. */
-function rewriteDocLinks(html: string, slug: string): string {
+/** Point each link between docs at its in-app route, `#/docs/<slug>`, with its anchor as one
+ *  more segment. The room gives each heading GitHub's id for it, so an anchor that works on
+ *  GitHub lands on the same heading in the app. A link to a file that is not a doc is left as
+ *  written, and a spec catches it. `from` is the linking file's path; `slug` names the page a
+ *  same-page link resolves against (a landing has none, so passes the empty slug). */
+function rewriteDocLinks(html: string, from: string, slug: string): string {
   return html
-    .replace(DOC_LINK, (whole, target: string, anchor: string | undefined) =>
-      SLUGS.has(target) ? `href="#/docs/${target}${anchor ? `/${anchor}` : ""}"` : whole,
-    )
+    .replace(MD_HREF, (whole, href: string, anchor: string | undefined) => {
+      const target = TARGETS.get(resolvePath(from, href) ?? "");
+      return target ? `href="#/docs/${target}${anchor ? `/${anchor}` : ""}"` : whole;
+    })
     .replace(SAME_PAGE_LINK, (_whole, anchor: string) => `href="#/docs/${slug}/${anchor}"`);
 }
 
-/** Render one doc's markdown to a sanitized HTML fragment (no page wrapper). Docs
- *  carry no post images, so the image map is empty and the media base is unused. A link
- *  to a heading on the same page resolves against `slug`; the landing has none, so passes
- *  the empty slug. */
-function renderFragment(markdown: string, slug: string): string {
+/** Render Markdown to a sanitized HTML fragment (no page wrapper). Docs carry no post images,
+ *  so the image map is empty and the media base is unused. */
+function renderFragment(markdown: string, from: string, slug: string): string {
   const warnings: string[] = [];
   const html = markdownToHtml(markdown, {
     images: new Map(),
@@ -171,34 +241,57 @@ function renderFragment(markdown: string, slug: string): string {
     maxWidth: 720,
     warnings,
   });
-  return rewriteDocLinks(sanitizeEmailHtml(html), slug);
+  return rewriteDocLinks(sanitizeEmailHtml(html), from, slug);
 }
 
-/** The landing page, from the README: its title, intro, and sections. A section's id is
- *  the folder its pages live in (a spec holds each section to one folder). */
-function renderLanding(): DocsLanding {
-  return {
-    title: INDEX.title,
-    intro: renderFragment(INDEX.intro, ""),
-    sections: INDEX.sections.map((sec) => ({
-      id: sec.pages[0]?.match(PAGE_PATH)?.[1] ?? "",
+/** Each set's landing, from its index: its title, intro, and sections. */
+function renderSets(): DocSet[] {
+  return INDEXES.map((set) => ({
+    id: set.id,
+    name: set.name,
+    title: set.title,
+    intro: renderFragment(set.intro, set.path, ""),
+    sections: set.sections.map((sec) => ({
+      id: sec.id,
       title: sec.title,
-      blurb: sec.blurb ? renderFragment(sec.blurb, "") : "",
+      blurb: sec.blurb ? renderFragment(sec.blurb, set.path, "") : "",
       numbered: sec.numbered,
     })),
-  };
+  }));
 }
 
-/** The landing page, and the whole guide in reading order — slug, title, section, and
- *  rendered fragment. */
+/** The sets, and every doc in reading order — slug, title, set, section, and rendered
+ *  fragment. */
 export function renderDocs(): DocsResponse {
   return {
-    landing: renderLanding(),
+    sets: renderSets(),
     docs: DOCS.map((d) => ({
       slug: d.slug,
       title: d.title,
+      set: d.set,
       section: d.section,
-      html: renderFragment(d.markdown, d.slug),
+      html: renderFragment(d.markdown, d.path, d.slug),
     })),
   };
+}
+
+// A relative Markdown link to a Markdown file, `[text](../guides/01-connect-claude.md#x)`.
+const MD_LINK = /\]\(([^)\s#:]+\.md)(#[^)\s]*)?\)/g;
+
+/** A doc's Markdown for an agent to read (SPEC §11): a page by its slug, or a set's index by
+ *  its id, with each link to another doc pointed at that doc's own Markdown route, which
+ *  resolves beside this one (`connect-claude.md`), so an agent can follow it. Null for a name
+ *  that is neither. */
+export function docMarkdown(name: string): string | null {
+  const doc = DOCS.find((d) => d.slug === name);
+  const set = SET_SOURCES.find((s) => s.id === name);
+  const from = doc?.path ?? set?.path;
+  const markdown = doc?.markdown ?? set?.index;
+  if (from === undefined || markdown === undefined) {
+    return null;
+  }
+  return markdown.replace(MD_LINK, (whole, href: string, anchor: string | undefined) => {
+    const target = TARGETS.get(resolvePath(from, href) ?? "");
+    return target ? `](${target}.md${anchor ?? ""})` : whole;
+  });
 }

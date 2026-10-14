@@ -10,7 +10,7 @@ paths:
 
 # Writing the docs
 
-The docs are two sets on one landing: **Publishing**, for the publisher who writes and sends the newsletter, and the **setup guide** (Get started, Guides, Reference), for deploying and running your own instance of Kestrel. This file holds the decisions every page follows; Publishing pages, below, says where a publisher's page differs. The style rules in `.claude/rules/maintainer.md` apply here too.
+The docs are two sets, each with its own landing: **Publishing** (`docs/publishing/`), for the publisher who writes and sends the newsletter, and **Self-hosting**, the setup guide (Get started, Guides, Reference), for deploying and running your own instance of Kestrel. This file holds the decisions every page follows; Publishing pages, below, says where a publisher's page differs. The style rules in `.claude/rules/maintainer.md` apply here too.
 
 ## What the setup guide is
 
@@ -22,18 +22,19 @@ The docs are two sets on one landing: **Publishing**, for the publisher who writ
 
 ## Where it lives
 
-- **One source:** `docs/`, as section folders (`publishing/`, `get-started/`, `guides/`, `reference/`) beside SPEC, API, and DESIGN.
-- **`docs/README.md` is the landing page and the table of contents.** Its H1 ("Kestrel docs") and an intro that sends each role to its section, then a `##` per section with a blurb and a list of the section's pages; a numbered list makes a numbered section. The editor's Docs tab and getkestrel.dev both build their landing and order from it, and GitHub shows it as written. A page that isn't listed there isn't in the guide (a spec holds the two together). No front matter until a rich element needs data the Markdown can't carry.
-- **A page's slug** is its file name without the `NN-` prefix, unique across sections.
+- **One source:** `docs/`, as folders (`publishing/`, `get-started/`, `guides/`, `reference/`) beside SPEC, API, and DESIGN.
+- **Each set's index file is its landing page and table of contents:** `docs/publishing/README.md` for Publishing, `docs/README.md` for Self-hosting. Its H1 and an intro that links the other set, then a `##` per section with a blurb and a list of the section's pages; a numbered list makes a numbered section. A section's id is its heading's anchor. The editor's Docs tab and getkestrel.dev build their landings and order from them. Agents read them raw (`GET /api/docs/publishing.md`), so each must read well as plain Markdown. A page that isn't listed in an index isn't in the docs (a spec holds the two together). No front matter until a rich element needs data the Markdown can't carry.
+- **A page's slug** is its file name without the `NN-` prefix, unique across both sets and distinct from the sets' ids (`publishing`, `self-hosting`), since all of them name routes of one shape: `#/docs/<name>` and `GET /api/docs/<name>.md`.
 - **getkestrel.dev is where most people read it**, at the latest release. The editor's Docs tab is the copy matched to the running version, and its landing is the same everywhere.
 
 ## Structure
 
-- **Publishing:** first, since the editor's Docs tab is read once Kestrel is running, mostly by the publisher. Picked from, not numbered: Your list, then Sending rules. Possible pages wait as GitHub issues, like guides.
+- **Publishing:** the Docs tab opens on it, since it's read once Kestrel is running, mostly by the publisher. Three sections, none numbered: Before your first send (Your publication, Your list, Sending rules), Every post (Writing a post, Scheduling and sending, After a send), and Going further (Working with Claude, the import format). The import format lives here because publishers, and Claude converting a list for them, are its readers.
 - **Get started:** the main path, numbered: Deploy the app, Lock the dashboard with Access, Connect Amazon SES, Verify it works, Go live. There is no overview page: what the whole path needs opens Deploy the app as its Before you begin, and the docs landing lists the steps.
 - **Guides:** picked from, not read in order: Connect Claude, trying Kestrel locally first, notifications through Cloudflare's email, rate limiting, upgrading. The docs landing's list sets the order, not the file prefixes. Possible guides wait as GitHub issues until they've been run end to end, such as staging and the archive on your website.
-- **Reference:** the detail and the why: configuration, sending-domain DNS, the import format.
+- **Reference:** the detail and the why: configuration, sending-domain DNS.
 - Previous and Next stay within a section.
+- **Self-hosting's index** links Publishing in its intro, and Publishing's links Self-hosting, so either is one link from the other.
 
 ## Publishing pages
 
@@ -41,6 +42,7 @@ A publisher's page is a task page, not a procedure, and it works for a writer so
 
 - **Answer first.** The page, and a section a link lands on, opens with the short answer, then the reasons. No Before you begin, numbered steps, or Check it.
 - **Shape:** what it's for; what Kestrel does and what you do; where to click, by the dashboard's own words in bold (**Subscribers → Import**); the limits; links onward.
+- **Facts come from the app, not the documents alone.** Check a label against the UI's source as well as DESIGN, and a behavior against the code as well as SPEC. Where they disagree, describe what the app does and flag the gap to the maintainer.
 - **No deploy vocabulary.** Never assume the reader touched Cloudflare, wrangler, or AWS. A fact that belongs to whoever deploys (Workers Paid, reply forwarding, the From address) is named as theirs, "whoever runs your Kestrel", with a link into the setup guide for the detail, never restated.
 - **Settled facts, cited and hedged.** A legal claim links its source and says whose law it is. Where the law is judgment, say "usually" or "probably". A page with legal content says it's general information, not legal advice.
 - **Headings are link targets.** The editor links a section by its heading's exact words, and a spec fails when a linked heading changes, so rename a linked heading only with its links.

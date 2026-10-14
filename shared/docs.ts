@@ -1,41 +1,50 @@
-// The docs (the publisher's pages and the setup guide) as the API carries it (SPEC §5, §11): its landing page, and each doc's
-// slug, title, section, and the sanitized HTML fragment the Worker rendered from the
+// The docs as the API carries them (SPEC §5, §11): two sets, one per reader (the publisher's
+// Publishing and the operator's Self-hosting), each with its own landing, and every page's
+// slug, title, set, section, and the sanitized HTML fragment the Worker rendered from the
 // repo's own Markdown, in reading order. The Worker's docs route produces this shape and
 // the editor injects the fragments into its own DOM; one definition, so neither can drift.
 // The rule that names a heading's anchor lives here too, for the same reason.
 
-/** One section of the guide, as `docs/README.md` lays it out under a `##` heading. */
+/** One section of a set's landing, as its index file lays it out under a `##` heading. */
 export interface DocSection {
-  /** The folder its pages live in, such as `get-started`. */
+  /** The heading's anchor, such as `get-started`. */
   id: string;
   title: string;
   /** The paragraph under the heading, as a sanitized HTML fragment; empty when there is none. */
   blurb: string;
-  /** Its pages are steps taken in order: the README lists them as a numbered list. */
+  /** Its pages are steps taken in order: the index lists them as a numbered list. */
   numbered: boolean;
 }
 
-/** The guide's landing page, read from `docs/README.md`: its H1, the intro under it, and
- *  its sections in order. The same file is the folder's index on GitHub. */
-export interface DocsLanding {
+/** One set of docs, written for one reader, with its own landing read from its index file
+ *  (`docs/publishing/README.md`, `docs/README.md`): its H1, the intro under it, and its
+ *  sections in order. Its id is also its landing's route, `#/docs/<id>`, so no page's slug
+ *  may share it. */
+export interface DocSet {
+  /** `publishing` or `self-hosting`. */
+  id: string;
+  /** The set's short name, for the switch between sets: `Publishing`, `Self-hosting`. */
+  name: string;
   title: string;
   /** The intro, as a sanitized HTML fragment. */
   intro: string;
   sections: DocSection[];
 }
 
-/** One doc as the SPA consumes it: its slug, title, section, and a sanitized HTML fragment (no page wrapper). */
+/** One doc as the SPA consumes it: its slug, title, set, section, and a sanitized HTML fragment (no page wrapper). */
 export interface DocFragment {
   slug: string;
   title: string;
-  /** The `id` of the section it belongs to. */
+  /** The `id` of the set it belongs to. */
+  set: string;
+  /** The `id` of the section it belongs to, within its set. */
   section: string;
   html: string;
 }
 
-/** GET /api/docs: the landing page, and the whole guide in reading order. */
+/** GET /api/docs: the sets, Publishing first, and every doc in reading order, set by set. */
 export interface DocsResponse {
-  landing: DocsLanding;
+  sets: DocSet[];
   docs: DocFragment[];
 }
 

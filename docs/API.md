@@ -68,6 +68,8 @@ A client learns the state of things in two ways.
 
 A cursor from a database that has since gone back in time, such as after a restore, is refused. The client then takes a fresh snapshot and follows from its cursor.
 
+**Documents come two ways.** The instance's own documentation, the docs and the API reference, is read as data the editor renders, and as Markdown an agent reads, with the same path plus `.md`. Each is a projection of one source, the docs' Markdown files or the route registration, so the two can't disagree. In a doc's Markdown, a link to another doc points at that doc's Markdown, so an agent can follow it without knowing where the source files live.
+
 ## Acting
 
 The client takes an act from the resource's `actions`, so it offers only what the server would accept now. The answer carries the resource as it stands after the act, `changed`, and a new `cursor`, so the client updates its copy without another read. A refused act carries the resource too.

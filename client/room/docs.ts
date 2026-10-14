@@ -1,8 +1,9 @@
-// The in-app docs room: the setup guide fetched from the authed /api/docs routes.
+// The in-app docs room: the two doc sets (Publishing, Self-hosting) fetched from the authed
+// /api/docs routes.
 
 import {
   type DocFragment,
-  type DocsLanding,
+  type DocSet,
   type DocsResponse,
   headingAnchors,
 } from "../../shared/docs";
@@ -14,9 +15,11 @@ import { type Html, html, setHtml, unsafeHtml } from "../ui/html";
 import { renderError, toast } from "../ui/widgets";
 import { roomShell } from "./shell";
 
-// The setup guide, authored in docs/README.md and its section folders, and served read-only by the authed
-// GET /api/docs route as sanitized HTML fragments. `#/docs` is the index — an intro over the
-// guide's sections, the main path numbered as steps; `#/docs/:slug` is one doc, and
+// The docs, authored as two sets (docs/publishing/README.md and docs/README.md, each an index
+// over its pages), and served read-only by the authed GET /api/docs route as sanitized HTML
+// fragments. `#/docs` is the first set's index (Publishing: the Docs tab is read once Kestrel
+// runs, mostly by the publisher) and `#/docs/:set` either set's — an intro over its
+// sections, a numbered section shown as steps; `#/docs/:slug` is one doc, and
 // `#/docs/:slug/:anchor` one heading on it; its rail a back-link to the index
 // plus that doc's "On this page" (never a tree of all docs). No iframe: the content is
 // trusted (repo markdown, hygiene-passed), so injecting the fragments is safe. Fetched once
@@ -65,15 +68,17 @@ export async function renderDocs(
       return;
     }
   }
-  const { landing, docs } = docsCache;
-  if (!docs.length) {
+  const { sets, docs } = docsCache;
+  const first = sets[0];
+  if (!docs.length || !first) {
     setHtml($(".room-main"), html`<p class="muted">No documentation.</p>`);
     return;
   }
-  if (slug) {
-    renderDocPage(root, landing, docs, slug, anchor ? decodeAnchor(anchor) : undefined);
-  } else {
-    renderDocsIndex(root, landing, docs);
+  const set = slug ? sets.find((s) => s.id === slug) : first;
+  if (set) {
+    renderDocsIndex(root, set, sets, docs);
+  } else if (slug) {
+    renderDocPage(root, sets, docs, slug, anchor ? decodeAnchor(anchor) : undefined);
   }
 }
 
@@ -87,20 +92,25 @@ function decodeAnchor(anchor: string): string | undefined {
   }
 }
 
-// The index: the landing page `docs/README.md` lays out (its title, intro, and sections),
-// with a card per doc. A section the README lists as numbered shows numbers, since its pages
+// A set's index: the landing its index file lays out (its title, intro, and sections),
+// with a card per doc, under a switch between the sets. A section the index lists as numbered shows numbers, since its pages
 // are steps taken in order; the others are picked from. The cards' titles and blurbs come
 // from the docs themselves. It keeps the
 // room's two-column shape (a doc page's rail is that doc's "On this page"); here the rail
 // holds the project's external links — the reference room is about Kestrel itself, so this
 // is where getkestrel.dev and the source live.
-function renderDocsIndex(root: HTMLElement, landing: DocsLanding, docs: DocFragment[]): void {
+function renderDocsIndex(
+  root: HTMLElement,
+  landing: DocSet,
+  sets: DocSet[],
+  docs: DocFragment[],
+): void {
   const card = (d: DocFragment, n: number | null): Html => {
     const desc = docDescription(d);
     return html`<li><a class="doc-card" href="#/docs/${d.slug}">${n === null ? null : html`<span class="doc-card-n">${String(n).padStart(2, "0")}</span>`}<span class="doc-card-main"><span class="doc-card-t">${d.title} <span class="doc-card-go" aria-hidden="true">→</span></span>${desc ? html`<span class="doc-card-d">${desc}</span>` : null}</span></a></li>`;
   };
   const sections = landing.sections.map((sec) => {
-    const inSection = docs.filter((d) => d.section === sec.id);
+    const inSection = docs.filter((d) => d.set === landing.id && d.section === sec.id);
     if (!inSection.length) {
       return null;
     }
@@ -111,7 +121,13 @@ function renderDocsIndex(root: HTMLElement, landing: DocsLanding, docs: DocFragm
       : null;
     return html`<section class="doc-section"><h2 class="doc-section-t">${sec.title}</h2>${blurb}${sec.numbered ? html`<ol class="doc-cards">${cards}</ol>` : html`<ul class="doc-cards">${cards}</ul>`}</section>`;
   });
-  const main = html`<div class="docs-index"><p class="eyebrow">Documentation</p><h1>${landing.title}</h1><div class="docs-index-intro">${unsafeHtml(landing.intro)}</div>${sections}</div>`;
+  // The switch between the sets: links, since each set's index is its own address. It
+  // chooses what you read, never who you are, so both sets stay one tap away.
+  const switcher = html`<nav class="set-wtog docs-sets" aria-label="Doc sets">${sets.map(
+    (s) =>
+      html`<a class="wtog-btn" href="#/docs/${s.id}"${s.id === landing.id ? html` aria-current="page"` : null}>${s.name}</a>`,
+  )}</nav>`;
+  const main = html`<div class="docs-index">${switcher}<p class="eyebrow">Documentation</p><h1>${landing.title}</h1><div class="docs-index-intro">${unsafeHtml(landing.intro)}</div>${sections}</div>`;
   // Three uniform out-links under a "Kestrel" label — the same shape as the API rail's
   // label + tiers, so mobile can give both the same chip row. getkestrel.dev is the
   // project's home, the same for every instance, so it's a constant; the source and
@@ -176,23 +192,27 @@ const headingId = (anchor: string): string => `doc-h-${anchor}`;
 
 function renderDocPage(
   root: HTMLElement,
-  landing: DocsLanding,
+  sets: DocSet[],
   docs: DocFragment[],
   slug: string,
   anchor?: string,
 ): void {
   const at = docs.findIndex((d) => d.slug === slug);
   const cur = docs[at];
-  if (!cur) {
+  const set = sets.find((s) => s.id === cur?.set);
+  if (!cur || !set) {
     // A stale or renamed deep link shouldn't masquerade as a doc — heal to the index.
+    const first = sets[0];
     toast(`No doc named “${slug}”, so here’s the index.`);
     history.replaceState(history.state, "", "#/docs");
-    renderDocsIndex(root, landing, docs);
+    if (first) {
+      renderDocsIndex(root, first, sets, docs);
+    }
     return;
   }
   // Prev/Next stay within the doc's section: the main path ends at its last step rather than
   // running on into the guides after it, which are picked from, not read in order.
-  const siblings = docs.filter((d) => d.section === cur.section);
+  const siblings = docs.filter((d) => d.set === cur.set && d.section === cur.section);
   const pos = siblings.indexOf(cur);
   const prev = siblings[pos - 1];
   const next = siblings[pos + 1];
@@ -256,6 +276,12 @@ function renderDocPage(
       sec.prepend(head);
     }
   }
+  // The set the page belongs to, over its title: the way back to that set's index, since the
+  // Docs tab opens on the first set and the rail holds only this page's headings.
+  const setLine = document.createElement("p");
+  setLine.className = "eyebrow doc-set";
+  setHtml(setLine, html`<a href="#/docs/${set.id}">${set.name}</a>`);
+  sec.prepend(setLine);
   for (const h2 of $$<HTMLHeadingElement>("h2", sec)) {
     sections.push({ id: h2.id, anchor: h2.dataset.anchor || "", title: h2.textContent || "" });
   }

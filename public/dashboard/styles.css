@@ -438,6 +438,28 @@ body.nav-resizing .sidebar {
   font-weight: 600;
   margin: 0 0 10px;
 }
+/* The switch between the doc sets (Publishing | Self-hosting), over a set's index. Links,
+   so the current one is aria-current rather than pressed, worn like the pressed segment. */
+.docs-sets {
+  margin-bottom: 20px;
+}
+.docs-sets .wtog-btn {
+  text-decoration: none;
+  font-size: 12.5px;
+}
+.docs-sets .wtog-btn[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+/* A doc page's set, over its title: the link back to that set's index. */
+.doc-set a {
+  color: inherit;
+  text-decoration: none;
+}
+.doc-set a:hover {
+  color: var(--accent);
+}
 .docs-index > h1 {
   font-size: 28px;
   line-height: 1.15;

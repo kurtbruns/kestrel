@@ -34,7 +34,7 @@ import { json } from "./lib/errors";
 import { RASTER_IMAGE_TYPES } from "./lib/image_types";
 import { HALT_BACKOFF_MS, MISSED_THRESHOLD_MS } from "./lib/time";
 import { unwrap } from "./lib/unwrap";
-import { buildReference } from "./reference";
+import { buildReference, referenceMarkdown } from "./reference";
 import { type RouteDef, Router } from "./router";
 import * as archiveRoutes from "./routes/archive";
 import * as devRoutes from "./routes/dev";
@@ -263,6 +263,16 @@ export function createRouter({
         "The docs (the publisher's pages and the setup guide) as sanitized HTML fragments, in reading order (JSON).",
       handler: docsRoutes.list,
     },
+    {
+      method: "GET",
+      path: "/api/docs/:name.md",
+      access: "admin",
+      resource: "system",
+      summary: "One doc's Markdown, for an agent to read (text/markdown).",
+      description:
+        "`name` is a doc's `slug` from `GET /api/docs`, or a set's `id` for that set's index: `publishing.md` lists the publisher's pages, `self-hosting.md` the setup guide's. Links between docs point at each other's Markdown, relative to this route, so an agent can follow them.",
+      handler: docsRoutes.markdown,
+    },
 
     // --- API reference (authed; generated from THIS manifest) ---
     {
@@ -279,6 +289,17 @@ export function createRouter({
         };
         return json(body);
       },
+    },
+    {
+      method: "GET",
+      path: "/api/reference.md",
+      access: "admin",
+      resource: "system",
+      summary: "The same reference as one Markdown document, for an agent to read (text/markdown).",
+      handler: (c) =>
+        docsRoutes.markdownResponse(
+          referenceMarkdown(buildReference(r.routes.map((route) => route.def)), c.url.origin),
+        ),
     },
 
     // --- app settings (authed; runtime preferences, never secrets) ---

@@ -1,13 +1,6 @@
-# Kestrel docs
+# Self-hosting Kestrel
 
-These pages cover two jobs: writing the newsletter, and running the instance it sends from. If you write it, start with Publishing. If you deploy and run Kestrel, start with Get started. One person often does both.
-
-## Publishing
-
-Writing and sending your newsletter once Kestrel is running, and the list it goes to.
-
-- [Your list: importing and exporting](publishing/01-your-list.md)
-- [Sending rules](publishing/02-sending-rules.md)
+These pages deploy and run your own instance of Kestrel, from an empty repository to a newsletter on your own Cloudflare account. Writing and sending the newsletter is covered in [Publishing](publishing/README.md).
 
 ## Get started
 
@@ -35,4 +28,3 @@ The detail behind the steps, for when you need it.
 
 - [Configuration](reference/01-configuration.md)
 - [Sending-domain DNS: SPF, DKIM, and DMARC](reference/02-sending-domain-dns.md)
-- [Subscriber import format](reference/03-import-format.md)
