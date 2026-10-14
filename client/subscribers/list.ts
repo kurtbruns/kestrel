@@ -165,7 +165,7 @@ function suppressionFlag(s: SubscriberListItem): Html | null {
 const STATUS_MEANS: Record<string, string> = {
   pending: "Subscribed but hasn’t clicked the confirmation email.",
   confirmed:
-    "Agreed to receive your posts, here or at the service they were imported from, and receives them.",
+    "Receives your posts. They confirmed here, or opted in at the service you imported them from.",
   unsubscribed: "Opted out.",
 };
 function legendRow(pill: Html, means: string): Html {
