@@ -179,6 +179,8 @@ export interface NewRow extends ConsentRow {
   tok: string;
   /** For an unsubscribed one, when the source says they left, or null. */
   uat: number | null;
+  /** The suppression the row itself claims, or null: one saying `erased` is never added. */
+  sup: string | null;
 }
 
 /** Everything one import writes. Each list holds the rows its plan meant for that write. */
@@ -275,7 +277,8 @@ export async function applyImport(
     now,
   );
   // An address that left before it came here is recorded as unsubscribed, unless it was
-  // erased here: a subscriber row would bring back the data the erasure removed.
+  // erased, here or by the file's own word: a subscriber row would bring back the data the
+  // erasure removed.
   add(
     "addedUnsubscribed",
     `INSERT INTO subscribers (id, email, status, unsub_token, created_at, confirmed_at, unsubscribed_at,
@@ -283,7 +286,8 @@ export async function applyImport(
      SELECT ${v("id")}, ${v("e")}, 'unsubscribed', ${v("tok")}, ?2, ${v("cat")}, COALESCE(${v("uat")}, ?2),
             ${v("org")}, ${v("opt")}, ${v("ev")}, ?3
        FROM json_each(?1) AS j
-      WHERE NOT EXISTS (SELECT 1 FROM suppressions s WHERE s.email = ${v("e")} AND s.reason = ?4)
+      WHERE ${v("sup")} IS NOT ?4
+        AND NOT EXISTS (SELECT 1 FROM suppressions s WHERE s.email = ${v("e")} AND s.reason = ?4)
      ON CONFLICT (email) DO NOTHING
      RETURNING email`,
     writes.addUnsubscribed,
@@ -307,7 +311,8 @@ export async function applyImport(
     [...writes.confirm, ...writes.addConfirmed],
     r.id,
   );
-  // Add an address new here, with no suppression here, as confirmed.
+  // Add an address new here, with no suppression here and none the file says was an
+  // erasure's, as confirmed.
   add(
     "addedConfirmed",
     `INSERT INTO subscribers (id, email, status, unsub_token, created_at, confirmed_at,
@@ -315,12 +320,14 @@ export async function applyImport(
      SELECT ${v("id")}, ${v("e")}, 'confirmed', ${v("tok")}, ?2, ${v("cat")},
             ${v("org")}, ${v("opt")}, ${v("ev")}, ?3
        FROM json_each(?1) AS j
-      WHERE NOT EXISTS (SELECT 1 FROM suppressions s WHERE s.email = ${v("e")})
+      WHERE ${v("sup")} IS NOT ?4
+        AND NOT EXISTS (SELECT 1 FROM suppressions s WHERE s.email = ${v("e")})
      ON CONFLICT (email) DO NOTHING
      RETURNING email`,
     writes.addConfirmed,
     now,
     r.id,
+    ERASED,
   );
   // Suppress an address with no suppression here; the first one stands, except over an
   // erased marker, which any other reason replaces, as `addSuppression` rules: a bounce or a

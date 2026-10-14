@@ -372,6 +372,82 @@ describe("an import after an erasure, whatever status the file gives the address
     expect((await suppressionOf(other))?.reason).toBe("erased");
     expect(await tablesNaming(other)).toEqual(["suppressions"]);
   });
+
+  it("is reported as blocked when the file's own bounce replaces a marker added after the plan", async () => {
+    const other = "grace@example.com";
+    const plan = await planImport(
+      env.DB,
+      { ...csvFile([`${other},unsubscribed,unknown,sendy,bounce,,,,,`]), plainListStatus: null },
+      { maxRows: IMPORT_LIMITS.maxRows, maxRowsReason: null, publication: "Field Notes" },
+    );
+    expect(plan.counts).toEqual(counts({ create_unsubscribed: 1 }));
+    await seedConfirmed(other);
+    await eraseOk(other);
+
+    const result = await commitImport(
+      env.DB,
+      plan,
+      { kind: "human", email: "publisher@example.com", via: "dev" },
+      Date.now(),
+    );
+
+    expect(result.differed).toEqual([
+      { row: 1, email: other, planned: "create_unsubscribed", applied: "blocked_by_suppression" },
+    ]);
+    expect(result.counts).toEqual(counts({ blocked_by_suppression: 1 }));
+    expect(result.suppressions_added).toBe(1);
+    expect(await subs.getByEmail(env.DB, other)).toBeNull();
+    expect((await suppressionOf(other))?.reason).toBe("import_bounce");
+    expect(await tablesNaming(other)).toEqual(["suppressions"]);
+  });
+});
+
+describe("an import row that itself says the address was erased (SPEC §7)", () => {
+  const email = "ada@example.com";
+
+  for (const [status, outcome] of [
+    ["subscribed", "blocked_by_suppression"],
+    ["unsubscribed", "blocked_by_suppression"],
+    ["pending", "suppression_added"],
+  ] as const) {
+    it(`adds only the marker for a ${status} row, creating no subscriber`, async () => {
+      const { plan, result } = await planAndCommit(
+        csvFile([
+          `${email},${status},double,sendy,erased,2024-01-01T00:00:00Z,,,,"{""ip"":""203.0.113.7""}"`,
+        ]),
+      );
+
+      const rows = [{ row: 1, email, outcome, suppression_added: true }];
+      expect(plan.counts).toEqual(counts({ [outcome]: 1 }));
+      expect(plan.rows).toEqual(rows);
+      expect(plan.suppressions_added).toBe(1);
+      expect(plan.attestation).toBeNull();
+      expect(result.counts).toEqual(counts({ [outcome]: 1 }));
+      expect(result.rows).toEqual(rows);
+      expect(result.differed).toEqual([]);
+      expect(await subs.getByEmail(env.DB, email)).toBeNull();
+      expect((await suppressionOf(email))?.reason).toBe("erased");
+      expect(await tablesNaming(email)).toEqual(["suppressions"]);
+      expect((await everyRow()).filter((l) => l.includes("203.0.113.7"))).toEqual([]);
+    });
+  }
+
+  it("is blocked, keeping the suppression here, for an address already suppressed here", async () => {
+    await subs.addSuppression(env.DB, email, "bounce");
+
+    const { plan, result } = await planAndCommit(
+      csvFile([`${email},unsubscribed,unknown,sendy,erased,,,,,`]),
+    );
+
+    const blocked = [
+      { row: 1, email, outcome: "blocked_by_suppression", suppression_added: false },
+    ];
+    expect(plan.rows).toEqual(blocked);
+    expect(result.rows).toEqual(blocked);
+    expect(await subs.getByEmail(env.DB, email)).toBeNull();
+    expect((await suppressionOf(email))?.reason).toBe("bounce");
+    expect(await tablesNaming(email)).toEqual(["suppressions"]);
+  });
 });
 
 describe("a receipt that lands after an erasure (SPEC §7)", () => {
