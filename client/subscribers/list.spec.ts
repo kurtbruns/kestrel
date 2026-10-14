@@ -203,7 +203,7 @@ describe("subscribers view", () => {
       [
         "badge confirmed",
         "confirmed",
-        "Agreed to receive your posts, here or at the service they were imported from, and receives them.",
+        "Receives your posts. They confirmed here, or opted in at the service you imported them from.",
       ],
       ["badge pending", "pending", "Subscribed but hasn’t clicked the confirmation email."],
       ["badge unsubscribed", "unsubscribed", "Opted out."],
@@ -224,8 +224,9 @@ describe("subscribers view", () => {
         "A do-not-contact marker kept after an erasure. Only the person’s own confirmation lifts it.",
       ],
     ]);
+    expect($$("#subLegend h2").map((h) => h.textContent)).toEqual(["Status", "Suppressed"]);
     expect($("#subLegend p").textContent).toBe(
-      "Suppressed: the address isn’t mailed, whatever its status, which stays as it was. The red flag beside the address says why:",
+      "The address isn’t mailed, whatever its status, which stays as it was. The red flag beside the address says why:",
     );
     toggle.click();
     expect(toggle.getAttribute("aria-expanded")).toBe("true");

@@ -165,20 +165,22 @@ function suppressionFlag(s: SubscriberListItem): Html | null {
 const STATUS_MEANS: Record<string, string> = {
   pending: "Subscribed but hasn’t clicked the confirmation email.",
   confirmed:
-    "Agreed to receive your posts, here or at the service they were imported from, and receives them.",
+    "Receives your posts. They confirmed here, or opted in at the service you imported them from.",
   unsubscribed: "Opted out.",
 };
 function legendRow(pill: Html, means: string): Html {
   return html`<dt>${pill}</dt><dd>${means}</dd>`;
 }
 function legend(): Html {
-  return html`<div class="sub-legend" id="subLegend" role="region" aria-labelledby="subLegendToggle" hidden>
+  return html`<div class="sub-legend" id="subLegend" role="region" aria-labelledby="subLegendToggle" hidden><div class="sub-legend-body">
+    <h2>Status</h2>
     <dl>${SUB_STATUSES.map(({ value }) => legendRow(badge(value), STATUS_MEANS[value] ?? ""))}</dl>
-    <p>Suppressed: the address isn’t mailed, whatever its status, which stays as it was. The red flag beside the address says why:</p>
+    <h2>Suppressed</h2>
+    <p>The address isn’t mailed, whatever its status, which stays as it was. The red flag beside the address says why:</p>
     <dl>${Object.values(SUPPRESSIONS).map(({ label, means }) =>
       legendRow(html`<span class="badge suppressed">${label}</span>`, means),
     )}</dl>
-  </div>`;
+  </div></div>`;
 }
 
 // A suppressed address keeps its consent status, but the status isn't in effect while the
