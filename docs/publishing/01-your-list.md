@@ -1,4 +1,4 @@
-# Bring your list
+# Bring your existing list
 
 Almost no one starts a newsletter with an empty list. If your readers are on another service, bring them over before your first post, with the consent they gave there. It's the **Bring your existing list** step on your dashboard, and **Import** starts it. If you're starting fresh, skip this step: new readers join through [Share your subscribe link](09-share-your-subscribe-link.md).
 
@@ -83,4 +83,4 @@ When a reader asks you to delete their data, choose **Erase** from their ⋯ men
 
 Claude can read the same export a page at a time through the API, at `GET /api/subscribers/export`.
 
-Next, [Write a post](04-write-a-post.md).
+Next, [Write your first post](04-write-a-post.md).

@@ -8,13 +8,13 @@ This page covers what to ask Claude for, the lines the app holds for any client,
 
 Ask in plain words, the way you'd ask a colleague. Claude reads the API reference, `GET /api/reference`, before its first call, and works out the rest.
 
-- **Draft a post.** Give it your notes, an outline, or a topic, and it saves a draft you can open in the dashboard. Images are uploaded to the post and referenced by file name, as [Write a post](04-write-a-post.md) describes.
+- **Draft a post.** Give it your notes, an outline, or a topic, and it saves a draft you can open in the dashboard. Images are uploaded to the post and referenced by file name, as [Write your first post](04-write-a-post.md) describes.
 - **Edit or proofread a post.** Claude saves a new version against the one it read. If you edited the post meanwhile, its save is refused, and it reads your version and works from that, or asks you.
 - **Send a test.** Claude sends the real email to your test addresses, or to one you name, through the same render as the send.
 - **Schedule a post.** Name the post and when it should go out. Claude schedules it, sends a test of exactly what will fire, and tells you when it fires and how to cancel. It can also cancel a send or move its fire time, as [Scheduling and sending](05-scheduling-and-sending.md) describes.
 - **Check a send's record.** Ask how a post did, and Claude reads the send and its recipients. It reports how many were accepted, delivered, and unsent, and any bounces or complaints. [After a send](06-after-a-send.md) says what each one means.
 - **Lift a suppression.** The dashboard has no control for it, so ask Claude when you know an address works again. [After a send](06-after-a-send.md#lifting-a-suppression) says when that's wise.
-- **Import a list.** Ask Claude to bring your subscribers over from another service. Its `/migrate-list` skill converts the export, checks it with you, and imports it. [Bring your list](01-your-list.md#let-claude-convert-your-export) says how that goes.
+- **Import a list.** Ask Claude to bring your subscribers over from another service. Its `/migrate-list` skill converts the export, checks it with you, and imports it. [Bring your existing list](01-your-list.md#let-claude-convert-your-export) says how that goes.
 
 If you have a post open when Claude saves it, the editor tells you, and names Claude as the one who changed it.
 

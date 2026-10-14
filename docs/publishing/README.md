@@ -8,8 +8,8 @@ The steps your dashboard lists until your first post, in the same order.
 
 1. [Name your publication](03-name-your-publication.md)
 1. [Check your setup](10-check-your-setup.md)
-1. [Bring your list](01-your-list.md)
-1. [Write a post](04-write-a-post.md)
+1. [Bring your existing list](01-your-list.md)
+1. [Write your first post](04-write-a-post.md)
 1. [Share your subscribe link](09-share-your-subscribe-link.md)
 
 ## Sending

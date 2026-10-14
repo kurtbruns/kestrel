@@ -6,7 +6,7 @@ This page covers what Kestrel handles, what you handle, and how to act on a read
 
 ## What Kestrel handles
 
-- **Consent.** Kestrel mails only people who confirmed they want your newsletter. Someone who subscribes gets an email with a link, and only once they confirm do they receive posts. People you import come with your old service's record of their consent, and your word for it ([Bring your list](01-your-list.md#why-your-old-services-record-is-honored)).
+- **Consent.** Kestrel mails only people who confirmed they want your newsletter. Someone who subscribes gets an email with a link, and only once they confirm do they receive posts. People you import come with your old service's record of their consent, and your word for it ([Bring your existing list](01-your-list.md#why-your-old-services-record-is-honored)).
 - **Unsubscribing.** Every email has an unsubscribe link, and the one-click unsubscribe header that Gmail and Yahoo ask bulk senders for. It takes effect at once. US law allows up to 10 business days.
 - **Bounces and complaints.** An address that bounces, or a reader who marks your email as spam, is never mailed again. So a bad address can't keep hurting your sending reputation.
 - **Sender authentication.** Your emails are signed for your own domain, with SPF, DKIM, and DMARC. Whoever runs your Kestrel set these up, and mailbox providers now expect them.
@@ -24,7 +24,7 @@ Kestrel offers readers no form for deleting their data, so they ask you. In many
 
 - **Say how to reach you.** Your privacy notice, wherever you publish it, should say how readers ask you about their data. Replying to any post works once replies reach your inbox.
 - **To stop the email,** find the reader under **Subscribers**, and choose **Unsubscribe** from their ⋯ menu.
-- **To delete their data,** choose **Erase** from the same menu instead. It removes the subscriber and how they joined, and can't be undone. Kestrel keeps only the address, marked do-not-contact, so it's never mailed again. [Bring your list](01-your-list.md#when-readers-reply) says more.
+- **To delete their data,** choose **Erase** from the same menu instead. It removes the subscriber and how they joined, and can't be undone. Kestrel keeps only the address, marked do-not-contact, so it's never mailed again. [Bring your existing list](01-your-list.md#when-readers-reply) says more.
 - **Act promptly.** Under the [GDPR](https://eur-lex.europa.eu/eli/reg/2016/679/oj), you answer within a month in most cases (Article 12). The right to have data deleted is Article 17, and Article 13 asks you to tell readers about it when they sign up.
 
 ## Outside the US

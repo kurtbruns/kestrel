@@ -1,4 +1,4 @@
-# Write a post
+# Write your first post
 
 You write a post in Markdown, in the editor. Kestrel saves it as you type and shows you the exact email under **Preview**. A test sends that same email to any inbox you name.
 

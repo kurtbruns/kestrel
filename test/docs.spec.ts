@@ -161,7 +161,7 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
 describe("each doc as Markdown, for an agent (docMarkdown)", () => {
   it("serves a page's Markdown with its links pointed at the other docs' Markdown", () => {
     const md = docMarkdown("your-list") ?? "";
-    expect(md).toMatch(/^# Bring your list/);
+    expect(md).toMatch(/^# Bring your existing list/);
     expect(md).toContain("](import-format.md)");
     expect(md).toContain("](go-live.md#as-your-list-grows)");
     expect(md).not.toMatch(/\]\([^)]*\d{2}-[a-z0-9-]+\.md/);

@@ -12,7 +12,7 @@ If nothing on your dashboard says otherwise, it is. While no email provider is c
 
 ## Send yourself a test
 
-A test shows you exactly what readers get, and you can send one before you write any post. Choose **Template** in the sidebar, then **Send test email**, and send a sample post to your own inboxes. [Name your publication](03-name-your-publication.md) covers the template, and [Write a post](04-write-a-post.md#test-emails) covers what a test is.
+A test shows you exactly what readers get, and you can send one before you write any post. Choose **Template** in the sidebar, then **Send test email**, and send a sample post to your own inboxes. [Name your publication](03-name-your-publication.md) covers the template, and [Write your first post](04-write-a-post.md#test-emails) covers what a test is.
 
 When it arrives, look at:
 
@@ -41,8 +41,8 @@ A growing list meets a few limits, and Kestrel tells you before or when it reach
 
 - **Your provider's daily sending quota.** A send that hits it waits, and you're emailed. It resumes on its own once the quota frees up, and nobody is mailed twice.
 - **How long a send takes.** It grows with your list, and depends on your provider's sending rate and your Cloudflare plan. [Go live](../get-started/06-go-live.md#as-your-list-grows) gives the rates.
-- **Daily database writes on Cloudflare's free plan.** A large send or import can use up the day's writes. Then the whole app stops until midnight UTC. On the free plan, Kestrel warns you before a send to more than 5,000 recipients. It also warns you before an import that would use most of the day's writes. Neither warning stops you. [Bring your list](01-your-list.md#limits) explains more.
+- **Daily database writes on Cloudflare's free plan.** A large send or import can use up the day's writes. Then the whole app stops until midnight UTC. On the free plan, Kestrel warns you before a send to more than 5,000 recipients. It also warns you before an import that would use most of the day's writes. Neither warning stops you. [Bring your existing list](01-your-list.md#limits) explains more.
 
 From about 5,000 subscribers, it's recommended to move to the $5 Workers Paid plan, which has no daily limit on writes.
 
-Next, [Bring your list](01-your-list.md).
+Next, [Bring your existing list](01-your-list.md).

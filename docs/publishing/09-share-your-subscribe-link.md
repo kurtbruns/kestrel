@@ -67,6 +67,6 @@ Whoever runs your Kestrel can also limit how often anyone submits the form, whic
 
 ## Already have a list somewhere else
 
-**Import it instead of asking everyone to sign up again.** Readers who opted in with your old service come with that record of their consent. [Bring your list](01-your-list.md) covers importing and exporting.
+**Import it instead of asking everyone to sign up again.** Readers who opted in with your old service come with that record of their consent. [Bring your existing list](01-your-list.md) covers importing and exporting.
 
 Next, send your first post: [Scheduling and sending](05-scheduling-and-sending.md).
