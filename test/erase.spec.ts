@@ -450,6 +450,67 @@ describe("an import row that itself says the address was erased (SPEC §7)", () 
   });
 });
 
+describe("an import row that says an address on the list was erased (SPEC §7)", () => {
+  const email = "ada@example.com";
+
+  async function confirmByLink(): Promise<void> {
+    const token = (await subs.getByEmail(env.DB, email))!.confirm_token!;
+    await SELF.fetch(`${base}/confirm`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token }).toString(),
+    });
+  }
+
+  it("never confirms a pending subscriber, only adding the marker their own confirmation lifts", async () => {
+    await publicSubscribe(email);
+    const before = await subs.getByEmail(env.DB, email);
+    expect(before!.status).toBe("pending");
+
+    const { plan, result } = await planAndCommit(
+      csvFile([
+        `${email},subscribed,double,sendy,erased,2024-01-01T00:00:00Z,2024-01-02T00:00:00Z,,,"{""ip"":""203.0.113.7""}"`,
+      ]),
+    );
+
+    const rows = [{ row: 1, email, outcome: "blocked_by_suppression", suppression_added: true }];
+    expect(plan.rows).toEqual(rows);
+    expect(plan.attestation).toBeNull();
+    expect(result.rows).toEqual(rows);
+    expect(result.differed).toEqual([]);
+    expect(await subs.getByEmail(env.DB, email)).toEqual(before);
+    expect((await suppressionOf(email))?.reason).toBe("erased");
+    expect((await everyRow()).filter((l) => l.includes("203.0.113.7"))).toEqual([]);
+
+    await confirmByLink();
+
+    expect(await suppressionOf(email)).toBeNull();
+    expect(await subs.audienceEmails(env.DB)).toEqual([email]);
+  });
+
+  it("marks a confirmed subscriber erased, which an Erase here keeps and their return lifts", async () => {
+    await importCsv([`${email},subscribed,double,sendy,,,,,,`]);
+    const result = await importCsv([`${email},subscribed,double,sendy,erased,,,,,`]);
+    expect(result.rows).toEqual([
+      { row: 1, email, outcome: "suppression_added", suppression_added: true },
+    ]);
+    expect((await subs.getByEmail(env.DB, email))!.status).toBe("confirmed");
+    expect((await suppressionOf(email))?.reason).toBe("erased");
+    expect(await subs.audienceEmails(env.DB)).toEqual([]);
+
+    await eraseOk(email);
+    expect(await subs.getByEmail(env.DB, email)).toBeNull();
+    expect((await suppressionOf(email))?.reason).toBe("erased");
+
+    await publicSubscribe(email);
+    expect(await confirmationsTo(email)).toBe(1);
+    await confirmByLink();
+
+    expect(await suppressionOf(email)).toBeNull();
+    expect(await subs.audienceEmails(env.DB)).toEqual([email]);
+  });
+});
+
 describe("a receipt that lands after an erasure (SPEC §7)", () => {
   /** A sent send to `email`, then its erasure; the delivery row's placeholder and message id. */
   async function erasedAfterSend(email: string) {

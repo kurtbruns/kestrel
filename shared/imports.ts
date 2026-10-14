@@ -781,7 +781,7 @@ export const IMPORT_OUTCOME_MEANINGS: Record<ImportOutcome, string> = {
   create_confirmed:
     "`subscribed`, with no subscriber and no suppression here, and not erased in the file: added as confirmed.",
   confirm_pending:
-    "`subscribed`, and pending here (never confirmed): confirmed, and its confirmation link no longer works.",
+    "`subscribed`, pending here (never confirmed), and not erased in the file: confirmed, and its confirmation link no longer works.",
   unchanged:
     "Already confirmed here, or already in the state the row claims. A subscriber who joined here keeps their own record.",
   mark_unsubscribed:
@@ -793,7 +793,7 @@ export const IMPORT_OUTCOME_MEANINGS: Record<ImportOutcome, string> = {
   kept_unsubscribed:
     "`subscribed`, but unsubscribed here, or pending again after leaving until they confirm here themselves. An unsubscribe here is never reversed (I2).",
   blocked_by_suppression:
-    "`subscribed`, but the address carries a suppression here, a do-not-contact marker included: never added or confirmed. Also `unsubscribed` for an address whose suppression here is the do-not-contact marker an erasure left, and `subscribed` or `unsubscribed` for an address with no subscriber here that is erased in the file (its `suppression` is `erased`, which is still added): no subscriber is recorded, so an import never brings back an erased person’s data.",
+    "`subscribed`, but the address carries a suppression here, a do-not-contact marker included: never added or confirmed. Also `unsubscribed` for an address whose suppression here is the do-not-contact marker an erasure left, and, for an address erased in the file (its `suppression` is `erased`, which is still added), `subscribed` or `unsubscribed` with no subscriber here, or `subscribed` and pending here, which stays pending: no subscriber is recorded or confirmed, so an import never brings back an erased person’s data.",
   suppression_added:
     "The row carries a suppression and the address has none here (or only a do-not-contact marker, which a bounce, a complaint, or a manual suppression replaces), and nothing else changes. Applied whatever the row’s `status`.",
   left_out:
