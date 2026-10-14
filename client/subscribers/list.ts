@@ -172,7 +172,7 @@ function legendRow(pill: Html, means: string): Html {
   return html`<dt>${pill}</dt><dd>${means}</dd>`;
 }
 function legend(): Html {
-  return html`<div class="sub-legend" id="subLegend" role="region" aria-labelledby="subLegendToggle" hidden>
+  return html`<div class="sub-legend" id="subLegend" role="region" aria-labelledby="subLegendToggle" hidden><div class="sub-legend-body">
     <h2>Status</h2>
     <dl>${SUB_STATUSES.map(({ value }) => legendRow(badge(value), STATUS_MEANS[value] ?? ""))}</dl>
     <h2>Suppressed</h2>
@@ -180,7 +180,7 @@ function legend(): Html {
     <dl>${Object.values(SUPPRESSIONS).map(({ label, means }) =>
       legendRow(html`<span class="badge suppressed">${label}</span>`, means),
     )}</dl>
-  </div>`;
+  </div></div>`;
 }
 
 // A suppressed address keeps its consent status, but the status isn't in effect while the
