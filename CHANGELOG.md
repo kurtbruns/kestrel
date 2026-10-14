@@ -18,7 +18,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
-- Readers can reply. The setup guide's Connect Amazon SES gains a step, "Receive replies at your From address", that forwards the From address to your inbox with Cloudflare Email Routing, where before nothing received mail there and a reply most likely bounced; Verify it works now has you reply to your test email. Kestrel still only sends: it never receives or stores a reply. An existing instance can add the forwarding at any time, with no redeploy. Settings says under the From address that readers' replies go there, linking the step (SPEC §9).
+- Readers can reply. The setup guide's Connect Amazon SES gains a step, "Receive replies at your From address", that forwards the From address to your inbox with Cloudflare Email Routing, where before nothing received mail there and a reply most likely bounced; Verify it works now has you reply to your test email. Kestrel still only sends: it never receives or stores a reply. An existing instance can add the forwarding at any time, with no redeploy. The new step is section 3, so Connect Amazon SES's later sections move down one (Request production access is now 5, Subscribe the app to the topic now 9), and a link to one of them by its old anchor (such as `#4-request-production-access`) now opens the top of the page instead. Settings says under the From address that readers' replies go there, linking the step (SPEC §9).
 
 ## [1.9.0] - 2026-10-13
 
