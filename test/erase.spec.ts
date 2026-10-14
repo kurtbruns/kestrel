@@ -1,7 +1,14 @@
 import { createExecutionContext, SELF, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { ImportCommitResponse, ImportPlanResponse } from "../shared/imports";
+import {
+  IMPORT_LIMITS,
+  IMPORT_OUTCOMES,
+  type ImportCommitResponse,
+  type ImportPlanResponse,
+  type OutcomeCounts,
+  type PlainListStatus,
+} from "../shared/imports";
 import type { SendView } from "../shared/sends";
 import type { EraseResponse } from "../shared/subscribers";
 import { createRouter } from "../src/app";
@@ -10,6 +17,7 @@ import * as subs from "../src/db/subscribers";
 import { type AppEnv, getConfig } from "../src/env";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { sweep } from "../src/send/sweep";
+import { commitImport, planImport } from "../src/services/imports";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
@@ -97,16 +105,24 @@ async function everyRow(): Promise<string[]> {
   return lines;
 }
 
-async function importCsv(lines: string[]): Promise<ImportCommitResponse> {
-  const file = {
+function csvFile(lines: string[]): { name: string; text: string } {
+  return {
     name: "list.csv",
     text: `${["email,status,opt_in,origin,suppression,subscribed_at,confirmed_at,unsubscribed_at,suppressed_at,evidence", ...lines].join("\r\n")}\r\n`,
   };
+}
+
+/** Plan a file through the API, then commit that plan, attesting and acknowledging what it asks. */
+async function planAndCommit(
+  file: { name: string; text: string },
+  plainListStatus?: PlainListStatus,
+): Promise<{ plan: ImportPlanResponse; result: ImportCommitResponse }> {
+  const extra = plainListStatus ? { plain_list_status: plainListStatus } : {};
   const plan: ImportPlanResponse = await readJson(
     await SELF.fetch(`${base}/api/imports/plan`, {
       method: "POST",
       headers: JSON_AUTH,
-      body: JSON.stringify({ file }),
+      body: JSON.stringify({ file, ...extra }),
     }),
   );
   const res = await SELF.fetch(`${base}/api/imports`, {
@@ -114,6 +130,7 @@ async function importCsv(lines: string[]): Promise<ImportCommitResponse> {
     headers: JSON_AUTH,
     body: JSON.stringify({
       file,
+      ...extra,
       plan_hash: plan.plan_hash,
       attestation: plan.attestation
         ? { version: plan.attestation.version, accepted: true }
@@ -122,7 +139,23 @@ async function importCsv(lines: string[]): Promise<ImportCommitResponse> {
     }),
   });
   expect(res.status).toBe(201);
-  return res.json();
+  return { plan, result: await res.json() };
+}
+
+async function importCsv(lines: string[]): Promise<ImportCommitResponse> {
+  return (await planAndCommit(csvFile(lines))).result;
+}
+
+/** Every outcome at zero, but those given. */
+function counts(nonzero: Partial<OutcomeCounts>): OutcomeCounts {
+  return { ...Object.fromEntries(IMPORT_OUTCOMES.map((o) => [o, 0])), ...nonzero } as OutcomeCounts;
+}
+
+/** The tables any row naming `email` is in, whatever its casing. */
+async function tablesNaming(email: string): Promise<string[]> {
+  return (await everyRow())
+    .filter((l) => l.toLowerCase().includes(email))
+    .map((l) => l.split(":")[0] ?? "");
 }
 
 describe("erasing a subscriber (SPEC §7)", () => {
@@ -254,6 +287,166 @@ describe("erasing a subscriber (SPEC §7)", () => {
     const again = await erase("id-ada@example.com");
     expect(again.status).toBe(404);
     expect((await readJson(again)).error).toBe("not_found");
+  });
+});
+
+describe("an import after an erasure, whatever status the file gives the address (SPEC §7)", () => {
+  const email = "ada@example.com";
+
+  beforeEach(async () => {
+    await seedConfirmed(email);
+    await eraseOk(email);
+  });
+
+  for (const [what, file, status] of [
+    [
+      "an unsubscribed row",
+      csvFile([
+        `${email},unsubscribed,unknown,sendy,,,,2024-05-05T00:00:00Z,,"{""ip"":""203.0.113.7""}"`,
+      ]),
+      undefined,
+    ],
+    [
+      "a plain list imported as unsubscribed",
+      { name: "list.txt", text: `${email}\r\n` },
+      "unsubscribed",
+    ],
+  ] as const) {
+    it(`is blocked for ${what}, creating no subscriber and keeping the marker`, async () => {
+      const { plan, result } = await planAndCommit(file, status);
+
+      const blocked = [
+        { row: 1, email, outcome: "blocked_by_suppression", suppression_added: false },
+      ];
+      expect(plan.counts).toEqual(counts({ blocked_by_suppression: 1 }));
+      expect(plan.rows).toEqual(blocked);
+      expect(result.counts).toEqual(counts({ blocked_by_suppression: 1 }));
+      expect(result.rows).toEqual(blocked);
+      expect(result.differed).toEqual([]);
+      expect(await subs.getByEmail(env.DB, email)).toBeNull();
+      expect(await suppressionOf(email)).toEqual({ email, reason: "erased", detail: null });
+      expect(await tablesNaming(email)).toEqual(["suppressions"]);
+      expect((await everyRow()).filter((l) => l.includes("203.0.113.7"))).toEqual([]);
+    });
+  }
+
+  it("still lets the file's own bounce replace the marker, creating no subscriber", async () => {
+    const { plan, result } = await planAndCommit(
+      csvFile([`${email},unsubscribed,unknown,sendy,bounce,,,,,`]),
+    );
+
+    const blocked = [{ row: 1, email, outcome: "blocked_by_suppression", suppression_added: true }];
+    expect(plan.counts).toEqual(counts({ blocked_by_suppression: 1 }));
+    expect(plan.rows).toEqual(blocked);
+    expect(result.rows).toEqual(blocked);
+    expect(result.suppressions_added).toBe(1);
+    expect((await suppressionOf(email))?.reason).toBe("import_bounce");
+    expect(await subs.getByEmail(env.DB, email)).toBeNull();
+    expect(await tablesNaming(email)).toEqual(["suppressions"]);
+  });
+
+  it("is caught when the commit applies, for an address erased after the plan", async () => {
+    const other = "grace@example.com";
+    const plan = await planImport(
+      env.DB,
+      { ...csvFile([`${other},unsubscribed,unknown,sendy,,,,,,`]), plainListStatus: null },
+      { maxRows: IMPORT_LIMITS.maxRows, maxRowsReason: null, publication: "Field Notes" },
+    );
+    expect(plan.counts).toEqual(counts({ create_unsubscribed: 1 }));
+    // They subscribe and are erased between the plan and the commit.
+    await seedConfirmed(other);
+    await eraseOk(other);
+
+    const result = await commitImport(
+      env.DB,
+      plan,
+      { kind: "human", email: "publisher@example.com", via: "dev" },
+      Date.now(),
+    );
+
+    expect(result.differed).toEqual([
+      { row: 1, email: other, planned: "create_unsubscribed", applied: "blocked_by_suppression" },
+    ]);
+    expect(result.counts).toEqual(counts({ blocked_by_suppression: 1 }));
+    expect(await subs.getByEmail(env.DB, other)).toBeNull();
+    expect((await suppressionOf(other))?.reason).toBe("erased");
+    expect(await tablesNaming(other)).toEqual(["suppressions"]);
+  });
+
+  it("is reported as blocked when the file's own bounce replaces a marker added after the plan", async () => {
+    const other = "grace@example.com";
+    const plan = await planImport(
+      env.DB,
+      { ...csvFile([`${other},unsubscribed,unknown,sendy,bounce,,,,,`]), plainListStatus: null },
+      { maxRows: IMPORT_LIMITS.maxRows, maxRowsReason: null, publication: "Field Notes" },
+    );
+    expect(plan.counts).toEqual(counts({ create_unsubscribed: 1 }));
+    await seedConfirmed(other);
+    await eraseOk(other);
+
+    const result = await commitImport(
+      env.DB,
+      plan,
+      { kind: "human", email: "publisher@example.com", via: "dev" },
+      Date.now(),
+    );
+
+    expect(result.differed).toEqual([
+      { row: 1, email: other, planned: "create_unsubscribed", applied: "blocked_by_suppression" },
+    ]);
+    expect(result.counts).toEqual(counts({ blocked_by_suppression: 1 }));
+    expect(result.suppressions_added).toBe(1);
+    expect(await subs.getByEmail(env.DB, other)).toBeNull();
+    expect((await suppressionOf(other))?.reason).toBe("import_bounce");
+    expect(await tablesNaming(other)).toEqual(["suppressions"]);
+  });
+});
+
+describe("an import row that itself says the address was erased (SPEC §7)", () => {
+  const email = "ada@example.com";
+
+  for (const [status, outcome] of [
+    ["subscribed", "blocked_by_suppression"],
+    ["unsubscribed", "blocked_by_suppression"],
+    ["pending", "suppression_added"],
+  ] as const) {
+    it(`adds only the marker for a ${status} row, creating no subscriber`, async () => {
+      const { plan, result } = await planAndCommit(
+        csvFile([
+          `${email},${status},double,sendy,erased,2024-01-01T00:00:00Z,,,,"{""ip"":""203.0.113.7""}"`,
+        ]),
+      );
+
+      const rows = [{ row: 1, email, outcome, suppression_added: true }];
+      expect(plan.counts).toEqual(counts({ [outcome]: 1 }));
+      expect(plan.rows).toEqual(rows);
+      expect(plan.suppressions_added).toBe(1);
+      expect(plan.attestation).toBeNull();
+      expect(result.counts).toEqual(counts({ [outcome]: 1 }));
+      expect(result.rows).toEqual(rows);
+      expect(result.differed).toEqual([]);
+      expect(await subs.getByEmail(env.DB, email)).toBeNull();
+      expect((await suppressionOf(email))?.reason).toBe("erased");
+      expect(await tablesNaming(email)).toEqual(["suppressions"]);
+      expect((await everyRow()).filter((l) => l.includes("203.0.113.7"))).toEqual([]);
+    });
+  }
+
+  it("is blocked, keeping the suppression here, for an address already suppressed here", async () => {
+    await subs.addSuppression(env.DB, email, "bounce");
+
+    const { plan, result } = await planAndCommit(
+      csvFile([`${email},unsubscribed,unknown,sendy,erased,,,,,`]),
+    );
+
+    const blocked = [
+      { row: 1, email, outcome: "blocked_by_suppression", suppression_added: false },
+    ];
+    expect(plan.rows).toEqual(blocked);
+    expect(result.rows).toEqual(blocked);
+    expect(await subs.getByEmail(env.DB, email)).toBeNull();
+    expect((await suppressionOf(email))?.reason).toBe("bounce");
+    expect(await tablesNaming(email)).toEqual(["suppressions"]);
   });
 });
 

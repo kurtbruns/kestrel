@@ -195,13 +195,15 @@ While a send is paused, the watch gives no rate or time to finish, which would p
 
 ### Subscribers
 
-The list as a whole (SPEC §8). The head has **Add subscriber** (Primary). A summary card gives the composition of the whole list, with an info tip defining each state; it doesn't change with the filter. The list filters by consent state and, separately, by suppression, because suppression is an overlay on an address, not a consent state (SPEC §7). A suppressed address carries a small red flag beside it naming why, never a value in the Status column.
+The list as a whole (SPEC §8). The head has **Export** (Ghost) beside **Add subscriber** (Primary). A summary card gives the composition of the whole list, with an info tip defining each state; it doesn't change with the filter. The list filters by consent state and, separately, by suppression, because suppression is an overlay on an address, not a consent state (SPEC §7). A suppressed address carries a small red flag beside it naming why, never a value in the Status column.
 
 **Add subscriber** starts double opt-in and says so. Its act is **Send confirmation**, not "Add", because no one joins the audience until they confirm (I1). **Unsubscribe**, from a confirmed subscriber's row menu, is immediate (I2) and confirmed in a dialog with a Danger button.
 
 **Erase** is in every subscriber's row menu, below Unsubscribe, since anyone on the list can ask to be erased (SPEC §7). It can't be undone, so it is confirmed in a dialog with a Danger **Erase** that says what goes (the subscriber and how they joined), what stays (past sends, showing an erased recipient; the address, kept only so it's never mailed), that it can't be undone, and that the person can still rejoin themselves. Its toast names the address, and says so when a bounce, complaint, or block the address already had still stands. An erased address that subscribed again is flagged **erased** like any suppression, its tip saying it isn't mailed until they confirm.
 
 **Adding an erased address** asks before sending. When Send confirmation meets an erased address, a second dialog stacks over Add subscriber: "Send to an erased address?", naming the address and when it was erased, and saying to send only if the person asked to join again, and that they rejoin only by confirming. Its Primary is **Send confirmation**; Cancel, the default focus, returns to the Add dialog with nothing sent. The public form never asks.
+
+**Export** downloads the whole list as one CSV in the import format (SPEC §7), named for the day the export began. It reads every page of the export before saving anything and writes them with the same writer the server documents, so the file is the one the API's pages make, whatever the list's size. The button reads "Exporting…" until the file is saved. Nothing is confirmed, since nothing changes; a failure is a toast in the server's words, and no partial file is saved. An export finishes and saves its file even if you leave the page while it reads.
 
 ### Template
 
@@ -247,7 +249,7 @@ The groups have no headings, only a wider gap: each section's title, its **inten
 
 **Notifications** (SPEC §8) has one field, the address, and **Send a test notification**, a check rather than the section's purpose, so it isn't Primary. The test goes to the saved address only, so while the field is blank or unsaved the button is disabled with a line saying why. Beneath, the deploy-time channel shows read-only: how notifications are sent, their From, and the **last notification**, as a "Delivered" or "Not delivered" pill with the channel's own words. A failed channel is a standing state, not an event, so it stays in its row until a later notification gets through, and is never a toast. When the channel is the newsletter's own provider, the section's note names the one notification it can't carry: the provider refusing the account.
 
-**Email sender** and **Instance** reflect deploy configuration read-only (§1.7), with the guide that changes them. While a local server simulates a provider (SPEC §10), the provider row carries a neutral pill naming it ("Simulating Amazon SES").
+**Email sender** and **Instance** reflect deploy configuration read-only (§1.7), with the guide that changes them. While a local server simulates a provider (SPEC §10), the provider row carries a neutral pill naming it ("Simulating Amazon SES"). Under the From address, one muted line says where readers' replies go ("Readers’ replies go to this address. Forward it to your inbox."), linking the setup guide's step for it. The app can't tell whether the forwarding exists, so the line explains and never warns (§1.3): no amber, no state, and nothing behind it to set.
 
 ### Docs and API
 

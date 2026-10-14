@@ -3,6 +3,7 @@
 import type { SubscriberListItem, SubscriberListResponse } from "../../shared/subscribers";
 import { api, describeError } from "../api";
 import { $, $$ } from "../ui/dom";
+import { saveFile } from "../ui/download";
 import { fmt } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
 import {
@@ -14,8 +15,9 @@ import {
   wireSort,
   wireToolbar,
 } from "../ui/list_controls";
-import { badge, infoTip, openMenu, renderError } from "../ui/widgets";
+import { badge, busy, infoTip, openMenu, renderError, toast } from "../ui/widgets";
 import { addSubscriberModal, confirmErase, confirmUnsubscribe } from "./dialogs";
+import { exportFile } from "./export";
 
 // The story of the list as a whole: its composition (by-status counts) and the roster,
 // filterable, sortable, and searchable. Consent status and suppression are separate
@@ -55,7 +57,7 @@ export async function renderSubscribers(
   setHtml(
     root,
     html`
-    <div class="spread page-head"><h1>Subscribers</h1><button class="primary" id="addSub">Add subscriber</button></div>
+    <div class="spread page-head"><h1>Subscribers</h1><span class="row"><button type="button" class="ghost" id="exportSubs">Export</button><button class="primary" id="addSub">Add subscriber</button></span></div>
     <div id="subCounts" class="muted">Loading…</div>
     ${listToolbar({ statuses: SUB_STATUSES, suppressible: true, searchPlaceholder: "Search email…" })}
     <div id="subList" class="muted">Loading…</div>
@@ -88,6 +90,17 @@ export async function renderSubscribers(
   }
 
   $("#addSub").onclick = () => addSubscriberModal(load, signal);
+  const exportBtn = $<HTMLButtonElement>("#exportSubs");
+  exportBtn.onclick = () =>
+    busy(exportBtn, "Exporting…", async () => {
+      try {
+        const file = await exportFile();
+        saveFile(file.text, file.name, "text/csv");
+      } catch (e) {
+        // The export has no surface of its own to say a failure in (DESIGN §5).
+        toast(describeError(e));
+      }
+    });
   wireToolbar(root, state, load);
   load();
 }

@@ -14,7 +14,7 @@ import {
   stubClipboard,
   unmount,
 } from "../test/support";
-import { headingAnchor, renderDocs } from "./docs";
+import { renderDocs } from "./docs";
 
 // The guide as the Worker serves it: sanitized fragments with no ids on the headings, three
 // steps of the main path and one reference page after them.
@@ -226,12 +226,6 @@ describe("docs room", () => {
     await mount((r, s) => renderDocs("overview", r, s, "check%2"));
     expect($("#doc-h-what-you-get")).toBeTruthy();
     expect(top).toHaveBeenCalledWith(0, 0);
-  });
-
-  it("derives a heading's anchor the way GitHub does", () => {
-    expect(headingAnchor("7. Read the logs")).toBe("7-read-the-logs");
-    expect(headingAnchor("3. Fill in wrangler.jsonc")).toBe("3-fill-in-wranglerjsonc");
-    expect(headingAnchor("Before you begin")).toBe("before-you-begin");
   });
 
   it("copies a code block", async () => {

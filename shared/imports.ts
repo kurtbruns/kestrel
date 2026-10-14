@@ -768,7 +768,8 @@ export type ImportOutcome = (typeof IMPORT_OUTCOMES)[number];
 
 /** When each outcome applies, for the format route and the reference page. */
 export const IMPORT_OUTCOME_MEANINGS: Record<ImportOutcome, string> = {
-  create_confirmed: "`subscribed`, with no subscriber and no suppression here: added as confirmed.",
+  create_confirmed:
+    "`subscribed`, with no subscriber and no suppression here, and not erased in the file: added as confirmed.",
   confirm_pending:
     "`subscribed`, and pending here (never confirmed): confirmed, and its confirmation link no longer works.",
   unchanged:
@@ -776,13 +777,13 @@ export const IMPORT_OUTCOME_MEANINGS: Record<ImportOutcome, string> = {
   mark_unsubscribed:
     "`unsubscribed`, and confirmed or pending here, with no confirmation here newer than the row’s `unsubscribed_at`: unsubscribed.",
   create_unsubscribed:
-    "`unsubscribed`, with no subscriber here: recorded as unsubscribed, so the list remembers they left.",
+    "`unsubscribed`, with no subscriber here, and not erased here or in the file: recorded as unsubscribed, so the list remembers they left.",
   kept_confirmed_newer:
     "`unsubscribed`, but the reader confirmed here after the source’s `unsubscribed_at`: their newer action stands.",
   kept_unsubscribed:
     "`subscribed`, but unsubscribed here, or pending again after leaving until they confirm here themselves. An unsubscribe here is never reversed (I2).",
   blocked_by_suppression:
-    "`subscribed`, but the address carries a suppression here, a do-not-contact marker included: never added or confirmed.",
+    "`subscribed`, but the address carries a suppression here, a do-not-contact marker included: never added or confirmed. Also `unsubscribed` for an address whose suppression here is the do-not-contact marker an erasure left, and `subscribed` or `unsubscribed` for an address with no subscriber here that is erased in the file (its `suppression` is `erased`, which is still added): no subscriber is recorded, so an import never brings back an erased person’s data.",
   suppression_added:
     "The row carries a suppression and the address has none here (or only a do-not-contact marker, which a bounce, a complaint, or a manual suppression replaces), and nothing else changes. Applied whatever the row’s `status`.",
   left_out:

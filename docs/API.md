@@ -50,7 +50,7 @@ When those two pull against each other, prefer the smaller API and a documented 
 | Send | One dispatch of a post: the frozen email, the fire time, and the record | The one shape is the send's view. Its email and its rows have routes of their own. |
 | Delivery | One recipient's row in a send's record | Paged. Read from the rows, so it is heavier than the view. |
 | Subscriber | An address, its consent state, its suppression, and how it joined | Paged. Erasing one removes it and answers with what was done, not the resource, since nothing of it is left. The whole list also reads out as an export, a page at a time in the import format's rows: a file format, not a second shape of the subscriber. |
-| Import | A plan of what bringing a list in would do, and the record of one committed | A plan writes nothing. The record never holds a subscriber's address. |
+| Import | A plan of what bringing a list in would do, and the record of one committed | A plan writes nothing. The record never holds a subscriber's address. A `subscribed` or `unsubscribed` row for an address whose suppression is an erasure's `erased` marker, or that the row itself says was erased, plans and applies as `blocked_by_suppression`, so an import never creates a subscriber for it. |
 | Settings | The runtime preferences (SPEC §9) | One resource. It never holds a secret. It shows deploy configuration read-only, including whether a deployment with no provider is local development's preview of that state (`deployment.notConnectedPreview`), so a client can say how to leave it. |
 
 ## Reading and following

@@ -2,6 +2,7 @@
 // slug, title, section, and the sanitized HTML fragment the Worker rendered from the
 // repo's own Markdown, in reading order. The Worker's docs route produces this shape and
 // the editor injects the fragments into its own DOM; one definition, so neither can drift.
+// The rule that names a heading's anchor lives here too, for the same reason.
 
 /** One section of the guide, as `docs/README.md` lays it out under a `##` heading. */
 export interface DocSection {
@@ -36,4 +37,30 @@ export interface DocFragment {
 export interface DocsResponse {
   landing: DocsLanding;
   docs: DocFragment[];
+}
+
+/** A heading's anchor as GitHub derives it from the heading's text: lowercased, with
+ *  punctuation dropped and each space a hyphen. The guide is read on GitHub too, so a link
+ *  written against GitHub's anchors (`05-verify.md#7-read-the-logs`) works in the editor
+ *  unchanged. The editor names its headings by it, and the Worker's suite checks the
+ *  editor's links to a heading against it. */
+export function headingAnchor(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s_-]/gu, "")
+    .replace(/\s/g, "-");
+}
+
+/** Each heading's anchor, in document order, as the editor names them: the anchor rule,
+ *  with a repeat taking GitHub's -1, -2. One rule for the editor and the suite that checks
+ *  links against it. */
+export function headingAnchors(texts: readonly string[]): string[] {
+  const seen = new Map<string, number>();
+  return texts.map((text) => {
+    const base = headingAnchor(text);
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return n ? `${base}-${n}` : base;
+  });
 }

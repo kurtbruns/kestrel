@@ -44,6 +44,7 @@ import {
 } from "../../shared/imports";
 import type { ListEntry, ListState } from "../db/imports";
 import * as imports from "../db/imports";
+import { ERASED } from "../db/subscribers";
 import { onFreePlanLimits } from "../env";
 import { HttpError, refusal } from "../lib/errors";
 import { newId, newTokens } from "../lib/ids";
@@ -127,6 +128,10 @@ const WRITE_OUTCOMES: ReadonlySet<ImportOutcome> = new Set([
  * to pending through the public form, so only its owner's confirmation undoes the leaving
  * (I2). A suppression here stands, except that an erased marker gives way to any other
  * reason, so a known bounce or complaint still stops the address being sent confirmations.
+ * An erased marker with no subscriber behind it also blocks an unsubscribed row: recording
+ * the person as unsubscribed would bring back the data the erasure removed. A row that
+ * itself says the address was erased never creates a subscriber either: it is blocked by its
+ * own marker, which it still brings.
  */
 export function classify(
   row: ImportRow,
@@ -135,8 +140,7 @@ export function classify(
 ): { outcome: ImportOutcome; suppressionAdded: boolean } {
   const suppressionAdded =
     row.suppression !== null &&
-    (suppressionHere === undefined ||
-      (suppressionHere === "erased" && row.suppression !== "erased"));
+    (suppressionHere === undefined || (suppressionHere === ERASED && row.suppression !== ERASED));
   const leftHere =
     here?.status === "unsubscribed" ||
     (here?.status === "pending" && here.unsubscribed_at !== null);
@@ -162,7 +166,9 @@ export function classify(
       (here.confirmed_at ?? 0) > row.unsubscribed_at;
     outcome =
       here === undefined
-        ? "create_unsubscribed"
+        ? suppressionHere === ERASED
+          ? "blocked_by_suppression"
+          : "create_unsubscribed"
         : here.status === "unsubscribed"
           ? "unchanged"
           : confirmedHereSince
@@ -170,6 +176,12 @@ export function classify(
             : "mark_unsubscribed";
   } else {
     outcome = "left_out";
+  }
+  if (
+    row.suppression === ERASED &&
+    (outcome === "create_confirmed" || outcome === "create_unsubscribed")
+  ) {
+    outcome = "blocked_by_suppression";
   }
   if (suppressionAdded && (outcome === "unchanged" || outcome === "left_out")) {
     outcome = "suppression_added";
@@ -511,7 +523,9 @@ export async function commitImport(
     actual.push({ ...p, outcome, suppressionAdded });
   }
   // A planned write the list held back: read the address as it now stands, setting aside a
-  // suppression this import itself just added, and say what that means for it.
+  // suppression this import itself just added, and say what that means for it. A new
+  // address held back while this import suppressed it was erased in between: the import's
+  // suppression replaced that marker, which is what held the write back.
   if (unsettled.length > 0) {
     let state: ListState = { subscribers: new Map(), suppressions: new Map() };
     try {
@@ -527,7 +541,11 @@ export async function commitImport(
       const { outcome } = classify(
         { ...p.row, suppression: null },
         state.subscribers.get(e),
-        applied.suppressed.has(e) ? undefined : state.suppressions.get(e),
+        applied.suppressed.has(e)
+          ? state.subscribers.has(e)
+            ? undefined
+            : ERASED
+          : state.suppressions.get(e),
       );
       // The guard held the write back, so whatever the list would allow now did not happen.
       actual.push({ ...p, outcome: WRITE_OUTCOMES.has(outcome) ? "unchanged" : outcome });
