@@ -103,6 +103,6 @@ The page shows the exact copy that was sent, never a fresh rendering of it. Kest
 
 A sent post can't be changed, and neither can its page. The sign-off shows your publication as it was when you sent the post, while the frame shows it as it is now. The page's address is permanent, so links to it keep working.
 
-Open it from **View published post ↗** on the send's record, or **Archive ↗** in the dashboard's **Sent** list. **View publication ↗** in the sidebar opens your home page, which links into your archive. [Your publication](03-your-publication.md) says where your name, logo, and address appear.
+Open it from **View published post ↗** on the send's record, or **Archive ↗** in the dashboard's **Sent** list. **View publication ↗** in the sidebar opens your home page, which links into your archive. [Name your publication](03-name-your-publication.md) says where your name, logo, and address appear.
 
 Next, see what Claude can do for you through the same API in [Working with Claude](07-working-with-claude.md).

@@ -1,4 +1,4 @@
-# Writing a post
+# Write a post
 
 You write a post in Markdown, in the editor. Kestrel saves it as you type and shows you the exact email under **Preview**. A test sends that same email to any inbox you name.
 
@@ -95,4 +95,4 @@ A test needs an email provider. Until whoever runs your Kestrel connects one, th
 
 ## Next
 
-When the test looks right, [Scheduling and sending](05-scheduling-and-sending.md) covers putting the post on the schedule and the review window before it goes out.
+When the test looks right, [Scheduling and sending](05-scheduling-and-sending.md) covers putting the post on the schedule. On a new publication, finish setting up first: [Share your subscribe link](09-share-your-subscribe-link.md).

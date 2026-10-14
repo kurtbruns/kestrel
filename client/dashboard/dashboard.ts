@@ -504,7 +504,8 @@ function apiConnectCard(connected: boolean): Html {
  * comes late because its New post creates a draft, which ends the first-run page; sharing
  * comes last so a visitor finds a post in the archive. While no provider is connected,
  * connecting one replaces the sending-domain step (connecting SES verifies the domain) and
- * the subscribe step says signups wait for it (the page is closed).
+ * the subscribe step says signups wait for it (the page is closed). The Publishing docs'
+ * Setup section (docs/publishing/README.md) follows these steps, so a change here changes it.
  */
 function setupChecklistHtml(pub: Publication, deployment: DeploymentView | null): Html {
   const subscribeUrl = `${deployment?.appOrigin || location.origin}/subscribe`;

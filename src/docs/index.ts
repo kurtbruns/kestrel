@@ -34,12 +34,13 @@ import upgrade from "../../docs/guides/07-upgrade.md";
 import tryLocally from "../../docs/guides/08-try-locally.md";
 import yourList from "../../docs/publishing/01-your-list.md";
 import sendingRules from "../../docs/publishing/02-sending-rules.md";
-import yourPublication from "../../docs/publishing/03-your-publication.md";
-import writingAPost from "../../docs/publishing/04-writing-a-post.md";
+import nameYourPublication from "../../docs/publishing/03-name-your-publication.md";
+import writeAPost from "../../docs/publishing/04-write-a-post.md";
 import schedulingAndSending from "../../docs/publishing/05-scheduling-and-sending.md";
 import afterASend from "../../docs/publishing/06-after-a-send.md";
 import workingWithClaude from "../../docs/publishing/07-working-with-claude.md";
 import importFormat from "../../docs/publishing/08-import-format.md";
+import shareYourSubscribeLink from "../../docs/publishing/09-share-your-subscribe-link.md";
 import publishingIndex from "../../docs/publishing/README.md";
 import selfHostingIndex from "../../docs/README.md";
 import configuration from "../../docs/reference/01-configuration.md";
@@ -58,12 +59,13 @@ import { sanitizeEmailHtml } from "../render/sanitize";
 const PAGES: Record<string, string> = {
   "publishing/01-your-list.md": yourList,
   "publishing/02-sending-rules.md": sendingRules,
-  "publishing/03-your-publication.md": yourPublication,
-  "publishing/04-writing-a-post.md": writingAPost,
+  "publishing/03-name-your-publication.md": nameYourPublication,
+  "publishing/04-write-a-post.md": writeAPost,
   "publishing/05-scheduling-and-sending.md": schedulingAndSending,
   "publishing/06-after-a-send.md": afterASend,
   "publishing/07-working-with-claude.md": workingWithClaude,
   "publishing/08-import-format.md": importFormat,
+  "publishing/09-share-your-subscribe-link.md": shareYourSubscribeLink,
   "get-started/02-deploy.md": deploy,
   "get-started/03-access.md": access,
   "get-started/04-ses.md": ses,

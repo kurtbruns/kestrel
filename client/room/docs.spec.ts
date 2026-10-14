@@ -155,7 +155,9 @@ describe("docs room", () => {
     ]);
     expect($(".docs-tabs [aria-current='page']").textContent).toBe("Publishing");
     // One intro covers both sets; a set's own intro, written for its index file, isn't repeated.
-    expect($(".docs-index-intro").textContent).toMatch(/^Kestrel's docs cover two jobs\./);
+    expect($(".docs-index-intro").textContent).toMatch(
+      /^Publishing covers writing and sending your newsletter/,
+    );
     expect($(".docs-index").textContent).not.toContain("Write and send.");
     // Only the set's own pages: the Self-hosting steps stay on its index.
     expect($$(".doc-card").map((c) => c.getAttribute("href"))).toEqual(["#/docs/your-list"]);

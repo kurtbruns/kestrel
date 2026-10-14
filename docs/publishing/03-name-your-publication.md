@@ -1,8 +1,8 @@
-# Your publication
+# Name your publication
 
-Your publication is its name, tagline, logo, and an optional mailing address, plus the one email template every post is sent in. You set the first four under **Settings → Publication identity**, and the template on the **Template** page.
+Give your newsletter a name and a look before your first post. Readers see your name, tagline, and logo in every email and on every public page. It's the first step of **Set up your publication** on your dashboard.
 
-This page covers what each part is and where readers see it. It also covers what a change does to scheduled posts, and who sets the From name and address.
+You set them under **Settings → Publication identity**. Every email takes its look from one template, which works as it comes and which you can edit on the **Template** page. This page also covers the optional mailing address, what a change does to scheduled posts, and who sets the From name and address.
 
 ## Name, tagline, and logo
 
@@ -65,7 +65,7 @@ Kestrel won't save a template without `{{ .Post.Body }}` or `{{ .Email.Unsubscri
 
 ### Email-only parts
 
-Wrap part of the template in `{{ if .IsEmail }}` and `{{ end }}` to show it in emails only, not on each post's public page. The starting templates wrap the unsubscribe link, the View in browser link, and the mailing address this way. To show your address on the web too, move it outside the wrapped part.
+Wrap part of the template in `{{ if .IsEmail }}` and `{{ end }}` to keep it off each post's public page. The starting templates wrap the unsubscribe link, the View in browser link, and the mailing address this way. To show your address on the web too, move it outside the wrapped part.
 
 ### Test the template
 
@@ -89,4 +89,4 @@ Afterwards, each of those posts says its look changed since your last test. The 
 
 Whoever runs your Kestrel sets the From name and address your emails come from. You can't change them in the dashboard, and **Settings → Email sender** shows them read-only. [Connect Amazon SES](../get-started/04-ses.md#8-set-the-provider-and-deploy) covers setting them.
 
-Next, [Writing a post](04-writing-a-post.md).
+Next, [Write a post](04-write-a-post.md).

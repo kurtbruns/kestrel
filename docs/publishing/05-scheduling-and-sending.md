@@ -26,7 +26,7 @@ So the post is locked while it's scheduled. It opens on **Preview**, which shows
 
 To change the post's content, cancel the schedule, edit, test again, and schedule it again. That resets your review, so your last test is always of the copy that sends.
 
-A change to your template, or to a publication detail the template shows, is different. It re-makes the email of every scheduled post, at the same send times, with the same content. Kestrel asks before it saves, in a dialog confirmed with **Save and apply**. Afterwards each re-made post's banner asks you to send a new test. The dashboard's card reads "Look changed since your last test" until you do. A save like this is refused while any scheduled post is within the minimum lead of its send time. The refusal says when to try again. [Your publication](03-your-publication.md) covers the template and those details.
+A change to your template, or to a publication detail the template shows, is different. It re-makes the email of every scheduled post, at the same send times, with the same content. Kestrel asks before it saves, in a dialog confirmed with **Save and apply**. Afterwards each re-made post's banner asks you to send a new test. The dashboard's card reads "Look changed since your last test" until you do. A save like this is refused while any scheduled post is within the minimum lead of its send time. The refusal says when to try again. [Name your publication](03-name-your-publication.md) covers the template and those details.
 
 ## Canceling
 

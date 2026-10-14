@@ -11,14 +11,15 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
   it("renders the docs in the indexes' order, Publishing first, with titles from each doc's H1 and an HTML fragment", () => {
     const { docs } = renderDocs();
     expect(docs.map((d) => `${d.set}/${d.section}/${d.slug}`)).toEqual([
-      "publishing/before-your-first-send/your-publication",
-      "publishing/before-your-first-send/your-list",
-      "publishing/before-your-first-send/sending-rules",
-      "publishing/every-post/writing-a-post",
-      "publishing/every-post/scheduling-and-sending",
-      "publishing/every-post/after-a-send",
-      "publishing/going-further/working-with-claude",
-      "publishing/going-further/import-format",
+      "publishing/setup/name-your-publication",
+      "publishing/setup/write-a-post",
+      "publishing/setup/share-your-subscribe-link",
+      "publishing/sending/scheduling-and-sending",
+      "publishing/sending/after-a-send",
+      "publishing/sending/sending-rules",
+      "publishing/guides/your-list",
+      "publishing/guides/working-with-claude",
+      "publishing/reference/import-format",
       "self-hosting/get-started/deploy",
       "self-hosting/get-started/access",
       "self-hosting/get-started/ses",
@@ -49,9 +50,10 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
     ]);
     expect(sets.map((s) => s.sections.map((sec) => [sec.id, sec.title, sec.numbered]))).toEqual([
       [
-        ["before-your-first-send", "Before your first send", false],
-        ["every-post", "Every post", false],
-        ["going-further", "Going further", false],
+        ["setup", "Setup", true],
+        ["sending", "Sending", false],
+        ["guides", "Guides", false],
+        ["reference", "Reference", false],
       ],
       [
         ["get-started", "Get started", true],

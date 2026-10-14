@@ -130,7 +130,7 @@ function renderDocsIndex(
     (s) =>
       html`<a href="#/docs/${s.id}" title="${s.title}"${s.id === landing.id ? html` aria-current="page"` : null}>${s.name}</a>`,
   )}</nav>`;
-  const main = html`<div class="docs-index"><h1>Kestrel docs</h1><p class="docs-index-intro">Kestrel's docs cover two jobs. <strong>Publishing</strong> is for whoever writes the newsletter: setting up your publication and list, then writing, sending, and following up on each post. <strong>Self-hosting</strong> is for whoever runs Kestrel: deploying it to your own Cloudflare account, connecting email, and keeping it up to date. One person often does both.</p>${tabs}${sections}</div>`;
+  const main = html`<div class="docs-index"><h1>Kestrel docs</h1><p class="docs-index-intro"><strong>Publishing</strong> covers writing and sending your newsletter, from naming your publication to what happens after each send. <strong>Self-hosting</strong> covers deploying Kestrel to your own Cloudflare account and keeping it running. One person often does both.</p>${tabs}${sections}</div>`;
   // Three uniform out-links under a "Kestrel" label — the same shape as the API rail's
   // label + tiers, so mobile can give both the same chip row. getkestrel.dev is the
   // project's home, the same for every instance, so it's a constant; the source and
