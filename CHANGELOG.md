@@ -10,7 +10,9 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading.** A script of yours that adds suppressions through the API sends `reason: "manual"` or none, reads what was stored from the answer's `suppression`, and takes a 200 with `added: false` as already suppressed. One that clears suppressions takes a 409 `erasure_marker` on an erased address as final.
+## [1.10.0] - 2026-10-14
+
+**Upgrading from 1.9.0.** No database migrations. Run `npm run check-context` in your instance's repository: this release changes the operator's Claude context (a new `/migrate-list` skill, and rules for erasing, for choosing between unsubscribing and blocking, and for reading the docs as Markdown), and a copy you've edited is merged by hand. Three API changes can break a script of yours, listed under Breaking. One that adds suppressions sends `reason: "manual"` or none, reads what was stored from the answer's `suppression`, and takes a 200 with `added: false` as already suppressed. One that clears suppressions takes a 409 `erasure_marker` on an erased address as final. One that reads `GET /api/docs` reads `sets` in place of `landing`.
 
 ### Added
 
@@ -27,7 +29,6 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Changed
 
 - The dashboard's first-run checklist speaks to the publisher: its second step, once an email provider is connected, is **Check your setup**, which opens a new Publishing page on sending yourself a test, how Kestrel tells you when something needs attention, and what changes as your list grows, in place of confirming the sending domain. It also gains **Bring your existing list**, before writing the first post, with **Import** for a publisher moving from another service; a fresh publication skips it. The checklist now stays until the first post rather than ending at the first subscriber, so importing a list no longer takes away the steps after it, and the list step shows as done with the count of subscribers on your list.
-- `GET /api/docs` returns `sets` (each set's id, name, title, intro, and sections) in place of the single `landing`, and each doc carries the `set` it belongs to. A section's id is now its heading's anchor rather than its folder (SPEC §11).
 - On the Subscribers page, each count in the summary filters the list: choose **confirmed**, **pending**, or **unsubscribed** to see that status, or **suppressed** to see every suppressed subscriber, and choose it again to see everyone. The suppressed count, here and on the dashboard, now counts suppressed subscribers rather than every suppressed address, so it matches the rows its filter shows (SPEC §8).
 - On the Subscribers page, the status and suppression pills no longer explain themselves in a hover tooltip, which keyboard, screen-reader, and touch users couldn't reach. A **Legend** beside the counts opens to show each pill beside what it means: the consent states, what suppressed means, and each red flag (bounced, complaint, blocked, erased). It replaces the counts' info tip, and the provider's words for a bounce or complaint, which the flag's tooltip carried, now show in **View subscriber**. The API reference describes subscriber states, suppression reasons, and each act on a subscriber in the same words, so Claude is told what you are told.
 - The other labels that explained themselves only on hover now say it on the page. On a sent post's record, the line accounting for every recipient says that a hard bounce or a complaint suppresses the address and a soft bounce leaves it on the list, where a row's outcome used to say it in a tooltip. On the Template page and the Settings template section, while a post is about to send, the lede says when it sends and that you can save once it has, which the in-use chip's tooltip used to, and the sentence goes away once that time has passed. Pills and chips across the editor show the ordinary arrow cursor rather than a text cursor.
@@ -47,6 +48,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Breaking
 
+- `GET /api/docs` returns `sets` (each set's id, name, title, intro, and sections) in place of the single `landing`, and each doc carries the `set` it belongs to. A section's id is now its heading's anchor rather than its folder (SPEC §11).
 - `counts.suppressed` in `GET /api/subscribers` counts subscribers whose address is suppressed, whatever their status, rather than every suppressed address, so it matches `suppressed=only`; an address suppressed with no subscriber is counted only in `GET /api/suppressions` (SPEC §8).
 - `POST /api/suppressions` adds only a block: `reason` may be omitted or `manual`, and any other is refused 400, since a bounce or complaint is the provider's to report and an erasure's marker is Erase's to leave. An address already suppressed keeps what it has, and the answer is now the suppression that stands with `added`, instead of echoing the request. `DELETE /api/suppressions/:email` refuses an erased address's marker with 409 `erasure_marker`, which only the person's own confirmation lifts (SPEC §7).
 
@@ -420,7 +422,8 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
-[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.10.0
 [1.9.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.9.0
 [1.8.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.8.0
 [1.7.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.7.0
