@@ -73,9 +73,9 @@ In the subscriber list, imported subscribers are **Confirmed** and receive your 
 
 Kestrel only sends mail. A reader who replies to a post writes to your From address, so replies reach you once that address forwards to an inbox you read. Whoever runs your Kestrel sets that up outside Kestrel.
 
-When a reader replies asking to be taken off the list, carrying it out is up to you, since Kestrel never sees the reply. Find them under **Subscribers**, and choose **Unsubscribe** from their ⋯ menu. It takes effect at once.
+When a reader replies asking to be taken off the list, carrying it out is up to you, since Kestrel never sees the reply. Find them under **Subscribers**, and choose **Unsubscribe** from their ⋯ menu. It takes effect at once. **Unsubscribe** is there for confirmed readers; one who never confirmed gets no posts, and **Erase** removes them.
 
-When a reader asks you to delete their data, choose **Erase** from their ⋯ menu instead. It removes the subscriber and how they joined, and can't be undone. It keeps only a do-not-contact marker, or the bounce, complaint, or block the address already had, so the address is never mailed again. The reader can still rejoin by subscribing and confirming themselves.
+When a reader asks you to delete their data, choose **Erase** from their ⋯ menu instead. It removes the subscriber and how they joined, and can't be undone. Past send records show an erased recipient in their place. Kestrel keeps only a do-not-contact marker, or the bounce, complaint, or block the address already had, so the address is never mailed again. The reader can still rejoin by subscribing and confirming themselves.
 
 ## Taking your list out
 

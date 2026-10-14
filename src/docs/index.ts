@@ -225,7 +225,7 @@ const SAME_PAGE_LINK = /href="#([^"/][^"]*)"/g;
  *  more segment. The room gives each heading GitHub's id for it, so an anchor that works on
  *  GitHub lands on the same heading in the app. A link to a file that is not a doc is left as
  *  written, and a spec catches it. `from` is the linking file's path; `slug` names the page a
- *  same-page link resolves against (a landing has none, so passes the empty slug). */
+ *  same-page link resolves against (a set's index passes the set's id). */
 function rewriteDocLinks(html: string, from: string, slug: string): string {
   return html
     .replace(MD_HREF, (whole, href: string, anchor: string | undefined) => {
@@ -254,11 +254,12 @@ function renderSets(): DocSet[] {
     id: set.id,
     name: set.name,
     title: set.title,
-    intro: renderFragment(set.intro, set.path, ""),
+    // A same-page link in an index resolves against the set's own route, `#/docs/<set>`.
+    intro: renderFragment(set.intro, set.path, set.id),
     sections: set.sections.map((sec) => ({
       id: sec.id,
       title: sec.title,
-      blurb: sec.blurb ? renderFragment(sec.blurb, set.path, "") : "",
+      blurb: sec.blurb ? renderFragment(sec.blurb, set.path, set.id) : "",
       numbered: sec.numbered,
     })),
   }));
@@ -281,21 +282,37 @@ export function renderDocs(): DocsResponse {
 
 // A relative Markdown link to a Markdown file, `[text](../guides/01-connect-claude.md#x)`.
 const MD_LINK = /\]\(([^)\s#:]+\.md)(#[^)\s]*)?\)/g;
+// Code, which shows link syntax as written and is never rewritten: a fenced block, or an
+// inline span.
+const MD_CODE = /^(```|~~~)[^\n]*\n[\s\S]*?^\1[^\n]*$|`[^`\n]+`/gm;
 
 /** A doc's Markdown for an agent to read (SPEC §11): a page by its slug, or a set's index by
- *  its id, with each link to another doc pointed at that doc's own Markdown route, which
- *  resolves beside this one (`connect-claude.md`), so an agent can follow it. Null for a name
- *  that is neither. */
+ *  its id, with its links pointed at the other docs' Markdown routes. Null for a name that is
+ *  neither. */
 export function docMarkdown(name: string): string | null {
   const doc = DOCS.find((d) => d.slug === name);
   const set = SET_SOURCES.find((s) => s.id === name);
   const from = doc?.path ?? set?.path;
   const markdown = doc?.markdown ?? set?.index;
-  if (from === undefined || markdown === undefined) {
-    return null;
+  return from === undefined || markdown === undefined
+    ? null
+    : markdownLinksForAgents(markdown, from);
+}
+
+/** Point each link to another doc at that doc's own Markdown route, which resolves beside
+ *  this one (`connect-claude.md`), so an agent can follow it. `from` is the file's path under
+ *  docs/. Code blocks and spans show link syntax as written, so they're left alone. */
+export function markdownLinksForAgents(markdown: string, from: string): string {
+  const rewrite = (prose: string): string =>
+    prose.replace(MD_LINK, (whole, href: string, anchor: string | undefined) => {
+      const target = TARGETS.get(resolvePath(from, href) ?? "");
+      return target ? `](${target}.md${anchor ?? ""})` : whole;
+    });
+  let out = "";
+  let at = 0;
+  for (const m of markdown.matchAll(MD_CODE)) {
+    out += rewrite(markdown.slice(at, m.index)) + m[0];
+    at = m.index + m[0].length;
   }
-  return markdown.replace(MD_LINK, (whole, href: string, anchor: string | undefined) => {
-    const target = TARGETS.get(resolvePath(from, href) ?? "");
-    return target ? `](${target}.md${anchor ?? ""})` : whole;
-  });
+  return out + rewrite(markdown.slice(at));
 }

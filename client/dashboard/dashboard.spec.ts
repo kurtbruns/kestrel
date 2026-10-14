@@ -415,6 +415,18 @@ describe("dashboard", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("keeps offering the import while no one on the list can be sent to", async () => {
+    // Only confirmed and pending subscribers count: an import that brought in only people
+    // who left or bounced leaves the step open, since a send would reach no one.
+    fake = world([], sendServer(), { pending: 0, confirmed: 0, unsubscribed: 12, suppressed: 3 });
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(0);
+    const step = $(".setup-list");
+    expect(step.classList.contains("setup-done")).toBe(false);
+    expect($("button", step).dataset.nav).toBe("#/subscribers/import");
+    expect(fake.unhandled).toEqual([]);
+  });
+
   // SPEC §9, DESIGN §4: a deployment with no provider connected says so where the
   // developer lands, as a standing state, and its checklist puts connecting one first.
   const steps = () => $$(".setup-steps li strong").map((s) => s.textContent);

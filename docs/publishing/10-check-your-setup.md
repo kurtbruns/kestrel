@@ -37,12 +37,12 @@ Whoever runs your Kestrel chooses how notifications are sent. [Notifications thr
 
 ## As your list grows
 
-A growing list meets a few limits, and Kestrel tells you before or when it reaches each one. Raising each is a change for whoever runs your Kestrel, as [Go live](../get-started/06-go-live.md#as-your-list-grows) describes.
+A growing list meets a few limits, and Kestrel tells you before or when it reaches each one. Raising each is a change for whoever runs your Kestrel, on the plans and accounts they chose, as [Go live](../get-started/06-go-live.md#as-your-list-grows) describes.
 
-- **Your provider's daily sending quota.** A send that hits it waits, and you're emailed. It resumes on its own once the quota frees up, and nobody is mailed twice.
-- **How long a send takes.** It grows with your list, and depends on your provider's sending rate and your Cloudflare plan. [Go live](../get-started/06-go-live.md#as-your-list-grows) gives the rates.
-- **Daily database writes on Cloudflare's free plan.** A large send or import can use up the day's writes. Then the whole app stops until midnight UTC. On the free plan, Kestrel warns you before a send to more than 5,000 recipients. It also warns you before an import that would use most of the day's writes. Neither warning stops you. [Bring your existing list](01-your-list.md#limits) explains more.
+- **Your provider's daily sending quota.** A send that hits it waits, and the dashboard shows why. It resumes on its own once the quota frees up, and nobody is mailed twice. Amazon SES reports a spent quota as refusing your account, so its email reaches you only if your notifications go another way ([Notifications](06-after-a-send.md#notifications)).
+- **How long a send takes.** It grows with your list, and depends on your provider's sending rate and the hosting plan whoever runs your Kestrel chose. [Go live](../get-started/06-go-live.md#as-your-list-grows) gives the rates.
+- **Daily database writes on the free hosting plan.** A large send or import can use up the day's writes. Then the whole app stops until midnight UTC. On that plan, Kestrel warns you before a send to more than 5,000 recipients. It also warns you before an import that would use most of the day's writes. Neither warning stops you. [Bring your existing list](01-your-list.md#limits) explains more.
 
-From about 5,000 subscribers, it's recommended to move to the $5 Workers Paid plan, which has no daily limit on writes.
+From about 5,000 subscribers, it's recommended that whoever runs your Kestrel moves to the paid hosting plan, which has no daily limit on writes.
 
 Next, [Bring your existing list](01-your-list.md).

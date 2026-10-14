@@ -68,7 +68,8 @@ Set the address under **Settings → Notifications**, in **Send notifications to
 You're told:
 
 - **When a send finishes,** with how many emails your provider accepted, how many were unsent, and how many were skipped.
-- **When your provider refuses your account,** with the provider's own words and what they point to.
+- **When your provider refuses your account,** with the provider's own words and what they point to. Amazon SES reports a spent daily quota this way too.
+- **When a send is held because no email provider is connected,** and that it goes out once one is.
 - **When a send stays in progress too long.**
 - **When a send waits for you to resolve it.**
 - **When a send missed its time,** going out late or not at all.

@@ -19,9 +19,10 @@ Opening the link alone records nothing, since mail scanners open links before a 
 The page always says to check the inbox, whatever the address is. Behind it, Kestrel sends a confirmation only when one is due:
 
 - **Already subscribed:** no email goes out, and they stay subscribed.
-- **Waiting to confirm:** they get a confirmation, but at most one in a short interval, however often the form is submitted.
+- **Waiting to confirm:** they get a confirmation, but at most one every 15 minutes, however often the form is submitted. A confirmation link works for 7 days, and an older one offers to send a fresh link.
 - **Unsubscribed earlier:** they get a confirmation, and confirming it puts them back on your list.
-- **Bounced or complained:** no email goes out. [After a send](06-after-a-send.md) covers those addresses.
+- **Bounced, complained, or blocked:** no email goes out. [After a send](06-after-a-send.md) covers those addresses.
+- **Erased at their request:** they get a confirmation, and confirming lifts the erasure, so they're back on your list.
 
 ## The confirmation email
 

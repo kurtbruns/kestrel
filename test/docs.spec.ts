@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import publishingIndex from "../docs/publishing/README.md";
 import selfHostingIndex from "../docs/README.md";
 import { type DocsResponse, headingAnchors } from "../shared/docs";
-import { bundledPages, docMarkdown, renderDocs } from "../src/docs";
+import { bundledPages, docMarkdown, markdownLinksForAgents, renderDocs } from "../src/docs";
 import { AUTH, base } from "./support/http";
 
 describe("docs registry (the two sets' index files and the pages they list)", () => {
@@ -63,6 +63,13 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
     ]);
     for (const s of sets) {
       expect(s.intro, s.id).toMatch(/^<p>.+<\/p>/s);
+    }
+    // A link in an index never names an empty slug: a same-page anchor resolves against the
+    // set's own route.
+    for (const set of sets) {
+      for (const html of [set.intro, ...set.sections.map((sec) => sec.blurb)]) {
+        expect(html, set.id).not.toContain('href="#/docs//');
+      }
     }
     // Each intro links the other set's index, which the room serves at the set's id.
     expect(sets[0]?.intro).toContain('href="#/docs/self-hosting"');
@@ -187,6 +194,22 @@ describe("each doc as Markdown, for an agent (docMarkdown)", () => {
       expect(md, name).not.toMatch(/\]\((?:\.\.\/|[a-z-]+\/)[^)]*\.md/);
     }
     expect(docMarkdown("nope")).toBeNull();
+  });
+
+  it("leaves link syntax inside code as written", () => {
+    const md = [
+      "See [Deploy](../get-started/02-deploy.md#check-it).",
+      "",
+      "Write `[Deploy](02-deploy.md)` to link a page.",
+      "",
+      "```",
+      "[Notifications](../guides/03-notifications.md)",
+      "```",
+    ].join("\n");
+    const out = markdownLinksForAgents(md, "publishing/01-your-list.md");
+    expect(out).toContain("See [Deploy](deploy.md#check-it).");
+    expect(out).toContain("Write `[Deploy](02-deploy.md)` to link a page.");
+    expect(out).toContain("[Notifications](../guides/03-notifications.md)\n```");
   });
 });
 

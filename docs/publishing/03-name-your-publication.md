@@ -18,7 +18,7 @@ Sent emails never change. An email already sent, and its archive page, keep the 
 
 Your identity shows in four places:
 
-- **In your emails,** wherever your template prints it. The built-in template signs off each post with your logo, name, and tagline. The sample email beside **Publication identity** shows which parts your template prints.
+- **In your emails,** wherever your template prints it. The built-in template signs off each post with your logo, name, and tagline. The sample email under **Settings → Email template** shows which parts your template prints.
 - **On the public pages readers see.** Your home page, your archive, and each post's page carry your identity. So do the pages for subscribing, confirming, and unsubscribing. Your logo is the browser tab's icon. **Settings → Reader pages** shows each of these pages as a reader gets it.
 - **In the confirmation email** a new subscriber gets, which opens with your logo, name, and tagline.
 - **In the dashboard.** The top of the sidebar shows your logo, name, and tagline.
@@ -29,15 +29,15 @@ A post's page shows your publication as it is now at the top, and the sign-off a
 
 **Probably not, if your newsletter is mostly your own writing. Yes, if you use it to sell.** The address is optional, and you can add it or remove it at any time.
 
-US law (CAN-SPAM) requires a postal address in commercial email. That's email whose main purpose is to advertise or promote a product or service, at any volume. A newsletter people subscribed to usually isn't commercial email, as long as it's mainly content. A sponsor mention or an ad mixed in doesn't change that. The FTC said so in its [2008 rule](https://www.ftc.gov/sites/default/files/documents/federal_register_notices/definitions-and-implementation-under-can-spam-act-16-cfr-part-316/080521canspamact.pdf). A newsletter that's purely advertising, like a catalog, is commercial.
+US law (CAN-SPAM) requires a postal address in commercial email. That's email whose primary purpose is to advertise or promote a product or service, at any volume. In its [2008 rule](https://www.ftc.gov/sites/default/files/documents/federal_register_notices/definitions-and-implementation-under-can-spam-act-16-cfr-part-316/080521canspamact.pdf), the FTC treats a newsletter someone subscribed to as a "transactional or relationship" message instead. That holds when it's mainly content, even with ads mixed in. A subscription that's purely advertising, like a catalog, stays commercial.
 
-You need an address in:
+An email whose primary purpose is selling is a different matter. The FTC's [primary-purpose test](https://www.ecfr.gov/current/title-16/chapter-I/subchapter-C/part-316/section-316.3) looks at what the email says and what its subject line suggests. So you probably need an address in:
 
 - An email that's mainly selling, such as a launch, a sale, a paid course, or event tickets.
 - A post that's mostly sponsor content or promotions.
 - A mixed email whose subject line reads like an ad.
 
-A nonprofit isn't exempt as a kind of sender. What the email says decides it. Canada's anti-spam law (CASL) counts more email as commercial, and asks for an address in it too. Gmail and Yahoo don't ask for one: their [rules for bulk senders](https://support.google.com/a/answer/14229414) are authentication, one-click unsubscribe, and a low spam-complaint rate.
+A nonprofit isn't exempt as a kind of sender. What the email says decides it. Canada's anti-spam law (CASL) usually counts more email as commercial, and asks for a mailing address in it too ([Government of Canada guidance](https://ised-isde.canada.ca/site/canada-anti-spam-legislation/en)). Gmail and Yahoo don't ask for one: their [rules for bulk senders](https://support.google.com/a/answer/14229414) are authentication, one-click unsubscribe, and a low spam-complaint rate.
 
 **What counts.** A street address, a USPS P.O. box, or a private mailbox registered with the Postal Service. You never have to publish a home address.
 

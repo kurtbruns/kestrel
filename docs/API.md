@@ -68,7 +68,7 @@ A client learns the state of things in two ways.
 
 A cursor from a database that has since gone back in time, such as after a restore, is refused. The client then takes a fresh snapshot and follows from its cursor.
 
-**Documents come two ways.** The instance's own documentation, the docs and the API reference, is read as data the editor renders, and as Markdown an agent reads, with the same path plus `.md`. Each is a projection of one source, the docs' Markdown files or the route registration, so the two can't disagree. In a doc's Markdown, a link to another doc points at that doc's Markdown, so an agent can follow it without knowing where the source files live.
+**Documents come two ways.** The instance's own documentation, the docs and the API reference, is read as data the editor renders, and as Markdown an agent reads: the reference at its own path plus `.md`, each doc at `/api/docs/<slug>.md`, and each set's index at `/api/docs/<set>.md`. Each is a projection of one source, the docs' Markdown files or the route registration, so the two can't disagree. In a doc's Markdown, a link to another doc points at that doc's Markdown, so an agent can follow it without knowing where the source files live.
 
 ## Acting
 
