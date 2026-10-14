@@ -1570,6 +1570,71 @@ td a:hover {
   vertical-align: middle;
 }
 
+/* The Subscribers summary: the counts, then a collapsed key saying what each pill means.
+   The key is in the page's own colors (not an inverted tooltip), each pill drawn as the
+   list draws it beside its definition. */
+#subCounts {
+  gap: 8px 24px;
+}
+.sub-key {
+  margin-top: 10px;
+  font-size: 13px;
+}
+.sub-key > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--muted);
+  border-radius: 4px;
+}
+.sub-key > summary::-webkit-details-marker {
+  display: none;
+}
+.sub-key > summary::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s;
+}
+.sub-key[open] > summary::before {
+  transform: rotate(45deg);
+}
+.sub-key > summary:hover {
+  color: var(--fg);
+}
+/* One grid for both lists, each a subgrid, so every definition starts at the same edge. */
+.sub-key-body {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 14px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+  max-width: 640px;
+}
+.sub-key-body dl {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  row-gap: 8px;
+  align-items: baseline;
+  margin: 0;
+}
+.sub-key-body dd {
+  margin: 0;
+  line-height: 1.45;
+}
+.sub-key-body p {
+  grid-column: 1 / -1;
+  margin: 16px 0 10px;
+  color: var(--muted);
+}
+
 /* list views (posts / subscribers / sends): search on the left, filters pinned right */
 .list-toolbar {
   display: flex;
@@ -3035,18 +3100,6 @@ textarea.is-invalid {
 .info:focus::after {
   opacity: 1;
   visibility: visible;
-  transform: translateY(0);
-}
-/* Drop the tip below the icon instead of above it. The default opens upward,
-   which clips against the top of the viewport when the icon sits at the top of a
-   page (e.g. the Subscribers counts card); this variant opens downward there. */
-.info.tip-below::after {
-  top: calc(100% + 8px);
-  bottom: auto;
-  transform: translateY(-2px);
-}
-.info.tip-below:hover::after,
-.info.tip-below:focus::after {
   transform: translateY(0);
 }
 /* The "Auto-generate from subject" toggle, grouped just under the slug field. */

@@ -258,8 +258,7 @@ function trapTab(dialog: HTMLElement, e: KeyboardEvent): void {
 // anchored to the icon's left edge; pure CSS can't see the viewport, so before it
 // shows we measure the icon and, if the (width-capped) tip would run off the right
 // edge on a narrow screen, slide it left via --tip-x. Delegated so it survives view
-// re-renders; with JS off the tip falls back to left:0. Vertical placement stays in
-// CSS (the .tip-below variant) — which icons sit near the top is static, not dynamic.
+// re-renders; with JS off the tip falls back to left:0.
 const TIP_GUTTER = 8;
 function positionInfoTip(el: HTMLElement): void {
   // Measure the rendered tip (laid out even while hidden) so this stays in step
@@ -301,11 +300,10 @@ export function installTooltips(): void {
 /**
  * The ⓘ affordance whose explanation shows as a tooltip. Focusable and role/aria-labelled
  * so it's reachable by keyboard and touch (the tip shows on :focus, not only :hover) and
- * read by screen readers — the aria-label mirrors the visible tip. `below` drops the tip
- * under the icon (for icons near the page top).
+ * read by screen readers — the aria-label mirrors the visible tip.
  */
-export function infoTip(tip: string, { below = false }: { below?: boolean } = {}): Html {
-  return html`<span class="info${below ? " tip-below" : ""}" role="img" tabindex="0" aria-label="${tip}" data-tip="${tip}">${icon("info-filled")}</span>`;
+export function infoTip(tip: string): Html {
+  return html`<span class="info" role="img" tabindex="0" aria-label="${tip}" data-tip="${tip}">${icon("info-filled")}</span>`;
 }
 
 export interface MenuItem {

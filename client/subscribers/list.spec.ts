@@ -91,12 +91,6 @@ describe("subscribers view", () => {
     expect($("tr[data-id='s2'] .badge.confirmed").classList.contains("held")).toBe(true);
     // The pills are plain labels: no hover tooltip, which keyboard and touch can't reach.
     expect($$("tr[data-id] .badge[title]")).toHaveLength(0);
-    // The summary's info tip defines them instead, the flags and the grey included.
-    const tip = $("#subCounts .info");
-    expect(tip.getAttribute("data-tip")).toBe(
-      "Pending: subscribed but hasn’t clicked the confirmation email. Confirmed: agreed to receive your posts, here or at the service they were imported from, and receives them. Unsubscribed: opted out. Suppressed: never mailed, whatever their status. A red flag beside the address says why: bounced (mail to it failed), complaint (marked as spam), blocked (suppressed by hand), or erased (a do-not-contact marker kept after an erasure, which only the person’s own confirmation lifts). Their status shows in grey: still true, but not mailed while suppressed, except a pending sign-up held only by an erasure.",
-    );
-    expect(tip.getAttribute("aria-label")).toBe(tip.getAttribute("data-tip"));
     expect($("tr[data-id='s1'] .badge.confirmed").classList.contains("held")).toBe(false);
     expect($("tr[data-id='s3'] td").textContent).toBe("<script>@b.c"); // shown as text
     // A wrapping address breaks before its "@", not mid-word.
@@ -163,6 +157,57 @@ describe("subscribers view", () => {
     expect($(".modal").textContent).toContain("Imported · Sendy, single opt-in");
     expect($(".sub-evidence").textContent).toBe('{\n  "signup_ip": "203.0.113.7"\n}');
     expect($(".modal").textContent).toContain("not something Kestrel recorded itself.");
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("defines every pill in a collapsed key under the counts, which stays as it is while the list reloads", async () => {
+    fake = fakeApi([
+      { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
+    ]);
+    await mount((r, s) => renderSubscribers(undefined, r, s));
+    await settle();
+    const key = $<HTMLDetailsElement>(".sub-summary details.sub-key");
+    expect(key.open).toBe(false);
+    expect($(".sub-key > summary").textContent).toBe("What these mean");
+    // Each pill as the list draws it (its classes), beside its definition.
+    const rows = $$(".sub-key dt").map((dt) => {
+      const pill = dt.querySelector(".badge")!;
+      return [pill.className, pill.textContent, dt.nextElementSibling!.textContent];
+    });
+    expect(rows).toEqual([
+      [
+        "badge confirmed",
+        "confirmed",
+        "Agreed to receive your posts, here or at the service they were imported from, and receives them.",
+      ],
+      ["badge pending", "pending", "Subscribed but hasn’t clicked the confirmation email."],
+      ["badge unsubscribed", "unsubscribed", "Opted out."],
+      ["badge suppressed", "bounced", "Mail to the address failed."],
+      ["badge suppressed", "complaint", "Marked as spam."],
+      ["badge suppressed", "blocked", "Suppressed by hand."],
+      [
+        "badge suppressed",
+        "erased",
+        "A do-not-contact marker kept after an erasure. Only the person’s own confirmation lifts it.",
+      ],
+      [
+        "badge confirmed held",
+        "confirmed",
+        "A suppressed subscriber’s status: still true, but not mailed while suppressed. A pending sign-up held only by an erasure keeps its color.",
+      ],
+    ]);
+    expect($(".sub-key p").textContent).toBe(
+      "Suppressed: never mailed, whatever their status. A red flag beside the address says why.",
+    );
+    // A reload repaints only the counts, so a key the reader opened stays open.
+    key.open = true;
+    const status = $<HTMLSelectElement>(".lt-status");
+    status.value = "pending";
+    status.dispatchEvent(new Event("change"));
+    await settle();
+    expect(fake.calls.map((c) => c.url.searchParams.get("status"))).toEqual([null, "pending"]);
+    expect($(".sub-key")).toBe(key);
+    expect(key.open).toBe(true);
     expect(fake.unhandled).toEqual([]);
   });
 

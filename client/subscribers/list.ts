@@ -15,7 +15,7 @@ import {
   wireSort,
   wireToolbar,
 } from "../ui/list_controls";
-import { badge, busy, infoTip, type MenuItem, openMenu, renderError, toast } from "../ui/widgets";
+import { badge, busy, type MenuItem, openMenu, renderError, toast } from "../ui/widgets";
 import {
   addSubscriberModal,
   confirmErase,
@@ -64,7 +64,7 @@ export async function renderSubscribers(
     root,
     html`
     <div class="spread page-head"><h1>Subscribers</h1><span class="row"><button type="button" class="ghost" id="importSubs">Import</button><button type="button" class="ghost" id="exportSubs">Export</button><button class="primary" id="addSub">Add subscriber</button></span></div>
-    <div id="subCounts" class="muted">Loading…</div>
+    <div class="card sub-summary"><div id="subCounts" class="row muted">Loading…</div>${statusKey()}</div>
     ${listToolbar({ statuses: SUB_STATUSES, suppressible: true, searchPlaceholder: "Search email…" })}
     <div id="subList" class="muted">Loading…</div>
     <div id="subPager"></div>`,
@@ -79,14 +79,12 @@ export async function renderSubscribers(
         signal,
       });
       const c = data.counts;
-      // The counts card stays a global by-status summary (independent of the active
-      // filter); the page total below reflects the filtered roster.
+      // The counts stay a global by-status summary (independent of the active filter);
+      // the page total below reflects the filtered roster. Only the counts repaint, so
+      // the key under them stays open or closed across a reload.
       setHtml(
         $("#subCounts"),
-        html`<div class="card row" style="gap:24px"><span><strong>${c.confirmed}</strong> confirmed</span><span>${c.pending} pending</span><span>${c.unsubscribed} unsubscribed</span><span>${c.suppressed} suppressed</span>${infoTip(
-          SUMMARY_TIP,
-          { below: true },
-        )}</div>`,
+        html`<span><strong>${c.confirmed}</strong> confirmed</span><span>${c.pending} pending</span><span>${c.unsubscribed} unsubscribed</span><span>${c.suppressed} suppressed</span>`,
       );
       // Suppressions alone are no subscribers, so a list of only them still points the way in.
       const listEmpty = c.pending + c.confirmed + c.unsubscribed === 0;
@@ -116,29 +114,53 @@ export async function renderSubscribers(
   load();
 }
 
-// The summary card's info tip defines every label a row can show (DESIGN §3): the consent
-// states, the red suppression flags, and the greyed status.
-const SUMMARY_TIP =
-  "Pending: subscribed but hasn’t clicked the confirmation email. Confirmed: agreed to receive your posts, here or at the service they were imported from, and receives them. Unsubscribed: opted out. Suppressed: never mailed, whatever their status. A red flag beside the address says why: bounced (mail to it failed), complaint (marked as spam), blocked (suppressed by hand), or erased (a do-not-contact marker kept after an erasure, which only the person’s own confirmation lifts). Their status shows in grey: still true, but not mailed while suppressed, except a pending sign-up held only by an erasure.";
-
 // The inline suppression flag rides next to the email (suppression is a deliverability
 // overlay, not a consent status) and names WHY: bounced / complaint / blocked / erased.
 // Reasons come from the webhook (bounce, complaint), a manual block, or an erasure;
 // anything unrecognized falls back to a generic label. The pills carry no hover tooltip,
-// which keyboard, screen-reader, and touch users can't reach: SUMMARY_TIP defines each
-// label once, and a subscriber's own detail belongs on their page.
-const SUPPRESSION_LABELS: Record<string, string> = {
-  bounce: "bounced",
-  complaint: "complaint",
-  manual: "blocked",
-  erased: "erased",
+// which keyboard, screen-reader, and touch users can't reach: the key under the counts
+// defines each label once, and a subscriber's own detail belongs on their page.
+const SUPPRESSIONS: Record<string, { label: string; means: string }> = {
+  bounce: { label: "bounced", means: "Mail to the address failed." },
+  complaint: { label: "complaint", means: "Marked as spam." },
+  manual: { label: "blocked", means: "Suppressed by hand." },
+  erased: {
+    label: "erased",
+    means:
+      "A do-not-contact marker kept after an erasure. Only the person’s own confirmation lifts it.",
+  },
 };
 function suppressionFlag(s: SubscriberListItem): Html | null {
   if (!s.suppressed) {
     return null;
   }
-  const label = SUPPRESSION_LABELS[s.suppression_reason ?? ""] || "suppressed";
+  const label = SUPPRESSIONS[s.suppression_reason ?? ""]?.label || "suppressed";
   return html` <span class="badge suppressed row-flag">${label}</span>`;
+}
+
+// What each label a row can show means (DESIGN §3), as a collapsed key under the counts:
+// every pill drawn as the list draws it, beside its definition, so the key also says what
+// the colors mean. A native <details>, so keyboard and screen readers get it for free.
+const STATUS_MEANS: Record<string, string> = {
+  pending: "Subscribed but hasn’t clicked the confirmation email.",
+  confirmed:
+    "Agreed to receive your posts, here or at the service they were imported from, and receives them.",
+  unsubscribed: "Opted out.",
+};
+function keyRow(pill: Html, means: string): Html {
+  return html`<dt>${pill}</dt><dd>${means}</dd>`;
+}
+function statusKey(): Html {
+  return html`<details class="sub-key"><summary>What these mean</summary><div class="sub-key-body">
+    <dl>${SUB_STATUSES.map(({ value }) => keyRow(badge(value), STATUS_MEANS[value] ?? ""))}</dl>
+    <p>Suppressed: never mailed, whatever their status. A red flag beside the address says why.</p>
+    <dl>${Object.values(SUPPRESSIONS).map(({ label, means }) =>
+      keyRow(html`<span class="badge suppressed">${label}</span>`, means),
+    )}${keyRow(
+      html`<span class="badge confirmed held">confirmed</span>`,
+      "A suppressed subscriber’s status: still true, but not mailed while suppressed. A pending sign-up held only by an erasure keeps its color.",
+    )}</dl>
+  </div></details>`;
 }
 
 // A suppressed address keeps its consent status, but the status isn't in effect while the
