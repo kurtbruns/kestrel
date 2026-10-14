@@ -2,7 +2,7 @@
 
 Kestrel sends your posts through Amazon SES, Amazon's email service. SES only delivers the mail: Kestrel keeps your list, each subscriber's consent, and the record of every send. AWS reviews your account before it lets you send to anyone but yourself. This page asks for that early, and you test in the sandbox while you wait.
 
-In this guide, you verify your sending hostname with SES, add a DMARC record, and ask AWS for production access. You also route bounces and complaints to the app through SNS. Then you give the app its AWS credentials, set the provider, and deploy.
+In this guide, you verify your sending hostname with SES and add a DMARC record. You forward readers' replies to your inbox, and ask AWS for production access. You also route bounces and complaints to the app through SNS. Then you give the app its AWS credentials, set the provider, and deploy.
 
 ## Before you begin
 
@@ -42,7 +42,33 @@ DMARC tells inboxes what to do with mail that fails its checks, and sends you re
 
 [Sending-domain DNS](../reference/02-sending-domain-dns.md#dmarc-publish-a-policy-and-collect-reports) explains each record, and when to tighten DMARC.
 
-## 3. (Optional) Set a custom MAIL FROM domain
+## 3. Receive replies at your From address
+
+When a reader replies to a post, or to their confirmation email, the reply goes to your From address, `newsletter@send.example.com`. Nothing receives mail there yet, so the reply bounces. Kestrel only sends mail, so you give the address an inbox yourself. Here you forward it to one you already read, with Cloudflare Email Routing, which is free on every plan.
+
+`send.example.com` receives no other mail, so turning on Email Routing there changes nothing else. Your SES records sit on other names under it. Inboxes check SES's mail for SPF at its return path, not here, so sending is unaffected.
+
+1. In the [Cloudflare dashboard](https://dash.cloudflare.com/), go to **Compute → Email Service → Email Routing**.
+
+1. Add `send.example.com` to Email Routing. Cloudflare adds subdomains from your domain's own settings: select `example.com`, then **Settings**, and add `send` under **Subdomains**.
+
+1. Cloudflare adds MX, SPF, and DKIM records for `send.example.com`, and locks them. Wait until they show as added.
+
+1. Under **Destination Addresses**, add the inbox you want replies in. Open the email Cloudflare sends to it, and select **Verify email address**. An address you've already verified with Cloudflare, such as one for [notifications](../guides/03-notifications.md), is listed already.
+
+1. Under **Routing Rules**, select **Create routing rule**. For **Email pattern**, enter `newsletter`, the part of your From address before the `@`, and select `send.example.com`. Set **Action** to **Send to an email**, select your inbox as the **Destination**, and save.
+
+On a subdomain, Email Routing forwards only the addresses you add a rule for, with no catch-all. That's all a From address needs.
+
+- **Automatic replies arrive too.** Out-of-office and other automatic replies go to your From address, so they reach your inbox. Bounces don't: they go to SES's return path, and the app handles them as before.
+- **Your DMARC reports need an inbox too.** Your DMARC record's report address may not receive mail. If so, change the record's `rua` to `mailto:dmarc@send.example.com`, and add a second rule that forwards `dmarc` the same way.
+- **Your answers come from your inbox.** A forwarded reply comes from the reader's own address. When you answer it, your answer goes out from the inbox it was forwarded to, not from `newsletter@send.example.com`.
+
+To answer from the newsletter's own address, give it a real mailbox instead of forwarding it. Point `send.example.com`'s MX records at a mail host you use, such as [Fastmail](https://www.fastmail.help/hc/en-us/articles/360060591133) or [Google Workspace](https://support.google.com/a/answer/140034). Then create `newsletter@send.example.com` there, as the host's docs describe. If you send from it, the host's SPF and DKIM records go on `send.example.com` beside SES's. SES's mail is unaffected, since its SPF is checked at its return path. And if your From address is on a domain that already receives mail, replies already reach it, and you can skip this section.
+
+Some replies ask you to do something, and Kestrel can't see them, so acting on them is yours. In the editor, open **Subscribers**, and use the reader's row menu. Choose **Unsubscribe** for a reader who asks to leave, and **Erase** for one who asks you to delete their data. A reader who never confirmed isn't mailed, so their row offers only **Erase**.
+
+## 4. (Optional) Set a custom MAIL FROM domain
 
 SES sends with its own return path by default, so SPF passes for `amazonses.com` rather than for your hostname. DMARC still passes, through DKIM. A custom MAIL FROM domain makes SPF pass for your hostname too, a second check in your favor.
 
@@ -57,11 +83,11 @@ SES sends with its own return path by default, so SPF passes for `amazonses.com`
 
 1. Wait until SES shows the MAIL FROM domain as **Successful**.
 
-## 4. Request production access
+## 5. Request production access
 
 A new SES account starts in the sandbox. It sends only to addresses you've verified in SES, up to 200 emails a day and one a second. Ask AWS to lift those limits now, and test while you wait.
 
-1. Name your publication first, since AWS may visit your website to review the request. In the editor, open **Settings → Publication identity**, and enter the name and tagline. Until you do, your public pages show the name in your From address. The subscribe form stays closed until section 7 sets the provider.
+1. Name your publication first, since AWS may visit your website to review the request. In the editor, open **Settings → Publication identity**, and enter the name and tagline. Until you do, your public pages show the name in your From address. The subscribe form stays closed until section 8 sets the provider.
 
 1. In SES, open the **Account dashboard**, select **View Get set up page**, and then **Request production access**.
 
@@ -83,9 +109,9 @@ If AWS asks for more detail, reply in the support case. If it denies the request
 
 Your account stays in the sandbox until AWS grants access, so don't go live before then. In the sandbox, a signup from any address you haven't verified fails, and a post reaches only your verified addresses.
 
-When AWS grants access, the **Account dashboard** shows your daily quota and your maximum send rate. You set the rate in the app in section 7. The rate decides how fast a send goes out, and [As your list grows](06-go-live.md#as-your-list-grows) says when to ask AWS to raise it.
+When AWS grants access, the **Account dashboard** shows your daily quota and your maximum send rate. You set the rate in the app in section 8. The rate decides how fast a send goes out, and [As your list grows](06-go-live.md#as-your-list-grows) says when to ask AWS to raise it.
 
-## 5. Send bounces and complaints to SNS
+## 6. Send bounces and complaints to SNS
 
 SES reports what happens to each email through SNS, the AWS notification service. A configuration set says which events to report, and an SNS topic carries them to the app.
 
@@ -120,9 +146,9 @@ SES reports what happens to each email through SNS, the AWS notification service
 
     Replace the topic ARN, and both copies of the account ID, with the values from your ARN. Replace `us-east-1` with your region's code, the same one the ARN shows. Choose **Save changes**.
 
-You subscribe the app to the topic in section 8, once it runs on SES.
+You subscribe the app to the topic in section 9, once it runs on SES.
 
-## 6. Create the app's AWS key
+## 7. Create the app's AWS key
 
 The app sends through an IAM user whose key can only send email. That limits the harm if the key ever leaks.
 
@@ -155,7 +181,7 @@ The app sends through an IAM user whose key can only send email. That limits the
 
 1. Copy the access key ID and the secret access key. AWS shows the secret only once.
 
-## 7. Set the provider and deploy
+## 8. Set the provider and deploy
 
 Until now the app has run with no email provider connected, refusing to send. Setting `PROVIDER` connects SES. Store the secrets before you set it. With `PROVIDER` set to `ses` and a required secret missing, the app refuses to run, and sends nothing, until you store it. `/health` and the editor's **A setting needs fixing** page name the missing secret, and reader pages say the newsletter is temporarily unavailable. `SES_CONFIGURATION_SET` is the one optional secret.
 
@@ -171,7 +197,7 @@ Until now the app has run with no email provider connected, refusing to send. Se
     npx wrangler secret put AWS_SECRET_ACCESS_KEY --env production
     ```
 
-1. Store the topic ARN from section 5. The app accepts events only from this topic:
+1. Store the topic ARN from section 6. The app accepts events only from this topic:
 
     ```bash
     npx wrangler secret put SNS_TOPIC_ARN --env production
@@ -214,7 +240,7 @@ Until now the app has run with no email provider connected, refusing to send. Se
     npx wrangler deploy --env production
     ```
 
-## 8. Subscribe the app to the topic
+## 9. Subscribe the app to the topic
 
 SNS delivers events only to a subscriber that has confirmed. The app confirms on its own, once it checks that the request came from your topic.
 
@@ -234,7 +260,7 @@ If it stays **Pending confirmation**, the request never reached the app, or the 
 
 - **Access covers `/webhooks/ses`.** If your Access application covers more than `/dashboard` and `/api`, SNS gets the login page instead of the app. Remove that path from your Access application, so only `dashboard` and `api` remain.
 - **`SNS_TOPIC_ARN` matches the topic's ARN.**
-- **The deploy in section 7 finished.**
+- **The deploy in section 8 finished.**
 
 Once you've fixed the cause, select the subscription, and choose **Request confirmation**. SNS sends the request again, and the app confirms it. SNS doesn't let you delete a subscription while it's pending, and removes it on its own after 48 hours.
 
@@ -272,11 +298,25 @@ Kestrel can't tell whether those emails went out. SES's console shows sent messa
 
 1. The SNS subscription shows **Confirmed**.
 
+1. Your From address has somewhere to go. In Cloudflare, your domain's DNS records show the ones Email Routing added for `send`, beside section 1's DKIM records:
+
+    - **Type:** `MX`, **Name:** `send`, three of them, for `route1.mx.cloudflare.net`, `route2.mx.cloudflare.net`, and `route3.mx.cloudflare.net`
+    - **Type:** `TXT`, **Name:** `send`, **Content:** `v=spf1 include:_spf.mx.cloudflare.net ~all`
+    - **Type:** `TXT`, **Name:** `cf2024-1._domainkey.send`, Cloudflare's DKIM key
+
+    The world sees the MX records too:
+
+    ```bash
+    dig +short MX send.example.com
+    ```
+
+    It lists the three `route` servers. Email Routing's **Routing Rules** shows your rule for `newsletter@send.example.com`, and **Destination Addresses** shows your inbox as verified. A reply to your test email in the next step proves the forwarding works.
+
 1. In the editor, **Settings → Email sender** shows Amazon SES and your From address, where it said **No email provider connected** before.
 
 1. In a browser, `https://newsletter.example.com/subscribe` shows the subscribe form, where it said signups aren't open yet.
 
-The test sends in the next step prove the rest. In the sandbox, send them only to the addresses you verified in section 4, and to the SES test addresses that page lists.
+The test sends in the next step prove the rest. In the sandbox, send them only to the addresses you verified in section 5, and to the SES test addresses that page lists.
 
 SES charges for each email it sends, test emails included. [Amazon SES pricing](https://aws.amazon.com/ses/pricing/) lists the rates.
 

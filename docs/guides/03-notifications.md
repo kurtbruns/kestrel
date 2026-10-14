@@ -21,7 +21,7 @@ Cloudflare's email sends only from a domain set up with Email Routing. Use your 
 
 1. Cloudflare adds MX, SPF, and DKIM records for `newsletter.example.com`, and locks them. Wait until they show as added.
 
-Avoid turning on Email Routing for a domain that already receives mail elsewhere, such as `example.com` with Google Workspace. Email Routing takes over that domain's MX records. Avoid `send.example.com` too, since your email provider sends from it.
+Avoid turning on Email Routing for a domain that already receives mail elsewhere, such as `example.com` with Google Workspace. Email Routing takes over that domain's MX records. Don't send notifications from `send.example.com` either, since your email provider sends from it. Email Routing there to forward readers' replies, as [Connect Amazon SES](../get-started/04-ses.md#3-receive-replies-at-your-from-address) sets up, is fine, since it only receives.
 
 ## 2. Verify your address
 

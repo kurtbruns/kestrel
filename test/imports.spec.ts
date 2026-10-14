@@ -2,8 +2,8 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import referencePage from "../docs/reference/03-import-format.md?raw";
+import { utcDayStart } from "../shared/daily_writes";
 import {
-  DAILY_WRITES_IMPORT_CONFIRMED,
   EXPORT_PAGE_ROWS,
   type ExportResponse,
   IMPORT_COLUMNS,
@@ -1086,8 +1086,33 @@ describe("the export, a page at a time (SPEC §8)", () => {
 });
 
 describe("an import that may spend D1's daily writes (SPEC §7)", () => {
-  // The list already holds enough confirmed subscribers that `added` new ones end just over,
-  // or just at, the threshold.
+  // Noon UTC today, so the day can't turn between an earlier import and the plan.
+  const NOON = utcDayStart(Date.now()) + 12 * 3_600_000;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOON);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // An import already committed at `createdAt` that brought in `created` new subscribers:
+  // 7 rows each, and 3 for its record.
+  async function seedImport(createdAt: number, created: number): Promise<void> {
+    await env.DB.prepare(
+      "INSERT INTO imports (id, created_at, principal_kind, principal_email, attestation_version, file_name, file_sha256, plan_hash, counts, suppressions_added) VALUES (?, ?, 'service', NULL, 1, 'earlier.csv', 'sha', ?, ?, 0)",
+    )
+      .bind(
+        `imp-${createdAt}-${created}`,
+        createdAt,
+        `hash-${createdAt}-${created}`,
+        JSON.stringify(counts({ create_confirmed: created })),
+      )
+      .run();
+  }
+
   async function planAdding(added: number, vars: Record<string, string> = {}) {
     const res = await fetchWith(vars, `${base}/api/imports/plan`, {
       method: "POST",
@@ -1105,20 +1130,32 @@ describe("an import that may spend D1's daily writes (SPEC §7)", () => {
     return (await readJson(res)) as ImportPlanResponse;
   }
 
-  it("warns on Workers Free's limits when the list it leaves passes the threshold, and still plans", async () => {
-    await seedConfirmed(addresses(DAILY_WRITES_IMPORT_CONFIRMED - 100));
-    const over = await planAdding(101);
-    expect(over.counts.create_confirmed).toBe(101);
+  it("warns on Workers Free's limits when it and today's earlier imports would pass the budget, and still plans", async () => {
+    await seedImport(utcDayStart(NOON), 9_000); // 63,003 rows
+    // A plan counts Claude's notice too, since who commits isn't known yet: 7 a subscriber,
+    // 3 for the record, 4 for the notice.
+    const over = await planAdding(1_000); // 7,007 more: 70,010, past 70,000
+    expect(over.counts.create_confirmed).toBe(1_000);
     expect(over.daily_writes_warning).toBe(
-      "On the Workers Free plan’s limits, this import leaves 3,001 confirmed subscribers. Importing and sending to that many on the same day may use up the database’s daily allowance of writes, which stops this newsletter until midnight UTC. Send your next post tomorrow (UTC), or move to Workers Paid.",
+      "On the Workers Free plan’s limits, this import and today’s earlier ones would use about 70% of the database’s daily allowance of writes. Running out stops this newsletter until midnight UTC. Import this file tomorrow (UTC), or move to Workers Paid.",
     );
-    expect((await planAdding(100)).daily_writes_warning).toBe(null);
+    expect((await planAdding(998)).daily_writes_warning).toBe(null); // 6,993 more: 69,996, within
+  });
+
+  it("counts only the imports of the current UTC day", async () => {
+    await seedImport(utcDayStart(NOON) - 1, 9_000); // the last moment of yesterday
+    expect((await planAdding(1_000)).daily_writes_warning).toBe(null);
+  });
+
+  it("leaves a send's share of the day to the send, so a large list alone never warns the import", async () => {
+    await seedConfirmed(addresses(6_000));
+    expect((await planAdding(1)).daily_writes_warning).toBe(null);
   });
 
   it("carries no warning on Workers Paid, and the warning never changes the plan's hash", async () => {
-    await seedConfirmed(addresses(DAILY_WRITES_IMPORT_CONFIRMED));
-    const free = await planAdding(1);
-    const paid = await planAdding(1, PAID);
+    await seedImport(utcDayStart(NOON), 9_000);
+    const free = await planAdding(1_000);
+    const paid = await planAdding(1_000, PAID);
     expect(free.daily_writes_warning).not.toBe(null);
     expect(paid.daily_writes_warning).toBe(null);
     expect(paid.plan_hash).toBe(free.plan_hash);

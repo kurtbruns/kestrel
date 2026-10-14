@@ -27,11 +27,13 @@ SES generates the DKIM values. Copy them exactly as SES lists them, since they d
 
 SPF needs no record of yours on SES's default path, since it passes for a subdomain of `amazonses.com`. An SPF record, at `bounce.send`, comes only with the optional custom MAIL FROM domain.
 
+Email Routing adds MX, SPF, and DKIM records at `send` itself, the DKIM one under the selector `cf2024-1`. They're for mail sent *to* your From address, so readers' replies reach you ([Connect Amazon SES](../get-started/04-ses.md#3-receive-replies-at-your-from-address)). They don't affect your sending: inboxes check SES's mail for SPF at its return path, and for DKIM against SES's own keys.
+
 ### SPF: authorize the return path
 
 SPF checks the message's return path, the address bounces go back to, not its `From:` header. DMARC passes when SPF or DKIM passes and aligns with the `From:` domain. DKIM aligns, so an aligned SPF is a second check in your favor, not a requirement.
 
-SES uses a subdomain of its own domain, `amazonses.com`, as the return path by default. SPF then passes for it but doesn't align, and DMARC passes through DKIM alone. A custom MAIL FROM domain, such as `bounce.send.example.com`, aligns SPF too. [Connect Amazon SES](../get-started/04-ses.md#3-optional-set-a-custom-mail-from-domain) sets one up, with an MX record that names your region and an SPF record:
+SES uses a subdomain of its own domain, `amazonses.com`, as the return path by default. SPF then passes for it but doesn't align, and DMARC passes through DKIM alone. A custom MAIL FROM domain, such as `bounce.send.example.com`, aligns SPF too. [Connect Amazon SES](../get-started/04-ses.md#4-optional-set-a-custom-mail-from-domain) sets one up, with an MX record that names your region and an SPF record:
 
 ```
 bounce.send.example.com.  MX   10 feedback-smtp.us-east-1.amazonses.com.

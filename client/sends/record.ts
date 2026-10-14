@@ -16,6 +16,7 @@ import { heldAdviceHtml, noEmailProvider, providerNotConnected } from "../deploy
 import { every, mount } from "../lifecycle";
 import { followSend } from "../send_state";
 import { $, $$ } from "../ui/dom";
+import { saveFile } from "../ui/download";
 import { fmt } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
 import { type ListState, renderPager, th, wireSort } from "../ui/list_controls";
@@ -663,14 +664,9 @@ function renderFrozenRecord(
     busy(csvBtn, "Exporting…", async () => {
       try {
         const csv = await apiFile(send.links.deliveries_csv);
-        const url = URL.createObjectURL(new Blob([csv.text], { type: "text/csv" }));
-        const a = document.createElement("a");
-        a.href = url;
         // The server's name for it (the archive slug), so the file is named the same
         // however it's fetched.
-        a.download = csv.filename ?? "deliveries.csv";
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        saveFile(csv.text, csv.filename ?? "deliveries.csv", "text/csv");
       } catch (e) {
         // The API names only what it didn't find ("send"), which says nothing on its own.
         toast(

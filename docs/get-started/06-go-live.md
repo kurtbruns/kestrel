@@ -6,14 +6,14 @@ In this guide, you check your publication's name, add a logo, and share your sub
 
 ## Before you begin
 
-- SES production access, granted in the region the app sends from. [Connect Amazon SES](04-ses.md#4-request-production-access) asks for it.
-- `SES_MAX_SEND_RATE` set to the maximum send rate on the SES **Account dashboard**, and deployed. [Connect Amazon SES](04-ses.md#7-set-the-provider-and-deploy) sets it to `1` for the sandbox.
+- SES production access, granted in the region the app sends from. [Connect Amazon SES](04-ses.md#5-request-production-access) asks for it.
+- `SES_MAX_SEND_RATE` set to the maximum send rate on the SES **Account dashboard**, and deployed. [Connect Amazon SES](04-ses.md#8-set-the-provider-and-deploy) sets it to `1` for the sandbox.
 
 In the sandbox, SES refuses the confirmation email to any address you haven't verified, so those signups fail. A post reaches only the addresses you verified in SES.
 
 ## 1. Name your publication
 
-Your publication's name, tagline, and logo appear on the public pages readers see, and in every email. You named it in [Connect Amazon SES](04-ses.md#4-request-production-access). Check those, and add a logo before anyone sees your pages.
+Your publication's name, tagline, and logo appear on the public pages readers see, and in every email. You named it in [Connect Amazon SES](04-ses.md#5-request-production-access). Check those, and add a logo before anyone sees your pages.
 
 1. In the editor, open **Settings → Publication identity**.
 
@@ -41,7 +41,7 @@ A new instance runs on Cloudflare's free Workers plan. As your list grows, three
 - **How fast a send goes out.** A send goes out a slice at a time, one slice a minute. SES takes one request a second, of up to 50 recipients, and no more recipients a second than your account's maximum send rate. So each request carries one second of that rate, up to 50.
 - **Your database's daily writes.** On the free plan, D1, the database the app runs on, allows 100,000 rows written a day. Past that, it refuses every query until midnight UTC, and the whole app stops: sends, signups, the public pages, and the editor.
 
-It's recommended to move to the $5 Workers Paid plan from about 5,000 subscribers. A send writes about 14 database rows a recipient, delivery receipts included. So one send uses up the free plan's day at about 7,000 recipients, and sooner when an import or anything else writes that day. Workers Paid counts [D1's writes](https://developers.cloudflare.com/d1/platform/pricing/) by the month instead, with 50 million included, and never stops the database for them. On the free plan, the app warns you before a send to more than 5,000 recipients, in the Schedule dialog and on the scheduled post. It never stops you, since your account may already be on Workers Paid.
+It's recommended to move to the $5 Workers Paid plan from about 5,000 subscribers. A send writes about 14 database rows a recipient, delivery receipts included. So one send uses up the free plan's day at about 7,000 recipients, and sooner when an import or anything else writes that day. Workers Paid counts [D1's writes](https://developers.cloudflare.com/d1/platform/pricing/) by the month instead, with 50 million included, and never stops the database for them. On the free plan, the app warns you before a send to more than 5,000 recipients, in the Schedule dialog and on the scheduled post. A smaller send that fires on a day you've imported subscribers gets the same warning on the scheduled post. The app also warns before an import that would use most of a day's writes with the day's earlier imports. It never stops you, since your account may already be on Workers Paid.
 
 The free Workers plan sends four requests a minute. At 14 messages a second, a common starting rate, that's 56 recipients a minute, and 1,000 subscribers take about 18 minutes. At 50 a second or more, it's 200 a minute.
 

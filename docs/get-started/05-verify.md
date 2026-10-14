@@ -2,11 +2,11 @@
 
 Some things only show up with real email: whether inboxes trust your mail, how it looks in a real mail client, and whether bounces and unsubscribes come back to the app. Check them now, while your list is empty and every email goes only to you.
 
-In this guide, you send yourself a test email and check that it passes authentication. Then you set up your notifications, send a real post to yourself as a subscriber, and unsubscribe. Finally, you check that bounces and complaints reach the app, and read the app's logs.
+In this guide, you send yourself a test email, reply to it, and check that it passes authentication. Then you set up your notifications, send a real post to yourself as a subscriber, and unsubscribe. Finally, you check that bounces and complaints reach the app, and read the app's logs.
 
 ## Before you begin
 
-- Two email addresses you own, such as a personal address and a work address. Some steps use both. While your SES account is in the sandbox, verify both in SES first, as [Connect Amazon SES](04-ses.md#4-request-production-access) describes.
+- Two email addresses you own, such as a personal address and a work address. Some steps use both. While your SES account is in the sandbox, verify both in SES first, as [Connect Amazon SES](04-ses.md#5-request-production-access) describes.
 - A Gmail address, or another mail client that shows a message's original source and an **Unsubscribe** button.
 
 ## 1. Send yourself a test email
@@ -18,6 +18,8 @@ A test email goes through the same code as a real send. If the test looks right,
 1. Select **Send test email**, enter your address, and send it.
 
 1. Open the email. It should arrive in your inbox, not in spam. The image loads and the subject reads as you wrote it. Its **View in browser** link opens "Nothing here yet" until the post goes out, and its unsubscribe link opens the page a subscriber sees, marked as a test and showing a sample address. Its button walks through to the confirmation, but a test email unsubscribes no one. Section 5 unsubscribes for real.
+
+1. Reply to it, as a reader would. Reply from an address other than the inbox your From address forwards to, such as your second address. Gmail doesn't show you a message you sent when it comes back to you. Send that address a test email too if you need one. The reply arrives in the inbox you chose in [Connect Amazon SES](04-ses.md#3-receive-replies-at-your-from-address). The app can't see your forwarding, so this is the only proof that readers can reach you. If the reply bounces, check the routing rule and the destination address there.
 
 ## 2. Check that it passes authentication
 
@@ -80,7 +82,7 @@ When an address bounces or marks your mail as spam, SES tells the app through SN
 
 1. In the editor, **Subscribers** lists both addresses as **Pending**, each with a **Suppressed** flag. The app never mails a suppressed address again.
 
-If an address has no flag, SES's events aren't reaching the app. Check the configuration set and the SNS subscription in [Connect Amazon SES](04-ses.md#5-send-bounces-and-complaints-to-sns).
+If an address has no flag, SES's events aren't reaching the app. Check the configuration set and the SNS subscription in [Connect Amazon SES](04-ses.md#6-send-bounces-and-complaints-to-sns).
 
 ## 7. Read the logs
 

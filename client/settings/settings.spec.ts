@@ -183,6 +183,22 @@ describe("settings view", () => {
     expect(row("Email provider")).toBe("Fake (dev, dead-end)Simulating Amazon SES, no failures");
   });
 
+  it("says under the From address where readers' replies go, linking the guide step, and never warns", async () => {
+    await open();
+    const note = $("#replyNote");
+    expect(note.closest(".set-kv-v")?.querySelector(".mono")?.textContent).toBe(
+      "Birds <hello@send.birds.example>",
+    );
+    expect(note.textContent).toBe("Readers’ replies go to this address. Forward it to your inbox.");
+    expect($<HTMLAnchorElement>("a", note).getAttribute("href")).toBe(
+      "#/docs/ses/3-receive-replies-at-your-from-address",
+    );
+    // An explanation, not a state: the app can't see the forwarding, so nothing reads as a warning.
+    expect(note.classList.contains("amber")).toBe(false);
+    expect(note.querySelector("svg")).toBeNull();
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("says no email provider is connected and points to connecting one, on a deployment partway through setup", async () => {
     const notConnected = response();
     notConnected.deployment = { ...notConnected.deployment, provider: "none" };
