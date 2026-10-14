@@ -545,6 +545,22 @@ export async function listSuppressions(db: D1Database): Promise<SuppressionRow[]
   return results;
 }
 
+/** The suppressions on exactly these addresses, so a roster page is annotated from its
+ *  own rows rather than from the capped `listSuppressions`. */
+export async function suppressionsFor(
+  db: D1Database,
+  emails: readonly string[],
+): Promise<SuppressionRow[]> {
+  if (emails.length === 0) {
+    return [];
+  }
+  const { results } = await db
+    .prepare("SELECT * FROM suppressions WHERE email IN (SELECT value FROM json_each(?))")
+    .bind(JSON.stringify(emails))
+    .all<SuppressionRow>();
+  return results;
+}
+
 /**
  * Clear an address's suppression, the publisher's deliberate act (SPEC §7). An erasure's
  * marker is never cleared this way: only the person's own confirmation lifts it, so it

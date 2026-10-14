@@ -1583,12 +1583,14 @@ td a:hover {
 #subCounts {
   gap: 8px 24px;
 }
+/* The padding and equal negative margin give a 24px target without moving the label. */
 .sub-legend-toggle {
   flex: none;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 0;
+  padding: 4px 6px;
+  margin: -4px -6px;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -1620,9 +1622,6 @@ td a:hover {
   padding-top: 14px;
   border-top: 1px solid var(--line-soft);
   font-size: 13px;
-}
-.sub-legend[hidden] {
-  display: none;
 }
 .sub-legend dl {
   grid-column: 1 / -1;

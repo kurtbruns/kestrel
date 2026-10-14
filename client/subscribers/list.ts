@@ -141,19 +141,21 @@ export async function renderSubscribers(
 // generic label. The pills carry no hover tooltip, which keyboard, screen-reader, and touch
 // users can't reach: the legend under the counts defines each label once, and a
 // subscriber's own detail belongs on their page.
+function flagLabel(s: SubscriberListItem): string {
+  return (s.suppression_reason && SUPPRESSION_FLAG[s.suppression_reason]) || "suppressed";
+}
 function suppressionFlag(s: SubscriberListItem): Html | null {
   if (!s.suppressed) {
     return null;
   }
-  const label = (s.suppression_reason && SUPPRESSION_FLAG[s.suppression_reason]) || "suppressed";
-  return html` <span class="badge suppressed row-flag">${label}</span>`;
+  return html` <span class="badge suppressed row-flag">${flagLabel(s)}</span>`;
 }
 
 // The legend: what each label a row can show means (DESIGN §3), every pill drawn as the
 // list draws it beside its definition, so it also says what the colors mean; then the acts
 // on a subscriber and when each is the one to use, which say whose decision each records.
 // The words are shared with the API reference (shared/subscriber_meanings.ts), so a client
-// is told what the publisher is. Its toggle sits at the right of the counts and the legend
+// is told what the publisher is told. Its toggle sits at the right of the counts and the legend
 // opens below the whole card, a layout a <details> can't give, so the toggle is a button
 // carrying aria-expanded.
 function legendRow(term: Html, means: string): Html {
@@ -161,7 +163,7 @@ function legendRow(term: Html, means: string): Html {
 }
 function legend(): Html {
   const flags = Object.keys(FLAG_MEANING) as SuppressionFlag[];
-  return html`<div class="sub-legend" id="subLegend" hidden>
+  return html`<div class="sub-legend" id="subLegend" role="region" aria-labelledby="subLegendToggle" hidden>
     <dl>${SUB_STATUSES.map(({ value }) => legendRow(badge(value), STATUS_MEANING[value]))}</dl>
     <p><strong>Suppressed.</strong> ${SUPPRESSED_MEANING} The red flag beside the address says why:</p>
     <dl>${flags.map((flag) => legendRow(html`<span class="badge suppressed">${flag}</span>`, FLAG_MEANING[flag]))}</dl>
@@ -234,7 +236,17 @@ function renderSubTable(
       // or complaint is rarer and stays with the API, and an erasure's marker is never
       // cleared by hand.
       const items: MenuItem[] = [
-        { label: "View subscriber", onClick: () => viewSubscriberModal(row, signal) },
+        {
+          label: "View subscriber",
+          onClick: () =>
+            viewSubscriberModal(
+              row,
+              signal,
+              row.suppressed
+                ? { label: flagLabel(row), detail: row.suppression_detail }
+                : undefined,
+            ),
+        },
       ];
       if (row.status === "confirmed") {
         items.push({
