@@ -438,24 +438,49 @@ body.nav-resizing .sidebar {
   font-weight: 600;
   margin: 0 0 10px;
 }
-/* The doc sets in the eyebrow slot over the title: on an index both sets, the current one
-   marked; on a doc page its own set, linking back to its index. Colour alone marks the
-   current one, so nothing reflows. */
-.docs-sets {
+/* The tab per doc set under the docs header: an underlined strip, the current set in the
+   foreground over an accent rule, the way tabs read as switchable. Links, since each set's
+   index is its own address. */
+.docs-tabs {
   display: flex;
-  gap: 18px;
+  gap: 24px;
+  border-bottom: 1px solid var(--line);
+  margin: 0 0 20px;
 }
-.docs-sets a,
+.docs-tabs a {
+  padding: 8px 0 10px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.docs-tabs a:hover {
+  color: var(--fg);
+}
+.docs-tabs a[aria-current="page"] {
+  color: var(--fg);
+  border-bottom-color: var(--accent);
+}
+/* A set's own intro, under the tabs. */
+.docs-set-intro {
+  color: var(--muted);
+  font-size: 14.5px;
+  line-height: 1.6;
+  margin: 0 0 24px;
+  max-width: 62ch;
+}
+.docs-set-intro p {
+  margin: 0;
+}
+/* A doc page's set, in the eyebrow over its title: the link back to that set's index. */
 .doc .doc-set a {
   color: var(--muted);
   text-decoration: none;
 }
-.docs-sets a:hover,
 .doc .doc-set a:hover {
   color: var(--accent);
-}
-.docs-sets a[aria-current="page"] {
-  color: var(--fg);
 }
 .docs-index > h1 {
   font-size: 28px;

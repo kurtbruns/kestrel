@@ -143,17 +143,18 @@ describe("docs room", () => {
     vi.unstubAllGlobals();
   });
 
-  it("opens on the first set, Publishing, with a switch to the other that reads as links", async () => {
+  it("opens on the first set, Publishing, under one header with a tab per set", async () => {
     fake = fakeApi([]);
     await mount((r, s) => renderDocs(undefined, r, s));
-    expect($(".docs-index h1").textContent).toBe("Publishing");
+    expect($(".docs-index h1").textContent).toBe("Kestrel docs");
     expect(
-      $$<HTMLAnchorElement>(".docs-sets a").map((a) => [a.getAttribute("href"), a.textContent]),
+      $$<HTMLAnchorElement>(".docs-tabs a").map((a) => [a.getAttribute("href"), a.textContent]),
     ).toEqual([
       ["#/docs/publishing", "Publishing"],
       ["#/docs/self-hosting", "Self-hosting"],
     ]);
-    expect($(".docs-sets [aria-current='page']").textContent).toBe("Publishing");
+    expect($(".docs-tabs [aria-current='page']").textContent).toBe("Publishing");
+    expect($(".docs-set-intro").textContent).toBe("Write and send.");
     // Only the set's own pages: the Self-hosting steps stay on its index.
     expect($$(".doc-card").map((c) => c.getAttribute("href"))).toEqual(["#/docs/your-list"]);
   });
@@ -164,8 +165,8 @@ describe("docs room", () => {
     await render("self-hosting");
     await settle();
     expect($(".room-switch [aria-current='page']").textContent).toBe("Docs");
-    expect($(".docs-index h1").textContent).toBe("Set up <and> run"); // a title is text
-    expect($(".docs-index-intro a").getAttribute("href")).toBe("#/docs/overview"); // markup
+    expect($(".docs-tabs [aria-current='page']").getAttribute("title")).toBe("Set up <and> run"); // a title is text
+    expect($(".docs-set-intro a").getAttribute("href")).toBe("#/docs/overview"); // markup
     expect($$(".doc-section-blurb").map((b) => b.textContent)).toEqual(["In order."]);
     const cards = $$<HTMLAnchorElement>(".doc-card");
     expect(cards.map((c) => c.getAttribute("href"))).toEqual([
