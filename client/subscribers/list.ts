@@ -94,11 +94,15 @@ export async function renderSubscribers(
       });
       const c = data.counts;
       // The counts stay a global by-status summary (independent of the active filter);
-      // the page total below reflects the filtered roster. Only the counts repaint, so
-      // the legend stays open or closed across a reload.
+      // the page total below reflects the filtered roster. Each count is also the way to
+      // its slice of the list (countFilters, below). Only the counts repaint, so the legend
+      // stays open or closed across a reload.
       setHtml(
         $("#subCounts"),
-        html`<span><strong>${c.confirmed}</strong> confirmed</span><span>${c.pending} pending</span><span>${c.unsubscribed} unsubscribed</span><span>${c.suppressed} suppressed</span>`,
+        html`${COUNT_FILTERS.map(
+          (f) =>
+            html`<button type="button" class="sub-count" data-filter="${f}" aria-pressed="${String(countSelected(state, f))}">${f === "confirmed" ? html`<strong>${c[f]}</strong>` : c[f]} ${f}</button>`,
+        )}`,
       );
       // Suppressions alone are no subscribers, so a list of only them still points the way in.
       const listEmpty = c.pending + c.confirmed + c.unsubscribed === 0;
@@ -109,6 +113,7 @@ export async function renderSubscribers(
     }
   }
 
+  wireCountFilters(root, state, load);
   const legendToggle = $("#subLegendToggle");
   legendToggle.onclick = () => {
     const open = legendToggle.getAttribute("aria-expanded") !== "true";
@@ -132,6 +137,42 @@ export async function renderSubscribers(
     });
   wireToolbar(root, state, load);
   load();
+}
+
+// The summary's counts double as filters, as the dashboard's tiles do: a count shows its
+// slice of the list, and choosing it again shows the whole list. A status count shows that
+// status, suppressed or not, and the suppressed count every suppressed subscriber, whatever
+// their status, so each count is exactly the rows it shows (the server counts the same
+// way). The toolbar's controls follow, and a count reads as chosen while the filter is its.
+type CountFilter = SubscriberStatus | "suppressed";
+const COUNT_FILTERS: CountFilter[] = ["confirmed", "pending", "unsubscribed", "suppressed"];
+function countSelected(state: ListState, f: CountFilter): boolean {
+  return f === "suppressed"
+    ? state.suppressed === "only" && !state.status
+    : state.status === f && !state.suppressed;
+}
+function wireCountFilters(root: HTMLElement, state: ListState, reload: () => void): void {
+  const counts = $("#subCounts", root);
+  counts.onclick = (e) => {
+    const b = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-filter]") : null;
+    if (!b) {
+      return;
+    }
+    const f = b.dataset.filter as CountFilter;
+    const choose = !countSelected(state, f);
+    state.status = choose && f !== "suppressed" ? f : "";
+    state.suppressed = choose && f === "suppressed" ? "only" : "";
+    state.offset = 0;
+    $<HTMLSelectElement>(".lt-status", root).value = state.status;
+    $<HTMLInputElement>(".lt-suppressed", root).checked = state.suppressed === "only";
+    for (const other of $$<HTMLElement>("[data-filter]", counts)) {
+      other.setAttribute(
+        "aria-pressed",
+        String(countSelected(state, other.dataset.filter as CountFilter)),
+      );
+    }
+    reload();
+  };
 }
 
 // The inline suppression flag rides next to the email (suppression is a deliverability

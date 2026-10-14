@@ -582,8 +582,9 @@ describe("subscribers: admin + suppressions", () => {
   });
 
   it("GET /api/subscribers returns counts", async () => {
-    // A list of known shape, so each count is checked against what is really there; a
-    // suppression counts whether or not its address is on the list.
+    // A list of known shape, so each count is checked against what is really there; the
+    // suppressed count is subscribers whose address is suppressed, so an address suppressed
+    // with no subscriber isn't one.
     await resetDatabase();
     await seedConfirmed(["c1@example.com", "c2@example.com", "c3@example.com"]);
     await env.DB.prepare(
@@ -597,7 +598,12 @@ describe("subscribers: admin + suppressions", () => {
     const res = await SELF.fetch(`${base}/api/subscribers`, { headers: AUTH });
     expect(res.status).toBe(200);
     const body = await readJson(res);
-    expect(body.counts).toEqual({ confirmed: 3, pending: 1, unsubscribed: 1, suppressed: 2 });
+    expect(body.counts).toEqual({ confirmed: 3, pending: 1, unsubscribed: 1, suppressed: 1 });
+    // The count is what the suppression facet shows.
+    const only = await readJson(
+      await SELF.fetch(`${base}/api/subscribers?suppressed=only`, { headers: AUTH }),
+    );
+    expect(only.page.total).toBe(body.counts.suppressed);
   });
 
   it("suppression excludes a confirmed subscriber, and clearing restores them", async () => {

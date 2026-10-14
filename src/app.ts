@@ -980,7 +980,7 @@ export function createRouter({
       resource: "subscribers",
       summary:
         "List subscribers with by-status counts. Filter, sort, and paginate via query params; returns a `page` envelope.",
-      description: `Consent status and suppression are separate axes: \`status\` filters the roster; \`suppressed\` is an overlay facet, and each row's \`suppression_reason\` says why. Pass \`email\` instead to look up one subscriber. ${STATUS_GLOSS} ${SUPPRESSION_GLOSS}`,
+      description: `Consent status and suppression are separate axes: \`status\` filters the roster; \`suppressed\` is an overlay facet, and each row's \`suppression_reason\` says why. \`counts\` is the whole list's composition, whatever the filter: \`counts.suppressed\` counts subscribers whose address is suppressed, whatever their status, so it overlaps the other three and matches \`suppressed=only\`; an address suppressed with no subscriber is listed only by \`GET /api/suppressions\`. Pass \`email\` instead to look up one subscriber. ${STATUS_GLOSS} ${SUPPRESSION_GLOSS}`,
       query: [
         {
           name: "status",

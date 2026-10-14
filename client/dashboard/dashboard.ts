@@ -207,7 +207,8 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   const reported = new Map<string, SendView>();
   const pub = derivePublication(appState.appConfig);
   const deployment = appState.appConfig?.deployment ?? null;
-  const totalSubs = counts.confirmed + counts.pending + counts.unsubscribed + counts.suppressed;
+  // Suppressed subscribers are counted in their status too, so they add nothing here.
+  const totalSubs = counts.confirmed + counts.pending + counts.unsubscribed;
 
   // First run — nothing written and no one on the list: replace the body with the
   // onboarding checklist (the shared Getting-started component) rather than a wall

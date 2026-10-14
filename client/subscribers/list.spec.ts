@@ -149,6 +149,76 @@ describe("subscribers view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("filters the list from its summary counts, with the toolbar following, and clears on a second choice", async () => {
+    fake = fakeApi([
+      { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
+    ]);
+    await mount((r, s) => renderSubscribers(undefined, r, s));
+    await settle();
+    const count = (f: string) => $(`#subCounts [data-filter='${f}']`);
+    const pressed = () =>
+      $$("#subCounts [data-filter]")
+        .filter((b) => b.getAttribute("aria-pressed") === "true")
+        .map((b) => b.dataset.filter);
+    const lastQuery = () => {
+      const q = fake.calls.at(-1)!.url.searchParams;
+      return [q.get("status"), q.get("suppressed")];
+    };
+    expect($$("#subCounts [data-filter]").map((b) => b.textContent)).toEqual([
+      "2 confirmed",
+      "1 pending",
+      "0 unsubscribed",
+      "1 suppressed",
+    ]);
+    expect(pressed()).toEqual([]);
+
+    // Suppressed: every suppressed subscriber, whatever their status.
+    count("suppressed").click();
+    await settle();
+    expect(lastQuery()).toEqual([null, "only"]);
+    expect($<HTMLInputElement>(".lt-suppressed").checked).toBe(true);
+    expect($<HTMLSelectElement>(".lt-status").value).toBe("");
+    expect(pressed()).toEqual(["suppressed"]);
+
+    // A status: that status, suppressed or not, so the suppression facet goes.
+    count("confirmed").click();
+    await settle();
+    expect(lastQuery()).toEqual(["confirmed", null]);
+    expect($<HTMLInputElement>(".lt-suppressed").checked).toBe(false);
+    expect($<HTMLSelectElement>(".lt-status").value).toBe("confirmed");
+    expect(pressed()).toEqual(["confirmed"]);
+
+    // Choosing it again shows the whole list.
+    count("confirmed").click();
+    await settle();
+    expect(lastQuery()).toEqual([null, null]);
+    expect($<HTMLSelectElement>(".lt-status").value).toBe("");
+    expect(pressed()).toEqual([]);
+
+    // A filter set from the toolbar reads on the count it matches, and on none when combined.
+    const status = $<HTMLSelectElement>(".lt-status");
+    status.value = "pending";
+    status.dispatchEvent(new Event("change"));
+    await settle();
+    expect(pressed()).toEqual(["pending"]);
+    const suppressed = $<HTMLInputElement>(".lt-suppressed");
+    suppressed.checked = true;
+    suppressed.dispatchEvent(new Event("change"));
+    await settle();
+    expect(pressed()).toEqual([]);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("shows the dashboard's Suppressed tile's filter as the suppressed count, chosen", async () => {
+    fake = fakeApi([
+      { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
+    ]);
+    await mount((r, s) => renderSubscribers("suppressed", r, s));
+    await settle();
+    expect($("#subCounts [data-filter='suppressed']").getAttribute("aria-pressed")).toBe("true");
+    expect($("#subCounts [data-filter='confirmed']").getAttribute("aria-pressed")).toBe("false");
+  });
+
   it("frames Unsubscribe as the reader's request, and points the publisher's own decision to Block (SPEC §7)", async () => {
     fake = fakeApi([
       { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },

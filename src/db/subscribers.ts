@@ -330,7 +330,14 @@ export async function counts(db: D1Database): Promise<Counts> {
       c.unsubscribed = r.n;
     }
   }
-  const sup = await db.prepare("SELECT COUNT(*) AS n FROM suppressions").first<{ n: number }>();
+  // Suppressed subscribers, whatever their status, so the count is what the roster's
+  // suppression facet shows. An address suppressed with no subscriber (an erasure's marker,
+  // a bounce an import brought for someone it didn't add) is no subscriber, and isn't counted.
+  const sup = await db
+    .prepare(
+      "SELECT COUNT(*) AS n FROM subscribers WHERE email IN (SELECT email FROM suppressions)",
+    )
+    .first<{ n: number }>();
   c.suppressed = sup?.n ?? 0;
   return c;
 }

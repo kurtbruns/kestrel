@@ -63,10 +63,12 @@ export interface SubscriberListItem extends Subscriber {
   suppression_detail: string | null;
 }
 
+/** The list's composition: subscribers by consent state, and how many of them are suppressed. */
 export interface SubscriberCounts {
   pending: number;
   confirmed: number;
   unsubscribed: number;
+  /** Subscribers whose address is suppressed, whatever their status, so it overlaps the three others. Addresses suppressed with no subscriber are in `GET /api/suppressions`. */
   suppressed: number;
 }
 

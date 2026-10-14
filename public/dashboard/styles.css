@@ -1580,8 +1580,30 @@ td a:hover {
   justify-content: space-between;
   gap: 8px 16px;
 }
+/* The negative margin lines the first count's text up with the card's edge. */
 #subCounts {
-  gap: 8px 24px;
+  gap: 8px 12px;
+  margin-left: -8px;
+}
+/* Each count is a filter (DESIGN §3): it reads as the plain count it was, and shows on
+   hover that it can be chosen. The chosen one takes the Secondary palette of a pressed
+   toggle, since it switches what you're looking at and commits nothing. */
+.sub-count {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  padding: 3px 8px;
+  margin: -3px 0;
+  border-radius: 6px;
+}
+.sub-count:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+.sub-count[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 .sub-legend-toggle {
   flex: none;
