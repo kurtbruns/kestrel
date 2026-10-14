@@ -220,7 +220,7 @@ function legendRow(term: Html, means: string): Html {
 }
 function legend(): Html {
   const flags = Object.keys(FLAG_MEANING) as SuppressionFlag[];
-  return html`<div class="sub-legend" id="subLegend" role="region" aria-labelledby="subLegendToggle" hidden>
+  return html`<div class="sub-legend" id="subLegend" role="region" aria-labelledby="subLegendToggle" hidden><div class="sub-legend-body">
     <h2>Status</h2>
     <dl>${SUB_STATUSES.map(({ value }) => legendRow(badge(value), STATUS_MEANING[value]))}</dl>
     <h2>Suppressed</h2>
@@ -231,7 +231,7 @@ function legend(): Html {
     <dl>${Object.values(SUBSCRIBER_ACTIONS).map(({ label, when }) =>
       legendRow(html`<strong class="sub-legend-act">${label}</strong>`, when),
     )}</dl>
-  </div>`;
+  </div></div>`;
 }
 
 // A suppressed address keeps its consent status, but the status isn't in effect while the
