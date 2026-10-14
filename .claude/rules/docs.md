@@ -8,13 +8,13 @@ paths:
   - "src/docs/**"
 ---
 
-# Writing the setup guide
+# Writing the docs
 
-The setup guide is the documentation for deploying and running your own instance of Kestrel. This file holds the decisions every page follows. The style rules in `.claude/rules/maintainer.md` apply here too.
+The docs are two sets on one landing: **Publishing**, for the publisher who writes and sends the newsletter, and the **setup guide** (Get started, Guides, Reference), for deploying and running your own instance of Kestrel. This file holds the decisions every page follows; Publishing pages, below, says where a publisher's page differs. The style rules in `.claude/rules/maintainer.md` apply here too.
 
-## What the guide is
+## What the setup guide is
 
-- **For running your own instance.** Deploying, configuring, and upgrading it. How a publisher writes and sends posts is a separate set of docs, `docs/publishing/`, whose name and landing aren't settled yet: until they are, it is a fourth section of this landing, "For publishers", written in this voice for the person who writes the newsletter, with no main-path steps.
+- **The setup guide is for running your own instance.** Deploying, configuring, and upgrading it. How a publisher writes and sends posts is the Publishing set, `docs/publishing/`.
 - **Followed by humans and robots alike.** Every page is a complete by-hand procedure that Claude can also follow step by step. Claude is the recommended way through, and any skill that automates a step follows the page rather than replacing it.
 - **Run from the reader's instance repository.** `kestrel init` writes it: the instance's configuration, its migrations, and the Kestrel release it runs, installed from npm as `@kurtbruns/kestrel`. Deploys and upgrades happen from it, through its npm scripts and plain wrangler commands (`npx wrangler deploy --env production`), never through a checkout of Kestrel's source. Changing Kestrel's code for one instance is not covered.
 - **Local development is optional.** The Try Kestrel locally first guide covers it, from an empty folder with no Cloudflare account or Git host; Deploy points to it as an optional checkpoint after `init`, and upgrading offers it once as an optional dry run. The README covers running Kestrel's own source, for working on Kestrel.
@@ -22,17 +22,28 @@ The setup guide is the documentation for deploying and running your own instance
 
 ## Where it lives
 
-- **One source:** `docs/`, as section folders (`get-started/`, `guides/`, `reference/`) beside SPEC, API, and DESIGN.
-- **`docs/README.md` is the landing page and the table of contents.** Its H1 and intro, then a `##` per section with a blurb and a list of the section's pages; a numbered list makes a numbered section. The editor's Docs tab and getkestrel.dev both build their landing and order from it, and GitHub shows it as written. A page that isn't listed there isn't in the guide (a spec holds the two together). No front matter until a rich element needs data the Markdown can't carry.
+- **One source:** `docs/`, as section folders (`publishing/`, `get-started/`, `guides/`, `reference/`) beside SPEC, API, and DESIGN.
+- **`docs/README.md` is the landing page and the table of contents.** Its H1 ("Kestrel docs") and an intro that sends each role to its section, then a `##` per section with a blurb and a list of the section's pages; a numbered list makes a numbered section. The editor's Docs tab and getkestrel.dev both build their landing and order from it, and GitHub shows it as written. A page that isn't listed there isn't in the guide (a spec holds the two together). No front matter until a rich element needs data the Markdown can't carry.
 - **A page's slug** is its file name without the `NN-` prefix, unique across sections.
 - **getkestrel.dev is where most people read it**, at the latest release. The editor's Docs tab is the copy matched to the running version, and its landing is the same everywhere.
 
 ## Structure
 
+- **Publishing:** first, since the editor's Docs tab is read once Kestrel is running, mostly by the publisher. Picked from, not numbered: Your list, then Sending rules. Possible pages wait as GitHub issues, like guides.
 - **Get started:** the main path, numbered: Deploy the app, Lock the dashboard with Access, Connect Amazon SES, Verify it works, Go live. There is no overview page: what the whole path needs opens Deploy the app as its Before you begin, and the docs landing lists the steps.
 - **Guides:** picked from, not read in order: Connect Claude, trying Kestrel locally first, notifications through Cloudflare's email, rate limiting, upgrading. The docs landing's list sets the order, not the file prefixes. Possible guides wait as GitHub issues until they've been run end to end, such as staging and the archive on your website.
 - **Reference:** the detail and the why: configuration, sending-domain DNS, the import format.
 - Previous and Next stay within a section.
+
+## Publishing pages
+
+A publisher's page is a task page, not a procedure, and it works for a writer someone else set Kestrel up for.
+
+- **Answer first.** The page, and a section a link lands on, opens with the short answer, then the reasons. No Before you begin, numbered steps, or Check it.
+- **Shape:** what it's for; what Kestrel does and what you do; where to click, by the dashboard's own words in bold (**Subscribers → Import**); the limits; links onward.
+- **No deploy vocabulary.** Never assume the reader touched Cloudflare, wrangler, or AWS. A fact that belongs to whoever deploys (Workers Paid, reply forwarding, the From address) is named as theirs, "whoever runs your Kestrel", with a link into the setup guide for the detail, never restated.
+- **Settled facts, cited and hedged.** A legal claim links its source and says whose law it is. Where the law is judgment, say "usually" or "probably". A page with legal content says it's general information, not legal advice.
+- **Headings are link targets.** The editor links a section by its heading's exact words, and a spec fails when a linked heading changes, so rename a linked heading only with its links.
 
 ## Main path defaults
 
@@ -42,7 +53,7 @@ The setup guide is the documentation for deploying and running your own instance
 
 ## Page anatomy
 
-After Linode's guides:
+A setup guide page, after Linode's guides:
 
 1. `# Title`: sentence case, a short noun or imperative phrase.
 2. **Intro:** what this page does, then "In this guide, you…". One or two short paragraphs.

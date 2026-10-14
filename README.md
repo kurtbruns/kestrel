@@ -12,7 +12,9 @@ Kestrel installs from npm as [`@kurtbruns/kestrel`](https://www.npmjs.com/packag
 npx @kurtbruns/kestrel init
 ```
 
-To look around before you deploy, [Try Kestrel locally first](docs/guides/08-try-locally.md) runs it with demo content and no Cloudflare account. [Get started](docs/README.md#get-started) takes you from an empty repository to a live newsletter, and [Upgrade to a new release](docs/guides/07-upgrade.md) moves an instance to a newer one. The same guide is in the editor's **Docs** tab.
+To look around before you deploy, [Try Kestrel locally first](docs/guides/08-try-locally.md) runs it with demo content and no Cloudflare account. Get started takes you from an empty repository to a live newsletter, and [Upgrade to a new release](docs/guides/07-upgrade.md) moves an instance to a newer one.
+
+The docs are two sets, one per job. [Get started](docs/README.md#get-started) and the guides beside it are for whoever deploys and runs Kestrel. [Publishing](docs/README.md#publishing) is for whoever writes and sends the newsletter: your list, and the sending rules, such as when your emails need a mailing address. Both are in the editor's **Docs** tab.
 
 ## Work on Kestrel
 

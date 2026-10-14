@@ -10,6 +10,8 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
   it("renders the guide in the README's order with titles from each doc's H1 and an HTML fragment", () => {
     const { docs } = renderDocs();
     expect(docs.map((d) => `${d.section}/${d.slug}`)).toEqual([
+      "publishing/your-list",
+      "publishing/sending-rules",
       "get-started/deploy",
       "get-started/access",
       "get-started/ses",
@@ -23,7 +25,6 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
       "reference/configuration",
       "reference/sending-domain-dns",
       "reference/import-format",
-      "publishing/your-list",
     ]);
     // Titles are extracted from the markdown, not hard-coded here.
     expect(docs.find((d) => d.slug === "access")?.title).toBe("Lock the dashboard with Access");
@@ -36,13 +37,13 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
 
   it("reads the landing page from the README: its title, intro, and sections", () => {
     const { landing } = renderDocs();
-    expect(landing.title).toBe("Set up and run Kestrel");
+    expect(landing.title).toBe("Kestrel docs");
     expect(landing.intro).toMatch(/^<p>.+<\/p>/s);
     expect(landing.sections.map((s) => [s.id, s.title, s.numbered])).toEqual([
+      ["publishing", "Publishing", false],
       ["get-started", "Get started", true],
       ["guides", "Guides", false],
       ["reference", "Reference", false],
-      ["publishing", "For publishers", false],
     ]);
     for (const s of landing.sections) {
       expect(s.blurb, s.title).toMatch(/^<p>.+<\/p>/s);
@@ -167,7 +168,7 @@ describe("docs API is gated like the rest of the authoring API", () => {
   });
 });
 
-describe("docs API serves the setup content when authed", () => {
+describe("docs API serves the docs when authed", () => {
   it("returns the whole guide as sanitized HTML fragments in reading order", async () => {
     const res = await SELF.fetch(`${base}/api/docs`, { headers: AUTH });
     expect(res.status).toBe(200);

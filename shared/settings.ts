@@ -25,6 +25,14 @@ export interface PublicationView {
   logoUrl: string;
 }
 
+/** The warning a settings save returns when it leaves a mailing address set that the
+ *  template doesn't print (SPEC §9). Advice, never a refusal: whether a publication needs an
+ *  address is the publisher's call, and a template may carry one written in by hand. Shared
+ *  so the editor can recognize it and link the docs beside it, while the API's string stays
+ *  plain text. */
+export const ADDRESS_NOT_PRINTED =
+  "You’ve added a mailing address in Settings, but this template doesn’t include the {{ .Publication.Address }} field. If you send promotional email, add it to the footer. If you’ve written your address into the template yourself, or don’t need to provide one, you can ignore this or remove the address in Settings.";
+
 /** The identity fields an email template can carry, named as the settings surface names them. */
 export type IdentityField = "name" | "tagline" | "logoUrl" | "address";
 

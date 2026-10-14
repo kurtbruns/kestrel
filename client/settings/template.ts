@@ -3,11 +3,12 @@
 
 import { emailLogoHtml } from "../../shared/email_logo";
 import { publicationName } from "../../shared/publication";
-import type {
-  SettingsPatchBody,
-  SettingsResponse,
-  SettingsSavedResponse,
-  TemplateTestResponse,
+import {
+  ADDRESS_NOT_PRINTED,
+  type SettingsPatchBody,
+  type SettingsResponse,
+  type SettingsSavedResponse,
+  type TemplateTestResponse,
 } from "../../shared/settings";
 import { api, describeError } from "../api";
 import { notConnectedTestLine, providerNotConnected, withNoProviderNote } from "../deployment";
@@ -22,6 +23,7 @@ import { escapeHtml, type Html, html, setHtml, unsafeHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { savebar } from "../ui/savebar";
 import { busy, modal, openMenu, renderError, toast } from "../ui/widgets";
+import { addressDocsLink } from "./identity";
 import { inUseChip, REMAKE_TEMPLATE, savedToast, withRemakeConfirm } from "./remake";
 
 const message = describeError;
@@ -596,7 +598,11 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
     }
     tplMsgsEl.hidden = false;
     tplMsgsEl.className = "set-tpl-msgs warn";
-    setHtml(tplMsgsEl, html`${msgs.map((m) => html`<div>${m}</div>`)}`);
+    // The mailing-address warning is the API's plain text; the editor links the docs after it.
+    setHtml(
+      tplMsgsEl,
+      html`${msgs.map((m) => html`<div>${m}${m === ADDRESS_NOT_PRINTED ? html` ${addressDocsLink()}` : null}</div>`)}`,
+    );
   }
   function revertTemplate() {
     tplEditor.value = templateBaseline;

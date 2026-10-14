@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SettingsResponse } from "../../shared/settings";
+import { ADDRESS_NOT_PRINTED, type SettingsResponse } from "../../shared/settings";
 import { appState } from "../state";
 import {
   $,
@@ -134,6 +134,34 @@ describe("template view", () => {
     expect($("#toasts").textContent).toMatch(/Template saved with warnings/);
     expect(bar().classList.contains("show")).toBe(false);
     expect(appState.appConfig?.settings.emailTemplate).toBe(stored);
+  });
+
+  it("links the mailing-address warning to the docs section, in a new tab, and no other warning", async () => {
+    await open([
+      { path: "/api/settings", reply: () => response() },
+      {
+        method: "PUT",
+        path: "/api/settings",
+        reply: () => ({
+          settings: response().settings,
+          warnings: ["No {{ .Email.ViewInBrowserURL }} link.", ADDRESS_NOT_PRINTED],
+          remade: [],
+        }),
+      },
+    ]);
+    typeInto(editor(), `${TEMPLATE} `);
+    $("#savebarSave").click();
+    await vi.advanceTimersByTimeAsync(0);
+    const [plain, address] = [...$("#tplMsgs").children] as HTMLElement[];
+    expect(plain!.querySelector("a")).toBeNull();
+    expect(address!.textContent).toMatch(
+      /^You’ve added a mailing address.*remove the address in Settings\. When to provide a mailing address/,
+    );
+    const link = address!.querySelector("a")!;
+    expect(link.getAttribute("href")).toBe(
+      "#/docs/sending-rules/when-to-provide-a-mailing-address",
+    );
+    expect(link.target).toBe("_blank");
   });
 
   it("a rejected template keeps the bar up with the reason", async () => {

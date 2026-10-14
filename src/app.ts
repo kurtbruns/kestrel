@@ -251,7 +251,7 @@ export function createRouter({
       handler: devRoutes.token,
     }),
 
-    // --- setup guide (authed; read-only, bundled from docs/) ---
+    // --- docs (authed; read-only, bundled from docs/) ---
     // Under /api so the same Access application that gates the authoring API
     // gates these too, and the SPA's authed fetch reaches them (SPEC §5, §11).
     {
@@ -259,7 +259,8 @@ export function createRouter({
       path: "/api/docs",
       access: "admin",
       resource: "system",
-      summary: "The setup guide as sanitized HTML fragments, in reading order (JSON).",
+      summary:
+        "The docs (the publisher's pages and the setup guide) as sanitized HTML fragments, in reading order (JSON).",
       handler: docsRoutes.list,
     },
 

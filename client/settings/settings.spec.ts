@@ -226,7 +226,17 @@ describe("settings view", () => {
     await open();
     expect($("#addrAdd").hidden).toBe(false);
     expect($("#addrField").hidden).toBe(true);
-    expect($("#addrAdd .field-hint").textContent).toMatch(/CAN-SPAM.*A P\.O\. box works\./);
+    expect($("#addrAdd .field-hint").textContent).toMatch(
+      /CAN-SPAM.*A P\.O\. box works\. When to provide a mailing address/,
+    );
+    // Each place the address shows links the docs section, in a new tab so the form stays.
+    for (const where of ["#addrAdd .field-hint", "#addrField .field-hint", "#addrWarn"]) {
+      const link = $<HTMLAnchorElement>(`${where} a`);
+      expect(link.getAttribute("href"), where).toBe(
+        "#/docs/sending-rules/when-to-provide-a-mailing-address",
+      );
+      expect(link.target, where).toBe("_blank");
+    }
     $("#addrAddBtn").click();
     expect($("#addrAdd").hidden).toBe(true);
     expect($("#addrField").hidden).toBe(false);
@@ -267,7 +277,7 @@ describe("settings view", () => {
     expect($("#addrWarn").hidden).toBe(false);
     expect($("#setAddress").getAttribute("aria-describedby")).toBe("addrWarn");
     expect($("#addrWarn").textContent).toBe(
-      "Your email template currently doesn’t include this field. If you send promotional email, add it to the template.",
+      "Your email template currently doesn’t include this field. If you send promotional email, add it to the template. When to provide a mailing address ↗ (opens in a new tab)",
     );
     typeInto($<HTMLInputElement>("#setAddress"), "");
     expect($("#addrWarn").hidden).toBe(true);

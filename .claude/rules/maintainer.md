@@ -23,6 +23,8 @@ Kestrel is built in levels of abstraction, and is kept that way. Each level is p
 - **`CHANGELOG.md`, the record.** What changed between releases, one line per change, for the person deciding whether to upgrade. It cuts across the levels instead of sitting at one. `.claude/rules/changelog.md` says what earns a line, how it is written, and when a release is cut.
 - **The code.** Everything beneath the documents, from the API route table down to the line. Every guarantee above has to land here. `.claude/CLAUDE.md` describes this level: how the code is organized, the rules that are not obvious from reading it, and how its comments are written.
 
+Beside these sit the docs in `docs/README.md` and its section folders, held by `.claude/rules/docs.md`. The publisher's pages (`docs/publishing/`) describe the app as the publisher meets it, so they sit below SPEC and DESIGN and restate neither: what the system does comes from SPEC, and the names of screens and buttons from DESIGN and the UI, worded for someone who has never read either. A change that alters what a publisher does or sees changes the page in the same commit. A publisher page may also carry what no other document holds, such as which law asks what of a newsletter, as long as it cites its source.
+
 This file holds the rules for keeping them at their height.
 
 ## The rules

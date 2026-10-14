@@ -245,7 +245,7 @@ The one email template every post is sent in (SPEC §9). The head carries the **
 - **A note** stating the rule: one template serves every post; a change while posts are scheduled applies to their emails too, after you confirm; sent emails never change.
 - **Variables**: every placeholder and what it means.
 
-The page saves through the save bar (§6). A save that leaves a problem the template can live with, such as a mailing address the template doesn't print, saves with a warning under the editor, naming Settings without linking there.
+The page saves through the save bar (§6). A save that leaves a problem the template can live with, such as a mailing address the template doesn't print, saves with a warning under the editor, naming Settings without linking there. The mailing-address warning is followed by **When to provide a mailing address ↗**, the docs section that answers it, opening in a new tab so the editor stays as it was; the API's warning stays plain text.
 
 ### Settings
 
@@ -264,7 +264,7 @@ The groups have no headings, only a wider gap: each section's title, its **inten
 **Publication identity.** Its note says it is "Shown in every email" and, while posts are scheduled, how many emails a save would update and that the publisher confirms first. The sample email beside it shows which fields the template prints, so the note doesn't list them. It carries no in-use chip, since the identity is in every email.
 
 - **Logo.** Shown square everywhere, so the upload makes it square: a picked image is cropped to its centered square and scaled in the browser, then saved at once. The tile is the preview, a toast says when edges were cropped, and Replace is the way back. A logo that isn't square (one set through the API) carries a warning under the tile until it's replaced.
-- **Mailing address.** Optional (SPEC §9), so with none saved it isn't an empty field, which would read as a missing required value. It's an **Add a mailing address** button with a hint beside it. A saved address is an open field with **Remove**, and no status line, which would be untrue under a custom template that prints the address somewhere else. While an address is set and the template doesn't print it, an amber line under the field says so, with no link and no mention of removing it, since Remove sits beside it. The Template page carries the same fact as a save warning, one on each side of the pair that disagrees.
+- **Mailing address.** Optional (SPEC §9), so with none saved it isn't an empty field, which would read as a missing required value. It's an **Add a mailing address** button with a hint beside it. A saved address is an open field with **Remove**, and no status line, which would be untrue under a custom template that prints the address somewhere else. While an address is set and the template doesn't print it, an amber line under the field says so, with no link to the template and no mention of removing it, since Remove sits beside it. Each of the three, the Add row's hint, the open field's only hint, and the amber line, ends with **When to provide a mailing address ↗**, the Sending rules section of the publisher's docs, opening in a new tab so a half-edited form stays as it was. The Template page carries the same fact as a save warning, one on each side of the pair that disagrees.
 
 **Ways to subscribe** offers two ways onto the list as two bands of one card, in reading order. Each band has the same head: a title, a small glyph, and one line on what it's for.
 

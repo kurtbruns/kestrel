@@ -32,6 +32,15 @@ function identityNote(inUse: InUseView): string {
   return `${shown} ${reach}${wait}`;
 }
 
+/** The docs section that says when a publication needs a mailing address (SPEC §9), linked
+ *  beside each place the address shows. It opens in a new tab, so a half-edited form stays
+ *  as it was. */
+const ADDRESS_DOCS_HREF = "#/docs/sending-rules/when-to-provide-a-mailing-address";
+
+export function addressDocsLink(): Html {
+  return html`<a class="set-link" href="${ADDRESS_DOCS_HREF}" target="_blank" rel="noopener">When to provide a mailing address <span aria-hidden="true">↗</span><span class="visually-hidden"> (opens in a new tab)</span></a>`;
+}
+
 /** The side of the square PNG a logo uploads as: sharp at 3× the largest place it shows
  *  (the reader pages' 64 px), and small for any inbox. */
 const LOGO_SIZE = 256;
@@ -80,7 +89,7 @@ export function identitySection(page: SettingsPage): Html {
             </div>
             <div class="set-field set-addr-add" id="addrAdd"${addressOpen ? HIDDEN : null}>
               <button type="button" class="ghost" id="addrAddBtn" aria-describedby="addrAddHint">${icon("plus")}Add a mailing address</button>
-              <p class="field-hint" id="addrAddHint">For promotional email, US law (CAN-SPAM) requires a postal address in the footer. A P.O. box works.</p>
+              <p class="field-hint" id="addrAddHint">For promotional email, US law (CAN-SPAM) requires a postal address in the footer. A P.O. box works. ${addressDocsLink()}</p>
             </div>
             <div class="set-field" id="addrField"${addressOpen ? null : HIDDEN}>
               <div class="set-field-head">
@@ -88,7 +97,8 @@ export function identitySection(page: SettingsPage): Html {
                 <button type="button" class="danger-subtle set-field-remove" id="addrRemove">Remove</button>
               </div>
               <input id="setAddress" value="${state.address}" placeholder="PO Box 123, City, ST 00000" maxlength="300" autocomplete="off">
-              <p class="set-field-warn" id="addrWarn" hidden>Your email template currently doesn’t include this field. If you send promotional email, add it to the template.</p>
+              <p class="field-hint">${addressDocsLink()}</p>
+              <p class="set-field-warn" id="addrWarn" hidden>Your email template currently doesn’t include this field. If you send promotional email, add it to the template. ${addressDocsLink()}</p>
             </div>
           </div>
         </div>

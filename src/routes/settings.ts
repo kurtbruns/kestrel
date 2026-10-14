@@ -24,15 +24,16 @@
  * where its destination is set.
  */
 
-import type {
-  DeploymentView,
-  InUseView,
-  LogoResponse,
-  NotificationTestResponse,
-  PublicationView,
-  SettingsResponse,
-  SettingsSavedResponse,
-  SettingsView,
+import {
+  ADDRESS_NOT_PRINTED,
+  type DeploymentView,
+  type InUseView,
+  type LogoResponse,
+  type NotificationTestResponse,
+  type PublicationView,
+  type SettingsResponse,
+  type SettingsSavedResponse,
+  type SettingsView,
 } from "../../shared/settings";
 import { buildInfo } from "../build";
 import { notificationStatus, recordNotificationTest } from "../db/notifications";
@@ -147,12 +148,6 @@ function settingsView(settings: AppSettings, cfg: Config): SettingsView {
 function renderedIdentityFields(settings: AppSettings, cfg: Config): IdentityField[] {
   return identityFieldsInUse(resolveBranding(settings, cfg).template);
 }
-
-/** Said when a save leaves a mailing address set that the template doesn't print (SPEC
- *  §9). Advice, never a refusal: whether a publication needs an address is the
- *  publisher's call, and a template may carry one written in by hand. */
-const ADDRESS_NOT_PRINTED =
-  "You’ve added a mailing address in Settings, but this template doesn’t include the {{ .Publication.Address }} field. If you send promotional email, add it to the footer. If you’ve written your address into the template yourself, or don’t need to provide one, you can ignore this or remove the address in Settings.";
 
 /** The scheduled sends a template or identity change would re-make (SPEC §9), the
  *  moment after which a save stops being refused for the lead, and the identity fields

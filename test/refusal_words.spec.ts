@@ -41,6 +41,7 @@ const MESSAGE_PROPERTY = /\bmessage:\s*(["'`])((?:\\.|(?!\1)[\s\S])*)\1/g;
 // by file. Each must be found, so a rename can't drop one from the check unnoticed.
 const SHARED_BUILDERS: Record<string, string[]> = {
   "../shared/sends.ts": ["NOT_CONNECTED_ADVICE", "refusalAdvice", "tooSoonMessage"],
+  "../shared/settings.ts": ["ADDRESS_NOT_PRINTED"],
 };
 
 /** The source with its comments removed, since a comment is never sent. */
@@ -251,8 +252,6 @@ describe("the words the API shows the publisher", () => {
     // A constant the call passes, and a local its message interpolates.
     expect(has("src/send/schedule.ts", "This post already has a send scheduled")).toBe(true);
     expect(has("src/send/schedule.ts", "its fire time has passed")).toBe(true);
-    // A constant added to a list of warnings.
-    expect(has("src/routes/settings.ts", "but this template doesn’t include")).toBe(true);
     // A helper that builds its message from the words its callers pass.
     expect(has("src/db/settings.ts", "must be text.")).toBe(true);
     expect(has("src/db/settings.ts", '"The publication name"')).toBe(true);
@@ -260,6 +259,8 @@ describe("the words the API shows the publisher", () => {
     expect(has("shared/sends.ts", "so there’s time to cancel")).toBe(true);
     expect(has("shared/sends.ts", "Service Quotas console")).toBe(true);
     expect(has("shared/sends.ts", "Connect Amazon SES")).toBe(true);
+    // A shared constant the Worker adds to a list of warnings.
+    expect(has("shared/settings.ts", "but this template doesn’t include")).toBe(true);
     expect(found.length).toBeGreaterThan(100);
   });
 

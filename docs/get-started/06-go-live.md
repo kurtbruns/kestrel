@@ -62,4 +62,6 @@ Each of these guides stands on its own. Pick the ones you want.
 - [Connect Claude to the API](../guides/01-connect-claude.md), so Claude can draft, proofread, and schedule posts through the same API the editor uses.
 - [Notifications through Cloudflare's email](../guides/03-notifications.md), so you hear about problems even when your email provider has stopped sending.
 
+If someone else writes the newsletter, point them to the docs' Publishing section, written for them, starting with [Your list](../publishing/01-your-list.md).
+
 When a new release comes out, [Upgrade to a new release](../guides/07-upgrade.md) shows how to move to it.
