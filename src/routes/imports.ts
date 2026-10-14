@@ -10,6 +10,7 @@
 
 import {
   ATTESTATION,
+  attestationPublication,
   describeFormat,
   EXAMPLE_CSV_NAME,
   EXAMPLE_TXT_NAME,
@@ -125,7 +126,7 @@ async function plan(c: RequestContext, input: ImportInput): Promise<Plan> {
   return planImport(c.env.DB, input, {
     maxRows,
     maxRowsReason: reason,
-    publication: settings.publication.name,
+    publication: attestationPublication(settings.publication.name, c.config.fromAddress),
     freePlan: onFreePlanLimits(c.config),
   });
 }

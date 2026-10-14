@@ -10,6 +10,7 @@
 
 import { dailyWritesPercent } from "./daily_writes";
 import { isValidEmail, normalizeEmail } from "./email";
+import { publicationName } from "./publication";
 
 /** The format's name and version, written in its `format` column. */
 export const IMPORT_FORMAT = "kestrel-subscribers/1";
@@ -813,9 +814,15 @@ export const ATTESTATION = {
   text: "Everyone I’m importing as subscribed opted in to receive [publication]. This isn’t a purchased, rented, or scraped list.",
 } as const;
 
-/** The attestation's words for one publication. */
+/** The publication as the attestation names it: by the name every surface shows (SPEC §9),
+ *  its own or else the sender's display name, and as "this newsletter" when it has neither. */
+export function attestationPublication(name: string, fromAddress: string): string {
+  return publicationName(name, fromAddress) || "this newsletter";
+}
+
+/** The attestation's words for a publication named as `attestationPublication` names it. */
 export function attestationText(publication: string): string {
-  return ATTESTATION.text.replace("[publication]", publication || "this newsletter");
+  return ATTESTATION.text.replace("[publication]", publication);
 }
 
 /** One row of the plan or the commit that won't be confirmed, with what happens to it. */
@@ -874,8 +881,8 @@ export interface ImportPlanResponse {
   /** The rows that won't be confirmed, in file order, each with its outcome. */
   rows: ImportRowResult[];
   sends_growing: GrowingSend[];
-  /** The attestation the commit needs, or null when no row would be confirmed. */
-  attestation: { version: number; text: string } | null;
+  /** The attestation the commit needs, with the name it calls the publication, or null when no row would be confirmed. */
+  attestation: { version: number; text: string; publication: string } | null;
   /** What the commit must name, so it applies this plan and no other. */
   plan_hash: string;
   /** On the Workers Free plan's limits, when this import and the day's earlier ones (UTC) would write more of D1's daily allowance than the budget leaves room for: the server's words, to show as they stand. Null otherwise. Never a refusal. */

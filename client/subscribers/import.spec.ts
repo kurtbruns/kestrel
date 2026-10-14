@@ -60,7 +60,7 @@ function planFor(name: string, over: Partial<ImportPlanResponse> = {}): ImportPl
       },
     ],
     sends_growing: [],
-    attestation: { version: 1, text: ATTEST },
+    attestation: { version: 1, text: ATTEST, publication: "Birds Weekly" },
     plan_hash: "hash-1",
     daily_writes_warning: null,
     ...over,
@@ -73,7 +73,7 @@ function plainPlan(name: string, status: PlainListStatus): ImportPlanResponse {
   const subscribing = status === "subscribed";
   return planFor(name, {
     file: { name, kind: "txt", rows: 3, addresses: 3, plain_list_status: status },
-    attestation: subscribing ? { version: 1, text: ATTEST } : null,
+    attestation: subscribing ? { version: 1, text: ATTEST, publication: "Birds Weekly" } : null,
     counts: counts(subscribing ? { create_confirmed: 3 } : { suppression_added: 3 }),
     plan_hash: `hash-${status}`,
   });
@@ -262,6 +262,32 @@ describe("import view", () => {
     expect(saved.map((f) => f.name)).toEqual(["list-not-imported.csv"]);
     expect(await saved[0]?.blob.text()).toBe(
       "row,email,outcome,suppression_added\r\n30,charles@example.com,create_unsubscribed,no\r\n",
+    );
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("names the publication under the attestation as the plan names it, not as the settings it loaded do (SPEC §9)", async () => {
+    // Settings changed in another tab since this one loaded them: the plan is the server's word.
+    appState.appConfig = settingsResponse({
+      settings: { publication: { name: "Old Name", tagline: "", address: "", logoUrl: "" } },
+    });
+    const text =
+      "Everyone I’m importing as subscribed opted in to receive Field Notes. This isn’t a purchased, rented, or scraped list.";
+    fake = fakeApi([
+      formatRoute,
+      {
+        method: "POST",
+        path: "/api/imports/plan",
+        reply: () =>
+          planFor("list.csv", { attestation: { version: 1, text, publication: "Field Notes" } }),
+      },
+    ]);
+    await mount(renderImport);
+    await settle();
+    await chooseFile("list.csv", "email,status,opt_in,origin\n");
+    expect($("label.imp-check").textContent).toBe(text);
+    expect($(".imp-attest-hint").textContent).toBe(
+      "Only import people who asked to receive Field Notes. If you’re unsure about some, take them out of the file before importing.",
     );
     expect(fake.unhandled).toEqual([]);
   });

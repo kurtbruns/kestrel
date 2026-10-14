@@ -78,7 +78,7 @@ export interface Plan {
   suppressionsAdded: number;
   confirmed: ConfirmedBreakdown;
   sendsGrowing: GrowingSend[];
-  attestation: { version: number; text: string } | null;
+  attestation: { version: number; text: string; publication: string } | null;
   planHash: string;
   /** The warning about D1's daily writes, on Workers Free's limits only (SPEC §7). */
   dailyWritesWarning: string | null;
@@ -229,6 +229,7 @@ export async function planImport(
   }: {
     maxRows: number;
     maxRowsReason: string | null;
+    /** The publication as the attestation names it (`attestationPublication`). */
     publication: string;
     /** On Workers Free's limits: the plan then warns when it and the day's earlier imports would spend too much of D1's daily writes. */
     freePlan?: boolean;
@@ -338,7 +339,7 @@ export async function planImport(
     confirmed,
     sendsGrowing,
     attestation: needsAttestation
-      ? { version: ATTESTATION.version, text: attestationText(publication) }
+      ? { version: ATTESTATION.version, text: attestationText(publication), publication }
       : null,
     planHash,
     freePlan,

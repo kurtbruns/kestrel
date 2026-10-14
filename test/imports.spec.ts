@@ -320,7 +320,8 @@ describe("refusals name what was wrong and what was expected (SPEC §7)", () => 
     const p = await planOk({ file });
     expect(p.attestation).toEqual({
       version: 1,
-      text: "Everyone I’m importing as subscribed opted in to receive this newsletter. This isn’t a purchased, rented, or scraped list.",
+      text: "Everyone I’m importing as subscribed opted in to receive Newsletter. This isn’t a purchased, rented, or scraped list.",
+      publication: "Newsletter",
     });
     const res = await commit({ file, plan_hash: p.plan_hash });
     expect(res.status).toBe(409);
@@ -331,10 +332,55 @@ describe("refusals name what was wrong and what was expected (SPEC §7)", () => 
     expect(await count("SELECT COUNT(*) AS n FROM subscribers")).toBe(0);
   });
 
-  it("names the publication in the attestation", async () => {
+  it("names the publication in the attestation by the name it set (SPEC §9)", async () => {
     await updateSettings(env.DB, { publication: { name: "Field Notes" } });
     const p = await planOk({ file: csvFile(["a@x.io,subscribed,single,sendy,,,,,,"]) });
-    expect(p.attestation?.text).toContain("to receive Field Notes.");
+    expect(p.attestation?.text).toBe(
+      "Everyone I’m importing as subscribed opted in to receive Field Notes. This isn’t a purchased, rented, or scraped list.",
+    );
+    expect(p.attestation?.publication).toBe("Field Notes");
+  });
+
+  it("names it by the sender's display name until a publication name is set (SPEC §9)", async () => {
+    const res = await fetchWith(
+      { FROM_ADDRESS: '"Birds Weekly" <news@send.example.com>' },
+      "/api/imports/plan",
+      {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ file: csvFile(["a@x.io,subscribed,single,sendy,,,,,,"]) }),
+      },
+    );
+    expect(res.status).toBe(200);
+    const p: ImportPlanResponse = await readJson(res);
+    expect(p.attestation?.text).toBe(
+      "Everyone I’m importing as subscribed opted in to receive Birds Weekly. This isn’t a purchased, rented, or scraped list.",
+    );
+    expect(p.attestation?.publication).toBe("Birds Weekly");
+  });
+
+  it("calls it this newsletter with neither a publication name nor a display name (SPEC §9)", async () => {
+    const res = await fetchWith({ FROM_ADDRESS: "news@send.example.com" }, "/api/imports/plan", {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ file: csvFile(["a@x.io,subscribed,single,sendy,,,,,,"]) }),
+    });
+    expect(res.status).toBe(200);
+    const p: ImportPlanResponse = await readJson(res);
+    expect(p.attestation?.text).toBe(
+      "Everyone I’m importing as subscribed opted in to receive this newsletter. This isn’t a purchased, rented, or scraped list.",
+    );
+    expect(p.attestation?.publication).toBe("this newsletter");
+  });
+
+  it("leaves the publication's name out of the plan's hash", async () => {
+    const file = csvFile(["a@x.io,subscribed,single,sendy,,,,,,"]);
+    const before = await planOk({ file });
+    await updateSettings(env.DB, { publication: { name: "Field Notes" } });
+    const after = await planOk({ file });
+    expect(after.attestation?.publication).toBe("Field Notes");
+    expect(after.plan_hash).toBe(before.plan_hash);
+    expect(after.attestation?.version).toBe(before.attestation?.version);
   });
 });
 
