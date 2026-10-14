@@ -243,9 +243,11 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
     status: PlainListStatus | null,
   ): Promise<ImportPlanResponse | null> {
     try {
+      // A plan writes nothing and paints, so it is cut off when the view goes.
       return await api<ImportPlanResponse>("/api/imports/plan", {
         method: "POST",
         json: status === null ? { file } : { file, plain_list_status: status },
+        signal,
       });
     } catch (e) {
       if (!signal.aborted) {
@@ -312,12 +314,21 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
         <div class="actions imp-actions"><a class="ghost-link" href="#/subscribers">Cancel</a><button type="button" class="primary" id="impGo">Import</button></div>
       </section>`,
     );
-    $("#impReplace", body).onclick = () => input.click();
+    const replace = $<HTMLButtonElement>("#impReplace", body);
+    replace.onclick = () => input.click();
     if (notImported > 0) {
       $("#impNotImported", body).onclick = () => downloadNotImported(p.file.name, p.rows);
     }
     const go = $<HTMLButtonElement>("#impGo", body);
     const toggles = $$<HTMLButtonElement>("[data-plain]", body);
+    // While a re-plan or the commit is on its way, nothing may start another plan for this
+    // file or a new one, so a late answer for the old file can't paint over a newer choice.
+    const hold = (held: boolean) => {
+      replace.disabled = held;
+      for (const t of toggles) {
+        t.disabled = held;
+      }
+    };
     for (const b of toggles) {
       b.onclick = () => {
         const status = b.dataset.plain as PlainListStatus;
@@ -327,9 +338,7 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
         // While the new plan is on its way, the one on screen is no longer the publisher's
         // choice, so nothing can commit it.
         go.disabled = true;
-        for (const t of toggles) {
-          t.disabled = true;
-        }
+        hold(true);
         void (async () => {
           const next = await plan(file, status);
           if (next && !signal.aborted) {
@@ -339,7 +348,7 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
         })();
       };
     }
-    go.onclick = () => commit(p, file, go);
+    go.onclick = () => commit(p, file, go, hold);
   }
 
   function plainStatusControl(pressed: PlainListStatus): Html {
@@ -363,6 +372,7 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
     p: ImportPlanResponse,
     file: ChosenFile,
     go: HTMLButtonElement,
+    hold: (held: boolean) => void,
   ): Promise<void> {
     body.querySelector(".imp-act-error")?.remove();
     // Each box the commit needs, unticked, says so where it is, in order down the page.
@@ -381,6 +391,7 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
       missing(attest, "Tick this to attest that everyone you’re importing as subscribed opted in.");
       return;
     }
+    hold(true);
     await busy(go, "Importing…", async () => {
       try {
         const done = await api<ImportCommitResponse>("/api/imports", {
@@ -413,7 +424,9 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
           }
           return;
         }
+        // Refused with the plan still on screen: say why, and let the publisher act again.
         paintError(describeError(e));
+        hold(false);
       }
     });
   }

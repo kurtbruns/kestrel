@@ -199,6 +199,24 @@ describe("subscribers view", () => {
     expect(location.hash).toBe("#/subscribers/import");
   });
 
+  it("keeps a list whose only subscribers have unsubscribed from reading as empty", async () => {
+    fake = fakeApi([
+      {
+        path: "/api/subscribers",
+        reply: () => ({
+          counts: { pending: 0, confirmed: 0, unsubscribed: 2, suppressed: 0 },
+          subscribers: [],
+          page: { ...page, total: 0 },
+        }),
+      },
+    ]);
+    await mount((r, s) => renderSubscribers(undefined, r, s));
+    await settle();
+    // Nothing matches the filter, but the list has people on it: no invitation to import.
+    expect($("#subList").textContent).toBe("No subscribers match.");
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("seeds the filter from the dashboard's deep link", async () => {
     fake = fakeApi([
       {

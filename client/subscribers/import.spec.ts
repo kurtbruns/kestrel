@@ -296,8 +296,15 @@ describe("import view", () => {
     expect($(".imp-plain").textContent).toContain("recorded as unknown");
     $("[data-plain='bounced']").click();
     await settle();
-    // While the new answer is planned, the plan on screen can't be committed.
+    // While the new answer is planned, the plan on screen can't be committed, and nothing
+    // can start another plan that the held one would then paint over.
     expect($<HTMLButtonElement>("#impGo").disabled).toBe(true);
+    expect($$<HTMLButtonElement>("[data-plain]").map((t) => t.disabled)).toEqual([
+      true,
+      true,
+      true,
+    ]);
+    expect($<HTMLButtonElement>("#impReplace").disabled).toBe(true);
     $("#impGo").click();
     held.release?.();
     await settle();
@@ -323,7 +330,7 @@ describe("import view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("starts over when the file is replaced: boxes unticked, and a plain list's answer back to the default", async () => {
+  it("plans a replacing plain list as subscribed again, whatever the last file was", async () => {
     fake = fakeApi([
       formatRoute,
       {
@@ -338,22 +345,71 @@ describe("import view", () => {
     await mount(renderImport);
     await settle();
     await chooseFile("first.txt", "a@example.com\n");
-    $("[data-plain='unsubscribed']").click();
+    $("[data-plain='bounced']").click();
     await settle();
-    $("[data-plain='subscribed']").click();
-    await settle();
-    $<HTMLInputElement>("#impAttest").click();
-    expect($<HTMLInputElement>("#impAttest").checked).toBe(true);
+    expect($("[data-plain='bounced']").getAttribute("aria-pressed")).toBe("true");
     $("#impReplace").click(); // opens the picker; the choice arrives as a change
     await chooseFile("second.txt", "b@example.com\n");
     expect($(".imp-file-name").textContent).toBe("second.txt");
-    expect($<HTMLInputElement>("#impAttest").checked).toBe(false);
     expect($("[data-plain='subscribed']").getAttribute("aria-pressed")).toBe("true");
     const last = fake.calls.filter((c) => c.url.pathname === "/api/imports/plan").at(-1);
     expect(last?.json()).toEqual({
       file: { name: "second.txt", text: "b@example.com\n" },
       plain_list_status: "subscribed",
     });
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("starts a replacing file's confirmation over, its boxes unticked", async () => {
+    fake = fakeApi([
+      formatRoute,
+      {
+        method: "POST",
+        path: "/api/imports/plan",
+        reply: (req) => planFor((req.json() as { file: { name: string } }).file.name),
+      },
+    ]);
+    await mount(renderImport);
+    await settle();
+    await chooseFile("first.csv", "x");
+    $<HTMLInputElement>("#impAttest").click();
+    expect($<HTMLInputElement>("#impAttest").checked).toBe(true);
+    $("#impReplace").click();
+    await chooseFile("second.csv", "y");
+    expect($(".imp-file-name").textContent).toBe("second.csv");
+    expect($<HTMLInputElement>("#impAttest").checked).toBe(false);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("holds Replace file and the plain list's answer while the import is committed", async () => {
+    const held: { release?: () => void } = {};
+    fake = fakeApi([
+      formatRoute,
+      {
+        method: "POST",
+        path: "/api/imports/plan",
+        reply: () => plainPlan("list.txt", "unsubscribed"),
+      },
+      {
+        method: "POST",
+        path: "/api/imports",
+        reply: () =>
+          new Promise((resolve) => {
+            held.release = () => resolve(jsonResponse(committed(), 201));
+          }),
+      },
+    ]);
+    await mount(renderImport);
+    await settle();
+    await chooseFile("list.txt", "a@example.com\n");
+    $("#impGo").click();
+    await settle();
+    expect($("#impGo").textContent).toBe("Importing…");
+    expect($<HTMLButtonElement>("#impReplace").disabled).toBe(true);
+    expect($$<HTMLButtonElement>("[data-plain]").every((t) => t.disabled)).toBe(true);
+    held.release?.();
+    await settle();
+    expect($("#impDoneHead").textContent).toBe("Import done");
     expect(fake.unhandled).toEqual([]);
   });
 
