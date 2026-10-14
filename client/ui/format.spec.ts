@@ -31,14 +31,40 @@ describe("invalidAddressesMessage", () => {
 });
 
 describe("fmt", () => {
+  // "Now" is pinned mid-year in the real clock's year, so each date below sits squarely
+  // inside or outside the current year on any day the suite runs, New Year's Eve included.
+  const year = new Date().getFullYear();
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(year, 5, 15, 12, 0));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("gives a short local date and time, to the minute, and an em dash for none", () => {
-    const at = new Date(2026, 8, 5, 7, 3, 45).getTime();
+    const at = new Date(year, 8, 5, 7, 3, 45).getTime();
     expect(fmt(at)).toMatch(/\b5\b/); // the day
     expect(fmt(at)).toMatch(/:03\b/); // the minute, padded; no seconds
-    expect(fmt(at)).not.toMatch(/2026|:45/);
+    expect(fmt(at)).not.toMatch(/:45/);
     expect(fmt(null)).toBe("—");
     expect(fmt(undefined)).toBe("—");
     expect(fmt(0)).toBe("—"); // no timestamp is the epoch
+  });
+
+  it("leaves the year off a date in the current year, at either end of it", () => {
+    for (const at of [new Date(year, 0, 1, 0, 0), new Date(year, 11, 31, 23, 59)]) {
+      expect(fmt(at.getTime())).not.toContain(String(year));
+    }
+  });
+
+  it("shows the year on a date from an earlier year", () => {
+    expect(fmt(new Date(year - 2, 1, 11, 2, 0).getTime())).toContain(String(year - 2));
+    expect(fmt(new Date(year - 1, 11, 31, 23, 59).getTime())).toContain(String(year - 1));
+  });
+
+  it("shows the year on a date in a later year, such as a send scheduled for next January", () => {
+    expect(fmt(new Date(year + 1, 0, 2, 9, 0).getTime())).toContain(String(year + 1));
   });
 });
 

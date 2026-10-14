@@ -37,6 +37,10 @@ const SIMULATION_LABELS: Record<SimulationProfile, string> = {
   ses: "Amazon SES",
 };
 
+// The setup guide's step that gives the From address an inbox. The app never receives mail
+// and can't see whether that step was done, so Settings only points to it (SPEC §9).
+const REPLIES_HREF = "#/docs/ses/3-receive-replies-at-your-from-address";
+
 function bareAddress(from: string): string {
   const m = String(from || "").match(/<([^>]+)>/);
   return m?.[1] ? m[1] : String(from || "");
@@ -64,7 +68,7 @@ export function senderSection(page: SettingsPage): Html {
           </div>
         </div>
         <div class="set-kv" style="border-top:1px solid var(--line)">
-          <div class="set-kv-k">From address</div><div class="set-kv-v"><span class="mono">${d.fromAddress}</span></div>
+          <div class="set-kv-k">From address</div><div class="set-kv-v set-kv-stack"><span class="mono">${d.fromAddress}</span><span class="muted" id="replyNote">Readers’ replies go to this address. <a class="set-link" href="${REPLIES_HREF}">Forward it to your inbox</a>.</span></div>
           <div class="set-kv-k">Sending domain</div><div class="set-kv-v"><span class="mono">${d.sendingDomain}</span></div>
           <div class="set-kv-k">Email provider</div><div class="set-kv-v" id="providerValue">${providerValue(d)}</div>
         </div>

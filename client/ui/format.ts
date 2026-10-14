@@ -3,16 +3,25 @@
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
 
-/** A short local date-time, or an em dash for none. */
-export const fmt = (ms: number | null | undefined): string =>
-  ms
-    ? new Date(ms).toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      })
-    : "—";
+/**
+ * A short local date-time, or an em dash for none. The year shows only when it isn't the
+ * current one (local time), past or future, so this year's dates stay short and a date
+ * from another year, such as a send from last year or one scheduled for next January,
+ * can't read as this year's.
+ */
+export function fmt(ms: number | null | undefined): string {
+  if (!ms) {
+    return "—";
+  }
+  const d = new Date(ms);
+  return d.toLocaleString(undefined, {
+    year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 /**
  * Split a free-text recipient list (newlines or commas) into unique, normalized

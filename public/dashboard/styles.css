@@ -1617,8 +1617,17 @@ td a:hover {
 .list-table .c-status {
   width: 128px;
 }
+/* Wide enough for the longest date on one line, a date outside the current year with
+   its year ("Sep 30, 2027, 12:00 AM"), with room for a wider system font. Narrower
+   screens, until the table stacks, keep the room for the text column instead (the Drafts
+   table has two date columns), so an off-year date wraps there. */
 .list-table .c-date {
-  width: 148px;
+  width: 176px;
+}
+@media (max-width: 840px) {
+  .list-table .c-date {
+    width: 148px;
+  }
 }
 .list-table .c-num {
   width: 104px;
@@ -4492,6 +4501,12 @@ button.set-field-remove {
 .set-kv > .set-kv-v {
   font-size: 13.5px;
   overflow-x: auto;
+}
+/* A value with one quiet line of explanation under it (the From address and where replies go). */
+.set-kv > .set-kv-stack {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
 }
 .set-kv > div:nth-last-child(1),
 .set-kv > div:nth-last-child(2) {

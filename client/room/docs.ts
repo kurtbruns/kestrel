@@ -1,6 +1,11 @@
 // The in-app docs room: the setup guide fetched from the authed /api/docs routes.
 
-import type { DocFragment, DocsLanding, DocsResponse } from "../../shared/docs";
+import {
+  type DocFragment,
+  type DocsLanding,
+  type DocsResponse,
+  headingAnchors,
+} from "../../shared/docs";
 import { api, describeError } from "../api";
 import { mount } from "../lifecycle";
 import { appState } from "../state";
@@ -166,17 +171,6 @@ interface DocSection {
   title: string;
 }
 
-/** A heading's anchor as GitHub derives it from the heading's text: lowercased, with
- *  punctuation dropped and each space a hyphen. The guide is read on GitHub too, so a link
- *  written against GitHub's anchors (`05-verify.md#7-read-the-logs`) works here unchanged. */
-export function headingAnchor(text: string): string {
-  return text
-    .trim()
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s_-]/gu, "")
-    .replace(/\s/g, "-");
-}
-
 // Element ids carry a prefix, so a heading can never take an id the shell already uses.
 const headingId = (anchor: string): string => `doc-h-${anchor}`;
 
@@ -237,13 +231,12 @@ function renderDocPage(
   // GitHub's -1, -2), and collect the H1 and H2s for "On this page". The H1 leads so
   // there's a way back to the top.
   const sec = $("section.doc-part", mainEl);
-  const seen = new Map<string, number>();
-  for (const h of $$<HTMLHeadingElement>("h1, h2, h3, h4", sec)) {
-    const base = headingAnchor(h.textContent || "");
-    const n = seen.get(base) ?? 0;
-    seen.set(base, n + 1);
-    h.dataset.anchor = n ? `${base}-${n}` : base;
-    h.id = headingId(h.dataset.anchor);
+  const headings = $$<HTMLHeadingElement>("h1, h2, h3, h4", sec);
+  const anchors = headingAnchors(headings.map((h) => h.textContent || ""));
+  for (const [i, h] of headings.entries()) {
+    const anchor = anchors[i] ?? "";
+    h.dataset.anchor = anchor;
+    h.id = headingId(anchor);
   }
   const h1 = sec.querySelector("h1");
   const sections: DocSection[] = [];

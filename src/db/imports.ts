@@ -15,6 +15,7 @@ import type { ImportRecord, OptIn, OutcomeCounts } from "../../shared/imports";
 import type { SubscriberStatus } from "../../shared/subscribers";
 import { importNotice } from "./notifications";
 import { restampSendsFiringBeforeStmt } from "./sends";
+import { ERASED } from "./subscribers";
 
 /**
  * The most bytes of JSON one statement binds. D1 refuses a string over 2,000,000 bytes;
@@ -240,7 +241,9 @@ const v = (field: string) => `json_extract(j.value, '$.${field}')`;
  * unsubscribed addresses, the confirmations of pending subscribers, the new confirmed ones,
  * the suppressions, and the publisher's notice. Confirmations run before the suppressions
  * so a row's own bounce lands beside its subscriber; a suppression already here holds any
- * confirmation back, an erased marker included, and is never replaced. Throws on a second
+ * confirmation back, an erased marker included, and is never replaced, and an erased marker
+ * holds back a new unsubscribed address too, since no import brings back an erased person's
+ * data (SPEC §7). Throws on a second
  * import of the same plan (`plan_hash` is unique), having written nothing.
  */
 export async function applyImport(
@@ -297,19 +300,22 @@ export async function applyImport(
     writes.unsubscribe,
     now,
   );
-  // An address that left before it came here is recorded as unsubscribed.
+  // An address that left before it came here is recorded as unsubscribed, unless it was
+  // erased here: a subscriber row would bring back the data the erasure removed.
   add(
     "addedUnsubscribed",
     `INSERT INTO subscribers (id, email, status, unsub_token, created_at, confirmed_at, unsubscribed_at,
                               origin, opt_in, consent_evidence, import_id)
      SELECT ${v("id")}, ${v("e")}, 'unsubscribed', ${v("tok")}, ?2, ${v("cat")}, COALESCE(${v("uat")}, ?2),
             ${v("org")}, ${v("opt")}, ${v("ev")}, ?3
-       FROM json_each(?1) AS j WHERE true
+       FROM json_each(?1) AS j
+      WHERE NOT EXISTS (SELECT 1 FROM suppressions s WHERE s.email = ${v("e")} AND s.reason = ?4)
      ON CONFLICT (email) DO NOTHING
      RETURNING email`,
     writes.addUnsubscribed,
     now,
     r.id,
+    ERASED,
   );
   // Confirm a subscriber still pending here who never left, with no suppression here; its
   // link stops working. A pending row that once left was put back by whoever typed its
