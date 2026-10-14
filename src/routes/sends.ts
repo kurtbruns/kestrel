@@ -14,7 +14,6 @@ import {
 } from "../../shared/sends";
 import { getPost } from "../db/posts";
 import * as sends from "../db/sends";
-import { onFreePlanLimits } from "../env";
 import { oneOf, readJsonObject } from "../lib/body";
 import { badRequest, HttpError, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
@@ -23,7 +22,7 @@ import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { bySeverity, sendConditions } from "../send/conditions";
-import { viewWithCursor } from "../send/describe";
+import { readWritesDay, viewWithCursor } from "../send/describe";
 import { feedPace, readAgainAt, SETTLE_FOLLOW_MS } from "../send/feed";
 import { resolveStuckSend } from "../send/resolve";
 import { cancel as cancelSend, reschedule as rescheduleSend } from "../send/schedule";
@@ -58,12 +57,15 @@ export async function list(c: RequestContext): Promise<Response> {
   // cursor.
   const now = Date.now();
   const { rows, total, seq } = await sends.listSendsPage(c.env.DB, filter, page);
+  const day = await readWritesDay(c.env.DB, c.config, now, rows);
   // Every row carries the denormalized c_* counters and its retry probe, so each row's
   // phase, conditions, and actions come from the same rules as `/progress`, with no
   // aggregate over deliveries and no read per row (SPEC §8). The server derives; no client
   // keeps a threshold or a phase rule of its own.
   const body: SendListResponse = {
-    sends: rows.map(({ has_retries, ...s }) => buildSendView(s, c.config, has_retries === 1, now)),
+    sends: rows.map(({ has_retries, ...s }) =>
+      buildSendView(s, c.config, has_retries === 1, now, day),
+    ),
     page: listPage(total, page),
     cursor: encodeSendCursor({ seq, at: now }),
   };
@@ -219,10 +221,11 @@ export async function feed(c: RequestContext): Promise<Response> {
     read.settlingSince,
     now,
   );
+  const day = await readWritesDay(c.env.DB, c.config, now, [...read.open, ...read.rows]);
   // Every open problem in one read, whichever sends it is on and whether they changed.
   const conditions: FeedCondition[] = read.open
     .flatMap((s) =>
-      sendConditions(s, now, onFreePlanLimits(c.config)).map((cond) => ({
+      sendConditions(s, now, day).map((cond) => ({
         ...cond,
         send_id: s.id,
         subject: s.subject,
@@ -232,7 +235,7 @@ export async function feed(c: RequestContext): Promise<Response> {
   const body: SendFeedResponse = {
     now,
     sends: read.rows.map(({ has_retries, ...row }) =>
-      buildSendView(row, c.config, has_retries === 1, now),
+      buildSendView(row, c.config, has_retries === 1, now, day),
     ),
     removed: read.removed,
     cursor: encodeSendCursor({ seq: read.seq, at: now }),

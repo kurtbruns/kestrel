@@ -8,6 +8,7 @@
 // the same code, so what is documented and what is accepted cannot drift apart. Pure and
 // dependency-free: the Worker and the editor both import it.
 
+import { dailyWritesPercent } from "./daily_writes";
 import { isValidEmail, normalizeEmail } from "./email";
 
 /** The format's name and version, written in its `format` column. */
@@ -46,15 +47,12 @@ export const IMPORT_LIMITS = {
 } as const;
 
 /**
- * On the Workers Free plan's limits, past this many confirmed subscribers an import and a
- * send on the same day may spend D1's daily allowance of written rows (about 7 a new
- * subscriber, about 14 a recipient), which stops the instance until midnight UTC.
+ * The import plan's warning, on the Workers Free plan's limits, when this import and the day's
+ * earlier ones would write `rows` of D1's daily allowance, past `DAILY_WRITES_BUDGET`.
+ * `earlier`: imports were already committed today (UTC).
  */
-export const DAILY_WRITES_IMPORT_CONFIRMED = 3_000;
-
-/** The import plan's warning about D1's daily writes, for the confirmed subscribers it leaves. */
-export function dailyWritesImportWarning(confirmed: number): string {
-  return `On the Workers Free plan’s limits, this import leaves ${confirmed.toLocaleString("en-US")} confirmed subscribers. Importing and sending to that many on the same day may use up the database’s daily allowance of writes, which stops this newsletter until midnight UTC. Send your next post tomorrow (UTC), or move to Workers Paid.`;
+export function dailyWritesImportWarning(rows: number, earlier: boolean): string {
+  return `On the Workers Free plan’s limits, ${earlier ? "this import and today’s earlier ones" : "this import"} would use about ${dailyWritesPercent(rows)}% of the database’s daily allowance of writes. Running out stops this newsletter until midnight UTC. Import this file tomorrow (UTC), or move to Workers Paid.`;
 }
 
 /**
@@ -870,7 +868,7 @@ export interface ImportPlanResponse {
   attestation: { version: number; text: string } | null;
   /** What the commit must name, so it applies this plan and no other. */
   plan_hash: string;
-  /** On the Workers Free plan's limits, when the list this import leaves is more than D1's daily writes can import and send to in one day: the server's words, to show as they stand. Null otherwise. Never a refusal. */
+  /** On the Workers Free plan's limits, when this import and the day's earlier ones (UTC) would write more of D1's daily allowance than the budget leaves room for: the server's words, to show as they stand. Null otherwise. Never a refusal. */
   daily_writes_warning: string | null;
 }
 

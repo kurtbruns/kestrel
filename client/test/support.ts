@@ -278,6 +278,44 @@ export function sendSummary(over: Partial<SendSummary> = {}): SendSummary {
   };
 }
 
+/** A file the page handed the reader: its name and contents. */
+export interface SavedFile {
+  name: string;
+  blob: Blob;
+}
+
+/**
+ * Record each file the page saves (an object URL clicked through an anchor, `ui/download`)
+ * instead of letting that click run. Each object URL is unique and maps to its own blob, so
+ * a click is matched to the file it names; a click on any other anchor runs as it would.
+ * `vi.restoreAllMocks()` in afterEach puts it back.
+ */
+export function captureDownloads(): SavedFile[] {
+  const saved: SavedFile[] = [];
+  const blobs = new Map<string, Blob>();
+  let seq = 0;
+  vi.spyOn(URL, "createObjectURL").mockImplementation((b) => {
+    const url = `blob:http://kestrel.test/download-${++seq}`;
+    blobs.set(url, b as Blob);
+    return url;
+  });
+  vi.spyOn(URL, "revokeObjectURL").mockImplementation((url) => {
+    blobs.delete(url);
+  });
+  const click = HTMLAnchorElement.prototype.click;
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    const blob = blobs.get(this.href);
+    if (blob) {
+      saved.push({ name: this.download, blob });
+    } else {
+      click.call(this);
+    }
+  });
+  return saved;
+}
+
 /** Set a field's value the way typing would be seen by the app: value, then an input event. */
 export function typeInto(el: HTMLInputElement | HTMLTextAreaElement, value: string): void {
   el.value = value;

@@ -13,11 +13,16 @@
  */
 
 import {
+  DAILY_WRITES_BUDGET,
+  importWrites,
+  nextUtcMidnight,
+  utcDayStart,
+} from "../../shared/daily_writes";
+import {
   ATTESTATION,
   attestationText,
   CONFIRMING_OUTCOMES,
   type ConfirmedBreakdown,
-  DAILY_WRITES_IMPORT_CONFIRMED,
   dailyWritesImportWarning,
   EXPORT_PAGE_ROWS,
   type GrowingSend,
@@ -39,7 +44,6 @@ import {
 } from "../../shared/imports";
 import type { ListEntry, ListState } from "../db/imports";
 import * as imports from "../db/imports";
-import { audienceCount } from "../db/subscribers";
 import { onFreePlanLimits } from "../env";
 import { HttpError, refusal } from "../lib/errors";
 import { newId, newTokens } from "../lib/ids";
@@ -77,6 +81,8 @@ export interface Plan {
   planHash: string;
   /** The warning about D1's daily writes, on Workers Free's limits only (SPEC §7). */
   dailyWritesWarning: string | null;
+  /** Whether it was planned on Workers Free's limits, where its commit restamps the day's scheduled sends. */
+  freePlan: boolean;
 }
 
 /**
@@ -205,12 +211,15 @@ export async function planImport(
     maxRowsReason,
     publication,
     freePlan = false,
+    now = Date.now(),
   }: {
     maxRows: number;
     maxRowsReason: string | null;
     publication: string;
-    /** On Workers Free's limits: the plan then warns past a list D1's daily writes can't import and send to in one day. */
+    /** On Workers Free's limits: the plan then warns when it and the day's earlier imports would spend too much of D1's daily writes. */
     freePlan?: boolean;
+    /** The moment the plan is made, which places it in its UTC day. */
+    now?: number;
   },
 ): Promise<Plan> {
   const tooMany = (rows: string) =>
@@ -287,8 +296,11 @@ export async function planImport(
   const needsAttestation = counts.create_confirmed + counts.confirm_pending > 0;
   const sha = await fileSha256(input.text);
   // Read only on Free, where it can warn; a warning never changes what the commit applies,
-  // so it stays out of the hash.
-  const confirmedAfter = freePlan ? (await audienceCount(db)) + gains : 0;
+  // so it stays out of the hash. A send's own share of the day is its condition's to weigh,
+  // when it is scheduled, since a publisher finishes an import before they send.
+  const earlierWrites = freePlan ? await imports.importWritesSince(db, utcDayStart(now)) : 0;
+  // Who will commit isn't known yet, so it counts Claude's notice to the publisher too.
+  const dayWrites = earlierWrites + importWrites(counts, suppressionsAdded, true);
   const planHash = await sha256Hex(
     JSON.stringify([
       "kestrel-import-plan/1",
@@ -315,9 +327,10 @@ export async function planImport(
       ? { version: ATTESTATION.version, text: attestationText(publication) }
       : null,
     planHash,
+    freePlan,
     dailyWritesWarning:
-      confirmedAfter > DAILY_WRITES_IMPORT_CONFIRMED
-        ? dailyWritesImportWarning(confirmedAfter)
+      freePlan && dayWrites > DAILY_WRITES_BUDGET
+        ? dailyWritesImportWarning(dayWrites, earlierWrites > 0)
         : null,
   };
 }
@@ -421,6 +434,7 @@ export async function commitImport(
     addConfirmed: [],
     suppress: [],
     notice: principal.kind === "service",
+    restampSendsBefore: plan.freePlan ? nextUtcMidnight(now) : null,
   };
   const tokens = newTokens(plan.counts.create_confirmed + plan.counts.create_unsubscribed);
   const token = (): string => tokens.pop() ?? "";

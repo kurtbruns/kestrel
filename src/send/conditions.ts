@@ -7,23 +7,24 @@
  * the clock against the row's times; wedged by `isWedged`; refused and provider_unavailable
  * by the halt the send carries; bounce_spike by its confirmed bounces over its audience at
  * fire; remade by its last re-make against its last test; daily_writes by its audience as
- * scheduled, on Workers Free's limits only. Each carries its severity, since
- * when (null when the record does not say), the server's words for it, and the action that
- * settles it, if the API has one. The actions are exactly what the server would accept on
+ * scheduled and what imports wrote on the UTC day it fires, on Workers Free's limits only.
+ * Each carries its severity, since when (null when the record does not say), the server's
+ * words for it, and the action that settles it, if the API has one. The actions are exactly what the server would accept on
  * the send right now, so a client offers a control only while pressing it would work.
  */
 
+import type { WritesDay } from "../../shared/daily_writes";
 import {
   BOUNCE_SPIKE_MIN,
   BOUNCE_SPIKE_RATE,
   BOUNCE_SPIKE_RECENT_MS,
   type ConditionSeverity,
-  DAILY_WRITES_SEND_RECIPIENTS,
-  dailyWritesSendWarning,
+  dailyWritesSendMessage,
   refusalAdvice,
   type SendAction,
   type SendCondition,
   type SendSummary,
+  sendSpendsDailyWrites,
 } from "../../shared/sends";
 import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
 import { isWedged } from "./wedged";
@@ -69,20 +70,27 @@ export function bySeverity<T extends Pick<SendCondition, "severity" | "since">>(
   return RANK[a.severity] - RANK[b.severity] || (a.since ?? 0) - (b.since ?? 0);
 }
 
-/** The send's open conditions, most severe first. `freePlan`: the deployment runs on Workers Free's limits. */
-export function sendConditions(send: SendSummary, now: number, freePlan: boolean): SendCondition[] {
+/**
+ * The send's open conditions, most severe first. `day`: on Workers Free's limits, the UTC day
+ * so far (what its imports wrote); null on any other deployment.
+ */
+export function sendConditions(
+  send: SendSummary,
+  now: number,
+  day: WritesDay | null,
+): SendCondition[] {
   const out: SendCondition[] = [];
 
   if (
-    freePlan &&
+    day !== null &&
     send.status === "scheduled" &&
-    send.recipient_count > DAILY_WRITES_SEND_RECIPIENTS
+    sendSpendsDailyWrites(send.recipient_count, send.fire_at, day)
   ) {
     out.push({
       kind: "daily_writes",
       severity: "warn",
       since: send.scheduled_at,
-      message: dailyWritesSendWarning(send.recipient_count),
+      message: dailyWritesSendMessage(send.recipient_count, send.fire_at, day),
       action: null,
       recipients: send.recipient_count,
     });

@@ -1,5 +1,17 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { $, $$, type FakeApi, fakeApi, mount, resetShell, settle, typeInto } from "../test/support";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { type ExportRow, toImportCsv } from "../../shared/imports";
+import {
+  $,
+  $$,
+  captureDownloads,
+  type FakeApi,
+  fakeApi,
+  jsonResponse,
+  mount,
+  resetShell,
+  settle,
+  typeInto,
+} from "../test/support";
 import { renderSubscribers } from "./list";
 
 const page = { total: 3, limit: 50, offset: 0, sort: "joined", dir: "desc" };
@@ -42,6 +54,7 @@ describe("subscribers view", () => {
   });
   afterEach(() => {
     fake?.restore();
+    vi.restoreAllMocks();
   });
 
   it("shows the counts, the roster with the suppression flag and its reason, and the actions each row allows", async () => {
@@ -238,4 +251,109 @@ describe("subscribers view", () => {
       expect($("#toasts").textContent).toMatch(said);
     });
   }
+
+  const exportRow = (email: string, over: Partial<ExportRow> = {}): ExportRow => ({
+    email,
+    status: "subscribed",
+    opt_in: "double",
+    origin: "kestrel",
+    suppression: null,
+    subscribed_at: "2026-01-02T09:30:00.000Z",
+    confirmed_at: "2026-01-02T09:42:00.000Z",
+    unsubscribed_at: null,
+    suppressed_at: null,
+    evidence: null,
+    format: "kestrel-subscribers/1",
+    ...over,
+  });
+
+  it("exports the whole list as one CSV in the import format, following every page (SPEC §7)", async () => {
+    const exportedAt = Date.UTC(2026, 0, 15, 9);
+    const pages: Record<string, { rows: ExportRow[]; next: string | null }> = {
+      "": { rows: [exportRow("ada@example.com")], next: "c1" },
+      c1: { rows: [exportRow("=cmd@example.com", { status: "unsubscribed" })], next: "c2" },
+      c2: {
+        rows: [exportRow("gone@example.com", { status: "none", suppression: "bounce" })],
+        next: null,
+      },
+    };
+    fake = fakeApi([
+      { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
+      {
+        path: "/api/subscribers/export",
+        reply: (req) => {
+          const p = pages[req.url.searchParams.get("after") ?? ""];
+          return {
+            format: "kestrel-subscribers/1",
+            exported_at: exportedAt,
+            subscribers: p?.rows ?? [],
+            next: p?.next ?? null,
+          };
+        },
+      },
+    ]);
+    const saved = captureDownloads();
+    await mount((r, s) => renderSubscribers(undefined, r, s));
+    await settle();
+    $("#exportSubs").click();
+    await settle();
+    const reads = fake.calls.filter((c) => c.url.pathname === "/api/subscribers/export");
+    expect(reads.map((c) => c.url.searchParams.get("after"))).toEqual([null, "c1", "c2"]);
+    expect(saved.map((f) => f.name)).toEqual(["kestrel-subscribers-2026-01-15.csv"]);
+    // One header, then every page's rows, through the writer the server documents.
+    expect(await saved[0]?.blob.text()).toBe(
+      toImportCsv([...pages[""]!.rows, ...pages.c1!.rows, ...pages.c2!.rows]),
+    );
+    expect($<HTMLButtonElement>("#exportSubs").disabled).toBe(false);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("stops an export whose next page names the page just read, rather than loop", async () => {
+    fake = fakeApi([
+      { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
+      {
+        path: "/api/subscribers/export",
+        reply: () => ({
+          format: "kestrel-subscribers/1",
+          exported_at: Date.now(),
+          subscribers: [exportRow("ada@example.com")],
+          next: "c1",
+        }),
+      },
+    ]);
+    const saved = captureDownloads();
+    await mount((r, s) => renderSubscribers(undefined, r, s));
+    await settle();
+    $("#exportSubs").click();
+    await settle();
+    expect(fake.calls.filter((c) => c.url.pathname === "/api/subscribers/export")).toHaveLength(2);
+    expect(saved).toEqual([]);
+    expect($("#toasts").textContent).toBe("The export repeated a page. Try again.");
+  });
+
+  it("says why an export failed, and saves no partial file", async () => {
+    fake = fakeApi([
+      { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
+      {
+        path: "/api/subscribers/export",
+        reply: (req) =>
+          req.url.searchParams.has("after")
+            ? jsonResponse({ error: "internal_error", message: "database unavailable" }, 500)
+            : {
+                format: "kestrel-subscribers/1",
+                exported_at: Date.now(),
+                subscribers: [exportRow("ada@example.com")],
+                next: "c1",
+              },
+      },
+    ]);
+    const saved = captureDownloads();
+    await mount((r, s) => renderSubscribers(undefined, r, s));
+    await settle();
+    $("#exportSubs").click();
+    await settle();
+    expect(saved).toEqual([]);
+    expect($("#toasts").textContent).toBe("database unavailable");
+    expect(fake.unhandled).toEqual([]);
+  });
 });

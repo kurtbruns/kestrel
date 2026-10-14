@@ -5,6 +5,7 @@
 // The Worker's routes produce these shapes and the editor consumes them; one definition,
 // so neither can drift.
 
+import { DAILY_WRITES_BUDGET, SEND_WRITES_PER_RECIPIENT, type WritesDay } from "./daily_writes";
 import type { PageMeta } from "./list";
 
 export type SendStatus = "scheduled" | "sending" | "sent" | "canceled";
@@ -336,7 +337,8 @@ interface ConditionBase {
  * - `bounce_spike`: a recently sent send's confirmed bounces reached the danger zone.
  * - `remade`: a template or identity change re-made the scheduled email after its last test.
  * - `daily_writes`: on Workers Free's limits, a scheduled send to more recipients than D1's
- *   daily writes comfortably cover; `recipients` is its audience as scheduled.
+ *   daily writes comfortably cover, after what imports already wrote on the UTC day it
+ *   fires; `recipients` is its audience as scheduled.
  */
 export type SendCondition =
   | (ConditionBase & { kind: "missed" })
@@ -373,16 +375,60 @@ export const BOUNCE_SPIKE_RECENT_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * On the Workers Free plan's limits, a scheduled send to more than this many recipients may
- * spend D1's daily allowance of written rows (about 14 a recipient, before anything else
- * writes that day), which stops the instance until midnight UTC. Past it, Workers Paid is
- * recommended. The warning never refuses: the account may be on Paid while the Worker is
- * configured for Free.
+ * spend D1's daily allowance of written rows on its own, which stops the instance until
+ * midnight UTC; fewer do when imports already wrote on the day it fires. Past it, Workers
+ * Paid is recommended. The warning never refuses: the account may be on Paid while the
+ * Worker is configured for Free.
  */
-export const DAILY_WRITES_SEND_RECIPIENTS = 5_000;
+export const DAILY_WRITES_SEND_RECIPIENTS = Math.floor(
+  DAILY_WRITES_BUDGET / SEND_WRITES_PER_RECIPIENT,
+);
 
-/** The `daily_writes` condition's words, for a send to `recipients`. */
-export function dailyWritesSendWarning(recipients: number): string {
-  return `On the Workers Free plan’s limits, a send to ${recipients.toLocaleString("en-US")} recipients may use up the database’s daily allowance of writes. That stops this newsletter until midnight UTC, the send included. Workers Paid is recommended for a list of more than ${DAILY_WRITES_SEND_RECIPIENTS.toLocaleString("en-US")}.`;
+/**
+ * Whether a send to `recipients`, firing at `fireAt`, may spend D1's daily writes, given the
+ * day so far: what imports wrote counts when the send fires before the day ends.
+ */
+export function sendSpendsDailyWrites(recipients: number, fireAt: number, day: WritesDay): boolean {
+  return (
+    recipients * SEND_WRITES_PER_RECIPIENT + importWritesBefore(fireAt, day) > DAILY_WRITES_BUDGET
+  );
+}
+
+/**
+ * Whether what the day's imports wrote can change the send's `daily_writes` condition: it is
+ * scheduled to fire before the day ends, and fits the budget on its own. Any other send's
+ * condition is the same whatever they wrote, so a route reads them only for such a send.
+ */
+export function importsWeighOn(
+  send: Pick<SendSummary, "status" | "fire_at" | "recipient_count">,
+  until: number,
+): boolean {
+  return (
+    send.status === "scheduled" &&
+    send.fire_at < until &&
+    send.recipient_count * SEND_WRITES_PER_RECIPIENT <= DAILY_WRITES_BUDGET
+  );
+}
+
+function importWritesBefore(fireAt: number, day: WritesDay): number {
+  return fireAt < day.until ? day.importWrites : 0;
+}
+
+/**
+ * The `daily_writes` condition's words, for a send to `recipients`. `afterImports`: the
+ * send fires on a UTC day imports already wrote on, and that is part of why it may not fit.
+ */
+export function dailyWritesSendWarning(recipients: number, afterImports = false): string {
+  const n = recipients.toLocaleString("en-US");
+  return afterImports
+    ? `On the Workers Free plan’s limits, a send to ${n} recipients on the same day as today’s imports may use up the database’s daily allowance of writes. That stops this newsletter until midnight UTC, the send included. Send it tomorrow (UTC), or move to Workers Paid, which is recommended for a list of more than ${DAILY_WRITES_SEND_RECIPIENTS.toLocaleString("en-US")}.`
+    : `On the Workers Free plan’s limits, a send to ${n} recipients may use up the database’s daily allowance of writes. That stops this newsletter until midnight UTC, the send included. Workers Paid is recommended for a list of more than ${DAILY_WRITES_SEND_RECIPIENTS.toLocaleString("en-US")}.`;
+}
+
+/** The `daily_writes` condition's words for a send that may not fit, saying whether the day's imports are part of why. */
+export function dailyWritesSendMessage(recipients: number, fireAt: number, day: WritesDay): string {
+  const alone = recipients * SEND_WRITES_PER_RECIPIENT > DAILY_WRITES_BUDGET;
+  return dailyWritesSendWarning(recipients, !alone && importWritesBefore(fireAt, day) > 0);
 }
 
 /** GET /api/sends/feed: what a client follows to keep up with sends without polling each one. */
