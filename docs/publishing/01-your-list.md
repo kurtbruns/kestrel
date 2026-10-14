@@ -1,6 +1,6 @@
 # Bring your list
 
-Almost no one starts a newsletter with an empty list. If your readers are on another service, bring them over before your first send, with the consent they gave there. If you're starting fresh, skip this step: new readers join through [Share your subscribe link](09-share-your-subscribe-link.md).
+Almost no one starts a newsletter with an empty list. If your readers are on another service, bring them over before your first post, with the consent they gave there. It's the **Bring your existing list** step on your dashboard, and **Import** starts it. If you're starting fresh, skip this step: new readers join through [Share your subscribe link](09-share-your-subscribe-link.md).
 
 This page covers the file Kestrel reads, what an import does and why, and the limits. It also covers taking your whole list out again at any time, in the same format. The dashboard's **Subscribers → Import** walks you through an import, and Claude reads this same page through the API.
 

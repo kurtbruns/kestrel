@@ -207,17 +207,17 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   const reported = new Map<string, SendView>();
   const pub = derivePublication(appState.appConfig);
   const deployment = appState.appConfig?.deployment ?? null;
-  const totalSubs = counts.confirmed + counts.pending + counts.unsubscribed + counts.suppressed;
 
-  // First run — nothing written and no one on the list: replace the body with the
-  // onboarding checklist (the shared Getting-started component) rather than a wall
-  // of empty tiles.
-  if (!posts.length && totalSubs === 0) {
+  // First run — nothing written yet: replace the body with the onboarding checklist (the
+  // shared Getting-started component) rather than a wall of empty tiles. It ends at the
+  // first post, not the first subscriber, so bringing a list in (a step on it) doesn't
+  // take away the steps after it.
+  if (!posts.length) {
     setHtml(
       root,
       html`<div class="dash-head"><div><h1>${pub.name}</h1>${
         pub.tagline ? html`<p class="muted dash-tagline">${pub.tagline}</p>` : null
-      }<p class="muted">Let’s get your first post out the door.</p></div></div>${setupChecklistHtml(pub, deployment)}<section class="dash-section"><h2>API access</h2>${apiConnectCard(false)}</section>`,
+      }<p class="muted">Let’s get your first post out the door.</p></div></div>${setupChecklistHtml(pub, deployment, counts)}<section class="dash-section"><h2>API access</h2>${apiConnectCard(false)}</section>`,
     );
     wireDashActions(root, remount, signal);
     return;
@@ -504,12 +504,19 @@ function apiConnectCard(connected: boolean): Html {
  * comes late because its New post creates a draft, which ends the first-run page; sharing
  * comes last so a visitor finds a post in the archive. While no provider is connected,
  * connecting one replaces the sending-domain step (connecting SES verifies the domain) and
- * the subscribe step says signups wait for it (the page is closed). The Publishing docs'
- * Setup section (docs/publishing/README.md) follows these steps, so a change here changes it.
+ * the subscribe step says signups wait for it (the page is closed). Bringing a list comes
+ * before writing, for a publisher moving from another service; it reads as done once the
+ * list has subscribers, which a fresh publication skips. The Publishing docs' Setup section
+ * (docs/publishing/README.md) follows these steps, so a change here changes it.
  */
-function setupChecklistHtml(pub: Publication, deployment: DeploymentView | null): Html {
+function setupChecklistHtml(
+  pub: Publication,
+  deployment: DeploymentView | null,
+  counts: SubscriberCounts,
+): Html {
   const subscribeUrl = `${deployment?.appOrigin || location.origin}/subscribe`;
   const notConnected = providerNotConnected();
+  const onList = counts.confirmed + counts.pending;
   return html`<div class="card setup">
     <h2 class="setup-title">Set up your publication</h2>
     <ol class="setup-steps">
@@ -518,6 +525,11 @@ function setupChecklistHtml(pub: Publication, deployment: DeploymentView | null)
         notConnected
           ? html`<li class="setup-connect"><div class="setup-step-main"><strong>Connect Amazon SES</strong><span class="muted">Nothing can be sent, and signups stay closed, until SES is connected.</span></div><button data-nav="${CONNECT_PROVIDER_HREF}">Connect Amazon SES</button></li>`
           : html`<li><div class="setup-step-main"><strong>Confirm your sending domain</strong><span class="muted">SPF, DKIM, and DMARC on your From address. The setup guide walks through it.</span></div><button data-nav="#/docs/sending-domain-dns">Docs</button></li>`
+      }
+      ${
+        onList
+          ? html`<li class="setup-done setup-list"><div class="setup-step-main"><strong>Bring your existing list</strong><span class="muted">${onList.toLocaleString()} ${onList === 1 ? "subscriber" : "subscribers"} on your list.</span></div><button data-nav="#/subscribers">Subscribers</button></li>`
+          : html`<li class="setup-list"><div class="setup-step-main"><strong>Bring your existing list</strong><span class="muted">Import the subscribers you have on another service, with the consent they gave there. Skip this if you’re starting fresh.</span></div><button data-nav="#/subscribers/import">Import</button></li>`
       }
       <li><div class="setup-step-main"><strong>Write your first post</strong><span class="muted">Draft a post in Markdown and preview it exactly as the email.</span></div><button class="primary" data-act="new-post">New post</button></li>
       ${

@@ -4,7 +4,7 @@ These pages cover writing and sending your newsletter in the dashboard, from nam
 
 ## Setup
 
-The steps your dashboard lists on your first visit, plus bringing a list you already have. Connecting email comes after naming your publication, and whoever runs your Kestrel does it ([Connect Amazon SES](../get-started/04-ses.md)).
+The steps your dashboard lists until your first post, in the same order. Connecting email comes after naming your publication, and whoever runs your Kestrel does it ([Connect Amazon SES](../get-started/04-ses.md)).
 
 1. [Name your publication](03-name-your-publication.md)
 1. [Bring your list](01-your-list.md)

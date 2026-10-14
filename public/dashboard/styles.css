@@ -4124,6 +4124,13 @@ button.api-filter-clear svg {
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
+/* A step already done (the list has subscribers): a check in place of its number. */
+.setup-steps li.setup-done::before {
+  content: "✓";
+  color: var(--ok-fg);
+  border-color: var(--ok-line);
+  background: var(--ok-bg);
+}
 .setup-step-main {
   flex: 1 1 auto;
   min-width: 0;
