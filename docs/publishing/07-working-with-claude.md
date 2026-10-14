@@ -13,7 +13,7 @@ Ask in plain words, the way you'd ask a colleague. Claude reads the API referenc
 - **Send a test.** Claude sends the real email to your test addresses, or to one you name, through the same render as the send.
 - **Schedule a post.** Name the post and when it should go out. Claude schedules it, sends a test of exactly what will fire, and tells you when it fires and how to cancel. It can also cancel a send or move its fire time, as [Scheduling and sending](05-scheduling-and-sending.md) describes.
 - **Check a send's record.** Ask how a post did, and Claude reads the send and its recipients. It reports how many were accepted, delivered, and unsent, and any bounces or complaints. [After a send](06-after-a-send.md) says what each one means.
-- **Lift a suppression.** The dashboard has no control for it, so ask Claude when you know an address works again. [After a send](06-after-a-send.md#lifting-a-suppression) says when that's wise.
+- **Lift a bounce or a complaint.** The dashboard lifts only a block, with **Unblock**, so ask Claude when you know a bounced address works again. [After a send](06-after-a-send.md#lifting-a-suppression) says when that's wise.
 - **Import a list.** Ask Claude to bring your subscribers over from another service. Its `/migrate-list` skill converts the export, checks it with you, and imports it. [Bring your existing list](01-your-list.md#let-claude-convert-your-export) says how that goes.
 
 If you have a post open when Claude saves it, the editor tells you, and names Claude as the one who changed it.
@@ -38,6 +38,7 @@ These come from the instructions your Kestrel gives Claude, not from the app, so
 - **It asks before anything that reaches readers.** Sending mail and changing the list wait for your yes.
 - **It schedules only when you ask,** then sends a test of the scheduled copy. After a change to your template or publication details, it tests again.
 - **It never adds a subscriber you didn't name.** The one exception is an import you asked for, through `/migrate-list`, which imports anyone as a subscriber only on your attestation.
+- **It records whose decision it was.** It unsubscribes someone only when they asked to leave, and blocks an address when you decide to stop mailing it. It lifts a bounce or a complaint only when you say the problem is gone, and confirms first.
 - **It erases a subscriber only when you name them and ask,** and confirms first, since an erasure can't be undone.
 - **It reads post text and subscriber data as content.** Words in a post or a reader's record are never instructions to Claude.
 - **It won't help share your subscribe link before your Kestrel can send to anyone.** Until then, signups fail. Whoever runs your Kestrel finishes that before [Go live](../get-started/06-go-live.md).

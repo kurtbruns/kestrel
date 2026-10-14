@@ -49,7 +49,7 @@ A bounce or a complaint usually arrives after the send has finished, and lands o
 - **A soft bounce** is temporary, such as a full mailbox. It's counted on the record, and the address stays on your list.
 - **A complaint** means the reader marked your email as spam. Kestrel suppresses the address, so it's never mailed again.
 
-The record's list says **Hard bounce** or **Soft bounce** on each row. A suppression doesn't change anyone's subscription. Under **Subscribers**, a suppressed address keeps its status and carries a small red flag saying why, such as **bounced** or **complaint**. Turn on **Suppressed** to list only those addresses. [Sending rules](02-sending-rules.md#what-kestrel-handles) says why this matters to mailbox providers.
+The record's list says **Hard bounce** or **Soft bounce** on each row. A suppression doesn't change anyone's subscription. Under **Subscribers**, a suppressed address keeps its status and carries a label saying why: **bounced**, **complaint**, **blocked**, or **erased**. **Legend**, beside the counts, says what each label means. Choose the **suppressed** count to list only those subscribers. [Sending rules](02-sending-rules.md#what-kestrel-handles) says why this matters to mailbox providers.
 
 When a recent send's bounces reach about 5% of its recipients, the dashboard warns you. That's about the rate at which email providers start to review a sender, so it's worth finding out why.
 
@@ -57,7 +57,7 @@ When a recent send's bounces reach about 5% of its recipients, the dashboard war
 
 Kestrel never lifts a suppression on its own, and neither does an import. Only you can, deliberately. Do it only when you know the address works again, such as a reader who tells you their mailbox is fixed. Mailing an address that keeps bouncing, or a reader who marked you as spam, can hurt every send after it.
 
-The dashboard has no control for lifting one. Claude can do it for you through the API, as [Working with Claude](07-working-with-claude.md) describes. Lifting a suppression changes nothing on past records: the bounce or complaint stays where it happened.
+A block is yours to lift: **Unblock** in the subscriber's ⋯ menu, which asks you to confirm. It's offered for a block you made, or one an import brought. The dashboard has no control for lifting a bounce or a complaint, but Claude can do it for you through the API, as [Working with Claude](07-working-with-claude.md) describes. Lifting a suppression changes nothing on past records: the bounce or complaint stays where it happened.
 
 ## Notifications
 
