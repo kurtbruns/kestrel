@@ -372,12 +372,16 @@ function outcomeReconHtml(outcomes: DeliveryOutcomes): string {
   // The suppression note is scoped to what actually suppresses: hard bounces and complaints,
   // never soft bounces (counted, left on the list, SPEC §8). The aggregate counters don't
   // split soft from hard, so gate on any bounce or complaint and state the rule rather than
-  // claim a count; a clean send says nothing about suppression at all.
+  // claim a count; a clean send says nothing about suppression at all. This is where a
+  // row's Hard bounce or Soft bounce label is explained (DESIGN §11), so any bounce names both.
   const suppression =
     outcomes.bounced || outcomes.complained
       ? " Hard bounces and spam complaints are suppressed automatically, so those addresses won’t be mailed again."
       : "";
-  return `${reconciled}${suppression}`;
+  const soft = outcomes.bounced
+    ? " A soft bounce is temporary, so it’s counted and the address stays on the list."
+    : "";
+  return `${reconciled}${suppression}${soft}`;
 }
 // Whether two readings of the record agree on every bucket, so a settling tick that
 // brought nothing new leaves the page as it is.
@@ -388,7 +392,6 @@ function sameOutcomes(a: DeliveryOutcomes, b: DeliveryOutcomes): boolean {
 interface Outcome {
   label: string;
   sw: string;
-  hint?: string;
 }
 
 // The per-recipient record: the outcome tiles summarize, this shows the actual rows. A
@@ -403,15 +406,15 @@ function deliveryOutcome(r: DeliveryRecord): Outcome {
   }
   if (r.event === "bounced") {
     if (r.bounce_kind === "hard") {
-      return { label: "Hard bounce", sw: "warn", hint: "permanent, so the address is suppressed" };
+      return { label: "Hard bounce", sw: "warn" };
     }
     if (r.bounce_kind === "soft") {
-      return { label: "Soft bounce", sw: "warn", hint: "transient, so counted but not suppressed" };
+      return { label: "Soft bounce", sw: "warn" };
     }
     return { label: "Bounce", sw: "warn" };
   }
   if (r.event === "complained") {
-    return { label: "Complained", sw: "danger", hint: "suppressed" };
+    return { label: "Complained", sw: "danger" };
   }
   switch (r.status) {
     case "unsent":
@@ -419,7 +422,7 @@ function deliveryOutcome(r: DeliveryRecord): Outcome {
     case "skipped":
       return { label: "Skipped", sw: "neutral" };
     case "accepted":
-      return { label: "Accepted", sw: "sending", hint: "awaiting a delivery receipt" };
+      return { label: "Accepted", sw: "sending" };
     default:
       return { label: "In flight", sw: "sending" };
   }
@@ -471,12 +474,9 @@ function deliveryRowsHtml(rows: DeliveryRecord[], dstate: DeliveryListState): Ht
   const body = rows.map((r) => {
     const o = deliveryOutcome(r);
     // The label names the bucket; its consequence (suppressed or not, awaiting a receipt)
-    // is taught once in prose by the reconciliation line above and kept on the row only as
-    // a hover tooltip, so a row stays a clean one-liner instead of restating the taxonomy
-    // on every line.
-    const outcome = o.hint
-      ? html`<span class="rec-out" title="${o.hint}"><span class="rec-sw sw-${o.sw}"></span>${o.label}</span>`
-      : html`<span class="rec-out"><span class="rec-sw sw-${o.sw}"></span>${o.label}</span>`;
+    // is said once in words by the reconciliation line above, never in a hover tooltip
+    // (DESIGN §11), so a row stays a clean one-liner without restating it on every line.
+    const outcome = html`<span class="rec-out"><span class="rec-sw sw-${o.sw}"></span>${o.label}</span>`;
     const detail = r.error || r.event_detail || "";
     const when = r.event_at ? fmt(r.event_at) : "";
     // An erased person's row keeps its place in the record, named for what it is rather
