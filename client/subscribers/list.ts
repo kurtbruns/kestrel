@@ -147,13 +147,15 @@ const IMPORTED_AS: Record<string, string> = {
   import_bounce: "bounce",
   import_complaint: "complaint",
 };
+function flagLabel(s: SubscriberListItem): string {
+  const reason = s.suppression_reason ?? "";
+  return SUPPRESSIONS[IMPORTED_AS[reason] ?? reason]?.label || "suppressed";
+}
 function suppressionFlag(s: SubscriberListItem): Html | null {
   if (!s.suppressed) {
     return null;
   }
-  const reason = s.suppression_reason ?? "";
-  const label = SUPPRESSIONS[IMPORTED_AS[reason] ?? reason]?.label || "suppressed";
-  return html` <span class="badge suppressed row-flag">${label}</span>`;
+  return html` <span class="badge suppressed row-flag">${flagLabel(s)}</span>`;
 }
 
 // The legend: what each label a row can show means (DESIGN §3), every pill drawn as the
@@ -170,7 +172,7 @@ function legendRow(pill: Html, means: string): Html {
   return html`<dt>${pill}</dt><dd>${means}</dd>`;
 }
 function legend(): Html {
-  return html`<div class="sub-legend" id="subLegend" hidden>
+  return html`<div class="sub-legend" id="subLegend" role="region" aria-labelledby="subLegendToggle" hidden>
     <dl>${SUB_STATUSES.map(({ value }) => legendRow(badge(value), STATUS_MEANS[value] ?? ""))}</dl>
     <p>Suppressed: the address isn’t mailed, whatever its status, which stays as it was. The red flag beside the address says why:</p>
     <dl>${Object.values(SUPPRESSIONS).map(({ label, means }) =>
@@ -238,7 +240,17 @@ function renderSubTable(
       // Anyone can be viewed and anyone can be erased (SPEC §7); only a
       // confirmed subscriber has anything to unsubscribe from.
       const items: MenuItem[] = [
-        { label: "View subscriber", onClick: () => viewSubscriberModal(row, signal) },
+        {
+          label: "View subscriber",
+          onClick: () =>
+            viewSubscriberModal(
+              row,
+              signal,
+              row.suppressed
+                ? { label: flagLabel(row), detail: row.suppression_detail }
+                : undefined,
+            ),
+        },
       ];
       if (row.status === "confirmed") {
         items.push({

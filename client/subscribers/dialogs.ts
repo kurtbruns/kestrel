@@ -148,7 +148,15 @@ const OPT_IN_WORDS: Record<OptIn, string> = {
  * One subscriber, on request: how they joined, when, and the evidence (SPEC §7). It only
  * shows: nothing in it can be changed, since it is the record of how they came to be here.
  */
-export function viewSubscriberModal(sub: Subscriber, signal: AbortSignal): void {
+/**
+ * View subscriber: how they joined and, when the address is suppressed, its flag and the
+ * provider's or publisher's words for it, which the list's plain-label pills don't carry.
+ */
+export function viewSubscriberModal(
+  sub: Subscriber,
+  signal: AbortSignal,
+  suppression?: { label: string; detail: string | null },
+): void {
   const evidence = evidenceText(sub.consent_evidence);
   const imported = sub.import_id !== null;
   const m = modal(
@@ -171,6 +179,7 @@ export function viewSubscriberModal(sub: Subscriber, signal: AbortSignal): void 
       <dt>Confirmed</dt><dd>${fmt(sub.confirmed_at)}</dd>
       ${sub.unsubscribed_at ? html`<dt>Left</dt><dd>${fmt(sub.unsubscribed_at)}</dd>` : null}
       <dt>Evidence</dt><dd>${evidence ? html`<pre class="sub-evidence">${evidence}</pre>` : "None recorded"}</dd>
+      ${suppression ? html`<dt>Suppressed</dt><dd>${suppression.label}${suppression.detail ? html`: ${suppression.detail}` : null}</dd>` : null}
     </dl>
     ${imported ? html`<p class="hint sub-note">The origin, opt-in, confirmation date, and evidence are what the imported file said, not something Kestrel recorded itself.</p>` : null}
     <div class="actions"><button type="button" id="vsClose">Close</button></div>`,
