@@ -103,4 +103,4 @@ Afterwards, each of those posts says its look changed since your last test. The 
 
 Whoever runs your Kestrel sets the From name and address your emails come from. You can't change them in the dashboard, and **Settings → Email sender** shows them read-only. [Connect Amazon SES](../get-started/04-ses.md#8-set-the-provider-and-deploy) covers setting them.
 
-Next, [Bring your list](01-your-list.md), or if you're starting fresh, [Write a post](04-write-a-post.md).
+Next, [Check your setup](10-check-your-setup.md).

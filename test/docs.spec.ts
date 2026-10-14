@@ -12,6 +12,7 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
     const { docs } = renderDocs();
     expect(docs.map((d) => `${d.set}/${d.section}/${d.slug}`)).toEqual([
       "publishing/setup/name-your-publication",
+      "publishing/setup/check-your-setup",
       "publishing/setup/your-list",
       "publishing/setup/write-a-post",
       "publishing/setup/share-your-subscribe-link",

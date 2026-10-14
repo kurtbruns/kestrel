@@ -500,10 +500,11 @@ function apiConnectCard(connected: boolean): Html {
 }
 
 /**
- * The first-run checklist, in the order the steps depend on each other. Writing a post
+ * The first-run checklist, in the order the steps depend on each other, each one the
+ * publisher's to take except connecting a provider, which shows only until one is. Writing a post
  * comes late because its New post creates a draft, which ends the first-run page; sharing
  * comes last so a visitor finds a post in the archive. While no provider is connected,
- * connecting one replaces the sending-domain step (connecting SES verifies the domain) and
+ * connecting one replaces the check-your-setup step (nothing can be checked before it) and
  * the subscribe step says signups wait for it (the page is closed). Bringing a list comes
  * before writing, for a publisher moving from another service; it reads as done once the
  * list has subscribers, which a fresh publication skips. The Publishing docs' Setup section
@@ -524,7 +525,7 @@ function setupChecklistHtml(
       ${
         notConnected
           ? html`<li class="setup-connect"><div class="setup-step-main"><strong>Connect Amazon SES</strong><span class="muted">Nothing can be sent, and signups stay closed, until SES is connected.</span></div><button data-nav="${CONNECT_PROVIDER_HREF}">Connect Amazon SES</button></li>`
-          : html`<li><div class="setup-step-main"><strong>Confirm your sending domain</strong><span class="muted">SPF, DKIM, and DMARC on your From address. The setup guide walks through it.</span></div><button data-nav="#/docs/sending-domain-dns">Docs</button></li>`
+          : html`<li class="setup-check"><div class="setup-step-main"><strong>Check your setup</strong><span class="muted">Send yourself a test, and see how Kestrel tells you when something needs attention.</span></div><button data-nav="#/docs/check-your-setup">Docs</button></li>`
       }
       ${
         onList

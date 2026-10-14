@@ -524,12 +524,14 @@ describe("dashboard", () => {
         await vi.advanceTimersByTimeAsync(0);
         expect(steps(), provider).toEqual([
           "Name your publication",
-          "Confirm your sending domain",
+          "Check your setup",
           "Bring your existing list",
           "Write your first post",
           "Share your subscribe link",
         ]);
         expect($(".setup-url").textContent, provider).toBe("https://app.birds.example/subscribe");
+        // Checking the setup is the publisher's step, so it opens the publisher's page.
+        expect($(".setup-check button").dataset.nav, provider).toBe("#/docs/check-your-setup");
         unmount();
         fake.restore();
         fake = world([post()], sendServer([scheduled()]), counts);

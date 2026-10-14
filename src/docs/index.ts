@@ -41,6 +41,7 @@ import afterASend from "../../docs/publishing/06-after-a-send.md";
 import workingWithClaude from "../../docs/publishing/07-working-with-claude.md";
 import importFormat from "../../docs/publishing/08-import-format.md";
 import shareYourSubscribeLink from "../../docs/publishing/09-share-your-subscribe-link.md";
+import checkYourSetup from "../../docs/publishing/10-check-your-setup.md";
 import publishingIndex from "../../docs/publishing/README.md";
 import selfHostingIndex from "../../docs/README.md";
 import configuration from "../../docs/reference/01-configuration.md";
@@ -66,6 +67,7 @@ const PAGES: Record<string, string> = {
   "publishing/07-working-with-claude.md": workingWithClaude,
   "publishing/08-import-format.md": importFormat,
   "publishing/09-share-your-subscribe-link.md": shareYourSubscribeLink,
+  "publishing/10-check-your-setup.md": checkYourSetup,
   "get-started/02-deploy.md": deploy,
   "get-started/03-access.md": access,
   "get-started/04-ses.md": ses,
