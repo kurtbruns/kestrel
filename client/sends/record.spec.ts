@@ -257,6 +257,57 @@ describe("sent record", () => {
     expect(fake.calls.filter((c) => c.url.pathname.endsWith("/deliveries"))).toHaveLength(lists);
   });
 
+  it("says what each outcome means in the reconciliation line, never on hover (DESIGN §11, SPEC §8)", async () => {
+    const outcomeRows = [
+      { ...rows[0]!, email: "hard@x.y" },
+      { ...rows[0]!, email: "soft@x.y", bounce_kind: "soft" as const },
+      { ...rows[0]!, email: "spam@x.y", event: "complained" as const, bounce_kind: null },
+      { ...rows[1]!, email: "wait@x.y", status: "accepted" as const, error: null },
+    ];
+    fake = fakeApi([
+      ...sentSend({ c_delivered: 6, c_bounced: 2, c_complained: 1, c_unsent: 0, c_accepted: 1 })
+        .routes,
+      {
+        path: "/api/sends/x1/deliveries",
+        reply: () => ({
+          deliveries: outcomeRows,
+          view: "failures",
+          page: { ...page, total: 4 },
+        }),
+      },
+    ]);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(0);
+    const outs = $$(".rec-people-table .rec-out");
+    expect(outs.map((o) => o.textContent)).toEqual([
+      "Hard bounce",
+      "Soft bounce",
+      "Complained",
+      "Accepted",
+    ]);
+    expect(outs.filter((o) => o.hasAttribute("title"))).toEqual([]);
+    expect($(".rec-recon").textContent).toBe(
+      "All 10 accounted for: 6 delivered, 2 bounced, 1 complained, 1 accepted, awaiting a delivery receipt." +
+        " Hard bounces and spam complaints are suppressed automatically, so those addresses won’t be mailed again." +
+        " A soft bounce is temporary, so it’s counted and the address stays on the list.",
+    );
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
+  it("leaves soft bounces out of a send that had none, saying only what suppresses", async () => {
+    fake = fakeApi([
+      ...sentSend({ c_delivered: 9, c_bounced: 0, c_complained: 1, c_unsent: 0 }).routes,
+      noRows,
+    ]);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(0);
+    expect($(".rec-recon").textContent).toBe(
+      "All 10 accounted for: 9 delivered, 1 complained." +
+        " Hard bounces and spam complaints are suppressed automatically, so those addresses won’t be mailed again.",
+    );
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
   it("reads Canceled for a canceled send, with when, never Sent", async () => {
     fake = fakeApi(
       sentSend({

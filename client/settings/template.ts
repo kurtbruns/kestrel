@@ -22,7 +22,7 @@ import { escapeHtml, type Html, html, setHtml, unsafeHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { savebar } from "../ui/savebar";
 import { busy, modal, openMenu, renderError, toast } from "../ui/widgets";
-import { inUseChip, REMAKE_TEMPLATE, savedToast, withRemakeConfirm } from "./remake";
+import { inUseChip, REMAKE_TEMPLATE, remakeWait, savedToast, withRemakeConfirm } from "./remake";
 
 const message = describeError;
 
@@ -439,7 +439,7 @@ interface TemplateSaved {
 export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Promise<void> {
   setHtml(
     root,
-    html`<div class="tpl-page"><div class="page-head"><div class="page-head-row"><h1>Email template</h1><span id="tplInUse"></span></div><p class="set-lede set-page-lede">The template controls the look and feel of the emails you send. You write it as HTML with a <code>&lt;style&gt;</code> block and <code>{{ variables }}</code> Kestrel fills in; your post’s Markdown is rendered into <code>{{ .Post.Body }}</code>.</p></div><div id="tplBody" class="muted">Loading…</div></div>`,
+    html`<div class="tpl-page"><div class="page-head"><div class="page-head-row"><h1>Email template</h1><span id="tplInUse"></span></div><p class="set-lede set-page-lede">The template controls the look and feel of the emails you send. You write it as HTML with a <code>&lt;style&gt;</code> block and <code>{{ variables }}</code> Kestrel fills in; your post’s Markdown is rendered into <code>{{ .Post.Body }}</code>.<span id="tplWait"></span></p></div><div id="tplBody" class="muted">Loading…</div></div>`,
   );
   const bodyEl = $("#tplBody", root);
   let data: SettingsResponse;
@@ -462,6 +462,9 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
   const defaultRecipients = Array.isArray(s.testRecipients) ? s.testRecipients : [];
   // Standing: whether scheduled posts are using this template (SPEC §9, DESIGN §8).
   setHtml($("#tplInUse"), inUseChip(data.inUse));
+  // While one is about to send, the lede says the save waits (DESIGN §11: not on the chip).
+  const wait = remakeWait(data.inUse);
+  $("#tplWait").textContent = wait ? ` ${wait}` : "";
 
   setHtml(
     bodyEl,

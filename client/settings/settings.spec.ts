@@ -15,6 +15,7 @@ import {
   typeInto,
   unmount,
 } from "../test/support";
+import { fmt } from "../ui/format";
 import { squareImage, UnreadableImage } from "../ui/square_image";
 import { renderSettings } from "./settings";
 
@@ -486,6 +487,27 @@ describe("settings view", () => {
       .map((c) => c.json() as { remake?: string[] });
     expect(puts.map((p) => p.remake)).toEqual([undefined, ["x1"]]);
     expect($("#toasts").textContent).toMatch(/Settings saved and applied to 1 scheduled email/);
+  });
+
+  it("says in words, never on the in-use chip, that saving waits for a post about to send (DESIGN §11)", async () => {
+    const at = Date.now() + 120_000;
+    const sends = [{ id: "x1", post_id: "p1", subject: "Gulls", fire_at: at, remade_at: null }];
+    await open([
+      {
+        path: "/api/settings",
+        reply: () => response({ inUse: { sends, retry_after: at, identityFields: ["name"] } }),
+      },
+    ]);
+    const wait = `A scheduled post sends at ${fmt(at)}, so saving waits until it has sent.`;
+    const chip = $(".set-chip.inuse");
+    expect(chip.hasAttribute("title")).toBe(false);
+    // The template section's lede, beside the chip, and the identity section's note.
+    expect(chip.closest(".set-sec")?.querySelector(".set-lede")?.textContent).toBe(
+      `The template controls the look and feel of the emails you send. Edit it on the Template page. ${wait}`,
+    );
+    expect($(".set-note span").textContent).toBe(
+      `Shown in every email. Saving a change updates 1 scheduled email too; you’ll confirm first. ${wait}`,
+    );
   });
 
   it("shows a send about to fire as the bar's blocking error, keeping the edits", async () => {

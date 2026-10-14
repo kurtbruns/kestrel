@@ -1892,6 +1892,7 @@ body.web-mode .content {
   border-radius: 999px;
   background: var(--accent-on);
   color: var(--accent);
+  cursor: default;
 }
 .web-bar-text {
   overflow-wrap: anywhere;
@@ -2069,13 +2070,15 @@ body.web-mode .content {
 /* An outcome cell reuses the tile swatch palette (sw-ok / sw-warn / sw-danger /
    sw-sending / sw-neutral) so a row reads the same bucket as its tile above. The
    swatch + label hold one line — nowrap so the label never breaks mid-word in the
-   fixed-width column; the consequence rides in the cell's `title` tooltip and the
-   reconciliation line above, not inline, so the row stays a clean one-liner. */
+   fixed-width column; the consequence is said in the reconciliation line above, not
+   inline or on hover (DESIGN §11), so the row stays a clean one-liner. A plain label,
+   so the default cursor. */
 .rec-out {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   white-space: nowrap;
+  cursor: default;
 }
 .rec-people-empty {
   margin: 14px 0 0;
@@ -2101,7 +2104,7 @@ body.web-mode .content {
 }
 /* The derived-phase pill (progressing / retrying / backing-off / needs-attention /
    settling / …). Tones reuse the status + semantic palettes so a phase reads the same
-   hue as its badge elsewhere. */
+   hue as its badge elsewhere. A plain label, so the default cursor (DESIGN §11). */
 .phase-pill {
   display: inline-block;
   padding: 2px 10px;
@@ -2110,6 +2113,7 @@ body.web-mode .content {
   font-weight: 600;
   border: 1px solid var(--line);
   white-space: nowrap;
+  cursor: default;
 }
 .phase-pill.tone-sending {
   background: var(--status-sending-bg);
@@ -4311,7 +4315,8 @@ button.copied svg {
 }
 
 /* Intent chips — the grouping made visible. Editable wears the Kestrel accent;
-   read-only wears a warn tone; copy-out stays muted. */
+   read-only wears a warn tone; copy-out stays muted. Plain labels, so the default
+   cursor (DESIGN §11). */
 .set-chip {
   display: inline-flex;
   align-items: center;
@@ -4324,6 +4329,7 @@ button.copied svg {
   color: var(--muted);
   background: var(--card);
   white-space: nowrap;
+  cursor: default;
 }
 .set-chip svg {
   width: 12px;
@@ -4591,6 +4597,7 @@ button.set-field-remove {
   font-family: var(--mono);
   font-size: 13px;
 }
+/* A status pill in the settings reflection: a plain label, so the default cursor (DESIGN §11). */
 .set-pill {
   display: inline-flex;
   align-items: center;
@@ -4603,6 +4610,7 @@ button.set-field-remove {
   color: var(--muted);
   border: 1px solid var(--line-soft);
   white-space: nowrap;
+  cursor: default;
 }
 .set-pill.ok {
   background: var(--ok-bg);
@@ -5475,6 +5483,7 @@ button.set-embed-copy svg {
   border-radius: 999px;
   border: 1px solid var(--line-soft);
   color: var(--muted);
+  cursor: default;
 }
 .set-req-pill .dot {
   width: 6px;

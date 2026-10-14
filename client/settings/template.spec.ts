@@ -14,6 +14,7 @@ import {
   stubClipboard,
   typeInto,
 } from "../test/support";
+import { fmt } from "../ui/format";
 import {
   EMAIL_TEMPLATE_EXAMPLES,
   mountSampleEmailPreview,
@@ -187,6 +188,29 @@ describe("template view", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.calls.filter((c) => c.method === "PUT")).toHaveLength(2);
     expect($("#toasts").textContent).toMatch(/Template saved and applied to 1 scheduled email/);
+  });
+
+  it("says in the lede, not on the in-use chip, that saving waits for a post about to send (DESIGN §11)", async () => {
+    const at = Date.now() + 120_000;
+    const sends = [{ id: "x1", post_id: "p1", subject: "Gulls", fire_at: at, remade_at: null }];
+    await open([
+      {
+        path: "/api/settings",
+        reply: () => response({ inUse: { sends, retry_after: at, identityFields: [] } }),
+      },
+    ]);
+    expect($(".set-chip.inuse").textContent).toBe("In use by 1 scheduled post");
+    expect($(".set-chip.inuse").hasAttribute("title")).toBe(false);
+    expect($(".set-page-lede").contains($("#tplWait"))).toBe(true);
+    expect($("#tplWait").textContent).toBe(
+      ` A scheduled post sends at ${fmt(at)}, so saving waits until it has sent.`,
+    );
+  });
+
+  it("leaves the lede to the template while no post is about to send", async () => {
+    await open();
+    expect($(".set-page-lede").textContent).toContain("rendered into {{ .Post.Body }}.");
+    expect($("#tplWait").textContent).toBe("");
   });
 
   it("keeps the edit and the bar when the publisher backs out of applying it", async () => {

@@ -7,6 +7,7 @@ import {
   inUseChip,
   isRemakeTooClose,
   REMAKE_TEMPLATE,
+  remakeWait,
   savedToast,
   withRemakeConfirm,
 } from "./remake";
@@ -180,7 +181,7 @@ describe("inUseChip", () => {
     return el.firstElementChild as HTMLElement;
   };
 
-  it("says nothing is scheduled, or how many posts a change would reach and when saving waits", () => {
+  it("says nothing is scheduled, or how many posts a change would reach, as a plain label (DESIGN §11)", () => {
     expect(chip(null).textContent?.trim()).toBe("No posts scheduled");
     expect(chip({ sends: [], retry_after: null, identityFields: [] }).classList).not.toContain(
       "inuse",
@@ -198,9 +199,18 @@ describe("inUseChip", () => {
       identityFields: [],
     });
     expect(waiting.textContent).toBe("In use by 1 scheduled post");
-    expect(waiting.title).toBe(
-      `One sends at ${fmt(1_800_000_000_000)}; saving waits until it has sent.`,
+    expect(waiting.hasAttribute("title")).toBe(false);
+  });
+});
+
+describe("remakeWait", () => {
+  it("says in words when saving waits for a post about to send, and nothing otherwise (SPEC §9)", () => {
+    const at = Date.now() + 120_000;
+    expect(remakeWait({ sends: [ref("a", "A")], retry_after: at, identityFields: [] })).toBe(
+      `A scheduled post sends at ${fmt(at)}, so saving waits until it has sent.`,
     );
+    expect(remakeWait({ sends: [ref("a", "A")], retry_after: null, identityFields: [] })).toBe("");
+    expect(remakeWait(null)).toBe("");
   });
 });
 

@@ -4,13 +4,12 @@
 import type { InUseView, LogoResponse } from "../../shared/settings";
 import { api } from "../api";
 import { $ } from "../ui/dom";
-import { fmt } from "../ui/format";
 import { type Html, html } from "../ui/html";
 import { icon } from "../ui/icons";
 import { squareImage } from "../ui/square_image";
 import { busy, toast } from "../ui/widgets";
 import { chip, HIDDEN, message, type SectionHandle, type SettingsPage, secHead } from "./page";
-import { remakeIdentity, savedToast, withRemakeConfirm } from "./remake";
+import { remakeIdentity, remakeWait, savedToast, withRemakeConfirm } from "./remake";
 
 /** The note under the card: where the identity shows up (the sample email shows which
  *  fields) and, only while posts are scheduled, that a save reaches them too (SPEC §9).
@@ -26,10 +25,7 @@ function identityNote(inUse: InUseView): string {
     return shown;
   }
   const reach = `Saving a change updates ${n} scheduled email${n === 1 ? "" : "s"} too; you’ll confirm first.`;
-  const wait = inUse.retry_after
-    ? ` One sends at ${fmt(inUse.retry_after)}, so saving waits until it has sent.`
-    : "";
-  return `${shown} ${reach}${wait}`;
+  return [shown, reach, remakeWait(inUse)].filter(Boolean).join(" ");
 }
 
 /** The side of the square PNG a logo uploads as: sharp at 3× the largest place it shows

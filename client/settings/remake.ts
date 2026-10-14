@@ -172,7 +172,8 @@ export const remakeIdentity = (action: string, gerund: string): RemakeVerb => ({
 
 /**
  * The standing in-use chip (DESIGN §8): the state a template or identity change would
- * reach, read from GET /api/settings `inUse`.
+ * reach, read from GET /api/settings `inUse`. A plain label (DESIGN §11): when saving has
+ * to wait, `remakeWait` says so in words beside it.
  */
 export function inUseChip(inUse: InUseView | null | undefined): Html {
   const sends = inUse?.sends || [];
@@ -180,12 +181,17 @@ export function inUseChip(inUse: InUseView | null | undefined): Html {
     return html`<span class="set-chip">${icon("info")}No posts scheduled</span>`;
   }
   const n = sends.length;
-  const title = inUse?.retry_after
-    ? `One sends at ${fmt(inUse.retry_after)}; saving waits until it has sent.`
-    : null;
-  return title
-    ? html`<span class="set-chip inuse" title="${title}"><span class="set-chip-dot"></span>In use by ${n} scheduled post${n === 1 ? "" : "s"}</span>`
-    : html`<span class="set-chip inuse"><span class="set-chip-dot"></span>In use by ${n} scheduled post${n === 1 ? "" : "s"}</span>`;
+  return html`<span class="set-chip inuse"><span class="set-chip-dot"></span>In use by ${n} scheduled post${n === 1 ? "" : "s"}</span>`;
+}
+
+/**
+ * The sentence a surface shows while a scheduled post is about to send (SPEC §9), since a
+ * save waits until it has; empty otherwise.
+ */
+export function remakeWait(inUse: InUseView | null | undefined): string {
+  return inUse?.retry_after
+    ? `A scheduled post sends at ${fmt(inUse.retry_after)}, so saving waits until it has sent.`
+    : "";
 }
 
 /**
