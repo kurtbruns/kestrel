@@ -1606,7 +1606,6 @@ td a:hover {
   border-right: 2px solid currentColor;
   border-bottom: 2px solid currentColor;
   transform: rotate(45deg);
-  transition: transform 0.15s;
 }
 .sub-legend-toggle[aria-expanded="true"]::after {
   margin-top: 3px;
