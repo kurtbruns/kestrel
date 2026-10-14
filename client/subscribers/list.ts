@@ -133,10 +133,6 @@ const SUPPRESSION_TIPS: Record<string, string> = {
   erased:
     "Erased at the person’s request, then subscribed again. Not mailed until they confirm, which lifts the erasure.",
 };
-// A listed subscriber who isn't pending can carry the marker only because an imported file
-// said they were erased at its source; their data here is the publisher's to erase.
-const ERASED_ELSEWHERE_TIP =
-  "Erased where this list came from. Not mailed. Erase here to remove their data.";
 function suppressionFlag(s: SubscriberListItem): Html | null {
   if (!s.suppressed) {
     return null;
@@ -144,9 +140,7 @@ function suppressionFlag(s: SubscriberListItem): Html | null {
   const reason = s.suppression_reason ?? "";
   const label = SUPPRESSION_LABELS[reason] || "suppressed";
   const base =
-    reason === "erased" && s.status !== "pending"
-      ? ERASED_ELSEWHERE_TIP
-      : SUPPRESSION_TIPS[reason] || "Suppressed, so it won’t be mailed, whatever their status.";
+    SUPPRESSION_TIPS[reason] || "Suppressed, so it won’t be mailed, whatever their status.";
   const tip = s.suppression_detail ? `${base} (${s.suppression_detail})` : base;
   return html` <span class="badge suppressed row-flag" title="${tip}">${label}</span>`;
 }

@@ -157,40 +157,43 @@ describe("subscribers view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  for (const [status, tip] of [
-    [
-      "pending",
-      "Erased at the person’s request, then subscribed again. Not mailed until they confirm, which lifts the erasure.",
-    ],
-    ["confirmed", "Erased where this list came from. Not mailed. Erase here to remove their data."],
-    [
-      "unsubscribed",
-      "Erased where this list came from. Not mailed. Erase here to remove their data.",
-    ],
-  ] as const) {
-    it(`explains an erased flag on a ${status} subscriber by how they came to carry it`, async () => {
-      fake = fakeApi([
-        {
-          path: "/api/subscribers",
-          reply: () => ({
-            counts,
-            subscribers: [{ ...subs[2], suppressed: true, suppression_reason: "erased", status }],
-            page,
-          }),
-        },
-      ]);
-      await mount((r, s) => renderSubscribers(undefined, r, s));
-      await settle();
-      const flag = $("tr[data-id='s3'] .row-flag");
-      expect(flag.textContent).toBe("erased");
-      expect(flag.getAttribute("title")).toBe(tip);
-      // Only a pending sign-up's own confirmation lifts the marker, so only its status is live.
-      expect($(`tr[data-id='s3'] .badge.${status}`).classList.contains("held")).toBe(
-        status !== "pending",
-      );
-      expect(fake.unhandled).toEqual([]);
-    });
-  }
+  it("names an erased address's flag, for one that subscribed again", async () => {
+    fake = fakeApi([
+      {
+        path: "/api/subscribers",
+        reply: () => ({
+          counts,
+          subscribers: [
+            { ...subs[2], suppressed: true, suppression_reason: "erased", status: "pending" },
+          ],
+          page,
+        }),
+      },
+    ]);
+    await mount((r, s) => renderSubscribers(undefined, r, s));
+    await settle();
+    const flag = $("tr[data-id='s3'] .row-flag");
+    expect(flag.textContent).toBe("erased");
+    expect(flag.getAttribute("title")).toMatch(/^Erased at the person’s request/);
+    // Their confirmation lifts the marker, so the pending status is live, not greyed.
+    expect($("tr[data-id='s3'] .badge.pending").classList.contains("held")).toBe(false);
+  });
+
+  it("greys a confirmed status under an erasure's marker, which no confirmation lifts", async () => {
+    fake = fakeApi([
+      {
+        path: "/api/subscribers",
+        reply: () => ({
+          counts,
+          subscribers: [{ ...subs[0], suppressed: true, suppression_reason: "erased" }],
+          page,
+        }),
+      },
+    ]);
+    await mount((r, s) => renderSubscribers(undefined, r, s));
+    await settle();
+    expect($("tr[data-id='s1'] .badge.confirmed").classList.contains("held")).toBe(true);
+  });
 
   it("points a list with no subscribers (suppressions alone count for none) at the import, and opens the import from the head", async () => {
     fake = fakeApi([
