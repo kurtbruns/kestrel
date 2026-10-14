@@ -433,7 +433,7 @@ describe("subscribers view", () => {
       [
         "badge confirmed",
         "confirmed",
-        "Agreed to receive your posts, here or at the service they were imported from, and receives them.",
+        "Receives your posts. They confirmed here, or opted in at the service you imported them from.",
       ],
       ["badge pending", "pending", "Subscribed but hasn’t clicked the confirmation email."],
       ["badge unsubscribed", "unsubscribed", "Opted out, themselves or by asking you."],
