@@ -1653,9 +1653,10 @@ td a:hover {
 .sub-legend dd {
   margin: 0;
 }
-/* An act's name is a term, not a heading: a step lighter than bold. */
+/* An act's name is a term, not a heading: lighter than bold, so it doesn't outweigh the
+   pills in the column beside it. */
 .sub-legend-act {
-  font-weight: 600;
+  font-weight: 500;
 }
 .sub-legend p {
   grid-column: 1 / -1;
