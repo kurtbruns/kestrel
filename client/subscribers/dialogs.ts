@@ -156,12 +156,18 @@ export function consentRecordModal(sub: Subscriber, signal: AbortSignal): void {
             <dt>Import</dt><dd><code>${sub.import_id ?? ""}</code></dd>`
           : null
       }
-      <dt>Subscribed</dt><dd>${fmt(sub.created_at)}</dd>
+      ${
+        // An import writes the row when it lands, and the file's own date (its confirmed_at,
+        // else its subscribed_at) as the confirmation, so the row's date is the import's.
+        imported
+          ? html`<dt>Imported</dt><dd>${fmt(sub.created_at)}</dd>`
+          : html`<dt>Subscribed</dt><dd>${fmt(sub.created_at)}</dd>`
+      }
       <dt>Confirmed</dt><dd>${fmt(sub.confirmed_at)}</dd>
       ${sub.unsubscribed_at ? html`<dt>Left</dt><dd>${fmt(sub.unsubscribed_at)}</dd>` : null}
       <dt>Evidence</dt><dd>${evidence ? html`<pre class="consent-evidence">${evidence}</pre>` : "None recorded"}</dd>
     </dl>
-    ${imported ? html`<p class="hint consent-note">The origin, opt-in, and evidence are what the imported file said. Kestrel didn’t record this consent itself.</p>` : null}
+    ${imported ? html`<p class="hint consent-note">The origin, opt-in, confirmation date, and evidence are what the imported file said. Kestrel didn’t record this consent itself.</p>` : null}
     <div class="actions"><button type="button" id="crClose">Close</button></div>`,
     signal,
   );

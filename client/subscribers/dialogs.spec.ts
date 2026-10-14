@@ -9,6 +9,7 @@ import {
   settingsResponse,
   typeInto,
 } from "../test/support";
+import { fmt } from "../ui/format";
 import {
   addSubscriberModal,
   confirmErase,
@@ -247,6 +248,47 @@ describe("consentRecordModal", () => {
     consent_evidence: null,
     import_id: null,
   };
+
+  /** The consent record's rows, label to value, as the dialog shows them. */
+  const recordRows = () => {
+    const dts = [...document.querySelectorAll(".consent-dl dt")];
+    return Object.fromEntries(
+      dts.map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]),
+    );
+  };
+
+  it("dates an imported subscriber by the import, and their confirmation by the file (SPEC §7)", () => {
+    fake = fakeApi([]);
+    const importedAt = Date.UTC(2026, 9, 13, 12);
+    const fileSaid = Date.UTC(2024, 2, 1, 9, 30);
+    consentRecordModal(
+      {
+        ...signedUp,
+        status: "confirmed",
+        created_at: importedAt,
+        confirmed_at: fileSaid,
+        unsubscribed_at: null,
+        origin: "sendy",
+        opt_in: "single",
+        import_id: "imp1",
+      },
+      live,
+    );
+    const rows = recordRows();
+    expect(rows.Imported).toBe(fmt(importedAt));
+    expect(rows.Confirmed).toBe(fmt(fileSaid));
+    expect("Subscribed" in rows).toBe(false);
+    expect($(".consent-note").textContent).toBe(
+      "The origin, opt-in, confirmation date, and evidence are what the imported file said. Kestrel didn’t record this consent itself.",
+    );
+    $("#crClose").click();
+    // Someone who joined here keeps "Subscribed", and no line about a file.
+    consentRecordModal({ ...signedUp, status: "confirmed", created_at: 5, confirmed_at: 6 }, live);
+    expect(recordRows().Subscribed).toBe(fmt(5));
+    expect("Imported" in recordRows()).toBe(false);
+    expect(document.querySelector(".consent-note")).toBeNull();
+    expect(fake.calls).toEqual([]);
+  });
 
   it("says a reader who signed up here and left never confirmed, and a pending one hasn't yet", () => {
     fake = fakeApi([]);
