@@ -8,7 +8,7 @@ import type { SubscriberStatus, SuppressionReason } from "./subscribers";
 export const STATUS_MEANING: Record<SubscriberStatus, string> = {
   pending: "Subscribed but hasn’t clicked the confirmation email.",
   confirmed:
-    "Agreed to receive your posts, here or at the service they were imported from, and receives them.",
+    "Receives your posts. They confirmed here, or opted in at the service you imported them from.",
   unsubscribed: "Opted out, themselves or by asking you.",
 };
 
