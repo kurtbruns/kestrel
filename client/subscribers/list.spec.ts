@@ -277,6 +277,27 @@ describe("subscribers view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("says what stands when the address was suppressed before the block landed", async () => {
+    fake = fakeApi([
+      { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
+      {
+        method: "POST",
+        path: "/api/suppressions",
+        reply: () => ({
+          suppression: { email: "a@b.c", reason: "bounce", detail: null, created_at: 1 },
+          added: false,
+        }),
+      },
+    ]);
+    await mount((r, s) => renderSubscribers(undefined, r, s));
+    await settle();
+    pick("s1", "Block");
+    $("#bGo").click();
+    await settle();
+    expect($("#toasts").textContent).toMatch(/a@b\.c was already suppressed \(bounced\)/);
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("unblocks only the publisher's own block, saying whether they'll be mailed again", async () => {
     fake = fakeApi([
       {
@@ -300,17 +321,39 @@ describe("subscribers view", () => {
     await settle();
     pick("s3", "Unblock");
     expect($(".modal .hint").textContent).toBe(
-      "Undoes your block on <script>@b.c. They’ll receive posts again only once they’re confirmed.",
+      "Undoes the block on <script>@b.c. They’ll receive posts again only once they’re confirmed.",
     );
     $("#ubCancel").click();
     pick("s1", "Unblock");
     expect($(".modal .hint").textContent).toBe(
-      "Undoes your block on a@b.c. They’re confirmed, so they’ll receive your posts again.",
+      "Undoes the block on a@b.c. They’re confirmed, so they’ll receive your posts again.",
     );
     $("#ubGo").click();
     await settle();
     expect(fake.calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
     expect($("#toasts").textContent).toMatch(/Unblocked a@b\.c/);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("shows a suppressed address's flag and the provider's words in View subscriber", async () => {
+    fake = fakeApi([
+      { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
+    ]);
+    await mount((r, s) => renderSubscribers(undefined, r, s));
+    await settle();
+    $("tr[data-id='s2'] [data-menu]").click();
+    $$<HTMLElement>(".menu .menu-item")
+      .find((b) => b.textContent === "View subscriber")!
+      .click();
+    const dt = $$(".modal .sub-dl dt").find((d) => d.textContent === "Suppressed")!;
+    expect(dt.nextElementSibling!.textContent).toBe("bounced: 550 no such user");
+    $("#vsClose").click();
+    // An address that isn't suppressed has no such line.
+    $("tr[data-id='s1'] [data-menu]").click();
+    $$<HTMLElement>(".menu .menu-item")
+      .find((b) => b.textContent === "View subscriber")!
+      .click();
+    expect($$(".modal .sub-dl dt").map((d) => d.textContent)).not.toContain("Suppressed");
     expect(fake.unhandled).toEqual([]);
   });
 
@@ -375,7 +418,11 @@ describe("subscribers view", () => {
         "complaint",
         "Marked as spam, here or at the service it was imported from.",
       ],
-      ["badge suppressed", "blocked", "You chose to stop mailing it. You can unblock it."],
+      [
+        "badge suppressed",
+        "blocked",
+        "Stopped by hand, by you or at the service it was imported from. You can unblock it.",
+      ],
       [
         "badge suppressed",
         "erased",

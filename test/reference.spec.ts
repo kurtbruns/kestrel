@@ -2,6 +2,7 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import {
+  ERASED_MARKER_MEANING,
   FLAG_MEANING,
   STATUS_MEANING,
   SUBSCRIBER_ACTIONS,
@@ -80,10 +81,17 @@ describe("API reference is generated from the route registration", () => {
     const describe = (key: string) => byKey.get(key)?.description ?? "";
     for (const key of ["GET /api/subscribers", "GET /api/suppressions"]) {
       expect(describe(key)).toContain(SUPPRESSED_MEANING);
-      for (const meaning of Object.values(FLAG_MEANING)) {
-        expect(describe(key)).toContain(meaning);
+      for (const [flag, meaning] of Object.entries(FLAG_MEANING)) {
+        if (flag !== "erased") {
+          expect(describe(key)).toContain(meaning);
+        }
       }
     }
+    // The roster shows an erasure's marker only on someone who signed up again; the list of
+    // suppressions holds markers with no subscriber, so it says what a marker is instead.
+    expect(describe("GET /api/subscribers")).toContain(FLAG_MEANING.erased);
+    expect(describe("GET /api/suppressions")).toContain(ERASED_MARKER_MEANING);
+    expect(describe("GET /api/suppressions")).not.toContain(FLAG_MEANING.erased);
     for (const meaning of Object.values(STATUS_MEANING)) {
       expect(describe("GET /api/subscribers")).toContain(meaning);
     }

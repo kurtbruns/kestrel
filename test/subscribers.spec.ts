@@ -682,6 +682,17 @@ describe("suppressions: a client records only its own block (SPEC §7)", () => {
     expect((await subs.suppressionOf(env.DB, email))?.reason).toBe("bounce");
   });
 
+  it("keeps a block already there, its detail included, rather than answering 200 over a changed one", async () => {
+    const email = uniqueEmail();
+    await block({ email, detail: "first" });
+    const res = await block({ email, detail: "second" });
+    expect(res.status).toBe(200);
+    expect(await readJson(res)).toMatchObject({
+      suppression: { reason: "manual", detail: "first" },
+      added: false,
+    });
+  });
+
   it("never blocks over an erasure's marker, so clearing a block can't lift an erasure", async () => {
     const email = uniqueEmail();
     await subs.addSuppression(env.DB, email, "erased");
@@ -775,6 +786,35 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     expect(body.subscribers[0].suppression_reason).toBe("complaint");
     // The page envelope reflects the filtered total, not the whole table.
     expect(body.page).toMatchObject({ total: 1, offset: 0 });
+  });
+
+  it("GET /api/subscribers flags a row's suppression however many newer suppressions there are (SPEC §7)", async () => {
+    await resetDatabase();
+    await seedConfirmed(["old@example.com"]);
+    await env.DB.prepare(
+      "INSERT INTO suppressions (email, reason, detail, created_at) VALUES ('old@example.com', 'bounce', 'mailbox gone', ?)",
+    )
+      .bind(Date.now() - 60_000)
+      .run();
+    // 1,001 newer suppressions on addresses not on the list, past the suppression list's cap.
+    await env.DB.prepare(
+      `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 1001)
+       INSERT INTO suppressions (email, reason, detail, created_at)
+       SELECT 'newer-' || i || '@example.com', 'complaint', NULL, ? FROM n`,
+    )
+      .bind(Date.now())
+      .run();
+
+    const res = await SELF.fetch(`${base}/api/subscribers?search=old@`, { headers: AUTH });
+    expect(res.status).toBe(200);
+    const body = await readJson(res);
+    expect(body.subscribers).toHaveLength(1);
+    expect(body.subscribers[0]).toMatchObject({
+      email: "old@example.com",
+      suppressed: true,
+      suppression_reason: "bounce",
+      suppression_detail: "mailbox gone",
+    });
   });
 
   it("GET /api/subscribers paginates (offset/limit) and sorts by a whitelisted column", async () => {

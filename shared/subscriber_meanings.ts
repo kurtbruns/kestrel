@@ -32,9 +32,16 @@ export const SUPPRESSION_FLAG: Record<SuppressionReason, SuppressionFlag> = {
 export const FLAG_MEANING: Record<SuppressionFlag, string> = {
   bounced: "Mail to the address failed, here or at the service it was imported from.",
   complaint: "Marked as spam, here or at the service it was imported from.",
-  blocked: "You chose to stop mailing it. You can unblock it.",
+  blocked: "Stopped by hand, by you or at the service it was imported from. You can unblock it.",
   erased: "Erased at their request, then signed up again. Not mailed unless they confirm.",
 };
+
+/**
+ * What an erasure's marker means wherever an address may have no subscriber, as in the
+ * list of suppressions: the roster only ever shows it on someone who signed up again.
+ */
+export const ERASED_MARKER_MEANING =
+  "Erased at their request: only the address is kept, so it isn’t mailed, and only the person’s own confirmation of a new sign-up lifts it.";
 
 /** An act on a subscriber: its name in the editor's row menu, and when it is the one to use. */
 export interface SubscriberAction {

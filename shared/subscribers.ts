@@ -11,7 +11,8 @@ export type SubscriberStatus = "pending" | "confirmed" | "unsubscribed";
 /**
  * Why an address is suppressed (SPEC §7), which also says whose decision it was: the
  * provider's (`bounce`, `complaint`), the previous service's, brought by an import
- * (`import_bounce`, `import_complaint`), the publisher's own block (`manual`), or an
+ * (`import_bounce`, `import_complaint`), a block by hand (`manual`), the publisher's own or
+ * one an import brought from the previous service, or an
  * erasure's do-not-contact marker (`erased`). `subscriber_meanings.ts` says what each means.
  */
 export type SuppressionReason =

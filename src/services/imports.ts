@@ -132,8 +132,9 @@ const WRITE_OUTCOMES: ReadonlySet<ImportOutcome> = new Set([
  * reason, so a known bounce or complaint still stops the address being sent confirmations.
  * An erased marker with no subscriber behind it also blocks an unsubscribed row: recording
  * the person as unsubscribed would bring back the data the erasure removed. A row that
- * itself says the address was erased never creates a subscriber either: it is blocked by its
- * own marker, which it still brings.
+ * itself says the address was erased never creates a subscriber or confirms a pending one
+ * either: it is blocked by its own marker, which it still brings, so a pending subscriber
+ * stays pending and only their own confirmation lifts it, as after an erasure here.
  */
 export function classify(
   row: ImportRow,
@@ -181,7 +182,9 @@ export function classify(
   }
   if (
     row.suppression === ERASED &&
-    (outcome === "create_confirmed" || outcome === "create_unsubscribed")
+    (outcome === "create_confirmed" ||
+      outcome === "confirm_pending" ||
+      outcome === "create_unsubscribed")
   ) {
     outcome = "blocked_by_suppression";
   }

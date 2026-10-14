@@ -3,6 +3,7 @@
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
 import type { OptIn } from "../../shared/imports";
+import { SUPPRESSION_FLAG } from "../../shared/subscriber_meanings";
 import type {
   BlockResponse,
   ClearSuppressionResponse,
@@ -150,7 +151,15 @@ const OPT_IN_WORDS: Record<OptIn, string> = {
  * One subscriber, on request: how they joined, when, and the evidence (SPEC §7). It only
  * shows: nothing in it can be changed, since it is the record of how they came to be here.
  */
-export function viewSubscriberModal(sub: Subscriber, signal: AbortSignal): void {
+/**
+ * View subscriber: how they joined and, when the address is suppressed, its flag and the
+ * provider's or publisher's words for it, which the list's plain-label pills don't carry.
+ */
+export function viewSubscriberModal(
+  sub: Subscriber,
+  signal: AbortSignal,
+  suppression?: { label: string; detail: string | null },
+): void {
   const evidence = evidenceText(sub.consent_evidence);
   const imported = sub.import_id !== null;
   const m = modal(
@@ -173,6 +182,7 @@ export function viewSubscriberModal(sub: Subscriber, signal: AbortSignal): void 
       <dt>Confirmed</dt><dd>${fmt(sub.confirmed_at)}</dd>
       ${sub.unsubscribed_at ? html`<dt>Left</dt><dd>${fmt(sub.unsubscribed_at)}</dd>` : null}
       <dt>Evidence</dt><dd>${evidence ? html`<pre class="sub-evidence">${evidence}</pre>` : "None recorded"}</dd>
+      ${suppression ? html`<dt>Suppressed</dt><dd>${suppression.label}${suppression.detail ? html`: ${suppression.detail}` : null}</dd>` : null}
     </dl>
     ${imported ? html`<p class="hint sub-note">The origin, opt-in, confirmation date, and evidence are what the imported file said, not something Kestrel recorded itself.</p>` : null}
     <div class="actions"><button type="button" id="vsClose">Close</button></div>`,
@@ -218,12 +228,17 @@ export function confirmBlock(sub: Subscriber, onDone: () => void, signal: AbortS
     busy(go, "Blocking…", async () => {
       m.clearError();
       try {
-        await api<BlockResponse>("/api/suppressions", {
+        const r = await api<BlockResponse>("/api/suppressions", {
           method: "POST",
           json: { email: sub.email },
         });
         m.close();
-        toast(`Blocked ${sub.email}`);
+        // Something else may have suppressed it since the list was read: say what stands.
+        toast(
+          r.added
+            ? `Blocked ${sub.email}`
+            : `${sub.email} was already suppressed (${SUPPRESSION_FLAG[r.suppression.reason]})`,
+        );
         onDone();
       } catch (e) {
         m.error(describeError(e));
@@ -238,7 +253,7 @@ export function confirmUnblock(sub: Subscriber, onDone: () => void, signal: Abor
       ? "They’re confirmed, so they’ll receive your posts again."
       : "They’ll receive posts again only once they’re confirmed.";
   const m = modal(
-    html`<h3>Unblock this address?</h3><p class="hint">Undoes your block on <strong>${sub.email}</strong>. ${mailed}</p><div class="actions"><button type="button" id="ubCancel">Cancel</button><button type="button" class="primary" id="ubGo">Unblock</button></div>`,
+    html`<h3>Unblock this address?</h3><p class="hint">Undoes the block on <strong>${sub.email}</strong>. ${mailed}</p><div class="actions"><button type="button" id="ubCancel">Cancel</button><button type="button" class="primary" id="ubGo">Unblock</button></div>`,
     signal,
   );
   const go = $<HTMLButtonElement>("#ubGo", m.el);
