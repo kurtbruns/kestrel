@@ -5,6 +5,8 @@
 // on screen or is refused. Every outcome, count, attestation, and warning is the server's.
 
 import {
+  EXAMPLE_CSV_NAME,
+  EXAMPLE_TXT_NAME,
   type ImportCommitResponse,
   type ImportFormatResponse,
   type ImportPlanResponse,
@@ -31,6 +33,7 @@ import {
   notImportedCsv,
   type OutcomeLine,
   outcomeLines,
+  rowDifferences,
 } from "./import_plan";
 
 /** The prompt the "Just ask Claude" card offers to copy. */
@@ -53,11 +56,6 @@ const PLAIN_LABELS: Record<PlainListStatus, string> = {
 interface ChosenFile {
   name: string;
   text: string;
-}
-
-/** Text with `code` spans, as the format's own words write them, as markup. */
-function withCode(text: string): Html {
-  return html`${text.split("`").map((part, i) => (i % 2 === 1 ? html`<code>${part}</code>` : part))}`;
 }
 
 export async function renderImport(root: HTMLElement, signal: AbortSignal): Promise<void> {
@@ -165,24 +163,14 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
       <div class="table-wrap"><table class="imp-sample"><thead><tr>${SAMPLE_COLUMNS.map((c) => html`<th><code>${c}</code></th>`)}</tr></thead>
       <tbody>${rows.map((r) => html`<tr>${SAMPLE_COLUMNS.map((c) => html`<td>${r[c] ?? ""}</td>`)}</tr>`)}</tbody></table></div>
       <p class="field-hint">Optional columns: ${optional.map((n, i) => html`${i ? ", " : ""}<code>${n}</code>`)}.</p>
-      <div class="row imp-links"><button type="button" class="ghost" data-template="csv">Download template (CSV)</button><a class="ghost-link" href="#/docs/import-format">Import format reference →</a></div>
-      <details class="imp-columns"><summary>Every column</summary>
-        <div class="table-wrap"><table class="imp-ref"><thead><tr><th>Column</th><th>Takes</th><th>Meaning</th></tr></thead><tbody>${format.columns.map(
-          (c) =>
-            html`<tr><td><code>${c.name}</code>${c.required ? html` <span class="muted">required</span>` : null}</td><td>${
-              c.values
-                ? c.values.map((v, i) => html`${i ? ", " : ""}<code>${v}</code>`)
-                : withCode(c.takes)
-            }</td><td>${withCode(c.meaning)}</td></tr>`,
-        )}</tbody></table></div>
-      </details>`;
+      <div class="row imp-links"><button type="button" class="ghost" data-template="csv">Download example file (CSV)</button><a class="ghost-link" href="#/docs/import-format">Import format reference →</a></div>`;
   }
 
   function plainSample(): Html {
     return html`<p class="imp-text">A <code>.txt</code> file with one address per line.</p>
-      ${codeBlock("email-list.txt", html`${TEMPLATE_TXT.replace(/\r\n/g, "\n").trim()}`, TEMPLATE_TXT)}
+      ${codeBlock(EXAMPLE_TXT_NAME, html`${TEMPLATE_TXT.replace(/\r\n/g, "\n").trim()}`, TEMPLATE_TXT)}
       <p class="imp-text">Next you’ll say what they are: subscribed (the default), unsubscribed, or bounced.</p>
-      <div class="row imp-links"><button type="button" class="ghost" data-template="txt">Download template (email-list.txt)</button></div>`;
+      <div class="row imp-links"><button type="button" class="ghost" data-template="txt">Download example file (.txt)</button></div>`;
   }
 
   function askClaude(): Html {
@@ -198,7 +186,7 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
             const file = await apiFile(`/api/imports/template.${kind}`);
             saveFile(
               file.text,
-              file.filename ?? (kind === "txt" ? "email-list.txt" : "kestrel-subscribers.csv"),
+              file.filename ?? (kind === "txt" ? EXAMPLE_TXT_NAME : EXAMPLE_CSV_NAME),
               kind === "txt" ? "text/plain" : "text/csv",
             );
           } catch (e) {
@@ -310,7 +298,7 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
             ? html`<p class="imp-text">Nobody is imported as a subscriber, so there’s nothing to attest.</p>`
             : null
         }
-        ${notice ? html`<div class="field-error imp-act-error" role="alert" tabindex="-1"><span class="field-error-ico" aria-hidden="true">!</span><span>${notice}</span></div>` : null}
+        ${notice ? actError(notice) : null}
         <div class="actions imp-actions"><a class="ghost-link" href="#/subscribers">Cancel</a><button type="button" class="primary" id="impGo">Import</button></div>
       </section>`,
     );
@@ -439,16 +427,8 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
   function paintError(message: string): void {
     body.querySelector(".imp-act-error")?.remove();
     const line = document.createElement("div");
-    line.className = "field-error imp-act-error";
-    line.setAttribute("role", "alert");
-    const ico = document.createElement("span");
-    ico.className = "field-error-ico";
-    ico.setAttribute("aria-hidden", "true");
-    ico.textContent = "!";
-    const text = document.createElement("span");
-    text.textContent = message;
-    line.append(ico, text);
-    $(".imp-actions", body).before(line);
+    setHtml(line, actError(message));
+    $(".imp-actions", body).before(...line.childNodes);
   }
 
   // --- 3. Done ----------------------------------------------------------------------------
@@ -464,6 +444,8 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
           : "you";
     const lines = outcomeLines(done.counts);
     const extra = extraSuppressionsLine(done.counts, done.suppressions_added);
+    // A replay answers with the stored record, not the plan on screen, so nothing compares.
+    const differences = done.replayed ? [] : rowDifferences(p.rows, done.rows, done.differed);
     setHtml(
       body,
       html`<section class="card imp-card imp-done">
@@ -478,13 +460,13 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
         <p class="imp-text imp-nobody">Nobody was emailed. To tell your readers about the move, write a post as usual.</p>
       </section>
       ${
-        done.differed.length > 0
-          ? html`<section class="card imp-card">
+        differences.length > 0
+          ? html`<section class="card imp-card imp-differed">
               <h2>Rows that turned out differently</h2>
-              <p class="imp-text">Your list changed between the plan and the import, so ${rowsText(done.differed.length)} had a different result. Each was applied to the list as it stood.</p>
-              <div class="table-wrap"><table class="imp-ref"><thead><tr><th>Row</th><th>Email</th><th>Planned</th><th>Applied</th></tr></thead><tbody>${done.differed.map(
+              <p class="imp-text">Your list changed between the plan and the import, so ${rowsText(differences.length)} had a different result. Each was applied to the list as it stood.</p>
+              <div class="table-wrap"><table class="imp-ref"><thead><tr><th>Row</th><th>Email</th><th>Planned</th><th>Applied</th></tr></thead><tbody>${differences.map(
                 (d) =>
-                  html`<tr><td>${String(d.row)}</td><td>${d.email}</td><td><code>${d.planned}</code></td><td><code>${d.applied}</code></td></tr>`,
+                  html`<tr><td>${String(d.row)}</td><td>${d.email}</td><td>${d.planned}</td><td>${d.applied}</td></tr>`,
               )}</tbody></table></div>
             </section>`
           : null
@@ -517,6 +499,11 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
   }
 
   paintChooser();
+}
+
+/** Why the commit didn't go through, or why the plan was made again, just above the actions. */
+function actError(message: string): Html {
+  return html`<div class="field-error imp-act-error" role="alert" tabindex="-1"><span class="field-error-ico" aria-hidden="true">!</span><span>${message}</span></div>`;
 }
 
 function isPlain(file: ChosenFile): boolean {

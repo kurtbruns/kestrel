@@ -1068,7 +1068,7 @@ export function createRouter({
       summary:
         "Everything about the import format (SPEC §7), generated from the definition the importer reads with: the preferred file and why, each accepted file with when to use it and what it loses, the columns, the plain list's rules, this deployment's limits, the outcomes, and the attestation.",
       description:
-        "Read it before converting a list. The full CSV (`kestrel-subscribers/1`) is preferred: it carries unsubscribes, bounces, and how each person joined, and it is what the export writes. A plain `.txt` list of addresses is the fallback for a list that is only addresses. Another service's export is converted to the format first; nothing is guessed. `limits.max_rows` is what this deployment takes, with `max_rows_reason` when it is below the format's own limit.",
+        "Read it before converting a list. The full CSV (`kestrel-subscribers/1`) is preferred: it carries unsubscribes, bounces, and how each person joined, and it is what the export writes. A plain `.txt` list of addresses is the fallback for a list that is only addresses. Another service's export is converted to the format first; nothing is guessed. `limits.max_rows` is what this deployment takes, with `max_rows_reason`, a sentence for the publisher, when it is below the format's own limit (on the Workers Free plan's limits, `SUBREQUEST_BUDGET` unset).",
       handler: importRoutes.format,
     },
     {

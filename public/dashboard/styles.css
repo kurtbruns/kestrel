@@ -6007,14 +6007,6 @@ body.has-savebar .content {
 .imp-links {
   margin-top: 10px;
 }
-.imp-columns {
-  margin-top: 12px;
-  font-size: 13px;
-}
-.imp-columns summary {
-  cursor: pointer;
-  color: var(--muted);
-}
 .imp-drop {
   display: flex;
   flex-direction: column;

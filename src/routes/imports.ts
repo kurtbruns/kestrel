@@ -11,6 +11,8 @@
 import {
   ATTESTATION,
   describeFormat,
+  EXAMPLE_CSV_NAME,
+  EXAMPLE_TXT_NAME,
   type ExportResponse,
   type ExportRow,
   fileKindOf,
@@ -67,12 +69,12 @@ function download(body: string, type: string, filename: string): Response {
 
 /** GET /api/imports/template.csv */
 export function templateCsv(): Response {
-  return download(TEMPLATE_CSV, "text/csv", "kestrel-subscribers.csv");
+  return download(TEMPLATE_CSV, "text/csv", EXAMPLE_CSV_NAME);
 }
 
 /** GET /api/imports/template.txt */
 export function templateTxt(): Response {
-  return download(TEMPLATE_TXT, "text/plain", "email-list.txt");
+  return download(TEMPLATE_TXT, "text/plain", EXAMPLE_TXT_NAME);
 }
 
 /** Refuse a body over the limit before reading it, when it says its length. */

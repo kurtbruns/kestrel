@@ -149,7 +149,8 @@ describe("import view", () => {
       "subscribed_at",
     ]);
     expect($$(".imp-sample tbody tr")).toHaveLength(3);
-    expect($(".imp-columns summary").textContent).toBe("Every column");
+    // Each column is described in one place, the reference page the link opens.
+    expect(document.querySelector(".imp-ref")).toBe(null);
     expect($<HTMLAnchorElement>(".imp-links a").getAttribute("href")).toBe("#/docs/import-format");
     expect($("#impLimit").textContent).toBe(
       "CSV or .txt, up to 1,000 rows. On the Workers Free plan’s limits, an import takes 1,000 rows.",
@@ -161,18 +162,18 @@ describe("import view", () => {
     $("[data-sample='plain']").click();
     expect($("[data-sample='plain']").getAttribute("aria-pressed")).toBe("true");
     expect($("#impSample").textContent).toContain("ada@example.com\ngrace@example.com");
-    expect($("[data-template]").textContent).toBe("Download template (email-list.txt)");
+    expect($("[data-template]").textContent).toBe("Download example file (.txt)");
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("downloads the template the server serves, under the server's name for it", async () => {
+  it("downloads the example file the server serves, under the server's name for it", async () => {
     fake = fakeApi([
       formatRoute,
       {
         path: "/api/imports/template.csv",
         reply: () =>
           new Response(TEMPLATE_CSV, {
-            headers: { "content-disposition": 'attachment; filename="kestrel-subscribers.csv"' },
+            headers: { "content-disposition": 'attachment; filename="kestrel-import-example.csv"' },
           }),
       },
     ]);
@@ -181,7 +182,7 @@ describe("import view", () => {
     await settle();
     $("[data-template='csv']").click();
     await settle();
-    expect(saved.map((f) => f.name)).toEqual(["kestrel-subscribers.csv"]);
+    expect(saved.map((f) => f.name)).toEqual(["kestrel-import-example.csv"]);
     expect(await saved[0]?.blob.text()).toBe(TEMPLATE_CSV);
   });
 
@@ -467,6 +468,7 @@ describe("import view", () => {
         reply: () =>
           jsonResponse(
             committed({
+              rows: planFor("list.csv").rows,
               differed: [
                 {
                   row: 4,
@@ -501,10 +503,73 @@ describe("import view", () => {
     expect($(".imp-done").textContent).toContain("Nobody was emailed.");
     expect($(".imp-record").textContent).toContain("pub@birds.example");
     expect($(".imp-record").textContent).toContain(ATTEST);
-    expect($(".imp-ref").textContent).toContain("ada@example.com");
+    expect($$(".imp-differed tbody tr").map((tr) => tr.textContent)).toEqual([
+      "4ada@example.comImported as subscribedUnchanged",
+    ]);
     // Another file starts over at the chooser, with focus on it.
     $("#impAnother").click();
     expect(document.activeElement).toBe($("#impChoose"));
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("lists a row that turned out differently from the plan on screen, which the commit's own plan can't see (SPEC §7)", async () => {
+    // Planned as confirmed, so absent from the plan's rows; the reader unsubscribed before the
+    // commit, whose own plan already kept them, so the server's differed is empty.
+    fake = fakeApi([
+      formatRoute,
+      { method: "POST", path: "/api/imports/plan", reply: () => planFor("list.csv") },
+      {
+        method: "POST",
+        path: "/api/imports",
+        reply: () =>
+          jsonResponse(
+            committed({
+              counts: counts({ create_confirmed: 24, kept_unsubscribed: 1 }),
+              rows: [
+                ...planFor("list.csv").rows,
+                {
+                  row: 7,
+                  email: "rosa@example.com",
+                  outcome: "kept_unsubscribed",
+                  suppression_added: false,
+                },
+              ],
+            }),
+            201,
+          ),
+      },
+    ]);
+    await mount(renderImport);
+    await settle();
+    await chooseFile("list.csv", "the file");
+    $<HTMLInputElement>("#impAttest").click();
+    $("#impGo").click();
+    await settle();
+    expect($(".imp-differed").textContent).toContain("so 1 row had a different result");
+    expect($$(".imp-differed tbody tr").map((tr) => tr.textContent)).toEqual([
+      "7rosa@example.comImported as subscribedKept unsubscribed",
+    ]);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("says nothing turned out differently when the result is the plan on screen", async () => {
+    fake = fakeApi([
+      formatRoute,
+      { method: "POST", path: "/api/imports/plan", reply: () => planFor("list.csv") },
+      {
+        method: "POST",
+        path: "/api/imports",
+        reply: () => jsonResponse(committed({ rows: planFor("list.csv").rows }), 201),
+      },
+    ]);
+    await mount(renderImport);
+    await settle();
+    await chooseFile("list.csv", "the file");
+    $<HTMLInputElement>("#impAttest").click();
+    $("#impGo").click();
+    await settle();
+    expect($("#impDoneHead").textContent).toBe("Import done");
+    expect(document.querySelector(".imp-differed")).toBe(null);
     expect(fake.unhandled).toEqual([]);
   });
 

@@ -748,6 +748,11 @@ export const TEMPLATE_CSV = toImportCsv(TEMPLATE_ROWS);
 /** The plain-list template's text: one address per line. */
 export const TEMPLATE_TXT = "ada@example.com\r\ngrace@example.com\r\nlinus@example.com\r\n";
 
+/** The names the two example files download under, so they read as examples of an import,
+ *  not as a list someone exported. */
+export const EXAMPLE_CSV_NAME = "kestrel-import-example.csv";
+export const EXAMPLE_TXT_NAME = "kestrel-import-example.txt";
+
 /**
  * What an import does to one address (SPEC §7), after its repeats are folded together. A row
  * that changes its status and adds a suppression reports its status outcome and

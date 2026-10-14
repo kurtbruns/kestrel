@@ -156,7 +156,10 @@ describe("the format, as the API serves it (SPEC §7)", () => {
   it("names the lower row limit on Workers Free, and the full one when the budget says Paid", async () => {
     const free = await readJson(await SELF.fetch(`${base}/api/imports/format`, { headers: AUTH }));
     expect(free.limits.max_rows).toBe(IMPORT_LIMITS.maxRowsFree);
-    expect(free.limits.max_rows_reason).toContain("Workers Free");
+    // Said to the publisher, who may not run the deployment: no setting's name in it.
+    expect(free.limits.max_rows_reason).toBe(
+      "That’s the limit on Cloudflare’s Workers Free plan. Whoever runs your Kestrel can raise it to 10,000 rows by moving to Workers Paid.",
+    );
     const paid = await readJson(await fetchWith(PAID, "/api/imports/format", { headers: AUTH }));
     expect(paid.limits).toMatchObject({ max_rows: IMPORT_LIMITS.maxRows, max_rows_reason: null });
   });
@@ -164,14 +167,23 @@ describe("the format, as the API serves it (SPEC §7)", () => {
   it("serves templates that, uploaded unchanged, plan cleanly", async () => {
     const csv = await SELF.fetch(`${base}/api/imports/template.csv`, { headers: AUTH });
     expect(csv.headers.get("content-type")).toBe("text/csv; charset=utf-8");
+    // Named as examples of an import, so a downloaded one isn't taken for an exported list.
+    expect(csv.headers.get("content-disposition")).toBe(
+      'attachment; filename="kestrel-import-example.csv"',
+    );
     const fromCsv = await planOk({
-      file: { name: "kestrel-subscribers.csv", text: await csv.text() },
+      file: { name: "kestrel-import-example.csv", text: await csv.text() },
     });
     expect(fromCsv.counts).toEqual(
       counts({ create_confirmed: 2, create_unsubscribed: 1, suppression_added: 1 }),
     );
     const txt = await SELF.fetch(`${base}/api/imports/template.txt`, { headers: AUTH });
-    const fromTxt = await planOk({ file: { name: "email-list.txt", text: await txt.text() } });
+    expect(txt.headers.get("content-disposition")).toBe(
+      'attachment; filename="kestrel-import-example.txt"',
+    );
+    const fromTxt = await planOk({
+      file: { name: "kestrel-import-example.txt", text: await txt.text() },
+    });
     expect(fromTxt.counts).toEqual(counts({ create_confirmed: 3 }));
   });
 
@@ -195,7 +207,10 @@ describe("the format, as the API serves it (SPEC §7)", () => {
     }
     const outcomes = tableRows("| Outcome | When |");
     expect(outcomes.map((o) => o[1])).toEqual(IMPORT_OUTCOMES.map((o) => `\`${o}\``));
-    const example = referencePage.split("Here is a small file:\n\n```\n")[1]?.split("```")[0] ?? "";
+    const example =
+      referencePage
+        .split("only the columns they use, since an optional column may be left out:\n\n```\n")[1]
+        ?.split("```")[0] ?? "";
     const p = await planOk({ file: { name: "example.csv", text: example } });
     expect(p.counts).toEqual(
       counts({ create_confirmed: 2, create_unsubscribed: 1, suppression_added: 1 }),
