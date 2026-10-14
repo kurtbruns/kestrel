@@ -1,7 +1,8 @@
-// The subscriber actions taken from more than one surface: adding one (the list, the
-// dashboard's quick actions), and unsubscribing or erasing one (the list's row menu).
+// The subscriber dialogs: adding one (the list, the dashboard's quick actions), and
+// viewing, unsubscribing, or erasing one (the list's row menu).
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
+import type { OptIn } from "../../shared/imports";
 import type {
   EraseResponse,
   ErasureAcknowledgementRequired,
@@ -15,6 +16,7 @@ import { $ } from "../ui/dom";
 import { fmt } from "../ui/format";
 import { html } from "../ui/html";
 import { busy, modal, toast } from "../ui/widgets";
+import { evidenceText, joinedVia, originName } from "./provenance";
 
 /**
  * Add subscriber → the normal double opt-in (never an auto-confirm). While no provider is
@@ -128,6 +130,53 @@ function addedMessage(addr: string, action: SubscribeAction): string {
     default:
       return `Confirmation sent to ${addr}`;
   }
+}
+
+const STATUS_WORDS: Record<Subscriber["status"], string> = {
+  pending: "Pending",
+  confirmed: "Confirmed",
+  unsubscribed: "Unsubscribed",
+};
+
+const OPT_IN_WORDS: Record<OptIn, string> = {
+  double: "Double",
+  single: "Single",
+  unknown: "Unknown",
+};
+
+/**
+ * One subscriber, on request: how they joined, when, and the evidence (SPEC §7). It only
+ * shows: nothing in it can be changed, since it is the record of how they came to be here.
+ */
+export function viewSubscriberModal(sub: Subscriber, signal: AbortSignal): void {
+  const evidence = evidenceText(sub.consent_evidence);
+  const imported = sub.import_id !== null;
+  const m = modal(
+    html`<h3 class="sub-title">${sub.email}</h3><p class="hint">${STATUS_WORDS[sub.status]}</p>
+    <dl class="sub-dl">
+      <dt>How they joined</dt><dd>${joinedVia(sub) ?? (sub.status === "pending" ? "Signed up here, not confirmed yet" : "Signed up here, never confirmed")}</dd>
+      ${
+        imported
+          ? html`<dt>Origin</dt><dd>${originName(sub.origin) ?? "Unknown"}</dd>
+            <dt>Opt-in</dt><dd>${OPT_IN_WORDS[sub.opt_in]}</dd>
+            <dt>Import</dt><dd><code>${sub.import_id ?? ""}</code></dd>`
+          : null
+      }
+      <dt>Joined</dt><dd>${
+        // When the row was added here, as the roster's Joined column shows it. An import
+        // records the file's own date (its confirmed_at, else its subscribed_at) as the
+        // confirmation below, which the note says is the file's.
+        fmt(sub.created_at)
+      }</dd>
+      <dt>Confirmed</dt><dd>${fmt(sub.confirmed_at)}</dd>
+      ${sub.unsubscribed_at ? html`<dt>Left</dt><dd>${fmt(sub.unsubscribed_at)}</dd>` : null}
+      <dt>Evidence</dt><dd>${evidence ? html`<pre class="sub-evidence">${evidence}</pre>` : "None recorded"}</dd>
+    </dl>
+    ${imported ? html`<p class="hint sub-note">The origin, opt-in, confirmation date, and evidence are what the imported file said, not something Kestrel recorded itself.</p>` : null}
+    <div class="actions"><button type="button" id="vsClose">Close</button></div>`,
+    signal,
+  );
+  $("#vsClose", m.el).onclick = m.close;
 }
 
 export function confirmUnsubscribe(sub: Subscriber, onDone: () => void, signal: AbortSignal): void {

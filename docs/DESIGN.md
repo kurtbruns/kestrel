@@ -64,10 +64,11 @@ The editor, the web version, the docs, and the walls hide the sidebar: writing w
 | Web version | `#/web/post/:post` | How the post's public page will look, before it is public. |
 | Sent | `#/sent` | What needs attention, what's queued, what's going out, what went out. |
 | Send page | `#/sent/:send` | How one send is going (the watch) or went (the record). |
-| Subscribers | `#/subscribers` | Who is on the list, and in what state. |
+| Subscribers | `#/subscribers` | Who is on the list, in what state, and how they joined. |
+| Import subscribers | `#/subscribers/import` | What bringing a list in would do, before it does it. |
 | Template | `#/template` | The one email template every post is sent in. |
 | Settings | `#/settings` | The publication's preferences, and the deploy facts read-only. |
-| Docs and API | `#/docs`, `#/reference` | The setup guide and the API reference, served by the instance. |
+| Docs and API | `#/docs`, `#/reference` | The setup guide, the publisher's pages, and the API reference, served by the instance. |
 
 The admin UI may link out to public pages (View publication, Archive ↗, View published post ↗). No public page links or redirects into `/dashboard` (SPEC §11), apart from the dev-only pill above.
 
@@ -195,7 +196,11 @@ While a send is paused, the watch gives no rate or time to finish, which would p
 
 ### Subscribers
 
-The list as a whole (SPEC §8). The head has **Export** (Ghost) beside **Add subscriber** (Primary). A summary card gives the composition of the whole list, with an info tip defining each state; it doesn't change with the filter. The list filters by consent state and, separately, by suppression, because suppression is an overlay on an address, not a consent state (SPEC §7). A suppressed address carries a small red flag beside it naming why, never a value in the Status column. Its consent state stays in the Status column in the unsubscribed grey: still true, but not in effect while the suppression stands, so a confirmed address that bounced never reads as one that is mailed. An erasure's marker alone doesn't grey it, since the person's own confirmation lifts the marker and their pending state is still live.
+The list as a whole (SPEC §8). The head has **Import** and **Export** (Ghost) beside **Add subscriber** (Primary); when the title and the three buttons don't fit on one line, the buttons go under the title. A summary card gives the composition of the whole list, with an info tip defining each state; it doesn't change with the filter. The list filters by consent state and, separately, by suppression, because suppression is an overlay on an address, not a consent state (SPEC §7). A suppressed address carries a small red flag beside it naming why, never a value in the Status column. Its consent state stays in the Status column in the unsubscribed grey: still true, but not in effect while the suppression stands, so a confirmed address that bounced never reads as one that is mailed. An erasure's marker alone doesn't grey it, since the person's own confirmation lifts the marker and their pending state is still live. An empty list, rather than a filter that matches no one, says so with a link to the import in its text.
+
+**How they joined** is a column beside Status, never a fourth state (SPEC §7). It is keyed on the import that brought a subscriber, not on what the file claimed: "Imported · Sendy, single opt-in" for anyone an import brought, with the origin as the service spells its name and "opt-in unknown" when the file didn't say, and "Double opt-in" only for a confirmation Kestrel recorded itself. Someone who signed up here and hasn't confirmed has nothing to say yet, an em dash, and the stacked phone row drops the cell.
+
+**Every row's menu** (⋯) offers, in order, **View subscriber**, **Unsubscribe** (only for a confirmed subscriber), and **Erase**, each described below. **View subscriber** is a read-only dialog titled with the address, its status beneath, then how they joined, the origin and opt-in an import's file gave, the import's id, when they joined (labeled Joined, the same date as the roster's Joined column), confirmed, and left, and the evidence pretty-printed, or "None recorded". An import records the file's own date (its confirmation time, else its subscription time) as the confirmation, so for an imported subscriber a line says the origin, opt-in, confirmation date, and evidence are the file's account, not something Kestrel recorded. It's on request rather than in the table, since evidence is for the rare question, not the daily scan. It's named for the subscriber rather than what it holds, so it can grow into a page for one subscriber, with their sends, without renaming.
 
 **Add subscriber** starts double opt-in and says so. Its act is **Send confirmation**, not "Add", because no one joins the audience until they confirm (I1). **Unsubscribe**, from a confirmed subscriber's row menu, is immediate (I2) and confirmed in a dialog with a Danger button.
 
@@ -203,7 +208,32 @@ The list as a whole (SPEC §8). The head has **Export** (Ghost) beside **Add sub
 
 **Adding an erased address** asks before sending. When Send confirmation meets an erased address, a second dialog stacks over Add subscriber: "Send to an erased address?", naming the address and when it was erased, and saying to send only if the person asked to join again, and that they rejoin only by confirming. Its Primary is **Send confirmation**; Cancel, the default focus, returns to the Add dialog with nothing sent. The public form never asks.
 
+**Import** opens Import subscribers, below.
+
 **Export** downloads the whole list as one CSV in the import format (SPEC §7), named for the day the export began. It reads every page of the export before saving anything and writes them with the same writer the server documents, so the file is the one the API's pages make, whatever the list's size. The button reads "Exporting…" until the file is saved. Nothing is confirmed, since nothing changes; a failure is a toast in the server's words, and no partial file is saved. An export finishes and saves its file even if you leave the page while it reads.
+
+### Import subscribers
+
+Bringing a list in (SPEC §7) at `#/subscribers/import`, under Subscribers in the navigation. It should feel obviously safe: see what Kestrel expects, see exactly what will happen, attest, commit, and get a report. The page decides nothing: the format, the limit, every outcome and count, the attestation, the sends that would grow, and the daily-writes warning are the server's, shown as they arrive (§1.2). The head is ← Subscribers, the title, and one line: "Nothing changes until you review what will happen and confirm." The rest is one of three states, in place.
+
+**1. Before a file.** The shape comes first, so a publisher sees what Kestrel reads before being asked for anything.
+
+- **The file Kestrel reads**, a card with a **Full list | Plain list** toggle (the Settings toggle, §7). Full list shows a three-row sample of the five columns that decide a row (`email`, `status`, `opt_in`, `origin`, `subscribed_at`), a line naming the optional columns, **Download example file (CSV)** (Ghost), and **Import format reference →** into the Docs tab, the one place every column is described, so the screen never holds a second copy to drift from it. Plain list shows a `.txt` sample, says the next step asks what the addresses are, and offers **Download example file (.txt)**. Both example files are the server's, under its names (`kestrel-import-example.csv` and `.txt`), named as examples so a downloaded one isn't taken for an exported list.
+- **Just ask Claude**, a card saying Claude converts another service's export and checks it with the publisher, with a prompt to copy.
+- **The drop zone**, dashed, with **Choose file**, the view's one Primary, and "CSV or .txt, up to N rows", N being this deployment's limit, followed by the server's reason when it is below the format's own.
+
+A file the server refuses (not in the format, a value it doesn't take, too many rows) is field validation under the chooser (§5), in the server's words, with the same prompt for Claude beneath. Nothing is guessed, and the chooser keeps focus.
+
+**2. A file chosen.** Planning writes nothing, so it runs as soon as a file is chosen or dropped; there is no Plan button. The chooser reads "Reading…" meanwhile, and once the plan is in, focus moves to the file row. One screen then holds the plan and the confirmation:
+
+- **The file row**: name, which kind of file, rows and distinct addresses, and **Replace file** (Ghost), which opens the picker again and plans the new file from the start: its boxes unticked, and a plain list's answer back to Subscribed.
+- **For a plain list**, "These addresses are **Subscribed | Unsubscribed | Bounced**", which plans again when changed, and a line that how they joined is recorded as unknown.
+- **What will happen**: one line per outcome with a count, in reading order (who joins, who leaves, what else the file does, what it leaves out), the first confirming line carrying its breakdown by opt-in and origin. Addresses blocked by a suppression here and readers this list keeps as they are (unsubscribed here, or confirmed here after the file says they left) sit apart under "Kept as they are here", so nobody reads them as imported. A row that also adds a suppression is said once beneath, not counted twice. **Download the N rows not imported as subscribed (CSV)** (Ghost) gives each row's number, address, and outcome. The plan's daily-writes warning, when it has one, is the Schedule dialog's amber box (§4), in the plan's words.
+- **Confirm**: a box per scheduled send that would grow ("“Owls”, sending Oct 14, 9:00 AM, goes to 25 more people."), then the attestation in the plan's words, both unticked, and under it "Only import people who asked to receive [publication]. If you’re unsure about some, take them out of the file before importing.", naming the publication as the plan's attestation does When nobody is imported as subscribed there's nothing to attest, and the card says so. Then Cancel (back to Subscribers) and **Import** (Primary).
+
+Import stays enabled. Pressing it with a box unticked marks that box with why it's needed and moves focus there, the first missing one down the page, as Schedule does with an empty subject (§3, Editor). If the commit comes back `plan_stale` (another import landed, or the scheduled posts it would grow changed), the page plans the file again, shows the new plan with its boxes unticked, and says above the actions, with focus there: "Your list or its scheduled posts changed since this plan, so here is the plan again as things stand now. Review it, then import." The commit always sends the plan on screen and the file it was made from, and Import is unavailable while a plain list's new answer is being planned. Any other refusal of the commit goes above the actions too, in the server's words, like a dialog error (§5). The file stays only in the page: nothing is stored between the plan and the commit.
+
+**3. Done.** The page shows the result and moves focus to its heading: what happened, per outcome as applied; any rows that turned out differently from the plan on screen, with what was planned and what was applied, in words (the commit plans again and its own `differed` covers only the commit itself, so the page also compares the rows of the plan it showed with the result's, which together name every row not imported as subscribed); "Nobody was emailed. To tell your readers about the move, write a post as usual."; and the import's record (the file, a fingerprint of it, when and by whom, and the attestation as given). **See your subscribers** is the Primary, beside **Import another file** (Ghost), which goes back to the chooser with focus on Choose file. The line that nothing changes yet goes, since something has. A commit repeated after a lost answer says it was already done and that nothing was written again.
 
 ### Template
 
@@ -255,7 +285,7 @@ The groups have no headings, only a wider gap: each section's title, its **inten
 
 The setup guide and the API reference share one room with its own bar (back to the dashboard, a Docs or API switch, and close) over a contents rail and the page. The build stamp sits at the rail's foot, and nowhere on the publication's screens: it's for a bug report, not the publisher's day.
 
-- **Docs** renders the setup guide, one doc per page. The index lists the main path first, numbered because its pages are steps taken in order, then the guides and the reference, unnumbered because a reader picks from them. A doc's Previous and Next stay within its section, so the main path ends at its last step.
+- **Docs** renders the setup guide and the publisher's pages, one doc per page. The index lists the main path first, numbered because its pages are steps taken in order, then the guides, the reference, and the publisher's pages, unnumbered because a reader picks from them. A doc's Previous and Next stay within its section, so the main path ends at its last step.
 - **API reference** lists each tier's routes under the resource they act on, whose heading stays pinned while its routes scroll by. Each route is one row (method badge, path, summary) that opens in place to its parameters, body types, JSON examples, and a curl command for this instance carrying the credential its tier needs. A filter above the first tier narrows the whole list, rail included, and `/` focuses it.
 
 ---
@@ -304,7 +334,7 @@ On the Workers Free plan's limits, a send to more than 5,000 recipients may use 
 - **The scheduled banner** carries the same words as a line under the countdown, for as long as the send is scheduled. The line keeps the banner's own violet, led by an amber ⚠️: a warning that blocks nothing shouldn't outweigh the send it's about, and the mark says it's worth a look without coloring the words.
 - **Nowhere else.** It isn't an attention item: nothing is wrong yet, and the health block is for what needs a person now (§1.3).
 
-An import plan's warning about the same limit (SPEC §7) is shown by whatever surface presents the plan.
+An import plan's warning about the same limit (SPEC §7) is the same amber box on the import screen (§3, Import subscribers), in the plan's words.
 
 ### Re-making scheduled emails
 
@@ -362,7 +392,7 @@ Every message has exactly one home, chosen by how long it lives and what the rea
 | **Save cue** | The editor's save state: Unsaved, Saving…, Saved, or why the last save failed. | Continuous; a failure stays until a save succeeds. |
 | **Banner** | A standing state of the screen's subject, with its actions: the editor's `scheduled` and `conflict` banners. | While the state holds. |
 | **Field error** | Why one field's value is refused, beneath the field, on a page or in a dialog. | Until the value changes. |
-| **Dialog error** | Why a dialog's act didn't go through, when no one field is at fault, just above its buttons. | Until the next try. |
+| **Dialog error** | Why a dialog's act didn't go through, when no one field is at fault, just above its buttons. A page whose act sits at its foot, like Import, says it the same way. | Until the next try. |
 | **Attention** | A condition someone must act on (§4). | Until the condition clears. |
 | **Standing line** | Why an act is unavailable, such as no provider connected (§4). | Every time it's shown, while it's true. |
 | **Wall** | A state in which nothing in the app can work (§2). | Until reload. |
@@ -427,7 +457,7 @@ The roles differ by fill, border, and weight, **never by height**: every labelle
 
 **Controls outside the five roles, on purpose:**
 
-- **Toggles and tabs** (**Edit | Preview**, **Styled | Plain**, **Desktop | Phone**, **Failures | Delivered | All**) switch what you're looking at; they never commit an act. The small pill toggles mark the pressed segment in the Secondary palette, and a section's main toggle is a step more prominent than one that only changes a preview's width.
+- **Toggles and tabs** (**Edit | Preview**, **Styled | Plain**, **Desktop | Phone**, **Failures | Delivered | All**, **Full list | Plain list**) switch what you're looking at; they never commit an act. A plain list's **Subscribed | Unsubscribed | Bounced** is one too: it changes what the plan shows, and planning writes nothing. The small pill toggles mark the pressed segment in the Secondary palette, and a section's main toggle is a step more prominent than one that only changes a preview's width.
 - **The text link** (`linkbtn`) is an act styled as a link, for a choice that must read as clearly demoted below even Ghost: Send now → in the Schedule dialog. Use a real role anywhere a demotion isn't the point.
 - **Copy** is a utility on a value, not an act on the publication: the word and a glyph that turns to a check for a moment when the copy lands. It says it worked where it sits, never with a toast, unless the browser refuses the clipboard. The setup guide's code blocks still carry an older word-only button that reads "Copied".
 - **Mockups** of reader controls (the embeddable form's Subscribe button) are inert and unfocusable, filled with the reader's ink rather than any role's color, because they show the reader's chrome rather than offer an act.
@@ -473,7 +503,7 @@ The docs room's bar stays one row at every width, so its anchors always clear it
 
 **Who speaks.** The UI speaks to the publisher as "you", and calls itself "Kestrel" when it has to. Claude is "Claude", including as the author of a revision. Never "we".
 
-**Use the spec's words.** A **post** is what the publisher writes; a **send** is one dispatch of it. **Delivered** always means a receipt confirmed it; a provider's acceptance is **accepted**. A delivery failure is a **bounce**, a **complaint**, or **unsent**. Consent states are **confirmed**, **pending**, and **unsubscribed**; **suppressed** is the overlay. Never internal names in the UI, such as "fake transport".
+**Use the spec's words.** A **post** is what the publisher writes; a **send** is one dispatch of it. **Delivered** always means a receipt confirmed it; a provider's acceptance is **accepted**. A delivery failure is a **bounce**, a **complaint**, or **unsent**. Consent states are **confirmed**, **pending**, and **unsubscribed**; **suppressed** is the overlay. "Consent" itself stays the spec's term, not the screen's: on a screen, say what the reader did ("agreed to receive your posts", **How they joined**), since the bare word reads as legal and can alarm a publisher who did nothing wrong. Never internal names in the UI, such as "fake transport".
 
 **Name a thing by what it is.** The Preview tab, a test, and the web version are three copies of a post, named for what each is (§3). The schedule's freeze reads as "locked" and "Cancel the schedule to edit". Where the spec says a scheduled email is *re-made*, the publisher reads that a change *applies to* scheduled emails, that they were *made again*, or that an email's *look changed*.
 

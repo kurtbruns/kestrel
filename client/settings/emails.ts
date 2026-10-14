@@ -55,7 +55,7 @@ export function recipientsSection(): Html {
       ${secHead("Default test recipients", chip("editable", "Editable"))}
       <div class="set-card">
         <div class="set-recip">
-          <p class="field-hint" style="margin:0">Pre-filled into <strong>Send test email</strong> so you can proof a post against your own inboxes before scheduling. These are your addresses, and they don’t go through the subscribe/consent flow.</p>
+          <p class="field-hint" style="margin:0">Pre-filled into <strong>Send test email</strong> so you can proof a post against your own inboxes before scheduling. These are your addresses, and they don’t go through the subscribe-and-confirm flow.</p>
           <div class="set-chips" id="recipChips"></div>
           <div class="set-recip-add">
             <input type="email" id="recipInput" placeholder="you@example.com" autocomplete="off">

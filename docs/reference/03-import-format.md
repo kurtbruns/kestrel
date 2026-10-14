@@ -2,18 +2,18 @@
 
 Kestrel imports a subscriber list in one documented format, `kestrel-subscribers/1`, and exports the whole list in the same format. This page describes the format, what an import does to each address, and the limits.
 
-Kestrel never guesses what another service's export means, because a wrong guess about who agreed to be emailed can't be taken back. An export from Sendy, Mailchimp, or anywhere else is converted to this format first, by Claude or by hand. The API serves everything on this page at `GET /api/imports/format`, generated from the same definition the importer reads with, along with a CSV template at `GET /api/imports/template.csv` and a plain-list template at `GET /api/imports/template.txt`.
+Kestrel never guesses what another service's export means, because a wrong guess about who agreed to be emailed can't be taken back. An export from Sendy, Mailchimp, or anywhere else is converted to this format first, by Claude or by hand. The API serves everything on this page at `GET /api/imports/format`, generated from the same definition the importer reads with, along with an example of each kind of file, `kestrel-import-example.csv` at `GET /api/imports/template.csv` and `kestrel-import-example.txt` at `GET /api/imports/template.txt`. The import screen offers both as **Download example file**.
 
 ## Two kinds of file
 
 - **The full CSV (preferred).** It carries unsubscribes, bounces, and how each person joined. It's what the export writes, and you can open it in a spreadsheet to check it before importing.
-- **A plain list (`.txt`).** One address per line, for a list that is only addresses. You say what they all are: subscribed (the default), unsubscribed, or bounced. It loses how each person joined, any times, the evidence of consent, and mixed states.
+- **A plain list (`.txt`).** One address per line, for a list that is only addresses. You say what they all are: subscribed (the default), unsubscribed, or bounced. Nothing else carries over: not how or when each person joined, when anyone left, or any evidence of their consent. And since every address is the one kind you choose, unsubscribes and bounces each need a file of their own.
 
 The file's name decides which it is: `.csv` or `.txt`. Anything else is refused.
 
 ## The CSV
 
-A CSV file (RFC 4180, UTF-8) with a header row of the column names below, in any order, then one row per address. Column names are written exactly, in lowercase. A row records what the source claims, never what Kestrel will do: the import decides that, under the rules further down.
+A CSV file saved as UTF-8 (in a spreadsheet, **CSV UTF-8**), with a header row of the column names below, in any order, then one row per address. A value with a comma, a quote, or a line break in it is wrapped in double quotes, with each quote inside written twice, as spreadsheets write it (RFC 4180). Column names are written exactly, in lowercase. A row records what the source claims, never what Kestrel will do: the import decides that, under the rules further down.
 
 | Column | Required | Values | Meaning |
 | --- | --- | --- | --- |
@@ -33,7 +33,7 @@ An instant is a UTC ISO-8601 time with its zone, such as `2024-03-01T09:30:00Z` 
 
 Any other column is refused, naming it. A source's other columns belong in `evidence`, as JSON. A file whose header names none of these columns isn't in the format at all, and is refused as such.
 
-Here is a small file:
+The example file, `kestrel-import-example.csv`, shows each case: a double opt-in subscriber with evidence, a single opt-in one, someone who left, and a bounced address. Here are the same four with only the columns they use, since an optional column may be left out:
 
 ```
 email,status,opt_in,origin,suppression,unsubscribed_at,evidence

@@ -10,6 +10,7 @@
 
 import { dailyWritesPercent } from "./daily_writes";
 import { isValidEmail, normalizeEmail } from "./email";
+import { publicationName } from "./publication";
 
 /** The format's name and version, written in its `format` column. */
 export const IMPORT_FORMAT = "kestrel-subscribers/1";
@@ -672,14 +673,18 @@ function csvField(raw: string): string {
     : value;
 }
 
+/**
+ * Records as CSV text, CRLF-terminated (RFC 4180), each value quoted where it needs to be
+ * and guarded against a spreadsheet running it as a formula. The first record is the header.
+ */
+export function toCsv(records: readonly (readonly string[])[]): string {
+  return `${records.map((r) => r.map(csvField).join(",")).join("\r\n")}\r\n`;
+}
+
 /** Rows as a CSV file in the format: the header, then a line per row, CRLF-terminated (RFC 4180). */
 export function toImportCsv(rows: readonly ExportRow[]): string {
   const names = IMPORT_COLUMNS.map((c) => c.name) as (keyof ExportRow)[];
-  const lines = [names.join(",")];
-  for (const row of rows) {
-    lines.push(names.map((name) => csvField(row[name] ?? "")).join(","));
-  }
-  return `${lines.join("\r\n")}\r\n`;
+  return toCsv([names, ...rows.map((row) => names.map((name) => row[name] ?? ""))]);
 }
 
 /** The CSV template: a few rows that show the format's cases, and that plan cleanly as they are. */
@@ -744,6 +749,11 @@ export const TEMPLATE_CSV = toImportCsv(TEMPLATE_ROWS);
 /** The plain-list template's text: one address per line. */
 export const TEMPLATE_TXT = "ada@example.com\r\ngrace@example.com\r\nlinus@example.com\r\n";
 
+/** The names the two example files download under, so they read as examples of an import,
+ *  not as a list someone exported. */
+export const EXAMPLE_CSV_NAME = "kestrel-import-example.csv";
+export const EXAMPLE_TXT_NAME = "kestrel-import-example.txt";
+
 /**
  * What an import does to one address (SPEC §7), after its repeats are folded together. A row
  * that changes its status and adds a suppression reports its status outcome and
@@ -804,9 +814,15 @@ export const ATTESTATION = {
   text: "Everyone I’m importing as subscribed opted in to receive [publication]. This isn’t a purchased, rented, or scraped list.",
 } as const;
 
-/** The attestation's words for one publication. */
+/** The publication as the attestation names it: by the name every surface shows (SPEC §9),
+ *  its own or else the sender's display name, and as "this newsletter" when it has neither. */
+export function attestationPublication(name: string, fromAddress: string): string {
+  return publicationName(name, fromAddress) || "this newsletter";
+}
+
+/** The attestation's words for a publication named as `attestationPublication` names it. */
 export function attestationText(publication: string): string {
-  return ATTESTATION.text.replace("[publication]", publication || "this newsletter");
+  return ATTESTATION.text.replace("[publication]", publication);
 }
 
 /** One row of the plan or the commit that won't be confirmed, with what happens to it. */
@@ -865,8 +881,8 @@ export interface ImportPlanResponse {
   /** The rows that won't be confirmed, in file order, each with its outcome. */
   rows: ImportRowResult[];
   sends_growing: GrowingSend[];
-  /** The attestation the commit needs, or null when no row would be confirmed. */
-  attestation: { version: number; text: string } | null;
+  /** The attestation the commit needs, with the name it calls the publication, or null when no row would be confirmed. */
+  attestation: { version: number; text: string; publication: string } | null;
   /** What the commit must name, so it applies this plan and no other. */
   plan_hash: string;
   /** On the Workers Free plan's limits, when this import and the day's earlier ones (UTC) would write more of D1's daily allowance than the budget leaves room for: the server's words, to show as they stand. Null otherwise. Never a refusal. */

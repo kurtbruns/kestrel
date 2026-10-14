@@ -1,8 +1,9 @@
 /**
- * The in-app setup guide: the repo's `docs/README.md` and the section folders it lists,
- * bundled into the Worker as Text modules (the `rules` entry in wrangler.jsonc) and served
- * read-only through the authed docs API. The markdown in `docs/` is the single source of
- * truth — the pages are NOT editable in the app.
+ * The in-app docs (the setup guide, and the publisher's pages beside it): the repo's
+ * `docs/README.md` and the section folders it lists, bundled into the Worker as Text
+ * modules (the `rules` entry in wrangler.jsonc) and served read-only through the authed
+ * docs API. The markdown in `docs/` is the single source of truth — the pages are NOT
+ * editable in the app.
  *
  * `docs/README.md` is the landing page and the table of contents both: its H1 and intro,
  * then a `##` heading per section with a blurb and a list of the section's pages, numbered
@@ -30,6 +31,7 @@ import notifications from "../../docs/guides/03-notifications.md";
 import rateLimit from "../../docs/guides/05-rate-limit.md";
 import upgrade from "../../docs/guides/07-upgrade.md";
 import tryLocally from "../../docs/guides/08-try-locally.md";
+import yourList from "../../docs/publishing/01-your-list.md";
 import readme from "../../docs/README.md";
 import configuration from "../../docs/reference/01-configuration.md";
 import sendingDomain from "../../docs/reference/02-sending-domain-dns.md";
@@ -53,6 +55,7 @@ const PAGES: Record<string, string> = {
   "reference/01-configuration.md": configuration,
   "reference/02-sending-domain-dns.md": sendingDomain,
   "reference/03-import-format.md": importFormat,
+  "publishing/01-your-list.md": yourList,
 };
 
 // A page's path under docs/: its section's folder, then the file. The slug is the file's

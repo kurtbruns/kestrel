@@ -78,7 +78,7 @@ export interface Plan {
   suppressionsAdded: number;
   confirmed: ConfirmedBreakdown;
   sendsGrowing: GrowingSend[];
-  attestation: { version: number; text: string } | null;
+  attestation: { version: number; text: string; publication: string } | null;
   planHash: string;
   /** The warning about D1's daily writes, on Workers Free's limits only (SPEC §7). */
   dailyWritesWarning: string | null;
@@ -98,7 +98,9 @@ export function maxImportRows(subrequestBudget: number): {
   return onFreePlanLimits({ subrequestBudget })
     ? {
         maxRows: IMPORT_LIMITS.maxRowsFree,
-        reason: `This deployment runs on the Workers Free plan’s limits (SUBREQUEST_BUDGET unset), whose 10 ms of CPU per request can plan and commit about ${IMPORT_LIMITS.maxRowsFree.toLocaleString("en-US")} rows; on Workers Paid, set SUBREQUEST_BUDGET to take up to ${IMPORT_LIMITS.maxRows.toLocaleString("en-US")}.`,
+        // Said to the publisher, who may never have seen Cloudflare: the setting behind it
+        // is the operator's, in the API reference and the import format page.
+        reason: `That’s the limit on Cloudflare’s Workers Free plan. Whoever runs your Kestrel can raise it to ${IMPORT_LIMITS.maxRows.toLocaleString("en-US")} rows by moving to Workers Paid.`,
       }
     : { maxRows: IMPORT_LIMITS.maxRows, reason: null };
 }
@@ -227,6 +229,7 @@ export async function planImport(
   }: {
     maxRows: number;
     maxRowsReason: string | null;
+    /** The publication as the attestation names it (`attestationPublication`). */
     publication: string;
     /** On Workers Free's limits: the plan then warns when it and the day's earlier imports would spend too much of D1's daily writes. */
     freePlan?: boolean;
@@ -336,7 +339,7 @@ export async function planImport(
     confirmed,
     sendsGrowing,
     attestation: needsAttestation
-      ? { version: ATTESTATION.version, text: attestationText(publication) }
+      ? { version: ATTESTATION.version, text: attestationText(publication), publication }
       : null,
     planHash,
     freePlan,

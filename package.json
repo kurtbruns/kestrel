@@ -38,6 +38,7 @@
     "docs/get-started/",
     "docs/guides/",
     "docs/reference/",
+    "docs/publishing/",
     "CHANGELOG.md"
   ],
   "scripts": {

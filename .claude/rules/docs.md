@@ -4,6 +4,7 @@ paths:
   - "docs/get-started/**"
   - "docs/guides/**"
   - "docs/reference/**"
+  - "docs/publishing/**"
   - "src/docs/**"
 ---
 
@@ -13,7 +14,7 @@ The setup guide is the documentation for deploying and running your own instance
 
 ## What the guide is
 
-- **For running your own instance.** Deploying, configuring, and upgrading it. How a publisher writes and sends posts is a separate set of docs.
+- **For running your own instance.** Deploying, configuring, and upgrading it. How a publisher writes and sends posts is a separate set of docs, `docs/publishing/`, whose name and landing aren't settled yet: until they are, it is a fourth section of this landing, "For publishers", written in this voice for the person who writes the newsletter, with no main-path steps.
 - **Followed by humans and robots alike.** Every page is a complete by-hand procedure that Claude can also follow step by step. Claude is the recommended way through, and any skill that automates a step follows the page rather than replacing it.
 - **Run from the reader's instance repository.** `kestrel init` writes it: the instance's configuration, its migrations, and the Kestrel release it runs, installed from npm as `@kurtbruns/kestrel`. Deploys and upgrades happen from it, through its npm scripts and plain wrangler commands (`npx wrangler deploy --env production`), never through a checkout of Kestrel's source. Changing Kestrel's code for one instance is not covered.
 - **Local development is optional.** The Try Kestrel locally first guide covers it, from an empty folder with no Cloudflare account or Git host; Deploy points to it as an optional checkpoint after `init`, and upgrading offers it once as an optional dry run. The README covers running Kestrel's own source, for working on Kestrel.

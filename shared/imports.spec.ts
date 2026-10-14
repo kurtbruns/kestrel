@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  attestationPublication,
   EXPORT_PAGE_ROWS,
   type ExportRow,
   IMPORT_COLUMNS,
@@ -403,5 +404,19 @@ describe("a page of the export on Workers Free (SPEC §8)", () => {
     const rows = page();
     expect(medianMs(() => JSON.stringify({ subscribers: rows }))).toBeLessThan(FREE_CPU_MS);
     expect(medianMs(() => toImportCsv(rows))).toBeLessThan(FREE_CPU_MS);
+  });
+});
+
+describe("attestationPublication (SPEC §9)", () => {
+  it("names the publication by the name it set", () => {
+    expect(attestationPublication("Field Notes", "Birds <a@b.c>")).toBe("Field Notes");
+  });
+
+  it("falls back to the sender's display name", () => {
+    expect(attestationPublication("", '"Birds Weekly" <a@b.c>')).toBe("Birds Weekly");
+  });
+
+  it("calls it this newsletter with neither", () => {
+    expect(attestationPublication("", "a@b.c")).toBe("this newsletter");
   });
 });

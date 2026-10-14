@@ -29,3 +29,9 @@ The detail behind the steps, for when you need it.
 - [Configuration](reference/01-configuration.md)
 - [Sending-domain DNS: SPF, DKIM, and DMARC](reference/02-sending-domain-dns.md)
 - [Subscriber import format](reference/03-import-format.md)
+
+## For publishers
+
+Writing and sending your newsletter once Kestrel is running, and the list it goes to.
+
+- [Your list: importing and exporting](publishing/01-your-list.md)

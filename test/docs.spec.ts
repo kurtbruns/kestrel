@@ -23,6 +23,7 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
       "reference/configuration",
       "reference/sending-domain-dns",
       "reference/import-format",
+      "publishing/your-list",
     ]);
     // Titles are extracted from the markdown, not hard-coded here.
     expect(docs.find((d) => d.slug === "access")?.title).toBe("Lock the dashboard with Access");
@@ -41,6 +42,7 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
       ["get-started", "Get started", true],
       ["guides", "Guides", false],
       ["reference", "Reference", false],
+      ["publishing", "For publishers", false],
     ]);
     for (const s of landing.sections) {
       expect(s.blurb, s.title).toMatch(/^<p>.+<\/p>/s);
