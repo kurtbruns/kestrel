@@ -14,7 +14,7 @@ import {
   addSubscriberModal,
   confirmErase,
   confirmUnsubscribe,
-  consentRecordModal,
+  viewSubscriberModal,
 } from "./dialogs";
 
 // The signal of a page that stays mounted throughout.
@@ -231,7 +231,7 @@ describe("confirmUnsubscribe", () => {
   });
 });
 
-describe("consentRecordModal", () => {
+describe("viewSubscriberModal", () => {
   const signedUp = {
     id: "s2",
     email: "left@b.c",
@@ -249,9 +249,9 @@ describe("consentRecordModal", () => {
     import_id: null,
   };
 
-  /** The consent record's rows, label to value, as the dialog shows them. */
+  /** The subscriber's rows, label to value, as the dialog shows them. */
   const recordRows = () => {
-    const dts = [...document.querySelectorAll(".consent-dl dt")];
+    const dts = [...document.querySelectorAll(".sub-dl dt")];
     return Object.fromEntries(
       dts.map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]),
     );
@@ -261,7 +261,7 @@ describe("consentRecordModal", () => {
     fake = fakeApi([]);
     const importedAt = Date.UTC(2026, 9, 13, 12);
     const fileSaid = Date.UTC(2024, 2, 1, 9, 30);
-    consentRecordModal(
+    viewSubscriberModal(
       {
         ...signedUp,
         status: "confirmed",
@@ -278,27 +278,27 @@ describe("consentRecordModal", () => {
     expect(rows.Joined).toBe(fmt(importedAt));
     expect(rows.Confirmed).toBe(fmt(fileSaid));
     expect("Imported" in rows || "Subscribed" in rows).toBe(false);
-    expect($(".consent-note").textContent).toBe(
-      "The origin, opt-in, confirmation date, and evidence are what the imported file said. Kestrel didn’t record this consent itself.",
+    expect($(".sub-note").textContent).toBe(
+      "The origin, opt-in, confirmation date, and evidence are what the imported file said, not something Kestrel recorded itself.",
     );
-    $("#crClose").click();
+    $("#vsClose").click();
     // Someone who joined here reads the same way, with no line about a file.
-    consentRecordModal({ ...signedUp, status: "confirmed", created_at: 5, confirmed_at: 6 }, live);
+    viewSubscriberModal({ ...signedUp, status: "confirmed", created_at: 5, confirmed_at: 6 }, live);
     const here = recordRows();
     expect(here.Joined).toBe(fmt(5));
     expect("Imported" in here || "Subscribed" in here).toBe(false);
-    expect(document.querySelector(".consent-note")).toBeNull();
+    expect(document.querySelector(".sub-note")).toBeNull();
     expect(fake.calls).toEqual([]);
   });
 
   it("says a reader who signed up here and left never confirmed, and a pending one hasn't yet", () => {
     fake = fakeApi([]);
-    consentRecordModal(signedUp, live);
-    expect($(".consent-dl dd").textContent).toBe("Signed up here, never confirmed");
-    expect($(".consent-dl").textContent).toContain("None recorded");
-    $("#crClose").click();
-    consentRecordModal({ ...signedUp, status: "pending", unsubscribed_at: null }, live);
-    expect($(".consent-dl dd").textContent).toBe("Signed up here, not confirmed yet");
+    viewSubscriberModal(signedUp, live);
+    expect($(".sub-dl dd").textContent).toBe("Signed up here, never confirmed");
+    expect($(".sub-dl").textContent).toContain("None recorded");
+    $("#vsClose").click();
+    viewSubscriberModal({ ...signedUp, status: "pending", unsubscribed_at: null }, live);
+    expect($(".sub-dl dd").textContent).toBe("Signed up here, not confirmed yet");
     expect(fake.calls).toEqual([]);
   });
 });

@@ -1,5 +1,5 @@
-// The subscriber dialogs: adding one (the list, the dashboard's quick actions),
-// unsubscribing or erasing one (the list's row menu), and one's consent record.
+// The subscriber dialogs: adding one (the list, the dashboard's quick actions), and
+// viewing, unsubscribing, or erasing one (the list's row menu).
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
 import type { OptIn } from "../../shared/imports";
@@ -132,6 +132,12 @@ function addedMessage(addr: string, action: SubscribeAction): string {
   }
 }
 
+const STATUS_WORDS: Record<Subscriber["status"], string> = {
+  pending: "Pending",
+  confirmed: "Confirmed",
+  unsubscribed: "Unsubscribed",
+};
+
 const OPT_IN_WORDS: Record<OptIn, string> = {
   double: "Double",
   single: "Single",
@@ -139,15 +145,15 @@ const OPT_IN_WORDS: Record<OptIn, string> = {
 };
 
 /**
- * A subscriber's consent record (SPEC §7): how they joined, when, and the evidence, on
- * request. It only shows: nothing in it can be changed, since it is the record.
+ * One subscriber, on request: how they joined, when, and the evidence (SPEC §7). It only
+ * shows: nothing in it can be changed, since it is the record of how they came to be here.
  */
-export function consentRecordModal(sub: Subscriber, signal: AbortSignal): void {
+export function viewSubscriberModal(sub: Subscriber, signal: AbortSignal): void {
   const evidence = evidenceText(sub.consent_evidence);
   const imported = sub.import_id !== null;
   const m = modal(
-    html`<h3>Consent record</h3><p class="hint"><strong>${sub.email}</strong> · ${sub.status}</p>
-    <dl class="consent-dl">
+    html`<h3 class="sub-title">${sub.email}</h3><p class="hint">${STATUS_WORDS[sub.status]}</p>
+    <dl class="sub-dl">
       <dt>How they joined</dt><dd>${joinedVia(sub) ?? (sub.status === "pending" ? "Signed up here, not confirmed yet" : "Signed up here, never confirmed")}</dd>
       ${
         imported
@@ -164,13 +170,13 @@ export function consentRecordModal(sub: Subscriber, signal: AbortSignal): void {
       }</dd>
       <dt>Confirmed</dt><dd>${fmt(sub.confirmed_at)}</dd>
       ${sub.unsubscribed_at ? html`<dt>Left</dt><dd>${fmt(sub.unsubscribed_at)}</dd>` : null}
-      <dt>Evidence</dt><dd>${evidence ? html`<pre class="consent-evidence">${evidence}</pre>` : "None recorded"}</dd>
+      <dt>Evidence</dt><dd>${evidence ? html`<pre class="sub-evidence">${evidence}</pre>` : "None recorded"}</dd>
     </dl>
-    ${imported ? html`<p class="hint consent-note">The origin, opt-in, confirmation date, and evidence are what the imported file said. Kestrel didn’t record this consent itself.</p>` : null}
-    <div class="actions"><button type="button" id="crClose">Close</button></div>`,
+    ${imported ? html`<p class="hint sub-note">The origin, opt-in, confirmation date, and evidence are what the imported file said, not something Kestrel recorded itself.</p>` : null}
+    <div class="actions"><button type="button" id="vsClose">Close</button></div>`,
     signal,
   );
-  $("#crClose", m.el).onclick = m.close;
+  $("#vsClose", m.el).onclick = m.close;
 }
 
 export function confirmUnsubscribe(sub: Subscriber, onDone: () => void, signal: AbortSignal): void {

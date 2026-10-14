@@ -6123,8 +6123,12 @@ body.has-savebar .content {
   gap: 14px;
   margin-top: 18px;
 }
+/* View subscriber's title is the address, so a long one breaks rather than widens the dialog. */
+.sub-title {
+  overflow-wrap: anywhere;
+}
 .imp-dl,
-.consent-dl {
+.sub-dl {
   display: grid;
   grid-template-columns: max-content 1fr;
   gap: 6px 16px;
@@ -6132,15 +6136,15 @@ body.has-savebar .content {
   font-size: 13.5px;
 }
 .imp-dl dt,
-.consent-dl dt {
+.sub-dl dt {
   color: var(--muted);
 }
 .imp-dl dd,
-.consent-dl dd {
+.sub-dl dd {
   margin: 0;
   overflow-wrap: anywhere;
 }
-.consent-evidence {
+.sub-evidence {
   margin: 0;
   white-space: pre-wrap;
   background: var(--bg);
@@ -6151,12 +6155,12 @@ body.has-savebar .content {
 }
 @media (max-width: 540px) {
   .imp-dl,
-  .consent-dl {
+  .sub-dl {
     grid-template-columns: 1fr;
     gap: 2px;
   }
   .imp-dl dd,
-  .consent-dl dd {
+  .sub-dl dd {
     margin-bottom: 8px;
   }
 }

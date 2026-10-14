@@ -61,8 +61,8 @@ const OUTCOME_WORDS: { outcome: ImportOutcome; one: string; many: string; kept?:
   },
   {
     outcome: "left_out",
-    one: "row pending or with no consent claim, left out, since an import sends no email",
-    many: "rows pending or with no consent claim, left out, since an import sends no email",
+    one: "row still pending, or with no status, left out, since an import sends no email",
+    many: "rows still pending, or with no status, left out, since an import sends no email",
   },
   { outcome: "invalid", one: "row isn’t a valid address", many: "rows aren’t valid addresses" },
   {

@@ -95,8 +95,8 @@ describe("subscribers view", () => {
       document.querySelector<HTMLElement>(".menu-overlay")?.click();
       return items;
     };
-    expect(menuOf("s1")).toEqual(["Consent record", "Unsubscribe", "Erase"]);
-    expect(menuOf("s3")).toEqual(["Consent record", "Erase"]); // pending: nothing to unsubscribe
+    expect(menuOf("s1")).toEqual(["View subscriber", "Unsubscribe", "Erase"]);
+    expect(menuOf("s3")).toEqual(["View subscriber", "Erase"]); // pending: nothing to unsubscribe
     expect(fake.unhandled).toEqual([]);
   });
 
@@ -143,13 +143,14 @@ describe("subscribers view", () => {
     expect($("tr[data-id='s2'] td.how").textContent).toBe("Double opt-in");
     // Pending and never confirmed here: nothing to say yet, and the stacked row drops the cell.
     expect($("tr[data-id='s3'] td.how").classList.contains("empty")).toBe(true);
-    // The consent record shows the evidence on request.
+    // View subscriber shows the evidence on request, under the address.
     $("tr[data-id='s1'] [data-menu]").click();
     $$<HTMLButtonElement>(".menu .menu-item")[0]?.click();
-    expect($(".modal h3").textContent).toBe("Consent record");
+    expect($(".modal h3").textContent).toBe(subs[0]?.email);
+    expect($(".modal .hint").textContent).toBe("Confirmed");
     expect($(".modal").textContent).toContain("Imported · Sendy, single opt-in");
-    expect($(".consent-evidence").textContent).toBe('{\n  "signup_ip": "203.0.113.7"\n}');
-    expect($(".modal").textContent).toContain("Kestrel didn’t record this consent itself.");
+    expect($(".sub-evidence").textContent).toBe('{\n  "signup_ip": "203.0.113.7"\n}');
+    expect($(".modal").textContent).toContain("not something Kestrel recorded itself.");
     expect(fake.unhandled).toEqual([]);
   });
 

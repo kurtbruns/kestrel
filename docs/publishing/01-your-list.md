@@ -61,7 +61,7 @@ Kestrel holds a few lines that an import can't cross:
 - **A reader's newer choice stands.** If someone confirmed here after your old service says they left, they stay subscribed.
 - **Repeats are folded together,** and when one row says subscribed and another says unsubscribed, unsubscribed wins.
 
-In the subscriber list, imported subscribers are **Confirmed** and receive your posts. The **How they joined** column says they were imported, with the service and the opt-in method your file gave, such as "Imported · Sendy, single opt-in". Only someone who confirmed through Kestrel itself reads as "Double opt-in". Choose **Consent record** from a subscriber's ⋯ menu to see the evidence.
+In the subscriber list, imported subscribers are **Confirmed** and receive your posts. The **How they joined** column says they were imported, with the service and the opt-in method your file gave, such as "Imported · Sendy, single opt-in". Only someone who confirmed through Kestrel itself reads as "Double opt-in". Choose **View subscriber** from a subscriber's ⋯ menu to see the evidence.
 
 ## Limits
 

@@ -20,7 +20,7 @@ import {
   addSubscriberModal,
   confirmErase,
   confirmUnsubscribe,
-  consentRecordModal,
+  viewSubscriberModal,
 } from "./dialogs";
 import { exportFile } from "./export";
 import { joinedVia } from "./provenance";
@@ -84,7 +84,7 @@ export async function renderSubscribers(
       setHtml(
         $("#subCounts"),
         html`<div class="card row" style="gap:24px"><span><strong>${c.confirmed}</strong> confirmed</span><span>${c.pending} pending</span><span>${c.unsubscribed} unsubscribed</span><span>${c.suppressed} suppressed</span>${infoTip(
-          "Pending: subscribed but hasn’t clicked the confirmation email. Confirmed: consented, here or at the service they were imported from, and receives sends. Unsubscribed: opted out. Suppressed: bounced, complained, blocked, or erased, and never mailed, whatever the consent state.",
+          "Pending: subscribed but hasn’t clicked the confirmation email. Confirmed: agreed to receive your posts, here or at the service they were imported from, and receives them. Unsubscribed: opted out. Suppressed: bounced, complained, blocked, or erased, and never mailed, whatever their status.",
           { below: true },
         )}</div>`,
       );
@@ -128,7 +128,7 @@ const SUPPRESSION_LABELS: Record<string, string> = {
 };
 const SUPPRESSION_TIPS: Record<string, string> = {
   bounce: "Hard bounce: mail to this address failed, so it won’t be mailed again.",
-  complaint: "Marked as spam, so it won’t be mailed again, whatever the consent state.",
+  complaint: "Marked as spam, so it won’t be mailed again, whatever their status.",
   manual: "Manually blocked, so it won’t be mailed.",
   erased:
     "Erased at the person’s request, then subscribed again. Not mailed until they confirm, which lifts the erasure.",
@@ -140,7 +140,7 @@ function suppressionFlag(s: SubscriberListItem): Html | null {
   const reason = s.suppression_reason ?? "";
   const label = SUPPRESSION_LABELS[reason] || "suppressed";
   const base =
-    SUPPRESSION_TIPS[reason] || "Suppressed, so it won’t be mailed, whatever the consent state.";
+    SUPPRESSION_TIPS[reason] || "Suppressed, so it won’t be mailed, whatever their status.";
   const tip = s.suppression_detail ? `${base} (${s.suppression_detail})` : base;
   return html` <span class="badge suppressed row-flag" title="${tip}">${label}</span>`;
 }
@@ -181,10 +181,10 @@ function renderSubTable(
       if (!row) {
         return;
       }
-      // Anyone's consent record can be read and anyone can be erased (SPEC §7); only a
+      // Anyone can be viewed and anyone can be erased (SPEC §7); only a
       // confirmed subscriber has anything to unsubscribe from.
       const items: MenuItem[] = [
-        { label: "Consent record", onClick: () => consentRecordModal(row, signal) },
+        { label: "View subscriber", onClick: () => viewSubscriberModal(row, signal) },
       ];
       if (row.status === "confirmed") {
         items.push({
