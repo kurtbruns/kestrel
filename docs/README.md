@@ -1,6 +1,6 @@
 # Self-hosting Kestrel
 
-These pages deploy and run your own instance of Kestrel, from an empty repository to a newsletter on your own Cloudflare account. Writing and sending the newsletter is covered in [Publishing](publishing/README.md).
+These pages cover deploying and running your own Kestrel, from an empty repository to a live newsletter on your Cloudflare account. Writing and sending the newsletter is covered in [Publishing](publishing/README.md).
 
 ## Get started
 
