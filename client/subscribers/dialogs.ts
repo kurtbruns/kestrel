@@ -1,9 +1,11 @@
 // The subscriber dialogs: adding one (the list, the dashboard's quick actions), and
-// viewing, unsubscribing, or erasing one (the list's row menu).
+// viewing, unsubscribing, blocking, unblocking, or erasing one (the list's row menu).
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
 import type { OptIn } from "../../shared/imports";
 import type {
+  BlockResponse,
+  ClearSuppressionResponse,
   EraseResponse,
   ErasureAcknowledgementRequired,
   SubscribeAction,
@@ -181,7 +183,7 @@ export function viewSubscriberModal(sub: Subscriber, signal: AbortSignal): void 
 
 export function confirmUnsubscribe(sub: Subscriber, onDone: () => void, signal: AbortSignal): void {
   const m = modal(
-    html`<h3>Unsubscribe this subscriber?</h3><p class="hint">Removes <strong>${sub.email}</strong> from the send audience immediately. They can re-subscribe later through the double opt-in.</p><div class="actions"><button type="button" id="uCancel">Cancel</button><button type="button" class="danger" id="uGo">Unsubscribe</button></div>`,
+    html`<h3>Unsubscribe this subscriber?</h3><p class="hint">Use this when <strong>${sub.email}</strong> asks you to take them off the list. They stop receiving posts immediately, and can rejoin by subscribing again. To stop mailing them on your own judgment, block the address instead.</p><div class="actions"><button type="button" id="uCancel">Cancel</button><button type="button" class="danger" id="uGo">Unsubscribe</button></div>`,
     signal,
   );
   const go = $<HTMLButtonElement>("#uGo", m.el);
@@ -193,6 +195,63 @@ export function confirmUnsubscribe(sub: Subscriber, onDone: () => void, signal: 
         await api(`/api/subscribers/${sub.id}/unsubscribe`, { method: "POST" });
         m.close();
         toast(`Unsubscribed ${sub.email}`);
+        onDone();
+      } catch (e) {
+        m.error(describeError(e));
+      }
+    });
+}
+
+/**
+ * Block is the publisher's own decision to stop mailing an address (SPEC §7), so its dialog
+ * says so and points a reader's own request to Unsubscribe instead. It keeps their status
+ * and can be undone, so it confirms without the weight of Erase.
+ */
+export function confirmBlock(sub: Subscriber, onDone: () => void, signal: AbortSignal): void {
+  const m = modal(
+    html`<h3>Block this address?</h3><p class="hint">Stops all mail to <strong>${sub.email}</strong>, whatever their status, which stays as it is. Use this when you decide yourself to stop mailing them; if they asked to leave, unsubscribe them instead. You can unblock it later.</p><div class="actions"><button type="button" id="bCancel">Cancel</button><button type="button" class="danger" id="bGo">Block</button></div>`,
+    signal,
+  );
+  const go = $<HTMLButtonElement>("#bGo", m.el);
+  $("#bCancel", m.el).onclick = m.close;
+  go.onclick = () =>
+    busy(go, "Blocking…", async () => {
+      m.clearError();
+      try {
+        await api<BlockResponse>("/api/suppressions", {
+          method: "POST",
+          json: { email: sub.email },
+        });
+        m.close();
+        toast(`Blocked ${sub.email}`);
+        onDone();
+      } catch (e) {
+        m.error(describeError(e));
+      }
+    });
+}
+
+/** Unblock undoes the publisher's own block, and only that: the dialog says what follows. */
+export function confirmUnblock(sub: Subscriber, onDone: () => void, signal: AbortSignal): void {
+  const mailed =
+    sub.status === "confirmed"
+      ? "They’re confirmed, so they’ll receive your posts again."
+      : "They’ll receive posts again only once they’re confirmed.";
+  const m = modal(
+    html`<h3>Unblock this address?</h3><p class="hint">Undoes your block on <strong>${sub.email}</strong>. ${mailed}</p><div class="actions"><button type="button" id="ubCancel">Cancel</button><button type="button" class="primary" id="ubGo">Unblock</button></div>`,
+    signal,
+  );
+  const go = $<HTMLButtonElement>("#ubGo", m.el);
+  $("#ubCancel", m.el).onclick = m.close;
+  go.onclick = () =>
+    busy(go, "Unblocking…", async () => {
+      m.clearError();
+      try {
+        await api<ClearSuppressionResponse>(`/api/suppressions/${encodeURIComponent(sub.email)}`, {
+          method: "DELETE",
+        });
+        m.close();
+        toast(`Unblocked ${sub.email}`);
         onDone();
       } catch (e) {
         m.error(describeError(e));

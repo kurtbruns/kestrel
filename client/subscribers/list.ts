@@ -1,6 +1,18 @@
 // The subscribers list: the by-status composition and the filterable roster.
 
-import type { SubscriberListItem, SubscriberListResponse } from "../../shared/subscribers";
+import {
+  FLAG_MEANING,
+  STATUS_MEANING,
+  SUBSCRIBER_ACTIONS,
+  SUPPRESSED_MEANING,
+  SUPPRESSION_FLAG,
+  type SuppressionFlag,
+} from "../../shared/subscriber_meanings";
+import type {
+  SubscriberListItem,
+  SubscriberListResponse,
+  SubscriberStatus,
+} from "../../shared/subscribers";
 import { api, describeError } from "../api";
 import { $, $$ } from "../ui/dom";
 import { saveFile } from "../ui/download";
@@ -18,7 +30,9 @@ import {
 import { badge, busy, type MenuItem, openMenu, renderError, toast } from "../ui/widgets";
 import {
   addSubscriberModal,
+  confirmBlock,
   confirmErase,
+  confirmUnblock,
   confirmUnsubscribe,
   viewSubscriberModal,
 } from "./dialogs";
@@ -30,7 +44,7 @@ import { joinedVia } from "./provenance";
 // axes: the status filter narrows the roster; the suppression facet is an overlay. The
 // dashboard tiles deep-link via #/subscribers/<filter> — `initialFilter` seeds the
 // status filter, or the suppression facet for "suppressed".
-const SUB_STATUSES = [
+const SUB_STATUSES: { value: SubscriberStatus; label: string }[] = [
   { value: "confirmed", label: "Confirmed" },
   { value: "pending", label: "Pending" },
   { value: "unsubscribed", label: "Unsubscribed" },
@@ -121,60 +135,39 @@ export async function renderSubscribers(
 }
 
 // The inline suppression flag rides next to the email (suppression is a deliverability
-// overlay, not a consent status) and names WHY: bounced / complaint / blocked / erased.
-// Reasons come from the webhook (bounce, complaint), an import that brought a bounce or
-// complaint from the previous service (shown as the same flag), a manual block, or an
-// erasure; anything unrecognized falls back to a generic label. The pills carry no hover tooltip,
-// which keyboard, screen-reader, and touch users can't reach: the legend under the counts
-// defines each label once, and a subscriber's own detail belongs on their page.
-const SUPPRESSIONS: Record<string, { label: string; means: string }> = {
-  bounce: {
-    label: "bounced",
-    means: "Mail to the address failed, here or at the service it was imported from.",
-  },
-  complaint: {
-    label: "complaint",
-    means: "Marked as spam, here or at the service it was imported from.",
-  },
-  manual: { label: "blocked", means: "Suppressed by hand." },
-  erased: {
-    label: "erased",
-    means:
-      "A do-not-contact marker kept after an erasure. Only the person’s own confirmation lifts it.",
-  },
-};
-const IMPORTED_AS: Record<string, string> = {
-  import_bounce: "bounce",
-  import_complaint: "complaint",
-};
+// overlay, not a consent status) and names WHY, which also says whose decision it was:
+// bounced / complaint (the provider's, or the previous service's for an import), blocked
+// (the publisher's), erased (an erasure's marker). Anything unrecognized falls back to a
+// generic label. The pills carry no hover tooltip, which keyboard, screen-reader, and touch
+// users can't reach: the legend under the counts defines each label once, and a
+// subscriber's own detail belongs on their page.
 function suppressionFlag(s: SubscriberListItem): Html | null {
   if (!s.suppressed) {
     return null;
   }
-  const reason = s.suppression_reason ?? "";
-  const label = SUPPRESSIONS[IMPORTED_AS[reason] ?? reason]?.label || "suppressed";
+  const label = (s.suppression_reason && SUPPRESSION_FLAG[s.suppression_reason]) || "suppressed";
   return html` <span class="badge suppressed row-flag">${label}</span>`;
 }
 
 // The legend: what each label a row can show means (DESIGN §3), every pill drawn as the
-// list draws it beside its definition, so it also says what the colors mean. Its toggle
-// sits at the right of the counts and the legend opens below the whole card, a layout a
-// <details> can't give, so the toggle is a button carrying aria-expanded.
-const STATUS_MEANS: Record<string, string> = {
-  pending: "Subscribed but hasn’t clicked the confirmation email.",
-  confirmed:
-    "Agreed to receive your posts, here or at the service they were imported from, and receives them.",
-  unsubscribed: "Opted out.",
-};
-function legendRow(pill: Html, means: string): Html {
-  return html`<dt>${pill}</dt><dd>${means}</dd>`;
+// list draws it beside its definition, so it also says what the colors mean; then the acts
+// on a subscriber and when each is the one to use, which say whose decision each records.
+// The words are shared with the API reference (shared/subscriber_meanings.ts), so a client
+// is told what the publisher is. Its toggle sits at the right of the counts and the legend
+// opens below the whole card, a layout a <details> can't give, so the toggle is a button
+// carrying aria-expanded.
+function legendRow(term: Html, means: string): Html {
+  return html`<dt>${term}</dt><dd>${means}</dd>`;
 }
 function legend(): Html {
+  const flags = Object.keys(FLAG_MEANING) as SuppressionFlag[];
   return html`<div class="sub-legend" id="subLegend" hidden>
-    <dl>${SUB_STATUSES.map(({ value }) => legendRow(badge(value), STATUS_MEANS[value] ?? ""))}</dl>
-    <p>Suppressed: the address isn’t mailed, whatever its status, which stays as it was. The red flag beside the address says why:</p>
-    <dl>${Object.values(SUPPRESSIONS).map(({ label, means }) =>
-      legendRow(html`<span class="badge suppressed">${label}</span>`, means),
+    <dl>${SUB_STATUSES.map(({ value }) => legendRow(badge(value), STATUS_MEANING[value]))}</dl>
+    <p><strong>Suppressed.</strong> ${SUPPRESSED_MEANING} The red flag beside the address says why:</p>
+    <dl>${flags.map((flag) => legendRow(html`<span class="badge suppressed">${flag}</span>`, FLAG_MEANING[flag]))}</dl>
+    <p>What you can do, from a subscriber’s ⋯ menu:</p>
+    <dl>${Object.values(SUBSCRIBER_ACTIONS).map(({ label, when }) =>
+      legendRow(html`<strong>${label}</strong>`, when),
     )}</dl>
   </div>`;
 }
@@ -235,20 +228,32 @@ function renderSubTable(
       if (!row) {
         return;
       }
-      // Anyone can be viewed and anyone can be erased (SPEC §7); only a
-      // confirmed subscriber has anything to unsubscribe from.
+      // Anyone can be viewed and anyone can be erased (SPEC §7); only a confirmed
+      // subscriber has anything to unsubscribe from. An address with no suppression can be
+      // blocked, and only the publisher's own block can be undone here: clearing a bounce
+      // or complaint is rarer and stays with the API, and an erasure's marker is never
+      // cleared by hand.
       const items: MenuItem[] = [
         { label: "View subscriber", onClick: () => viewSubscriberModal(row, signal) },
       ];
       if (row.status === "confirmed") {
         items.push({
-          label: "Unsubscribe",
+          label: SUBSCRIBER_ACTIONS.unsubscribe.label,
           danger: true,
           onClick: () => confirmUnsubscribe(row, reload, signal),
         });
       }
+      if (!row.suppressed) {
+        items.push({
+          label: SUBSCRIBER_ACTIONS.block.label,
+          danger: true,
+          onClick: () => confirmBlock(row, reload, signal),
+        });
+      } else if (row.suppression_reason === "manual") {
+        items.push({ label: "Unblock", onClick: () => confirmUnblock(row, reload, signal) });
+      }
       items.push({
-        label: "Erase",
+        label: SUBSCRIBER_ACTIONS.erase.label,
         danger: true,
         onClick: () => confirmErase(row, reload, signal),
       });

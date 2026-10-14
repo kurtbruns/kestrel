@@ -128,7 +128,7 @@ export function isErasedPlaceholder(email: string): boolean {
  * it is left with, `erased` or a bounce or complaint it already had, which stands.
  */
 export interface EraseResponse {
-  erased: { email: string; deliveries: number; suppression: string };
+  erased: { email: string; deliveries: number; suppression: SuppressionReason };
 }
 
 /**

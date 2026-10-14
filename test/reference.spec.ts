@@ -1,15 +1,15 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { createRouter } from "../src/app";
-import { requireAuth } from "../src/auth/middleware";
-import { type AppEnv, getConfig } from "../src/env";
 import {
   FLAG_MEANING,
   STATUS_MEANING,
   SUBSCRIBER_ACTIONS,
   SUPPRESSED_MEANING,
 } from "../shared/subscriber_meanings";
+import { createRouter } from "../src/app";
+import { requireAuth } from "../src/auth/middleware";
+import { type AppEnv, getConfig } from "../src/env";
 import { buildReference } from "../src/reference";
 import { type RouteDef, Router } from "../src/router";
 import { AUTH, base } from "./support/http";

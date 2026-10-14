@@ -18,15 +18,6 @@
  */
 
 import { IMPORT_LIMITS } from "../shared/imports";
-import {
-  FLAG_MEANING,
-  STATUS_MEANING,
-  SUBSCRIBER_ACTIONS,
-  SUPPRESSED_MEANING,
-  SUPPRESSION_FLAG,
-  type SuppressionFlag,
-} from "../shared/subscriber_meanings";
-import type { SubscriberStatus, SuppressionReason } from "../shared/subscribers";
 import type { ReferenceResponse } from "../shared/reference";
 import {
   BOUNCE_SPIKE_MIN,
@@ -37,6 +28,15 @@ import {
   MIN_LEAD_FLOOR_MS,
   STUCK_THRESHOLD_MS,
 } from "../shared/sends";
+import {
+  FLAG_MEANING,
+  STATUS_MEANING,
+  SUBSCRIBER_ACTIONS,
+  SUPPRESSED_MEANING,
+  SUPPRESSION_FLAG,
+  type SuppressionFlag,
+} from "../shared/subscriber_meanings";
+import type { SubscriberStatus, SuppressionReason } from "../shared/subscribers";
 import { buildInfo } from "./build";
 import type { Config } from "./env";
 import { json } from "./lib/errors";
@@ -77,7 +77,7 @@ const REASON_GLOSS = (Object.keys(FLAG_MEANING) as SuppressionFlag[])
     return `${reasons} (shown as ${flag}): ${FLAG_MEANING[flag]}`;
   })
   .join(" ");
-const SUPPRESSION_GLOSS = `Suppressed: ${SUPPRESSED_MEANING} Each \`reason\` says why, and whose decision it was. ${REASON_GLOSS}`;
+const SUPPRESSION_GLOSS = `Suppressed means: ${SUPPRESSED_MEANING} Each \`reason\` says why, and whose decision it was. ${REASON_GLOSS}`;
 
 const JSON_BODY = ["application/json"];
 const FORM_UPLOAD = ["multipart/form-data"];
@@ -980,8 +980,7 @@ export function createRouter({
       resource: "subscribers",
       summary:
         "List subscribers with by-status counts. Filter, sort, and paginate via query params; returns a `page` envelope.",
-      description:
-        `Consent status and suppression are separate axes: \`status\` filters the roster; \`suppressed\` is an overlay facet, and each row's \`suppression_reason\` says why. Pass \`email\` instead to look up one subscriber. ${STATUS_GLOSS} ${SUPPRESSION_GLOSS}`,
+      description: `Consent status and suppression are separate axes: \`status\` filters the roster; \`suppressed\` is an overlay facet, and each row's \`suppression_reason\` says why. Pass \`email\` instead to look up one subscriber. ${STATUS_GLOSS} ${SUPPRESSION_GLOSS}`,
       query: [
         {
           name: "status",
