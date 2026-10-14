@@ -444,13 +444,7 @@ export async function commitImport(
       cat: row.confirmed_at ?? row.subscribed_at,
     };
     if (outcome === "create_confirmed") {
-      writes.addConfirmed.push({
-        ...consent,
-        id: newId(),
-        tok: token(),
-        uat: null,
-        sup: row.suppression,
-      });
+      writes.addConfirmed.push({ ...consent, id: newId(), tok: token(), uat: null });
     } else if (outcome === "confirm_pending") {
       writes.confirm.push(consent);
     } else if (outcome === "mark_unsubscribed") {
@@ -464,7 +458,6 @@ export async function commitImport(
         id: newId(),
         tok: token(),
         uat: row.unsubscribed_at,
-        sup: row.suppression,
       });
     }
     if (suppressionAdded && row.suppression !== null) {
