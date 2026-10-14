@@ -84,7 +84,7 @@ export async function renderSubscribers(
       setHtml(
         $("#subCounts"),
         html`<div class="card row" style="gap:24px"><span><strong>${c.confirmed}</strong> confirmed</span><span>${c.pending} pending</span><span>${c.unsubscribed} unsubscribed</span><span>${c.suppressed} suppressed</span>${infoTip(
-          "Pending: subscribed but hasn’t clicked the confirmation email. Confirmed: agreed to receive your posts, here or at the service they were imported from, and receives them. Unsubscribed: opted out. Suppressed: bounced, complained, blocked, or erased, and never mailed, whatever their status.",
+          SUMMARY_TIP,
           { below: true },
         )}</div>`,
       );
@@ -116,33 +116,29 @@ export async function renderSubscribers(
   load();
 }
 
+// The summary card's info tip defines every label a row can show (DESIGN §3): the consent
+// states, the red suppression flags, and the greyed status.
+const SUMMARY_TIP =
+  "Pending: subscribed but hasn’t clicked the confirmation email. Confirmed: agreed to receive your posts, here or at the service they were imported from, and receives them. Unsubscribed: opted out. Suppressed: never mailed, whatever their status. A red flag beside the address says why: bounced (mail to it failed), complaint (marked as spam), blocked (suppressed by hand), or erased (a do-not-contact marker kept after an erasure, which only the person’s own confirmation lifts). Their status shows in grey: still true, but not mailed while suppressed, except a pending sign-up held only by an erasure.";
+
 // The inline suppression flag rides next to the email (suppression is a deliverability
-// overlay, not a consent status) and names WHY: bounced / complaint / blocked, with the
-// provider detail in the tooltip. Reasons come from the webhook (bounce, complaint) or a
-// manual block; anything unrecognized falls back to a generic label.
+// overlay, not a consent status) and names WHY: bounced / complaint / blocked / erased.
+// Reasons come from the webhook (bounce, complaint), a manual block, or an erasure;
+// anything unrecognized falls back to a generic label. The pills carry no hover tooltip,
+// which keyboard, screen-reader, and touch users can't reach: SUMMARY_TIP defines each
+// label once, and a subscriber's own detail belongs on their page.
 const SUPPRESSION_LABELS: Record<string, string> = {
   bounce: "bounced",
   complaint: "complaint",
   manual: "blocked",
   erased: "erased",
 };
-const SUPPRESSION_TIPS: Record<string, string> = {
-  bounce: "Hard bounce: mail to this address failed, so it won’t be mailed again.",
-  complaint: "Marked as spam, so it won’t be mailed again, whatever their status.",
-  manual: "Manually blocked, so it won’t be mailed.",
-  erased:
-    "Erased at the person’s request, then subscribed again. Not mailed until they confirm, which lifts the erasure.",
-};
 function suppressionFlag(s: SubscriberListItem): Html | null {
   if (!s.suppressed) {
     return null;
   }
-  const reason = s.suppression_reason ?? "";
-  const label = SUPPRESSION_LABELS[reason] || "suppressed";
-  const base =
-    SUPPRESSION_TIPS[reason] || "Suppressed, so it won’t be mailed, whatever their status.";
-  const tip = s.suppression_detail ? `${base} (${s.suppression_detail})` : base;
-  return html` <span class="badge suppressed row-flag" title="${tip}">${label}</span>`;
+  const label = SUPPRESSION_LABELS[s.suppression_reason ?? ""] || "suppressed";
+  return html` <span class="badge suppressed row-flag">${label}</span>`;
 }
 
 // A suppressed address keeps its consent status, but the status isn't in effect while the
@@ -154,7 +150,7 @@ function statusBadge(s: SubscriberListItem): Html {
   if (!s.suppressed || (s.suppression_reason === "erased" && s.status === "pending")) {
     return badge(s.status);
   }
-  return html`<span class="badge ${s.status} held" title="Not mailed while suppressed">${s.status}</span>`;
+  return html`<span class="badge ${s.status} held">${s.status}</span>`;
 }
 
 // An address that has to wrap breaks before its "@", keeping the mailbox and the domain

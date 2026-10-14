@@ -1492,12 +1492,18 @@ td a:hover {
   text-decoration: underline;
 }
 
+/* A badge is a plain label, so it shows the default cursor rather than the text one. In a
+   row or card that opens on click it keeps the container's pointer. */
 .badge {
   display: inline-block;
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 12px;
   border: 1px solid var(--line);
+  cursor: default;
+}
+.clickable .badge {
+  cursor: inherit;
 }
 .badge.draft {
   background: var(--status-draft-bg);

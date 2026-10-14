@@ -87,9 +87,16 @@ describe("subscribers view", () => {
     expect($$("tr[data-id]")).toHaveLength(3);
     const flag = $("tr[data-id='s2'] .row-flag");
     expect(flag.textContent).toBe("bounced");
-    expect(flag.getAttribute("title")).toMatch(/Hard bounce.*\(550 no such user\)/);
     // A suppressed row keeps its consent status, greyed; an unsuppressed one is not.
     expect($("tr[data-id='s2'] .badge.confirmed").classList.contains("held")).toBe(true);
+    // The pills are plain labels: no hover tooltip, which keyboard and touch can't reach.
+    expect($$("tr[data-id] .badge[title]")).toHaveLength(0);
+    // The summary's info tip defines them instead, the flags and the grey included.
+    const tip = $("#subCounts .info");
+    expect(tip.getAttribute("data-tip")).toBe(
+      "Pending: subscribed but hasn’t clicked the confirmation email. Confirmed: agreed to receive your posts, here or at the service they were imported from, and receives them. Unsubscribed: opted out. Suppressed: never mailed, whatever their status. A red flag beside the address says why: bounced (mail to it failed), complaint (marked as spam), blocked (suppressed by hand), or erased (a do-not-contact marker kept after an erasure, which only the person’s own confirmation lifts). Their status shows in grey: still true, but not mailed while suppressed, except a pending sign-up held only by an erasure.",
+    );
+    expect(tip.getAttribute("aria-label")).toBe(tip.getAttribute("data-tip"));
     expect($("tr[data-id='s1'] .badge.confirmed").classList.contains("held")).toBe(false);
     expect($("tr[data-id='s3'] td").textContent).toBe("<script>@b.c"); // shown as text
     // A wrapping address breaks before its "@", not mid-word.
@@ -176,7 +183,7 @@ describe("subscribers view", () => {
     await settle();
     const flag = $("tr[data-id='s3'] .row-flag");
     expect(flag.textContent).toBe("erased");
-    expect(flag.getAttribute("title")).toMatch(/^Erased at the person’s request/);
+    expect(flag.hasAttribute("title")).toBe(false);
     // Their confirmation lifts the marker, so the pending status is live, not greyed.
     expect($("tr[data-id='s3'] .badge.pending").classList.contains("held")).toBe(false);
   });
@@ -195,6 +202,7 @@ describe("subscribers view", () => {
     await mount((r, s) => renderSubscribers(undefined, r, s));
     await settle();
     expect($("tr[data-id='s1'] .badge.confirmed").classList.contains("held")).toBe(true);
+    expect($("tr[data-id='s1'] .badge.confirmed").hasAttribute("title")).toBe(false);
   });
 
   it("points a list with no subscribers (suppressions alone count for none) at the import, and opens the import from the head", async () => {
