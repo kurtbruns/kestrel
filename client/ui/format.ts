@@ -6,7 +6,8 @@ import { isValidEmail, normalizeEmail } from "../../shared/email";
 /**
  * A short local date-time, or an em dash for none. The year shows only when it isn't the
  * current one (local time), past or future, so this year's dates stay short and a date
- * from years back, such as an imported subscriber's join date, can't read as this year's.
+ * from another year, such as a send from last year or one scheduled for next January,
+ * can't read as this year's.
  */
 export function fmt(ms: number | null | undefined): string {
   if (!ms) {

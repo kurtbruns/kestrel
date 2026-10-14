@@ -1617,8 +1617,17 @@ td a:hover {
 .list-table .c-status {
   width: 128px;
 }
+/* Wide enough for the longest date on one line, a date outside the current year with
+   its year ("Sep 30, 2027, 12:00 AM"), with room for a wider system font. Narrower
+   screens, until the table stacks, keep the room for the text column instead (the Drafts
+   table has two date columns), so an off-year date wraps there. */
 .list-table .c-date {
-  width: 148px;
+  width: 176px;
+}
+@media (max-width: 840px) {
+  .list-table .c-date {
+    width: 148px;
+  }
 }
 .list-table .c-num {
   width: 104px;
