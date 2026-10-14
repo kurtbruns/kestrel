@@ -3,6 +3,7 @@
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
 import type { OptIn } from "../../shared/imports";
+import { SUPPRESSION_FLAG } from "../../shared/subscriber_meanings";
 import type {
   BlockResponse,
   ClearSuppressionResponse,
@@ -227,12 +228,17 @@ export function confirmBlock(sub: Subscriber, onDone: () => void, signal: AbortS
     busy(go, "Blocking…", async () => {
       m.clearError();
       try {
-        await api<BlockResponse>("/api/suppressions", {
+        const r = await api<BlockResponse>("/api/suppressions", {
           method: "POST",
           json: { email: sub.email },
         });
         m.close();
-        toast(`Blocked ${sub.email}`);
+        // Something else may have suppressed it since the list was read: say what stands.
+        toast(
+          r.added
+            ? `Blocked ${sub.email}`
+            : `${sub.email} was already suppressed (${SUPPRESSION_FLAG[r.suppression.reason]})`,
+        );
         onDone();
       } catch (e) {
         m.error(describeError(e));
@@ -247,7 +253,7 @@ export function confirmUnblock(sub: Subscriber, onDone: () => void, signal: Abor
       ? "They’re confirmed, so they’ll receive your posts again."
       : "They’ll receive posts again only once they’re confirmed.";
   const m = modal(
-    html`<h3>Unblock this address?</h3><p class="hint">Undoes your block on <strong>${sub.email}</strong>. ${mailed}</p><div class="actions"><button type="button" id="ubCancel">Cancel</button><button type="button" class="primary" id="ubGo">Unblock</button></div>`,
+    html`<h3>Unblock this address?</h3><p class="hint">Undoes the block on <strong>${sub.email}</strong>. ${mailed}</p><div class="actions"><button type="button" id="ubCancel">Cancel</button><button type="button" class="primary" id="ubGo">Unblock</button></div>`,
     signal,
   );
   const go = $<HTMLButtonElement>("#ubGo", m.el);

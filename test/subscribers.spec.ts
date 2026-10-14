@@ -676,6 +676,17 @@ describe("suppressions: a client records only its own block (SPEC §7)", () => {
     expect((await subs.suppressionOf(env.DB, email))?.reason).toBe("bounce");
   });
 
+  it("keeps a block already there, its detail included, rather than answering 200 over a changed one", async () => {
+    const email = uniqueEmail();
+    await block({ email, detail: "first" });
+    const res = await block({ email, detail: "second" });
+    expect(res.status).toBe(200);
+    expect(await readJson(res)).toMatchObject({
+      suppression: { reason: "manual", detail: "first" },
+      added: false,
+    });
+  });
+
   it("never blocks over an erasure's marker, so clearing a block can't lift an erasure", async () => {
     const email = uniqueEmail();
     await subs.addSuppression(env.DB, email, "erased");

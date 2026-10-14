@@ -522,20 +522,17 @@ export async function block(
   detail?: string,
 ): Promise<{ suppression: SuppressionRow; added: boolean }> {
   const address = normalizeEmail(email);
-  const res = await db
-    .prepare(
-      "INSERT INTO suppressions (email, reason, detail, created_at) VALUES (?, 'manual', ?, ?) ON CONFLICT (email) DO NOTHING",
-    )
-    .bind(address, detail ?? null, Date.now())
-    .run();
-  const suppression = unwrap(
-    await db
-      .prepare("SELECT * FROM suppressions WHERE email = ?")
-      .bind(address)
-      .first<SuppressionRow>(),
-    "suppression",
-  );
-  return { suppression, added: (res.meta.changes ?? 0) > 0 };
+  // One batch, one transaction: nothing can clear the row between the insert and the read.
+  const [insert, read] = await db.batch([
+    db
+      .prepare(
+        "INSERT INTO suppressions (email, reason, detail, created_at) VALUES (?, 'manual', ?, ?) ON CONFLICT (email) DO NOTHING",
+      )
+      .bind(address, detail ?? null, Date.now()),
+    db.prepare("SELECT * FROM suppressions WHERE email = ?").bind(address),
+  ]);
+  const suppression = unwrap(read?.results[0] as SuppressionRow | undefined, "suppression");
+  return { suppression, added: (insert?.meta.changes ?? 0) > 0 };
 }
 
 export async function listSuppressions(db: D1Database): Promise<SuppressionRow[]> {

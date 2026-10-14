@@ -204,7 +204,7 @@ The list as a whole (SPEC §8). The head has **Import** and **Export** (Ghost) b
 
 **Add subscriber** starts double opt-in and says so. Its act is **Send confirmation**, not "Add", because no one joins the audience until they confirm (I1). **Unsubscribe**, from a confirmed subscriber's row menu, is for the person's own request, and its dialog says so: they stop receiving posts at once (I2) and can rejoin by subscribing again, and stopping mail on the publisher's own judgment is a block instead. It is confirmed with a Danger button.
 
-**Block** is the publisher's own decision to stop mailing an address, confirmed in a dialog with a Danger **Block** that says it stops all mail whatever the person's status, which it keeps, that a person who asked to leave is unsubscribed instead, and that it can be undone. **Unblock** appears only on an address the publisher blocked, never on a bounce, a complaint, or an erasure's marker; its dialog, with a Primary **Unblock**, says whether the person will be mailed again, which they will only if confirmed. Each toast names the address.
+**Block** is the publisher's own decision to stop mailing an address, confirmed in a dialog with a Danger **Block** that says it stops all mail whatever the person's status, which it keeps, that a person who asked to leave is unsubscribed instead, and that it can be undone. **Unblock** appears only on a block by hand, the publisher's or one an import brought, never on a bounce, a complaint, or an erasure's marker; its dialog, with a Primary **Unblock**, says whether the person will be mailed again, which they will only if confirmed. Each toast names the address.
 
 **Erase** is in every subscriber's row menu, below Unsubscribe, since anyone on the list can ask to be erased (SPEC §7). It can't be undone, so it is confirmed in a dialog with a Danger **Erase** that says what goes (the subscriber and how they joined), what stays (past sends, showing an erased recipient; the address, kept only so it's never mailed), that it can't be undone, and that the person can still rejoin themselves. Its toast names the address, and says so when a bounce, complaint, or block the address already had still stands. An erased address that subscribed again is flagged **erased** like any suppression, and the list's legend says it isn't mailed unless they confirm, which only they can do.
 
@@ -452,7 +452,7 @@ The roles differ by fill, border, and weight, **never by height**: every labelle
 **Rules.**
 
 - If two acts both feel Primary, one of them is Secondary.
-- A destructive act is confirmed in a dialog whose text says what is lost and whether it can be undone. A reversible act (Cancel a schedule, Reschedule) is not confirmed.
+- A destructive act is confirmed in a dialog whose text says what is lost and whether it can be undone. A reversible act (Cancel a schedule, Reschedule) is not confirmed, unless it stops or resumes mail to a person (Block, Unblock), which is confirmed in a dialog that says so.
 - An unavailable control is either `disabled`, with its reason shown beside it (a not-connected dialog's act, a test with no saved address), or unavailable but still clickable (`aria-disabled`), when the click itself should point at the way out, like Save draft under the conflict banner or the locked composer's toolbar.
 - In a label, **→** navigates within the app, **↗** opens a new tab (and says so to a screen reader), and **…** opens a dialog that asks more.
 - If a new button doesn't fit a role, reconsider the button before adding a role.
