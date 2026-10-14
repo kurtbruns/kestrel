@@ -121,13 +121,14 @@ function renderDocsIndex(
       : null;
     return html`<section class="doc-section"><h2 class="doc-section-t">${sec.title}</h2>${blurb}${sec.numbered ? html`<ol class="doc-cards">${cards}</ol>` : html`<ul class="doc-cards">${cards}</ul>`}</section>`;
   });
-  // The switch between the sets: links, since each set's index is its own address. It
-  // chooses what you read, never who you are, so both sets stay one tap away.
-  const switcher = html`<nav class="set-wtog docs-sets" aria-label="Doc sets">${sets.map(
+  // The sets, in the eyebrow over the title: links, since each set's index is its own
+  // address, with the current one marked. A doc page's eyebrow names its own set in the same
+  // slot. It chooses what you read, never who you are, so both sets stay one tap away.
+  const switcher = html`<nav class="eyebrow docs-sets" aria-label="Doc sets">${sets.map(
     (s) =>
-      html`<a class="wtog-btn" href="#/docs/${s.id}"${s.id === landing.id ? html` aria-current="page"` : null}>${s.name}</a>`,
+      html`<a href="#/docs/${s.id}"${s.id === landing.id ? html` aria-current="page"` : null}>${s.name}</a>`,
   )}</nav>`;
-  const main = html`<div class="docs-index">${switcher}<p class="eyebrow">Documentation</p><h1>${landing.title}</h1><div class="docs-index-intro">${unsafeHtml(landing.intro)}</div>${sections}</div>`;
+  const main = html`<div class="docs-index">${switcher}<h1>${landing.title}</h1><div class="docs-index-intro">${unsafeHtml(landing.intro)}</div>${sections}</div>`;
   // Three uniform out-links under a "Kestrel" label — the same shape as the API rail's
   // label + tiers, so mobile can give both the same chip row. getkestrel.dev is the
   // project's home, the same for every instance, so it's a constant; the source and
