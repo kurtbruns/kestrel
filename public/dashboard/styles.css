@@ -1616,10 +1616,11 @@ td a:hover {
 /* One grid for every group, each list a subgrid, so every definition starts at the same
    edge. Each group is named by an h2 in the app's label style, and the panel has no title of
    its own: the Legend toggle already names it. A group's break (24px) is three times a
-   row's (8px), so the groups read as groups, and a definition stops near 68 characters. */
+   row's (8px), so the groups read as groups. The container caps its own text column near
+   68 characters, so every line in it stops there while its divider still spans the card. */
 .sub-legend {
   display: grid;
-  grid-template-columns: max-content 1fr;
+  grid-template-columns: max-content minmax(0, 68ch);
   column-gap: 16px;
   margin-top: 14px;
   padding-top: 16px;
@@ -1644,12 +1645,10 @@ td a:hover {
 }
 .sub-legend dd {
   margin: 0;
-  max-width: 68ch;
 }
 .sub-legend p {
   grid-column: 1 / -1;
   margin: 0 0 8px;
-  max-width: 68ch;
   color: var(--muted);
 }
 
