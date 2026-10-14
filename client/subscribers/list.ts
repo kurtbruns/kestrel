@@ -9,6 +9,7 @@ import {
   type SuppressionFlag,
 } from "../../shared/subscriber_meanings";
 import type {
+  SubscriberCounts,
   SubscriberListItem,
   SubscriberListResponse,
   SubscriberStatus,
@@ -78,7 +79,7 @@ export async function renderSubscribers(
     root,
     html`
     <div class="spread page-head"><h1>Subscribers</h1><span class="row"><button type="button" class="ghost" id="importSubs">Import</button><button type="button" class="ghost" id="exportSubs">Export</button><button class="primary" id="addSub">Add subscriber</button></span></div>
-    <div class="card sub-summary"><div class="sub-summary-head"><div id="subCounts" class="row muted">Loading…</div><button type="button" class="sub-legend-toggle" id="subLegendToggle" aria-expanded="false" aria-controls="subLegend">Legend</button></div>${legend()}</div>
+    <div class="card sub-summary"><div class="sub-summary-head"><div id="subCounts" class="row muted" role="group" aria-label="Show">Loading…</div><button type="button" class="sub-legend-toggle" id="subLegendToggle" aria-expanded="false" aria-controls="subLegend">Legend</button></div>${legend()}</div>
     ${listToolbar({ statuses: SUB_STATUSES, suppressible: true, searchPlaceholder: "Search email…" })}
     <div id="subList" class="muted">Loading…</div>
     <div id="subPager"></div>`,
@@ -95,15 +96,9 @@ export async function renderSubscribers(
       const c = data.counts;
       // The counts stay a global by-status summary (independent of the active filter);
       // the page total below reflects the filtered roster. Each count is also the way to
-      // its slice of the list (countFilters, below). Only the counts repaint, so the legend
-      // stays open or closed across a reload.
-      setHtml(
-        $("#subCounts"),
-        html`${COUNT_FILTERS.map(
-          (f) =>
-            html`<button type="button" class="sub-count" data-filter="${f}" aria-pressed="${String(countSelected(state, f))}">${f === "confirmed" ? html`<strong>${c[f]}</strong>` : c[f]} ${f}</button>`,
-        )}`,
-      );
+      // its slice of the list (wireCountFilters, below). Only the counts repaint, so the
+      // legend stays open or closed across a reload.
+      paintCounts($("#subCounts"), c, state);
       // Suppressions alone are no subscribers, so a list of only them still points the way in.
       const listEmpty = c.pending + c.confirmed + c.unsubscribed === 0;
       renderSubTable(listEl, data.subscribers, state, load, signal, listEmpty);
@@ -144,12 +139,30 @@ export async function renderSubscribers(
 // status, suppressed or not, and the suppressed count every suppressed subscriber, whatever
 // their status, so each count is exactly the rows it shows (the server counts the same
 // way). The toolbar's controls follow, and a count reads as chosen while the filter is its.
+// A count chosen from the keyboard keeps its focus: the buttons are made once and then
+// only relabelled, so a reload never replaces the button the reader is on.
 type CountFilter = SubscriberStatus | "suppressed";
 const COUNT_FILTERS: CountFilter[] = ["confirmed", "pending", "unsubscribed", "suppressed"];
 function countSelected(state: ListState, f: CountFilter): boolean {
+  if (state.search) {
+    return false;
+  }
   return f === "suppressed"
     ? state.suppressed === "only" && !state.status
     : state.status === f && !state.suppressed;
+}
+function paintCounts(el: HTMLElement, c: SubscriberCounts, state: ListState): void {
+  if (!el.querySelector("[data-filter]")) {
+    setHtml(
+      el,
+      html`${COUNT_FILTERS.map((f) => html`<button type="button" class="sub-count" data-filter="${f}" aria-pressed="false"></button>`)}`,
+    );
+  }
+  for (const b of $$<HTMLElement>("[data-filter]", el)) {
+    const f = b.dataset.filter as CountFilter;
+    setHtml(b, html`${f === "confirmed" ? html`<strong>${c[f]}</strong>` : c[f]} ${f}`);
+    b.setAttribute("aria-pressed", String(countSelected(state, f)));
+  }
 }
 function wireCountFilters(root: HTMLElement, state: ListState, reload: () => void): void {
   const counts = $("#subCounts", root);
@@ -160,9 +173,12 @@ function wireCountFilters(root: HTMLElement, state: ListState, reload: () => voi
     }
     const f = b.dataset.filter as CountFilter;
     const choose = !countSelected(state, f);
+    // A count shows exactly its slice, so choosing one drops a search too.
     state.status = choose && f !== "suppressed" ? f : "";
     state.suppressed = choose && f === "suppressed" ? "only" : "";
+    state.search = "";
     state.offset = 0;
+    $<HTMLInputElement>(".lt-search", root).value = "";
     $<HTMLSelectElement>(".lt-status", root).value = state.status;
     $<HTMLInputElement>(".lt-suppressed", root).checked = state.suppressed === "only";
     for (const other of $$<HTMLElement>("[data-filter]", counts)) {

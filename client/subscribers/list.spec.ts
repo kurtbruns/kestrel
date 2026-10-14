@@ -209,6 +209,35 @@ describe("subscribers view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("keeps focus on a chosen count through the reload, and drops a search so the count is its rows", async () => {
+    fake = fakeApi([
+      { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
+    ]);
+    await mount((r, s) => renderSubscribers(undefined, r, s));
+    await settle();
+    const search = $<HTMLInputElement>(".lt-search");
+    search.value = "gmail";
+    search.dispatchEvent(new Event("input"));
+    await new Promise((r) => setTimeout(r, 300));
+    await settle();
+    // Under a search, no count is its rows, so none reads as chosen.
+    $<HTMLSelectElement>(".lt-status").value = "pending";
+    $(".lt-status").dispatchEvent(new Event("change"));
+    await settle();
+    expect($("#subCounts [data-filter='pending']").getAttribute("aria-pressed")).toBe("false");
+    const pending = $<HTMLButtonElement>("#subCounts [data-filter='pending']");
+    pending.focus();
+    pending.click();
+    await settle();
+    // Choosing it shows its slice whole: the search goes.
+    const q = fake.calls.at(-1)!.url.searchParams;
+    expect([q.get("status"), q.get("search")]).toEqual(["pending", null]);
+    expect(search.value).toBe("");
+    expect(document.activeElement).toBe(pending);
+    expect(pending.getAttribute("aria-pressed")).toBe("true");
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("shows the dashboard's Suppressed tile's filter as the suppressed count, chosen", async () => {
     fake = fakeApi([
       { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },

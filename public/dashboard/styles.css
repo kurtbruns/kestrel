@@ -1582,7 +1582,7 @@ td a:hover {
 }
 /* The negative margin lines the first count's text up with the card's edge. */
 #subCounts {
-  gap: 8px 12px;
+  gap: 10px 12px;
   margin-left: -8px;
 }
 /* Each count is a filter (DESIGN §3): it reads as the plain count it was, and shows on
@@ -1593,8 +1593,8 @@ td a:hover {
   background: transparent;
   color: inherit;
   font-size: inherit;
-  padding: 3px 8px;
-  margin: -3px 0;
+  padding: 4px 8px;
+  margin: -4px 0;
   border-radius: 6px;
 }
 .sub-count:hover {
@@ -1604,6 +1604,12 @@ td a:hover {
 .sub-count[aria-pressed="true"] {
   background: var(--accent-soft);
   color: var(--accent);
+}
+/* Forced colors drop the tint, so the chosen count keeps an outline there. */
+@media (forced-colors: active) {
+  .sub-count[aria-pressed="true"] {
+    outline: 1px solid ButtonText;
+  }
 }
 /* The padding and equal negative margin give a 24px target without moving the label. */
 .sub-legend-toggle {

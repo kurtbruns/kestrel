@@ -23,7 +23,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
-- On the Subscribers page, each count in the summary filters the list: choose **confirmed**, **pending**, or **unsubscribed** to see that status, or **suppressed** to see every suppressed subscriber, and choose it again to see everyone. The suppressed count, here, on the dashboard, and as `counts.suppressed` in the API, now counts suppressed subscribers rather than every suppressed address, so it matches the rows its filter shows; an address suppressed with no subscriber, such as an erased person who hasn't come back, is still in the suppression list (SPEC §8).
+- On the Subscribers page, each count in the summary filters the list: choose **confirmed**, **pending**, or **unsubscribed** to see that status, or **suppressed** to see every suppressed subscriber, and choose it again to see everyone. The suppressed count, here and on the dashboard, now counts suppressed subscribers rather than every suppressed address, so it matches the rows its filter shows (SPEC §8).
 - On the Subscribers page, the status and suppression pills no longer explain themselves in a hover tooltip, which keyboard, screen-reader, and touch users couldn't reach. A **Legend** beside the counts opens to show each pill beside what it means: the consent states, what suppressed means, and each red flag (bounced, complaint, blocked, erased). It replaces the counts' info tip, and the provider's words for a bounce or complaint, which the flag's tooltip carried, now show in **View subscriber**. The API reference describes subscriber states, suppression reasons, and each act on a subscriber in the same words, so Claude is told what you are told.
 - The Subscribers table holds up at mid-sized widths: it switches to stacked rows whenever it's too narrow to give an address room, not only at phone width, the How they joined column is narrower, and an address that has to wrap breaks before its @ rather than mid-word.
 - The import attestation names your publication the way the sidebar and your emails do: until you set a publication name, by the display name of your From address, and only with neither as "this newsletter". The plan's `attestation` carries the `publication` name it used, and the dashboard's import screen takes the name under the attestation from there. The attestation's version is unchanged.
@@ -41,6 +41,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Breaking
 
+- `counts.suppressed` in `GET /api/subscribers` counts subscribers whose address is suppressed, whatever their status, rather than every suppressed address, so it matches `suppressed=only`; an address suppressed with no subscriber is counted only in `GET /api/suppressions` (SPEC §8).
 - `POST /api/suppressions` adds only a block: `reason` may be omitted or `manual`, and any other is refused 400, since a bounce or complaint is the provider's to report and an erasure's marker is Erase's to leave. An address already suppressed keeps what it has, and the answer is now the suppression that stands with `added`, instead of echoing the request. `DELETE /api/suppressions/:email` refuses an erased address's marker with 409 `erasure_marker`, which only the person's own confirmation lifts (SPEC §7).
 
 ## [1.9.0] - 2026-10-13

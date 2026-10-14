@@ -604,6 +604,12 @@ describe("subscribers: admin + suppressions", () => {
       await SELF.fetch(`${base}/api/subscribers?suppressed=only`, { headers: AUTH }),
     );
     expect(only.page.total).toBe(body.counts.suppressed);
+    for (const status of ["confirmed", "pending", "unsubscribed"] as const) {
+      const slice = await readJson(
+        await SELF.fetch(`${base}/api/subscribers?status=${status}`, { headers: AUTH }),
+      );
+      expect(slice.page.total).toBe(body.counts[status]);
+    }
   });
 
   it("suppression excludes a confirmed subscriber, and clearing restores them", async () => {
