@@ -7,6 +7,7 @@ import {
   inUseChip,
   isRemakeTooClose,
   REMAKE_TEMPLATE,
+  remakeWait,
   savedToast,
   withRemakeConfirm,
 } from "./remake";
@@ -180,7 +181,7 @@ describe("inUseChip", () => {
     return el.firstElementChild as HTMLElement;
   };
 
-  it("says nothing is scheduled, or how many posts a change would reach and when saving waits", () => {
+  it("says nothing is scheduled, or how many posts a change would reach, as a plain label (DESIGN §11)", () => {
     expect(chip(null).textContent?.trim()).toBe("No posts scheduled");
     expect(chip({ sends: [], retry_after: null, identityFields: [] }).classList).not.toContain(
       "inuse",
@@ -198,9 +199,38 @@ describe("inUseChip", () => {
       identityFields: [],
     });
     expect(waiting.textContent).toBe("In use by 1 scheduled post");
-    expect(waiting.title).toBe(
-      `One sends at ${fmt(1_800_000_000_000)}; saving waits until it has sent.`,
+    expect(waiting.hasAttribute("title")).toBe(false);
+  });
+});
+
+describe("remakeWait", () => {
+  const inside = (fireAts: number[], until: number | null) => ({
+    sends: fireAts.map((t, i) => ({ ...ref(`s${i}`, `S${i}`), fire_at: t })),
+    retry_after: until,
+    identityFields: [],
+  });
+
+  it("names when a post about to send has gone, and that a save can follow (SPEC §9)", () => {
+    const now = Date.now();
+    const at = now + 120_000;
+    expect(remakeWait(inside([at, at + 3_600_000], at), now)).toBe(
+      `A scheduled post sends at ${fmt(at)}. You can save once it has sent.`,
     );
+  });
+
+  it("counts every post inside the lead and names when the last of them sends", () => {
+    const now = Date.now();
+    const at = now + 120_000;
+    expect(remakeWait(inside([now + 60_000, at, at + 3_600_000], at), now)).toBe(
+      `2 scheduled posts send by ${fmt(at)}. You can save once they have sent.`,
+    );
+  });
+
+  it("says nothing with none inside the lead, or once that time has passed", () => {
+    const now = Date.now();
+    expect(remakeWait(inside([now + 3_600_000], null), now)).toBe("");
+    expect(remakeWait(null, now)).toBe("");
+    expect(remakeWait(inside([now - 1], now - 1), now)).toBe("");
   });
 });
 

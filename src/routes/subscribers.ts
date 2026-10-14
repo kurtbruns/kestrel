@@ -82,14 +82,18 @@ export async function list(c: RequestContext): Promise<Response> {
     suppressedParam === "only" ? "only" : suppressedParam === "hide" ? "hide" : undefined;
   const filter = { status, search, suppressed } satisfies subscribers.SubscriberFilter;
   const page = parseListParams(c.url, subscribers.SUBSCRIBER_LIST_SPEC);
-  const [counts, total, rows, suppressions] = await Promise.all([
+  const [counts, total, rows] = await Promise.all([
     subscribers.counts(c.env.DB),
     subscribers.countSubscribers(c.env.DB, filter),
     subscribers.listSubscribers(c.env.DB, filter, page),
-    subscribers.listSuppressions(c.env.DB),
   ]);
   // Annotate each row with its suppression reason (if any), so the list can show WHY
-  // an address is suppressed — bounced / complaint / manual — without a per-row lookup.
+  // an address is suppressed — bounced / complaint / manual — with one lookup for the
+  // page's own addresses.
+  const suppressions = await subscribers.suppressionsFor(
+    c.env.DB,
+    rows.map((r) => r.email),
+  );
   const suppressedBy = new Map(suppressions.map((s) => [s.email, s]));
   const annotated = rows.map((r) => {
     const sup = suppressedBy.get(r.email);

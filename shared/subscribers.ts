@@ -1,11 +1,35 @@
 // Subscribers as the API carries them (SPEC §7): the row, the suppression annotation the
-// list adds, and the bodies of the subscriber routes. The Worker's routes produce these
+// list adds, and the bodies of the subscriber and suppression routes. The Worker's routes produce these
 // shapes and the editor consumes them; one definition, so neither can drift.
 
 import type { OptIn } from "./imports";
 import type { PageMeta } from "./list";
 
+/** A subscriber's consent state (SPEC §7); `subscriber_meanings.ts` says what each means. */
 export type SubscriberStatus = "pending" | "confirmed" | "unsubscribed";
+
+/**
+ * Why an address is suppressed (SPEC §7), which also says whose decision it was: the
+ * provider's (`bounce`, `complaint`), the previous service's, brought by an import
+ * (`import_bounce`, `import_complaint`), a block by hand (`manual`), the publisher's own or
+ * one an import brought from the previous service, or an
+ * erasure's do-not-contact marker (`erased`). `subscriber_meanings.ts` says what each means.
+ */
+export type SuppressionReason =
+  | "bounce"
+  | "complaint"
+  | "manual"
+  | "erased"
+  | "import_bounce"
+  | "import_complaint";
+
+/** One suppressed address: why, the provider's or the publisher's words if any, and since when. */
+export interface Suppression {
+  email: string;
+  reason: SuppressionReason;
+  detail: string | null;
+  created_at: number;
+}
 
 export interface Subscriber {
   id: string;
@@ -36,14 +60,16 @@ export interface Subscriber {
 /** The list row: the subscriber plus why it is suppressed, if it is, so the list can say so without a lookup. */
 export interface SubscriberListItem extends Subscriber {
   suppressed: boolean;
-  suppression_reason: string | null;
+  suppression_reason: SuppressionReason | null;
   suppression_detail: string | null;
 }
 
+/** The list's composition: subscribers by consent state, and how many of them are suppressed. */
 export interface SubscriberCounts {
   pending: number;
   confirmed: number;
   unsubscribed: number;
+  /** Subscribers whose address is suppressed, whatever their status, so it overlaps the three others. Addresses suppressed with no subscriber are in `GET /api/suppressions`. */
   suppressed: number;
 }
 
@@ -105,7 +131,7 @@ export function isErasedPlaceholder(email: string): boolean {
  * it is left with, `erased` or a bounce or complaint it already had, which stands.
  */
 export interface EraseResponse {
-  erased: { email: string; deliveries: number; suppression: string };
+  erased: { email: string; deliveries: number; suppression: SuppressionReason };
 }
 
 /**
@@ -117,4 +143,25 @@ export interface ErasureAcknowledgementRequired {
   error: "erasure_acknowledgement_required";
   message: string;
   erased_at: number;
+}
+
+/** GET /api/suppressions: every suppressed address, newest first. */
+export interface SuppressionListResponse {
+  suppressions: Suppression[];
+}
+
+/**
+ * POST /api/suppressions, the publisher's block (SPEC §7). An address already suppressed
+ * keeps the suppression it has, which says more about it than a block would, so `added`
+ * is false and `suppression` is the one that stands.
+ */
+export interface BlockResponse {
+  suppression: Suppression;
+  added: boolean;
+}
+
+/** DELETE /api/suppressions/:email: whether a suppression was there to clear. */
+export interface ClearSuppressionResponse {
+  email: string;
+  cleared: boolean;
 }

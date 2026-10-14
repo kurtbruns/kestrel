@@ -7,6 +7,8 @@ import {
   type Subscriber,
   type SubscriberCounts,
   type SubscriberStatus,
+  type Suppression,
+  type SuppressionReason,
 } from "../../shared/subscribers";
 import { newId, newToken } from "../lib/ids";
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
@@ -17,13 +19,7 @@ import { unwrap } from "../lib/unwrap";
 export type { SubscribeAction, SubscriberStatus };
 export type SubscriberRow = Subscriber;
 export type Counts = SubscriberCounts;
-
-export interface SuppressionRow {
-  email: string;
-  reason: string;
-  detail: string | null;
-  created_at: number;
-}
+export type SuppressionRow = Suppression;
 
 export function getByEmail(db: D1Database, email: string): Promise<SubscriberRow | null> {
   return db.prepare("SELECT * FROM subscribers WHERE email = ?").bind(email).first<SubscriberRow>();
@@ -334,7 +330,14 @@ export async function counts(db: D1Database): Promise<Counts> {
       c.unsubscribed = r.n;
     }
   }
-  const sup = await db.prepare("SELECT COUNT(*) AS n FROM suppressions").first<{ n: number }>();
+  // Suppressed subscribers, whatever their status, so the count is what the roster's
+  // suppression facet shows. An address suppressed with no subscriber (an erasure's marker,
+  // a bounce an import brought for someone it didn't add) is no subscriber, and isn't counted.
+  const sup = await db
+    .prepare(
+      "SELECT COUNT(*) AS n FROM subscribers WHERE email IN (SELECT email FROM suppressions)",
+    )
+    .first<{ n: number }>();
   c.suppressed = sup?.n ?? 0;
   return c;
 }
@@ -370,7 +373,7 @@ export async function isSuppressed(db: D1Database, email: string): Promise<boole
  * address is kept only so it is never mailed by accident, and the person may still come
  * back by subscribing again, their own confirmation lifting the marker.
  */
-export const ERASED = "erased";
+export const ERASED: SuppressionReason = "erased";
 
 /** The address's suppression reason and when it was set, or null when it has none. */
 export function suppressionOf(
@@ -501,7 +504,7 @@ export async function blocksConfirmation(db: D1Database, email: string): Promise
 export async function addSuppression(
   db: D1Database,
   email: string,
-  reason: string,
+  reason: SuppressionReason,
   detail?: string,
 ): Promise<void> {
   // One suppression per address, and the first one stands, except over an `erased` marker:
@@ -514,6 +517,31 @@ export async function addSuppression(
     .run();
 }
 
+/**
+ * The publisher's block (SPEC §7): a `manual` suppression. Unlike a bounce or complaint it
+ * never replaces a suppression the address already has, an erasure's marker included: the
+ * one there says more about the address, and a block over the marker would let clearing the
+ * block lift an erasure. Answers the suppression that stands, and whether this added it.
+ */
+export async function block(
+  db: D1Database,
+  email: string,
+  detail?: string,
+): Promise<{ suppression: SuppressionRow; added: boolean }> {
+  const address = normalizeEmail(email);
+  // One batch, one transaction: nothing can clear the row between the insert and the read.
+  const [insert, read] = await db.batch([
+    db
+      .prepare(
+        "INSERT INTO suppressions (email, reason, detail, created_at) VALUES (?, 'manual', ?, ?) ON CONFLICT (email) DO NOTHING",
+      )
+      .bind(address, detail ?? null, Date.now()),
+    db.prepare("SELECT * FROM suppressions WHERE email = ?").bind(address),
+  ]);
+  const suppression = unwrap(read?.results[0] as SuppressionRow | undefined, "suppression");
+  return { suppression, added: (insert?.meta.changes ?? 0) > 0 };
+}
+
 export async function listSuppressions(db: D1Database): Promise<SuppressionRow[]> {
   const { results } = await db
     .prepare("SELECT * FROM suppressions ORDER BY created_at DESC LIMIT 1000")
@@ -521,7 +549,37 @@ export async function listSuppressions(db: D1Database): Promise<SuppressionRow[]
   return results;
 }
 
-export async function clearSuppression(db: D1Database, email: string): Promise<boolean> {
-  const res = await db.prepare("DELETE FROM suppressions WHERE email = ?").bind(email).run();
-  return (res.meta.changes ?? 0) > 0;
+/** The suppressions on exactly these addresses, so a roster page is annotated from its
+ *  own rows rather than from the capped `listSuppressions`. */
+export async function suppressionsFor(
+  db: D1Database,
+  emails: readonly string[],
+): Promise<SuppressionRow[]> {
+  if (emails.length === 0) {
+    return [];
+  }
+  const { results } = await db
+    .prepare("SELECT * FROM suppressions WHERE email IN (SELECT value FROM json_each(?))")
+    .bind(JSON.stringify(emails))
+    .all<SuppressionRow>();
+  return results;
+}
+
+/**
+ * Clear an address's suppression, the publisher's deliberate act (SPEC §7). An erasure's
+ * marker is never cleared this way: only the person's own confirmation lifts it, so it
+ * answers `erased` and leaves the marker in place.
+ */
+export async function clearSuppression(
+  db: D1Database,
+  email: string,
+): Promise<"cleared" | "none" | "erased"> {
+  const res = await db
+    .prepare("DELETE FROM suppressions WHERE email = ? AND reason <> ?")
+    .bind(email, ERASED)
+    .run();
+  if ((res.meta.changes ?? 0) > 0) {
+    return "cleared";
+  }
+  return (await suppressionOf(db, email))?.reason === ERASED ? "erased" : "none";
 }

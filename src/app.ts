@@ -28,6 +28,16 @@ import {
   MIN_LEAD_FLOOR_MS,
   STUCK_THRESHOLD_MS,
 } from "../shared/sends";
+import {
+  ERASED_MARKER_MEANING,
+  FLAG_MEANING,
+  STATUS_MEANING,
+  SUBSCRIBER_ACTIONS,
+  SUPPRESSED_MEANING,
+  SUPPRESSION_FLAG,
+  type SuppressionFlag,
+} from "../shared/subscriber_meanings";
+import type { SubscriberStatus, SuppressionReason } from "../shared/subscribers";
 import { buildInfo } from "./build";
 import type { Config } from "./env";
 import { json } from "./lib/errors";
@@ -52,6 +62,27 @@ import * as subscriberRoutes from "./routes/subscribers";
 import * as suppressionRoutes from "./routes/suppressions";
 import * as webhookRoutes from "./routes/webhooks";
 import { SETTLE_FOLLOW_MS } from "./send/feed";
+
+// The meanings the editor's legend shows, in the reference's own words around them, so a
+// client reading a route is told what the publisher is told (shared/subscriber_meanings.ts).
+const STATUS_GLOSS = (Object.keys(STATUS_MEANING) as SubscriberStatus[])
+  .map((status) => `\`${status}\`: ${STATUS_MEANING[status]}`)
+  .join(" ");
+// The roster shows an erasure's marker only on someone who signed up again; a list of
+// suppressions may hold one with no subscriber, so it takes the context-free meaning.
+function suppressionGloss(erased: string): string {
+  const reasons = (Object.keys(FLAG_MEANING) as SuppressionFlag[])
+    .map((flag) => {
+      const named = (Object.keys(SUPPRESSION_FLAG) as SuppressionReason[])
+        .filter((reason) => SUPPRESSION_FLAG[reason] === flag)
+        .map((reason) => `\`${reason}\``)
+        .join(" or ");
+      return `${named} (shown as ${flag}): ${flag === "erased" ? erased : FLAG_MEANING[flag]}`;
+    })
+    .join(" ");
+  return `Suppressed means: ${SUPPRESSED_MEANING} Each \`reason\` says why, and whose decision it was. ${reasons}`;
+}
+const SUPPRESSION_GLOSS = suppressionGloss(FLAG_MEANING.erased);
 
 // The body types a route declares (`RouteDef.accepts`); a raw upload adds its own.
 const JSON_BODY = ["application/json"];
@@ -977,8 +1008,7 @@ export function createRouter({
       resource: "subscribers",
       summary:
         "List subscribers with by-status counts. Filter, sort, and paginate via query params; returns a `page` envelope.",
-      description:
-        "Consent status and suppression are separate axes: `status` filters the roster; `suppressed` is an overlay facet. Pass `email` instead to look up one subscriber.",
+      description: `Consent status and suppression are separate axes: \`status\` filters the roster; \`suppressed\` is an overlay facet, and each row's \`suppression_reason\` says why. \`counts\` is the whole list's composition, whatever the filter: \`counts.suppressed\` counts subscribers whose address is suppressed, whatever their status, so it overlaps the other three and matches \`suppressed=only\`; an address suppressed with no subscriber is listed only by \`GET /api/suppressions\`. Pass \`email\` instead to look up one subscriber. ${STATUS_GLOSS} ${SUPPRESSION_GLOSS}`,
       query: [
         {
           name: "status",
@@ -1061,7 +1091,8 @@ export function createRouter({
       path: "/api/subscribers/:id/unsubscribe",
       access: "admin",
       resource: "subscribers",
-      summary: "Unsubscribe a subscriber (admin-initiated).",
+      summary: "Unsubscribe a subscriber at their request (SPEC §7).",
+      description: `${SUBSCRIBER_ACTIONS.unsubscribe.when} Immediate and idempotent, as their own unsubscribe link is (I2): it removes consent and never confirms anyone. To stop mailing an address on your own judgment, block it instead (\`POST /api/suppressions\`), which records that the decision was yours.`,
       handler: subscriberRoutes.unsubscribe,
     },
     {
@@ -1072,6 +1103,7 @@ export function createRouter({
       summary:
         "Erase a subscriber (SPEC §7): remove their data and keep only a do-not-contact marker. Can't be undone.",
       description:
+        `${SUBSCRIBER_ACTIONS.erase.when} Unsubscribing stops the mail and keeps everything; erasing removes what the list knows about them. ` +
         "One batch: deletes the subscriber's row, with how they joined and its evidence; replaces their address on every past delivery row with one placeholder, `erased:` and random hex, so each send's record still sums to its audience; and suppresses the address with reason `erased`, holding only the address and the time. A bounce, complaint, or manual suppression the address already has is kept as it is. Answers `erased`: the `email`, how many `deliveries` now show the placeholder, and the `suppression` the address is left with. The person can come back by subscribing again: their own confirmation lifts the marker, an import never does (while the address carries the `erased` marker, a row for it, `subscribed` or `unsubscribed`, is `blocked_by_suppression` and creates no subscriber; an address left with its earlier suppression is treated as that suppression), and `POST /api/subscribers` asks for `acknowledge_erasure: true` first. Nothing about the id is kept, so erasing it again answers 404 `not_found`. While a send run is handing the subscriber to the provider (their row pending or dispatched under the run's lease) it refuses 409 `run_in_progress` and changes nothing: try again a moment later. A receipt that later lands on an erased row records its outcome without the provider's words, and a bounce or complaint suppresses the address the receipt names, replacing the marker.",
       example: {
         response: {
@@ -1198,7 +1230,8 @@ export function createRouter({
       path: "/api/suppressions",
       access: "admin",
       resource: "suppressions",
-      summary: "List suppressed addresses (bounced or complained, never mailed).",
+      summary: "List suppressed addresses, never mailed whatever their status, with why.",
+      description: `Newest first, up to 1,000, whether or not the address is on the list. ${suppressionGloss(ERASED_MARKER_MEANING)}`,
       handler: suppressionRoutes.list,
     },
     {
@@ -1207,10 +1240,19 @@ export function createRouter({
       access: "admin",
       accepts: JSON_BODY,
       resource: "suppressions",
-      summary: "Suppress an address manually.",
+      summary: "Block an address: the publisher's own decision to stop mailing it (SPEC §7).",
+      description: `${SUBSCRIBER_ACTIONS.block.when} Stores a suppression with \`reason\` \`manual\` and an optional \`detail\` in the publisher's words, and changes no consent status. If they asked to leave, unsubscribe them instead (\`POST /api/subscribers/:id/unsubscribe\`). \`reason\` may be omitted or \`manual\`; any other is a 400, since a bounce or complaint is the provider's to report and an erasure's marker is Erase's to leave. An address already suppressed keeps what it has, its \`detail\` included: the answer is 200 with \`added: false\` and the suppression that stands, rather than 201.`,
       example: {
-        request: { email: "reader@example.com", reason: "manual" },
-        response: { suppressed: "reader@example.com", reason: "manual" },
+        request: { email: "reader@example.com", detail: "Our own test address" },
+        response: {
+          suppression: {
+            email: "reader@example.com",
+            reason: "manual",
+            detail: "Our own test address",
+            created_at: 1760400000000,
+          },
+          added: true,
+        },
       },
       handler: suppressionRoutes.add,
     },
@@ -1219,7 +1261,10 @@ export function createRouter({
       path: "/api/suppressions/:email",
       access: "admin",
       resource: "suppressions",
-      summary: "Clear a suppression for an address.",
+      summary: "Clear an address's suppression, so it may be mailed again (SPEC §7).",
+      description:
+        "A deliberate, rare act. Unblocking a block (`manual`) undoes a block by hand, the publisher's or one an import brought; clear one only on the publisher's word. Clearing a bounce or complaint lets mail go to an address that failed or reported spam, so do it only when the publisher knows the reason is gone. An erasure's marker (`erased`) is never cleared here: only the person's own confirmation lifts it, so it refuses 409 `erasure_marker` and leaves it. An erasure that found a block already on the address keeps the block instead of a marker, and clearing that block clears the address. Answers `cleared: false` when the address had no suppression.",
+      example: { response: { email: "reader@example.com", cleared: true } },
       handler: suppressionRoutes.clear,
     },
 

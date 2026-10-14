@@ -1,6 +1,13 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import {
+  ERASED_MARKER_MEANING,
+  FLAG_MEANING,
+  STATUS_MEANING,
+  SUBSCRIBER_ACTIONS,
+  SUPPRESSED_MEANING,
+} from "../shared/subscriber_meanings";
 import { createRouter } from "../src/app";
 import { requireAuth } from "../src/auth/middleware";
 import { type AppEnv, getConfig } from "../src/env";
@@ -67,6 +74,34 @@ describe("API reference is generated from the route registration", () => {
     ]) {
       expect(byKey.get(key)?.description ?? "").toMatch(/frozen copy/);
     }
+  });
+
+  it("tells a client what each subscriber status, suppression, and act means, in the editor legend's words (SPEC §7)", () => {
+    const byKey = new Map(defs.map((d) => [`${d.method} ${d.path}`, d]));
+    const describe = (key: string) => byKey.get(key)?.description ?? "";
+    for (const key of ["GET /api/subscribers", "GET /api/suppressions"]) {
+      expect(describe(key)).toContain(SUPPRESSED_MEANING);
+      for (const [flag, meaning] of Object.entries(FLAG_MEANING)) {
+        if (flag !== "erased") {
+          expect(describe(key)).toContain(meaning);
+        }
+      }
+    }
+    // The roster shows an erasure's marker only on someone who signed up again; the list of
+    // suppressions holds markers with no subscriber, so it says what a marker is instead.
+    expect(describe("GET /api/subscribers")).toContain(FLAG_MEANING.erased);
+    expect(describe("GET /api/suppressions")).toContain(ERASED_MARKER_MEANING);
+    expect(describe("GET /api/suppressions")).not.toContain(FLAG_MEANING.erased);
+    for (const meaning of Object.values(STATUS_MEANING)) {
+      expect(describe("GET /api/subscribers")).toContain(meaning);
+    }
+    // Each act says when it is the one to use, and so whose decision it records.
+    expect(describe("POST /api/subscribers/:id/unsubscribe")).toContain(
+      SUBSCRIBER_ACTIONS.unsubscribe.when,
+    );
+    expect(describe("POST /api/suppressions")).toContain(SUBSCRIBER_ACTIONS.block.when);
+    expect(describe("POST /api/subscribers/:id/erase")).toContain(SUBSCRIBER_ACTIONS.erase.when);
+    expect(describe("DELETE /api/suppressions/:email")).toContain("erasure_marker");
   });
 
   it("groups admin, public, and webhook tiers (mirroring app.ts)", () => {
