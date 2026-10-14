@@ -1647,7 +1647,7 @@ td a:hover {
   max-width: 68ch;
 }
 /* An act's name is a term, not a heading: a step lighter than bold. */
-.sub-legend dt strong {
+.sub-legend-act {
   font-weight: 600;
 }
 .sub-legend p {

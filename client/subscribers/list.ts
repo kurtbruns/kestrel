@@ -172,7 +172,7 @@ function legend(): Html {
     <h2>Row actions</h2>
     <p>From a subscriber’s ⋯ menu:</p>
     <dl>${Object.values(SUBSCRIBER_ACTIONS).map(({ label, when }) =>
-      legendRow(html`<strong>${label}</strong>`, when),
+      legendRow(html`<strong class="sub-legend-act">${label}</strong>`, when),
     )}</dl>
   </div>`;
 }
