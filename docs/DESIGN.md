@@ -481,7 +481,7 @@ The docs room's bar stays one row at every width, so its anchors always clear it
 
 **Be honest about time.** A send is never "now" or "immediately"; there is always a window.
 
-**Mechanics.** Sentence case for buttons and headings. Counts pluralize ("1 recipient"). A busy button says what it's doing ("Saving…") until it's done. Typographic apostrophes and quotes. A colon, a comma, or a new sentence rather than an em dash; an em dash stands alone only as the mark for an empty table cell.
+**Mechanics.** Sentence case for buttons and headings. Counts pluralize ("1 recipient"). A busy button says what it's doing ("Saving…") until it's done. Typographic apostrophes and quotes. A colon, a comma, or a new sentence rather than an em dash; an em dash stands alone only as the mark for an empty table cell. A date and time is short and local ("Feb 11, 2:00 AM"), and shows its year whenever that isn't the current year, past or future ("Feb 11, 2024, 2:00 AM").
 
 ---
 

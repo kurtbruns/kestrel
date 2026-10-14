@@ -18,6 +18,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- Dates in the editor show their year when it isn't the current year, past or future, so an imported subscriber's join date from years back, or a send scheduled for next January, reads unambiguously ("Feb 11, 2024, 2:00 AM"); this year's dates stay as short as before.
 - On the Workers Free plan's limits, the daily-writes warnings now count what the day's imports wrote, by UTC. An import plan warns when it and that day's earlier imports would use more than 70% of D1's daily writes, and advises importing the file the next day, so a list brought in over several files is warned before it can stop the newsletter. A scheduled send firing on a day imports have written now warns below 5,000 recipients, and advises sending the next day. The plan no longer warns because the list it leaves passes 3,000 confirmed subscribers: whether a send fits is the send's warning, given when it's scheduled (SPEC §7, §8).
 
 ## [1.9.0] - 2026-10-13
