@@ -119,6 +119,15 @@ describe("dev seed (Field Notes dataset)", () => {
     const erased = results.find((r) => r.reason === "erased")!;
     expect(erased.created_at).toBeLessThan(erased.joined);
     expect(erased.detail).toBeNull();
+    // A block by hand comes after the unsubscribe it follows, and nothing is dated ahead.
+    const blocked = await env.DB.prepare(
+      `SELECT x.created_at, s.unsubscribed_at FROM suppressions x
+       JOIN subscribers s ON s.email = x.email WHERE s.status = 'unsubscribed'`,
+    ).first<{ created_at: number; unsubscribed_at: number }>();
+    expect(blocked!.created_at).toBeGreaterThan(blocked!.unsubscribed_at);
+    for (const r of results) {
+      expect(r.created_at).toBeLessThanOrEqual(Date.now());
+    }
   });
 
   it("freezes each send's audience as it was AT THAT MOMENT, not the final list", async () => {

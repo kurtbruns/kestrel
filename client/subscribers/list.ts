@@ -147,10 +147,11 @@ function suppressionFlag(s: SubscriberListItem): Html | null {
 
 // A suppressed address keeps its consent status, but the status isn't in effect while the
 // suppression stands, so its badge takes the not-mailed grey (DESIGN §3). An erasure's
-// marker is the one exception: the person's own confirmation lifts it, so their pending
-// status is still live.
+// marker on a pending sign-up is the one exception: the person's own confirmation lifts
+// it, so that pending status is still live. On a confirmed row (an import can put one
+// there) nothing lifts it, so it greys like any other suppression.
 function statusBadge(s: SubscriberListItem): Html {
-  if (!s.suppressed || s.suppression_reason === "erased") {
+  if (!s.suppressed || (s.suppression_reason === "erased" && s.status === "pending")) {
     return badge(s.status);
   }
   return html`<span class="badge ${s.status} held" title="Not mailed while suppressed">${s.status}</span>`;

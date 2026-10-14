@@ -179,6 +179,22 @@ describe("subscribers view", () => {
     expect($("tr[data-id='s3'] .badge.pending").classList.contains("held")).toBe(false);
   });
 
+  it("greys a confirmed status under an erasure's marker, which no confirmation lifts", async () => {
+    fake = fakeApi([
+      {
+        path: "/api/subscribers",
+        reply: () => ({
+          counts,
+          subscribers: [{ ...subs[0], suppressed: true, suppression_reason: "erased" }],
+          page,
+        }),
+      },
+    ]);
+    await mount((r, s) => renderSubscribers(undefined, r, s));
+    await settle();
+    expect($("tr[data-id='s1'] .badge.confirmed").classList.contains("held")).toBe(true);
+  });
+
   it("points a list with no subscribers (suppressions alone count for none) at the import, and opens the import from the head", async () => {
     fake = fakeApi([
       {
