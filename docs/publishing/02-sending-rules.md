@@ -25,7 +25,7 @@ Kestrel offers readers no form for deleting their data, so they ask you. In many
 - **Say how to reach you.** Your privacy notice, wherever you publish it, should say how readers ask you about their data. Replying to any post works once replies reach your inbox.
 - **To stop the email,** find a confirmed reader under **Subscribers**, and choose **Unsubscribe** from their ⋯ menu. It records that they asked, and they can rejoin by subscribing again. A reader who never confirmed gets no posts, so **Erase** is the choice for them.
 - **To stop mailing someone on your own judgment,** not at their request, choose **Block** instead. It stops every email to the address whatever its status, and **Unblock** undoes it.
-- **To delete their data,** choose **Erase** from the same menu instead. It removes the subscriber and how they joined, and can't be undone. Past send records show an erased recipient in their place. Kestrel keeps the address only so it's never mailed again, as [Bring your existing list](01-your-list.md#when-readers-reply) explains.
+- **To delete their data,** choose **Erase** from the same menu. It removes the subscriber and how they joined, and can't be undone. Past send records show an erased recipient in their place. Kestrel keeps the address only so it's never mailed again, as [Bring your existing list](01-your-list.md#when-readers-reply) explains.
 - **Act promptly.** Under the [GDPR](https://eur-lex.europa.eu/eli/reg/2016/679/oj), you answer within a month in most cases (Article 12). The right to have data deleted is Article 17, and Article 13 asks you to tell readers about it when they sign up.
 
 ## Outside the US
