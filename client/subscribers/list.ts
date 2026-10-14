@@ -173,8 +173,10 @@ function legendRow(pill: Html, means: string): Html {
 }
 function legend(): Html {
   return html`<div class="sub-legend" id="subLegend" role="region" aria-labelledby="subLegendToggle" hidden>
+    <h2>Status</h2>
     <dl>${SUB_STATUSES.map(({ value }) => legendRow(badge(value), STATUS_MEANS[value] ?? ""))}</dl>
-    <p>Suppressed: the address isn’t mailed, whatever its status, which stays as it was. The red flag beside the address says why:</p>
+    <h2>Suppressed</h2>
+    <p>The address isn’t mailed, whatever its status, which stays as it was. The red flag beside the address says why:</p>
     <dl>${Object.values(SUPPRESSIONS).map(({ label, means }) =>
       legendRow(html`<span class="badge suppressed">${label}</span>`, means),
     )}</dl>

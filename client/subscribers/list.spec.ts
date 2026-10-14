@@ -224,8 +224,9 @@ describe("subscribers view", () => {
         "A do-not-contact marker kept after an erasure. Only the person’s own confirmation lifts it.",
       ],
     ]);
+    expect($$("#subLegend h2").map((h) => h.textContent)).toEqual(["Status", "Suppressed"]);
     expect($("#subLegend p").textContent).toBe(
-      "Suppressed: the address isn’t mailed, whatever its status, which stays as it was. The red flag beside the address says why:",
+      "The address isn’t mailed, whatever its status, which stays as it was. The red flag beside the address says why:",
     );
     toggle.click();
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
