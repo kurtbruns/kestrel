@@ -11,11 +11,11 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
   it("renders the docs in the indexes' order, Publishing first, with titles from each doc's H1 and an HTML fragment", () => {
     const { docs } = renderDocs();
     expect(docs.map((d) => `${d.set}/${d.section}/${d.slug}`)).toEqual([
-      "publishing/setup/name-your-publication",
-      "publishing/setup/check-your-setup",
-      "publishing/setup/your-list",
-      "publishing/setup/write-a-post",
-      "publishing/setup/share-your-subscribe-link",
+      "publishing/set-up-your-publication/name-your-publication",
+      "publishing/set-up-your-publication/check-your-setup",
+      "publishing/set-up-your-publication/your-list",
+      "publishing/set-up-your-publication/write-a-post",
+      "publishing/set-up-your-publication/share-your-subscribe-link",
       "publishing/sending/scheduling-and-sending",
       "publishing/sending/after-a-send",
       "publishing/sending/sending-rules",
@@ -51,7 +51,7 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
     ]);
     expect(sets.map((s) => s.sections.map((sec) => [sec.id, sec.title, sec.numbered]))).toEqual([
       [
-        ["setup", "Setup", true],
+        ["set-up-your-publication", "Set up your publication", true],
         ["sending", "Sending", false],
         ["more", "More", false],
       ],

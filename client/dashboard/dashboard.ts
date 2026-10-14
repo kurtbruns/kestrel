@@ -507,8 +507,8 @@ function apiConnectCard(connected: boolean): Html {
  * connecting one replaces the check-your-setup step (nothing can be checked before it) and
  * the subscribe step says signups wait for it (the page is closed). Bringing a list comes
  * before writing, for a publisher moving from another service; it reads as done once the
- * list has subscribers, which a fresh publication skips. The Publishing docs' Setup section
- * (docs/publishing/README.md) follows these steps, so a change here changes it.
+ * list has subscribers, which a fresh publication skips. The Publishing docs' section of the
+ * same name (docs/publishing/README.md) follows these steps, so a change here changes it.
  */
 function setupChecklistHtml(
   pub: Publication,

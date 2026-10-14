@@ -2,7 +2,7 @@
 
 These pages cover writing and sending your newsletter in the dashboard, from naming your publication to what happens after each send. Deploying and running Kestrel itself is covered in [Self-hosting](../README.md).
 
-## Setup
+## Set up your publication
 
 The steps your dashboard lists until your first post, in the same order.
 
