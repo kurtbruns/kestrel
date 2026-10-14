@@ -64,7 +64,7 @@ export async function renderSubscribers(
     root,
     html`
     <div class="spread page-head"><h1>Subscribers</h1><span class="row"><button type="button" class="ghost" id="importSubs">Import</button><button type="button" class="ghost" id="exportSubs">Export</button><button class="primary" id="addSub">Add subscriber</button></span></div>
-    <div class="card sub-summary"><div id="subCounts" class="row muted">Loading…</div>${statusKey()}</div>
+    <div class="card sub-summary"><div class="sub-summary-head"><div id="subCounts" class="row muted">Loading…</div><button type="button" class="sub-legend-toggle" id="subLegendToggle" aria-expanded="false" aria-controls="subLegend">Legend</button></div>${legend()}</div>
     ${listToolbar({ statuses: SUB_STATUSES, suppressible: true, searchPlaceholder: "Search email…" })}
     <div id="subList" class="muted">Loading…</div>
     <div id="subPager"></div>`,
@@ -81,7 +81,7 @@ export async function renderSubscribers(
       const c = data.counts;
       // The counts stay a global by-status summary (independent of the active filter);
       // the page total below reflects the filtered roster. Only the counts repaint, so
-      // the key under them stays open or closed across a reload.
+      // the legend stays open or closed across a reload.
       setHtml(
         $("#subCounts"),
         html`<span><strong>${c.confirmed}</strong> confirmed</span><span>${c.pending} pending</span><span>${c.unsubscribed} unsubscribed</span><span>${c.suppressed} suppressed</span>`,
@@ -95,6 +95,12 @@ export async function renderSubscribers(
     }
   }
 
+  const legendToggle = $("#subLegendToggle");
+  legendToggle.onclick = () => {
+    const open = legendToggle.getAttribute("aria-expanded") !== "true";
+    legendToggle.setAttribute("aria-expanded", String(open));
+    $("#subLegend").hidden = !open;
+  };
   $("#addSub").onclick = () => addSubscriberModal(load, signal);
   $("#importSubs").onclick = () => {
     location.hash = "#/subscribers/import";
@@ -118,7 +124,7 @@ export async function renderSubscribers(
 // overlay, not a consent status) and names WHY: bounced / complaint / blocked / erased.
 // Reasons come from the webhook (bounce, complaint), a manual block, or an erasure;
 // anything unrecognized falls back to a generic label. The pills carry no hover tooltip,
-// which keyboard, screen-reader, and touch users can't reach: the key under the counts
+// which keyboard, screen-reader, and touch users can't reach: the legend under the counts
 // defines each label once, and a subscriber's own detail belongs on their page.
 const SUPPRESSIONS: Record<string, { label: string; means: string }> = {
   bounce: { label: "bounced", means: "Mail to the address failed." },
@@ -138,29 +144,27 @@ function suppressionFlag(s: SubscriberListItem): Html | null {
   return html` <span class="badge suppressed row-flag">${label}</span>`;
 }
 
-// What each label a row can show means (DESIGN §3), as a collapsed key under the counts:
-// every pill drawn as the list draws it, beside its definition, so the key also says what
-// the colors mean. A native <details>, so keyboard and screen readers get it for free.
+// The legend: what each label a row can show means (DESIGN §3), every pill drawn as the
+// list draws it beside its definition, so it also says what the colors mean. Its toggle
+// sits at the right of the counts and the legend opens below the whole card, a layout a
+// <details> can't give, so the toggle is a button carrying aria-expanded.
 const STATUS_MEANS: Record<string, string> = {
   pending: "Subscribed but hasn’t clicked the confirmation email.",
   confirmed:
     "Agreed to receive your posts, here or at the service they were imported from, and receives them.",
   unsubscribed: "Opted out.",
 };
-function keyRow(pill: Html, means: string): Html {
+function legendRow(pill: Html, means: string): Html {
   return html`<dt>${pill}</dt><dd>${means}</dd>`;
 }
-function statusKey(): Html {
-  return html`<details class="sub-key"><summary>What these mean</summary><div class="sub-key-body">
-    <dl>${SUB_STATUSES.map(({ value }) => keyRow(badge(value), STATUS_MEANS[value] ?? ""))}</dl>
-    <p>Suppressed: never mailed, whatever their status. A red flag beside the address says why.</p>
+function legend(): Html {
+  return html`<div class="sub-legend" id="subLegend" hidden>
+    <dl>${SUB_STATUSES.map(({ value }) => legendRow(badge(value), STATUS_MEANS[value] ?? ""))}</dl>
+    <p>Suppressed: the address isn’t mailed, whatever its status, which stays as it was. The red flag beside the address says why:</p>
     <dl>${Object.values(SUPPRESSIONS).map(({ label, means }) =>
-      keyRow(html`<span class="badge suppressed">${label}</span>`, means),
-    )}${keyRow(
-      html`<span class="badge confirmed held">confirmed</span>`,
-      "A suppressed subscriber’s status: still true, but not mailed while suppressed. A pending sign-up held only by an erasure keeps its color.",
+      legendRow(html`<span class="badge suppressed">${label}</span>`, means),
     )}</dl>
-  </div></details>`;
+  </div>`;
 }
 
 // A suppressed address keeps its consent status, but the status isn't in effect while the

@@ -160,17 +160,20 @@ describe("subscribers view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("defines every pill in a collapsed key under the counts, which stays as it is while the list reloads", async () => {
+  it("defines every pill in a legend the reader opens, which stays as it is while the list reloads", async () => {
     fake = fakeApi([
       { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
     ]);
     await mount((r, s) => renderSubscribers(undefined, r, s));
     await settle();
-    const key = $<HTMLDetailsElement>(".sub-summary details.sub-key");
-    expect(key.open).toBe(false);
-    expect($(".sub-key > summary").textContent).toBe("What these mean");
+    const toggle = $(".sub-summary #subLegendToggle");
+    const legend = $("#subLegend");
+    expect(toggle.textContent).toBe("Legend");
+    expect(toggle.getAttribute("aria-controls")).toBe("subLegend");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(legend.hidden).toBe(true);
     // Each pill as the list draws it (its classes), beside its definition.
-    const rows = $$(".sub-key dt").map((dt) => {
+    const rows = $$("#subLegend dt").map((dt) => {
       const pill = dt.querySelector(".badge")!;
       return [pill.className, pill.textContent, dt.nextElementSibling!.textContent];
     });
@@ -190,24 +193,24 @@ describe("subscribers view", () => {
         "erased",
         "A do-not-contact marker kept after an erasure. Only the person’s own confirmation lifts it.",
       ],
-      [
-        "badge confirmed held",
-        "confirmed",
-        "A suppressed subscriber’s status: still true, but not mailed while suppressed. A pending sign-up held only by an erasure keeps its color.",
-      ],
     ]);
-    expect($(".sub-key p").textContent).toBe(
-      "Suppressed: never mailed, whatever their status. A red flag beside the address says why.",
+    expect($("#subLegend p").textContent).toBe(
+      "Suppressed: the address isn’t mailed, whatever its status, which stays as it was. The red flag beside the address says why:",
     );
-    // A reload repaints only the counts, so a key the reader opened stays open.
-    key.open = true;
+    toggle.click();
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(legend.hidden).toBe(false);
+    // A reload repaints only the counts, so a legend the reader opened stays open.
     const status = $<HTMLSelectElement>(".lt-status");
     status.value = "pending";
     status.dispatchEvent(new Event("change"));
     await settle();
     expect(fake.calls.map((c) => c.url.searchParams.get("status"))).toEqual([null, "pending"]);
-    expect($(".sub-key")).toBe(key);
-    expect(key.open).toBe(true);
+    expect($("#subLegend")).toBe(legend);
+    expect(legend.hidden).toBe(false);
+    toggle.click();
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(legend.hidden).toBe(true);
     expect(fake.unhandled).toEqual([]);
   });
 
