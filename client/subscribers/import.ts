@@ -18,7 +18,6 @@ import {
 } from "../../shared/imports";
 import { ApiError, api, apiFile, describeError } from "../api";
 import { mount } from "../lifecycle";
-import { appState } from "../state";
 import { codeBlock, wireCopy } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
 import { saveFile } from "../ui/download";
@@ -87,8 +86,6 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
     return;
   }
 
-  // Named as the attestation names it: the publication's own name, or none.
-  const publication = appState.appConfig?.settings.publication.name || "this newsletter";
   // The file in hand lives only in the closures of the plan on screen: nothing is stored
   // between the plan and the commit, and the commit sends exactly what that plan was made from.
   let sample: "full" | "plain" = "full";
@@ -290,7 +287,7 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
         ${
           p.attestation
             ? html`<label class="imp-check"><input type="checkbox" id="impAttest"><span>${p.attestation.text}</span></label>
-              <p class="field-hint imp-attest-hint">Only import people who asked to receive ${publication}. If you’re unsure about some, take them out of the file before importing.</p>`
+              <p class="field-hint imp-attest-hint">Only import people who asked to receive ${p.attestation.publication}. If you’re unsure about some, take them out of the file before importing.</p>`
             : null
         }
         ${
