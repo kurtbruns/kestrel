@@ -309,7 +309,7 @@ describe("subscribers view", () => {
       [
         "badge suppressed",
         "erased",
-        "A do-not-contact marker kept after an erasure. Only the person’s own confirmation lifts it.",
+        "Erased at their request, then signed up again. Not mailed unless they confirm.",
       ],
     ]);
     expect(

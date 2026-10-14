@@ -1203,7 +1203,7 @@ export function createRouter({
       access: "admin",
       resource: "suppressions",
       summary: "List suppressed addresses, never mailed whatever their status, with why.",
-      description: `Newest first, up to 1,000. ${SUPPRESSION_GLOSS}`,
+      description: `Newest first, up to 1,000, whether or not the address is on the list. ${SUPPRESSION_GLOSS} An \`erased\` address the person hasn’t signed up with again has no subscriber: only its do-not-contact marker is kept, so it is never mailed, and only the person’s own confirmation lifts it.`,
       handler: suppressionRoutes.list,
     },
     {

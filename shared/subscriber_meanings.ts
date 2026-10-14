@@ -33,8 +33,7 @@ export const FLAG_MEANING: Record<SuppressionFlag, string> = {
   bounced: "Mail to the address failed, here or at the service it was imported from.",
   complaint: "Marked as spam, here or at the service it was imported from.",
   blocked: "You chose to stop mailing it. You can unblock it.",
-  erased:
-    "A do-not-contact marker kept after an erasure. Only the person’s own confirmation lifts it.",
+  erased: "Erased at their request, then signed up again. Not mailed unless they confirm.",
 };
 
 /** An act on a subscriber: its name in the editor's row menu, and when it is the one to use. */
