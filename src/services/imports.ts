@@ -39,7 +39,7 @@ import {
 } from "../../shared/imports";
 import type { ListEntry, ListState } from "../db/imports";
 import * as imports from "../db/imports";
-import { audienceCount } from "../db/subscribers";
+import { audienceCount, ERASED } from "../db/subscribers";
 import { onFreePlanLimits } from "../env";
 import { HttpError, refusal } from "../lib/errors";
 import { newId, newTokens } from "../lib/ids";
@@ -121,6 +121,8 @@ const WRITE_OUTCOMES: ReadonlySet<ImportOutcome> = new Set([
  * to pending through the public form, so only its owner's confirmation undoes the leaving
  * (I2). A suppression here stands, except that an erased marker gives way to any other
  * reason, so a known bounce or complaint still stops the address being sent confirmations.
+ * An erased marker with no subscriber behind it also blocks an unsubscribed row: recording
+ * the person as unsubscribed would bring back the data the erasure removed.
  */
 export function classify(
   row: ImportRow,
@@ -156,7 +158,9 @@ export function classify(
       (here.confirmed_at ?? 0) > row.unsubscribed_at;
     outcome =
       here === undefined
-        ? "create_unsubscribed"
+        ? suppressionHere === ERASED
+          ? "blocked_by_suppression"
+          : "create_unsubscribed"
         : here.status === "unsubscribed"
           ? "unchanged"
           : confirmedHereSince

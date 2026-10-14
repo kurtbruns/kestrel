@@ -73,10 +73,10 @@ Each row gets exactly one outcome. A row that both changes its status and adds a
 | `confirm_pending` | `subscribed`, and pending in Kestrel (never confirmed): confirmed, and its confirmation link no longer works. |
 | `unchanged` | Already confirmed in Kestrel, or already in the state the row claims. A subscriber who joined through Kestrel keeps their own record. |
 | `mark_unsubscribed` | `unsubscribed`, and confirmed or pending in Kestrel, with no confirmation in Kestrel newer than the row's `unsubscribed_at`: unsubscribed. |
-| `create_unsubscribed` | `unsubscribed`, with no subscriber in Kestrel: recorded as unsubscribed, so the list remembers they left. |
+| `create_unsubscribed` | `unsubscribed`, with no subscriber in Kestrel and not erased in Kestrel: recorded as unsubscribed, so the list remembers they left. |
 | `kept_confirmed_newer` | `unsubscribed`, but the reader confirmed in Kestrel after the source's `unsubscribed_at`: their newer action stands. |
 | `kept_unsubscribed` | `subscribed`, but unsubscribed in Kestrel, or pending again after leaving until they confirm in Kestrel themselves. An unsubscribe is never reversed. |
-| `blocked_by_suppression` | `subscribed`, but the address carries a suppression in Kestrel, a do-not-contact marker included: never added or confirmed. |
+| `blocked_by_suppression` | `subscribed`, but the address carries a suppression in Kestrel, a do-not-contact marker included: never added or confirmed. Also `unsubscribed` for an address erased in Kestrel, whose do-not-contact marker is all that is left of it: no subscriber is recorded, so an import never brings back an erased person's data. |
 | `suppression_added` | The row carries a suppression and the address has none in Kestrel, or only a do-not-contact marker, and nothing else changes. Applied whatever the row's `status`. |
 | `left_out` | `pending` or `none` with nothing to apply: counted, never confirmed. An import sends no email, so it can't start a confirmation either. |
 | `invalid` | The address isn't valid. |
