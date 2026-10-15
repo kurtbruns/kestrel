@@ -37,6 +37,8 @@ The editor lives under `/dashboard`, and the API under `/api`. One application c
 
     Each path covers everything under it. Leave every other path out. The landing page, the archive, subscribing, unsubscribing, images, and your email provider's webhooks must stay public.
 
+1. **(Optional)** Choose how long a sign-in lasts. The application's session duration defaults to 24 hours, so everyone signs in again each day. You can set anything from immediately to one month, as Cloudflare's [session management](https://developers.cloudflare.com/cloudflare-one/access-controls/access-settings/session-management/) describes. A longer session suits a publisher on their own computer, and a shorter one is safer on a shared one.
+
 ## 3. Allow yourself in
 
 Every Access application denies everyone until a policy allows them.
