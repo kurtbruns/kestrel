@@ -30,7 +30,7 @@ None of these can be read or changed from inside the app, by the editor or by Cl
 
 ### `PROVIDER`
 
-Until it's set, or while it's empty, the app runs with no provider connected. You can write and preview posts, but everything that would send email is refused: scheduling, sending now, test emails, and the confirmation emails that signups need. The subscribe page says signups aren't open yet, and Settings shows **No email provider connected**. Setting it to `none` means the same. A new instance's `production` block declares it empty, `"PROVIDER": ""`, so wrangler doesn't warn that the top level's value is missing there. [Connect Amazon SES](../get-started/04-ses.md) changes it to `ses`.
+Until it's set, or while it's empty, the app runs with no provider connected. Posts can be written and previewed, but everything that would send email is refused: scheduling, sending now, test emails, and the confirmation emails that signups need. The subscribe page says signups aren't open yet, and Settings shows **No email provider connected**. Setting it to `none` means the same. A new instance's `production` block declares it empty, `"PROVIDER": ""`, so wrangler doesn't warn that the top level's value is missing there. [Connect Amazon SES](../get-started/04-ses.md) changes it to `ses`.
 
 `fake` delivers nothing. It records a send as if every recipient accepted it. Local development runs on it, and names it on purpose in the top level of `wrangler.jsonc`. Never copy it into `production`, whatever wrangler suggests: every subscriber would be recorded as sent the post, and never get it. The app refuses `fake` unless `APP_ORIGIN` is on `localhost` or `127.0.0.1`. A hosted demo that runs `fake` on a real hostname on purpose sets `ALLOW_FAKE_PROVIDER` to `true`, which no other deployment needs, and which no other provider reads.
 
@@ -38,11 +38,11 @@ Until it's set, or while it's empty, the app runs with no provider connected. Yo
 
 `FROM_ADDRESS` is the only address mail is sent from, and the identity your provider authenticates. `SENDING_DOMAIN` is for display: Settings shows it beside the From address. The app never checks that the two match, so set `SENDING_DOMAIN` to the part of `FROM_ADDRESS` after the `@`.
 
-Neither one is the publication's name, tagline, or logo. You set those in the editor, under **Settings → Publication identity**. Until you do, the From address's display name stands in for the name, and with neither, your emails and reader pages show no name at all.
+Neither one is the publication's name, tagline, or logo. You set those in the editor, under **Settings → Publication identity**. Until you do, the From address's display name stands in for the name, and with neither, the emails and reader pages show no name at all.
 
 ### `ARCHIVE_BASE_PATH`
 
-Every post you send carries its archive link, `ARCHIVE_BASE_PATH` followed by the post's slug, and those links are permanent. Changing the prefix later breaks every link already mailed, so pick it before your first send. To keep links from an older install working, set it to the prefix they use, such as `/newsletter`.
+Every post sent carries its archive link, `ARCHIVE_BASE_PATH` followed by the post's slug, and those links are permanent. Changing the prefix later breaks every link already mailed, so pick it before the first send. To keep links from an older install working, set it to the prefix they use, such as `/newsletter`.
 
 A missing leading slash is added, and a trailing slash is dropped.
 
@@ -66,7 +66,7 @@ It's also how the app tells Workers Free from Workers Paid. At the default, the 
 
 - One import takes up to 1,000 rows, since Free's 10 ms of CPU a request can't plan and commit more. Above it, up to 10,000 ([Limits in detail](../publishing/01-your-list.md#limits-in-detail)).
 - An export reads 1,000 rows a page. Above it, 10,000.
-- The app warns before a send to more than 5,000 recipients (fewer on a day you've imported), and on an import plan that, with the day's earlier imports, would use most of a day's writes. Either may use up D1's daily allowance of 100,000 rows written, which stops the app until midnight UTC ([As your list grows](../guides/09-as-your-list-grows.md)). Neither warning stops you. Above the default, neither appears.
+- The app warns before a send to more than 5,000 recipients (fewer on a day with imports), and on an import plan that, with the day's earlier imports, would use most of a day's writes. Either may use up D1's daily allowance of 100,000 rows written, which stops the app until midnight UTC ([As your list grows](../guides/09-as-your-list-grows.md)). Neither warning stops you. Above the default, neither appears.
 
 Never set it above your plan's limit. A minute that hits the cap is cut off mid-batch, and the send stalls until a later minute picks it up. A value below 30 is raised to 30, the least a minute needs to send anything and still send a notification.
 
@@ -74,7 +74,7 @@ Never set it above your plan's limit. A minute that hits the cap is cut off mid-
 
 Every send stays visible and cancelable for at least this long before it goes out, whether it's scheduled, sent now, or moved. It's the window to catch a mistake, including one in a send Claude prepared.
 
-The floor is 60, since sends go out from a once-a-minute schedule. The ceiling is 86400, one day. It's the least wait before every send, not a limit on how far ahead you can schedule. It lives in deploy config on purpose, so neither the editor nor Claude can shorten it.
+The floor is 60, since sends go out from a once-a-minute schedule. The ceiling is 86400, one day. It's the least wait before every send, not a limit on how far ahead a post can be scheduled. It lives in deploy config on purpose, so neither the editor nor Claude can shorten it.
 
 ### `ARCHIVE_ORIGIN` and `MEDIA_PUBLIC_BASE`
 

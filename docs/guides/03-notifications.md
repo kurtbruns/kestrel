@@ -1,6 +1,6 @@
 # Notifications through Cloudflare's email
 
-Kestrel emails you when a send goes out, and right away when one runs into a problem. By default, these notifications go through your email provider. The one you need most, about your provider refusing your account, is the one your provider would refuse too. Cloudflare's email doesn't depend on your provider, so that notification still reaches you.
+Kestrel emails the publisher when a send goes out, and right away when one runs into a problem. By default, these notifications go through your email provider. The one you need most, about your provider refusing your account, is the one your provider would refuse too. Cloudflare's email doesn't depend on your provider, so that notification still reaches you.
 
 In this guide, you turn on Cloudflare's email for your app's hostname, and verify your own address with it. Then you add the binding that sends notifications through it, deploy, and send yourself a test.
 

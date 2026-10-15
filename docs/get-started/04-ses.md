@@ -105,7 +105,7 @@ If AWS asks for more detail, reply in the support case. If it denies the request
 - Signups use double opt-in: each subscriber confirms by email before joining the list.
 - Every post offers one-click unsubscribe.
 - Bounces and complaints reach the app through SNS, and it stops mailing those addresses automatically.
-- How many subscribers you expect, and how often you send.
+- How many subscribers the newsletter expects, and how often it sends.
 
 Your account stays in the sandbox until AWS grants access, so don't go live before then. In the sandbox, a signup from any address you haven't verified fails, and a post reaches only your verified addresses.
 

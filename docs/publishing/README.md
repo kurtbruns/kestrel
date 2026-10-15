@@ -16,7 +16,7 @@ The steps your dashboard lists until your first post, in the same order.
 
 Things you choose to do once you're running.
 
-- [Your email template](11-email-template.md)
+- [Edit your email template](11-email-template.md)
 - [Working with Claude](07-working-with-claude.md)
 
 ## Rules and troubleshooting

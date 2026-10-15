@@ -1,4 +1,4 @@
-# Your email template
+# Edit your email template
 
 You write each post in Markdown, and the template is the HTML frame it's sent in, like a layout in a static site generator. `{{ .Post.Body }}` marks where your post goes, and the rest is plain HTML around it. The built-in template works as it comes, so changing it is optional.
 

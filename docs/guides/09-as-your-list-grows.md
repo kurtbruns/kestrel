@@ -20,7 +20,7 @@ SES caps how many emails your account sends a day, and how many a second. A send
 
 ## 2. Upgrade to Workers Paid
 
-On the free plan, [D1](https://developers.cloudflare.com/d1/platform/pricing/) allows a fixed number of database writes a day. A send to about 7,000 recipients uses them all, and then the whole app stops until midnight UTC. Until you upgrade, the app warns you before a send or an import that could use up the day. It's recommended to upgrade from about 5,000 subscribers.
+On the free plan, [D1](https://developers.cloudflare.com/d1/platform/pricing/) allows a fixed number of database writes a day. A send to about 7,000 recipients uses them all, and then the whole app stops until midnight UTC. Until you upgrade, the app warns the publisher before a send or an import that could use up the day. It's recommended to upgrade from about 5,000 subscribers.
 
 1. Upgrade your Cloudflare account to the $5 [Workers Paid plan](https://developers.cloudflare.com/workers/platform/pricing/), which has no daily limit on writes.
 
