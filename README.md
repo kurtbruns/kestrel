@@ -26,20 +26,19 @@ npm run dev
 
 The first time, it asks you to confirm the local database's migrations. Then open http://localhost:8787/dashboard/, with nothing to sign in with. If port 8787 is taken, the `Ready on` line shows the one it picked.
 
-In a second terminal, load a demo publication with posts, subscribers, and past sends, or empty it again:
+In a second terminal, load a demo publication with posts, subscribers, and past sends:
 
 ```bash
 npm run seed
+```
+
+To start over, reset the app to the state a new instance starts in: no posts, subscribers, or settings, with the first-run dashboard and its setup checklist:
+
+```bash
 npm run reset
 ```
 
-When you're ready to deploy, this folder can be your instance's repository. Push it to an empty GitHub repository, then follow [Deploy the app](docs/get-started/02-deploy.md#2-sign-in-to-cloudflare) from signing in to Cloudflare.
-
-## Run your own
-
-Kestrel installs from npm as [`@kurtbruns/kestrel`](https://www.npmjs.com/package/@kurtbruns/kestrel). Your instance lives in a small repository of your own, which holds its settings and names the release it runs. [Get started](docs/README.md#get-started) takes you from an empty repository to a live newsletter, and [Upgrade to a new release](docs/guides/07-upgrade.md) moves an instance to a newer one.
-
-The docs are two sets, one per job. [Self-hosting](docs/README.md) is for whoever deploys and runs Kestrel. [Publishing](docs/publishing/README.md) is for whoever writes and sends the newsletter. Both are in the editor's **Docs** tab, and an instance serves every page as Markdown for Claude to read.
+When you're ready to deploy your own instance, see the [setup guide](https://getkestrel.dev/docs/), which contains instructions for deploying and running Kestrel.
 
 ## Contributing
 
