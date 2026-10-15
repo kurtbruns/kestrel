@@ -1,8 +1,8 @@
 # Verify it works
 
-Some things only show up with real email: whether inboxes trust your mail, how it looks in a real mail client, and whether bounces and unsubscribes come back to the app. Check them now, while your list is empty and every email goes only to you.
+Some things only show up with real email: whether inboxes trust your mail, how it looks in a real mail client, and whether bounces and unsubscribes come back to the app. Check them now, while the list is empty and every email goes only to you.
 
-In this guide, you send yourself a test email, reply to it, and check that it passes authentication. Then you set up your notifications, send a real post to yourself as a subscriber, and unsubscribe. Finally, you check that bounces and complaints reach the app, read the app's logs, and check that SES can send to anyone.
+In this guide, you send yourself a test email, reply to it, and check that it passes authentication. Then you set up notifications, send a real post to yourself as a subscriber, and unsubscribe. Finally, you check that bounces and complaints reach the app, read the app's logs, and check that SES can send to anyone.
 
 ## Before you begin
 
@@ -37,7 +37,7 @@ Inboxes trust mail that passes DKIM and DMARC for the domain it's from. Passing 
 
 If a check fails, compare your DNS records with the ones in [Connect Amazon SES](04-ses.md#1-verify-your-sending-hostname). [Sending-domain DNS](../reference/02-sending-domain-dns.md#verify-alignment) explains each result.
 
-## 3. Set up your notifications
+## 3. Set up notifications
 
 Kestrel emails you when a send finishes, and right away when one runs into a problem. Notifications go through your email provider. To send them through Cloudflare instead, see [Notifications through Cloudflare's email](../guides/03-notifications.md).
 
@@ -47,6 +47,8 @@ Kestrel emails you when a send finishes, and right away when one runs into a pro
 
 1. Select **Send a test notification**. It arrives at that address.
 
+Use your own address to test. If you're not the publisher, they set theirs in [Check your setup](../publishing/10-check-your-setup.md).
+
 ## 4. Send a real post to yourself
 
 This is a real send, to a list of one. It proves the whole path: subscribing, confirming, scheduling, and sending.
@@ -55,7 +57,7 @@ This is a real send, to a list of one. It proves the whole path: subscribing, co
 
 1. Open the confirmation email, follow its link, and select **Confirm**. In the editor, **Subscribers** shows the address as **Confirmed**.
 
-1. Open your post, select **Schedule**, and then **Send now**. Every send waits at least five minutes before it goes out, so you can cancel a mistake.
+1. Open the post, select **Schedule**, and then **Send now**. Every send waits at least five minutes before it goes out, so you can cancel a mistake.
 
 1. Cancel the send, to see that canceling stops it. Then select **Send now** again, and let it go.
 
@@ -86,7 +88,7 @@ If an address has no flag, SES's events aren't reaching the app. Check the confi
 
 ## 7. Read the logs
 
-The app writes a log line for each thing it does, and Cloudflare keeps them for a few days. Nothing else tells you if the once-a-minute schedule that sends your posts stops, so it's worth knowing where to look.
+The app writes a log line for each thing it does, and Cloudflare keeps them for a few days. Nothing else tells you if the once-a-minute schedule that sends posts stops, so it's worth knowing where to look.
 
 1. In the Cloudflare dashboard, go to **Workers & Pages**, select `kestrel-production`, and select **Observability**.
 

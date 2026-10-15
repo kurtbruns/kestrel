@@ -1,8 +1,8 @@
 # Connect Amazon SES
 
-Kestrel sends your posts through Amazon SES, Amazon's email service. SES only delivers the mail: Kestrel keeps your list, each subscriber's consent, and the record of every send. AWS reviews your account before it lets you send to anyone but yourself. This page asks for that early, and you test in the sandbox while you wait.
+Kestrel sends the newsletter's posts through Amazon SES, Amazon's email service. SES only delivers the mail: Kestrel keeps the list, each subscriber's consent, and the record of every send. AWS reviews your account before it lets you send to anyone but yourself. This page asks for that early, and you test in the sandbox while you wait.
 
-In this guide, you verify your sending hostname with SES and add a DMARC record. You forward readers' replies to your inbox, and ask AWS for production access. You also route bounces and complaints to the app through SNS. Then you give the app its AWS credentials, set the provider, and deploy.
+In this guide, you verify your sending hostname with SES and add a DMARC record. You forward readers' replies to the publisher's inbox, and ask AWS for production access. You also route bounces and complaints to the app through SNS. Then you give the app its AWS credentials, set the provider, and deploy.
 
 ## Before you begin
 
@@ -44,7 +44,7 @@ DMARC tells inboxes what to do with mail that fails its checks, and sends you re
 
 ## 3. Receive replies at your From address
 
-When a reader replies to a post, or to their confirmation email, the reply goes to your From address, `newsletter@send.example.com`. Nothing receives mail there yet, so the reply bounces. Kestrel only sends mail, so you give the address an inbox yourself. Here you forward it to one you already read, with Cloudflare Email Routing, which is free on every plan.
+When a reader replies to a post, or to their confirmation email, the reply goes to your From address, `newsletter@send.example.com`. Nothing receives mail there yet, so the reply bounces. Kestrel only sends mail, so you give the address an inbox yourself. Here you forward it to the publisher's inbox, with Cloudflare Email Routing, which is free on every plan. The publisher is whoever writes and sends the newsletter, which may be you.
 
 `send.example.com` receives no other mail, so turning on Email Routing there changes nothing else. Your SES records sit on other names under it. Inboxes check SES's mail for SPF at its return path, not here, so sending is unaffected.
 
@@ -54,19 +54,19 @@ When a reader replies to a post, or to their confirmation email, the reply goes 
 
 1. Cloudflare adds MX, SPF, and DKIM records for `send.example.com`, and locks them. Wait until they show as added.
 
-1. Under **Destination Addresses**, add the inbox you want replies in. Open the email Cloudflare sends to it, and select **Verify email address**. An address you've already verified with Cloudflare, such as one for [notifications](../guides/03-notifications.md), is listed already.
+1. Under **Destination Addresses**, add the publisher's inbox. Open the email Cloudflare sends to it, and select **Verify email address**. An address you've already verified with Cloudflare, such as one for [notifications](../guides/03-notifications.md), is listed already.
 
-1. Under **Routing Rules**, select **Create routing rule**. For **Email pattern**, enter `newsletter`, the part of your From address before the `@`, and select `send.example.com`. Set **Action** to **Send to an email**, select your inbox as the **Destination**, and save.
+1. Under **Routing Rules**, select **Create routing rule**. For **Email pattern**, enter `newsletter`, the part of your From address before the `@`, and select `send.example.com`. Set **Action** to **Send to an email**, select the publisher's inbox as the **Destination**, and save.
 
 On a subdomain, Email Routing forwards only the addresses you add a rule for, with no catch-all. That's all a From address needs.
 
-- **Automatic replies arrive too.** Out-of-office and other automatic replies go to your From address, so they reach your inbox. Bounces don't: they go to SES's return path, and the app handles them as before.
+- **Automatic replies arrive too.** Out-of-office and other automatic replies go to your From address, so they reach the publisher's inbox. Bounces don't: they go to SES's return path, and the app handles them as before.
 - **Your DMARC reports need an inbox too.** Your DMARC record's report address may not receive mail. If so, change the record's `rua` to `mailto:dmarc@send.example.com`, and add a second rule that forwards `dmarc` the same way.
-- **Your answers come from your inbox.** A forwarded reply comes from the reader's own address. When you answer it, your answer goes out from the inbox it was forwarded to, not from `newsletter@send.example.com`.
+- **Answers come from the publisher's inbox.** A forwarded reply comes from the reader's own address. An answer to it goes out from the inbox it was forwarded to, not from `newsletter@send.example.com`.
 
 To answer from the newsletter's own address, give it a real mailbox instead of forwarding it. Point `send.example.com`'s MX records at a mail host you use, such as [Fastmail](https://www.fastmail.help/hc/en-us/articles/360060591133) or [Google Workspace](https://support.google.com/a/answer/140034). Then create `newsletter@send.example.com` there, as the host's docs describe. If you send from it, the host's SPF and DKIM records go on `send.example.com` beside SES's. SES's mail is unaffected, since its SPF is checked at its return path. And if your From address is on a domain that already receives mail, replies already reach it, and you can skip this section.
 
-Some replies ask you to do something, and Kestrel can't see them, so acting on them is yours. In the editor, open **Subscribers**, and use the reader's row menu. Choose **Unsubscribe** for a reader who asks to leave, and **Erase** for one who asks you to delete their data. A reader who never confirmed isn't mailed, so their row offers only **Erase**.
+Some replies ask the publisher to do something, and Kestrel can't see them, so the publisher acts on them, as [Sending rules](../publishing/02-sending-rules.md#when-a-reader-asks-to-leave-or-to-be-deleted) describes.
 
 ## 4. (Optional) Set a custom MAIL FROM domain
 
@@ -87,7 +87,7 @@ SES sends with its own return path by default, so SPF passes for `amazonses.com`
 
 A new SES account starts in the sandbox. It sends only to addresses you've verified in SES, up to 200 emails a day and one a second. Ask AWS to lift those limits now, and test while you wait.
 
-1. Name your publication first, since AWS may visit your website to review the request. In the editor, open **Settings → Publication identity**, and enter the name and tagline. Until you do, your public pages show the name in your From address. The subscribe form stays closed until section 8 sets the provider.
+1. Name the publication first, or ask the publisher for its name, since AWS may visit its website to review the request. In the editor, open **Settings → Publication identity**, and enter the name and tagline. Until then, the public pages show the name in your From address. The subscribe form stays closed until section 8 sets the provider.
 
 1. In SES, open the **Account dashboard**, select **View Get set up page**, and then **Request production access**.
 
@@ -100,7 +100,7 @@ A new SES account starts in the sandbox. It sends only to addresses you've verif
 
 1. While you wait, verify the two addresses you test with in [Verify it works](05-verify.md#before-you-begin), so the sandbox lets you mail them. For each, under **Identities**, choose **Create identity**, select **Email address**, and follow the link in the email AWS sends.
 
-If AWS asks for more detail, reply in the support case. If it denies the request, reply there, or open a new request from the **Account dashboard**. Either way, say how Kestrel handles your list:
+If AWS asks for more detail, reply in the support case. If it denies the request, reply there, or open a new request from the **Account dashboard**. Either way, say how Kestrel handles the list:
 
 - Signups use double opt-in: each subscriber confirms by email before joining the list.
 - Every post offers one-click unsubscribe.
@@ -310,7 +310,7 @@ Kestrel can't tell whether those emails went out. SES's console shows sent messa
     dig +short MX send.example.com
     ```
 
-    It lists the three `route` servers. Email Routing's **Routing Rules** shows your rule for `newsletter@send.example.com`, and **Destination Addresses** shows your inbox as verified. A reply to your test email in the next step proves the forwarding works.
+    It lists the three `route` servers. Email Routing's **Routing Rules** shows your rule for `newsletter@send.example.com`, and **Destination Addresses** shows the publisher's inbox as verified. A reply to your test email in the next step proves the forwarding works.
 
 1. In the editor, **Settings → Email sender** shows Amazon SES and your From address, where it said **No email provider connected** before.
 

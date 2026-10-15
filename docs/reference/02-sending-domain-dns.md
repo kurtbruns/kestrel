@@ -27,7 +27,7 @@ SES generates the DKIM values. Copy them exactly as SES lists them, since they d
 
 SPF needs no record of yours on SES's default path, since it passes for a subdomain of `amazonses.com`. An SPF record, at `bounce.send`, comes only with the optional custom MAIL FROM domain.
 
-Email Routing adds MX, SPF, and DKIM records at `send` itself, the DKIM one under the selector `cf2024-1`. They're for mail sent *to* your From address, so readers' replies reach you ([Connect Amazon SES](../get-started/04-ses.md#3-receive-replies-at-your-from-address)). They don't affect your sending: inboxes check SES's mail for SPF at its return path, and for DKIM against SES's own keys.
+Email Routing adds MX, SPF, and DKIM records at `send` itself, the DKIM one under the selector `cf2024-1`. They're for mail sent *to* your From address, so readers' replies reach the publisher ([Connect Amazon SES](../get-started/04-ses.md#3-receive-replies-at-your-from-address)). They don't affect your sending: inboxes check SES's mail for SPF at its return path, and for DKIM against SES's own keys.
 
 ### SPF: authorize the return path
 
