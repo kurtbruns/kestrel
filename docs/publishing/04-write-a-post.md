@@ -52,4 +52,4 @@ So a recipient count shown before the send is a snapshot. An import that adds su
 
 At the send time, the post moves to its send page under **Sent**, where you can watch it go out. From then it can't be edited, canceled, or moved. Its archive page goes up at the same moment, showing exactly the copy that was sent, so every email's "view in browser" link works. Whatever interrupts a send, such as your provider's daily quota running out, it waits and resumes where it stopped. No reader gets the same post twice.
 
-If a send needs your attention, the send page and the dashboard say so. [When something's wrong](06-troubleshooting.md) covers each case.
+If a send needs your attention, the send page and the dashboard say so. [Troubleshooting](06-troubleshooting.md) covers each case.

@@ -2,7 +2,7 @@
 
 Give your newsletter a name and a look before your first post. Set the name, tagline, and logo under **Settings → Publication identity**. They appear in every email your template prints them in, on the public pages readers see, and in the confirmation email new subscribers get.
 
-All three are optional and can change at any time. Left blank, the name falls back to your emails' From name. Pick a logo at least 256 × 256 px: Kestrel shows it square everywhere, cropping a wider or taller image to its center. An email already sent, and its archive page, keep the identity they went out with.
+All three are optional, and you can change them at any time. How they appear in each email comes from your email template, which [Your email template](11-email-template.md) covers changing.
 
 ## When to provide a mailing address
 
@@ -13,10 +13,6 @@ US law (CAN-SPAM) asks for a postal address in commercial email. The FTC [treats
 A P.O. box or a registered private mailbox counts, so you never have to publish your home address. To add one, choose **Add a mailing address** under **Settings → Publication identity**. The built-in templates print it in the email footer and keep it off your public pages.
 
 This is general information, not legal advice. The FTC's [CAN-SPAM compliance guide](https://www.ftc.gov/business-guidance/resources/can-spam-act-compliance-guide-business) has the detail, and [Sending rules](02-sending-rules.md) covers the rest of what the law asks of a newsletter.
-
-## Your emails' look
-
-Every post is sent in your email template, which prints your name, tagline, and logo, and your mailing address once you add one. The built-in template works as it comes. [Your email template](11-email-template.md) covers changing it.
 
 ## Who sets the From name and address
 

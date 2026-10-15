@@ -1,4 +1,4 @@
-# When something's wrong
+# Troubleshooting
 
 When a send needs you, its page and the dashboard's health block say so in a red or amber line. Red needs you to act, and amber is worth a look. Find the line's words below for what it means and what to do.
 

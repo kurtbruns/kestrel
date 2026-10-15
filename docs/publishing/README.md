@@ -24,4 +24,4 @@ Things you choose to do once you're running.
 What the law asks of every send, and what to do when something goes wrong.
 
 - [Sending rules](02-sending-rules.md)
-- [When something's wrong](06-troubleshooting.md)
+- [Troubleshooting](06-troubleshooting.md)
