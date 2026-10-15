@@ -125,7 +125,7 @@ function computeHealth(live: SendView[]): HealthAlert[] {
       text:
         stuck.length === 1
           ? html`<a href="#/sent/${firstStuck.id}">${firstStuck.subject}</a>: ${conditionOf(firstStuck, "stuck")?.message}`
-          : html`<a href="#/sent">${stuck.length} sends</a> have been sending longer than they should; they may be retrying.`,
+          : html`<a href="#/sent">${stuck.length} sends</a> have handed off no one for a while, and nothing the provider said explains it.`,
     });
   }
   // Bounce spike (SPEC §8): the server's reading of a recent send's confirmed bounces over

@@ -142,7 +142,7 @@ describe("the send lifecycle in the log", () => {
   });
 
   it("a request lost on a provider with no key logs send.ambiguous once, then send.wedged each tick from the one that left it", async () => {
-    allowErrorLogs("send.ambiguous", "send.wedged", "send.stuck");
+    allowErrorLogs("send.ambiguous", "send.wedged");
     vi.useFakeTimers({ toFake: ["Date"] });
     const provider = new BatchProvider();
     provider.loseAnswers = 1;
@@ -177,7 +177,9 @@ describe("the send lifecycle in the log", () => {
       recipients: 3,
     });
     expect(lines().filter((l) => l.event === "send.ambiguous")).toHaveLength(1);
-    expect(lines().at(-1)).toMatchObject({ event: "sweep.tick", wedged: 1, stuck: 1 });
+    // Waiting on Resolve, never in flight too long, however long it waits (SPEC §12).
+    expect(lines().filter((l) => l.event === "send.stuck")).toHaveLength(0);
+    expect(lines().at(-1)).toMatchObject({ event: "sweep.tick", wedged: 1, stuck: 0 });
     expectNoAddress();
   });
 

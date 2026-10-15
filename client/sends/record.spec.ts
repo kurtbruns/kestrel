@@ -891,7 +891,7 @@ describe("sent record", () => {
     await mount((r, s) => renderSentRecord("x1", r, s));
     await vi.advanceTimersByTimeAsync(0);
     expect($("#watchBody .health.amber").textContent).toContain(
-      "Still sending 31 minutes after it started",
+      "Nothing has gone out for 31 minutes",
     );
     stuck = false;
     await vi.advanceTimersByTimeAsync(3000);

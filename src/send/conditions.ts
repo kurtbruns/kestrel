@@ -3,8 +3,9 @@
  * §12): the one server function every route reads, so the list, the watch, the feed, and
  * Claude never derive a condition or an action of their own.
  *
- * A condition is a reading of the send row at a moment, never stored: missed and stuck by
- * the clock against the row's times; wedged by `isWedged`; refused and provider_unavailable
+ * A condition is a reading of the send row at a moment, never stored: missed by the clock
+ * against the fire time; stuck by `stuckAt`, the clock against the send's last progress;
+ * wedged by `isWedged`; refused and provider_unavailable
  * by the halt the send carries; bounce_spike by its confirmed bounces over its audience at
  * fire; remade by its last re-make against its last test; daily_writes by its audience as
  * scheduled and what imports wrote on the UTC day it fires, on Workers Free's limits only.
@@ -26,7 +27,8 @@ import {
   type SendSummary,
   sendSpendsDailyWrites,
 } from "../../shared/sends";
-import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
+import { MISSED_THRESHOLD_MS } from "../lib/time";
+import { stuckAt } from "./stuck";
 import { isWedged } from "./wedged";
 
 const minutes = (ms: number) => Math.max(1, Math.round(ms / 60_000));
@@ -164,12 +166,16 @@ export function sendConditions(
         retry_at: send.halt_retry_at,
       });
     }
-    if (send.started_at !== null && now - send.started_at > STUCK_THRESHOLD_MS) {
+    // In flight too long: nothing handed off for the threshold, and no halt or wedge to
+    // explain it. A send that is handing off is never flagged, however long it takes.
+    const stuck = stuckAt(send);
+    if (stuck !== null && now > stuck) {
+      const idle = now - (send.progress_at ?? send.started_at ?? now);
       out.push({
         kind: "stuck",
         severity: "warn",
-        since: send.started_at + STUCK_THRESHOLD_MS,
-        message: `Still sending ${plural(minutes(now - send.started_at), "minute")} after it started; it may be retrying.`,
+        since: stuck,
+        message: `Nothing has gone out for ${plural(minutes(idle), "minute")}, and nothing the provider said explains it: the sweep that sends may have stopped, or keeps failing on this send. It carries on from where it stopped once the sweep runs it, mailing no one twice.`,
         action: null,
       });
     }

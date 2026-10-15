@@ -31,10 +31,11 @@ import { isWedged } from "./wedged";
  *   - `progressing`     handing recipients to the provider at the pace the platform allows,
  *                       including a send too large for one tick waiting for the next.
  *   - `retrying`        handing off, but with recipients already retried (transient errors).
- *   - `backing-off`     work remains, nothing is in flight, and the pause follows an error:
+ *   - `backing-off`     work remains and the pause follows an error: nothing in flight and
  *                       recipients waiting on their retry after a transient error, or the
  *                       provider unavailable until the halt's next retry
- *                       (`provider.halt.retry_at`).
+ *                       (`provider.halt.retry_at`), even with a batch it never answered
+ *                       in flight awaiting Resolve.
  *   - `needs-attention` wedged: nothing left to hand off, and the last run released the
  *                       send with recipients in flight whose fate is unknown (§12) —
  *                       awaiting Resolve;
@@ -70,14 +71,21 @@ function derivePhase(
         // provider refusing the account
         return "needs-attention";
       }
+      // Paused for a provider outage with work left: nothing goes out until the halt's next
+      // retry, whatever is in flight. A batch the provider never answered stays in flight
+      // for Resolve and will not move on its own, so it never makes the pause read as
+      // progress (SPEC §12). The provider answering a batch ends the halt.
+      if (unavailable && counts.pending > 0) {
+        return "backing-off";
+      }
       if (counts.in_flight > 0) {
         return hasRetries ? "retrying" : "progressing";
       }
       // Work remains and nothing is in flight: the run released the lease. Only an error
       // makes that a back-off. The retry probe already tells one apart: a pending recipient
-      // with attempts is one a transient error put back in the queue. Without either, the
-      // tick's budget ran out on a healthy send, which the next tick carries on (SPEC §12).
-      if (counts.pending > 0 && (hasRetries || unavailable)) {
+      // with attempts is one a transient error put back in the queue. Without it, the tick's
+      // budget ran out on a healthy send, which the next tick carries on (SPEC §12).
+      if (counts.pending > 0 && hasRetries) {
         return "backing-off";
       }
       return "progressing";

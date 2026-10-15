@@ -23,6 +23,7 @@ import { getConfig } from "../env";
 import { errorText, log } from "../lib/log";
 import { MAX_NOTIFY_ATTEMPTS, MISSED_THRESHOLD_MS } from "../lib/time";
 import { type Budget, metered } from "../send/budget";
+import { idleSince } from "../send/stuck";
 import { isWedged } from "../send/wedged";
 import { getNotifier } from "./channel";
 import { composeImportNotification, composeNotification } from "./compose";
@@ -54,7 +55,7 @@ export function stillHolds(n: notifications.DueAny, now: number): boolean {
         n.send_status === "sending" && n.halt_reason === "account" && n.halted_at === n.episode
       );
     case "stuck":
-      return n.send_status === "sending";
+      return idleSince({ ...n, status: n.send_status }) === n.episode;
     case "wedged":
       return isWedged({ ...n, status: n.send_status });
     case "missed":

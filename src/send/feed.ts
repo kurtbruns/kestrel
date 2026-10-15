@@ -6,7 +6,7 @@
  * The pace follows what can change on its own, and when. Each send has a next change
  * (`nextChangeAt`): now, while it can move at any moment (due, or sending with work the
  * sweep can take up); a moment ahead, when it waits on the clock or the sweep (its fire
- * time, a halt's next retry, the in-flight-too-long threshold); or none, when only an
+ * time, a halt's next retry); or none, when only an
  * action or a receipt can change it (a wedged send awaiting Resolve, a missed send whose
  * sweep is not running, a finished one). While any send can move now, the feed is read
  * every few seconds. A settling send's receipts arrive fastest just after dispatch, so
@@ -20,7 +20,7 @@
  */
 
 import type { SendSummary } from "../../shared/sends";
-import { HALT_RETRY_SLACK_MS, MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
+import { HALT_RETRY_SLACK_MS, MISSED_THRESHOLD_MS } from "../lib/time";
 import { isWedged } from "./wedged";
 
 // While a send can move at any moment, the sweep can act on it at any minute's tick.
@@ -70,9 +70,8 @@ export type PaceFields = Pick<
  *   (recipients queued, or a cut-off run's lease run out, and no halt waiting): now.
  * - sending and halted: the first tick that retries it (its `halt_retry_at`, less the slack
  *   the sweep allows), or now once that has come.
- * - sending and wedged (awaiting Resolve), even with a halt left on it: only the
- *   in-flight-too-long threshold, still ahead, can change it with no one acting; a halted
- *   send crosses it too, if that comes before its retry.
+ * - sending and wedged (awaiting Resolve), even with a halt left on it: null. A wedged send
+ *   is never in flight too long, and a halted one turns so only past its retry (SPEC §12).
  * - sent or canceled: null.
  */
 export function nextChangeAt(send: PaceFields, now: number): number | null {
@@ -88,22 +87,18 @@ export function nextChangeAt(send: PaceFields, now: number): number | null {
   if (send.locked_until !== null && send.locked_until > now) {
     return now; // a run holds it, and may be working
   }
-  let next: number | null = null;
   if (isWedged(send)) {
-    // The sweep no longer runs it, whatever halt it last carried: only Resolve moves it.
-  } else if (send.halt_retry_at !== null) {
-    // Halted, or a run cut off after halting it: the sweep takes it up at the retry.
-    next = Math.max(now, send.halt_retry_at - HALT_RETRY_SLACK_MS);
-  } else {
-    // Queued work, or a run cut off whose lease has run out: the next tick takes it up.
-    return now;
+    // The sweep no longer runs it, whatever halt it last carried, and it is never in
+    // flight too long: only Resolve moves it.
+    return null;
   }
-  // Wedged or halted: the in-flight-too-long threshold is the clock's change, if still ahead.
-  const stuckAt = send.started_at === null ? null : send.started_at + STUCK_THRESHOLD_MS;
-  if (stuckAt !== null && stuckAt >= now) {
-    next = next === null ? stuckAt : Math.min(next, stuckAt);
+  if (send.halt_retry_at !== null) {
+    // Halted, or a run cut off after halting it: the sweep takes it up at the retry. The
+    // in-flight-too-long threshold, counted from the retry (`stuckAt`), comes after it.
+    return Math.max(now, send.halt_retry_at - HALT_RETRY_SLACK_MS);
   }
-  return next;
+  // Queued work, or a run cut off whose lease has run out: the next tick takes it up.
+  return now;
 }
 
 /** What sets the pace, over every send that is not finished: whether one can move now,

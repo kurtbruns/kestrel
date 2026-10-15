@@ -132,6 +132,8 @@ export interface Send {
   halt_retries: number;
   /** When the sweep next retries the halted send (SPEC §12); null while it is not halted. */
   halt_retry_at: number | null;
+  /** When the provider last answered for any of the send's recipients (SPEC §12); null until it first does, when the send's start stands in. */
+  progress_at: number | null;
   c_pending: number;
   c_in_flight: number;
   c_accepted: number;
@@ -153,9 +155,11 @@ export interface Send {
 export type SendSummary = Omit<Send, "rendered_html" | "rendered_text">;
 
 /**
- * How long a send may stay `sending` before it is flagged as in flight too long (SPEC
- * §12): long enough that an ordinary outage's retries never alarm, short enough to be
- * told the same afternoon. The server decides the flag; the editor only words it.
+ * How long a send may hand off no one, with nothing else to explain why, before it is
+ * flagged as in flight too long (SPEC §12): long enough that a slow tick or a brief stall
+ * never alarms, short enough to be told the same afternoon. A send that is handing off is
+ * never flagged, however long it takes. The server decides the flag; the editor only
+ * words it.
  */
 export const STUCK_THRESHOLD_MS = 30 * 60 * 1000;
 
@@ -329,7 +333,8 @@ interface ConditionBase {
  * same on every route:
  *
  * - `missed`: still scheduled past the missed tolerance; the sweep that fires it has not run.
- * - `stuck`: still sending past the stuck threshold after it started.
+ * - `stuck`: still sending, with no recipient handed off for the stuck threshold and no
+ *   halt or wedge to explain it: the sweep has stopped, or every run fails.
  * - `wedged`: recipients whose delivery is unknown; `count` of them, settled by Resolve.
  * - `refused`: the provider refuses the account; its `cause`, `error`, the `advice` for the
  *   fix (outside the app), and `retry_at`. No action: the send resumes on its own.

@@ -83,10 +83,10 @@ export function composeNotification(n: DueNotification, config: Config): Rendere
       );
     case "stuck":
       return message(
-        `Problem with ${title}: still sending after ${minutes(STUCK_THRESHOLD_MS)} minutes`,
+        `Problem with ${title}: nothing has gone out for ${minutes(STUCK_THRESHOLD_MS)} minutes`,
         [
-          `${title} started sending${n.started_at ? ` at ${when(n.started_at)}` : ""} and is still going: ${n.c_pending + n.c_in_flight} recipients have not been sent yet.`,
-          "It keeps retrying on its own. If it stays like this, check the provider's status and the send's page.",
+          `${title} has handed off no one since ${when(n.progress_at ?? n.started_at ?? n.episode)}, and nothing the provider said explains it: ${n.c_pending + n.c_in_flight} recipients have not been sent yet.`,
+          "The sweep that sends may have stopped, or keeps failing on this send. Check the app's logs and the send's page. Once the sweep runs it again, it carries on from where it stopped, mailing no one twice.",
         ],
         link,
       );

@@ -14,7 +14,7 @@
  * adapter's halt) halts the run, not the recipients: the batch goes back to `pending` as
  * fresh rows with no attempt spent, the send records the halt and stays open, and the
  * sweep tries again once the halt's backoff (`HALT_BACKOFF_MS`) has passed, however long
- * the halt lasts; an answered batch ends it (SPEC §12). A request with no answer halts the
+ * the halt lasts; an answer that holds no one back ends it (SPEC §12). A request with no answer halts the
  * run the same way, but its batch stays in flight for Resolve.
  * Only a recipient's own retryable failure counts toward `MAX_DELIVERY_ATTEMPTS`.
  *
@@ -212,7 +212,7 @@ export async function runSend(
     const held: string[] = [];
     let halt: BatchHalt | null = null;
     let requeued = 0;
-    let answered = false;
+    let progressed = false;
     let complete = true;
     // For the `send.batch` line: every member of the group lands in exactly one of its
     // counts (accepted, unsent, retried, held, unknown), so they sum to `recipients`.
@@ -296,10 +296,10 @@ export async function runSend(
         complete = false;
         batchHalt = answer.halt;
       } else {
-        // An answer that took or settled someone is progress, which ends a halt the send
-        // carried; one that only held recipients back is not.
+        // An answer that took or settled someone is progress; one that only held recipients
+        // back is not. Only progress with no one held back ends a halt (below).
         if (answer.results.some((r) => r.accepted || r.held !== true)) {
-          answered = true;
+          progressed = true;
         }
         // Recipients the provider held back for its own reasons go back with no attempt
         // spent, and the send records why, as for a halted batch. Only the halt is taken:
@@ -342,7 +342,15 @@ export async function runSend(
       }
     }
 
-    await sends.settleDeliveries(db, sendId, lease, "dispatched", outcomes, Date.now(), answered);
+    // The provider working again ends the halt the send carried, and only an answer with
+    // no one held back says so: one that took some and held the rest back (a quota running
+    // out a few at a time) continues the halt, keeping when it began and its backoff, so
+    // the publisher is told once (SPEC §12).
+    const cleared = progressed && !halt;
+    await sends.settleDeliveries(db, sendId, lease, "dispatched", outcomes, Date.now(), {
+      progressed,
+      clears: cleared,
+    });
     // One reading of the clock for the hold and its log line, so the `retryAt` logged is
     // the retry time stored.
     const heldAt = Date.now();
@@ -375,7 +383,7 @@ export async function runSend(
       unknown,
       latencyMs,
     });
-    if (answered && halted) {
+    if (cleared && halted) {
       log.info("send.resumed", {
         ...tags,
         reason: halted.reason,

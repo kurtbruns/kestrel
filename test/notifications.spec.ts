@@ -215,9 +215,9 @@ describe("a send that needs the publisher", () => {
       .bind(long, slow.id, refused.id)
       .run();
     await env.DB.prepare(
-      "UPDATE sends SET halt_reason = 'account', halted_at = ?, halt_error = 'suspended' WHERE id = ?",
+      "UPDATE sends SET halt_reason = 'account', halted_at = ?, halt_error = 'suspended', halt_retry_at = ? WHERE id = ?",
     )
-      .bind(long, refused.id)
+      .bind(long, Date.now() + 5 * 60_000, refused.id)
       .run();
 
     await notifications.recordNotifications(env.DB, Date.now());
@@ -416,16 +416,17 @@ describe("after the review", () => {
     const send = await dueSend({ subject: "Resumed one" });
     const long = Date.now() - STUCK_THRESHOLD_MS - 60 * 60_000;
     await env.DB.prepare(
-      "UPDATE sends SET status = 'sending', started_at = ?, c_pending = 1, halt_reason = 'account', halted_at = ? WHERE id = ?",
+      "UPDATE sends SET status = 'sending', started_at = ?, c_pending = 1, halt_reason = 'account', halted_at = ?, halt_retry_at = ? WHERE id = ?",
     )
-      .bind(long, long, send.id)
+      .bind(long, long, Date.now() + 60 * 60_000, send.id)
       .run();
     await notifications.recordNotifications(env.DB, Date.now());
-    // The account is fixed: the refusal lifts and the send is back to work, past the threshold.
+    // The account is fixed: the provider answers, which lifts the refusal and is progress,
+    // and the send is back to work, long past its start.
     await env.DB.prepare(
-      "UPDATE sends SET halt_reason = NULL, halted_at = NULL, halt_error = NULL WHERE id = ?",
+      "UPDATE sends SET halt_reason = NULL, halted_at = NULL, halt_error = NULL, progress_at = ? WHERE id = ?",
     )
-      .bind(send.id)
+      .bind(Date.now(), send.id)
       .run();
     await notifications.recordNotifications(env.DB, Date.now());
 
@@ -651,6 +652,8 @@ describe("the link in a notification", () => {
           locked_until: null,
           halt_reason: null,
           halted_at: null,
+          halt_retry_at: null,
+          progress_at: null,
           halt_cause: null,
           halt_error: null,
           c_pending: 0,

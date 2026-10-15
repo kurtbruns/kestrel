@@ -10,14 +10,21 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading.** No database migrations. Run `npm run check-context` in your instance's repository: `/migrate-list` now reads the import format from "Bring your existing list".
+**Upgrading.** One database migration (`0007_sends_progress_at`), which `npm run sync-migrations` brings in: apply it before you deploy with `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development). It adds a column recording when each send last handed anyone off, and writes no rows, so it costs nothing against D1's daily allowance at any size. Run `npm run check-context` in your instance's repository: `/migrate-list` now reads the import format from "Bring your existing list".
 
 ### Changed
+
+- A send is flagged as **in flight too long** only when it has handed off no one for 30 minutes and nothing else explains it (a provider refusing the account, an outage it is waiting out, or a send awaiting Resolve), rather than 30 minutes after it started. A large send going out at your SES rate on Workers Free is no longer flagged, emailed about, or logged as `send.stuck`, however long it takes; one the sweep has stopped moving still is, and its email and message say nothing has gone out and why that points at the sweep (SPEC §12).
 
 - The Publishing docs are reorganized around what a publisher has to do or decide. Their sections are **Set up your publication**, **Go further** (Edit your email template, Working with Claude), and **Rules and troubleshooting** (Sending rules, Troubleshooting). Write and send a post covers scheduling too, Troubleshooting replaces After a send with each problem a send or an import reports, in its own words, and the import format is the last section of Bring your existing list, which opens with when to upgrade to Workers Paid.
 - In Self-hosting, **As your list grows** is its own guide (raising Amazon SES limits and upgrading to Workers Paid, with how long a send takes after each), Verify it works ends by checking SES production access, and Go live hands over to the publisher, including letting them sign in through Access. The pages call whoever writes the newsletter the publisher. Try Kestrel locally first moves into the README, now the front page for someone deciding whether to run Kestrel, and working on Kestrel's own source moves to CONTRIBUTING.md.
 - The Markdown of each removed page (`import-format`, `scheduling-and-sending`, `after-a-send`, `try-locally`) still answers at its old address, with the page that now holds its content. The import screen's **Import format reference →** opens the file format section.
 - The operator's Claude context: `/migrate-list` reads the import format from `GET /api/docs/your-list.md`, since the separate import format page is gone.
+
+### Fixed
+
+- A send that SES keeps partly refusing, as a daily quota frees up a few at a time, is one refusal until SES takes a batch with nothing refused: you're emailed about it once, its page keeps the time the refusal began, and its retries keep spacing out up to an hour apart instead of starting over every few minutes. The readers SES took are still recorded as sent at once, and the rest wait with no retry spent (SPEC §12).
+- A send paused for a provider outage reads **Backing off**, with when it next retries, on its page, the Sent list, and the dashboard, and shows no time to finish, even while a batch the provider never answered waits for Resolve. Before, it read as sending normally for up to an hour (SPEC §12).
 
 ## [1.10.0] - 2026-10-14
 

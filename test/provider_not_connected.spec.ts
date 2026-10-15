@@ -324,6 +324,8 @@ describe("a send scheduled before the provider was disconnected", () => {
         locked_until: null,
         halt_reason: "account",
         halted_at: 0,
+        halt_retry_at: null,
+        progress_at: null,
         halt_cause: "not_connected",
         halt_error: "No email provider is connected to this deployment.",
         c_pending: 3,

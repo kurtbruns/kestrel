@@ -276,8 +276,9 @@ describe("GET /api/sends", () => {
       env.DB.prepare(
         "UPDATE deliveries SET attempts = 1 WHERE send_id = ? AND email = 'b@example.com'",
       ).bind(retrying.id),
+      // The outage the failed batch halted on has ended, so no halt reads it as a back-off.
       env.DB.prepare(
-        "UPDATE sends SET c_pending = c_pending - 1, c_in_flight = c_in_flight + 1 WHERE id = ?",
+        "UPDATE sends SET c_pending = c_pending - 1, c_in_flight = c_in_flight + 1, halt_reason = NULL, halt_cause = NULL, halt_error = NULL, halted_at = NULL, halt_retries = 0, halt_retry_at = NULL WHERE id = ?",
       ).bind(retrying.id),
     ]);
 

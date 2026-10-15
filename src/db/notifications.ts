@@ -16,7 +16,7 @@ import type {
   SendNotificationKind,
 } from "../../shared/settings";
 import { MISSED_THRESHOLD_MS, NOTIFY_HORIZON_MS, STUCK_THRESHOLD_MS } from "../lib/time";
-import { WEDGED_SEND } from "./sends";
+import { SEND_IDLE_SINCE, stuckSendSql, WEDGED_SEND } from "./sends";
 
 export type { NotificationKind };
 
@@ -35,6 +35,8 @@ export interface DueNotification {
   locked_until: number | null;
   halt_reason: HaltReason | null;
   halted_at: number | null;
+  halt_retry_at: number | null;
+  progress_at: number | null;
   halt_cause: HaltCause | null;
   halt_error: string | null;
   c_pending: number;
@@ -90,10 +92,10 @@ export function importNotice(db: D1Database, importId: string, now: number): D1P
  * INSERT OR IGNORE on the (send, kind, episode) key is what makes a condition that
  * persists across ticks one notification rather than one a tick. A finished or late send
  * counts only within the horizon, so turning notifications on does not mail the history.
- * A send in flight too long is not also reported as stuck while it is wedged, or once the
- * provider has refused its account at any point: those notifications already say why it
- * is taking so long, and a send that resumes after a long refusal is past the stuck
- * threshold the moment it does.
+ * A send in flight too long (`stuckSendSql`) is one event for each stretch it sits idle,
+ * keyed by when that stretch began (`SEND_IDLE_SINCE`), so a send that moves again and later
+ * stops is told again. A wedged or halted send is not stuck: its own notification says why
+ * it waits.
  */
 export async function recordNotifications(db: D1Database, now: number): Promise<void> {
   await db
@@ -111,11 +113,8 @@ export async function recordNotifications(db: D1Database, now: number): Promise<
          UNION ALL
          SELECT id, 'wedged', 0, ?1, ?1 FROM sends WHERE ${WEDGED_SEND}
          UNION ALL
-         SELECT id, 'stuck', 0, ?1, ?1 FROM sends
-          WHERE status = 'sending' AND started_at < ?1 - ?4
-            AND halt_reason IS NOT 'account' AND NOT (${WEDGED_SEND})
-            AND NOT EXISTS (SELECT 1 FROM notifications r
-                             WHERE r.send_id = sends.id AND r.kind = 'refused')`,
+         SELECT id, 'stuck', ${SEND_IDLE_SINCE}, ?1, ?1 FROM sends
+          WHERE ${stuckSendSql("?1 - ?4")}`,
     )
     .bind(now, now - NOTIFY_HORIZON_MS, MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS)
     .run();
@@ -130,7 +129,7 @@ export async function dueNotifications(db: D1Database, limit: number): Promise<D
     .prepare(
       `SELECT n.send_id, n.import_id, n.kind, n.episode, n.attempts,
               s.subject, s.status AS send_status, s.fire_at, s.started_at, s.completed_at,
-              s.locked_until, s.halt_reason, s.halted_at, s.halt_cause, s.halt_error, s.c_pending, s.c_in_flight, s.c_accepted,
+              s.locked_until, s.halt_reason, s.halted_at, s.halt_retry_at, s.progress_at, s.halt_cause, s.halt_error, s.c_pending, s.c_in_flight, s.c_accepted,
               s.c_delivered, s.c_bounced, s.c_complained, s.c_skipped, s.c_unsent,
               i.file_name, i.created_at, i.attestation_version, i.counts, i.suppressions_added
          FROM notifications n

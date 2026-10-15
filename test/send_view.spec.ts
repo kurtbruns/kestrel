@@ -216,6 +216,7 @@ describe("the time to finish, in ticks", () => {
       halted_at: null,
       halt_retries: 0,
       halt_retry_at: null,
+      progress_at: null,
       c_pending: TOTAL - done,
       c_in_flight: 0,
       c_accepted: done,

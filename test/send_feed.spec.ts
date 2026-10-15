@@ -528,7 +528,7 @@ describe("GET /api/sends/feed paces from each send's next change", () => {
     expect(body.read_again_at).toBe(now + 50_000 - 30_000 + 1000);
   });
 
-  it("does not hurry for a wedged send: only Resolve or the in-flight-too-long flag moves it", async () => {
+  it("does not hurry for a wedged send: only Resolve moves it", async () => {
     const now = Date.now();
     const send = await frozenSend(now - 120_000, { subject: "Wedged" });
     await setRow(send.id, {
@@ -541,7 +541,7 @@ describe("GET /api/sends/feed paces from each send's next change", () => {
     });
     const body = await feed();
     expect(has(body.sends[0], "wedged")).toBe(true);
-    expect(body.sends[0]?.next_change_at).toBe(now - 110_000 + STUCK_THRESHOLD_MS);
+    expect(body.sends[0]?.next_change_at).toBeNull();
     expect(body.read_again_at).toBe(body.now + 60_000);
   });
 

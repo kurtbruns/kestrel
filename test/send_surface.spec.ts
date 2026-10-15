@@ -68,6 +68,7 @@ function row(over: Partial<SendSummary>): SendSummary {
     halted_at: null,
     halt_retries: 0,
     halt_retry_at: null,
+    progress_at: null,
     c_pending: 0,
     c_in_flight: 0,
     c_accepted: 0,
@@ -176,7 +177,7 @@ describe("conditions: one server rule for each kind", () => {
     expect(await readWritesDay(meter.db, { subrequestBudget: 1000 }, now, quiet)).toBe(null);
   });
 
-  it("reads wedged with its count and the Resolve action, refused with the fix and no action, and stuck", () => {
+  it("reads wedged with its count and the Resolve action, refused with the fix and no action, and stuck only when nothing explains the wait", () => {
     const wedged = sendConditions(row({ c_in_flight: 3, started_at: NOW - 60_000 }), NOW, null);
     expect(wedged).toEqual([
       expect.objectContaining({
@@ -199,7 +200,8 @@ describe("conditions: one server rule for each kind", () => {
       NOW,
       null,
     );
-    expect(refused.map((c) => c.kind)).toEqual(["refused", "stuck"]); // most severe first
+    // Started long ago, but the refusal explains the wait until its retry: not also stuck.
+    expect(refused.map((c) => c.kind)).toEqual(["refused"]);
     expect(refused[0]).toMatchObject({
       action: null,
       cause: "quota",
@@ -218,6 +220,21 @@ describe("conditions: one server rule for each kind", () => {
       null,
     );
     expect(outage.map((c) => [c.kind, c.severity])).toEqual([["provider_unavailable", "info"]]);
+    // Nothing handed off for the threshold and no halt to explain it (SPEC §12).
+    const idle = sendConditions(
+      row({
+        c_pending: 5,
+        started_at: NOW - 3 * STUCK_THRESHOLD_MS,
+        progress_at: NOW - STUCK_THRESHOLD_MS - 60_000,
+      }),
+      NOW,
+      null,
+    );
+    expect(idle.map((c) => [c.kind, c.severity])).toEqual([["stuck", "warn"]]);
+    expect(idle[0]).toMatchObject({ since: NOW - 60_000, action: null });
+    expect(idle[0]?.message).toMatch(
+      /^Nothing has gone out for 31 minutes, and nothing the provider/,
+    );
   });
 
   it("reads a bounce spike off a recently sent send at the danger zone, and never off an old or small one", () => {

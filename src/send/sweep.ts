@@ -3,7 +3,8 @@
  *   1. fire due sends (and loudly flag any that missed their fire time),
  *   2. resume sends left mid-flight by a crash (expired lease), never a wedged one, which
  *      no run can move until Resolve (`WEDGED_SEND`),
- *   3. flag anomalies (stuck sends, wedged sends awaiting Resolve),
+ *   3. flag anomalies (sends in flight too long with nothing handed off, wedged sends
+ *      awaiting Resolve),
  *   4. notify the publisher of sends that went out or ran into a problem (`notify/notify.ts`).
  *
  * A missed fire is still delivered — the render is frozen, so lateness is a
@@ -35,6 +36,7 @@ import { drainSimulatedWebhooks } from "../providers/simulate";
 import { Budget, metered } from "./budget";
 import { MIN_RUN_COST, runSend } from "./loop";
 import { SendWindow } from "./pace";
+import { idleSince } from "./stuck";
 
 /** The two anomaly queries at the end of a tick, held back from the budget up front so
  *  they run whatever the sends spent. */
@@ -106,7 +108,12 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
 
   // 3) Loud anomaly flags: the ANOMALY_CHECKS held back above, so on the raw handle.
   for (const s of await sends.stuckSends(env.DB, now - STUCK_THRESHOLD_MS)) {
-    log.error("send.stuck", { sendId: s.id, postId: s.post_id, startedAt: s.started_at });
+    log.error("send.stuck", {
+      sendId: s.id,
+      postId: s.post_id,
+      startedAt: s.started_at,
+      idleSince: idleSince(s),
+    });
     tick.stuck += 1;
   }
   for (const s of await sends.wedgedSends(env.DB)) {

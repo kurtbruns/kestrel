@@ -22,7 +22,7 @@ import { type Html, html, setHtml } from "../ui/html";
 import { type ListState, renderPager, th, wireSort } from "../ui/list_controls";
 import { busy, renderError, toast } from "../ui/widgets";
 import { openResolveModal } from "./dialogs";
-import { can, clampPct, conditionOf, fmtDuration, has } from "./progress";
+import { can, clampPct, conditionOf, fmtDuration, has, nextRetry } from "./progress";
 
 const message = describeError;
 
@@ -94,14 +94,6 @@ const PHASE_BLURB: Partial<Record<SendPhase, string>> = {
   "needs-attention": "Some deliveries are stuck and need a decision.",
   settling: "Dispatch complete, waiting on delivery receipts.",
 };
-/** When a halted send's next retry is due, relative to now (SPEC §12). */
-function nextRetry(retryAt: number | null): string {
-  if (retryAt === null) {
-    return "it is retried on its own";
-  }
-  const wait = retryAt - Date.now();
-  return wait > 0 ? `next retry in ${fmtDuration(wait)}` : "next retry due now";
-}
 /** The phase's one-line gloss, said for the cause when the phase has more than one. */
 function phaseBlurb(prog: SendView): string {
   const halt = prog.provider.halt;

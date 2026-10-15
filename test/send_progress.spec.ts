@@ -188,8 +188,14 @@ describe("a send's view on GET /api/sends/:id", () => {
       ];
     };
     expect(await read()).toEqual([false, false]);
-    // Started past the stuck threshold (SPEC §12): both surfaces say so.
+    // Started long ago is not enough: the outage's retry still explains the wait.
     await env.DB.prepare("UPDATE sends SET started_at = ? WHERE id = ?")
+      .bind(Date.now() - 2 * STUCK_THRESHOLD_MS, send.id)
+      .run();
+    expect(await read()).toEqual([false, false]);
+    // Idle past the stuck threshold, its retry long due and never run (SPEC §12): both
+    // surfaces say so.
+    await env.DB.prepare("UPDATE sends SET halt_retry_at = ? WHERE id = ?")
       .bind(Date.now() - STUCK_THRESHOLD_MS - 60_000, send.id)
       .run();
     expect(await read()).toEqual([true, true]);
@@ -226,6 +232,7 @@ describe("buildSendView — derived phase", () => {
       halted_at: null,
       halt_retries: 0,
       halt_retry_at: null,
+      progress_at: null,
       c_pending: 0,
       c_in_flight: 0,
       c_accepted: 0,
@@ -310,6 +317,34 @@ describe("buildSendView — derived phase", () => {
       since,
       retry_at: since + 20 * 60_000,
     });
+  });
+  it("backing-off with its retry and no time to finish while an outage pauses it, even with a batch awaiting Resolve (SPEC §12)", () => {
+    const now = Date.now();
+    const paused = {
+      status: "sending" as const,
+      recipient_count: 10,
+      c_pending: 5,
+      c_in_flight: 3, // the batch the provider never answered: it waits for Resolve
+      c_accepted: 2,
+      halt_reason: "unavailable" as const,
+      halt_cause: "outage" as const,
+      halt_error: "no answer",
+      halted_at: now - 60_000,
+      halt_retries: 2,
+      halt_retry_at: now + 5 * 60_000,
+    };
+    const prog = viewOf(mkSend(paused), "ses", false, now);
+    expect(prog.phase).toBe("backing-off");
+    expect(prog.provider.halt?.retry_at).toBe(now + 5 * 60_000);
+    expect(prog.dispatch.eta_ms).toBeNull();
+    expect(phase(paused, true)).toBe("backing-off"); // with a retried recipient too
+    // The provider answering a batch ends the halt: progressing again.
+    const answered = { ...paused, halt_reason: null, halt_cause: null, halt_error: null };
+    expect(phase({ ...answered, halted_at: null, halt_retries: 0, halt_retry_at: null })).toBe(
+      "progressing",
+    );
+    // Nothing left to send but the batch awaiting Resolve: needs attention, as ever.
+    expect(phase({ ...paused, c_pending: 0 })).toBe("needs-attention");
   });
   it("backing-off, not refused, while the provider is only unavailable", () => {
     const prog = viewOf(
