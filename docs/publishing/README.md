@@ -4,7 +4,7 @@ These pages get you publishing in the dashboard, and cover the decisions to make
 
 ## Set up your publication
 
-The steps your dashboard lists until your first post, in the same order.
+The steps to set up a new publication, in the order the dashboard's setup checklist lists them.
 
 1. [Name your publication](03-name-your-publication.md)
 1. [Check your setup](10-check-your-setup.md)

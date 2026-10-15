@@ -99,7 +99,7 @@ export function maxImportRows(subrequestBudget: number): {
     ? {
         maxRows: IMPORT_LIMITS.maxRowsFree,
         // Said to the publisher, who may never have seen Cloudflare: the setting behind it
-        // is the operator's, in the API reference and the import format page.
+        // is the operator's, in the API reference and Bring your existing list's file format.
         reason: `That’s the limit on Cloudflare’s Workers Free plan. Whoever runs your Kestrel can raise it to ${IMPORT_LIMITS.maxRows.toLocaleString("en-US")} rows by moving to Workers Paid.`,
       }
     : { maxRows: IMPORT_LIMITS.maxRows, reason: null };

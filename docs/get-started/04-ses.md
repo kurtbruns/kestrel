@@ -54,7 +54,7 @@ When a reader replies to a post, or to their confirmation email, the reply goes 
 
 1. Cloudflare adds MX, SPF, and DKIM records for `send.example.com`, and locks them. Wait until they show as added.
 
-1. Under **Destination Addresses**, add the publisher's inbox. Open the email Cloudflare sends to it, and select **Verify email address**. An address you've already verified with Cloudflare, such as one for [notifications](../guides/03-notifications.md), is listed already.
+1. Under **Destination Addresses**, add the publisher's inbox. Open the email Cloudflare sends to it, and select **Verify email address**. If it isn't your inbox, ask the publisher to do this step. An address you've already verified with Cloudflare, such as one for [notifications](../guides/03-notifications.md), is listed already.
 
 1. Under **Routing Rules**, select **Create routing rule**. For **Email pattern**, enter `newsletter`, the part of your From address before the `@`, and select `send.example.com`. Set **Action** to **Send to an email**, select the publisher's inbox as the **Destination**, and save.
 

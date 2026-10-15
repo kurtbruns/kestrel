@@ -1,6 +1,6 @@
 # Bring your existing list
 
-Moving to Kestrel from another newsletter service means bringing your subscribers with you, along with the consent they gave there. This guide explains how to export your list from the old service, convert it to Kestrel's format, and import it under **Subscribers → Import**. It also covers what carries over, the limits on an import, and taking your list out again. Kestrel shows you what an import will do before anything changes, and an import never emails anyone.
+Moving to Kestrel from another newsletter service means bringing your subscribers with you, along with the consent they gave there. This guide explains how to export your list from the old service, convert it to Kestrel's format, and import it under **Subscribers → Import**. It also covers what carries over, the limits on an import, and taking your list out again. Kestrel shows you what an import will do before anything changes, and an import never emails your subscribers.
 
 **The first decision is whether to upgrade to Cloudflare's Workers Paid plan.** With more than about 5,000 subscribers, it's recommended to upgrade before you import. The free plan caps database writes per day, and a large import plus a send can use them up. When that happens, the app stops working until midnight UTC. Workers Paid is $5 a month and has no daily cap, and [As your list grows](../guides/09-as-your-list-grows.md) walks through the upgrade.
 
@@ -103,7 +103,7 @@ bounced@example.com,none,unknown,unknown,bounce,,
 
 ### Plan, then commit
 
-An import happens in two steps. Planning shows what the import would do to every row, against your list as it stands. It changes nothing, so you can plan a file as often as you need. Committing applies the plan, all of it or none of it, and sends no email.
+An import happens in two steps. Planning shows what the import would do to every row, against your list as it stands. It changes nothing, so you can plan a file as often as you need. Committing applies the plan, all of it or none of it, and emails no subscriber.
 
 The commit needs two things from you when they apply:
 

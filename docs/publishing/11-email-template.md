@@ -2,7 +2,7 @@
 
 You write each post in Markdown, and the template is the HTML frame it's sent in, like a layout in a static site generator. `{{ .Post.Body }}` marks where your post goes, and the rest is plain HTML around it. The built-in template works as it comes, so changing it is optional.
 
-To change it, choose **Template** in the sidebar, edit the HTML, and choose **Save changes**. **Start from example** offers two starting points: **Signed**, which ends each post with your logo, name, and tagline, and **Plain**, which has just your post and the footer links.
+To change it, choose **Template** in the sidebar, edit the HTML, and choose **Save changes**. **Start from example** offers two starting points. **Signed** ends each post with your logo, name, and tagline, and **Plain** has just your post and the footer links.
 
 ## What every template needs
 

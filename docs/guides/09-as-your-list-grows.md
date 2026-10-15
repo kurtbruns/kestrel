@@ -12,7 +12,14 @@ SES caps how many emails your account sends a day, and how many a second. A send
 
 1. When AWS grants it, the SES **Account dashboard** shows your new rate. In `wrangler.jsonc`, set the `production` block's [`SES_MAX_SEND_RATE`](../reference/01-configuration.md#ses_max_send_rate) to match.
 
-1. Commit the change, push it, and deploy:
+1. Commit the change, and push it:
+
+    ```bash
+    git commit -am "Match the SES send rate"
+    git push
+    ```
+
+1. Deploy:
 
     ```bash
     npx wrangler deploy --env production
@@ -26,7 +33,14 @@ On the free plan, [D1](https://developers.cloudflare.com/d1/platform/pricing/) a
 
 1. In `wrangler.jsonc`, add `"SUBREQUEST_BUDGET": "10000"` to the `production` block's `vars`. It tells the app it's on Workers Paid, so each minute sends far more ([`SUBREQUEST_BUDGET`](../reference/01-configuration.md#subrequest_budget)).
 
-1. Commit the change, push it, and deploy:
+1. Commit the change, and push it:
+
+    ```bash
+    git commit -am "Run on Workers Paid"
+    git push
+    ```
+
+1. Deploy:
 
     ```bash
     npx wrangler deploy --env production

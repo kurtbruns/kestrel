@@ -4,7 +4,15 @@ At this point, your instance should be deployed, verified, and out of the SES sa
 
 ## Start publishing
 
-The rest happens in the editor, at `https://newsletter.example.com/dashboard/`. The Publishing docs walk through it in the order of the dashboard's checklist, starting with [Name your publication](../publishing/03-name-your-publication.md). If someone else writes the newsletter, send them that link.
+The rest happens in the editor, at `https://newsletter.example.com/dashboard/`. The Publishing docs walk through it in the order of the dashboard's setup checklist, starting with [Name your publication](../publishing/03-name-your-publication.md). The checklist itself shows only until the first post exists, so the test post from [Verify it works](05-verify.md) has already hidden it.
+
+If someone else is the publisher, let them sign in first:
+
+1. Add their email address to the `Publishers` policy on the Access application, as in [Allow yourself in](03-access.md#3-allow-yourself-in). If you set `ACCESS_ALLOWED_EMAILS`, store the list again with their address added.
+
+1. If they don't have a Cloudflare account, add another way to sign in, such as a one-time code by email. It's under **Zero Trust → Integrations → Identity providers**.
+
+1. Send them the editor's address and a link to [Name your publication](../publishing/03-name-your-publication.md).
 
 ## Optional next steps
 

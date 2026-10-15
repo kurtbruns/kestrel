@@ -291,6 +291,7 @@ const FORMER_SLUGS = new Map([
   ["import-format", "your-list"],
   ["scheduling-and-sending", "write-a-post"],
   ["after-a-send", "troubleshooting"],
+  ["try-locally", "deploy"],
 ]);
 
 /** A doc's Markdown for an agent to read (SPEC §11): a page by its slug or a former slug, or a

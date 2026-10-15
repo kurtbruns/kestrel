@@ -47,7 +47,7 @@ The Publishing set gets a publisher going, and tells them about the decisions to
 - **Only what changes what the publisher does.** The dashboard explains itself as they go, so a page doesn't walk it screen by screen. Exact rules, edge cases, and the API go in a reference section at the page's end, under its own heading, or in the API reference.
 - **Each fact once.** One page holds it, and the others link there in a line.
 - **Short.** The task part of a page fits in a screen or two.
-- **No closing "Next" line.** The Docs tab's pager already links the next page in the section.
+- **No closing "Next" line.** A publisher picks a page from the index or follows a link to it, rather than reading the set in order, and the Docs tab's pager links the next page anyway.
 - **Facts come from the app, not the documents alone.** Check a label against the UI's source as well as DESIGN, and a behavior against the code as well as SPEC. Where they disagree, describe what the app does and flag the gap to the maintainer.
 - **Say what to do, not who does it.** The reader may also manage the instance, so a change that belongs to the deployment says what to do and links the setup guide page that does it, never restating it. Name the provider's own product (Cloudflare's Workers Paid plan, Amazon SES), so a search finds it. Never assume the reader has used wrangler or a terminal.
 - **Settled facts, cited and hedged.** A legal claim links its source and says whose law it is. Where the law is judgment, say "usually" or "probably". A page with legal content says it's general information, not legal advice.
@@ -68,7 +68,7 @@ A setup guide page, after Linode's guides:
 3. `## Before you begin`: only where a page has prerequisites of its own. List what the reader needs as noun phrases. Deploy the app also carries an unnumbered `## Choose your hostnames` after it, since the whole path uses those names.
 4. `## 1. Verb phrase` sections: one or two sentences of why, then numbered steps.
 5. `## Check it`: a checklist the reader, or Claude, can verify. Prefer a check with a concrete result (a URL that answers, a command's output) over "it looks right". A page whose sections are themselves the checks, such as Verify it works, ends with one line instead, rather than restating them.
-6. **End** by pointing to the next page. The Docs tab has a pager, but Claude follows these pages as Markdown, where the line is the only way on.
+6. **End** by pointing to the next page, on Get started's numbered path. Claude follows that path as Markdown, where the line is the only way on. A guide, picked from the landing, needs none.
 
 ## Voice
 

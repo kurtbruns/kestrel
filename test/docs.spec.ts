@@ -178,6 +178,7 @@ describe("each doc as Markdown, for an agent (docMarkdown)", () => {
     expect(docMarkdown("import-format")).toMatch(/^# Bring your existing list/);
     expect(docMarkdown("scheduling-and-sending")).toBe(docMarkdown("write-a-post"));
     expect(docMarkdown("after-a-send")).toBe(docMarkdown("troubleshooting"));
+    expect(docMarkdown("try-locally")).toBe(docMarkdown("deploy"));
   });
 
   it("serves a set's index by its id, linking its pages and the other set", () => {

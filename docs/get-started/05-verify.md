@@ -39,7 +39,7 @@ If a check fails, compare your DNS records with the ones in [Connect Amazon SES]
 
 ## 3. Set up notifications
 
-Kestrel emails you when a send finishes, and right away when one runs into a problem. Notifications go through your email provider. To send them through Cloudflare instead, see [Notifications through Cloudflare's email](../guides/03-notifications.md).
+Kestrel emails the notifications address when a send finishes, and right away when one runs into a problem. Notifications go through your email provider. To send them through Cloudflare instead, see [Notifications through Cloudflare's email](../guides/03-notifications.md).
 
 1. In the editor, open **Settings → Notifications**.
 

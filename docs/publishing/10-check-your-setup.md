@@ -14,7 +14,7 @@ Choose **Template** in the sidebar, then **Send test email**, and send a sample 
 
 ## Subscribe yourself
 
-Subscribe with a personal address at your publication's address followed by `/subscribe`, and confirm. You see what a new reader sees, and you then appear under **Subscribers** as **Confirmed**. [Share your subscribe link](09-share-your-subscribe-link.md) covers the page and the confirmation email.
+Open your subscribe page, from the link under **Settings → Ways to subscribe**, and subscribe with a personal address. Then confirm. You see what a new reader sees, and you then appear under **Subscribers** as **Confirmed**. [Share your subscribe link](09-share-your-subscribe-link.md) covers the page and the confirmation email.
 
 ## Set your notifications address
 
