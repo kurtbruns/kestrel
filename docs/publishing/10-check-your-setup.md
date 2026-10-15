@@ -2,7 +2,7 @@
 
 Before your readers get anything, see it arrive yourself, and make sure a problem will reach you without your watching for it. Send yourself a test and reply to it, subscribe yourself, and set where Kestrel emails you.
 
-**With more than about 5,000 subscribers, upgrade to Cloudflare's Workers Paid plan before you import.** [Bring your existing list](01-your-list.md) says why.
+If you're bringing a list of more than about 5,000 subscribers, upgrade to Cloudflare's Workers Paid plan before you import it. On the free plan, a large import and a send can use up the day's database writes. Then the app stops working until midnight UTC. [As your list grows](../get-started/06-go-live.md#as-your-list-grows) walks through the upgrade.
 
 ## Send yourself a test
 
