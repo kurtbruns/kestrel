@@ -893,9 +893,13 @@ describe("sent record", () => {
     expect($("#watchBody .health.amber").textContent).toContain(
       "Nothing has gone out for 31 minutes",
     );
+    // The gloss under the bar agrees with the alert rather than saying it is handing off.
+    const gloss = () => $$("#watchBody .wbar-sub")[0]?.textContent;
+    expect(gloss()).toBe("Nothing is being handed off to the provider right now.");
     stuck = false;
     await vi.advanceTimersByTimeAsync(3000);
     expect(document.querySelector("#watchBody .health.amber")).toBeNull();
+    expect(gloss()).toBe("Paused between ticks. It resumes on the next sweep.");
     expect(fake.unhandled).toHaveLength(0);
   });
 

@@ -14,7 +14,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
-- A send is flagged as **in flight too long** only when it has handed off no one for 30 minutes and nothing else explains it (a provider refusing the account, an outage it is waiting out, or a send awaiting Resolve), rather than 30 minutes after it started. A large send going out at your SES rate on Workers Free is no longer flagged, emailed about, or logged as `send.stuck`, however long it takes; one the sweep has stopped moving still is, and its email and message say nothing has gone out and why that points at the sweep (SPEC §12).
+- A send is flagged as **in flight too long** only when it has handed off no one for 30 minutes and nothing else explains it (a provider refusing the account, an outage it is waiting out, or a send awaiting Resolve), rather than 30 minutes after it started. A large send going out at your SES rate on Workers Free is no longer flagged, emailed about, or logged as `send.stuck`, however long it takes; one the sweep has stopped moving still is, shows no time to finish, and its email and message say nothing has gone out and why that points at the sweep (SPEC §12).
 
 ### Fixed
 

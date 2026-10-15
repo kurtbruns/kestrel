@@ -21,6 +21,7 @@ import type { Config } from "../env";
 import { archiveUrl } from "../render/render";
 import { sendActions, sendConditions } from "./conditions";
 import { nextChangeAt } from "./feed";
+import { isStuck } from "./stuck";
 import { isWedged } from "./wedged";
 
 /**
@@ -242,7 +243,9 @@ export function buildSendView(
   // wedged), the ticks ahead would not hand anyone off, so a finish counted from them is
   // not coming. Between ticks a healthy send is still handing off: the estimate counts the
   // wait for the next tick.
-  const handingOff = phase === "progressing" || phase === "retrying";
+  // A send in flight too long has handed off no one for the threshold, so the estimate
+  // counted from the ticks it sat still would promise a finish that is not coming either.
+  const handingOff = (phase === "progressing" || phase === "retrying") && !isStuck(send, now);
 
   return {
     id,

@@ -106,6 +106,10 @@ function phaseBlurb(prog: SendView): string {
   if (prog.phase === "backing-off" && halt?.reason === "unavailable") {
     return `The provider is unavailable; ${nextRetry(halt.retry_at)}.`;
   }
+  // In flight too long: the alert above says why, so the gloss must not say it is handing off.
+  if (has(prog, "stuck")) {
+    return "Nothing is being handed off to the provider right now.";
+  }
   // A send too large for one tick waits for the next with nothing in flight. The server
   // reads that as progressing, since nothing failed; the line says why the bar is still.
   if (prog.phase === "progressing" && prog.counts.in_flight === 0 && prog.counts.pending > 0) {
@@ -181,7 +185,7 @@ function watchBodyHtml(prog: SendView): Html {
   const acceptedTotal = c.accepted + c.delivered + c.bounced + c.complained;
   const rate = prog.dispatch.rate_per_min;
   // The server gives a time to finish only while the send is handing off, never while it
-  // is paused (backing off, refused, or wedged). The rate goes with it: it is what a tick
+  // is paused (backing off, refused, or wedged) or in flight too long. The rate goes with it: it is what a tick
   // has carried so far, so beside a pause it would promise progress nothing is making.
   const eta = prog.dispatch.eta_ms;
   const dispatchSub =

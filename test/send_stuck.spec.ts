@@ -95,6 +95,7 @@ describe("a send nothing is moving", () => {
     const row = (await sends.getSend(env.DB, send.id))!;
     const prog = viewOf(row, "ses", false, Date.now());
     expect(has(prog, "stuck")).toBe(true);
+    expect(prog.dispatch.eta_ms).toBeNull(); // no finish promised for a send that sits still
     expect(prog.conditions.find((c) => c.kind === "stuck")).toMatchObject({
       severity: "warn",
       since: started + STUCK_THRESHOLD_MS,
