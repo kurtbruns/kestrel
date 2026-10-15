@@ -67,7 +67,7 @@ export function composeNotification(n: DueNotification, config: Config): Rendere
           [
             `No email provider is connected to this deployment, so ${title} is held where it is.`,
             refusalAdvice(n.halt_cause),
-            "No one has been marked unsent. The send keeps trying, at most an hour apart, and goes out at the first try after a provider is connected, mailing no one twice.",
+            "No one has been marked unsent. The send keeps trying, at most an hour apart, and goes out at the first try after a provider is connected, mailing no one twice. Any other post that comes due meanwhile waits with it, and you are not told again.",
           ],
           link,
         );
@@ -77,7 +77,7 @@ export function composeNotification(n: DueNotification, config: Config): Rendere
         [
           `The email provider is refusing this account, so ${title} is paused where it is. The provider said: ${n.halt_error || "no detail given"}`,
           refusalAdvice(n.halt_cause),
-          "No one has been marked unsent. The send keeps trying, at most an hour apart, and resumes on its own at the next try after the account is fixed, mailing no one twice.",
+          "No one has been marked unsent. The send keeps trying, at most an hour apart, and resumes on its own at the next try after the account is fixed, mailing no one twice. Any other post that comes due meanwhile waits with it, and you are not told again.",
         ],
         link,
       );

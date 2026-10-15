@@ -92,6 +92,9 @@ export function importNotice(db: D1Database, importId: string, now: number): D1P
  * INSERT OR IGNORE on the (send, kind, episode) key is what makes a condition that
  * persists across ticks one notification rather than one a tick. A finished or late send
  * counts only within the horizon, so turning notifications on does not mail the history.
+ * A refusal is the account's, so it is one event however many sends it holds: a send that
+ * joined another's refusal (`joinHalt`) shares when it began, and only one of the sends
+ * sharing that start is told of it.
  * A send in flight too long (`stuckSendSql`) is one event for each stretch it sits idle,
  * keyed by when that stretch began (`SEND_IDLE_SINCE`), so a send that moves again and later
  * stops is told again. A wedged or halted send is not stuck: its own notification says why
@@ -104,8 +107,14 @@ export async function recordNotifications(db: D1Database, now: number): Promise<
          SELECT id, 'finished', 0, ?1, ?1 FROM sends
           WHERE status = 'sent' AND completed_at >= ?2
          UNION ALL
-         SELECT id, 'refused', halted_at, ?1, ?1 FROM sends
+         SELECT id, 'refused', halted_at, ?1, ?1 FROM sends s
           WHERE status = 'sending' AND halt_reason = 'account' AND halted_at IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM sends o
+                             WHERE o.status = 'sending' AND o.halt_reason = 'account'
+                               AND o.halted_at = s.halted_at AND o.id < s.id)
+            AND NOT EXISTS (SELECT 1 FROM notifications r
+                             WHERE r.kind = 'refused' AND r.episode = s.halted_at
+                               AND r.send_id <> s.id)
          UNION ALL
          SELECT id, 'missed', 0, ?1, ?1 FROM sends
           WHERE (status = 'scheduled' AND fire_at < ?1 - ?3)

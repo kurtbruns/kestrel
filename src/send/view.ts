@@ -36,7 +36,8 @@ import { isWedged } from "./wedged";
  *                       recipients waiting on their retry after a transient error, or the
  *                       provider unavailable until the halt's next retry
  *                       (`provider.halt.retry_at`), even with a batch it never answered
- *                       in flight awaiting Resolve.
+ *                       in flight awaiting Resolve, or held on another send's outage
+ *                       before its first hand-off.
  *   - `needs-attention` wedged: nothing left to hand off, and the last run released the
  *                       send with recipients in flight whose fate is unknown (§12) —
  *                       awaiting Resolve;
@@ -56,6 +57,7 @@ function derivePhase(
   wedged: boolean,
   refused: boolean,
   unavailable: boolean,
+  audienceFixed: boolean,
 ): SendPhase {
   switch (status) {
     case "scheduled":
@@ -76,7 +78,9 @@ function derivePhase(
       // retry, whatever is in flight. A batch the provider never answered stays in flight
       // for Resolve and will not move on its own, so it never makes the pause read as
       // progress (SPEC §12). The provider answering a batch ends the halt.
-      if (unavailable && counts.pending > 0) {
+      // A send held on the outage before its first hand-off has fixed no audience yet, so
+      // nothing is pending, but all of it is still to go.
+      if (unavailable && (counts.pending > 0 || !audienceFixed)) {
         return "backing-off";
       }
       if (counts.in_flight > 0) {
@@ -238,7 +242,16 @@ export function buildSendView(
   const refused = halt?.reason === "account";
   const unavailable = halt?.reason === "unavailable";
 
-  const phase = derivePhase(send.status, counts, hasRetries, due, wedged, refused, unavailable);
+  const phase = derivePhase(
+    send.status,
+    counts,
+    hasRetries,
+    due,
+    wedged,
+    refused,
+    unavailable,
+    send.audience_resolved_at !== null,
+  );
   // A time to finish only while the send is handing off: paused (backing off, halted,
   // wedged), the ticks ahead would not hand anyone off, so a finish counted from them is
   // not coming. Between ticks a healthy send is still handing off: the estimate counts the

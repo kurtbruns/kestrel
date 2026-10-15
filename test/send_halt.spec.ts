@@ -412,11 +412,21 @@ describe("the halt's backoff", () => {
       }
     }
     expect(waitingTicks).toBeGreaterThan(5);
-    // Every send retried on the account schedule, never once a tick.
-    expect(transport.requests).toBe(5 * 5);
+    // One request a retry on the account schedule, never once a tick, and only one send
+    // asks: the others join its refusal (SPEC §12).
+    expect(transport.requests).toBe(5);
+    let probing = 0;
     for (const id of ids) {
-      await expectHeld(id, 3);
+      const send = (await sends.getSend(env.DB, id))!;
+      expect([send.status, send.halt_reason]).toEqual(["sending", "account"]);
+      if (send.audience_resolved_at === null) {
+        expect(send.c_pending + send.c_in_flight + send.c_accepted).toBe(0); // held from the start
+      } else {
+        probing += 1;
+        await expectHeld(id, 3);
+      }
     }
+    expect(probing).toBe(1);
   });
 
   it("mails everyone exactly once after the fault clears, at the next scheduled retry", async () => {

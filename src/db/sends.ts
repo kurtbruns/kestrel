@@ -999,6 +999,96 @@ export async function resumableSends(
   return results;
 }
 
+/** A halt another send is waiting out, which the account or the provider is the cause of,
+ *  not that send alone (SPEC §12). */
+export interface AccountHalt {
+  sendId: string;
+  reason: HaltReason;
+  cause: HaltCause | null;
+  error: string;
+  since: number;
+  retries: number;
+  retryAt: number;
+}
+
+/**
+ * The halt any other sending send is waiting out whose next retry is still after `aheadOf`,
+ * or null when none is (SPEC §12). A halt is about the account or the provider, never one
+ * send, so a send that would start or resume while one stands waits on it rather than ask
+ * the provider again. A refusal outranks an outage, and of each the one retried last is the
+ * newest word. A wedged send's halt is not counted: nothing retries it, so it says nothing
+ * about the provider now.
+ */
+export async function accountHalt(
+  db: D1Database,
+  sendId: string,
+  aheadOf: number,
+): Promise<AccountHalt | null> {
+  const row = await db
+    .prepare(
+      `SELECT id, halt_reason, halt_cause, halt_error, halted_at, halt_retries, halt_retry_at
+         FROM sends
+        WHERE status = 'sending' AND id <> ? AND halt_reason IS NOT NULL
+          AND halt_retry_at > ? AND NOT ${WEDGED_SEND}
+        ORDER BY halt_reason = 'account' DESC, halt_retry_at DESC
+        LIMIT 1`,
+    )
+    .bind(sendId, aheadOf)
+    .first<{
+      id: string;
+      halt_reason: HaltReason;
+      halt_cause: HaltCause | null;
+      halt_error: string | null;
+      halted_at: number | null;
+      halt_retries: number;
+      halt_retry_at: number;
+    }>();
+  return row
+    ? {
+        sendId: row.id,
+        reason: row.halt_reason,
+        cause: row.halt_cause,
+        error: row.halt_error ?? "",
+        since: row.halted_at ?? row.halt_retry_at,
+        retries: row.halt_retries,
+        retryAt: row.halt_retry_at,
+      }
+    : null;
+}
+
+/**
+ * Hold this send on another send's halt (`accountHalt`) without asking the provider: it
+ * takes the halt's reason, words, step in the backoff, and next retry, so it reads and
+ * retries as that send does. A send already halted for the same reason keeps when its own
+ * halt began, as `holdBatch` does. Lease-guarded.
+ */
+export async function joinHalt(
+  db: D1Database,
+  sendId: string,
+  lease: string,
+  halt: AccountHalt,
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE sends SET halt_reason = ?, halt_cause = ?, halt_error = ?,
+              halted_at = CASE WHEN halt_reason IS ? AND halted_at IS NOT NULL THEN halted_at ELSE ? END,
+              halt_retries = ?, halt_retry_at = ?, rev = ${NEXT_REV}
+        WHERE id = ? AND lease_token = ?`,
+    )
+    .bind(
+      halt.reason,
+      halt.cause,
+      halt.error,
+      halt.reason,
+      halt.since,
+      halt.retries,
+      halt.retryAt,
+      sendId,
+      lease,
+    )
+    .run();
+}
+
 /** The wedged sends (`WEDGED_SEND`), for the sweep's `send.wedged` line. */
 export async function wedgedSends(db: D1Database): Promise<SendRow[]> {
   const { results } = await db

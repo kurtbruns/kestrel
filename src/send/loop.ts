@@ -14,7 +14,9 @@
  * adapter's halt) halts the run, not the recipients: the batch goes back to `pending` as
  * fresh rows with no attempt spent, the send records the halt and stays open, and the
  * sweep tries again once the halt's backoff (`HALT_BACKOFF_MS`) has passed, however long
- * the halt lasts; an answer that holds no one back ends it (SPEC §12). A request with no answer halts the
+ * the halt lasts; an answer that holds no one back ends it (SPEC §12). A halt is the
+ * account's or the provider's, not one send's, so while one send waits one out, another that
+ * starts or resumes joins it without a request (`accountHalt`). A request with no answer halts the
  * run the same way, but its batch stays in flight for Resolve.
  * Only a recipient's own retryable failure counts toward `MAX_DELIVERY_ATTEMPTS`.
  *
@@ -36,7 +38,12 @@ import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
 import { getConfig } from "../env";
 import { errorText, log } from "../lib/log";
-import { HALT_BACKOFF_MS, LEASE_TTL_MS, MAX_DELIVERY_ATTEMPTS } from "../lib/time";
+import {
+  HALT_BACKOFF_MS,
+  HALT_RETRY_SLACK_MS,
+  LEASE_TTL_MS,
+  MAX_DELIVERY_ATTEMPTS,
+} from "../lib/time";
 import { getProvider } from "../providers";
 import { drainSimulatedWebhooks } from "../providers/simulate";
 import type { BatchHalt, HaltReason } from "../providers/types";
@@ -70,9 +77,9 @@ const GROUP_RECIPIENTS = 10;
 // What a run can cost, in D1 statements (and, where noted, provider requests), so it
 // only starts what it can finish. Each is an upper bound; the budget counts what is
 // actually spent.
-/** Opening: read the send, take the lease, resolve the audience (2), list the fresh
- *  rows. */
-const OPEN_COST = 5;
+/** Opening: read the send, take the lease, look for another send's halt, resolve the
+ *  audience (2), list the fresh rows. */
+const OPEN_COST = 6;
 /** One group, besides a request for each of its batches: read its rows, close any no
  *  longer to be mailed (2), renew the lease, hand off (2), record the outcomes (2). A
  *  group with a halted batch also records the hold (3), but then the run only releases
@@ -168,6 +175,25 @@ export async function runSend(
     renewAt = Date.now() + LEASE_TTL_MS / 2;
     return sends.renewLease(db, sendId, lease, Date.now() + LEASE_TTL_MS);
   };
+
+  // While another send waits out a refusal or an outage, this one would only meet the same
+  // answer, or strand a batch for Resolve on a provider that has gone silent: it joins that
+  // halt and retries with it, asking the provider nothing (SPEC §12). Before the audience,
+  // so a send held from the start fixes it when it first hands off, not while held.
+  const standing = await sends.accountHalt(db, sendId, Date.now() + HALT_RETRY_SLACK_MS);
+  if (standing) {
+    await sends.joinHalt(db, sendId, lease, standing);
+    log.warn("send.halted", {
+      ...tags,
+      reason: standing.reason,
+      cause: standing.cause,
+      error: standing.error,
+      retryAt: new Date(standing.retryAt).toISOString(),
+      heldBy: standing.sendId,
+    });
+    await sends.releaseLease(db, sendId, lease);
+    return { ...empty, leased: true, halt: standing.reason };
+  }
 
   // The first run fixes the audience (SPEC §6); every later run works the rows that
   // exist, so a reader who confirms mid-send gets the next post, not this one. The guard

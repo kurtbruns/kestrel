@@ -19,6 +19,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Fixed
 
 - A send that SES keeps partly refusing, as a daily quota frees up a few at a time, is one refusal until SES takes a batch with nothing refused: you're emailed about it once, its page keeps the time the refusal began, and its retries keep spacing out up to an hour apart instead of starting over every few minutes. The readers SES took are still recorded as sent at once, and the rest wait with no retry spent (SPEC §12).
+- A post that comes due while another send is held by SES refusing the account, or by an outage, now waits with it instead of firing: it asks SES nothing, reads as held with the same next retry, and goes out once SES answers. You're emailed once per refusal rather than once per send, and an outage where SES doesn't answer no longer leaves a batch of each new post waiting for Resolve. A held post goes to your list as it stands when it actually goes out (SPEC §6, §12).
 - A send paused for a provider outage reads **Backing off**, with when it next retries, on its page, the Sent list, and the dashboard, and shows no time to finish, even while a batch the provider never answered waits for Resolve. Before, it read as sending normally for up to an hour (SPEC §12).
 
 ## [1.11.0] - 2026-10-15
