@@ -443,8 +443,9 @@ function dashActiveHtml(active: SendView[]): Html {
   if (!active.length) {
     return html``;
   }
+  // The health line above already says a send is in flight too long, so its card doesn't.
   return html`<section class="dash-section"><h2>Active send${active.length === 1 ? "" : "s"}</h2>${active.map(
-    activeRowHtml,
+    (s) => activeRowHtml(s, { stuckNote: false }),
   )}</section>`;
 }
 function wireDashActiveCards(root: HTMLElement): void {

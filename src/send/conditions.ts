@@ -175,7 +175,7 @@ export function sendConditions(
         kind: "stuck",
         severity: "warn",
         since: stuck,
-        message: `Nothing has gone out for ${plural(minutes(idle), "minute")}, with no retry or provider problem to explain it. The sweep that sends may have stopped or keep failing on this send, or another send may be taking every minute's sending allowance. It picks up where it stopped, mailing no one twice.`,
+        message: `Nothing has gone out for ${plural(minutes(idle), "minute")}, with no retry or provider problem to explain it. Sending may have stopped, or another send may be taking its turn. It picks up where it stopped, mailing no one twice.`,
         action: null,
       });
     }

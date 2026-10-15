@@ -123,7 +123,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
     const active = live.filter((s) => s.status === "sending" && !needsOperator(s));
     setHtml(
       activeEl,
-      active.length ? html`<h2>In progress</h2>${active.map(activeRowHtml)}` : html``,
+      active.length ? html`<h2>In progress</h2>${active.map((s) => activeRowHtml(s))}` : html``,
     );
     for (const card of $$<HTMLElement>("[data-watch]", activeEl)) {
       card.onclick = (e) => {

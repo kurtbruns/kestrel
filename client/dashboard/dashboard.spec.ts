@@ -253,9 +253,8 @@ describe("dashboard", () => {
         .map((c) => c.dataset.watch)
         .sort(),
     ).toEqual(["ok1", "st1"]);
-    expect($("[data-watch='st1'] .active-stuck").textContent).toMatch(
-      /^Nothing has gone out for 31 minutes/,
-    );
+    // The health line says it is in flight too long, so its card doesn't say it again.
+    expect(document.querySelector("[data-watch='st1'] .active-stuck")).toBeNull();
     // The missed send's own card says how late it is, in the danger tone.
     expect(countdown("p9").textContent).toBe("Missed its fire time · 6 min late");
     expect(countdown("p9").classList.contains("countdown-missed")).toBe(true);

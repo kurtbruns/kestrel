@@ -177,10 +177,11 @@ export function nextRetry(retryAt: number | null): string {
  * dispatch bar is, and the time to finish is the server's, shown only while the send is
  * handing off, never while it is paused. A send paused for a provider outage leads with
  * that and when it next retries, since nothing goes out until then (SPEC §12). A send in
- * flight too long says so on its card.
+ * flight too long says so on its card, unless the page already says so in its health line
+ * (`stuckNote: false`, the dashboard), so the words aren't shown twice.
  * The whole card opens the watch; the "Watch" link is the keyboard/middle-click target.
  */
-export function activeRowHtml(s: SendView): Html {
+export function activeRowHtml(s: SendView, { stuckNote = true } = {}): Html {
   const c = s.counts;
   const accepted = c.accepted + c.delivered + c.bounced + c.complained;
   const confirmed = c.delivered + c.bounced + c.complained;
@@ -188,7 +189,7 @@ export function activeRowHtml(s: SendView): Html {
   const pct = total > 0 ? (100 * accepted) / total : 0;
   // The server gives a time to finish only while the send is handing off.
   const eta = s.dispatch.eta_ms ? ` · ~${fmtDuration(s.dispatch.eta_ms)} left` : "";
-  const stuck = conditionOf(s, "stuck");
+  const stuck = stuckNote ? conditionOf(s, "stuck") : undefined;
   const halt = s.provider.halt;
   const outage = s.phase === "backing-off" && halt?.reason === "unavailable";
   const lead = outage ? "Backing off" : "Sending";
