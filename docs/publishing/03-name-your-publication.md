@@ -1,6 +1,6 @@
-# Name your publication
+# Name and brand your publication
 
-Give your newsletter a name and a look before your first post. Set the name, tagline, and logo under **Settings → Publication identity**. They appear in every email your template prints them in, on the public pages readers see, and in the confirmation email new subscribers get.
+Give your newsletter a name and a look before your first post. Set the name, tagline, and logo under **Settings → Publication identity**, and the [email template](03-name-your-publication.md#the-email-template) every post is sent in under **Template**. Your identity appears in your emails, on the public pages readers see, and in the confirmation email new subscribers get.
 
 All three are optional and can change at any time. Left blank, the name falls back to your emails' From name. Pick a logo at least 256 × 256 px: Kestrel shows it square everywhere, cropping a wider or taller image to its center. An email already sent, and its archive page, keep the identity they went out with.
 
