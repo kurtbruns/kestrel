@@ -10,7 +10,9 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading.** No database migrations. Run `npm run check-context` in your instance's repository: `/migrate-list` now reads the import format from "Bring your existing list".
+## [1.11.0] - 2026-10-15
+
+**Upgrading from 1.10.0.** No database migrations. Run `npm run check-context` in your instance's repository: `/migrate-list` now reads the import format from "Bring your existing list".
 
 ### Changed
 
@@ -431,7 +433,8 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
-[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.10.0...HEAD
+[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.11.0...HEAD
+[1.11.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.11.0
 [1.10.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.10.0
 [1.9.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.9.0
 [1.8.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.8.0
