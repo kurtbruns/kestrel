@@ -21,4 +21,5 @@ What the law asks of every send, and what to do when something goes wrong.
 
 ## More
 
+- [Your email template](11-email-template.md)
 - [Working with Claude](07-working-with-claude.md)

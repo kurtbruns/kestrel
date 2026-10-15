@@ -109,7 +109,7 @@ If AWS asks for more detail, reply in the support case. If it denies the request
 
 Your account stays in the sandbox until AWS grants access, so don't go live before then. In the sandbox, a signup from any address you haven't verified fails, and a post reaches only your verified addresses.
 
-When AWS grants access, the **Account dashboard** shows your daily quota and your maximum send rate. You set the rate in the app in section 8. The rate decides how fast a send goes out, and [As your list grows](06-go-live.md#as-your-list-grows) says when to ask AWS to raise it.
+When AWS grants access, the **Account dashboard** shows your daily quota and your maximum send rate. You set the rate in the app in section 8. The rate decides how fast a send goes out, and [As your list grows](../guides/09-as-your-list-grows.md) says when to ask AWS to raise it.
 
 ## 6. Send bounces and complaints to SNS
 
@@ -223,7 +223,7 @@ Until now the app has run with no email provider connected, refusing to send. Se
     }
     ```
 
-    On Workers Paid, also add `"SUBREQUEST_BUDGET": "10000"`, the plan's limit, so each minute sends more. Leave it out on Workers Free. [As your list grows](06-go-live.md#as-your-list-grows) says when the plan is worth it.
+    On Workers Paid, also add `"SUBREQUEST_BUDGET": "10000"`, the plan's limit, so each minute sends more. Leave it out on Workers Free. [As your list grows](../guides/09-as-your-list-grows.md) says when the plan is worth it.
 
     When AWS grants production access, set `SES_MAX_SEND_RATE` to the maximum send rate on the **Account dashboard**, and deploy again. The app keeps to that rate, so SES doesn't throttle your send.
 

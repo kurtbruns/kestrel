@@ -32,6 +32,7 @@ import notifications from "../../docs/guides/03-notifications.md";
 import rateLimit from "../../docs/guides/05-rate-limit.md";
 import upgrade from "../../docs/guides/07-upgrade.md";
 import tryLocally from "../../docs/guides/08-try-locally.md";
+import listGrows from "../../docs/guides/09-as-your-list-grows.md";
 import yourList from "../../docs/publishing/01-your-list.md";
 import sendingRules from "../../docs/publishing/02-sending-rules.md";
 import nameYourPublication from "../../docs/publishing/03-name-your-publication.md";
@@ -40,6 +41,7 @@ import troubleshooting from "../../docs/publishing/06-troubleshooting.md";
 import workingWithClaude from "../../docs/publishing/07-working-with-claude.md";
 import shareYourSubscribeLink from "../../docs/publishing/09-share-your-subscribe-link.md";
 import checkYourSetup from "../../docs/publishing/10-check-your-setup.md";
+import emailTemplate from "../../docs/publishing/11-email-template.md";
 import publishingIndex from "../../docs/publishing/README.md";
 import selfHostingIndex from "../../docs/README.md";
 import configuration from "../../docs/reference/01-configuration.md";
@@ -62,6 +64,7 @@ const PAGES: Record<string, string> = {
   "publishing/04-write-a-post.md": writeAPost,
   "publishing/06-troubleshooting.md": troubleshooting,
   "publishing/07-working-with-claude.md": workingWithClaude,
+  "publishing/11-email-template.md": emailTemplate,
   "publishing/09-share-your-subscribe-link.md": shareYourSubscribeLink,
   "publishing/10-check-your-setup.md": checkYourSetup,
   "get-started/02-deploy.md": deploy,
@@ -74,6 +77,7 @@ const PAGES: Record<string, string> = {
   "guides/05-rate-limit.md": rateLimit,
   "guides/07-upgrade.md": upgrade,
   "guides/08-try-locally.md": tryLocally,
+  "guides/09-as-your-list-grows.md": listGrows,
   "reference/01-configuration.md": configuration,
   "reference/02-sending-domain-dns.md": sendingDomain,
 };

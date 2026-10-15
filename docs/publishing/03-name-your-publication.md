@@ -14,24 +14,9 @@ A P.O. box or a registered private mailbox counts, so you never have to publish 
 
 This is general information, not legal advice. The FTC's [CAN-SPAM compliance guide](https://www.ftc.gov/business-guidance/resources/can-spam-act-compliance-guide-business) has the detail, and [Sending rules](02-sending-rules.md) covers the rest of what the law asks of a newsletter.
 
-## The email template
+## Your emails' look
 
-You write posts in Markdown, and the template is the HTML frame each one is placed in, like a layout in a static site generator. `{{ .Post.Body }}` is where your post goes, and the rest is plain HTML around it. The built-in template works as it comes. To change it, choose **Template** in the sidebar, edit, and save. **Start from example** offers two starting points, and **Send test email** sends a sample post through your saved template.
-
-Kestrel won't save a template without `{{ .Post.Body }}` and `{{ .Email.UnsubscribeURL }}`. Every email has to carry the post and a way to leave. Wrap a part in `{{ if .IsEmail }}` and `{{ end }}` to keep it off each post's public page. The starting templates do this with the unsubscribe link and mailing address.
-
-| Variable | What it holds |
-| --- | --- |
-| `{{ .Post.Body }}` | Your post, rendered from Markdown. Required. |
-| `{{ .Post.Subject }}` | The post's subject line. |
-| `{{ .Publication.Name }}` | Your publication's name. |
-| `{{ .Publication.Tagline }}` | Your tagline. |
-| `{{ .Publication.Logo }}` | Your logo as an image, or nothing when no logo is set. |
-| `{{ .Publication.LogoURL }}` | Your logo's address, or empty. |
-| `{{ .Publication.Address }}` | Your mailing address, or empty. |
-| `{{ .Email.SentTo }}` | The address this email was sent to. |
-| `{{ .Email.UnsubscribeURL }}` | This reader's one-click unsubscribe link. Required. |
-| `{{ .Email.ViewInBrowserURL }}` | The post's public page. |
+Every post is sent in your email template, which prints your name, tagline, and logo, and your mailing address once you add one. The built-in template works as it comes. [Your email template](11-email-template.md) covers changing it.
 
 ## Who sets the From name and address
 

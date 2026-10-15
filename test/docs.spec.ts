@@ -18,6 +18,7 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
       "publishing/set-up-your-publication/share-your-subscribe-link",
       "publishing/sending/sending-rules",
       "publishing/sending/troubleshooting",
+      "publishing/more/email-template",
       "publishing/more/working-with-claude",
       "self-hosting/get-started/deploy",
       "self-hosting/get-started/access",
@@ -28,6 +29,7 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
       "self-hosting/guides/try-locally",
       "self-hosting/guides/notifications",
       "self-hosting/guides/rate-limit",
+      "self-hosting/guides/as-your-list-grows",
       "self-hosting/guides/upgrade",
       "self-hosting/reference/configuration",
       "self-hosting/reference/sending-domain-dns",
@@ -126,7 +128,7 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
     expect(start?.html).toContain('href="#/docs/sending-domain-dns/choose-your-sending-name"');
     // Across sets: a publisher page to the setup guide, and back.
     expect(docs.find((d) => d.slug === "your-list")?.html).toContain(
-      'href="#/docs/go-live/as-your-list-grows"',
+      'href="#/docs/as-your-list-grows"',
     );
     expect(docs.find((d) => d.slug === "connect-claude")?.html).toContain(
       'href="#/docs/your-list/the-file-format"',
@@ -168,7 +170,7 @@ describe("each doc as Markdown, for an agent (docMarkdown)", () => {
     const md = docMarkdown("your-list") ?? "";
     expect(md).toMatch(/^# Bring your existing list/);
     expect(md).toContain("](your-list.md#the-file-format)");
-    expect(md).toContain("](go-live.md#as-your-list-grows)");
+    expect(md).toContain("](as-your-list-grows.md)");
     expect(md).not.toMatch(/\]\([^)]*\d{2}-[a-z0-9-]+\.md/);
   });
 

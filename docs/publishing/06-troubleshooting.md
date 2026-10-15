@@ -8,7 +8,7 @@ When a send needs you, its page and the dashboard's health block say so in a red
 
 A problem with your email provider never marks anyone unsent. The send waits where it is, and carries on from there once the problem clears.
 
-- **"The provider is refusing the account".** Your provider won't take mail from your account, and its own words follow, with the fix they point to. The fix is almost always in your Amazon SES account or Kestrel's deployment, and the message names it. A spent daily sending quota frees up within a day, and you can ask AWS for a higher one, as [As your list grows](../get-started/06-go-live.md#as-your-list-grows) describes.
+- **"The provider is refusing the account".** Your provider won't take mail from your account, and its own words follow, with the fix they point to. The fix is almost always in your Amazon SES account or Kestrel's deployment, and the message names it. A spent daily sending quota frees up within a day, and you can ask AWS for a higher one, as [As your list grows](../guides/09-as-your-list-grows.md) describes.
 - **"No email provider is connected".** The send is held until one is connected ([Connect Amazon SES](../get-started/04-ses.md)), and goes out once it is.
 - **"The provider is unavailable".** An outage or a rate limit on the provider's side. The send retries on its own, so there's nothing to do.
 - **"Still sending … after it started".** A send is taking longer than expected, and may be retrying. If the line stays, read the app's logs, as [Read the logs](../get-started/05-verify.md#7-read-the-logs) describes.
