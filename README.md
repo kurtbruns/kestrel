@@ -38,13 +38,7 @@ To start over, reset the app to the state a new instance starts in: no posts, su
 npm run reset
 ```
 
-When you're ready to deploy, this folder can be your instance's repository. Push it to an empty GitHub repository, then follow [Deploy the app](https://getkestrel.dev/docs/deploy/) from signing in to Cloudflare.
-
-## Run your own
-
-Kestrel installs from npm as [`@kurtbruns/kestrel`](https://www.npmjs.com/package/@kurtbruns/kestrel). Your instance lives in a small repository of your own, which holds its settings and names the release it runs. The [setup guide](https://getkestrel.dev/docs/) takes you from an empty repository to a live newsletter, and [Upgrade to a new release](https://getkestrel.dev/docs/upgrade/) moves an instance to a newer one.
-
-The docs are two sets, one per job. [Self-hosting](https://getkestrel.dev/docs/) is for whoever deploys and runs Kestrel. [Publishing](https://getkestrel.dev/docs/publishing/) is for whoever writes and sends the newsletter. Both are in the editor's **Docs** tab, and an instance serves every page as Markdown for Claude to read.
+When you're ready to deploy your own instance, see the [setup guide](https://getkestrel.dev/docs/), which contains instructions for deploying and running Kestrel.
 
 ## Contributing
 
