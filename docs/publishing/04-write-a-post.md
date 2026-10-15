@@ -29,7 +29,7 @@ Scheduling makes the email once, from the post, your template, and your publicat
 
 **Send yourself a test now.** It's the copy your list receives, and the time until the send is your window to catch a mistake, including one Claude made.
 
-A change to your template, or to a publication detail it shows, re-makes every scheduled post's email, with the same content and send time. Kestrel asks before it saves, and each re-made post then asks you to send a new test. [Changes and scheduled posts](03-name-your-publication.md#changes-and-scheduled-posts) covers what changes and when a save is refused.
+Changing your template, or a publication detail it shows, re-makes the email of every scheduled post, with the same content and send time. Kestrel asks before it saves, and each re-made post then asks you to send a new test. A change is refused while a post is within the minimum lead of its send time, and Kestrel says when to try again. Posts already sending or sent never change.
 
 **Send now →**, under the time picker, is for a post you've already reviewed. It still waits out the window, scheduling the post for the minimum lead from now.
 

@@ -33,15 +33,6 @@ Kestrel won't save a template without `{{ .Post.Body }}` and `{{ .Email.Unsubscr
 | `{{ .Email.UnsubscribeURL }}` | This reader's one-click unsubscribe link. Required. |
 | `{{ .Email.ViewInBrowserURL }}` | The post's public page. |
 
-## Changes and scheduled posts
-
-A scheduled post's email is made when you schedule it. So a change to the template, or to a part of your identity it prints, re-makes each scheduled post's email. Its content and send time stay the same. A dialog lists those posts and asks before it saves, and a logo change asks the same way.
-
-Afterwards, each of those posts says its look changed since your last test, until you send a fresh one. Send it, since your earlier test no longer shows what goes out.
-
-- **A post about to send,** within the minimum lead of its send time, blocks the change. Kestrel says when you can try again, once that post has gone out.
-- **Posts already sending or sent** never change.
-
 ## Who sets the From name and address
 
 The From name and address your emails come from are set when Kestrel is deployed, so **Settings → Email sender** shows them read-only. To change them, follow [Connect Amazon SES](../get-started/04-ses.md#8-set-the-provider-and-deploy).
