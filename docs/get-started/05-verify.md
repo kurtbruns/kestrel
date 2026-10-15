@@ -2,7 +2,7 @@
 
 Some things only show up with real email: whether inboxes trust your mail, how it looks in a real mail client, and whether bounces and unsubscribes come back to the app. Check them now, while your list is empty and every email goes only to you.
 
-In this guide, you send yourself a test email, reply to it, and check that it passes authentication. Then you set up your notifications, send a real post to yourself as a subscriber, and unsubscribe. Finally, you check that bounces and complaints reach the app, and read the app's logs.
+In this guide, you send yourself a test email, reply to it, and check that it passes authentication. Then you set up your notifications, send a real post to yourself as a subscriber, and unsubscribe. Finally, you check that bounces and complaints reach the app, read the app's logs, and check that SES can send to anyone.
 
 ## Before you begin
 
@@ -95,6 +95,16 @@ The app writes a log line for each thing it does, and Cloudflare keeps them for 
 1. Filter on `event` equal to `send.completed`. Your send from section 4 is there.
 
 1. Filter on `level` equal to `error`. A healthy instance shows nothing.
+
+## 8. Check that SES can send to anyone
+
+[Connect Amazon SES](04-ses.md#5-request-production-access) asked AWS for production access. Until AWS grants it, the sandbox mails only your verified addresses, so check it before you go live.
+
+1. In SES, open the **Account dashboard** in the region the app sends from. It no longer says your account is in the sandbox, and it shows your daily quota and maximum send rate.
+
+1. Check that `SES_MAX_SEND_RATE` in `wrangler.jsonc` matches that rate, and that you deployed after setting it, as [Connect Amazon SES](04-ses.md#8-set-the-provider-and-deploy) describes.
+
+If the dashboard still says sandbox, AWS hasn't answered yet. Every other section works in the sandbox, so come back to this one when it does.
 
 When every section gives the result it describes, your instance is ready for subscribers.
 
