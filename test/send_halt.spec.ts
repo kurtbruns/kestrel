@@ -661,6 +661,38 @@ describe("the real adapters, end to end through the loop", () => {
     expect((await refusals()).filter((n) => n.kind === "refused")).toHaveLength(1);
   });
 
+  it("SES throttling a few entries is a rate limit, retried a minute later each time, never spaced out like a refusal (SPEC §12)", async () => {
+    const emails = addresses(20);
+    await seedConfirmed(emails);
+    const send = await dueSend();
+    vi.mocked(providers.getProvider).mockReturnValue(sesAdapter());
+    // Every request takes some and has the rest throttled for the account's rate: the n-th
+    // five addresses are throttled on their first n tries.
+    const tries = new Map<string, number>();
+    const { mailed } = answerSes((to) => {
+      const n = tries.get(to) ?? 0;
+      tries.set(to, n + 1);
+      return n >= Math.floor(emails.indexOf(to) / 5)
+        ? entryOk()
+        : { Status: "ACCOUNT_THROTTLED", Error: "Maximum sending rate exceeded." };
+    });
+
+    await sweep(capped());
+    for (let retry = 0; retry < 3; retry++) {
+      const row = (await sends.getSend(env.DB, send.id))!;
+      expect([row.halt_reason, row.halt_cause, row.halt_retries], `retry ${retry}`).toEqual([
+        "unavailable",
+        "rate_limit",
+        1,
+      ]);
+      expect(row.halt_retry_at! - row.halted_at!).toBe(HALT_BACKOFF_MS.unavailable[0]);
+      vi.setSystemTime(row.halt_retry_at!);
+      await sweep(capped());
+    }
+    expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
+    expect(emails.every((e) => mailed.get(e) === 1)).toBe(true);
+  });
+
   it("a group whose first request SES partly held back sends nothing more that tick", async () => {
     // An account allowed three a second: batches of three, three batches a group.
     const slow = { ...sesEnv, SES_MAX_SEND_RATE: "3" } as AppEnv;

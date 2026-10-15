@@ -134,7 +134,8 @@ export const condition = {
     kind: "stuck",
     severity: "warn",
     since: null,
-    message: "Nothing has gone out for 31 minutes, and nothing the provider said explains it.",
+    message:
+      "Nothing has gone out for 31 minutes, with no retry or provider problem to explain it.",
     action: null,
   }),
   refused: (error: string, retryAt: number | null): SendCondition => ({

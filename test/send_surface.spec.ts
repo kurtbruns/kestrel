@@ -233,7 +233,7 @@ describe("conditions: one server rule for each kind", () => {
     expect(idle.map((c) => [c.kind, c.severity])).toEqual([["stuck", "warn"]]);
     expect(idle[0]).toMatchObject({ since: NOW - 60_000, action: null });
     expect(idle[0]?.message).toMatch(
-      /^Nothing has gone out for 31 minutes, and nothing the provider/,
+      /^Nothing has gone out for 31 minutes, with no retry or provider problem to explain it\./,
     );
   });
 

@@ -342,11 +342,13 @@ export async function runSend(
       }
     }
 
-    // The provider working again ends the halt the send carried, and only an answer with
-    // no one held back says so: one that took some and held the rest back (a quota running
-    // out a few at a time) continues the halt, keeping when it began and its backoff, so
-    // the publisher is told once (SPEC §12).
-    const cleared = progressed && !halt;
+    // The provider working again ends the halt the send carried. An account refusal is the
+    // exception: an answer that took some and refused the rest for the account (a quota
+    // freeing up a few at a time) continues it, keeping when it began and its backoff, so
+    // the publisher is told once (SPEC §12). Anything else held back, such as SES throttling
+    // a few entries for the account's rate, is pace rather than a fault a person fixes: the
+    // progress ends the halt and the hold starts afresh, a minute out.
+    const cleared = progressed && halt?.reason !== "account";
     await sends.settleDeliveries(db, sendId, lease, "dispatched", outcomes, Date.now(), {
       progressed,
       clears: cleared,

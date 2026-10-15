@@ -179,16 +179,22 @@ describe("the one definition", () => {
       for (const started_at of [null, past]) {
         for (const progress_at of [null, past, recent]) {
           for (const halt_retry_at of [null, past, now + MIN]) {
-            for (const c_in_flight of [0, 2]) {
-              cases.push({
-                status,
-                started_at,
-                progress_at,
-                halt_retry_at,
-                c_pending: 0,
-                c_in_flight,
-                locked_until: null,
-              });
+            // Every side of the wedge: work left or not, rows in flight or not, a run
+            // holding the lease or not.
+            for (const c_pending of [0, 2]) {
+              for (const c_in_flight of [0, 2]) {
+                for (const locked_until of [null, now + MIN]) {
+                  cases.push({
+                    status,
+                    started_at,
+                    progress_at,
+                    halt_retry_at,
+                    c_pending,
+                    c_in_flight,
+                    locked_until,
+                  });
+                }
+              }
             }
           }
         }

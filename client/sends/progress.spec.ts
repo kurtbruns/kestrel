@@ -145,7 +145,7 @@ describe("the in-progress card", () => {
     );
     expect($(".active-stat", el).textContent).not.toMatch(/left/);
     expect($(".active-stuck", el).textContent).toBe(
-      "Nothing has gone out for 31 minutes, and nothing the provider said explains it.",
+      "Nothing has gone out for 31 minutes, with no retry or provider problem to explain it.",
     );
   });
 

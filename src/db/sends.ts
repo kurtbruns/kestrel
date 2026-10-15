@@ -1388,10 +1388,11 @@ const OUTCOME_BUCKET: Record<DeliveryOutcome["status"], CounterCol> = {
  * provider's answer. Every outcome clears the dispatch key, since the hand-off is
  * answered. `answer` says what the provider's answer was, which closing rows without asking
  * it never is: `progressed` when it took or settled any recipient, which stamps the send's
- * `progress_at` (SPEC §12, in flight too long); `clears` when it also held no one back,
- * which ends any halt the send carried. An answer that took some and held the rest back is
- * progress but not the end of the halt, so a provider that keeps refusing part of each
- * batch is one halt, keeping when it began and stepping through its backoff (SPEC §12).
+ * `progress_at` (SPEC §12, in flight too long); `clears` when it ends any halt the send
+ * carried, which the send loop decides: progress that refused no one for the account. An
+ * answer that took some and refused the rest for the account is progress but not the end
+ * of the halt, so a provider that keeps refusing part of each batch is one halt, keeping
+ * when it began and stepping through its backoff (SPEC §12).
  * Lease-guarded: a run that lost its lease records nothing, and its batch stays in flight,
  * for Resolve.
  */
