@@ -4,56 +4,44 @@ Kestrel is a newsletter app you run yourself on Cloudflare. You write a post in 
 
 See [getkestrel.dev](https://getkestrel.dev) to learn more about Kestrel.
 
-## Run your own
+## Try it locally
 
-Kestrel installs from npm as [`@kurtbruns/kestrel`](https://www.npmjs.com/package/@kurtbruns/kestrel). Your instance lives in a small repository of your own, which holds its settings and names the release it runs:
+You can run Kestrel on your own computer to look around, with [Node.js](https://nodejs.org/) 22 or later. It needs no Cloudflare account, and email goes to a stand-in, so nothing reaches a real inbox.
+
+In an empty folder, write a new instance and install it:
 
 ```bash
 npx @kurtbruns/kestrel init
+npm install
 ```
 
-To look around before you deploy, [Try Kestrel locally first](docs/guides/08-try-locally.md) runs it with demo content and no Cloudflare account. [Get started](docs/README.md#get-started) takes you from an empty repository to a live newsletter, and [Upgrade to a new release](docs/guides/07-upgrade.md) moves an instance to a newer one.
-
-The docs are two sets, one per job. [Self-hosting](docs/README.md) is for whoever deploys and runs Kestrel. [Publishing](docs/publishing/README.md) is for whoever writes and sends the newsletter: setting up the publication, the list, writing, sending, and the rules a newsletter keeps. Both are in the editor's **Docs** tab, which opens on Publishing, and an instance serves every page as Markdown for Claude to read.
-
-## Work on Kestrel
-
-This repository is Kestrel's source. To run it on your computer, with [Node.js](https://nodejs.org/) 22 or later:
+Copy the local settings, and start the app:
 
 ```bash
-npm install
 cp .dev.vars.example .dev.vars
 npm run dev
 ```
 
-Open the editor at http://localhost:8787/dashboard/. There's nothing to sign in with locally, and email goes to a stand-in that never reaches a real inbox. `.dev.vars.example` explains each local setting, including how the stand-in mimics SES on a send.
+The first time, it asks you to confirm the local database's migrations. Then open http://localhost:8787/dashboard/, with nothing to sign in with. If port 8787 is taken, the `Ready on` line shows the one it picked.
 
-### Demo data
-
-The app starts empty. To explore it with content, load **Field Notes**, a demo publication kept as Markdown in [`demo/`](demo/):
+In a second terminal, load a demo publication with posts, subscribers, and past sends, or empty it again:
 
 ```bash
-npm run seed                          # load the demo
-npm run simulate-send -- --in 90s     # schedule a send and print a link to watch it go out
-npm run reset                         # back to an empty instance
+npm run seed
+npm run reset
 ```
 
-### Calling the API
+When you're ready to deploy, this folder can be your instance's repository. Push it to an empty GitHub repository, then follow [Deploy the app](docs/get-started/02-deploy.md#2-sign-in-to-cloudflare) from signing in to Cloudflare.
 
-The editor is one client of Kestrel's HTTP API, and Claude is the other. Locally, mint a token to call it yourself:
+## Run your own
 
-```bash
-TOKEN=$(curl -s http://localhost:8787/api/dev/token?kind=service | jq -r .token)
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8787/api/posts
-```
+Kestrel installs from npm as [`@kurtbruns/kestrel`](https://www.npmjs.com/package/@kurtbruns/kestrel). Your instance lives in a small repository of your own, which holds its settings and names the release it runs. [Get started](docs/README.md#get-started) takes you from an empty repository to a live newsletter, and [Upgrade to a new release](docs/guides/07-upgrade.md) moves an instance to a newer one.
 
-The editor's **API** tab lists every route.
+The docs are two sets, one per job. [Self-hosting](docs/README.md) is for whoever deploys and runs Kestrel. [Publishing](docs/publishing/README.md) is for whoever writes and sends the newsletter. Both are in the editor's **Docs** tab, and an instance serves every page as Markdown for Claude to read.
 
-## Going further
+## Contributing
 
-- **What Kestrel guarantees:** [`docs/SPEC.md`](docs/SPEC.md). How the admin UI is built: [`docs/DESIGN.md`](docs/DESIGN.md).
-- **Working on the code:** [`.claude/CLAUDE.md`](.claude/CLAUDE.md) has the commands, conventions, and module boundaries.
-- **Releases:** [`CHANGELOG.md`](CHANGELOG.md).
+To work on Kestrel's own source, see [CONTRIBUTING.md](CONTRIBUTING.md). Releases are recorded in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

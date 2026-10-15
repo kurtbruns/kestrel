@@ -4,6 +4,7 @@ paths:
   - "docs/API.md"
   - "docs/DESIGN.md"
   - "README.md"
+  - "CONTRIBUTING.md"
   - "CHANGELOG.md"
   - ".claude/CLAUDE.md"
 ---
@@ -19,7 +20,7 @@ Kestrel is built in levels of abstraction, and is kept that way. Each level is p
 - **`docs/SPEC.md`, the idea.** What Kestrel guarantees: the features, the behavior, the invariants, and the publisher's experience. The system, not the code that implements it.
 - **`docs/API.md`, the shape of the API.** The rules every route follows: how a resource is read, followed, acted on, and refused, and the test a new wire concept must pass. It sits between the spec's guarantees and the generated API reference, which lists each route; it names concepts, never a route's every field.
 - **`docs/DESIGN.md`, the presentation.** How the admin UI presents that behavior: the principles behind it, a map of its screens, how a send reads across them, and the shared vocabulary (where messages go, saving, button roles, color, layout, copy, accessibility). What each means and which to reach for, one level above the exact CSS.
-- **`README.md`, getting started.** What Kestrel is in a paragraph, the prerequisites, and the path to a running instance. It points onward to `.claude/CLAUDE.md` instead of repeating details the codebase keeps changing.
+- **`README.md`, getting started.** The package's front page on npm and GitHub, for someone deciding whether to run Kestrel: what it is in a paragraph, trying it locally, and the path to a running instance. Working on Kestrel's own source is `CONTRIBUTING.md`, which points onward to `.claude/CLAUDE.md` instead of repeating details the codebase keeps changing.
 - **`CHANGELOG.md`, the record.** What changed between releases, one line per change, for the person deciding whether to upgrade. It cuts across the levels instead of sitting at one. `.claude/rules/changelog.md` says what earns a line, how it is written, and when a release is cut.
 - **The code.** Everything beneath the documents, from the API route table down to the line. Every guarantee above has to land here. `.claude/CLAUDE.md` describes this level: how the code is organized, the rules that are not obvious from reading it, and how its comments are written.
 

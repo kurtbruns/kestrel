@@ -31,7 +31,6 @@ import connectClaude from "../../docs/guides/01-connect-claude.md";
 import notifications from "../../docs/guides/03-notifications.md";
 import rateLimit from "../../docs/guides/05-rate-limit.md";
 import upgrade from "../../docs/guides/07-upgrade.md";
-import tryLocally from "../../docs/guides/08-try-locally.md";
 import listGrows from "../../docs/guides/09-as-your-list-grows.md";
 import yourList from "../../docs/publishing/01-your-list.md";
 import sendingRules from "../../docs/publishing/02-sending-rules.md";
@@ -76,7 +75,6 @@ const PAGES: Record<string, string> = {
   "guides/03-notifications.md": notifications,
   "guides/05-rate-limit.md": rateLimit,
   "guides/07-upgrade.md": upgrade,
-  "guides/08-try-locally.md": tryLocally,
   "guides/09-as-your-list-grows.md": listGrows,
   "reference/01-configuration.md": configuration,
   "reference/02-sending-domain-dns.md": sendingDomain,

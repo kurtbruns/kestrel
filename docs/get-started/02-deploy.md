@@ -56,7 +56,14 @@ Your instance's repository holds its configuration, its database migrations, and
     git push -u origin HEAD
     ```
 
-1. **(Optional)** Try Kestrel locally before you deploy it. Your instance is written and installed, so start at [Start the app](../guides/08-try-locally.md#2-start-the-app), and come back here when you're done. Email goes to a stand-in, so nothing reaches a real inbox.
+1. **(Optional)** Try Kestrel locally before you deploy it. Copy the local settings, and start the app:
+
+    ```bash
+    cp .dev.vars.example .dev.vars
+    npm run dev
+    ```
+
+    Open http://localhost:8787/dashboard/, and run `npm run seed` in a second terminal to load a demo publication. Email goes to a stand-in, so nothing reaches a real inbox. Stop the server with <kbd>Ctrl</kbd>+<kbd>C</kbd> when you're done.
 
 ## 2. Sign in to Cloudflare
 
