@@ -442,7 +442,7 @@ describe("dashboard", () => {
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
       expect(steps()).toEqual([
-        "Name and brand your publication",
+        "Name your publication",
         "Connect Amazon SES",
         "Bring your existing list",
         "Write your first post",
@@ -535,7 +535,7 @@ describe("dashboard", () => {
         await mount(renderDashboard);
         await vi.advanceTimersByTimeAsync(0);
         expect(steps(), provider).toEqual([
-          "Name and brand your publication",
+          "Name your publication",
           "Check your setup",
           "Bring your existing list",
           "Write your first post",

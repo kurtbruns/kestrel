@@ -12,7 +12,6 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
-- The dashboard's first-run checklist names its first step **Name and brand your publication**, since the step, and the Publishing page of the same name, cover the email template as well as the name, tagline, and logo.
 - The Publishing docs are shorter and answer first, around what a publisher has to do or decide. Write and send a post now covers scheduling too, since testing the locked copy is the point of scheduling. **When something's wrong** replaces After a send, taking each problem a send or an import reports, in its own words, with what it means and what to do. The import format reference is the last section of "Bring your existing list", which opens with the advice to move to the paid hosting plan for a list of more than about 5,000. The import screen's **Import format reference →** opens that section, and the Markdown of each removed page (`import-format`, `scheduling-and-sending`, `after-a-send`) still answers at its old address, with the page that holds its content now (SPEC §11).
 - The operator's Claude context's `/migrate-list` reads the import format from the merged page, `GET /api/docs/your-list.md`, since the separate import format page is gone. `npm run check-context` offers the change to an existing instance.
 

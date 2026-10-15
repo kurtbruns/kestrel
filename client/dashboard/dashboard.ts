@@ -521,7 +521,7 @@ function setupChecklistHtml(
   return html`<div class="card setup">
     <h2 class="setup-title">Set up your publication</h2>
     <ol class="setup-steps">
-      <li><div class="setup-step-main"><strong>Name and brand your publication</strong><span class="muted">Currently “${pub.name}”. Set the name, tagline, and brand in Settings.</span></div><button data-nav="#/settings">Settings</button></li>
+      <li><div class="setup-step-main"><strong>Name your publication</strong><span class="muted">Currently “${pub.name}”. Set the name, tagline, and brand in Settings.</span></div><button data-nav="#/settings">Settings</button></li>
       ${
         notConnected
           ? html`<li class="setup-connect"><div class="setup-step-main"><strong>Connect Amazon SES</strong><span class="muted">Nothing can be sent, and signups stay closed, until SES is connected.</span></div><button data-nav="${CONNECT_PROVIDER_HREF}">Connect Amazon SES</button></li>`
