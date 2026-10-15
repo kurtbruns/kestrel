@@ -817,6 +817,41 @@ describe("sent record", () => {
     }
   });
 
+  it("says a post held on another send's halt is waiting and has handed no one off (SPEC §12)", async () => {
+    const retryAt = Date.now() + 45 * 60_000;
+    const held = sendView(send({ status: "sending", completed_at: null }), {
+      phase: "needs-attention",
+      audience: { count: 157, fixed: false, fixed_at: null },
+      provider: {
+        name: "ses",
+        halt: {
+          reason: "account",
+          cause: "quota",
+          error: "quota exceeded",
+          retries: 6,
+          since: 1_000,
+          retry_at: retryAt,
+        },
+      },
+      conditions: [condition.refused("quota exceeded", retryAt)],
+    });
+    fake = fakeApi([
+      {
+        path: "/api/sends/x1",
+        reply: () => ({ send: held, outcomes: outcomes({ accepted: 0 }), cursor: "1.1" }),
+      },
+      feedOf(() => held),
+    ]);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#watchMeta").textContent).toMatch(
+      /^Due .* · held before handing anyone off · about 157 recipients$/,
+    );
+    expect($(".wbar-sub").textContent).toBe(
+      "The provider is refusing this account, so this post waits with the send already held and hasn’t handed anyone off; next retry in 45 min.",
+    );
+  });
+
   it("counts a halt's next retry down on the clock while no report arrives", async () => {
     const retryAt = Date.now() + 12 * 60_000;
     const refused = sendView(send({ status: "sending", completed_at: null }), {

@@ -97,6 +97,16 @@ const PHASE_BLURB: Partial<Record<SendPhase, string>> = {
 /** The phase's one-line gloss, said for the cause when the phase has more than one. */
 function phaseBlurb(prog: SendView): string {
   const halt = prog.provider.halt;
+  // Held from the start: it joined another send's halt before handing anyone off (SPEC §12).
+  if (halt && heldFromStart(prog)) {
+    const why =
+      halt.cause === "not_connected"
+        ? "No email provider is connected"
+        : halt.reason === "account"
+          ? "The provider is refusing this account"
+          : "The provider is unavailable";
+    return `${why}, so this post waits with the send already held and hasn’t handed anyone off; ${nextRetry(halt.retry_at)}.`;
+  }
   if (has(prog, "refused") && halt?.cause === "not_connected") {
     return `No email provider is connected, so nothing goes out until one is; ${nextRetry(halt.retry_at)}.`;
   }
@@ -234,7 +244,14 @@ function watchBodyHtml(prog: SendView): Html {
         : "no delivery failures"
     }</span></div>`;
 }
+/** A send held on another send's halt before its first hand-off: it has fixed no audience. */
+function heldFromStart(send: SendView): boolean {
+  return send.status === "sending" && send.provider.halt !== null && !send.audience.fixed;
+}
 function watchMetaHtml(send: SendView): Html {
+  if (heldFromStart(send)) {
+    return html`Due ${fmt(send.fire_at)} · held before handing anyone off · about ${send.audience.count.toLocaleString()} recipients`;
+  }
   const started = send.started_at ? `Started ${fmt(send.started_at)}` : "Sending now";
   return html`${started} · ${send.audience.count.toLocaleString()} recipients`;
 }
