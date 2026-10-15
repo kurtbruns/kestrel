@@ -1,6 +1,8 @@
 # Kestrel
 
-Kestrel is a newsletter app you run yourself on Cloudflare. You write a post in Markdown, preview it exactly as the email, and send it to a double-opt-in list. The list, the consent, the record of every send, and a permanent archive of every post stay with you. Bring an existing list in, and take the whole list out, in one documented format. Write in the editor by hand, or with Claude through the same API.
+Kestrel is an open-source newsletter app you run yourself, on Cloudflare and Amazon SES. You own the list, the proof each reader opted in, the record of every send, and a permanent archive of every post.
+
+You write in Markdown, preview the exact email, and schedule it with a window to cancel. Bring your list from another service, and take it out whenever you like. Work in the editor, or ask Claude to do it through the same API.
 
 See [getkestrel.dev](https://getkestrel.dev) to learn more about Kestrel.
 
