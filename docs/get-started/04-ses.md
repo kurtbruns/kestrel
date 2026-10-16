@@ -107,7 +107,11 @@ If AWS asks for more detail, reply in the support case. If it denies the request
 - Bounces and complaints reach the app through SNS, and it stops mailing those addresses automatically.
 - How many subscribers the newsletter expects, and how often it sends.
 
-Your account stays in the sandbox until AWS grants access, so don't go live before then. In the sandbox, a signup from any address you haven't verified fails, and a post reaches only your verified addresses.
+Your account stays in the sandbox until AWS grants access, so don't go live before then. In the sandbox, SES refuses mail to any address you haven't verified:
+
+- A signup from an unverified address gets no confirmation email. The app emails the publisher about it, at most once a day.
+- A post goes to your verified addresses and then waits, with the line "The provider is refusing the account" and SES's words. No reader is marked unsent. Once AWS grants access, the post goes to the rest at its next retry, mailing no one twice.
+- A daily quota refusal in the sandbox (200 emails a day) means the same thing: request production access rather than a higher quota.
 
 When AWS grants access, the **Account dashboard** shows your daily quota and your maximum send rate. You set the rate in the app in section 8. The rate decides how fast a send goes out, and [As your list grows](../guides/09-as-your-list-grows.md) says when to ask AWS to raise it.
 
@@ -256,10 +260,26 @@ SNS delivers events only to a subscriber that has confirmed. The app confirms on
 
 1. Reload the subscription. Its status changes to **Confirmed**, with nothing for you to click.
 
+1. Give SNS longer to retry. By default it retries a failed delivery 3 times over about a minute, then discards the event, so a bounce that arrives while the app is briefly down or mid-deploy is lost, and the address gets your next post. Open the topic, choose **Edit**, and expand **Delivery policy (HTTP/S)**. Clear **Use the default delivery policy**, set these, and choose **Save changes**:
+
+    | Field | Value |
+    | --- | --- |
+    | Number of retries | `13` |
+    | Retries without delay | `0` |
+    | Minimum delay | `20` |
+    | Minimum delay retries | `2` |
+    | Maximum delay | `300` |
+    | Maximum delay retries | `6` |
+    | Retry-backoff function | Exponential |
+
+    SNS then keeps trying for most of an hour, the longest it allows. It never retries an event the app refused. The app refuses only an event it can't verify came from your topic, and logs an error when one claims to be from SNS.
+
+1. **(Optional)** Keep what SNS still can't deliver. On the subscription, choose **Edit**, and set a **Redrive policy (dead-letter queue)** to an SQS queue of your own. SNS then moves an event there instead of discarding it, where you can read it later. [Amazon SNS dead-letter queues](https://docs.aws.amazon.com/sns/latest/dg/sns-dead-letter-queues.html) covers the queue and its permissions.
+
 If it stays **Pending confirmation**, the request never reached the app, or the app refused it. Check, in this order:
 
 - **Access covers `/webhooks/ses`.** If your Access application covers more than `/dashboard` and `/api`, SNS gets the login page instead of the app. Remove that path from your Access application, so only `dashboard` and `api` remain.
-- **`SNS_TOPIC_ARN` matches the topic's ARN.**
+- **`SNS_TOPIC_ARN` matches the topic's ARN.** If it doesn't, the app's logs show a `webhook.refused` error naming both.
 - **The deploy in section 8 finished.**
 
 Once you've fixed the cause, select the subscription, and choose **Request confirmation**. SNS sends the request again, and the app confirms it. SNS doesn't let you delete a subscription while it's pending, and removes it on its own after 48 hours.

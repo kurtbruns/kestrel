@@ -426,13 +426,26 @@ describe("template view", () => {
     expect(document.querySelector(".modal")).toBeNull();
   });
 
-  it("a test that misses some addresses stays open with only those, naming them, so Send again mails no one twice", async () => {
+  it("a test that misses some addresses stays open with only those, naming each and why, so Send again mails no one twice (SPEC §5)", async () => {
     await open([
       { path: "/api/settings", reply: () => response() },
       {
         method: "POST",
         path: "/api/settings/template/test",
-        reply: () => ({ sent: 1, total: 2, failed: ["you@b.c"] }),
+        reply: () => ({
+          sent: 1,
+          total: 2,
+          failed: ["you@b.c"],
+          not_sent: [
+            {
+              email: "you@b.c",
+              may_have_arrived: false,
+              error: "ses 400 MessageRejected: Email address is not verified.",
+              message:
+                "The provider refused it: ses 400 MessageRejected: Email address is not verified. Sending to this address again gets the same answer until what the provider names is fixed.",
+            },
+          ],
+        }),
       },
     ]);
     $("#tplTest").click();
@@ -441,7 +454,7 @@ describe("template view", () => {
     expect(document.querySelector(".modal")).not.toBeNull();
     expect($<HTMLTextAreaElement>("#tplTestTo").value).toBe("you@b.c");
     expect($(".modal .dialog-error").textContent).toBe(
-      "!Sent to 1 of 2. Not sent to you@b.c. Send again to try those.",
+      "!Sent to 1 of 2. you@b.c: The provider refused it: ses 400 MessageRejected: Email address is not verified. Sending to this address again gets the same answer until what the provider names is fixed. Send again goes only to those.",
     );
     expect($("#toasts").textContent).toBe("");
     expect(fake.unhandled).toEqual([]);

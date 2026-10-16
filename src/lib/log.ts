@@ -11,11 +11,12 @@
  * No address, token, or credential goes in a field (the line SPEC §9 draws for settings).
  * Field values are scalars only, so a row, an error object, or a recipient list can't be
  * dumped whole, and every string is scrubbed on the way out, of anything address-shaped
- * and of any token in a URL, so a provider's or an exception's own text (or a stack) can't
- * carry one through either.
+ * of any token in a URL, and of any AWS credential a signature error echoes back, so a
+ * provider's or an exception's own text (or a stack) can't carry one through either.
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
+import { redactCredentials } from "./redact";
 
 export type LogLevel = "error" | "warn" | "info";
 
@@ -55,9 +56,10 @@ const ADDRESS =
 // reads the line act as that subscriber.
 const TOKEN = /([?&;]token=)[^&\s"'#<>]+/gi;
 
-/** A string with every address in it reduced to its domain and every URL token removed. */
+/** A string with every address in it reduced to its domain, and every URL token and AWS
+ *  credential removed. */
 export function scrub(text: string): string {
-  return text.replace(ADDRESS, "…@$1").replace(TOKEN, "$1…");
+  return redactCredentials(text).replace(ADDRESS, "…@$1").replace(TOKEN, "$1…");
 }
 
 function emit(level: LogLevel, event: string, fields: LogFields): void {

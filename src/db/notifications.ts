@@ -16,7 +16,7 @@ import type {
   SendNotificationKind,
 } from "../../shared/settings";
 import { MISSED_THRESHOLD_MS, NOTIFY_HORIZON_MS, STUCK_THRESHOLD_MS } from "../lib/time";
-import { WEDGED_SEND } from "./sends";
+import { SEND_IDLE_SINCE, stuckSendSql, WEDGED_SEND } from "./sends";
 
 export type { NotificationKind };
 
@@ -35,6 +35,8 @@ export interface DueNotification {
   locked_until: number | null;
   halt_reason: HaltReason | null;
   halted_at: number | null;
+  halt_retry_at: number | null;
+  progress_at: number | null;
   halt_cause: HaltCause | null;
   halt_error: string | null;
   c_pending: number;
@@ -62,8 +64,18 @@ export interface DueImportNotification {
   suppressions_added: number;
 }
 
+/** A notice that the SES sandbox refused a signup's confirmation, due; one a UTC day, whose
+ *  start is its episode. It carries nothing else: no send, no import, and no address. */
+export interface DueSandboxNotification {
+  send_id: null;
+  import_id: null;
+  kind: "sandbox";
+  episode: number;
+  attempts: number;
+}
+
 /** Any notification that is due. */
-export type DueAny = DueNotification | DueImportNotification;
+export type DueAny = DueNotification | DueImportNotification | DueSandboxNotification;
 
 /** What names one notification: its send, kind, and episode, or for an import notice its import. */
 export interface NotificationKey {
@@ -85,15 +97,37 @@ export function importNotice(db: D1Database, importId: string, now: number): D1P
     .bind(importId, now, now);
 }
 
+/** The start of the UTC day `now` falls in: a sandbox notice's episode. */
+export function utcDayStart(now: number): number {
+  return Math.floor(now / 86_400_000) * 86_400_000;
+}
+
+/**
+ * Record that the publisher is to be told the SES sandbox refused a signup's confirmation
+ * (SPEC §7, §8): once a UTC day however many it refuses, which the partial unique index on
+ * the day makes an ignored insert rather than a second notice.
+ */
+export async function sandboxNotice(db: D1Database, now: number): Promise<void> {
+  await db
+    .prepare(
+      "INSERT OR IGNORE INTO notifications (send_id, import_id, kind, episode, created_at, updated_at) VALUES (NULL, NULL, 'sandbox', ?, ?, ?)",
+    )
+    .bind(utcDayStart(now), now, now)
+    .run();
+}
+
 /**
  * Record every event that has happened and has no notification yet, in one statement.
  * INSERT OR IGNORE on the (send, kind, episode) key is what makes a condition that
  * persists across ticks one notification rather than one a tick. A finished or late send
  * counts only within the horizon, so turning notifications on does not mail the history.
- * A send in flight too long is not also reported as stuck while it is wedged, or once the
- * provider has refused its account at any point: those notifications already say why it
- * is taking so long, and a send that resumes after a long refusal is past the stuck
- * threshold the moment it does.
+ * A refusal is the account's, so it is one event however many sends it holds: a send that
+ * joined another's refusal (`joinHalt`) shares when it began, and only one of the sends
+ * sharing that start is told of it.
+ * A send in flight too long (`stuckSendSql`) is one event for each stretch it sits idle,
+ * keyed by when that stretch began (`SEND_IDLE_SINCE`), so a send that moves again and later
+ * stops is told again. A wedged or halted send is not stuck: its own notification says why
+ * it waits.
  */
 export async function recordNotifications(db: D1Database, now: number): Promise<void> {
   await db
@@ -102,8 +136,14 @@ export async function recordNotifications(db: D1Database, now: number): Promise<
          SELECT id, 'finished', 0, ?1, ?1 FROM sends
           WHERE status = 'sent' AND completed_at >= ?2
          UNION ALL
-         SELECT id, 'refused', halted_at, ?1, ?1 FROM sends
+         SELECT id, 'refused', halted_at, ?1, ?1 FROM sends s
           WHERE status = 'sending' AND halt_reason = 'account' AND halted_at IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM sends o
+                             WHERE o.status = 'sending' AND o.halt_reason = 'account'
+                               AND o.halted_at = s.halted_at AND o.id < s.id)
+            AND NOT EXISTS (SELECT 1 FROM notifications r
+                             WHERE r.kind = 'refused' AND r.episode = s.halted_at
+                               AND r.send_id <> s.id)
          UNION ALL
          SELECT id, 'missed', 0, ?1, ?1 FROM sends
           WHERE (status = 'scheduled' AND fire_at < ?1 - ?3)
@@ -111,11 +151,8 @@ export async function recordNotifications(db: D1Database, now: number): Promise<
          UNION ALL
          SELECT id, 'wedged', 0, ?1, ?1 FROM sends WHERE ${WEDGED_SEND}
          UNION ALL
-         SELECT id, 'stuck', 0, ?1, ?1 FROM sends
-          WHERE status = 'sending' AND started_at < ?1 - ?4
-            AND halt_reason IS NOT 'account' AND NOT (${WEDGED_SEND})
-            AND NOT EXISTS (SELECT 1 FROM notifications r
-                             WHERE r.send_id = sends.id AND r.kind = 'refused')`,
+         SELECT id, 'stuck', ${SEND_IDLE_SINCE}, ?1, ?1 FROM sends
+          WHERE ${stuckSendSql("?1 - ?4")}`,
     )
     .bind(now, now - NOTIFY_HORIZON_MS, MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS)
     .run();
@@ -130,19 +167,28 @@ export async function dueNotifications(db: D1Database, limit: number): Promise<D
     .prepare(
       `SELECT n.send_id, n.import_id, n.kind, n.episode, n.attempts,
               s.subject, s.status AS send_status, s.fire_at, s.started_at, s.completed_at,
-              s.locked_until, s.halt_reason, s.halted_at, s.halt_cause, s.halt_error, s.c_pending, s.c_in_flight, s.c_accepted,
+              s.locked_until, s.halt_reason, s.halted_at, s.halt_retry_at, s.progress_at, s.halt_cause, s.halt_error, s.c_pending, s.c_in_flight, s.c_accepted,
               s.c_delivered, s.c_bounced, s.c_complained, s.c_skipped, s.c_unsent,
               i.file_name, i.created_at, i.attestation_version, i.counts, i.suppressions_added
          FROM notifications n
          LEFT JOIN sends s ON s.id = n.send_id
          LEFT JOIN imports i ON i.id = n.import_id
-        WHERE n.status = 'pending' AND (s.id IS NOT NULL OR i.id IS NOT NULL)
+        WHERE n.status = 'pending' AND (s.id IS NOT NULL OR i.id IS NOT NULL OR n.kind = 'sandbox')
         ORDER BY n.created_at ASC, n.send_id ASC, n.kind ASC
         LIMIT ?`,
     )
     .bind(limit)
     .all<Record<string, unknown>>();
   return results.map((r): DueAny => {
+    if (r.kind === "sandbox") {
+      return {
+        send_id: null,
+        import_id: null,
+        kind: "sandbox",
+        episode: r.episode as number,
+        attempts: r.attempts as number,
+      };
+    }
     if (r.kind === "import") {
       return {
         send_id: null,

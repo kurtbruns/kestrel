@@ -145,8 +145,35 @@ describe("the in-progress card", () => {
     );
     expect($(".active-stat", el).textContent).not.toMatch(/left/);
     expect($(".active-stuck", el).textContent).toBe(
-      "Still sending 31 minutes after it started; it may be retrying.",
+      "Nothing has gone out for 31 minutes, with no retry or provider problem to explain it.",
     );
+  });
+
+  it("leads with backing off and when it next retries while the provider is unavailable", () => {
+    vi.useFakeTimers({ now: 1_000_000 });
+    try {
+      const el = card(
+        view({
+          phase: "backing-off",
+          provider: {
+            name: "ses",
+            halt: {
+              reason: "unavailable",
+              cause: "outage",
+              error: "no answer",
+              retries: 2,
+              since: 900_000,
+              retry_at: 1_000_000 + 5 * 60_000,
+            },
+          },
+        }),
+      );
+      expect($(".active-stat", el).textContent).toBe(
+        "Backing off: 60 of 150 accepted · 10 confirmed · provider unavailable, next retry in 5 min",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("belongs to the attention block instead when the send needs the operator", () => {

@@ -5,6 +5,7 @@ import {
   BOUNCE_SPIKE_RECENT_MS,
   type DeliveryListResponse,
   type FeedCondition,
+  NO_RECEIPTS_AFTER_MS,
   type ResolveResponse,
   type SendActionResponse,
   type SendFeedResponse,
@@ -204,7 +205,11 @@ export async function feed(c: RequestContext): Promise<Response> {
     now,
     since,
     now - SETTLE_FOLLOW_MS,
-    { missedMs: MISSED_THRESHOLD_MS, stuckMs: STUCK_THRESHOLD_MS },
+    {
+      missedMs: MISSED_THRESHOLD_MS,
+      stuckMs: STUCK_THRESHOLD_MS,
+      noReceiptsMs: NO_RECEIPTS_AFTER_MS,
+    },
     limit,
     now - BOUNCE_SPIKE_RECENT_MS,
   );

@@ -3,10 +3,11 @@
  * §12): the one server function every route reads, so the list, the watch, the feed, and
  * Claude never derive a condition or an action of their own.
  *
- * A condition is a reading of the send row at a moment, never stored: missed and stuck by
- * the clock against the row's times; wedged by `isWedged`; refused and provider_unavailable
+ * A condition is a reading of the send row at a moment, never stored: missed by the clock
+ * against the fire time; stuck by `stuckAt`, the clock against the send's last progress;
+ * wedged by `isWedged`; refused and provider_unavailable
  * by the halt the send carries; bounce_spike by its confirmed bounces over its audience at
- * fire; remade by its last re-make against its last test; daily_writes by its audience as
+ * fire; no_receipts by its counters long after dispatch finished; remade by its last re-make against its last test; daily_writes by its audience as
  * scheduled and what imports wrote on the UTC day it fires, on Workers Free's limits only.
  * Each carries its severity, since when (null when the record does not say), the server's
  * words for it, and the action that settles it, if the API has one. The actions are exactly what the server would accept on
@@ -20,23 +21,22 @@ import {
   BOUNCE_SPIKE_RECENT_MS,
   type ConditionSeverity,
   dailyWritesSendMessage,
+  isSelfThrottled,
+  NO_RECEIPTS_AFTER_MS,
   refusalAdvice,
+  refusedMessage,
   type SendAction,
   type SendCondition,
   type SendSummary,
   sendSpendsDailyWrites,
+  unavailableMessage,
 } from "../../shared/sends";
-import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
+import { MISSED_THRESHOLD_MS } from "../lib/time";
+import { stuckAt } from "./stuck";
 import { isWedged } from "./wedged";
 
 const minutes = (ms: number) => Math.max(1, Math.round(ms / 60_000));
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-
-/** The provider's words as a sentence the copy around them can follow. */
-function sentence(error: string | null): string {
-  const text = error?.trim() || "no detail given";
-  return /[.!?]$/.test(text) ? text : `${text}.`;
-}
 
 const action = (send: Pick<SendSummary, "id">, name: SendAction["name"]): SendAction => ({
   name,
@@ -136,40 +136,40 @@ export function sendConditions(
     // report one: only Resolve moves it.
     const retried = !isWedged(send);
     if (retried && send.halt_reason === "account") {
-      const advice = refusalAdvice(send.halt_cause);
       out.push({
         kind: "refused",
         severity: "action",
         since: send.halted_at,
-        // No provider connected (SPEC §9) is held like a refusal but is no provider's doing,
-        // so it is said as what it is, with the fix once.
-        message:
-          send.halt_cause === "not_connected"
-            ? `No email provider is connected, so this send is held where it is. ${advice} No one has been marked unsent, and the send goes out at its first retry after a provider is connected.`
-            : `The provider is refusing the account: ${sentence(send.halt_error)} ${advice} No one has been marked unsent, and the send resumes on its own at its next retry once the account is fixed.`,
+        message: refusedMessage(send.halt_cause, send.halt_error),
         action: null,
         cause: send.halt_cause,
         error: send.halt_error ?? "",
-        advice,
+        advice: refusalAdvice(send.halt_cause),
         retry_at: send.halt_retry_at,
       });
     } else if (retried && send.halt_reason === "unavailable") {
       out.push({
         kind: "provider_unavailable",
-        severity: "info",
+        // A rate limit that outlasts any burst is the deployment's setting, which a person
+        // fixes, so it is worth a look rather than only shown.
+        severity: isSelfThrottled(send) ? "warn" : "info",
         since: send.halted_at,
-        message: `The provider is unavailable: ${sentence(send.halt_error)} The send retries on its own, spaced out the longer this lasts, and no one has been marked unsent.`,
+        message: unavailableMessage(send),
         action: null,
         error: send.halt_error ?? "",
         retry_at: send.halt_retry_at,
       });
     }
-    if (send.started_at !== null && now - send.started_at > STUCK_THRESHOLD_MS) {
+    // In flight too long: nothing handed off for the threshold, and no halt or wedge to
+    // explain it. A send that is handing off is never flagged, however long it takes.
+    const stuck = stuckAt(send);
+    if (stuck !== null && now > stuck) {
+      const idle = now - (send.progress_at ?? send.started_at ?? now);
       out.push({
         kind: "stuck",
         severity: "warn",
-        since: send.started_at + STUCK_THRESHOLD_MS,
-        message: `Still sending ${plural(minutes(now - send.started_at), "minute")} after it started; it may be retrying.`,
+        since: stuck,
+        message: `Nothing has gone out for ${plural(minutes(idle), "minute")}, with no retry or provider problem to explain it. Sending may have stopped, or another send may be taking its turn. It picks up where it stopped, mailing no one twice.`,
         action: null,
       });
     }
@@ -192,6 +192,28 @@ export function sendConditions(
       action: null,
       bounced: send.c_bounced,
       rate,
+    });
+  }
+
+  // Not one receipt for anyone the provider took, an hour after the last was handed off:
+  // the provider's events may not be reaching the app, so its bounces and complaints are
+  // suppressing no one. Said as a possibility, since a send can be this quiet on its own.
+  const heard = send.c_delivered + send.c_bounced + send.c_complained;
+  if (
+    send.status === "sent" &&
+    send.completed_at !== null &&
+    now - send.completed_at > NO_RECEIPTS_AFTER_MS &&
+    now - send.completed_at <= BOUNCE_SPIKE_RECENT_MS &&
+    send.c_accepted > 0 &&
+    heard === 0
+  ) {
+    out.push({
+      kind: "no_receipts",
+      severity: "warn",
+      since: send.completed_at + NO_RECEIPTS_AFTER_MS,
+      message: `No delivery receipt has arrived for any of the ${plural(send.c_accepted, "recipient")} the provider took, ${plural(Math.round((now - send.completed_at) / 3_600_000) || 1, "hour")} after the send went out. The provider's events may not be reaching this app, so its bounces and complaints suppress no one. Check the webhook and the app's error log.`,
+      action: null,
+      accepted: send.c_accepted,
     });
   }
 

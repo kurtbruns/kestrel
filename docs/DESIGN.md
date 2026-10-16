@@ -160,7 +160,7 @@ Cancel and Save (Primary): nothing is saved until Save, and Cancel, Escape, or a
 
 On a draft's Preview tab, the toolbar and the image foot dim and take no clicks, since either would change text that isn't on screen. Dropping an image still works and switches to Edit, so the insert is seen.
 
-**Testing.** Send test email opens a dialog that takes one or more addresses and sends each its own test, so one that fails doesn't stop the rest. When every address gets it, the dialog closes with a toast. When some don't, the dialog stays open with only those addresses left in the field and says so above its buttons ("Sent to 1 of 2. Not sent to …", with the reason), so Send again tries just those and no one gets a second copy.
+**Testing.** Send test email opens a dialog that takes one or more addresses and sends each its own test, so one that fails doesn't stop the rest. When every address gets it, the dialog closes with a toast. When some don't, the dialog stays open with only those addresses left in the field and says so above its buttons ("Sent to 1 of 2.", then each reason once with the addresses it covers), so Send again tries just those and no one gets a second copy. The reason is the server's sentence as it stands: the provider's words and the fix, or that the test may have arrived, so the dialog adds no "try again" of its own to a refusal that sending again can't change.
 
 **Three copies, each named for what it is.** The Preview tab is the email; a test is the email in a real inbox; the **Web version ↗** is the post's public page. "View in browser" is not used for the last one: that is the email's own link, the post's unlisted link, worded by the publisher's template. In the Preview tab, that link opens the web version until the post is published, so a publisher who clicks it finds the page rather than "Nothing here yet".
 
@@ -197,7 +197,7 @@ One page for the whole life of a send once it fires (SPEC §8): the watch while 
 - **Dispatch**: how many the provider has accepted, in the sending blue, with the phase's one-line gloss and, while handing off, the rate and time to finish.
 - **Delivery**: grey up to the accepted count, with green for confirmed deliveries filling in behind, so delivery visibly lags dispatch and never passes it. Its count reads confirmed of accepted.
 
-While a send is paused, the watch gives no rate or time to finish, which would promise progress nothing is making. A send too large for one sweep, waiting for the next, still reads **Sending**, with a neutral line that it resumes on the next sweep; the amber **Backing off** is kept for a pause after an error.
+While a send is paused, or in flight too long, the watch gives no rate or time to finish, which would promise progress nothing is making. A send too large for one sweep, waiting for the next, still reads **Sending**, with a neutral line that it resumes on the next sweep; the amber **Backing off** is kept for a pause after an error. A send paused for a provider outage reads **Backing off** with when it next retries, on its watch and on its In progress card (the Sent list's and the dashboard's), whose line leads with **Backing off** in place of **Sending**; it does so even while a batch the provider never answered waits for Resolve, since nothing goes out before the retry. The moment the provider answers a batch it reads **Sending** again. A send that comes due while another is held by a refusal or an outage is held with it from the start: it reads the same as that send (**Needs attention** with the refusal, or **Backing off** with the outage, and the same next retry), with nothing handed off yet. Its page says so in place of when it started ("Due … · held before handing anyone off · about N recipients"), and the line under its bar says it waits with the send already held. A send in flight too long keeps its **Sending** pill, since it is still open, but its gloss says nothing is being handed off, beside the amber alert that says why, and it gives no time to finish.
 
 **The sent page** splits in two, under the subject, its phase pill, and when it was sent: **The post**, what it is on the web and what can still be done with it, and **Delivery**, how the send went. Each part is a card under a small uppercase label.
 
@@ -372,9 +372,11 @@ The **health block** on the dashboard, the **attention cards** on Sent, and an *
 | --- | --- | --- |
 | Missed fire time | red | Health line; the scheduled card and banner read "Missed its fire time · N min late". |
 | Wedged send | red | Health line linking to the send; attention card and the watch carry **Resolve…**. |
-| Provider refusing the account | red | Health line, attention card, and watch alert, each with the provider's words and one sentence of advice. No control: nothing in the app fixes it, so the subject links to its watch. The copy says no one has been marked unsent and the send resumes once the account is fixed, and the watch names the next retry. |
+| Provider refusing the account, or this send | red | Health line, attention card, and watch alert, each with the provider's words and one sentence of advice that names the fix and who makes it. No control: nothing in the app fixes it, so the subject links to its watch. The watch's headline says "refusing this account", or "refusing this send" when the provider refuses the send's own email. The copy says no one has been marked unsent because of this, so it stays true beside readers unsent earlier, and the send resumes once it is fixed, and the watch names the next retry. |
 | In flight too long | amber | Health line, a note on its active-send and In progress cards, and a line at the top of its watch. |
+| Rate limit the deployment causes | amber | Health line and a line at the top of its watch, in the server's words, which name `SES_MAX_SEND_RATE`. An ordinary outage or rate limit raises nothing (below). |
 | Bounce spike | amber | Health line linking to the send's record. |
+| No receipts | amber | Health line linking to the send's record (one line for several sends, linking to Sent), and a line above the record's tiles that goes when a receipt lands. |
 | No provider connected | amber, or red once it holds a send | Below. |
 
 A send that needs the operator leaves the active-send cards and In progress, so it is reported once. A provider that is only unavailable is not an attention item: the send reads as in progress, its phase gloss says the provider is unavailable and when the next retry is, and the in-flight-too-long flag raises it if it lasts.
@@ -494,7 +496,7 @@ A color means one thing, and a token names one color. A second token for a color
 | **Violet** | Scheduled, in its review window | The scheduled badge, cards, banner, and the in-use chip. Off the accent so a scheduled send never reads as the thing to click. |
 | **Sending blue** | In flight | The sending badge, the dispatch bar, active-send cards, the Sending and Settling pills. Its own shade, not the accent. |
 | **Green** | Done and fine | Sent, confirmed, delivered, Complete, Saved. |
-| **Amber** | Worth a look | In flight too long, a bounce spike, not connected, Unsaved, a pending subscriber, retrying, render warnings, the conflict banner. |
+| **Amber** | Worth a look | In flight too long, a bounce spike, no receipts, not connected, Unsaved, a pending subscriber, retrying, render warnings, the conflict banner. |
 | **Red** | Went wrong, or needs a decision | A missed fire time, a wedged send, a refusing provider, complaints, suppression, destructive acts, a refused save. |
 | **Grey** | Inert, or a fact about where something lives | Draft, unsubscribed, unsent, skipped, canceled; Read-only · set at deploy; Email only. |
 | **Ink** | Strong text | Headings and strong labels. Never a button fill, except the inert reader mockups (§7). |

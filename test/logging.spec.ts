@@ -141,8 +141,30 @@ describe("the send lifecycle in the log", () => {
     expectNoAddress();
   });
 
+  it("a refusal whose words echo the signing credential logs send.halted without it", async () => {
+    const provider = new BatchProvider();
+    vi.spyOn(providers, "getProvider").mockReturnValue(provider);
+    // The adapter redacts SES's words; the logger redacts again, so no provider's can leak.
+    provider.refuse =
+      "IncompleteSignatureException: Authorization=AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20261016/us-east-1/ses/aws4_request, SignedHeaders=host, Signature=5d672d79c15b13162d9279b0855cfba6";
+    await seedConfirmed(AUDIENCE);
+    const send = await dueSend();
+
+    await sweep(env);
+
+    const halted = lines().find((l) => l.event === "send.halted" && l.sendId === send.id)!;
+    expect(halted.error).toBe(
+      "IncompleteSignatureException: Authorization=AWS4-HMAC-SHA256 Credential=…, SignedHeaders=host, Signature=…",
+    );
+    for (const spy of spies) {
+      for (const call of spy.mock.calls) {
+        expect(call.map(String).join(" ")).not.toMatch(/AKIAIOSFODNN7EXAMPLE|5d672d79/);
+      }
+    }
+  });
+
   it("a request lost on a provider with no key logs send.ambiguous once, then send.wedged each tick from the one that left it", async () => {
-    allowErrorLogs("send.ambiguous", "send.wedged", "send.stuck");
+    allowErrorLogs("send.ambiguous", "send.wedged");
     vi.useFakeTimers({ toFake: ["Date"] });
     const provider = new BatchProvider();
     provider.loseAnswers = 1;
@@ -177,7 +199,9 @@ describe("the send lifecycle in the log", () => {
       recipients: 3,
     });
     expect(lines().filter((l) => l.event === "send.ambiguous")).toHaveLength(1);
-    expect(lines().at(-1)).toMatchObject({ event: "sweep.tick", wedged: 1, stuck: 1 });
+    // Waiting on Resolve, never in flight too long, however long it waits (SPEC §12).
+    expect(lines().filter((l) => l.event === "send.stuck")).toHaveLength(0);
+    expect(lines().at(-1)).toMatchObject({ event: "sweep.tick", wedged: 1, stuck: 0 });
     expectNoAddress();
   });
 
@@ -338,6 +362,23 @@ describe("the helper", () => {
       "bad URL https://k.test/unsubscribe?token=…&x=1",
     );
     expect(scrub("/confirm?TOKEN=abc")).toBe("/confirm?TOKEN=…");
+  });
+
+  it("removes an AWS credential a signature error echoes, and any access key ID", () => {
+    expect(
+      scrub(
+        "Credential=AKIAIOSFODNN7EXAMPLE/20261016/us-east-1/ses/aws4_request, SignedHeaders=host, Signature=deadbeef01",
+      ),
+    ).toBe("Credential=…, SignedHeaders=host, Signature=…");
+    expect(scrub("key ASIAIOSFODNN7EXAMPLE was refused")).toBe("key … was refused");
+    expect(scrub("x-amz-security-token:IQoJb3JpZ2luX2Vj\nhost")).toBe(
+      "x-amz-security-token:…\nhost",
+    );
+    expect(scrub("?X-Amz-Security-Token=IQoJ%2Fb3&X-Amz-Date=1")).toBe(
+      "?X-Amz-Security-Token=…&X-Amz-Date=1",
+    );
+    // An ordinary word that merely starts the same is not a key.
+    expect(scrub("AKIA is a key prefix")).toBe("AKIA is a key prefix");
   });
 
   it("never throws, whatever the console does", () => {

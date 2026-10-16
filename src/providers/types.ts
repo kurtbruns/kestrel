@@ -26,11 +26,20 @@ export interface Recipient {
  * One recipient's answer. `held` marks a recipient the provider set aside for a reason
  * about itself or the account (a throttle, a spent quota) while it took others in the same
  * request: it goes back to the queue with no attempt spent, as a halted batch does, since
- * the failure is not the recipient's (SPEC §12).
+ * the failure is not the recipient's (SPEC §12). `unknown` marks a one-off message's
+ * recipient whose request got no answer after earlier ones in the same call were answered,
+ * so it may have arrived; a list batch never carries it, since the adapter throws instead.
  */
 export type PerRecipientResult =
   | { email: string; accepted: true; providerId: string }
-  | { email: string; accepted: false; retryable: boolean; error: string; held?: true };
+  | {
+      email: string;
+      accepted: false;
+      retryable: boolean;
+      error: string;
+      held?: true;
+      unknown?: true;
+    };
 
 /**
  * A batch refused as a whole, for a reason about the provider or the account, never

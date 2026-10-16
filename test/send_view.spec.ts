@@ -9,12 +9,14 @@ import type {
   SendResponse,
   SendView,
 } from "../shared/sends";
+import { STUCK_THRESHOLD_MS } from "../shared/sends";
 import * as posts from "../src/db/posts";
 import type { SendRow } from "../src/db/sends";
 import * as sends from "../src/db/sends";
 import { getConfig } from "../src/env";
 import { clearFakeOutbox } from "../src/providers/fake";
 import { tickEstimate } from "../src/send/view";
+import { has } from "./support/conditions";
 import { frozenSend, resetDatabase } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 import { viewOf } from "./support/view";
@@ -221,6 +223,7 @@ describe("the time to finish, in ticks", () => {
       halted_at: null,
       halt_retries: 0,
       halt_retry_at: null,
+      progress_at: null,
       c_pending: TOTAL - done,
       c_in_flight: 0,
       c_accepted: done,
@@ -296,6 +299,17 @@ describe("the time to finish, in ticks", () => {
     });
     expect(viewOf(halted, "fake", false, now).phase).toBe("backing-off");
     expect(dispatchAt(halted, now).eta_ms).toBeNull();
+  });
+
+  it("gives no time to finish once the send is in flight too long (SPEC §12)", () => {
+    // 400 handed off on the first tick, then nothing for the stuck threshold and more: a
+    // finish counted from those ticks would be a promise nothing is keeping.
+    const now = T + STUCK_THRESHOLD_MS + 2 * MIN;
+    const stalled = row(400, { progress_at: started });
+    expect(has(viewOf(stalled, "fake", false, now), "stuck")).toBe(true);
+    expect(dispatchAt(stalled, now).eta_ms).toBeNull();
+    // The same counts with a hand-off a minute ago: moving, so it has its finish.
+    expect(dispatchAt(row(400, { progress_at: now - MIN }), now).eta_ms).not.toBeNull();
   });
 
   it("counts a send that fits one tick as finishing at once", () => {

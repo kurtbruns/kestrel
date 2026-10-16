@@ -229,6 +229,27 @@ describe("dashboard", () => {
     expect(fake.calls.indexOf(feed!)).toBeGreaterThan(fake.calls.indexOf(list!));
   });
 
+  it("raises an amber line for a rate limit the deployment causes itself, and none for an ordinary outage (SPEC §12)", async () => {
+    const srv = sendServer();
+    srv.put(sending({ id: "t1", subject: "Terns", c_pending: 5 }), {
+      phase: "backing-off",
+      conditions: [condition.unavailable(true)],
+    });
+    srv.put(sending({ id: "o1", subject: "Owls", c_pending: 5 }), {
+      phase: "backing-off",
+      conditions: [condition.unavailable(false)],
+    });
+    fake = world([post()], srv);
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(0);
+    const health = $(".health");
+    expect(health.classList.contains("amber")).toBe(true);
+    expect($$(":scope > div > div", health).map((d) => d.textContent)).toEqual([
+      "Terns: The provider keeps refusing for its sending rate: Maximum sending rate exceeded. Whoever runs the deployment sets SES_MAX_SEND_RATE.",
+    ]);
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("raises the health line from the server's flags, red for a missed send and a wedged one, and keeps the wedged send out of the active widget", async () => {
     // The server decides every flag (SPEC §12): eleven minutes in is not in flight too long,
     // thirty-one is, and a send due six minutes ago is past the missed tolerance.
@@ -250,7 +271,7 @@ describe("dashboard", () => {
     expect(lines).toEqual([
       "1 scheduled send passed the fire time without going out.",
       "Kinglets has 2 ambiguous deliveries awaiting a decision; resolve them on its page.",
-      "Swifts: Still sending 31 minutes after it started; it may be retrying.",
+      "Swifts: Nothing has gone out for 31 minutes, with no retry or provider problem to explain it.",
     ]);
     // The wedged line leads to where Resolve is: the send's own page.
     expect($("a", health).getAttribute("href")).toBe("#/sent/w1");
@@ -259,9 +280,8 @@ describe("dashboard", () => {
         .map((c) => c.dataset.watch)
         .sort(),
     ).toEqual(["ok1", "st1"]);
-    expect($("[data-watch='st1'] .active-stuck").textContent).toMatch(
-      /31 minutes after it started/,
-    );
+    // The health line says it is in flight too long, so its card doesn't say it again.
+    expect(document.querySelector("[data-watch='st1'] .active-stuck")).toBeNull();
     // The missed send's own card says how late it is, in the danger tone.
     expect(countdown("p9").textContent).toBe("Missed its fire time · 6 min late");
     expect(countdown("p9").classList.contains("countdown-missed")).toBe(true);
@@ -348,7 +368,7 @@ describe("dashboard", () => {
     const health = $(".health");
     expect(health.classList.contains("red")).toBe(true);
     expect($$(":scope > div > div", health).map((d) => d.textContent)).toEqual([
-      "2 sends: The provider is refusing the account: ses 403 UnrecognizedClientException: The security token included in the request is invalid. Replace the SES access key in the deployment’s secrets, or give it ses:SendEmail and ses:SendBulkEmail in its IAM policy. No one has been marked unsent, and the send resumes on its own at its next retry once the account is fixed.",
+      "2 sends: The provider is refusing the account: ses 403 UnrecognizedClientException: The security token included in the request is invalid. Whoever runs the deployment replaces the SES access key in its secrets, or gives the key ses:SendEmail and ses:SendBulkEmail in its IAM policy. No one has been marked unsent because of this, and the send resumes on its own at its next retry once the account is fixed.",
     ]);
     // Several refused sends link to the Sent page that lists them; one links to its watch.
     expect($("a", health).getAttribute("href")).toBe("#/sent");
@@ -368,6 +388,31 @@ describe("dashboard", () => {
     expect(health.classList.contains("amber")).toBe(true);
     expect(health.textContent).toMatch(/10 recipients bounced \(10%\)/);
     expect($("a", health).getAttribute("href")).toBe("#/sent/x1");
+  });
+
+  it("says, amber, when a recent send has heard no receipt long after it went out", async () => {
+    // The server reads the silence off the send (SPEC §8); the dashboard only shows it, one
+    // line however many sends it touches, since one broken event destination silences all.
+    const srv = sendServer();
+    srv.put(send({ c_delivered: 0, c_bounced: 0, c_accepted: 40 }), {
+      conditions: [condition.noReceipts(40)],
+    });
+    fake = world([post()], srv);
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(0);
+    const health = $(".health");
+    expect(health.classList.contains("amber")).toBe(true);
+    expect(health.textContent).toMatch(/No delivery receipt has arrived for any of the 40/);
+    expect($("a", health).getAttribute("href")).toBe("#/sent/x1");
+
+    srv.put(send({ id: "x2", c_delivered: 0, c_bounced: 0, c_accepted: 9 }), {
+      conditions: [condition.noReceipts(9)],
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect($$(":scope > div > div", $(".health")).map((d) => d.textContent)).toEqual([
+      "2 sends have had no delivery receipt long after they went out. The provider's events may not be reaching this app, so its bounces and complaints suppress no one.",
+    ]);
+    expect($("a", $(".health")).getAttribute("href")).toBe("#/sent");
   });
 
   it("shows the first-run checklist when nothing is written yet, and its New post creates one", async () => {
@@ -800,7 +845,7 @@ describe("dashboard", () => {
       /Swifts: The provider is refusing the account: ses 429/,
     );
     // The provider's words end in a period already: the line adds none of its own.
-    expect($(".health.red").textContent).toMatch(/quota exceeded\. Wait for SES’s 24-hour quota/);
+    expect($(".health.red").textContent).toMatch(/quota exceeded\. SES’s 24-hour quota/);
     expect($(".health a").getAttribute("href")).toBe("#/sent/x3");
     expect(document.querySelector("#dashActive .active-card")).toBeNull(); // reported once
     await vi.advanceTimersByTimeAsync(9000);

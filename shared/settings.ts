@@ -4,6 +4,12 @@
 // consumes them; one definition, so neither can drift.
 
 import type { BuildInfo } from "./build";
+import type { TestNotSent } from "./posts";
+
+/** One address a template test missed, and why. */
+export interface TemplateTestMiss extends TestNotSent {
+  email: string;
+}
 
 /** The double opt-in confirmation email's editable copy (SPEC §7). */
 export interface ConfirmationEmailCopy {
@@ -110,8 +116,9 @@ export interface DeploymentView {
 /** What a notification about a send is about (SPEC §8): it finished, or one of the conditions that need the publisher. */
 export type SendNotificationKind = "finished" | "refused" | "stuck" | "wedged" | "missed";
 
-/** What a notification is about (SPEC §8): a send, or a list Claude imported for the publisher. */
-export type NotificationKind = SendNotificationKind | "import";
+/** What a notification is about (SPEC §8): a send, a list Claude imported for the publisher,
+ *  or a signup's confirmation the SES sandbox refused (`sandbox`, at most one a UTC day). */
+export type NotificationKind = SendNotificationKind | "import" | "sandbox";
 
 /** What a line of the notification status is about: an event, or a test from the settings surface (whose subject is ""). An import's subject is its file's name. */
 export type NotificationStatusKind = NotificationKind | "test";
@@ -185,6 +192,8 @@ export interface TemplateTestResponse {
   total: number;
   /** The recipients the provider didn't accept, in the order asked; empty when all were sent. */
   failed: string[];
+  /** Why each address in `failed` wasn't sent, in the same order. */
+  not_sent: TemplateTestMiss[];
   provider: string;
   recipients: string[];
   subject: string;

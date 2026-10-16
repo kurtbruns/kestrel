@@ -179,6 +179,26 @@ describe("sent record", () => {
     expect(fake.unhandled).toHaveLength(0);
   });
 
+  it("says, amber, when no receipt has come long after dispatch, and clears it in place when one lands (SPEC §8)", async () => {
+    const server = sendServer();
+    server.put(send({ c_delivered: 0, c_bounced: 0, c_unsent: 0, c_accepted: 10 }), {
+      conditions: [condition.noReceipts(10)],
+    });
+    fake = fakeApi([...server.routes, noRows]);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#recPill").textContent).toBe("Settling");
+    expect($("#recAlert .health.amber").textContent).toMatch(
+      /^⚠️No delivery receipt has arrived for any of the 10 recipients/,
+    );
+    const card = $(".rec-card");
+    server.edit("x1", { c_delivered: 1, c_accepted: 9 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect($(".rec-card")).toBe(card);
+    expect(document.querySelector("#recAlert .health")).toBeNull();
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
   // DESIGN §3: the page in two parts, the post and its delivery. The post holds the one thing
   // that can still change, its listing, never the record (SPEC §5, I3), and both changes of
   // visibility ask first.
@@ -991,6 +1011,41 @@ describe("sent record", () => {
     }
   });
 
+  it("says a post held on another send's halt is waiting and has handed no one off (SPEC §12)", async () => {
+    const retryAt = Date.now() + 45 * 60_000;
+    const held = sendView(send({ status: "sending", completed_at: null }), {
+      phase: "needs-attention",
+      audience: { count: 157, fixed: false, fixed_at: null },
+      provider: {
+        name: "ses",
+        halt: {
+          reason: "account",
+          cause: "quota",
+          error: "quota exceeded",
+          retries: 6,
+          since: 1_000,
+          retry_at: retryAt,
+        },
+      },
+      conditions: [condition.refused("quota exceeded", retryAt)],
+    });
+    fake = fakeApi([
+      {
+        path: "/api/sends/x1",
+        reply: () => ({ send: held, outcomes: outcomes({ accepted: 0 }), cursor: "1.1" }),
+      },
+      feedOf(() => held),
+    ]);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#watchMeta").textContent).toMatch(
+      /^Due .* · held before handing anyone off · about 157 recipients$/,
+    );
+    expect($(".wbar-sub").textContent).toBe(
+      "The provider is refusing this account, so this post waits with the send already held and hasn’t handed anyone off; next retry in 45 min.",
+    );
+  });
+
   it("counts a halt's next retry down on the clock while no report arrives", async () => {
     const retryAt = Date.now() + 12 * 60_000;
     const refused = sendView(send({ status: "sending", completed_at: null }), {
@@ -1065,9 +1120,30 @@ describe("sent record", () => {
     await mount((r, s) => renderSentRecord("x1", r, s));
     await vi.advanceTimersByTimeAsync(0);
     expect($("#watchBody .health.amber").textContent).toContain(
-      "Still sending 31 minutes after it started",
+      "Nothing has gone out for 31 minutes",
     );
+    // The gloss under the bar agrees with the alert rather than saying it is handing off.
+    const gloss = () => $$("#watchBody .wbar-sub")[0]?.textContent;
+    expect(gloss()).toBe("Nothing is being handed off to the provider right now.");
     stuck = false;
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(document.querySelector("#watchBody .health.amber")).toBeNull();
+    expect(gloss()).toBe("Paused between ticks. It resumes on the next sweep.");
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
+  it("flags a rate limit the deployment causes itself in amber, in the server's words, and an ordinary outage not at all", async () => {
+    let selfThrottled = true;
+    const current = () =>
+      sendView(inFlight(), {
+        phase: "backing-off",
+        conditions: [condition.unavailable(selfThrottled)],
+      });
+    fake = watching(current);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#watchBody .health.amber").textContent).toContain("SES_MAX_SEND_RATE");
+    selfThrottled = false;
     await vi.advanceTimersByTimeAsync(3000);
     expect(document.querySelector("#watchBody .health.amber")).toBeNull();
     expect(fake.unhandled).toHaveLength(0);

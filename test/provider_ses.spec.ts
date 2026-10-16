@@ -36,6 +36,12 @@ function newProvider(): SesProvider {
 
 const UNSUB = "https://app.example.com/unsubscribe?token=deadbeef";
 
+/** An entry SES refused because an identity it names isn't verified, in SES's words. */
+const notVerified = (who: string) => ({
+  Status: "MESSAGE_REJECTED",
+  Error: `Email address is not verified. The following identities failed the check in region US-EAST-1: ${who}`,
+});
+
 /** A rendered email still carrying the unsubscribe sentinel (as render() emits). */
 function renderedFixture(): RenderedEmail {
   return {
@@ -268,7 +274,7 @@ describe("SesProvider.sendBatch", () => {
       [{ email: "me@example.com", unsubscribeUrl: UNSUB }],
       { purpose: "test", tag: "t" },
     );
-    expect(r).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "suspended" } });
+    expect(r).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "paused" } });
   });
 
   it("answers a test to several addresses when a later request gets no answer, naming who got what", async () => {
@@ -293,8 +299,54 @@ describe("SesProvider.sendBatch", () => {
       kind: "answered",
       results: [
         { email: "a@example.com", accepted: true, providerId: "m1" },
-        { email: "b@example.com", accepted: false, retryable: false },
-        { email: "c@example.com", accepted: false, retryable: true },
+        {
+          email: "b@example.com",
+          accepted: false,
+          retryable: false,
+          error: "ses gave no answer (connection reset)",
+          unknown: true,
+        },
+        {
+          email: "c@example.com",
+          accepted: false,
+          retryable: true,
+          error: "not tried, since an earlier request got no answer",
+        },
+      ],
+    });
+  });
+
+  it("answers a test to several addresses when the first request gets no answer: that one may have arrived, the rest weren't tried", async () => {
+    let n = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      n += 1;
+      throw new Error("The operation was aborted due to timeout");
+    });
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      ["a@example.com", "b@example.com", "c@example.com"].map((email) => ({
+        email,
+        unsubscribeUrl: UNSUB,
+      })),
+      { purpose: "test", tag: "t" },
+    );
+    expect(n).toBe(1);
+    expect(r).toEqual({
+      kind: "answered",
+      results: [
+        {
+          email: "a@example.com",
+          accepted: false,
+          retryable: false,
+          error: "ses gave no answer (The operation was aborted due to timeout)",
+          unknown: true,
+        },
+        ...["b@example.com", "c@example.com"].map((email) => ({
+          email,
+          accepted: false,
+          retryable: true,
+          error: "not tried, since an earlier request got no answer",
+        })),
       ],
     });
   });
@@ -375,13 +427,20 @@ describe("SesProvider.sendBatch", () => {
 
   it.each([
     ["ACCOUNT_DAILY_QUOTA_EXCEEDED", "account", "quota"],
-    ["ACCOUNT_SENDING_PAUSED", "account", "suspended"],
+    ["ACCOUNT_SENDING_PAUSED", "account", "paused"],
+    ["CONFIGURATION_SET_SENDING_PAUSED", "account", "set_paused"],
     ["ACCOUNT_SUSPENDED", "account", "suspended"],
-    ["MAIL_FROM_DOMAIN_NOT_VERIFIED", "account", "sender"],
+    ["MAIL_FROM_DOMAIN_NOT_VERIFIED", "account", "mail_from"],
     ["CONFIGURATION_SET_DOES_NOT_EXIST", "account", "configuration"],
     ["CONFIGURATION_SET_NOT_FOUND", "account", "configuration"],
+    ["INVALID_SENDING_POOL_NAME", "account", "sending_pool"],
+    ["TEMPLATE_DOES_NOT_EXIST", "account", "unsupported"],
+    ["TEMPLATE_NOT_FOUND", "account", "unsupported"],
     ["ACCOUNT_THROTTLED", "unavailable", "rate_limit"],
     ["TRANSIENT_FAILURE", "unavailable", "outage"],
+    // Several plain failures with nothing taken are SES's, not each recipient's.
+    ["FAILED", "unavailable", "outage"],
+    ["INVALID_PARAMETER", "account", "invalid_request"],
   ])("halts a batch whose entries all came back %s (SPEC §12)", async (status, reason, cause) => {
     answerSes(() => ({ Status: status, Error: "SES's words" }));
     const r = await newProvider().sendBatch(
@@ -409,29 +468,151 @@ describe("SesProvider.sendBatch", () => {
       ["a@example.com", "b@example.com"].map((email) => ({ email, unsubscribeUrl: UNSUB })),
       { purpose: "list", tag: "send-1" },
     );
-    expect(r).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "suspended" } });
+    expect(r).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "paused" } });
   });
 
-  it("halts an entry rejected for the sender's own identity, but fails one naming only the recipient", async () => {
-    const notVerified = (who: string) => ({
-      Status: "MESSAGE_REJECTED",
-      Error: `Email address is not verified. The following identities failed the check in region US-EAST-1: ${who}`,
-    });
+  it("halts an entry rejected for the sender's own identity, by its address or its domain (SPEC §12)", async () => {
     const one = [{ email: "reader@example.com", unsubscribeUrl: UNSUB }];
-    answerSes(() => notVerified("newsletter@send.example.com"));
+    for (const who of ["newsletter@send.example.com", "send.example.com", "example.com"]) {
+      answerSes(() => notVerified(who));
+      expect(
+        await newProvider().sendBatch(renderedFixture(), one, { purpose: "list", tag: "s" }),
+      ).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "sender" } });
+    }
+  });
+
+  it("holds a send the SES sandbox refuses readers of, marking no one unsent and keeping those it took (SPEC §12)", async () => {
+    // In the sandbox SES takes the verified reader and refuses the others by name: the
+    // account's status, not the readers', so they wait with no attempt spent.
+    answerSes((to) => (to === "verified@example.com" ? entryOk() : notVerified(to)));
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      ["verified@example.com", "a@example.com", "b@example.com"].map((email) => ({
+        email,
+        unsubscribeUrl: UNSUB,
+      })),
+      { purpose: "list", tag: "s" },
+    );
+    expect(r).toMatchObject({
+      kind: "answered",
+      results: [
+        { email: "verified@example.com", accepted: true },
+        { email: "a@example.com", accepted: false, retryable: true, held: true },
+        { email: "b@example.com", accepted: false, retryable: true, held: true },
+      ],
+      halt: { reason: "account", cause: "sandbox" },
+    });
+  });
+
+  it("never takes a reader whose address holds the sender's for the sender (SPEC §12)", async () => {
+    // From newsletter@send.example.com; the reader's address contains it as a substring.
+    const reader = "thenewsletter@send.example.com";
+    answerSes(() => notVerified(reader));
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      [{ email: reader, unsubscribeUrl: UNSUB }],
+      { purpose: "list", tag: "s" },
+    );
+    expect(r).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "sandbox" } });
+    answerSes(() => notVerified("newsletter@send.example.com.au"));
     expect(
-      await newProvider().sendBatch(renderedFixture(), one, {
-        purpose: "list",
-        tag: "s",
-      }),
-    ).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "sender" } });
-    answerSes(() => notVerified("reader@example.com"));
+      await newProvider().sendBatch(
+        renderedFixture(),
+        [{ email: "x@example.com", unsubscribeUrl: UNSUB }],
+        {
+          purpose: "list",
+          tag: "s",
+        },
+      ),
+    ).toMatchObject({ kind: "halted", halt: { cause: "sandbox" } });
+  });
+
+  it("halts a batch whose every entry SES rejected for its content, rather than marking the batch unsent", async () => {
+    answerSes(() => ({ Status: "MESSAGE_REJECTED", Error: "The message contained a virus." }));
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      ["a@example.com", "b@example.com"].map((email) => ({ email, unsubscribeUrl: UNSUB })),
+      { purpose: "list", tag: "s" },
+    );
+    expect(r).toEqual({
+      kind: "halted",
+      halt: {
+        reason: "account",
+        cause: "content",
+        error: "ses MESSAGE_REJECTED: The message contained a virus.",
+      },
+    });
+  });
+
+  it.each([
+    ["INVALID_PARAMETER", false],
+    ["INVALID_PARAMETER_VALUE", false],
+    ["FAILED", true],
+  ])(
+    "fails an entry SES answers %s as the recipient's own (retryable: %s)",
+    async (status, retryable) => {
+      answerSes((to) =>
+        to === "bad@example.com" ? { Status: status, Error: "words" } : entryOk(),
+      );
+      const r = await newProvider().sendBatch(
+        renderedFixture(),
+        ["ok@example.com", "bad@example.com"].map((email) => ({ email, unsubscribeUrl: UNSUB })),
+        { purpose: "list", tag: "s" },
+      );
+      expect(r).toEqual({
+        kind: "answered",
+        results: [
+          { email: "ok@example.com", accepted: true, providerId: expect.any(String) },
+          { email: "bad@example.com", accepted: false, retryable, error: `ses ${status}: words` },
+        ],
+      });
+    },
+  );
+
+  it("leaves out an entry with no status or one SES doesn't document, logging it, so it waits for Resolve (I4)", async () => {
+    // SES may have taken it (an entry's status and message id are both optional), so it is
+    // neither re-sent nor recorded unsent, and the batch can't be halted as a whole.
+    const warns = vi.spyOn(console, "warn");
+    answerSes((to) =>
+      to === "odd@example.com"
+        ? ({ Error: "?" } as never)
+        : { Status: "SOMETHING_NEW", MessageId: "m-new" },
+    );
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      ["new@example.com", "odd@example.com"].map((email) => ({ email, unsubscribeUrl: UNSUB })),
+      { purpose: "list", tag: "s" },
+    );
+    expect(r).toEqual({ kind: "answered", results: [] });
     expect(
-      await newProvider().sendBatch(renderedFixture(), one, {
-        purpose: "list",
-        tag: "s",
-      }),
-    ).toMatchObject({ kind: "answered", results: [{ accepted: false, retryable: false }] });
+      logged(warns)
+        .filter((l) => l.event === "provider.unrecognized")
+        .map((l) => l.status),
+    ).toEqual(["SOMETHING_NEW", null]);
+  });
+
+  it("holds a one-entry request SES rejected for content, unless its words name the reader", async () => {
+    const one = [{ email: "reader@example.com", unsubscribeUrl: UNSUB }];
+    const send = () =>
+      newProvider().sendBatch(renderedFixture(), one, { purpose: "list", tag: "s" });
+    answerSes(() => ({ Status: "MESSAGE_REJECTED", Error: "The message contained a virus." }));
+    expect(await send()).toMatchObject({ kind: "halted", halt: { cause: "content" } });
+    answerSes(() => ({ Status: "MESSAGE_REJECTED", Error: "Rejected: reader@example.com." }));
+    expect(await send()).toMatchObject({
+      kind: "answered",
+      results: [{ email: "reader@example.com", accepted: false, retryable: false }],
+    });
+  });
+
+  it("reads the sender in SES's words when a sentence's period follows it", async () => {
+    answerSes(() => notVerified("newsletter@send.example.com."));
+    expect(
+      await newProvider().sendBatch(
+        renderedFixture(),
+        [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
+        { purpose: "list", tag: "s" },
+      ),
+    ).toMatchObject({ kind: "halted", halt: { cause: "sender" } });
   });
 
   it("leaves out a recipient SES's answer has no result for, so its fate stays unknown (SPEC §12)", async () => {
@@ -487,22 +668,21 @@ describe("SesProvider.sendBatch", () => {
     expect(r).toMatchObject({ kind: "halted", halt: { ...halt } });
   });
 
-  it("reads the quota wording only on a throttle, not on a rejected message", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({ __type: "MessageRejected", message: "Daily message quota exceeded." }),
-        { status: 400 },
-      ),
-    );
-    const r = await newProvider().sendBatch(
-      renderedFixture(),
-      [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
-      { purpose: "list", tag: "send-1" },
-    );
-    expect(r).toMatchObject({ kind: "answered", results: [{ accepted: false, retryable: false }] });
+  it("reads the quota wording on a throttle or a limit, but not on a rejected message", async () => {
+    const answer = (__type: string, message: string) =>
+      vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(new Response(JSON.stringify({ __type, message }), { status: 400 }));
+    const one = [{ email: "reader@example.com", unsubscribeUrl: UNSUB }];
+    const send = () =>
+      newProvider().sendBatch(renderedFixture(), one, { purpose: "list", tag: "s" });
+    answer("LimitExceededException", "Daily sending quota exceeded.");
+    expect(await send()).toMatchObject({ kind: "halted", halt: { cause: "quota" } });
+    answer("MessageRejected", "Daily message quota exceeded.");
+    expect(await send()).toMatchObject({ kind: "halted", halt: { cause: "content" } });
   });
 
-  it("fails every recipient of a request SES refuses with a 400 for good", async () => {
+  it("fails the one recipient of a request SES refuses as invalid, for good", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -544,24 +724,178 @@ describe("SesProvider.sendBatch", () => {
     });
   });
 
-  it("halts a 5xx as unavailable", async () => {
+  it.each([
+    [500, "InternalFailure"],
+    [503, "ServiceUnavailable"],
+    [504, ""],
+    [400, "RequestAbortedException"],
+  ])(
+    "throws a list batch's %i %s as no answer, since SES may have taken it (I4)",
+    async (status, type) => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify(type ? { __type: type, message: "words" } : {}), { status }),
+      );
+      await expect(
+        newProvider().sendBatch(
+          renderedFixture(),
+          [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
+          { purpose: "list", tag: "send-1" },
+        ),
+      ).rejects.toThrow(/SES may have taken the batch/);
+    },
+  );
+
+  it("halts a one-off message's 5xx as unavailable", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("<internal>", { status: 500 }));
     const r = await newProvider().sendBatch(
       renderedFixture(),
       [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
-      {
-        purpose: "list",
-        tag: "send-1",
-      },
+      { purpose: "test", tag: "t" },
     );
-    expect(r).toMatchObject({ kind: "halted", halt: { reason: "unavailable" } });
+    expect(r).toMatchObject({ kind: "halted", halt: { reason: "unavailable", cause: "outage" } });
   });
 
   it.each([
-    [400, "SendingPausedException", "Account is paused", "suspended"],
+    [408, "RequestTimeoutException", "outage"],
+    [400, "LimitExceededException", "outage"],
+    [400, "ThrottlingException", "rate_limit"],
+  ])(
+    "holds a %i %s as SES unavailable, marking no one unsent (SPEC §12)",
+    async (status, type, cause) => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ __type: type, message: "words" }), { status }),
+      );
+      const r = await newProvider().sendBatch(
+        renderedFixture(),
+        ["a@example.com", "b@example.com"].map((email) => ({ email, unsubscribeUrl: UNSUB })),
+        { purpose: "list", tag: "send-1" },
+      );
+      expect(r).toEqual({
+        kind: "halted",
+        halt: { reason: "unavailable", cause, error: `ses ${status} ${type}: words` },
+      });
+    },
+  );
+
+  it("halts a request-level content refusal for the operator, rather than working through the list", async () => {
+    for (const [status, type] of [
+      [400, "MessageRejected"],
+      [413, "RequestEntityTooLargeException"],
+    ] as const) {
+      vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+        new Response(JSON.stringify({ __type: type, message: "no" }), { status }),
+      );
+      const r = await newProvider().sendBatch(
+        renderedFixture(),
+        ["a@example.com", "b@example.com"].map((email) => ({ email, unsubscribeUrl: UNSUB })),
+        { purpose: "list", tag: "send-1" },
+      );
+      expect(r).toEqual({
+        kind: "halted",
+        halt: { reason: "account", cause: "content", error: `ses ${status} ${type}: no` },
+      });
+    }
+  });
+
+  it("refuses only the recipient SES's invalid-request words name, holding the rest for the next request", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          __type: "BadRequestException",
+          message: "Illegal address: bad@example.com.",
+        }),
+        { status: 400 },
+      ),
+    );
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      // "notbad@example.com" holds the named address inside it, and is not it.
+      ["ok@example.com", "bad@example.com", "notbad@example.com"].map((email) => ({
+        email,
+        unsubscribeUrl: UNSUB,
+      })),
+      { purpose: "list", tag: "send-1" },
+    );
+    const error = "ses 400 BadRequestException: Illegal address: bad@example.com.";
+    expect(r).toEqual({
+      kind: "answered",
+      results: [
+        {
+          email: "ok@example.com",
+          accepted: false,
+          retryable: true,
+          error: "not sent",
+          held: true,
+        },
+        { email: "bad@example.com", accepted: false, retryable: false, error },
+        {
+          email: "notbad@example.com",
+          accepted: false,
+          retryable: true,
+          error: "not sent",
+          held: true,
+        },
+      ],
+    });
+  });
+
+  it("holds a batch SES refuses as invalid without naming anyone, rather than marking it unsent", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ __type: "BadRequestException", message: "Invalid input" }), {
+        status: 400,
+      }),
+    );
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      ["a@example.com", "b@example.com"].map((email) => ({ email, unsubscribeUrl: UNSUB })),
+      { purpose: "list", tag: "send-1" },
+    );
+    expect(r).toEqual({
+      kind: "halted",
+      halt: {
+        reason: "account",
+        cause: "invalid_request",
+        error: "ses 400 BadRequestException: Invalid input",
+      },
+    });
+  });
+
+  it("keeps a malformed address out of the request, so it can't take its batch with it", async () => {
+    const { requests } = answerSes();
+    const bad = [
+      "bad addr@example.com",
+      "a..b@example.com",
+      "x@example..com",
+      "x@-x.com",
+      "nodot@localhost",
+    ];
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      [...bad, "reader@example.com"].map((email) => ({ email, unsubscribeUrl: UNSUB })),
+      { purpose: "list", tag: "send-1" },
+    );
+    expect(
+      requests.map((q) => q.BulkEmailEntries.map((e) => e.Destination.ToAddresses[0])),
+    ).toEqual([["reader@example.com"]]);
+    expect(r).toMatchObject({
+      kind: "answered",
+      results: [
+        ...bad.map((email) => ({ email, accepted: false, retryable: false })),
+        { email: "reader@example.com", accepted: true },
+      ],
+    });
+  });
+
+  it.each([
+    [400, "SendingPausedException", "Account is paused", "paused"],
+    [400, "SendingPausedException", "Configuration set sending is currently paused.", "set_paused"],
     [400, "AccountSuspendedException", "Account is suspended", "suspended"],
-    [400, "MailFromDomainNotVerifiedException", "MAIL FROM domain is not verified", "sender"],
+    [400, "MailFromDomainNotVerifiedException", "MAIL FROM domain is not verified", "mail_from"],
     [403, "UnrecognizedClientException", "The token included is invalid", "credentials"],
+    [403, "OptInRequired", "The AWS account needs a subscription", "opt_in"],
+    [401, "NotAuthorized", "no", "credentials"],
+    [404, "UnknownOperationException", "unknown", "unsupported"],
+    [400, "MalformedHttpRequestException", "bad body", "unsupported"],
     [
       404,
       "NotFoundException",
@@ -589,6 +923,54 @@ describe("SesProvider.sendBatch", () => {
       });
     },
   );
+
+  // A badly signed request is answered with the Authorization header or the canonical
+  // request echoed back; SES's words keep their meaning and lose the credential (SPEC §9).
+  const echoed = (status: number, type: string, message: string) =>
+    vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ __type: type, message }), { status }));
+  const LEAKED = /AKIA|ASIA|5d672d79|IQoJb3/;
+
+  it("halts a 403 SignatureDoesNotMatch on the key without carrying the credential it echoes", async () => {
+    echoed(
+      403,
+      "SignatureDoesNotMatch",
+      "The request signature we calculated does not match. The Canonical String was 'POST\nx-amz-security-token:IQoJb3JpZ2luX2VjEJr//////////wEaCXVzLWVhc3QtMSJH\n' and the String-to-Sign was '20261016/us-east-1/ses/aws4_request' for ASIAIOSFODNN7EXAMPLE",
+    );
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
+      { purpose: "list", tag: "send-1" },
+    );
+    expect(r).toEqual({
+      kind: "halted",
+      halt: {
+        reason: "account",
+        cause: "credentials",
+        error:
+          "ses 403 SignatureDoesNotMatch: The request signature we calculated does not match. The Canonical String was 'POST\nx-amz-security-token:…\n' and the String-to-Sign was '20261016/us-east-1/ses/aws4_request' for …",
+      },
+    });
+    expect(JSON.stringify(r)).not.toMatch(LEAKED);
+  });
+
+  it("keeps the Credential and Signature an IncompleteSignatureException echoes out of SES's words", async () => {
+    echoed(
+      400,
+      "IncompleteSignatureException",
+      "Authorization header requires existence of either a 'X-Amz-Date' or a 'Date' header. Authorization=AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20261016/us-east-1/ses/aws4_request, SignedHeaders=content-type;host;x-amz-date, Signature=5d672d79c15b13162d9279b0855cfba6789a8edb4c82c400e06b5924a6f2b5d7",
+    );
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
+      { purpose: "test", tag: "t" },
+    );
+    expect(JSON.stringify(r)).toContain(
+      "ses 400 IncompleteSignatureException: Authorization header requires existence of either a 'X-Amz-Date' or a 'Date' header. Authorization=AWS4-HMAC-SHA256 Credential=…, SignedHeaders=content-type;host;x-amz-date, Signature=…",
+    );
+    expect(JSON.stringify(r)).not.toMatch(LEAKED);
+  });
 
   it.each(["test", "confirmation"] as const)(
     "holds a %s SES answers with a configuration set it can't find, rather than failing the address (SPEC §12)",
@@ -637,13 +1019,13 @@ describe("SesProvider.sendBatch", () => {
       kind: "halted",
       halt: {
         reason: "account",
-        cause: "suspended",
+        cause: "paused",
         error: "ses 400 SendingPausedException: Account is paused",
       },
     });
   });
 
-  it("halts a MessageRejected naming the sender's own identity, but not one naming only the recipient", async () => {
+  it("halts a MessageRejected naming the sender's own identity as the sender's, and one naming only recipients as the sandbox (SPEC §12)", async () => {
     const rejected = (message: string) =>
       new Response(JSON.stringify({ __type: "MessageRejected", message }), { status: 400 });
     const from = "newsletter@send.example.com";
@@ -675,8 +1057,8 @@ describe("SesProvider.sendBatch", () => {
         tag: "s",
       }),
     ).toMatchObject({
-      kind: "answered",
-      results: [{ accepted: false, retryable: false }],
+      kind: "halted",
+      halt: { reason: "account", cause: "sandbox" },
     });
     expect(spy).toHaveBeenCalledTimes(2);
   });
@@ -903,6 +1285,7 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     expect(result.events).toMatchObject([{ type: "bounced", email: "v1@example.com", hard: true }]);
 
     // The version names the hash: the same SHA-1 signature claimed as version 2 fails.
+    allowErrorLogs("webhook.refused");
     _clearKeyCache();
     const misnamed = await newProvider().parseWebhook(
       webhookRequest({ ...envelope, SignatureVersion: "2" }),
@@ -1018,6 +1401,7 @@ describe("SesProvider.parseWebhook (SNS)", () => {
   // A valid SNS signature proves only that SNS sent the message; any AWS account's topic
   // could have. The configured topic is what makes it this deployment's.
   it("refuses a correctly signed subscription from another topic, never fetching its SubscribeURL", async () => {
+    allowErrorLogs("webhook.refused");
     const signer = await makeSigner();
     const subscribeUrl = newSubscribeUrl();
     const { fetched } = mockSubscribe(signer, subscribeUrl);
@@ -1033,7 +1417,9 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     expect(fetched.subscribe).toBe(false);
   });
 
-  it("refuses a correctly signed bounce from another topic and suppresses no one", async () => {
+  it("refuses a correctly signed bounce from another topic, suppresses no one, and logs both topics at error (SPEC §12)", async () => {
+    allowErrorLogs("webhook.refused");
+    const errors = vi.spyOn(console, "error");
     const signer = await makeSigner();
     mockCert(signer);
     await seedDelivery("listed@example.com", "msg-foreign-1");
@@ -1053,6 +1439,18 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     // Applied as the route applies them: had the bounce slipped through, this suppresses.
     await applyDeliveryEvents(env.DB, result.events);
     expect(await subscribers.isSuppressed(env.DB, "listed@example.com")).toBe(false);
+    // SNS discards a 4xx for good, so the refusal is the only trace: loud, and naming the
+    // topic that came and the one this deployment expects, so a recreated topic is plain.
+    expect(logged(errors).filter((l) => l.event === "webhook.refused")).toEqual([
+      {
+        event: "webhook.refused",
+        level: "error",
+        provider: "ses",
+        reason: "topic",
+        topic: FOREIGN_TOPIC_ARN,
+        expected: SNS_TOPIC_ARN,
+      },
+    ]);
   });
 
   it("refuses everything when SNS_TOPIC_ARN is unset (fails closed)", async () => {
@@ -1074,7 +1472,9 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     expect(fetched.subscribe).toBe(false);
   });
 
-  it("rejects a forged signature and mutates nothing", async () => {
+  it("rejects a forged signature, mutates nothing, and logs it at error", async () => {
+    allowErrorLogs("webhook.refused");
+    const errors = vi.spyOn(console, "error");
     const signer = await makeSigner();
     mockCert(signer);
     await seedDelivery("victim@example.com", "msg-forged-1");
@@ -1094,9 +1494,66 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     await applyDeliveryEvents(env.DB, result.events);
     expect(await subscribers.isSuppressed(env.DB, "victim@example.com")).toBe(false);
     expect(await deliveryEvent("msg-forged-1")).toBeNull();
+    expect(logged(errors).filter((l) => l.event === "webhook.refused")).toMatchObject([
+      { level: "error", reason: "signature", topic: SNS_TOPIC_ARN, expected: SNS_TOPIC_ARN },
+    ]);
   });
 
-  it("rejects a signing cert served from an untrusted host", async () => {
+  // SNS retries a 5xx and discards a 4xx for good, so not reaching SNS's own certificate
+  // host must never read as a forgery: the message may be a real bounce (SPEC §10).
+  it.each([
+    ["the network fails", () => Promise.reject(new TypeError("Network connection lost."))],
+    ["the host answers 503", async () => new Response("unavailable", { status: 503 })],
+    ["the host answers 500", async () => new Response("error", { status: 500 })],
+    ["the host answers 429", async () => new Response("slow down", { status: 429 })],
+  ])(
+    "answers 503 when the signing cert can't be fetched because %s, so SNS retries, and acts on nothing",
+    async (_why, answer) => {
+      const warns = vi.spyOn(console, "warn");
+      const signer = await makeSigner();
+      await seedDelivery("held@example.com", "msg-cert-1");
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+        reqUrl(input) === signer.certUrl ? answer() : new Response("not found", { status: 404 }),
+      );
+      const envelope = await signEnvelope(
+        notification(signer, bounceMessage("held@example.com", "msg-cert-1", "Permanent")),
+        signer,
+      );
+
+      const result = await newProvider().parseWebhook(webhookRequest(envelope), sesEnv);
+
+      expect(result.response.status).toBe(503);
+      expect(result.events).toHaveLength(0);
+      await applyDeliveryEvents(env.DB, result.events);
+      expect(await subscribers.isSuppressed(env.DB, "held@example.com")).toBe(false);
+      expect(logged(warns).filter((l) => l.event === "webhook.cert_unavailable")).toMatchObject([
+        { level: "warn", provider: "ses", topic: SNS_TOPIC_ARN },
+      ]);
+
+      // SNS's retry, once the host answers, is verified and applied as any message is.
+      mockCert(signer);
+      const retried = await newProvider().parseWebhook(webhookRequest(envelope), sesEnv);
+      expect(retried.response.status).toBe(200);
+      expect(retried.events).toHaveLength(1);
+    },
+  );
+
+  it("still refuses with 403 when SNS's host has no cert at the URL, since that is the message's fault", async () => {
+    allowErrorLogs("webhook.refused");
+    const signer = await makeSigner();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("not found", { status: 404 }));
+    const envelope = await signEnvelope(
+      notification(signer, bounceMessage("x@example.com", "msg-404", "Permanent")),
+      signer,
+    );
+
+    const result = await newProvider().parseWebhook(webhookRequest(envelope), sesEnv);
+
+    expect(result.response.status).toBe(403);
+    expect(result.events).toHaveLength(0);
+  });
+
+  it("rejects a signing cert served from an untrusted host, as a stranger's request, logging no error", async () => {
     const signer = await makeSigner();
     // The message points its SigningCertURL at a non-SNS host.
     signer.certUrl = "https://evil.example.com/cert.pem";

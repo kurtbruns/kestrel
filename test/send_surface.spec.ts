@@ -5,6 +5,9 @@ import { writesDay } from "../shared/daily_writes";
 import {
   BOUNCE_SPIKE_RECENT_MS,
   DAILY_WRITES_SEND_RECIPIENTS,
+  NO_RECEIPTS_AFTER_MS,
+  refusalAdvice,
+  SELF_THROTTLE_HALTS,
   type SendFeedResponse,
   type SendListResponse,
   type SendSummary,
@@ -68,6 +71,7 @@ function row(over: Partial<SendSummary>): SendSummary {
     halted_at: null,
     halt_retries: 0,
     halt_retry_at: null,
+    progress_at: null,
     c_pending: 0,
     c_in_flight: 0,
     c_accepted: 0,
@@ -176,7 +180,7 @@ describe("conditions: one server rule for each kind", () => {
     expect(await readWritesDay(meter.db, { subrequestBudget: 1000 }, now, quiet)).toBe(null);
   });
 
-  it("reads wedged with its count and the Resolve action, refused with the fix and no action, and stuck", () => {
+  it("reads wedged with its count and the Resolve action, refused with the fix and no action, and stuck only when nothing explains the wait", () => {
     const wedged = sendConditions(row({ c_in_flight: 3, started_at: NOW - 60_000 }), NOW, null);
     expect(wedged).toEqual([
       expect.objectContaining({
@@ -199,18 +203,18 @@ describe("conditions: one server rule for each kind", () => {
       NOW,
       null,
     );
-    expect(refused.map((c) => c.kind)).toEqual(["refused", "stuck"]); // most severe first
+    // Started long ago, but the refusal explains the wait until its retry: not also stuck.
+    expect(refused.map((c) => c.kind)).toEqual(["refused"]);
     expect(refused[0]).toMatchObject({
       action: null,
       cause: "quota",
       error: "Daily message quota exceeded",
-      advice:
-        "Wait for SES’s 24-hour quota to free up, or ask AWS to raise it in the Service Quotas console.",
+      advice: refusalAdvice("quota"),
       retry_at: NOW + 60_000,
       since: NOW - 60_000,
     });
     expect(refused[0]?.message).toMatch(
-      /^The provider is refusing the account: Daily message quota exceeded\. Wait/,
+      /^The provider is refusing the account: Daily message quota exceeded\. SES’s 24-hour quota/,
     );
     const outage = sendConditions(
       row({ c_pending: 5, halt_reason: "unavailable", halt_error: "503", halt_retry_at: NOW + 1 }),
@@ -218,6 +222,65 @@ describe("conditions: one server rule for each kind", () => {
       null,
     );
     expect(outage.map((c) => [c.kind, c.severity])).toEqual([["provider_unavailable", "info"]]);
+    // Nothing handed off for the threshold and no halt to explain it (SPEC §12).
+    const idle = sendConditions(
+      row({
+        c_pending: 5,
+        started_at: NOW - 3 * STUCK_THRESHOLD_MS,
+        progress_at: NOW - STUCK_THRESHOLD_MS - 60_000,
+      }),
+      NOW,
+      null,
+    );
+    expect(idle.map((c) => [c.kind, c.severity])).toEqual([["stuck", "warn"]]);
+    expect(idle[0]).toMatchObject({ since: NOW - 60_000, action: null });
+    expect(idle[0]?.message).toMatch(
+      /^Nothing has gone out for 31 minutes, with no retry or provider problem to explain it\./,
+    );
+  });
+
+  it("tells a rate limit that outlasts any burst apart, naming SES_MAX_SEND_RATE (SPEC §12)", () => {
+    const throttled = (halt_retries: number) =>
+      sendConditions(
+        row({
+          c_pending: 5,
+          halt_reason: "unavailable",
+          halt_cause: "rate_limit",
+          halt_error: "ses 429 TooManyRequestsException: Maximum sending rate exceeded.",
+          halt_retries,
+          halted_at: NOW - 60_000,
+          halt_retry_at: NOW + 60_000,
+        }),
+        NOW,
+        null,
+      );
+    const burst = throttled(SELF_THROTTLE_HALTS - 1);
+    expect(burst.map((c) => [c.kind, c.severity])).toEqual([["provider_unavailable", "info"]]);
+    expect(burst[0]?.message).not.toContain("SES_MAX_SEND_RATE");
+    const setting = throttled(SELF_THROTTLE_HALTS);
+    expect(setting.map((c) => [c.kind, c.severity])).toEqual([["provider_unavailable", "warn"]]);
+    expect(setting[0]?.message).toContain("Whoever runs the deployment sets SES_MAX_SEND_RATE");
+  });
+
+  it("says this send, not the account, when the provider refuses its email, and holds no one unsent because of it", () => {
+    const [refused] = sendConditions(
+      row({
+        c_pending: 5,
+        c_unsent: 2,
+        halt_reason: "account",
+        halt_cause: "content",
+        halt_error: "ses 400 MessageRejected: no",
+        halted_at: NOW - 60_000,
+        halt_retry_at: NOW + 60_000,
+      }),
+      NOW,
+      null,
+    );
+    expect(refused).toMatchObject({ kind: "refused", cause: "content" });
+    expect(refused?.message).toMatch(
+      /^The provider is refusing this send: ses 400 MessageRejected: no\. /,
+    );
+    expect(refused?.message).toContain("No one has been marked unsent because of this");
   });
 
   it("reads a bounce spike off a recently sent send at the danger zone, and never off an old or small one", () => {
@@ -233,6 +296,32 @@ describe("conditions: one server rule for each kind", () => {
       bounced: 5,
       rate: 0.05,
     });
+  });
+
+  it("says a recently sent send with no receipt at all, long after dispatch, may not be hearing from the provider (SPEC §8)", () => {
+    const sent = {
+      status: "sent" as const,
+      completed_at: NOW - NO_RECEIPTS_AFTER_MS - 60_000,
+      c_accepted: 40,
+    };
+    const silent = sendConditions(row(sent), NOW, null);
+    expect(silent.map((c) => [c.kind, c.severity])).toEqual([["no_receipts", "warn"]]);
+    expect(silent[0]).toMatchObject({
+      since: NOW - 60_000,
+      action: null,
+      accepted: 40,
+    });
+    expect(silent[0]?.message).toMatch(
+      /^No delivery receipt has arrived for any of the 40 recipients the provider took, 1 hour after/,
+    );
+    // Settling as usual: too soon to say, or any receipt at all has come.
+    expect(kinds(row({ ...sent, completed_at: NOW - NO_RECEIPTS_AFTER_MS + 60_000 }))).toEqual([]);
+    expect(kinds(row({ ...sent, c_accepted: 39, c_delivered: 1 }))).toEqual([]);
+    expect(kinds(row({ ...sent, c_accepted: 39, c_bounced: 1 }))).toEqual([]);
+    expect(kinds(row({ ...sent, c_accepted: 39, c_complained: 1 }))).toEqual([]);
+    // Nothing waits on a receipt, or the send is history past the recent window.
+    expect(kinds(row({ ...sent, c_accepted: 0, c_unsent: 40 }))).toEqual([]);
+    expect(kinds(row({ ...sent, completed_at: NOW - BOUNCE_SPIKE_RECENT_MS - 1 }))).toEqual([]);
   });
 
   it("reports no halt on a wedged send, which nothing will retry", () => {

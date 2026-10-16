@@ -29,6 +29,7 @@ import { runSend } from "../src/send/loop";
 import { SES_DEPLOY, SNS_TOPIC_ARN } from "./support/deploy";
 import { dueSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { base } from "./support/http";
+import { allowErrorLogs } from "./support/log";
 import { answerSes, SES_BULK_ENDPOINT } from "./support/ses";
 import { makeSigner, type Signer, signEnvelope } from "./support/sns";
 
@@ -149,6 +150,107 @@ describe("send loop drives the real SES adapter", () => {
       c_in_flight: 0,
       c_unsent: 0,
     });
+  });
+});
+
+describe("SES's answers, read by whose problem they are (SPEC §12)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const notVerified = (to: string) => ({
+    Status: "MESSAGE_REJECTED",
+    Error: `Email address is not verified. The following identities failed the check in region US-EAST-1: ${to}`,
+  });
+
+  /** Move the clock to the send's next retry. */
+  async function toRetry(sendId: string): Promise<void> {
+    const row = await sends.getSend(env.DB, sendId);
+    vi.setSystemTime(row!.halt_retry_at!);
+  }
+
+  it("holds a send the sandbox refuses, marks no one unsent, and mails each reader once after production access (I4)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    for (const email of ["verified@integ.test", "a@integ.test", "b@integ.test"]) {
+      await seedConfirmed(email);
+    }
+    const send = await dueSend();
+    const sandbox = answerSes((to) =>
+      to === "verified@integ.test" ? { Status: "SUCCESS", MessageId: "m-v" } : notVerified(to),
+    );
+
+    const held = await runSend(sesEnv(), send.id);
+
+    expect(held).toMatchObject({ accepted: 1, unsent: 0, finished: false, halt: "account" });
+    expect(await sends.getSend(env.DB, send.id)).toMatchObject({
+      status: "sending",
+      halt_reason: "account",
+      halt_cause: "sandbox",
+      c_accepted: 1,
+      c_pending: 2,
+      c_unsent: 0,
+    });
+    sandbox.spy.mockRestore();
+
+    // AWS grants production access: the next retry takes the rest, and the reader SES
+    // already took is never in a request again.
+    await toRetry(send.id);
+    const granted = answerSes();
+    const resumed = await runSend(sesEnv(), send.id);
+
+    expect(resumed).toMatchObject({ accepted: 2, unsent: 0, finished: true });
+    expect(
+      granted.requests.flatMap((q) => q.BulkEmailEntries.map((e) => e.Destination.ToAddresses[0])),
+    ).toEqual(["a@integ.test", "b@integ.test"]);
+    expect(await sends.getSend(env.DB, send.id)).toMatchObject({ status: "sent", c_unsent: 0 });
+  });
+
+  it("leaves a batch SES answered with a server error in flight for Resolve, never re-sending it (I4)", async () => {
+    allowErrorLogs("send.ambiguous");
+    await seedConfirmed("s1@integ.test");
+    await seedConfirmed("s2@integ.test");
+    const send = await dueSend();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ __type: "InternalFailure", message: "oops" }), { status: 500 }),
+    );
+
+    const result = await runSend(sesEnv(), send.id);
+
+    expect(result).toMatchObject({ accepted: 0, unsent: 0, finished: false, halt: "unavailable" });
+    expect(await sends.getSend(env.DB, send.id)).toMatchObject({
+      c_in_flight: 2,
+      c_pending: 0,
+      c_unsent: 0,
+      halt_cause: "outage",
+    });
+  });
+
+  it("holds a send whose email SES refuses without holding another send behind it", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    await seedConfirmed("s1@integ.test");
+    await seedConfirmed("s2@integ.test");
+    const refused = await dueSend();
+    const rejecting = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ __type: "MessageRejected", message: "Bad content" }), {
+        status: 400,
+      }),
+    );
+    expect(await runSend(sesEnv(), refused.id)).toMatchObject({
+      accepted: 0,
+      unsent: 0,
+      halt: "account",
+    });
+    expect(await sends.getSend(env.DB, refused.id)).toMatchObject({
+      halt_cause: "content",
+      c_pending: 2,
+      c_unsent: 0,
+    });
+    rejecting.mockRestore();
+
+    // Another post's send, while the refusal stands, asks SES and goes out.
+    const other = await dueSend();
+    answerSes();
+    expect(await runSend(sesEnv(), other.id)).toMatchObject({ accepted: 2, finished: true });
   });
 });
 

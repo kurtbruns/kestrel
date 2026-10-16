@@ -192,6 +192,9 @@ function spkiFromPem(pem: string): Uint8Array {
   throw new Error("PEM has neither a PUBLIC KEY nor a CERTIFICATE");
 }
 
+/** SNS's certificate host could not be reached, or answered that it is failing. */
+class CertUnavailable extends Error {}
+
 async function fetchVerifyKey(certUrl: string, hash: "SHA-1" | "SHA-256"): Promise<CryptoKey> {
   const cacheKey = `${hash}:${certUrl}`;
   const cached = keyCache.get(cacheKey);
@@ -209,11 +212,26 @@ async function fetchVerifyKey(certUrl: string, hash: "SHA-1" | "SHA-256"): Promi
     throw new Error(`untrusted SigningCertURL host: ${u.hostname}`);
   }
 
-  const res = await fetch(certUrl);
+  // Not reaching SNS's own host says nothing about the message, and SNS discards for good a
+  // message answered 4xx, so a network failure or the host's 5xx or 429 is told apart from
+  // every other failure: the webhook answers it 5xx, which SNS retries. Any other status
+  // is the URL's fault, not the host's, so it stays a refusal.
+  let res: Response;
+  let pem: string;
+  try {
+    res = await fetch(certUrl);
+    pem = res.ok ? await res.text() : "";
+  } catch (err) {
+    throw new CertUnavailable(
+      `signing cert fetch failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  if (res.status >= 500 || res.status === 429) {
+    throw new CertUnavailable(`signing cert fetch failed: ${res.status}`);
+  }
   if (!res.ok) {
     throw new Error(`signing cert fetch failed: ${res.status}`);
   }
-  const pem = await res.text();
   const key = await crypto.subtle.importKey(
     "spki",
     spkiFromPem(pem),
@@ -226,32 +244,59 @@ async function fetchVerifyKey(certUrl: string, hash: "SHA-1" | "SHA-256"): Promi
 }
 
 /**
- * Verify an SNS message signature. Returns false (never throws) on any problem —
- * bad version, untrusted cert host, fetch/parse failure, or signature mismatch —
- * so the caller can reject uniformly.
+ * What checking a message's signature found: `valid`; `unsigned` when it does not claim
+ * an SNS signature at all (none, an unknown version, or a cert URL off SNS's host), as a
+ * stray request to a public URL doesn't; `invalid` when it claims one that does not hold
+ * (a cert that won't parse, or a mismatch); or `unavailable` when SNS's certificate host
+ * could not be reached or answered 5xx or 429, which says nothing about the message, so
+ * the caller can ask SNS to retry it rather than refuse it for good.
  */
-export async function verifySnsSignature(msg: SnsEnvelope): Promise<boolean> {
-  if (!msg.Signature || !msg.SigningCertURL) {
+export type SnsSignatureCheck = "valid" | "unsigned" | "invalid" | "unavailable";
+
+/** Whether a SigningCertURL is https on SNS's own host, the only place a cert is fetched from. */
+function isSnsCertUrl(certUrl: string): boolean {
+  try {
+    const u = new URL(certUrl);
+    return u.protocol === "https:" && isSnsHost(u.hostname);
+  } catch {
     return false;
+  }
+}
+
+/** Verify an SNS message signature. Never throws; only `valid` may be acted on. */
+export async function verifySnsSignature(msg: SnsEnvelope): Promise<SnsSignatureCheck> {
+  if (
+    typeof msg.Signature !== "string" ||
+    !msg.Signature ||
+    typeof msg.SigningCertURL !== "string" ||
+    !isSnsCertUrl(msg.SigningCertURL)
+  ) {
+    return "unsigned";
   }
   const hash =
     msg.SignatureVersion === "2" ? "SHA-256" : msg.SignatureVersion === "1" ? "SHA-1" : null;
   if (!hash) {
-    return false;
+    return "unsigned";
   }
 
   let key: CryptoKey;
   try {
     key = await fetchVerifyKey(msg.SigningCertURL, hash);
-  } catch {
-    return false;
+  } catch (err) {
+    return err instanceof CertUnavailable ? "unavailable" : "invalid";
   }
 
   try {
     const data = new TextEncoder().encode(canonicalString(msg));
-    return await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, base64ToBytes(msg.Signature), data);
+    const ok = await crypto.subtle.verify(
+      "RSASSA-PKCS1-v1_5",
+      key,
+      base64ToBytes(msg.Signature),
+      data,
+    );
+    return ok ? "valid" : "invalid";
   } catch {
-    return false;
+    return "invalid";
   }
 }
 

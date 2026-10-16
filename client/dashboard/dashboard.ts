@@ -56,7 +56,7 @@ interface HealthAlert {
 // within a read of its condition and stays until the condition clears, and the dashboard
 // keeps no rule of its own: the bounce spike included, which the server reads off each
 // recently sent send. Only the loud kinds are lines here; a re-made send's note and a
-// provider outage short of the stuck threshold are shown where the send is. The one line
+// provider outage, which its retry explains, are shown where the send is. The one line
 // not about a send is the deployment's: no email provider connected (SPEC §9), an amber
 // standing state with no time, read from the deployment reflection, gone once one is set.
 // When that state is holding a send, the two are said as one red line instead of two.
@@ -129,7 +129,20 @@ function computeHealth(live: SendView[], setupSaysNotConnected = false): HealthA
       text:
         stuck.length === 1
           ? html`<a href="#/sent/${firstStuck.id}">${firstStuck.subject}</a>: ${conditionOf(firstStuck, "stuck")?.message}`
-          : html`<a href="#/sent">${stuck.length} sends</a> have been sending longer than they should; they may be retrying.`,
+          : html`<a href="#/sent">${stuck.length} sends</a> have handed off no one for a while, with no retry or provider problem to explain it.`,
+    });
+  }
+  // A rate limit the deployment causes itself (SPEC §12): the server marks it worth a look,
+  // since a burst never lasts, and its words name the setting.
+  const throttled = live.flatMap((s) => {
+    const c = conditionOf(s, "provider_unavailable");
+    return c?.severity === "warn" ? [{ s, c }] : [];
+  });
+  const [firstThrottled] = throttled;
+  if (firstThrottled) {
+    alerts.push({
+      level: "amber",
+      text: html`<a href="#/sent/${firstThrottled.s.id}">${firstThrottled.s.subject}</a>: ${firstThrottled.c.message}`,
     });
   }
   // Bounce spike (SPEC §8): the server's reading of a recent send's confirmed bounces over
@@ -143,6 +156,24 @@ function computeHealth(live: SendView[], setupSaysNotConnected = false): HealthA
     alerts.push({
       level: "amber",
       text: html`<a href="#/sent/${firstSpike.s.id}">${firstSpike.s.subject}</a>: ${firstSpike.c.message}`,
+    });
+  }
+  // No receipts (SPEC §8): a recent send that has heard nothing back for anyone the
+  // provider took, long after dispatch, so its events may not be reaching the app and its
+  // bounces and complaints suppress no one. One line, since one broken destination silences
+  // every send alike.
+  const silent = live.flatMap((s) => {
+    const c = conditionOf(s, "no_receipts");
+    return c ? [{ s, c }] : [];
+  });
+  const [firstSilent] = silent;
+  if (firstSilent) {
+    alerts.push({
+      level: "amber",
+      text:
+        silent.length === 1
+          ? html`<a href="#/sent/${firstSilent.s.id}">${firstSilent.s.subject}</a>: ${firstSilent.c.message}`
+          : html`<a href="#/sent">${silent.length} sends</a> have had no delivery receipt long after they went out. The provider's events may not be reaching this app, so its bounces and complaints suppress no one.`,
     });
   }
   if (notConnected && !held.length && !setupSaysNotConnected) {
@@ -470,8 +501,9 @@ function dashActiveHtml(active: SendView[]): Html {
   if (!active.length) {
     return html``;
   }
+  // The health line above already says a send is in flight too long, so its card doesn't.
   return html`<section class="dash-section"><h2>Active send${active.length === 1 ? "" : "s"}</h2>${active.map(
-    activeRowHtml,
+    (s) => activeRowHtml(s, { stuckNote: false }),
   )}</section>`;
 }
 function wireDashActiveCards(root: HTMLElement): void {

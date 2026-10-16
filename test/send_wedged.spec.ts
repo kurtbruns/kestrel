@@ -132,7 +132,7 @@ describe("a batch an earlier release left queued under its key", () => {
 
 describe("a wedged send a receipt with no provider id reaches", () => {
   it("keeps every unknown recipient, its count, and Resolve: a receipt that cannot name its message never settles one", async () => {
-    allowErrorLogs("send.ambiguous", "send.wedged", "send.stuck");
+    allowErrorLogs("send.ambiguous", "send.wedged");
     vi.useFakeTimers({ toFake: ["Date"] });
     const provider = new BatchProvider();
     provider.loseAnswers = 1;
@@ -161,14 +161,15 @@ describe("a wedged send a receipt with no provider id reaches", () => {
     expect(events).toBe(0);
 
     // Past the stuck threshold the send still reads wedged, with its count and the control
-    // that settles it beside the stuck flag, and the sweep still leaves it alone.
+    // that settles it, never also stuck, since Resolve explains the wait (SPEC §12), and the
+    // sweep still leaves it alone.
     vi.setSystemTime(Date.now() + STUCK_THRESHOLD_MS + 60_000);
     await sweep(env);
     expect((await row(send.id)).rev).toBe(wedged.rev);
     const p = await progress(send.id);
     expect([p.phase, has(p, "stuck"), condition(p, "wedged")?.count]).toEqual([
       "needs-attention",
-      true,
+      false,
       3,
     ]);
     expect(p.actions.map((a) => a.name)).toEqual(["resolve"]);
@@ -219,9 +220,10 @@ describe("the pace around a wedge and a cut-off run", () => {
   };
 
   it("never hurries for a wedged send, even one still carrying a past halt", () => {
+    // Only Resolve moves it: it is never in flight too long either (SPEC §12).
     expect(
       nextChangeAt({ ...inFlight, locked_until: null, halt_retry_at: NOW - 300_000 }, NOW),
-    ).toBe(NOW - 60_000 + STUCK_THRESHOLD_MS);
+    ).toBeNull();
   });
 
   it("waits for the retry of a halted send whose run was cut off, rather than reading it as moving", () => {

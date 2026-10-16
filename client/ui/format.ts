@@ -54,21 +54,47 @@ export function invalidAddressesMessage(invalid: string[]): string | null {
   return `Not ${invalid.length === 1 ? "an email address" : "email addresses"}: ${invalid.join(", ")}`;
 }
 
+/** One address a test didn't reach, and the sentence saying why. */
+export interface TestMiss {
+  email: string;
+  /** The server's words for why (a test response's `not_sent.message`), or the request's
+   *  own error; "" when there is nothing to say. */
+  message: string;
+}
+
 /**
- * The dialog error for a test that didn't reach every address: who got it, who didn't,
- * each distinct reason once, and that Send again tries only those. Both test dialogs leave
- * just the failed addresses in their field, so a second press mails no one twice.
+ * The dialog error for a test that didn't reach every address: who got it, why each other
+ * address didn't, each distinct reason once with the addresses it covers, and that Send
+ * again tries only those. Both test dialogs leave just the failed addresses in their
+ * field, so a second press mails no one twice. A reason is the server's own sentence,
+ * which says whether sending again can help, so with one the dialog adds no advice of its
+ * own, only who Send again goes to.
  */
-export function notSentMessage(
-  sent: number,
-  total: number,
-  failed: string[],
-  reasons: string[] = [],
-): string {
-  const why = reasons.length ? ` ${reasons.join(" ")}` : "";
+export function notSentMessage(sent: number, total: number, missed: TestMiss[]): string {
+  const byReason = new Map<string, string[]>();
+  const unexplained: string[] = [];
+  for (const m of missed) {
+    if (m.message) {
+      byReason.set(m.message, [...(byReason.get(m.message) ?? []), m.email]);
+    } else {
+      unexplained.push(m.email);
+    }
+  }
+  if (!byReason.size) {
+    return sent
+      ? `Sent to ${sent} of ${total}. Not sent to ${unexplained.join(", ")}. Send again to try those.`
+      : "Not sent. Send again to try.";
+  }
+  // Name the addresses whenever there was more than one, so each reason says whose it is.
+  const reasons = [...byReason].map(([message, emails]) =>
+    total > 1 ? `${emails.join(", ")}: ${message}` : message,
+  );
+  if (unexplained.length) {
+    reasons.push(`Not sent to ${unexplained.join(", ")}.`);
+  }
   return sent
-    ? `Sent to ${sent} of ${total}. Not sent to ${failed.join(", ")}.${why} Send again to try those.`
-    : `Not sent.${why} Send again to try.`;
+    ? `Sent to ${sent} of ${total}. ${reasons.join(" ")} Send again goes only to those.`
+    : reasons.join(" ");
 }
 
 /** A Date as the value of a `datetime-local` input, in local time. */

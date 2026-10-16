@@ -14,6 +14,7 @@ import type {
   SendStatus,
   SendSummary,
 } from "../../shared/sends";
+import { SEND_OWN_HALT_CAUSES } from "../../shared/sends";
 import type { ScheduledSendRef } from "../../shared/settings";
 import { isErasedPlaceholder } from "../../shared/subscribers";
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
@@ -334,7 +335,7 @@ export const SEND_LIST_SPEC: ListSpec = {
 // but carries the denormalized counters, so a list row is enough for the Sent-page
 // active row and the dashboard active-send widget without a second per-send read.
 const SEND_LIST_COLS =
-  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, audience_resolved_at, remade_at, tested_at, halt_reason, halt_cause, halt_error, halted_at, halt_retries, halt_retry_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent, rev";
+  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, audience_resolved_at, remade_at, tested_at, halt_reason, halt_cause, halt_error, halted_at, halt_retries, halt_retry_at, progress_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent, rev";
 
 // A view's columns: the list projection, which address its email carries, and what its post
 // says about its two addresses (the slug for the archive link, and the unlisted token) and its
@@ -497,10 +498,43 @@ export interface FeedSince {
   at: number;
 }
 
+/**
+ * A wedged send (SPEC §12), as SQL over a `sends` row: sending, nothing left to hand off,
+ * recipients still in flight, and no run holding it, because the last run released its
+ * lease having left them there. A run releases only once it has recorded every answer it
+ * got, so what it leaves in flight is exactly what nothing will re-send: recipients whose
+ * fate is unknown, awaiting Resolve. A run cut off mid-batch releases nothing (its lease runs out
+ * instead), so its batches are not wedged until the next run has looked at them. The one
+ * definition: the watch (`isWedged`), the feed, the sweep, and the notifications read it.
+ * It takes no clock, so a send turns wedged only by a write, which the feed reports.
+ */
+export const WEDGED_SEND =
+  "(status = 'sending' AND c_pending = 0 AND c_in_flight > 0 AND locked_until IS NULL)";
+
+/**
+ * Since when a sending send has been idle with nothing to explain it (SPEC §12), as SQL over
+ * a `sends` row: its last progress (the provider's last answer for any of its recipients,
+ * or its start before the first), or, while it is halted, its next retry, since the halt
+ * explains the wait until then. The one definition: the watch (`idleSince`), the feed, the
+ * sweep, and the notifications read it.
+ */
+export const SEND_IDLE_SINCE = "MAX(COALESCE(progress_at, started_at), COALESCE(halt_retry_at, 0))";
+
+/**
+ * A send in flight too long (SPEC §12), as SQL over a `sends` row: sending, not wedged
+ * (Resolve explains that wait), and idle (`SEND_IDLE_SINCE`) since before `cutoff`, an SQL
+ * expression for now less the stuck threshold. A send handing anyone off is never stuck,
+ * however long it takes.
+ */
+export function stuckSendSql(cutoff: string): string {
+  return `(status = 'sending' AND started_at IS NOT NULL AND NOT ${WEDGED_SEND} AND ${SEND_IDLE_SINCE} < ${cutoff})`;
+}
+
 /** The clock thresholds the feed watches for, which change a send with no write (SPEC §12). */
 export interface FeedThresholds {
   missedMs: number;
   stuckMs: number;
+  noReceiptsMs: number;
 }
 
 // The sends that can change on their own, over `?1` (now) and `?2` (the oldest completion
@@ -522,17 +556,22 @@ const CUT = `(SELECT rev FROM (${CHANGES}) ORDER BY rev LIMIT 1 OFFSET ?6 - 1)`;
 const IN_PAGE = `rev > ?2 AND rev <= COALESCE(${CUT}, 9007199254740991)`;
 
 // The sends that changed after a cursor, over `?1` (now), `?2` (the cursor's sequence), `?3`
-// (its read time), `?4` (the missed threshold), `?5` (the stuck threshold) and `?6` (the
-// limit): every send whose `rev` is in the page, and every send a clock threshold changed
-// between the read time and now with no write, whatever the limit. Each crossing is the same
-// comparison `buildSendProgress` makes, at the read time (not yet) and at now (crossed): a
-// fire time passing (due), the missed tolerance passing, and the stuck threshold passing. A
-// send turns wedged only by a write (`WEDGED_SEND`), so no crossing is needed for it.
+// (its read time), `?4` (the missed threshold), `?5` (the stuck threshold), `?6` (the
+// limit) and `?7` (the no-receipts threshold): every send whose `rev` is in the page, and
+// every send a clock threshold changed between the read time and now with no write, whatever
+// the limit. Each crossing is the same comparison `buildSendProgress` makes, at the read time
+// (not yet) and at now (crossed): a fire time passing (due), the missed tolerance passing,
+// the stuck threshold passing since the send went idle (`SEND_IDLE_SINCE`), and a sent send
+// still without a receipt passing the no-receipts threshold. A send turns wedged only by a
+// write (`WEDGED_SEND`), so no crossing is needed for it.
 const CHANGED_SINCE = `(${IN_PAGE})
   OR (status = 'scheduled' AND (
        (fire_at > ?3 AND fire_at <= ?1)
     OR (fire_at + ?4 >= ?3 AND fire_at + ?4 < ?1)))
-  OR (status = 'sending' AND started_at + ?5 >= ?3 AND started_at + ?5 < ?1)`;
+  OR (status = 'sending' AND started_at IS NOT NULL AND NOT ${WEDGED_SEND}
+      AND ${SEND_IDLE_SINCE} + ?5 >= ?3 AND ${SEND_IDLE_SINCE} + ?5 < ?1)
+  OR (status = 'sent' AND c_accepted > 0 AND c_delivered + c_bounced + c_complained = 0
+      AND completed_at + ?7 >= ?3 AND completed_at + ?7 < ?1)`;
 
 /**
  * One read of the send feed (SPEC §8), over send rows only, never the delivery record: with
@@ -570,7 +609,15 @@ export async function sendFeed(
     since
       ? db
           .prepare(`${select} WHERE ${CHANGED_SINCE} ORDER BY fire_at ASC, id ASC`)
-          .bind(now, since.seq, since.at, thresholds.missedMs, thresholds.stuckMs, limit)
+          .bind(
+            now,
+            since.seq,
+            since.at,
+            thresholds.missedMs,
+            thresholds.stuckMs,
+            limit,
+            thresholds.noReceiptsMs,
+          )
       : db
           .prepare(`${select} WHERE ${LIVE_SEND} ORDER BY fire_at ASC, id ASC`)
           .bind(now, settledSince),
@@ -1002,19 +1049,6 @@ export async function dueSends(db: D1Database, now: number): Promise<SendRow[]> 
   return results;
 }
 
-/**
- * A wedged send (SPEC §12), as SQL over a `sends` row: sending, nothing left to hand off,
- * recipients still in flight, and no run holding it, because the last run released its
- * lease having left them there. A run releases only once it has recorded every answer it
- * got, so what it leaves in flight is exactly what nothing will re-send: recipients whose
- * fate is unknown, awaiting Resolve. A run cut off mid-batch releases nothing (its lease runs out
- * instead), so its batches are not wedged until the next run has looked at them. The one
- * definition: the watch (`isWedged`), the feed, the sweep, and the notifications read it.
- * It takes no clock, so a send turns wedged only by a write, which the feed reports.
- */
-export const WEDGED_SEND =
-  "(status = 'sending' AND c_pending = 0 AND c_in_flight > 0 AND locked_until IS NULL)";
-
 /** Sends left mid-flight whose lease has expired, and whose halt, if they carry one, is
  *  due its next retry by `retryDueBy` (SPEC §12): resume them. A send still waiting out its
  *  backoff costs the sweep nothing past this query, and a wedged one is left alone: no run
@@ -1035,6 +1069,98 @@ export async function resumableSends(
   return results;
 }
 
+/** A halt another send is waiting out, which the account or the provider is the cause of,
+ *  not that send alone (SPEC §12). */
+export interface AccountHalt {
+  sendId: string;
+  reason: HaltReason;
+  cause: HaltCause | null;
+  error: string;
+  since: number;
+  retries: number;
+  retryAt: number;
+}
+
+/**
+ * The halt any other sending send is waiting out whose next retry is still after `aheadOf`,
+ * or null when none is (SPEC §12). A halt is about the account or the provider, never one
+ * send, so a send that would start or resume while one stands waits on it rather than ask
+ * the provider again. A refusal outranks an outage, and of each the one retried last is the
+ * newest word. A wedged send's halt is not counted: nothing retries it, so it says nothing
+ * about the provider now. Nor is a refusal of one send's own email (`SEND_OWN_HALT_CAUSES`),
+ * which the provider would not meet on another send.
+ */
+export async function accountHalt(
+  db: D1Database,
+  sendId: string,
+  aheadOf: number,
+): Promise<AccountHalt | null> {
+  const row = await db
+    .prepare(
+      `SELECT id, halt_reason, halt_cause, halt_error, halted_at, halt_retries, halt_retry_at
+         FROM sends
+        WHERE status = 'sending' AND id <> ? AND halt_reason IS NOT NULL
+          AND halt_retry_at > ? AND NOT ${WEDGED_SEND}
+          AND (halt_cause IS NULL OR halt_cause NOT IN (SELECT value FROM json_each(?)))
+        ORDER BY halt_reason = 'account' DESC, halt_retry_at DESC
+        LIMIT 1`,
+    )
+    .bind(sendId, aheadOf, JSON.stringify(SEND_OWN_HALT_CAUSES))
+    .first<{
+      id: string;
+      halt_reason: HaltReason;
+      halt_cause: HaltCause | null;
+      halt_error: string | null;
+      halted_at: number | null;
+      halt_retries: number;
+      halt_retry_at: number;
+    }>();
+  return row
+    ? {
+        sendId: row.id,
+        reason: row.halt_reason,
+        cause: row.halt_cause,
+        error: row.halt_error ?? "",
+        since: row.halted_at ?? row.halt_retry_at,
+        retries: row.halt_retries,
+        retryAt: row.halt_retry_at,
+      }
+    : null;
+}
+
+/**
+ * Hold this send on another send's halt (`accountHalt`) without asking the provider: it
+ * takes the halt's reason, words, step in the backoff, and next retry, so it reads and
+ * retries as that send does. A send already halted for the same reason keeps when its own
+ * halt began, as `holdBatch` does. Lease-guarded.
+ */
+export async function joinHalt(
+  db: D1Database,
+  sendId: string,
+  lease: string,
+  halt: AccountHalt,
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE sends SET halt_reason = ?, halt_cause = ?, halt_error = ?,
+              halted_at = CASE WHEN halt_reason IS ? AND halted_at IS NOT NULL THEN halted_at ELSE ? END,
+              halt_retries = ?, halt_retry_at = ?, rev = ${NEXT_REV}
+        WHERE id = ? AND lease_token = ?`,
+    )
+    .bind(
+      halt.reason,
+      halt.cause,
+      halt.error,
+      halt.reason,
+      halt.since,
+      halt.retries,
+      halt.retryAt,
+      sendId,
+      lease,
+    )
+    .run();
+}
+
 /** The wedged sends (`WEDGED_SEND`), for the sweep's `send.wedged` line. */
 export async function wedgedSends(db: D1Database): Promise<SendRow[]> {
   const { results } = await db
@@ -1043,13 +1169,12 @@ export async function wedgedSends(db: D1Database): Promise<SendRow[]> {
   return results;
 }
 
-/** Sends stuck in `sending` too long (for loud alerting). */
-export async function stuckSends(db: D1Database, olderThan: number): Promise<SendRow[]> {
+/** Sends in flight too long (`stuckSendSql`), idle since before `idleBefore`, for the
+ *  sweep's loud `send.stuck` line. */
+export async function stuckSends(db: D1Database, idleBefore: number): Promise<SendRow[]> {
   const { results } = await db
-    .prepare(
-      "SELECT * FROM sends WHERE status = 'sending' AND started_at IS NOT NULL AND started_at < ?",
-    )
-    .bind(olderThan)
+    .prepare(`SELECT * FROM sends WHERE ${stuckSendSql("?")} ORDER BY started_at ASC`)
+    .bind(idleBefore)
     .all<SendRow>();
   return results;
 }
@@ -1423,9 +1548,15 @@ const OUTCOME_BUCKET: Record<DeliveryOutcome["status"], CounterCol> = {
  * recipient. `from` is the status the rows leave: `pending` for a recipient closed before
  * hand-off (unsubscribed, suppressed, or out of attempts), `dispatched` for the
  * provider's answer. Every outcome clears the dispatch key, since the hand-off is
- * answered. `answered` says the provider actually answered this batch,
- * which ends any halt the send carried; closing rows without asking it does not. Lease-guarded: a
- * run that lost its lease records nothing, and its batch stays in flight, for Resolve.
+ * answered. `answer` says what the provider's answer was, which closing rows without asking
+ * it never is: `progressed` when it took or settled any recipient, which stamps the send's
+ * `progress_at` (SPEC §12, in flight too long); `clears` when it ends any halt the send
+ * carried, which the send loop decides: progress that refused no one for the account. An
+ * answer that took some and refused the rest for the account is progress but not the end
+ * of the halt, so a provider that keeps refusing part of each batch is one halt, keeping
+ * when it began and stepping through its backoff (SPEC §12).
+ * Lease-guarded: a run that lost its lease records nothing, and its batch stays in flight,
+ * for Resolve.
  */
 export async function settleDeliveries(
   db: D1Database,
@@ -1434,7 +1565,7 @@ export async function settleDeliveries(
   from: "pending" | "dispatched",
   outcomes: DeliveryOutcome[],
   now: number,
-  answered = false,
+  answer: { progressed: boolean; clears: boolean } = { progressed: false, clears: false },
 ): Promise<void> {
   if (outcomes.length === 0) {
     return;
@@ -1457,7 +1588,12 @@ export async function settleDeliveries(
   }
   const cols = [...deltas.keys()];
   const sets = cols.map((c) => `${c} = ${c} + ?`);
-  if (answered) {
+  const values: unknown[] = cols.map((c) => deltas.get(c) ?? 0);
+  if (answer.progressed) {
+    sets.push("progress_at = ?");
+    values.push(now);
+  }
+  if (answer.clears) {
     sets.push(
       "halt_reason = NULL",
       "halt_cause = NULL",
@@ -1491,7 +1627,7 @@ export async function settleDeliveries(
       .prepare(
         `UPDATE sends SET ${sets.join(", ")}, rev = ${NEXT_REV} WHERE id = ? AND lease_token = ?`,
       )
-      .bind(...cols.map((c) => deltas.get(c) ?? 0), sendId, lease),
+      .bind(...values, sendId, lease),
   ]);
 }
 

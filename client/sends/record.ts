@@ -11,6 +11,7 @@ import type {
   SendResponse,
   SendView,
 } from "../../shared/sends";
+import { isSendOwnHalt } from "../../shared/sends";
 import { isErasedPlaceholder } from "../../shared/subscribers";
 import { ApiError, api, apiFile, describeError } from "../api";
 import { heldAdviceHtml, noEmailProvider, providerNotConnected } from "../deployment";
@@ -26,7 +27,7 @@ import { icon } from "../ui/icons";
 import { type ListState, renderPager, th, wireSort } from "../ui/list_controls";
 import { busy, type Modal, modal, renderError, toast } from "../ui/widgets";
 import { openResolveModal } from "./dialogs";
-import { can, clampPct, conditionOf, fmtDuration, has } from "./progress";
+import { can, clampPct, conditionOf, fmtDuration, has, nextRetry } from "./progress";
 
 const message = describeError;
 
@@ -98,25 +99,32 @@ const PHASE_BLURB: Partial<Record<SendPhase, string>> = {
   "needs-attention": "Some deliveries are stuck and need a decision.",
   settling: "Dispatch complete, waiting on delivery receipts.",
 };
-/** When a halted send's next retry is due, relative to now (SPEC §12). */
-function nextRetry(retryAt: number | null): string {
-  if (retryAt === null) {
-    return "it is retried on its own";
-  }
-  const wait = retryAt - Date.now();
-  return wait > 0 ? `next retry in ${fmtDuration(wait)}` : "next retry due now";
-}
 /** The phase's one-line gloss, said for the cause when the phase has more than one. */
 function phaseBlurb(prog: SendView): string {
   const halt = prog.provider.halt;
+  // Held from the start: it joined another send's halt before handing anyone off (SPEC §12).
+  if (halt && heldFromStart(prog)) {
+    const why =
+      halt.cause === "not_connected"
+        ? "No email provider is connected"
+        : halt.reason === "account"
+          ? "The provider is refusing this account"
+          : "The provider is unavailable";
+    return `${why}, so this post waits with the send already held and hasn’t handed anyone off; ${nextRetry(halt.retry_at)}.`;
+  }
   if (has(prog, "refused") && halt?.cause === "not_connected") {
     return `No email provider is connected, so nothing goes out until one is; ${nextRetry(halt.retry_at)}.`;
   }
   if (has(prog, "refused") && halt) {
-    return `The provider is refusing this account, so nothing more goes out until it’s fixed; ${nextRetry(halt.retry_at)}.`;
+    const what = isSendOwnHalt(halt.cause) ? "this send" : "this account";
+    return `The provider is refusing ${what}, so nothing more goes out until it’s fixed; ${nextRetry(halt.retry_at)}.`;
   }
   if (prog.phase === "backing-off" && halt?.reason === "unavailable") {
     return `The provider is unavailable; ${nextRetry(halt.retry_at)}.`;
+  }
+  // In flight too long: the alert above says why, so the gloss must not say it is handing off.
+  if (has(prog, "stuck")) {
+    return "Nothing is being handed off to the provider right now.";
   }
   // A send too large for one tick waits for the next with nothing in flight. The server
   // reads that as progressing, since nothing failed; the line says why the bar is still.
@@ -193,7 +201,7 @@ function watchBodyHtml(prog: SendView): Html {
   const acceptedTotal = c.accepted + c.delivered + c.bounced + c.complained;
   const rate = prog.dispatch.rate_per_min;
   // The server gives a time to finish only while the send is handing off, never while it
-  // is paused (backing off, refused, or wedged). The rate goes with it: it is what a tick
+  // is paused (backing off, refused, or wedged) or in flight too long. The rate goes with it: it is what a tick
   // has carried so far, so beside a pause it would promise progress nothing is making.
   const eta = prog.dispatch.eta_ms;
   const dispatchSub =
@@ -215,14 +223,21 @@ function watchBodyHtml(prog: SendView): Html {
   // own headline, and the fix said once, with no provider's words to quote: the step as the
   // link every not-connected line carries (or, in the local preview, the restart).
   const unconnected = refused?.cause === "not_connected";
+  // The provider refusing this send's own email rather than the account (SPEC §12).
+  const ownRefusal = isSendOwnHalt(refused?.cause ?? null);
   // In flight too long (SPEC §12): the amber the dashboard's health line and the Sent
   // page's card give the same condition, in the server's words.
   const stuck = conditionOf(prog, "stuck");
+  // A rate limit the deployment causes itself (SPEC §12), which the server marks worth a
+  // look: the same amber, in its words, which name the setting.
+  const unavailable = conditionOf(prog, "provider_unavailable");
+  const throttled = unavailable?.severity === "warn" ? unavailable : undefined;
   return html`
     ${stuck ? html`<div class="health amber" role="status"><span class="health-dot">⚠️</span><div>${stuck.message}</div></div>` : null}
+    ${throttled ? html`<div class="health amber" role="status"><span class="health-dot">⚠️</span><div>${throttled.message}</div></div>` : null}
     ${
       refused
-        ? html`<div class="health red" role="alert"><span class="health-dot">⚠️</span><div><strong>${unconnected ? "No email provider is connected" : "The provider is refusing this account"}</strong>${unconnected ? null : html`<div>${refused.error}</div>`}<div class="refused-advice">${unconnected ? heldAdviceHtml() : refused.advice}</div><div>${refused.since === null ? null : `Since ${fmt(refused.since)}. `}No one has been marked unsent, and once ${unconnected ? "one is connected" : "this is fixed"} the send resumes at its next retry${refused.retry_at === null ? "" : `, ${fmt(refused.retry_at)}`}.</div></div></div>`
+        ? html`<div class="health red" role="alert"><span class="health-dot">⚠️</span><div><strong>${unconnected ? "No email provider is connected" : ownRefusal ? "The provider is refusing this send" : "The provider is refusing this account"}</strong>${unconnected ? null : html`<div>${refused.error}</div>`}<div class="refused-advice">${unconnected ? heldAdviceHtml() : refused.advice}</div><div>${refused.since === null ? null : `Since ${fmt(refused.since)}. `}No one has been marked unsent because of this, and once ${unconnected ? "one is connected" : "this is fixed"} the send resumes at its next retry${refused.retry_at === null ? "" : `, ${fmt(refused.retry_at)}`}.</div></div></div>`
         : null
     }
     <div class="wbars">
@@ -242,7 +257,14 @@ function watchBodyHtml(prog: SendView): Html {
         : "no delivery failures"
     }</span></div>`;
 }
+/** A send held on another send's halt before its first hand-off: it has fixed no audience. */
+function heldFromStart(send: SendView): boolean {
+  return send.status === "sending" && send.provider.halt !== null && !send.audience.fixed;
+}
 function watchMetaHtml(send: SendView): Html {
+  if (heldFromStart(send)) {
+    return html`Due ${fmt(send.fire_at)} · held before handing anyone off · about ${send.audience.count.toLocaleString()} recipients`;
+  }
   const started = send.started_at ? `Started ${fmt(send.started_at)}` : "Sending now";
   return html`${started} · ${send.audience.count.toLocaleString()} recipients`;
 }
@@ -532,6 +554,7 @@ function renderFrozenRecord(
     </section>
     <section class="card rec-card" aria-labelledby="recDeliveryTitle">
       <h2 class="rec-part-title" id="recDeliveryTitle">Delivery</h2>
+      <div id="recAlert">${recAlertHtml(send)}</div>
       <p class="rec-tiles-cap muted">Delivery outcomes keep updating as receipts arrive; the audience at fire and the published post are fixed.</p>
       <div class="rec-tiles">${outcomeTilesHtml(outcomes)}</div>
       <p class="rec-recon muted">${outcomeReconHtml(outcomes)}</p>
@@ -804,6 +827,7 @@ function renderFrozenRecord(
           return;
         }
         setHtml($("#recPill", root), phasePill(fresh.phase));
+        setHtml($("#recAlert", root), recAlertHtml(fresh));
         if (
           fresh.email_only !== view.email_only ||
           fresh.links.archive !== view.links.archive ||
@@ -863,6 +887,15 @@ function postPartHtml(send: SendView): Html {
     ? html`<div class="rec-arch-what"><strong>${icon("mail")}Email only</strong><span class="rec-arch-note">Not on your home page or in your public archive.</span></div><button type="button" class="secondary" id="recListing">Add to archive…</button>`
     : html`<div class="rec-arch-what"><strong>${icon("link")}In your archive</strong><span class="rec-arch-note">Listed on your home page and in your public archive.</span></div><button type="button" class="secondary" id="recListing">Remove from archive…</button>`;
   return html`${link}<div class="rec-arch">${where}</div>`;
+}
+
+/** No receipts long after dispatch (SPEC §8), in the server's words: amber above the tiles,
+ *  so a send whose provider's events aren't arriving never reads as ordinary settling. */
+function recAlertHtml(send: SendView): Html {
+  const c = conditionOf(send, "no_receipts");
+  return c
+    ? html`<div class="health amber" role="status"><span class="health-dot">⚠️</span><div>${c.message}</div></div>`
+    : html``;
 }
 
 /** A sent send's outcomes from its counters: the same buckets as the record's own read,

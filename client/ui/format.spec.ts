@@ -3,6 +3,7 @@ import {
   fmt,
   invalidAddressesMessage,
   lateStr,
+  notSentMessage,
   parseAddresses,
   toLocalInput,
   untilStr,
@@ -27,6 +28,47 @@ describe("invalidAddressesMessage", () => {
     expect(invalidAddressesMessage([])).toBeNull();
     expect(invalidAddressesMessage(["typo@gmail"])).toBe("Not an email address: typo@gmail");
     expect(invalidAddressesMessage(["a", "b@c"])).toBe("Not email addresses: a, b@c");
+  });
+});
+
+describe("notSentMessage", () => {
+  const refused =
+    "The provider refused it: ses 400 MessageRejected: Email address is not verified. Sending to this address again gets the same answer until what the provider names is fixed.";
+
+  it("says the server's reason for a lone address, with no retry advice of its own (SPEC §5)", () => {
+    expect(notSentMessage(0, 1, [{ email: "you@b.c", message: refused }])).toBe(refused);
+  });
+
+  it("names whose each reason is, once per reason, and who Send again goes to", () => {
+    const noAnswer =
+      "The provider didn’t answer, so the test may have arrived: timeout. Check the inbox before sending it again.";
+    expect(
+      notSentMessage(1, 4, [
+        { email: "a@b.c", message: refused },
+        { email: "b@b.c", message: noAnswer },
+        { email: "c@b.c", message: refused },
+      ]),
+    ).toBe(
+      `Sent to 1 of 4. a@b.c, c@b.c: ${refused} b@b.c: ${noAnswer} Send again goes only to those.`,
+    );
+  });
+
+  it("still names an address that came back with no reason beside others that did", () => {
+    expect(
+      notSentMessage(0, 2, [
+        { email: "a@b.c", message: refused },
+        { email: "b@b.c", message: "" },
+      ]),
+    ).toBe(`a@b.c: ${refused} Not sent to b@b.c.`);
+  });
+
+  it("falls back to inviting a retry when there is no reason to give", () => {
+    expect(notSentMessage(0, 1, [{ email: "you@b.c", message: "" }])).toBe(
+      "Not sent. Send again to try.",
+    );
+    expect(notSentMessage(1, 2, [{ email: "you@b.c", message: "" }])).toBe(
+      "Sent to 1 of 2. Not sent to you@b.c. Send again to try those.",
+    );
   });
 });
 

@@ -23,6 +23,7 @@ import { archiveAnswers } from "../lib/archive_address";
 import { archiveUrl } from "../render/render";
 import { sendActions, sendConditions } from "./conditions";
 import { nextChangeAt } from "./feed";
+import { isStuck } from "./stuck";
 import { isWedged } from "./wedged";
 
 /**
@@ -33,10 +34,12 @@ import { isWedged } from "./wedged";
  *   - `progressing`     handing recipients to the provider at the pace the platform allows,
  *                       including a send too large for one tick waiting for the next.
  *   - `retrying`        handing off, but with recipients already retried (transient errors).
- *   - `backing-off`     work remains, nothing is in flight, and the pause follows an error:
+ *   - `backing-off`     work remains and the pause follows an error: nothing in flight and
  *                       recipients waiting on their retry after a transient error, or the
  *                       provider unavailable until the halt's next retry
- *                       (`provider.halt.retry_at`).
+ *                       (`provider.halt.retry_at`), even with a batch it never answered
+ *                       in flight awaiting Resolve, or held on another send's outage
+ *                       before its first hand-off.
  *   - `needs-attention` wedged: nothing left to hand off, and the last run released the
  *                       send with recipients in flight whose fate is unknown (§12) —
  *                       awaiting Resolve;
@@ -56,6 +59,7 @@ function derivePhase(
   wedged: boolean,
   refused: boolean,
   unavailable: boolean,
+  audienceFixed: boolean,
 ): SendPhase {
   switch (status) {
     case "scheduled":
@@ -72,14 +76,23 @@ function derivePhase(
         // provider refusing the account
         return "needs-attention";
       }
+      // Paused for a provider outage with work left: nothing goes out until the halt's next
+      // retry, whatever is in flight. A batch the provider never answered stays in flight
+      // for Resolve and will not move on its own, so it never makes the pause read as
+      // progress (SPEC §12). The provider answering a batch ends the halt.
+      // A send held on the outage before its first hand-off has fixed no audience yet, so
+      // nothing is pending, but all of it is still to go.
+      if (unavailable && (counts.pending > 0 || !audienceFixed)) {
+        return "backing-off";
+      }
       if (counts.in_flight > 0) {
         return hasRetries ? "retrying" : "progressing";
       }
       // Work remains and nothing is in flight: the run released the lease. Only an error
       // makes that a back-off. The retry probe already tells one apart: a pending recipient
-      // with attempts is one a transient error put back in the queue. Without either, the
-      // tick's budget ran out on a healthy send, which the next tick carries on (SPEC §12).
-      if (counts.pending > 0 && (hasRetries || unavailable)) {
+      // with attempts is one a transient error put back in the queue. Without it, the tick's
+      // budget ran out on a healthy send, which the next tick carries on (SPEC §12).
+      if (counts.pending > 0 && hasRetries) {
         return "backing-off";
       }
       return "progressing";
@@ -237,12 +250,23 @@ export function buildSendView(
   const refused = halt?.reason === "account";
   const unavailable = halt?.reason === "unavailable";
 
-  const phase = derivePhase(send.status, counts, hasRetries, due, wedged, refused, unavailable);
+  const phase = derivePhase(
+    send.status,
+    counts,
+    hasRetries,
+    due,
+    wedged,
+    refused,
+    unavailable,
+    send.audience_resolved_at !== null,
+  );
   // A time to finish only while the send is handing off: paused (backing off, halted,
   // wedged), the ticks ahead would not hand anyone off, so a finish counted from them is
   // not coming. Between ticks a healthy send is still handing off: the estimate counts the
   // wait for the next tick.
-  const handingOff = phase === "progressing" || phase === "retrying";
+  // A send in flight too long has handed off no one for the threshold, so the estimate
+  // counted from the ticks it sat still would promise a finish that is not coming either.
+  const handingOff = (phase === "progressing" || phase === "retrying") && !isStuck(send, now);
 
   return {
     id,

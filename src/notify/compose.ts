@@ -8,7 +8,7 @@
 
 import { dashboardLink } from "../../shared/dashboard_link";
 import type { OutcomeCounts } from "../../shared/imports";
-import { refusalAdvice } from "../../shared/sends";
+import { isSendOwnHalt, refusalAdvice } from "../../shared/sends";
 import type { DueImportNotification, DueNotification } from "../db/notifications";
 import type { Config } from "../env";
 import { escapeHtml, escapeHtmlAttr } from "../lib/html";
@@ -67,7 +67,20 @@ export function composeNotification(n: DueNotification, config: Config): Rendere
           [
             `No email provider is connected to this deployment, so ${title} is held where it is.`,
             refusalAdvice(n.halt_cause),
-            "No one has been marked unsent. The send keeps trying, at most an hour apart, and goes out at the first try after a provider is connected, mailing no one twice.",
+            "No one has been marked unsent because of this. The send keeps trying, at most an hour apart, and goes out at the first try after a provider is connected, mailing no one twice. Any other post that comes due meanwhile waits with it, and you are not told again.",
+          ],
+          link,
+        );
+      }
+      if (isSendOwnHalt(n.halt_cause)) {
+        // The provider refuses this send's own email, not the account: no other send waits
+        // on it (SPEC §12).
+        return message(
+          `Problem with ${title}: the provider is refusing it`,
+          [
+            `The email provider is refusing ${title} itself, so it is paused where it is. The provider said: ${n.halt_error || "no detail given"}`,
+            refusalAdvice(n.halt_cause),
+            "No one has been marked unsent because of this. The send keeps trying, at most an hour apart, mailing no one twice. Other posts go out as usual.",
           ],
           link,
         );
@@ -77,16 +90,16 @@ export function composeNotification(n: DueNotification, config: Config): Rendere
         [
           `The email provider is refusing this account, so ${title} is paused where it is. The provider said: ${n.halt_error || "no detail given"}`,
           refusalAdvice(n.halt_cause),
-          "No one has been marked unsent. The send keeps trying, at most an hour apart, and resumes on its own at the next try after the account is fixed, mailing no one twice.",
+          "No one has been marked unsent because of this. The send keeps trying, at most an hour apart, and resumes on its own at the next try after the account is fixed, mailing no one twice. Any other post that comes due meanwhile waits with it, and you are not told again.",
         ],
         link,
       );
     case "stuck":
       return message(
-        `Problem with ${title}: still sending after ${minutes(STUCK_THRESHOLD_MS)} minutes`,
+        `Problem with ${title}: nothing has gone out for ${minutes(STUCK_THRESHOLD_MS)} minutes`,
         [
-          `${title} started sending${n.started_at ? ` at ${when(n.started_at)}` : ""} and is still going: ${n.c_pending + n.c_in_flight} recipients have not been sent yet.`,
-          "It keeps retrying on its own. If it stays like this, check the provider's status and the send's page.",
+          `${title} has handed off no one since ${when(n.progress_at ?? n.started_at ?? n.episode)}, with no retry or provider problem to explain it: ${n.c_pending + n.c_in_flight} recipients have not been sent yet.`,
+          "The sweep that sends may have stopped or keep failing on this send, or another send may be taking every minute's sending allowance. Check the send's page and the app's logs. It picks up where it stopped, mailing no one twice.",
         ],
         link,
       );
@@ -155,5 +168,23 @@ export function sampleNotification(config: Config): RenderedEmail {
       "If it arrived, the channel works; nothing else was sent.",
     ],
     dashboardLink(config.appOrigin, "/settings"),
+  );
+}
+
+/**
+ * Tell the publisher the SES sandbox refused a signup's confirmation (SPEC §7, §8): the reader
+ * was told a link is on its way and none went, and every signup from an address not verified
+ * in SES meets the same until AWS grants production access. Sent at most once a UTC day, and
+ * naming no reader.
+ */
+export function composeSandboxNotification(config: Config): RenderedEmail {
+  return message(
+    "A signup's confirmation was refused: SES is still in the sandbox",
+    [
+      "Someone signed up, and Amazon SES refused to send their confirmation email, because the SES account is still in the sandbox, which mails only addresses verified in SES. They were told a link is on its way, so they may try again.",
+      refusalAdvice("sandbox"),
+      "Until then, every signup from an address not verified in SES is refused the same way, and a post reaches only verified addresses. You are told at most once a day.",
+    ],
+    dashboardLink(config.appOrigin, "/subscribers"),
   );
 }

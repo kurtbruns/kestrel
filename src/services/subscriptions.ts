@@ -2,15 +2,16 @@
  *  double opt-in confirmation through the provider seam. Used by both the public
  *  form and the authed API. */
 
+import * as notifications from "../db/notifications";
 import { getSettings, resolveConfirmationEmail } from "../db/settings";
 import * as subscribers from "../db/subscribers";
 import { confirmationEmail } from "../emails/system";
 import { newToken } from "../lib/ids";
-import { log } from "../lib/log";
+import { errorText, log } from "../lib/log";
 import { CONFIRM_COOLDOWN_MS, CONFIRM_LINK_TTL_MS } from "../lib/time";
 import { unwrap } from "../lib/unwrap";
 import { getProvider, requireConnectedProvider } from "../providers";
-import type { RenderedEmail, SendBatchResult } from "../providers/types";
+import type { HaltCause, RenderedEmail, SendBatchResult } from "../providers/types";
 import { resolveBranding } from "../render/template_engine";
 import type { RequestContext } from "../router";
 
@@ -85,6 +86,16 @@ export async function requestSubscription(
       created,
     );
     log.warn("subscribe.confirmation_refused", { provider: c.config.provider, error: sent.error });
+    if (sent.cause === "sandbox") {
+      // The reader is told a link is on its way, so the publisher is the one who has to
+      // hear that none went (SPEC §7, §8): at most once a day.
+      // Telling is downstream of the signup: a failure to record it never changes the answer.
+      try {
+        await notifications.sandboxNotice(db, now);
+      } catch (err) {
+        log.error("subscribe.failed", { provider: c.config.provider, error: errorText(err) });
+      }
+    }
     return { kind: "failed", delivered: "no", error: sent.error };
   }
   // Sent, or it may have been: arm its link so it works if it arrived, and keep the claim,
@@ -129,7 +140,11 @@ async function sendConfirmation(
   message: RenderedEmail,
   subscriber: subscribers.SubscriberRow,
   attemptAt: number,
-): Promise<{ delivered: "yes" } | { delivered: "no" | "unknown"; error: string }> {
+): Promise<
+  | { delivered: "yes" }
+  | { delivered: "no"; error: string; cause?: HaltCause }
+  | { delivered: "unknown"; error: string }
+> {
   const provider = getProvider(c.config, c.env);
   const recipients = [{ email: subscriber.email, unsubscribeUrl: "" }];
   let result: SendBatchResult;
@@ -144,7 +159,7 @@ async function sendConfirmation(
     return { delivered: "unknown", error: err instanceof Error ? err.message : String(err) };
   }
   if (result.kind === "halted") {
-    return { delivered: "no", error: result.halt.error };
+    return { delivered: "no", error: result.halt.error, cause: result.halt.cause };
   }
   const [answer] = result.results;
   if (!answer) {

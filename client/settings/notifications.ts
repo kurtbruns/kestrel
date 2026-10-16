@@ -40,12 +40,17 @@ const NOTIFICATION_KINDS: Record<NotificationStatusKind, string> = {
   wedged: "waiting to be resolved",
   missed: "missed fire time",
   import: "list imported",
+  sandbox: "signup refused by the SES sandbox",
   test: "test",
 };
 
 /** What a status line is about: the send and what happened, or just "test notification". */
 function aboutNotification(n: { kind: NotificationStatusKind; subject: string }): string {
-  return n.kind === "test" ? "test notification" : `${n.subject} (${NOTIFICATION_KINDS[n.kind]})`;
+  if (n.kind === "test") {
+    return "test notification";
+  }
+  // A sandbox notice is about no send or import, so it has no subject to lead with.
+  return n.subject ? `${n.subject} (${NOTIFICATION_KINDS[n.kind]})` : NOTIFICATION_KINDS[n.kind];
 }
 
 /** The last delivered notification, and a newer failure when the channel has stopped working. */

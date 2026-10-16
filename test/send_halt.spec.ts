@@ -12,7 +12,7 @@ import { runSend } from "../src/send/loop";
 import { sweep } from "../src/send/sweep";
 import { BatchProvider, SesLikeProvider } from "./support/batching";
 import { nextRetry } from "./support/clock";
-import { has } from "./support/conditions";
+import { condition, has } from "./support/conditions";
 import { guardD1 } from "./support/d1_guard";
 import { addresses, dueSend, resetDatabase, seedConfirmed, tick, ticks } from "./support/fixtures";
 import { allowErrorLogs } from "./support/log";
@@ -140,7 +140,7 @@ describe("a provider outage", () => {
     expect(emails.every((e) => transport.timesMailed(e) === 1)).toBe(true);
   });
 
-  it("reads backing-off and stays quiet until the stuck threshold", async () => {
+  it("reads backing-off, and is raised as stuck only once its retry is long overdue", async () => {
     await seedConfirmed(addresses(3));
     const send = await dueSend();
     transport.rateLimit = 2;
@@ -155,10 +155,14 @@ describe("a provider outage", () => {
       false,
     ]);
 
-    // Still quiet at the threshold itself, and raised as stuck just past it, backing off all
-    // the while.
+    // The halt explains the wait until its retry, so the threshold counts from there: still
+    // quiet at the threshold itself, and raised as stuck just past it, as when the sweep
+    // stopped and the retry never ran, backing off all the while (SPEC §12).
     const row = (await sends.getSend(env.DB, send.id))!;
-    const threshold = row.started_at! + STUCK_THRESHOLD_MS;
+    expect(viewOf(row, "ses", false, row.started_at! + STUCK_THRESHOLD_MS + 1).conditions).toEqual(
+      prog.conditions,
+    );
+    const threshold = row.halt_retry_at! + STUCK_THRESHOLD_MS;
     const at = (now: number) => viewOf(row, "ses", false, now);
     expect([at(threshold).phase, has(at(threshold), "stuck")]).toEqual(["backing-off", false]);
     expect([at(threshold + 1).phase, has(at(threshold + 1), "stuck")]).toEqual([
@@ -183,6 +187,11 @@ describe("a request with no answer on a provider without a key", () => {
     expect([row.halt_reason, row.halt_cause]).toEqual(["unavailable", "outage"]);
     expect(row.halt_retry_at).toBeGreaterThan(Date.now());
     expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ dispatched: 1, pending: 2 });
+    // Paused, not progressing, though a batch is in flight: it waits for Resolve and will
+    // not move on its own, and nothing else goes out before the retry (SPEC §12).
+    const paused = viewOf(row, "ses", false, Date.now());
+    expect([paused.phase, paused.dispatch.eta_ms]).toEqual(["backing-off", null]);
+    expect(condition(paused, "provider_unavailable")?.retry_at).toBe(row.halt_retry_at);
     await sweep(capped()); // the same minute: the retry isn't due
     expect(ses.requests).toBe(1);
     await untilSent(send.id, 5); // later ticks send the rest; the lost one waits for Resolve
@@ -294,7 +303,6 @@ describe("the halt's backoff", () => {
     ["unavailable", [0, 1, 3, 8, 23, 53, 113, 173]],
     ["account", [0, 5, 20, 50, 110, 170]],
   ] as const)("spaces %s retries out across ticks, consuming no one", async (reason, expected) => {
-    allowErrorLogs("send.stuck");
     const emails = addresses(250);
     await seedConfirmed(emails);
     const send = await dueSend();
@@ -332,7 +340,8 @@ describe("the halt's backoff", () => {
     expect(prog.provider.halt?.retry_at).toBe(held.halt_retry_at);
     expect(prog.provider.halt!.retry_at).toBeGreaterThan(Date.now());
     expect(prog.phase).toBe(reason === "account" ? "needs-attention" : "backing-off");
-    expect(has(prog, "stuck")).toBe(true); // a long halt is still raised
+    // A long halt is raised as the halt, which says why it waits, never as in flight too long.
+    expect(has(prog, "stuck")).toBe(false);
   });
 
   it("returns to every-tick pace the moment a batch is answered", async () => {
@@ -403,11 +412,21 @@ describe("the halt's backoff", () => {
       }
     }
     expect(waitingTicks).toBeGreaterThan(5);
-    // Every send retried on the account schedule, never once a tick.
-    expect(transport.requests).toBe(5 * 5);
+    // One request a retry on the account schedule, never once a tick, and only one send
+    // asks: the others join its refusal (SPEC §12).
+    expect(transport.requests).toBe(5);
+    let probing = 0;
     for (const id of ids) {
-      await expectHeld(id, 3);
+      const send = (await sends.getSend(env.DB, id))!;
+      expect([send.status, send.halt_reason]).toEqual(["sending", "account"]);
+      if (send.audience_resolved_at === null) {
+        expect(send.c_pending + send.c_in_flight + send.c_accepted).toBe(0); // held from the start
+      } else {
+        probing += 1;
+        await expectHeld(id, 3);
+      }
     }
+    expect(probing).toBe(1);
   });
 
   it("mails everyone exactly once after the fault clears, at the next scheduled retry", async () => {
@@ -587,6 +606,101 @@ describe("the real adapters, end to end through the loop", () => {
     expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 2, pending: 18 });
     const held = (await rows(send.id)).filter((r) => r.status === "pending");
     expect(held.every((r) => r.attempts === 0)).toBe(true);
+  });
+
+  it("a quota SES keeps partly refusing is one refusal: told once, its start kept, its backoff growing (SPEC §12)", async () => {
+    const emails = addresses(20);
+    await seedConfirmed(emails);
+    const send = await dueSend();
+    vi.mocked(providers.getProvider).mockReturnValue(sesAdapter());
+    // The rolling quota frees up a couple at a time: each retry takes that many and refuses
+    // the rest, and one retry finds none free at all.
+    let free = 2;
+    const { mailed } = answerSes(() =>
+      free-- > 0
+        ? entryOk()
+        : { Status: "ACCOUNT_DAILY_QUOTA_EXCEEDED", Error: "Daily message quota exceeded." },
+    );
+    const refusals = () =>
+      env.DB.prepare("SELECT kind, episode FROM notifications WHERE send_id = ?")
+        .bind(send.id)
+        .all<{ kind: string; episode: number }>()
+        .then((r) => r.results);
+
+    await sweep(capped());
+    const first = (await sends.getSend(env.DB, send.id))!;
+    expect([first.halt_reason, first.halt_cause, first.halt_retries]).toEqual([
+      "account",
+      "quota",
+      1,
+    ]);
+    const since = first.halted_at!;
+
+    const steps = HALT_BACKOFF_MS.account;
+    for (const [retry, taken] of [
+      [2, 2],
+      [3, 0], // an answer that only held readers back continues the hold the same way
+      [4, 2],
+    ] as const) {
+      free = taken;
+      vi.setSystemTime((await sends.getSend(env.DB, send.id))!.halt_retry_at!);
+      await sweep(capped());
+      const row = (await sends.getSend(env.DB, send.id))!;
+      expect([row.halt_reason, row.halted_at, row.halt_retries], `retry ${retry}`).toEqual([
+        "account",
+        since,
+        retry,
+      ]);
+      expect(row.halt_retry_at! - Date.now()).toBe(steps[Math.min(retry, steps.length) - 1]);
+      const prog = viewOf(row, "ses", false, Date.now());
+      expect(condition(prog, "refused")?.since).toBe(since);
+      expect(has(prog, "stuck")).toBe(false);
+    }
+    // Those it took are recorded at once; those it refused wait with no attempt spent.
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 6, pending: 14 });
+    expect((await rows(send.id)).every((r) => r.attempts === 0)).toBe(true);
+    expect(await refusals()).toEqual([{ kind: "refused", episode: since }]);
+
+    // A batch SES takes in full ends the hold, and the send finishes, mailing each once (I4).
+    free = 100;
+    vi.setSystemTime((await sends.getSend(env.DB, send.id))!.halt_retry_at!);
+    await sweep(capped());
+    const done = (await sends.getSend(env.DB, send.id))!;
+    expect([done.status, done.halt_reason, done.halted_at]).toEqual(["sent", null, null]);
+    expect(emails.every((e) => mailed.get(e) === 1)).toBe(true);
+    expect((await refusals()).filter((n) => n.kind === "refused")).toHaveLength(1);
+  });
+
+  it("SES throttling a few entries is a rate limit, retried a minute later each time, never spaced out like a refusal (SPEC §12)", async () => {
+    const emails = addresses(20);
+    await seedConfirmed(emails);
+    const send = await dueSend();
+    vi.mocked(providers.getProvider).mockReturnValue(sesAdapter());
+    // Every request takes some and has the rest throttled for the account's rate: the n-th
+    // five addresses are throttled on their first n tries.
+    const tries = new Map<string, number>();
+    const { mailed } = answerSes((to) => {
+      const n = tries.get(to) ?? 0;
+      tries.set(to, n + 1);
+      return n >= Math.floor(emails.indexOf(to) / 5)
+        ? entryOk()
+        : { Status: "ACCOUNT_THROTTLED", Error: "Maximum sending rate exceeded." };
+    });
+
+    await sweep(capped());
+    for (let retry = 0; retry < 3; retry++) {
+      const row = (await sends.getSend(env.DB, send.id))!;
+      expect([row.halt_reason, row.halt_cause, row.halt_retries], `retry ${retry}`).toEqual([
+        "unavailable",
+        "rate_limit",
+        1,
+      ]);
+      expect(row.halt_retry_at! - row.halted_at!).toBe(HALT_BACKOFF_MS.unavailable[0]);
+      vi.setSystemTime(row.halt_retry_at!);
+      await sweep(capped());
+    }
+    expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
+    expect(emails.every((e) => mailed.get(e) === 1)).toBe(true);
   });
 
   it("a group whose first request SES partly held back sends nothing more that tick", async () => {
