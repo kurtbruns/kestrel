@@ -10,7 +10,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading from 1.11.0.** Two database migrations: run `npm run sync-migrations`, then `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development) before deploying. `0007_post_email_only` adds each post's listing, reading every existing post as listed in the archive, so the archive shows what it did before; it adds a column with a default and rewrites no rows. `0008_unlisted_links` gives every post its unlisted link, and records that every send made before it links its archive address, so those addresses keep answering whatever the post's listing. It writes each post and send row once. An instance verified with an earlier release has its test post in the archive: open it under **Sent** and select **Remove from archive…**.
+**Upgrading from 1.11.0.** Two database migrations: run `npm run sync-migrations`, then `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development) before deploying. `0007_post_email_only` adds each post's listing, reading every existing post as listed in the archive, so the archive shows what it did before; it adds a column with a default and rewrites no rows. `0008_unlisted_links` gives every post its unlisted link, and records that every send made before it links its archive address, so those addresses keep answering whatever the post's listing. It writes each post and send row once. An instance verified with an earlier release has its test post in the archive: open it under **Sent** and select **Remove from archive…**. One API change can break a script of yours, listed under Breaking: one that sets a slug by hand handles a 409 `slug_taken` by choosing another, where it used to get a numbered slug.
 
 ### Added
 
@@ -26,6 +26,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - A sent post's recipient list opens on **All** rather than **Failures**, its switch now reading **All | Delivered | Failures**. The failures are still counted in the tiles above it, one switch away.
 - Verify it works sends its test post as **Email only**, and ends by erasing the SES simulator addresses and any test subscriber that won't be a reader.
 - The demo publication (`npm run seed`) opens with the operator's own test send, made as Verify it works makes one: email only, to one test address, before the list came in. It shows under **Sent** with the **Email only** label, and the archive leaves it out. Its scheduled post, **A quick note**, says how to send a post as email only.
+
+### Breaking
+
+- A slug sent by hand (`slug` on `POST /api/posts`, `PUT /api/posts/:id`, the listing route, or a schedule) that another post holds is now refused with a 409 `slug_taken`, and one that isn't lowercase words joined by single hyphens with a 400 `slug_invalid`, where before it was numbered or rewritten silently. A change to a sent post's slug is a 409 `slug_permanent` (SPEC §4).
 
 ## [1.11.0] - 2026-10-15
 

@@ -5,6 +5,7 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
+import { getPost, setPublishing } from "../src/db/posts";
 import { getConfig } from "../src/env";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { sweep } from "../src/send/sweep";
@@ -156,6 +157,36 @@ describe("the archive address (SPEC §4, §5)", () => {
     await fire(sendId);
     expect((await get("/archive/the-spring-letter")).status).toBe(200);
     expect((await get("/archive/spring-update")).status).toBe(404);
+  });
+
+  it("is fixed while a scheduled email frozen before unlisted links already carries it", async () => {
+    const id = await makeDraft("Spring Update");
+    const sendId = await schedule(id);
+    await setRow(sendId, { web_link: "archive" }); // as 0008 marks a send frozen before it
+    const res = await setListing(id, { slug: "the-spring-letter" });
+    expect(res.status).toBe(409);
+    expect(await readJson(res)).toMatchObject({ error: "slug_permanent", field: "slug" });
+    expect((await read(id)).post.slug).toBe("spring-update");
+    // Naming the address it has, or changing only the listing, is still fine.
+    expect((await setListing(id, { slug: "spring-update", email_only: true })).status).toBe(200);
+  });
+
+  it("writes only the settings a change names, so a concurrent change to another stands", async () => {
+    const id = await makeDraft("Spring Update");
+    const stale = await getPost(env.DB, id);
+    await setListing(id, { slug: "the-spring-letter" }); // another writer, after the read
+    await setPublishing(env.DB, stale!, { emailOnly: true });
+    const { post } = await read(id);
+    expect(post).toMatchObject({ slug: "the-spring-letter", email_only: true });
+  });
+
+  it("holds the address once the send starts, even against a change checked just before", async () => {
+    const id = await makeDraft("Spring Update");
+    const sendId = await schedule(id);
+    const checked = await getPost(env.DB, id); // the check sees a scheduled post
+    await fire(sendId);
+    await setPublishing(env.DB, checked!, { slug: { slug: "the-spring-letter", auto: false } });
+    expect((await read(id)).post.slug).toBe("spring-update");
   });
 
   it("is refused, not renamed, when malformed or another post's, wherever it is set", async () => {

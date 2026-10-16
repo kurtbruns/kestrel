@@ -176,16 +176,31 @@ export function setPublishingStmt(
   input: PublishingInput,
   guard?: { sql: string; binds: unknown[] },
 ): D1PreparedStatement {
-  const extra = guard ? ` AND ${guard.sql}` : "";
-  return db
-    .prepare(`UPDATE posts SET email_only = ?, slug = ?, slug_auto = ? WHERE id = ?${extra}`)
-    .bind(
-      (input.emailOnly ?? post.email_only) ? 1 : 0,
-      input.slug?.slug ?? post.slug,
-      (input.slug?.auto ?? post.slug_auto) ? 1 : 0,
-      post.id,
-      ...(guard?.binds ?? []),
+  // Only the fields the change names, so a concurrent change to another isn't undone.
+  const sets: string[] = [];
+  const binds: unknown[] = [];
+  if (input.emailOnly !== undefined) {
+    sets.push("email_only = ?");
+    binds.push(input.emailOnly ? 1 : 0);
+  }
+  const where = ["id = ?"];
+  if (input.slug !== undefined) {
+    sets.push("slug = ?", "slug_auto = ?");
+    binds.push(input.slug.slug, input.slug.auto ? 1 : 0);
+    // An address is fixed once the send starts (SPEC §4): the check before this write can't see
+    // a send that starts between the two, so the write holds the rule itself.
+    where.push(
+      "NOT EXISTS (SELECT 1 FROM sends WHERE sends.post_id = posts.id AND sends.status IN ('sending', 'sent'))",
     );
+  }
+  if (guard) {
+    where.push(guard.sql);
+  }
+  return db
+    .prepare(
+      `UPDATE posts SET ${sets.length ? sets.join(", ") : "id = id"} WHERE ${where.join(" AND ")}`,
+    )
+    .bind(...binds, post.id, ...(guard?.binds ?? []));
 }
 
 /** Whether a settings change changes anything about the post. */

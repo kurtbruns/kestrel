@@ -986,7 +986,7 @@ export async function renderEditor(
     const controls = $("#schedControls");
     // --- the banner: the cards' countdown, and the review window closing at the fire time ---
     // Before the fire time it counts down on the clock. From then the server refuses Cancel
-    // and Reschedule (SPEC §6), so the same line reads "Preparing to send…" in place of the
+    // and Edit schedule (SPEC §6), so the same line reads "Preparing to send…" in place of the
     // countdown and the buttons stay where they are, disabled: the page hands off to the
     // live send within seconds, so nothing needs to move. Past the server's missed
     // tolerance it says how late the send is, from the server's condition.

@@ -43,10 +43,10 @@ import type { AppEnv, Config } from "../env";
 import { badRequest, notFound, refusal } from "../lib/errors";
 import { newId } from "../lib/ids";
 import { log } from "../lib/log";
+import { slugRefusal } from "../lib/slug_refusals";
 import { unwrap } from "../lib/unwrap";
 import { render } from "../render/render";
 import { type EmailBranding, resolveBranding } from "../render/template_engine";
-import { slugRefusal } from "../routes/post_settings";
 import { viewSend } from "./describe";
 
 /** The one render a freeze performs: the post's current content and images through
@@ -109,7 +109,7 @@ const FREEZE_RETRIES = 3;
 
 /** The refusal for a post that already has its one active send (SPEC §6). */
 const ACTIVE_SEND_EXISTS =
-  "This post already has a send scheduled or going out. Reschedule or cancel that send instead.";
+  "This post already has a send scheduled or going out. Edit its schedule or cancel it instead.";
 
 /** Create a scheduled Send from the post's current content and lock the post. `postSettings`, when
  *  given, sets the post's listing and slug in the same batch (SPEC §4, §5), already resolved
@@ -132,7 +132,7 @@ export async function freeze(
       "post_not_draft",
       post.status === "sent"
         ? "This post has already been sent, so it can’t be scheduled again."
-        : "This post is already scheduled. Reschedule or cancel its send instead.",
+        : "This post is already scheduled. Edit its schedule or cancel it instead.",
     );
   }
   // The subject is the one field the reader sees in their inbox (SPEC §6). One

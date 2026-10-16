@@ -5,10 +5,11 @@
  * wherever it is set, before anything is written.
  */
 
-import type { PostRow, PublishingInput, SlugRefusal } from "../db/posts";
+import type { PostRow, PublishingInput } from "../db/posts";
 import { resolveSlug } from "../db/posts";
+import { getActiveSendForPost, publishedSendForPost } from "../db/sends";
 import { fieldError, type JsonObject, optBoolean, optString } from "../lib/body";
-import { refusal } from "../lib/errors";
+import { slugPermanent, slugRefusal } from "../lib/slug_refusals";
 
 /** The settings fields of a request body, each absent when the request leaves it as it is. */
 export interface SettingsBody {
@@ -29,45 +30,27 @@ export function readSettingsBody(body: JsonObject): SettingsBody {
   return { emailOnly, slug, slugAuto };
 }
 
-/** The refusal for a slug that can't be set, in the words a client shows under the field. */
-export function slugRefusal(code: SlugRefusal) {
-  return code === "slug_invalid"
-    ? refusal(
-        400,
-        "slug_invalid",
-        "Use lowercase letters and numbers, with single hyphens between words, up to 80 characters.",
-        { field: "slug" },
-      )
-    : refusal(409, "slug_taken", "Another post already has this address. Choose another.", {
-        field: "slug",
-      });
-}
-
 /**
- * Resolve a settings change against the post and every other post, or refuse it. A published
- * post's address is fixed (SPEC §4): naming the slug it has is fine, and any other change to it
- * is a 409 `slug_permanent`. A malformed slug is a 400 `slug_invalid`, and one another post
- * holds a 409 `slug_taken`; both name `slug`, and nothing is written.
+ * Resolve a settings change against the post and every other post, or refuse it. The address is
+ * fixed once the post's send starts, and while its scheduled send's email (frozen before unlisted
+ * links) carries it (SPEC §4): naming the slug it has is fine, and any other change to it is a
+ * 409 `slug_permanent`. A malformed slug is a 400 `slug_invalid`, and one another post holds a
+ * 409 `slug_taken`; both name `slug`, and nothing is written.
  */
 export async function resolveSettings(
   db: D1Database,
   post: PostRow,
   body: SettingsBody,
-  published: boolean,
 ): Promise<PublishingInput> {
   const input: PublishingInput = { emailOnly: body.emailOnly };
   if (body.slug === undefined && body.slugAuto === undefined) {
     return input;
   }
-  if (published) {
+  const fixed = await addressFixed(db, post);
+  if (fixed) {
     const moves = (body.slug !== undefined && body.slug !== post.slug) || body.slugAuto === true;
     if (moves) {
-      throw refusal(
-        409,
-        "slug_permanent",
-        "This post’s archive address is fixed once it’s sent, since people may have its link.",
-        { field: body.slug !== undefined ? "slug" : "slug_auto" },
-      );
+      throw slugPermanent(body.slug !== undefined ? "slug" : "slug_auto", fixed);
     }
     return input;
   }
@@ -81,4 +64,14 @@ export async function resolveSettings(
   }
   input.slug = resolved;
   return input;
+}
+
+/** Why a post's address can no longer move, or null while it can: its send has started, or its
+ *  scheduled email, frozen before unlisted links, already links to it. */
+async function addressFixed(db: D1Database, post: PostRow): Promise<"sent" | "linked" | null> {
+  if (await publishedSendForPost(db, post.id)) {
+    return "sent";
+  }
+  const active = await getActiveSendForPost(db, post.id);
+  return active?.web_link === "archive" ? "linked" : null;
 }

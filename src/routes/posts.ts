@@ -15,15 +15,15 @@ import {
   currentSendSeq,
   getActiveSendForPost,
   latestSentSendForPost,
-  publishedSendForPost,
 } from "../db/sends";
 import { fieldError, optBoolean, optString, optStringOrNull, readJsonObject } from "../lib/body";
 import { badRequest, json, notFound, refusal } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
+import { slugRefusal } from "../lib/slug_refusals";
 import { unwrap } from "../lib/unwrap";
 import type { RequestContext } from "../router";
 import { param } from "../router";
-import { readSettingsBody, resolveSettings, slugRefusal } from "./post_settings";
+import { readSettingsBody, resolveSettings } from "./post_settings";
 
 function author(c: RequestContext): string | null {
   return c.principal?.email ?? c.principal?.kind ?? null;
@@ -325,8 +325,7 @@ export async function setListing(c: RequestContext): Promise<Response> {
   if (!post) {
     throw notFound("post");
   }
-  const published = (await publishedSendForPost(c.env.DB, post.id)) !== null;
-  const input = await resolveSettings(c.env.DB, post, fields, published);
+  const input = await resolveSettings(c.env.DB, post, fields);
   const changed = await slugGuarded(() => posts.setPublishing(c.env.DB, post, input));
   const now = changed ? unwrap(await posts.getPost(c.env.DB, post.id), "post") : post;
   const answer: ListingResponse = {

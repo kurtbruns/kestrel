@@ -319,7 +319,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
         }
       }
       // The whole card opens the post; the subject link handles keyboard/middle-click,
-      // and the schedule-management buttons (Reschedule, Cancel) opt out of navigation
+      // and the schedule-management buttons (Edit schedule, Cancel) opt out of navigation
       // (like the posts table's row-click guard).
       for (const card of $$<HTMLElement>(".card.clickable", schedEl)) {
         card.onclick = (e) => {

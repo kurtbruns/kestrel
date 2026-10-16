@@ -83,7 +83,7 @@ export async function schedule(c: RequestContext): Promise<Response> {
   requireConnectedProvider(c.config);
   const fireAt = parseFutureFireAt(body.fire_at, c.config.minLeadMs);
   // A draft has no started send, so its address can still change.
-  const settings = await resolveSettings(c.env.DB, post, fields, false);
+  const settings = await resolveSettings(c.env.DB, post, fields);
   const send = await freeze(c.env, c.config, post, fireAt, settings);
   const frozen: ScheduleResponse = unwrap(await viewWithCursor(c.env, send.id), "send");
   return json(frozen, 201);
@@ -112,7 +112,7 @@ export async function sendNow(c: RequestContext): Promise<Response> {
   // the minute at or after it like any other fire time.
   const now = Date.now();
   const fireAt = acceptFireAt(now + c.config.minLeadMs, c.config.minLeadMs, { now });
-  const settings = await resolveSettings(c.env.DB, post, fields, false);
+  const settings = await resolveSettings(c.env.DB, post, fields);
   let send: SendRow;
   try {
     send = await freeze(c.env, c.config, post, fireAt, settings);

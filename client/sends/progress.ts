@@ -66,7 +66,7 @@ export function countdownHtml(s: SendView): Html {
  * "Sends in …" before the fire time; "Preparing to send…" from the fire time (by the clock,
  * or sooner when the server already reads the send due) until the send starts and its card
  * leaves the queue; and, past the server's missed tolerance, how late it is, in the danger
- * tone. A card's window controls (`data-closes`, Cancel and Reschedule) hide at the fire
+ * tone. A card's window controls (`data-closes`, Cancel and Edit schedule) hide at the fire
  * time, when the review window closes (SPEC §6) and the server would refuse them, rather
  * than wait for the next read. A fire time inside the coming second gets a tick of its own
  * at that moment, so the switch lands when the countdown runs out, not up to a second

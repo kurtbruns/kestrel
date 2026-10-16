@@ -1,6 +1,6 @@
 // A post's settings as every surface words and edits them (SPEC §4, §5): whether it is
 // included in the archive, and its archive address. Post settings, Schedule, Send now,
-// Reschedule, and Add to archive edit a working copy through the same form, which reaches the
+// Edit schedule, and Add to archive edit a working copy through the same form, which reaches the
 // post only when the publisher presses that dialog's act, and show a refused address under its
 // field. One module, so the choice reads the same everywhere (DESIGN §3).
 
@@ -158,7 +158,7 @@ function wireSettingsForm(
 
 /**
  * What a working copy changes about the stored settings, as `PUT /api/posts/:id/listing` (and
- * Schedule, Send now, and Reschedule) take it, or null when it changes nothing. A fixed address
+ * Schedule, Send now, and Edit schedule) take it, or null when it changes nothing. A fixed address
  * never changes, and one handed back to the subject asks the server to derive it again.
  */
 export function settingsChange(saved: Publishing, working: Publishing): ListingBody | null {
