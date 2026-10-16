@@ -79,6 +79,7 @@ describe("one SendView on every route", () => {
     )) as ScheduleResponse;
     expectView(scheduled.send);
     expect(decodeSendCursor(scheduled.cursor)).not.toBeNull();
+    expect(scheduled.send.dispatch.duration_ms).toBeNull();
     const id = scheduled.send.id;
 
     const moved = (await readJson(
@@ -104,6 +105,7 @@ describe("one SendView on every route", () => {
     const canceled = (await readJson(await post(`/api/sends/${id}/cancel`))) as SendActionResponse;
     expectView(canceled.send);
     expect([canceled.send.status, canceled.send.phase]).toEqual(["canceled", "canceled"]);
+    expect(canceled.send.dispatch.duration_ms).toBeNull();
     for (const view of [scheduled.send, moved.send, list.sends[0], one.send, canceled.send]) {
       expect(view.links.email_html).toBe(`/api/sends/${id}/email?format=html`);
       expect(view.links.archive).toBeNull(); // never started: nothing published to link
@@ -119,10 +121,11 @@ describe("one SendView on every route", () => {
     ).send;
     expect(before.audience).toEqual({ count: 0, fixed: false, fixed_at: null });
     const now = Date.now();
+    const started = now - 2500;
     await env.DB.batch([
       env.DB.prepare(
         "UPDATE sends SET status = 'sent', started_at = ?, completed_at = ?, audience_resolved_at = ?, recipient_count = 3, c_accepted = 3 WHERE id = ?",
-      ).bind(now, now, now, send.id),
+      ).bind(started, now, now, send.id),
       env.DB.prepare("UPDATE posts SET status = 'sent' WHERE id = ?").bind(send.post_id),
     ]);
     const after = (
@@ -131,6 +134,7 @@ describe("one SendView on every route", () => {
       )) as SendResponse
     ).send;
     expect(after.audience).toEqual({ count: 3, fixed: true, fixed_at: now });
+    expect(after.dispatch.duration_ms).toBe(2500);
     const post = (await posts.getPost(env.DB, send.post_id))!;
     expect(after.links.archive).toMatch(new RegExp(`/${post.slug}$`));
     expect(after.links.unlisted).toBe(`${getConfig(env).appOrigin}/email/${post.unlisted_token}`);

@@ -170,7 +170,7 @@ export function createRouter({
       skipped: 1,
       unsent: 0,
     },
-    dispatch: { done: 460, percent: 38, rate_per_min: 230, eta_ms: 185000 },
+    dispatch: { done: 460, percent: 38, rate_per_min: 230, eta_ms: 185000, duration_ms: null },
     delivery: { confirmed: 4, percent_of_accepted: 1 },
     provider: { name: "ses", halt: null },
     phase: "progressing",
@@ -203,7 +203,7 @@ export function createRouter({
       skipped: 0,
       unsent: 0,
     },
-    dispatch: { done: 0, percent: 0, rate_per_min: null, eta_ms: null },
+    dispatch: { done: 0, percent: 0, rate_per_min: null, eta_ms: null, duration_ms: null },
     delivery: { confirmed: 0, percent_of_accepted: 0 },
     phase: "scheduled",
     actions: [
@@ -858,7 +858,13 @@ export function createRouter({
                 skipped: 0,
                 unsent: 0,
               },
-              dispatch: { done: 0, percent: 0, rate_per_min: null, eta_ms: null },
+              dispatch: {
+                done: 0,
+                percent: 0,
+                rate_per_min: null,
+                eta_ms: null,
+                duration_ms: null,
+              },
               delivery: { confirmed: 0, percent_of_accepted: 0 },
             }),
           ],
@@ -889,7 +895,7 @@ export function createRouter({
       access: "admin",
       resource: "sends",
       summary:
-        "One send: its view, the delivery-outcome breakdown of its record, and the `cursor` marking where this read stood among the changes to sends, to follow it from with `GET /api/sends/feed` (it carries no pace, so read the feed at once from it).",
+        "One send: its view, the delivery-outcome breakdown of its record, and the `cursor` marking where this read stood among the changes to sends, to follow it from with `GET /api/sends/feed` (it carries no pace, so read the feed at once from it). A sent send carries its completed hand-off duration as `dispatch.duration_ms`, in milliseconds.",
       description:
         "`send` is the send's view, the one shape every send route carries (the list, the feed, every action's answer and refusal), so a client keeps one copy current from any of them and tells two apart by `rev`, the higher the newer. It holds the stored facts: `status` (`scheduled`, `sending`, `sent`, `canceled`), the times, `remade_at` (a template or identity change re-made it while scheduled) and `tested_at`, and `audience` (`count`, an estimate until the send fires and the audience at fire once `fixed`, from `fixed_at`). Beside them, what the server derives as of `as_of`, the server's clock at the read: `counts` (every recipient in one bucket), `dispatch` (hand-off progress; `rate_per_min` is what a sweep tick carries, one tick a minute, and `eta_ms` counts the ticks the rest needs, the wait between them included, given only while it is handing off and once a tick has finished, never while paused or in flight too long), `delivery` (receipts over accepted), `provider` (its `name`, and `halt` while the provider refuses its batches), `phase` (`scheduled`, `due`, `progressing`, `retrying`, `backing-off`, `needs-attention`, `settling`, `complete`, `canceled`), `conditions`, `actions`, and `next_change_at` (see `GET /api/sends/feed`). `links` names the send's other resources: the frozen email (`email_html`, `email_text`), the recipient rows and their CSV, the post, and `archive`, the published page, absolute, once the send is sent. " +
         conditionsText +
@@ -1033,7 +1039,18 @@ export function createRouter({
       example: {
         request: { resolution: "unsent" },
         response: {
-          send: sendExample({ status: "sent", phase: "settling", completed_at: 1768467620000 }),
+          send: sendExample({
+            status: "sent",
+            phase: "settling",
+            completed_at: 1768467620000,
+            dispatch: {
+              done: 1200,
+              percent: 100,
+              rate_per_min: null,
+              eta_ms: null,
+              duration_ms: 19000,
+            },
+          }),
           cursor: "58.1768467620000",
           resolved: 12,
           completed: true,

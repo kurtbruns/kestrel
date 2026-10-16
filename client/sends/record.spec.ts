@@ -140,6 +140,7 @@ describe("sent record", () => {
     expect($(".rec-recon").textContent).toMatch(
       /All 10 accounted for: 8 delivered, 1 bounced, 1 unsent\..*suppressed automatically/,
     );
+    expect($(".rec-meta").textContent).toContain(" · went out in 1s · 10 recipients");
     expect($$(".rec-people-table tbody tr")).toHaveLength(2);
     expect($(".rec-people-table tbody tr .rec-out").textContent).toBe("Hard bounce");
     expect($("#recOpen").textContent).toBe("Open\u00a0↗");
@@ -515,6 +516,7 @@ describe("sent record", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect($("#recPill").textContent).toBe("Canceled");
     expect($(".rec-meta").textContent).toMatch(/^Canceled /);
+    expect($(".rec-meta").textContent).not.toContain("went out in");
     expect($(".rec-card").textContent).not.toMatch(/\bSent\b/);
     expect($(".rec-card").textContent).toMatch(/no one was mailed/);
     expect(document.querySelector(".rec-tiles")).toBeNull();
@@ -1155,7 +1157,13 @@ describe("sent record", () => {
       sendView(inFlight(), {
         phase: paused ? "backing-off" : "progressing",
         // The server gives a time to finish only while the send is handing off.
-        dispatch: { done: 5, percent: 50, rate_per_min: 30, eta_ms: paused ? null : 120_000 },
+        dispatch: {
+          done: 5,
+          percent: 50,
+          rate_per_min: 30,
+          eta_ms: paused ? null : 120_000,
+          duration_ms: null,
+        },
       });
     fake = watching(current);
     await mount((r, s) => renderSentRecord("x1", r, s));
@@ -1172,7 +1180,13 @@ describe("sent record", () => {
     const current = () =>
       sendView(send({ ...inFlight(), c_in_flight: between ? 0 : 3 }), {
         phase: "progressing",
-        dispatch: { done: 5, percent: 50, rate_per_min: 30, eta_ms: 120_000 },
+        dispatch: {
+          done: 5,
+          percent: 50,
+          rate_per_min: 30,
+          eta_ms: 120_000,
+          duration_ms: null,
+        },
       });
     fake = watching(current);
     await mount((r, s) => renderSentRecord("x1", r, s));

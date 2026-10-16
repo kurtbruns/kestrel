@@ -408,6 +408,8 @@ export interface SendView {
     rate_per_min: number | null;
     /** Rough time to finish dispatch, counted in sweep ticks: to the end of the last tick the rest needs, the wait between ticks included. Only while it is handing off (null otherwise, never while paused, nor before the first tick has finished). */
     eta_ms: number | null;
+    /** Elapsed time from the first hand-off to dispatch completion, only for a sent send. */
+    duration_ms: number | null;
   };
   /** Delivery confirmation, which lags acceptance. */
   delivery: { confirmed: number; percent_of_accepted: number };
