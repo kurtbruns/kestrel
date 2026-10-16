@@ -22,8 +22,8 @@ import { roomShell } from "./shell";
 // Every route the app and Claude can call, generated from the route manifest
 // (src/app.ts) and served as JSON by the authed /api/reference route. The SPA renders
 // it natively: a rail of tiers and their resources beside the route list, where each
-// route is one scannable row, a native <details>, that opens in place to its full
-// documentation.
+// route is one scannable row led by its name, a native <details>, that opens in place to
+// its full documentation.
 function apiExample(label: string, value: unknown): Html | null {
   return value === undefined
     ? null
@@ -65,13 +65,12 @@ function apiPathHtml(path: string): Html {
     .map((part, i) => (i % 2 ? html`<span class="api-param">${part}</span>` : part))}`;
 }
 function apiRouteHtml(r: ReferenceEntry): Html {
-  // What the filter matches: the method, the path, and the one-line summary.
-  const hay = `${r.method} ${concretePath(r.path)} ${r.summary}`.toLowerCase();
+  // What the filter matches: the route's name, the method, the path, and the summary.
+  const hay = `${r.title} ${r.method} ${concretePath(r.path)} ${r.summary}`.toLowerCase();
   return html`<li data-hay="${hay}"><details class="api-route">
       <summary class="api-route-sum">
         <span class="api-method m-${r.method}">${r.method}</span>
-        <code class="api-path">${apiPathHtml(r.path)}</code>
-        <span class="api-route-line">${r.summary}</span>
+        <span class="api-route-name"><span class="api-route-title">${r.title}</span><code class="api-path">${apiPathHtml(r.path)}</code></span>
         <span class="api-chev" aria-hidden="true"></span>
       </summary>
       <div class="api-route-detail">
@@ -120,7 +119,7 @@ function apiNavHtml(groups: ReferenceGroup[]): Html {
 }
 
 /**
- * Show only the routes whose method, path, or summary contains every word of the query,
+ * Show only the routes whose name, method, path, or summary contains every word of the query,
  * with the resources, tiers, and rail links that still hold one. An empty query shows
  * everything. The last tier still shown is marked, so it keeps the room to scroll
  * up under the bar that the last tier has.
@@ -227,7 +226,7 @@ export async function renderReference(root: HTMLElement, signal: AbortSignal): P
   setHtml(navEl, apiNavHtml(groups));
   setHtml(
     contentEl,
-    html`<header class="api-head"><h1>API reference</h1><p class="muted">Generated from the route registration, so every endpoint the app and Claude can call is listed here. Base URL <code>${location.origin}</code>.</p><div class="api-filter">${icon("search")}<input type="search" id="apiFilter" placeholder="Filter routes by method, path, or summary" autocomplete="off" aria-label="Filter routes" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd><button type="button" class="icon api-filter-clear" id="apiFilterClear" aria-label="Clear filter" hidden>${icon("x")}</button></div></header>${groups.map(apiSectionHtml)}<p class="api-empty muted" id="apiEmpty" hidden>No routes match. Try a path segment like <code>sends</code> or a method like <code>DELETE</code>.</p>`,
+    html`<header class="api-head"><h1>API reference</h1><p class="muted">Generated from the route registration, so every endpoint the app and Claude can call is listed here. Base URL <code>${location.origin}</code>.</p><div class="api-filter">${icon("search")}<input type="search" id="apiFilter" placeholder="Filter routes by name, method, or path" autocomplete="off" aria-label="Filter routes" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd><button type="button" class="icon api-filter-clear" id="apiFilterClear" aria-label="Clear filter" hidden>${icon("x")}</button></div></header>${groups.map(apiSectionHtml)}<p class="api-empty muted" id="apiEmpty" hidden>No routes match. Try a path segment like <code>sends</code> or a method like <code>DELETE</code>.</p>`,
   );
   const filterEl = $<HTMLInputElement>("#apiFilter");
   const clearEl = $("#apiFilterClear");

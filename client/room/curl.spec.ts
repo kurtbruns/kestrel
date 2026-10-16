@@ -7,6 +7,7 @@ const route = (over: Partial<ReferenceEntry>): ReferenceEntry => ({
   path: "/api/posts",
   access: "admin",
   resource: "posts",
+  title: "",
   summary: "",
   ...over,
 });

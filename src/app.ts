@@ -221,6 +221,7 @@ export function createRouter({
       path: "/health",
       access: "public",
       resource: "system",
+      title: "Check health",
       summary:
         "Health check: ok once the configuration is accepted and the database has run every migration this release ships.",
       description:
@@ -235,6 +236,7 @@ export function createRouter({
       path: "/api/whoami",
       access: "admin",
       resource: "system",
+      title: "Get who is signed in",
       summary:
         "The authenticated principal and the auth mode: how this request signed in (access or dev). A service token's principal carries its Client ID as `tokenId`.",
       handler: (c) => {
@@ -251,6 +253,7 @@ export function createRouter({
       path: "/api/version",
       access: "admin",
       resource: "system",
+      title: "Get the running build",
       summary:
         "The running build: version, short SHA, release tag (if this build is one), build time, and repo links.",
       example: {
@@ -273,6 +276,7 @@ export function createRouter({
       path: "/api/dev/token",
       access: "public",
       resource: "dev",
+      title: "Mint a dev token",
       summary: "Mint an admin token (local dev only).",
       description:
         "Public because it's how a local client gets the token every admin route requires. Registered only on a local instance. When `kestrel dev` started the server, the answer also carries `runId`, the ID it recorded for this run, which `kestrel seed` and `kestrel reset` check before wiping the database.",
@@ -294,6 +298,7 @@ export function createRouter({
       path: "/api/docs",
       access: "admin",
       resource: "system",
+      title: "List the docs",
       summary:
         "The docs (the publisher's pages and the setup guide) as sanitized HTML fragments, in reading order (JSON).",
       handler: docsRoutes.list,
@@ -303,6 +308,7 @@ export function createRouter({
       path: "/api/docs/:name.md",
       access: "admin",
       resource: "system",
+      title: "Get a doc as Markdown",
       summary: "One doc's Markdown, for an agent to read (text/markdown).",
       description:
         "`name` is a doc's `slug` from `GET /api/docs`, or a set's `id` for that set's index: `publishing.md` lists the publisher's pages, `self-hosting.md` the setup guide's. Links between docs point at each other's Markdown, relative to this route, so an agent can follow them.",
@@ -315,6 +321,7 @@ export function createRouter({
       path: "/api/reference",
       access: "admin",
       resource: "system",
+      title: "Get the API reference",
       summary: "Every route, generated from the registration so it can't drift.",
       // Returned as data (the SPA renders it natively as a sidebar plus sections, no iframe);
       // it's also a machine-readable listing of the surface for Claude and tooling.
@@ -330,6 +337,7 @@ export function createRouter({
       path: "/api/reference.md",
       access: "admin",
       resource: "system",
+      title: "Get the API reference as Markdown",
       summary: "The same reference as one Markdown document, for an agent to read (text/markdown).",
       handler: (c) =>
         docsRoutes.markdownResponse(
@@ -343,6 +351,7 @@ export function createRouter({
       path: "/api/settings",
       access: "admin",
       resource: "settings",
+      title: "Get the settings",
       summary:
         "Runtime preferences, a read-only reflection of deploy config (no secrets), and `inUse`: the scheduled sends a template or identity change would re-make.",
       description:
@@ -374,6 +383,7 @@ export function createRouter({
       access: "admin",
       accepts: JSON_BODY,
       resource: "settings",
+      title: "Update the settings",
       summary:
         "Update runtime preferences: test recipients, the publication identity, the email template, the confirmation email wording.",
       description:
@@ -402,6 +412,7 @@ export function createRouter({
       access: "admin",
       accepts: FORM_UPLOAD,
       resource: "settings",
+      title: "Upload the logo",
       summary: "Upload the publication logo (multipart `file`); served publicly via /media.",
       description:
         "The logo is part of the identity, so when the template renders it and sends are scheduled this re-makes their emails under the same rule as `PUT /api/settings`, acknowledged as `?remake=` (comma-separated send ids) since the request carries no JSON body; the bytes are written only once the refusals are ruled out. The image is stored as sent: every surface shows the logo as a square, and an email stretches one that isn't, so send a square image at least 256 × 256 px (the editor crops and scales to that before uploading).",
@@ -412,6 +423,7 @@ export function createRouter({
       path: "/api/settings/logo",
       access: "admin",
       resource: "settings",
+      title: "Remove the logo",
       summary: "Remove the publication logo.",
       description:
         "Under the same re-make rule as `PUT /api/settings` when the template renders the logo and sends are scheduled: acknowledged as `?remake=` (comma-separated send ids), refused inside the minimum lead. The image itself stays served, since emails already sent still show it (I3); only what renders from then on loses it.",
@@ -426,6 +438,7 @@ export function createRouter({
       access: "admin",
       accepts: JSON_BODY,
       resource: "settings",
+      title: "Test the email template",
       summary:
         "Send a sample post through the saved email template, to `to` or the default recipients (I5).",
       description: `Renders the stored template, never unsaved editor content; saving first is the client's job, and that save may need the re-make acknowledgement (see \`PUT /api/settings\`). The answer names the recipients the provider didn't accept in \`failed\`, so a client can offer exactly those again and no one gets a second copy, and says why for each in \`not_sent\`, in the same order (see \`POST /api/posts/:id/test\`). ${notConnected}`,
@@ -447,6 +460,7 @@ export function createRouter({
       path: "/api/settings/notifications/test",
       access: "admin",
       resource: "settings",
+      title: "Test notifications",
       summary:
         "Send a sample notification to the saved notifications address, through the live channel (SPEC §8).",
       description: `Takes no body and goes only to \`settings.notifications.to\`, so it cannot mail an arbitrary address; 400 when none is set. A channel that refuses (an unverified Cloudflare destination, say) is a 502 \`notify_failed\` carrying its words. Through the newsletter's provider, ${notConnected.charAt(0).toLowerCase()}${notConnected.slice(1)}`,
@@ -458,6 +472,7 @@ export function createRouter({
       path: "/api/reader-pages/:journey/:state",
       access: "admin",
       resource: "settings",
+      title: "Preview a reader page",
       summary:
         "A page a reader can land on, as a standalone HTML page: Settings' preview of it (SPEC §5).",
       description:
@@ -472,6 +487,7 @@ export function createRouter({
       access: "admin",
       accepts: JSON_BODY,
       resource: "posts",
+      title: "Create a post",
       summary:
         "Create a draft post. Its slug follows the subject (`slug_auto: true`) unless you send a `slug`, which sets it by hand.",
       description:
@@ -502,6 +518,7 @@ export function createRouter({
       path: "/api/posts",
       access: "admin",
       resource: "posts",
+      title: "List posts",
       summary:
         "List posts. Filter, sort, and paginate via query params; returns a `page` envelope. Each row carries its active send's id, status, and fire time; the response's `cursor` marks where the read stood among the changes to sends (`<seq>.<at>`, as on `GET /api/sends`), so a client can follow the listed posts' sends from it with `GET /api/sends/feed`.",
       query: [
@@ -534,6 +551,7 @@ export function createRouter({
       path: "/api/posts/:id",
       access: "admin",
       resource: "posts",
+      title: "Get a post",
       summary:
         "One post with its current markdown and any active schedule; `scheduled.remade_at` says when a template or identity change last re-made its email.",
       description:
@@ -546,6 +564,7 @@ export function createRouter({
       access: "admin",
       accepts: JSON_BODY,
       resource: "posts",
+      title: "Update a post",
       summary:
         "Update a draft. Send the revision you read as `base_revision` (or If-Match): a save without one is a 428 `base_required` carrying the post as it stands, and one whose base is no longer current is a 409 `stale_revision`.",
       description:
@@ -573,6 +592,7 @@ export function createRouter({
       path: "/api/posts/:id",
       access: "admin",
       resource: "posts",
+      title: "Delete a post",
       summary:
         "Delete a draft and its revisions (drafts only; any other post is a 409 `post_not_draft`).",
       handler: postRoutes.deletePost,
@@ -583,6 +603,7 @@ export function createRouter({
       access: "admin",
       accepts: JSON_BODY,
       resource: "posts",
+      title: "Set a post's publishing options",
       summary:
         "Set a post's publishing options: where it is listed (`email_only`) and its archive address (`slug`, `slug_auto`) (SPEC §4, §5).",
       description:
@@ -612,6 +633,7 @@ export function createRouter({
       path: "/api/posts/:id/revisions",
       access: "admin",
       resource: "posts",
+      title: "List a post's revisions",
       summary: "The post's revision history.",
       handler: postRoutes.listRevisions,
     },
@@ -620,6 +642,7 @@ export function createRouter({
       path: "/api/posts/:id/revisions/:n",
       access: "admin",
       resource: "posts",
+      title: "Get a revision",
       summary: "One revision by its number.",
       handler: postRoutes.getRevision,
     },
@@ -631,6 +654,7 @@ export function createRouter({
       access: "admin",
       accepts: [...FORM_UPLOAD, ...RASTER_IMAGE_TYPES],
       resource: "posts",
+      title: "Upload an image",
       summary:
         "Upload an image to a draft (multipart form field `file`); a post that is not a draft is a 409 `post_not_draft`.",
       description:
@@ -642,6 +666,7 @@ export function createRouter({
       path: "/api/posts/:id/images",
       access: "admin",
       resource: "posts",
+      title: "List a post's images",
       summary: "List a post's images.",
       handler: imageRoutes.listImages,
     },
@@ -650,6 +675,7 @@ export function createRouter({
       path: "/api/posts/:id/images/:filename",
       access: "admin",
       resource: "posts",
+      title: "Delete an image",
       summary:
         "Delete one image from a draft; a post that is not a draft is a 409 `post_not_draft`.",
       handler: imageRoutes.deleteImage,
@@ -661,6 +687,7 @@ export function createRouter({
       path: "/api/posts/:id/preview",
       access: "admin",
       resource: "posts",
+      title: "Render a post's email",
       summary:
         "Render the post to its email (returns the hosted URL, subject, warnings, and `frozen`).",
       description:
@@ -672,6 +699,7 @@ export function createRouter({
       path: "/api/posts/:id/preview",
       access: "admin",
       resource: "posts",
+      title: "Preview a post's email",
       summary: "The rendered email as a standalone HTML page (the editor's preview).",
       description:
         "Once the post is scheduled this is its frozen copy, exactly as it will fire, and once sent the record's; a draft renders live (SPEC §5).",
@@ -682,6 +710,7 @@ export function createRouter({
       path: "/api/posts/:id/web",
       access: "admin",
       resource: "posts",
+      title: "Preview a post's web version",
       summary:
         "The post's web version as a standalone HTML page: what its public post page will show.",
       description:
@@ -694,6 +723,7 @@ export function createRouter({
       access: "admin",
       accepts: JSON_BODY,
       resource: "posts",
+      title: "Send a test",
       summary:
         "Send a test to one address through the same per-recipient path as a real send (I5).",
       description:
@@ -719,6 +749,7 @@ export function createRouter({
         path: "/api/dev/outbox",
         access: "admin",
         resource: "dev",
+        title: "Read the fake outbox",
         summary: "Inspect the fake transport's outbox (local dev only).",
         handler: renderRoutes.devOutbox,
       },
@@ -728,6 +759,7 @@ export function createRouter({
         access: "admin",
         accepts: FORM_UPLOAD,
         resource: "dev",
+        title: "Load the demo dataset",
         summary: "Load the local demo dataset (local dev only).",
         handler: devRoutes.seed,
       },
@@ -736,6 +768,7 @@ export function createRouter({
         path: "/api/dev/reset",
         access: "admin",
         resource: "dev",
+        title: "Reset the database",
         summary: "Reset the local database to a fresh install (local dev only).",
         handler: devRoutes.reset,
       },
@@ -748,6 +781,7 @@ export function createRouter({
       access: "admin",
       accepts: JSON_BODY,
       resource: "posts",
+      title: "Schedule a post",
       summary: `Freeze the render and schedule the send for a future time (at least ${formatLead(minLeadMs)} out).`,
       description:
         "Freezes the current draft, with the template and identity as they stand, onto a send row and soft-locks the post; cancelable until its fire time. A later template or identity change re-makes that frozen email after the publisher confirms it (SPEC §6); there is no per-send template to name, and a `template_revision` field is a 400. `fire_at` is epoch milliseconds or an ISO-8601 timestamp with a `Z` or `±hh:mm` offset; a timestamp without one is a 400, since the Worker cannot know which local time was meant. `fire_at` must be at least the minimum lead out, a 400 `fire_at_too_soon` otherwise (for the soonest send, use Send now, `POST /api/posts/:id/send`): " +
@@ -765,6 +799,7 @@ export function createRouter({
       access: "admin",
       accepts: JSON_BODY,
       resource: "posts",
+      title: "Send a post now",
       summary:
         "Send now: freeze and schedule one minimum lead out, on the minute, cancelable until then. Idempotent per post.",
       description:
@@ -782,6 +817,7 @@ export function createRouter({
       path: "/api/sends",
       access: "admin",
       resource: "sends",
+      title: "List sends",
       summary:
         "List sends with delivery progress. Filter, sort, and paginate via query params; returns a `page` envelope. Each row is the send's view, the same shape `GET /api/sends/:id`, the feed, and every action answer with (see `GET /api/sends/:id`), read at the same moment, so a list row and the watch never read a send differently. A row's `rev` rises with every change a reader could see (a cancel, a move, a re-make, dispatch progress, a receipt), ordered across all sends. The response's `cursor` marks where this read stood among those changes: `<seq>.<at>`, the change sequence at the read and the server's time of it (epoch milliseconds), both decimal; pass it to `GET /api/sends/feed` as `since`. `audience.count` is a snapshot of the audience while a send is scheduled; once it fires (`audience.fixed`), it is the audience fixed at fire, which never grows.",
       description:
@@ -827,6 +863,7 @@ export function createRouter({
       path: "/api/sends/feed",
       access: "admin",
       resource: "sends",
+      title: "Follow changes to sends",
       summary:
         "What changed among sends since a cursor, each send with its phase, counters, conditions, and actions, every open condition across the sends, and when to read again: what a client follows to keep up with sends, whichever client changed them, without polling each one.",
       description: `With \`since\` (the \`cursor\` from \`GET /api/sends\`, \`GET /api/sends/:id\`, or this route's last read), \`sends\` is every send that changed after that read, whatever its state: a cancel, a move, a re-make, a new schedule, dispatch progress, a receipt, a completion. It also holds each send the clock changed with no write since then: one whose fire time passed (\`due\`), one past the ${MISSED_THRESHOLD_MS / 60_000}-minute missed tolerance (the \`missed\` condition), and one idle past the ${STUCK_THRESHOLD_MS / 60_000}-minute stuck threshold (\`stuck\`). A send turns wedged (\`wedged\`) by a write, when the run that left recipients with an unknown fate hands it back, so it is reported like any other change. \`removed\` is every send removed after the cursor (a canceled send deleted with its post), each \`{id, rev}\`, so a client drops it rather than keeping a row for a send that is gone. Without \`since\`, \`sends\` is every send that can change on its own: due, \`sending\`, or settling (\`sent\` within the last ${SETTLE_FOLLOW_MS / 60_000} minutes with a recipient still awaiting a receipt), and \`removed\` is empty. Either way each send is its view, the shape \`GET /api/sends/:id\` describes, read off the send's counters, never its delivery rows, so a send reads the same here as on its page; soonest fire first. \`cursor\` is where this read stood, to pass as \`since\` next time: \`<seq>.<at>\`, the change sequence at the read and the server's time of it (\`now\`), both decimal. The format is part of this contract, so a client holding cursors from several reads (a list, and one send's page) may compare them and follow everything from one read: the cursor with the smaller of each number answers for both. A read reports at most \`limit\` changes after the cursor, in the order they were made, and never splits the changes one write made; the sends the clock changed are always all reported. When more are waiting, \`more\` is true, \`cursor\` stands where the read stopped, and \`read_again_at\` is \`now\`: read again at once from it. A cursor ahead of this database (a sequence above the current one, or a read time more than a minute after \`now\`, as after a reset or a restore of the database) is a 409 \`cursor_ahead\` naming \`since\`: nothing after it would ever be reported, so read the sends again (\`GET /api/sends\` or \`GET /api/sends/:id\`) and follow from that read's cursor. \`read_again_at\` is when to read again, by the server's clock (\`now\`), from each unfinished send's \`next_change_at\`, the earliest it can change with no one acting: about 3 seconds while any send can move now (due, short of the missed tolerance, or sending with a run in hand or work queued for the next tick); while sends are only settling, 3 seconds, then 15, then 60, by how long ago the youngest finished dispatch; otherwise about once a minute (one sweep tick); and never later than just past the next change the clock or the sweep will make (a fire time, a halted send's next retry). A send waiting on a person (the provider refusing the account, a wedged send awaiting Resolve, a missed fire time) does not quicken it. A client that reads again then is never more than a few seconds behind a send that is moving, behind a settling send's receipts by at most that pace, and behind any other change (the other client's cancel or move, a Resolve, a late receipt) by about a minute. \`read_again_at\` is advisory: reading sooner, such as right after acting on a send, is always fine, and reading late or skipping a read loses nothing, since the next read from the last cursor reports every send that changed in between. \`GET /api/sends\` and \`GET /api/sends/:id\` carry no pace of their own: a client following from one of them reads this route at once, then keeps to its \`read_again_at\`. \`conditions\` repeats every open condition across the sends that can have one (scheduled, sending, and sent within the bounce-spike window), each with its \`send_id\` and \`subject\`, whether or not the send changed, so one read shows every open problem; most severe first. ${conditionsText} Reading it changes nothing.`,
@@ -890,6 +927,7 @@ export function createRouter({
       path: "/api/sends/:id",
       access: "admin",
       resource: "sends",
+      title: "Get a send",
       summary:
         "One send: its view, the delivery-outcome breakdown of its record, and the `cursor` marking where this read stood among the changes to sends, to follow it from with `GET /api/sends/feed` (it carries no pace, so read the feed at once from it).",
       description:
@@ -919,6 +957,7 @@ export function createRouter({
       path: "/api/sends/:id/email",
       access: "admin",
       resource: "sends",
+      title: "Get a send's email",
       summary:
         "The send's frozen email (I3), exactly as it will fire or went out, with the per-recipient placeholders unfilled: HTML, or its plain-text part.",
       description:
@@ -936,6 +975,7 @@ export function createRouter({
       path: "/api/sends/:id/deliveries",
       access: "admin",
       resource: "sends",
+      title: "List a send's deliveries",
       summary:
         "The send's per-recipient delivery rows (JSON), filtered by outcome view and paginated; returns a `page` envelope. Reads the delivery rows directly (the source of truth), not the send's counters — heavier than the send's view, so it is not a poll target.",
       query: [
@@ -982,6 +1022,7 @@ export function createRouter({
       path: "/api/sends/:id/deliveries.csv",
       access: "admin",
       resource: "sends",
+      title: "Export a send's deliveries",
       summary: "The send's per-recipient delivery record as CSV (email, status, event, error).",
       handler: sendRoutes.deliveriesCsv,
     },
@@ -990,6 +1031,7 @@ export function createRouter({
       path: "/api/sends/:id/cancel",
       access: "admin",
       resource: "sends",
+      title: "Cancel a send",
       summary: "Cancel a scheduled send during its review window; unlocks the post.",
       description:
         "Answers with the send's view and a `cursor`. The review window closes at the fire time (SPEC §6), whether or not the sweep has started the send: from then this is a 409 `window_closed`. A send canceled already answers 200 with `changed: false`, so a retried cancel is safe; otherwise `changed` is true. " +
@@ -1009,6 +1051,7 @@ export function createRouter({
       access: "admin",
       accepts: JSON_BODY,
       resource: "sends",
+      title: "Reschedule a send",
       summary: "Move a scheduled send's fire time without re-freezing the render (I3, I6).",
       description:
         "Updates only `fire_at` on a send still in its review window: the frozen render is untouched (the audience is resolved when the send fires) and the review window is preserved; a re-made send keeps its `remade_at`. Distinct from cancel → edit → schedule again, which is for content changes. The same `fire_at` form as scheduling (epoch milliseconds or an ISO-8601 timestamp with a `Z` or `±hh:mm` offset), and the same minimum lead, a 400 `fire_at_too_soon` otherwise: " +
@@ -1027,6 +1070,7 @@ export function createRouter({
       access: "admin",
       accepts: JSON_BODY,
       resource: "sends",
+      title: "Resolve a wedged send",
       summary:
         "Resolve a send wedged on ambiguous (dispatched) deliveries; body {resolution: 'unsent'|'accepted'}.",
       description:
@@ -1051,6 +1095,7 @@ export function createRouter({
       access: "admin",
       accepts: JSON_BODY,
       resource: "subscribers",
+      title: "Add a subscriber",
       summary: "Add a subscriber via the normal double opt-in (never an auto-confirm).",
       description: `An address that was erased (SPEC §7) is refused 409 \`erasure_acknowledgement_required\`, with \`erased_at\`, until the request carries \`acknowledge_erasure: true\`: the publisher confirms the person asked to join again. The confirmation then goes as usual, and the person's own confirming lifts the marker. The public form never asks. ${notConnected} Nothing is stored then, since the confirmation could not go.`,
       example: { request: { email: "reader@example.com" } },
@@ -1061,6 +1106,7 @@ export function createRouter({
       path: "/api/subscribers",
       access: "admin",
       resource: "subscribers",
+      title: "List subscribers",
       summary:
         "List subscribers with by-status counts. Filter, sort, and paginate via query params; returns a `page` envelope.",
       description: `Consent status and suppression are separate axes: \`status\` filters the roster; \`suppressed\` is an overlay facet, and each row's \`suppression_reason\` says why. \`counts\` is the whole list's composition, whatever the filter: \`counts.suppressed\` counts subscribers whose address is suppressed, whatever their status, so it overlaps the other three and matches \`suppressed=only\`; an address suppressed with no subscriber is listed only by \`GET /api/suppressions\`. Pass \`email\` instead to look up one subscriber. ${STATUS_GLOSS} ${SUPPRESSION_GLOSS}`,
@@ -1098,6 +1144,7 @@ export function createRouter({
       path: "/api/subscribers/export",
       access: "admin",
       resource: "subscribers",
+      title: "Export the list",
       summary:
         "The whole list in the import format (`kestrel-subscribers/1`, SPEC §7), a page at a time.",
       description:
@@ -1138,6 +1185,7 @@ export function createRouter({
       path: "/api/subscribers/:id",
       access: "admin",
       resource: "subscribers",
+      title: "Get a subscriber",
       summary: "One subscriber.",
       handler: subscriberRoutes.get,
     },
@@ -1146,6 +1194,7 @@ export function createRouter({
       path: "/api/subscribers/:id/unsubscribe",
       access: "admin",
       resource: "subscribers",
+      title: "Unsubscribe a subscriber",
       summary: "Unsubscribe a subscriber at their request (SPEC §7).",
       description: `${SUBSCRIBER_ACTIONS.unsubscribe.when} Immediate and idempotent, as their own unsubscribe link is (I2): it removes consent and never confirms anyone. To stop mailing an address on your own judgment, block it instead (\`POST /api/suppressions\`), which records that the decision was yours.`,
       handler: subscriberRoutes.unsubscribe,
@@ -1155,6 +1204,7 @@ export function createRouter({
       path: "/api/subscribers/:id/erase",
       access: "admin",
       resource: "subscribers",
+      title: "Erase a subscriber",
       summary:
         "Erase a subscriber (SPEC §7): remove their data and keep only a do-not-contact marker. Can't be undone.",
       description:
@@ -1174,6 +1224,7 @@ export function createRouter({
       path: "/api/imports/format",
       access: "admin",
       resource: "imports",
+      title: "Get the import format",
       summary:
         "Everything about the import format (SPEC §7), generated from the definition the importer reads with: the preferred file and why, each accepted file with when to use it and what it loses, the columns, the plain list's rules, this deployment's limits, the outcomes, and the attestation.",
       description:
@@ -1185,6 +1236,7 @@ export function createRouter({
       path: "/api/imports/template.csv",
       access: "admin",
       resource: "imports",
+      title: "Get the CSV template",
       summary:
         "A CSV template in the import format, showing its cases; uploaded unchanged it plans cleanly.",
       handler: importRoutes.templateCsv,
@@ -1194,6 +1246,7 @@ export function createRouter({
       path: "/api/imports/template.txt",
       access: "admin",
       resource: "imports",
+      title: "Get the plain-list template",
       summary: "A plain-list template: one address per line.",
       handler: importRoutes.templateTxt,
     },
@@ -1203,6 +1256,7 @@ export function createRouter({
       access: "admin",
       accepts: JSON_BODY,
       resource: "imports",
+      title: "Plan an import",
       summary:
         "Plan an import: what it would do to every row against the list as it stands. Writes nothing, so call it as often as a file needs.",
       description: `Body \`{ file: { name, text }, plain_list_status? }\`: the file's name (\`.csv\` for the format, \`.txt\` for a plain list) and its contents as UTF-8 text, and for a plain list what its addresses are, \`subscribed\` (the default), \`unsubscribed\`, or \`bounced\` (a 400 naming the field on a CSV, whose rows say). Answers \`counts\` (every row once, by outcome, summing to \`file.rows\`), \`suppressions_added\`, \`confirmed\` (the rows to be confirmed, by \`opt_in\` and \`origin\`), \`rows\` (each row that won't be confirmed, with its outcome), \`sends_growing\` (each send whose audience would grow, with \`gains\`: a scheduled one, or one that fired but hasn't fixed its audience yet), \`attestation\` (\`{ version, text, publication }\` when anyone would be confirmed, else null: \`publication\` is the name \`text\` calls the publication by, its name or else the sender's display name, as every surface names it, or \`this newsletter\` with neither), \`plan_hash\`, and \`daily_writes_warning\` (on the Workers Free plan's limits, the server's words when this import and the imports already committed that UTC day would write more of D1's daily allowance of written rows than it leaves room for, advising importing the file the next day; else null; never a refusal, and outside the hash; a send's share of the day is its own \`daily_writes\` condition). The outcomes and when each applies are in \`GET /api/imports/format\`. Refusals name what was wrong and what was expected: 400 \`unrecognized_format\` (not a file in the format at all, with \`row\` where it shows), 400 \`invalid_field\` (a column or value the format doesn't take, with \`row\`, \`column\`, and \`allowed\` where the values are a set), 400 \`too_many_rows\` (over this deployment's \`limit\`), and 413 \`body_too_large\` (over ${IMPORT_LIMITS.maxBodyBytes / (1024 * 1024)} MB).`,
@@ -1264,6 +1318,7 @@ export function createRouter({
       access: "admin",
       accepts: JSON_BODY,
       resource: "imports",
+      title: "Commit an import",
       summary:
         "Commit a plan: apply it all, or nothing, in one batch, and keep the import's record. Never sends an email.",
       description:
@@ -1285,6 +1340,7 @@ export function createRouter({
       path: "/api/suppressions",
       access: "admin",
       resource: "suppressions",
+      title: "List suppressions",
       summary: "List suppressed addresses, never mailed whatever their status, with why.",
       description: `Newest first, up to 1,000, whether or not the address is on the list. ${suppressionGloss(ERASED_MARKER_MEANING)}`,
       handler: suppressionRoutes.list,
@@ -1295,6 +1351,7 @@ export function createRouter({
       access: "admin",
       accepts: JSON_BODY,
       resource: "suppressions",
+      title: "Block an address",
       summary: "Block an address: the publisher's own decision to stop mailing it (SPEC §7).",
       description: `${SUBSCRIBER_ACTIONS.block.when} Stores a suppression with \`reason\` \`manual\` and an optional \`detail\` in the publisher's words, and changes no consent status. If they asked to leave, unsubscribe them instead (\`POST /api/subscribers/:id/unsubscribe\`). \`reason\` may be omitted or \`manual\`; any other is a 400, since a bounce or complaint is the provider's to report and an erasure's marker is Erase's to leave. An address already suppressed keeps what it has, its \`detail\` included: the answer is 200 with \`added: false\` and the suppression that stands, rather than 201.`,
       example: {
@@ -1316,6 +1373,7 @@ export function createRouter({
       path: "/api/suppressions/:email",
       access: "admin",
       resource: "suppressions",
+      title: "Clear a suppression",
       summary: "Clear an address's suppression, so it may be mailed again (SPEC §7).",
       description: `${SUBSCRIBER_ACTIONS.clear.when} A deliberate, rare act. Unblocking a block (\`manual\`) undoes a block by hand, the publisher's or one an import brought; clear one only on the publisher's word. An erasure's marker (\`erased\`) is never cleared here: only the person's own confirmation lifts it, so it refuses 409 \`erasure_marker\` and leaves it. An erasure that found a block already on the address keeps the block instead of a marker, and clearing that block clears the address. Answers \`cleared: false\` when the address had no suppression.`,
       example: { response: { email: "reader@example.com", cleared: true } },
@@ -1328,6 +1386,7 @@ export function createRouter({
       path: "/webhooks/ses",
       access: "webhook",
       resource: "delivery",
+      title: "Receive SES notifications",
       summary: "SES/SNS bounce + complaint notifications (SNS-signature-verified in the adapter).",
       handler: webhookRoutes.ses,
     },
@@ -1341,6 +1400,7 @@ export function createRouter({
       path: "/",
       access: "public",
       resource: "archive",
+      title: "Show the landing page",
       summary:
         "The newsletter's public landing page: identity, the latest post, and a subscribe call to action.",
       handler: archiveRoutes.landing,
@@ -1350,6 +1410,7 @@ export function createRouter({
       path: "/subscribe",
       access: "public",
       resource: "subscriptions",
+      title: "Show the subscribe form",
       summary:
         "The public subscribe form (HTML); while no email provider is connected, a page saying signups aren't open yet (SPEC §9).",
       handler: publicRoutes.subscribeForm,
@@ -1359,6 +1420,7 @@ export function createRouter({
       path: "/subscribe",
       access: "public",
       resource: "subscriptions",
+      title: "Request a subscription",
       summary: "Request a subscription; starts the double opt-in (confirmation email).",
       description:
         "Answers the same way whatever the address's state (new, pending, confirmed, unsubscribed, or suppressed), and before any confirmation is sent, so neither the reply nor its timing reveals list membership. A confirmation goes out only if one is due: never to a confirmed or suppressed address, and at most one per address per cooldown. A confirmation the email provider refuses is logged and changes nothing, so submitting again is safe; the authed `POST /api/subscribers` reports the refusal. While no email provider is connected every request is refused alike, 409 `provider_not_connected` (as JSON, or the page saying signups aren't open yet), and nothing is stored (SPEC §9).",
@@ -1373,6 +1435,7 @@ export function createRouter({
       path: "/confirm",
       access: "public",
       resource: "subscriptions",
+      title: "Show the confirmation page",
       summary: "Confirmation landing page (`?token=`): a Confirm button, and no change.",
       description:
         "Opening the link records nothing, since mail scanners open every link; the page's button POSTs the token. An expired link's page offers to send a fresh one instead.",
@@ -1390,6 +1453,7 @@ export function createRouter({
       path: "/confirm",
       access: "public",
       resource: "subscriptions",
+      title: "Confirm a subscription",
       summary: "Confirm a subscription: the landing page's button (form field `token`).",
       handler: publicRoutes.confirm,
     },
@@ -1398,6 +1462,7 @@ export function createRouter({
       path: "/unsubscribe",
       access: "public",
       resource: "subscriptions",
+      title: "Show the unsubscribe page",
       summary: "Unsubscribe landing page (`?token=`, or `?test=1` on a test email or a preview).",
       query: [
         {
@@ -1417,6 +1482,7 @@ export function createRouter({
       path: "/unsubscribe",
       access: "public",
       resource: "subscriptions",
+      title: "Process an unsubscribe",
       summary:
         "Process a one-click / form unsubscribe (`?token=`, or `?test=1` on a test email or a preview).",
       query: [
@@ -1443,6 +1509,7 @@ export function createRouter({
       path: `${UNLISTED_PATH}/:token`,
       access: "public",
       resource: "archive",
+      title: "Open an unlisted link",
       summary:
         "A post's unlisted link, the view-in-browser link every test and send carries (SPEC §5).",
       description:
@@ -1462,6 +1529,7 @@ export function createRouter({
       path: `${archiveBasePath}{/}?`,
       access: "public",
       resource: "archive",
+      title: "Show the archive",
       summary:
         "The public archive index: every published post (its send has started), newest first.",
       handler: archiveRoutes.archiveIndex,
@@ -1471,6 +1539,7 @@ export function createRouter({
       path: `${archiveBasePath}/:slug`,
       access: "public",
       resource: "archive",
+      title: "Show an archived post",
       summary:
         "A published post's archive page (I3), from the moment a listed post's send starts, while it stays listed.",
       description:
@@ -1484,6 +1553,7 @@ export function createRouter({
       path: "/media/:key(.*)",
       access: "public",
       resource: "media",
+      title: "Serve an image",
       summary: "Serve image bytes from storage (public; readers + archive load these).",
       handler: imageRoutes.serveMedia,
     },

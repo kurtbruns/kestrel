@@ -31,6 +31,7 @@ const groups: ReferenceGroup[] = [
         path: "/api/posts",
         access: "admin",
         resource: "posts",
+        title: "List posts",
         summary: "List posts.",
         description: "Offset-paged.",
         query: [{ name: "status", description: "draft, scheduled, or sent" }],
@@ -41,6 +42,7 @@ const groups: ReferenceGroup[] = [
         path: "/api/posts",
         access: "admin",
         resource: "posts",
+        title: "Create <a post>",
         summary: "Create <a post>.",
         example: { request: { subject: "Owls" }, response: { post: { id: "p1" } } },
       },
@@ -49,6 +51,7 @@ const groups: ReferenceGroup[] = [
         path: "/api/posts/:id",
         access: "admin",
         resource: "posts",
+        title: "Retrieve a post",
         summary: "One post.",
       },
       {
@@ -56,6 +59,7 @@ const groups: ReferenceGroup[] = [
         path: "/api/sends/:id/cancel",
         access: "admin",
         resource: "sends",
+        title: "Cancel a send",
         summary: "Cancel a send.",
       },
     ],
@@ -71,6 +75,7 @@ const groups: ReferenceGroup[] = [
         path: "/subscribe",
         access: "public",
         resource: "subscriptions",
+        title: "Subscribe",
         summary: "Subscribe.",
       },
     ],
@@ -112,13 +117,14 @@ describe("reference room", () => {
     ]);
     expect(nav.map((a) => a.textContent)).toEqual(["Admin", "Posts", "Sends", "Public"]);
     expect($(".api-head p").textContent).toContain(`Base URL ${location.origin}.`);
-    // Every row starts collapsed: badge, path, and summary line in the summary.
+    // Every row starts collapsed: badge, then the route's name over its path.
     const rows = $$<HTMLDetailsElement>("#api-admin-posts details.api-route");
     expect(rows).toHaveLength(3);
     expect(rows.every((d) => !d.open)).toBe(true);
     expect($(".api-method", rows[0]).className).toBe("api-method m-GET");
     expect($(".api-path", rows[0]).textContent).toBe("/api/posts");
-    expect($(".api-route-line", rows[0]).textContent).toBe("List posts.");
+    expect($(".api-route-title", rows[0]).textContent).toBe("List posts");
+    expect($(".api-route-sum", rows[0]).textContent).not.toContain("List posts.");
     expect(document.querySelector(".api-tier")).toBeNull(); // the tier heads the section, not each row
     // A path parameter is marked; the rest of the path is text.
     expect($(".api-path", rows[2]).textContent).toBe("/api/posts/:id");
@@ -127,7 +133,8 @@ describe("reference room", () => {
     expect($(".api-desc", rows[0]).textContent).toBe("Offset-paged.");
     expect($(".api-query td code", rows[0]).textContent).toBe("status");
     expect($(".api-summary", rows[1]).textContent).toBe("Create <a post>."); // text, not markup
-    expect(document.querySelector(".api-summary a, .api-route-line a")).toBeNull();
+    expect($(".api-route-title", rows[1]).textContent).toBe("Create <a post>");
+    expect(document.querySelector(".api-summary a, .api-route-title a")).toBeNull();
     expect($$(".block-label", rows[1]).map((l) => l.textContent)).toEqual([
       "Request",
       "Response",
@@ -160,6 +167,7 @@ describe("reference room", () => {
             path: "/webhooks/ses",
             access: "webhook",
             resource: "delivery",
+            title: "SES events",
             summary: "SES events.",
           },
         ],
@@ -224,6 +232,7 @@ describe("reference room", () => {
             path: "/api/posts/:id/images",
             access: "admin",
             resource: "posts",
+            title: "Upload an image",
             summary: "Upload an image.",
             accepts: ["multipart/form-data", "image/png"],
           },
@@ -232,6 +241,7 @@ describe("reference room", () => {
             path: "/api/posts/:id",
             access: "admin",
             resource: "posts",
+            title: "Delete a draft",
             summary: "Delete a draft.",
           },
         ],
@@ -258,6 +268,7 @@ describe("reference room", () => {
             path: "/confirm",
             access: "public",
             resource: "subscriptions",
+            title: "Confirm",
             summary: "Confirm.",
             query: [{ name: "token", description: "The link's token.", required: true }],
           },
@@ -352,7 +363,7 @@ describe("reference room", () => {
     expect(active()).toEqual(["admin-posts"]); // the detached rail no longer moves
   });
 
-  it("filters rows by method, path, or summary, with the headings and rail links that still hold one", async () => {
+  it("filters rows by name, method, path, or summary, with the headings and rail links that still hold one", async () => {
     fake = fakeApi([{ path: "/api/reference", reply: () => ({ groups }) }]);
     await mount(renderReference);
     await settle();
@@ -366,7 +377,7 @@ describe("reference room", () => {
         .filter((li) => !li.hidden)
         .map((li) => `${$(".api-method", li).textContent} ${$(".api-path", li).textContent}`);
 
-    expect(filter.placeholder).toBe("Filter routes by method, path, or summary");
+    expect(filter.placeholder).toBe("Filter routes by name, method, or path");
     expect($("#apiFilterClear").hidden).toBe(true);
     type("post create");
     expect($("#apiFilterClear").hidden).toBe(false);
@@ -382,6 +393,10 @@ describe("reference room", () => {
     expect($("#apiEmpty").hidden).toBe(true);
     // The last tier still shown keeps the last tier's room to scroll up under the bar.
     expect($$(".api-section.api-last").map((sec) => sec.id)).toEqual(["api-admin"]);
+
+    // A route's name is matched too, though neither its path nor its summary says it.
+    type("retrieve");
+    expect(shown()).toEqual(["GET /api/posts/:id"]);
 
     type("nothing-matches");
     expect(shown()).toEqual([]);

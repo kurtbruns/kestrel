@@ -75,6 +75,7 @@ function entry(r: RouteDef): ReferenceEntry {
     path: r.path,
     access: r.access,
     resource: r.resource,
+    title: r.title,
     summary: r.summary,
     description: r.description,
     query: r.query,
@@ -107,10 +108,10 @@ function jsonBlock(label: string, value: unknown): string {
   return `${label}:\n\n\`\`\`json\n${JSON.stringify(value, null, 2)}\n\`\`\``;
 }
 
-/** One route as a Markdown section: its method and path as the heading, then the summary,
- *  description, body types, query parameters, and example. */
+/** One route as a Markdown section: its title as the heading, its method and path beneath,
+ *  then the summary, description, body types, query parameters, and example. */
 function routeMarkdown(r: ReferenceEntry): string {
-  const parts = [`#### ${r.method} ${r.path}`, r.summary];
+  const parts = [`#### ${r.title}`, `\`${r.method} ${r.path}\``, r.summary];
   if (r.description) {
     parts.push(r.description);
   }
@@ -135,7 +136,7 @@ function routeMarkdown(r: ReferenceEntry): string {
 
 /**
  * The reference as one Markdown document, for an agent to read (SPEC §11): a `##` heading per
- * tier, a `###` per resource within it, and a `####` per route. A projection of the same
+ * tier, a `###` per resource within it, and a `####` per route, named by its title. A projection of the same
  * groups `buildReference` returns, so it can't drift from the JSON. `origin` is the base URL
  * the paths hang off.
  */

@@ -114,6 +114,8 @@ export interface RouteDef {
   access: Access;
   /** What the route acts on; the reference groups by it within the tier. */
   resource: Resource;
+  /** The route named by what it does ("Schedule a post"), which the reference leads with. */
+  title: string;
   summary: string;
   description?: string;
   /** Query parameters, documented from the registration so the reference can't drift. */

@@ -4074,11 +4074,11 @@ button.api-filter-clear svg {
 .api-rows > li {
   border-bottom: 1px solid var(--line);
 }
-/* One route per row: badge, path, and summary line, a native disclosure that opens in
-   place to the full documentation. */
+/* One route per row: badge, then the route's name over its path, a native disclosure that
+   opens in place to the full documentation. The name leads, since a reader looks for an act. */
 .api-route-sum {
   display: grid;
-  grid-template-columns: 62px minmax(0, max-content) minmax(0, 1fr) 20px;
+  grid-template-columns: 62px minmax(0, 1fr) 20px;
   gap: 14px;
   align-items: center;
   padding: 9px 6px;
@@ -4092,15 +4092,16 @@ button.api-filter-clear svg {
 .api-route-sum:hover {
   background: var(--hover);
 }
-.api-route-line {
-  color: var(--muted);
-  font-size: 13.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.api-route-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  min-width: 0;
 }
-.api-route[open] .api-route-line {
-  visibility: hidden;
+.api-route-title {
+  font-size: 14.5px;
+  font-weight: 600;
 }
 .api-chev {
   width: 6px;
@@ -4139,6 +4140,11 @@ button.api-filter-clear svg {
 .api-path {
   font: 13.5px var(--mono);
   overflow-wrap: anywhere;
+}
+/* Beneath the route's name in a row, the path is how to call it, so it reads quieter. */
+.api-route-name .api-path {
+  color: var(--muted);
+  font-size: 12.5px;
 }
 .api-param {
   color: var(--syntax-variable);
@@ -4298,20 +4304,10 @@ button.api-filter-clear svg {
     margin-top: 0;
   }
   .api-route-sum {
-    grid-template-columns: 62px minmax(0, 1fr) 20px;
-    gap: 4px 10px;
+    gap: 10px;
   }
-  .api-route-line {
-    grid-column: 2;
-    grid-row: 2;
-    white-space: normal;
-  }
-  .api-chev {
-    grid-column: 3;
-    grid-row: 1;
-  }
-  .api-route[open] .api-route-line {
-    display: none;
+  .api-route-name {
+    flex-direction: column;
   }
   .api-route-detail {
     padding: 0 4px 14px;

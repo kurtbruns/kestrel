@@ -110,5 +110,5 @@ An error nothing handled answers `500` `internal_error` on the API. On a reader 
 1. Start from the spec. If the change alters what a client can rely on, the spec changes first (`.claude/rules/maintainer.md`).
 2. Put it on an existing resource and an existing way of reading or acting if it fits (principles 2 and 3).
 3. Pass principle 9's questions, and write the one sentence the reference will carry.
-4. Register it in `src/app.ts` with its summary, body types, query parameters, and example, so the reference and the gate come from the same entry.
+4. Register it in `src/app.ts` with its title (the act, as "Schedule a post"), summary, body types, query parameters, and example, so the reference and the gate come from the same entry.
 5. Update this document only if the change adds a rule or a kind of concept, not a field.

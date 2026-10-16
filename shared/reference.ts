@@ -49,6 +49,8 @@ export interface ReferenceEntry {
   path: string;
   access: Access;
   resource: Resource;
+  /** The route named by what it does ("Schedule a post"); the reference leads with it, the path beneath. */
+  title: string;
   summary: string;
   description?: string;
   query?: QueryParam[];

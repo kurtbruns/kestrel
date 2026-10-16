@@ -147,6 +147,21 @@ describe("API reference is generated from the route registration", () => {
     expect(defs.some((d) => d.method === "GET" && d.path === "/api/reference")).toBe(true);
   });
 
+  it("names every route by what it does, each name its own (the reference leads with it)", () => {
+    const groups = buildReference(defs);
+    const titles = groups.flatMap((g) => g.routes.map((r) => r.title));
+    expect(titles.length).toBe(defs.length);
+    // A short act, capitalized, with no trailing period and no path in it.
+    for (const t of titles) {
+      expect(t).toMatch(/^[A-Z][^/.]{2,40}$/);
+    }
+    // Two routes under one name would leave the reader to tell them apart by path again.
+    expect(new Set(titles).size).toBe(titles.length);
+    expect(
+      groups.flatMap((g) => g.routes).find((r) => r.path === "/api/posts/:id/schedule")?.title,
+    ).toBe("Schedule a post");
+  });
+
   it("carries documented query params through for list routes (filter/sort/pagination)", () => {
     const groups = buildReference(defs);
     const listRoute = groups
@@ -166,6 +181,7 @@ describe("API reference is generated from the route registration", () => {
       path: "/demo/thing",
       access: "admin",
       resource: "posts",
+      title: "Make a thing",
       summary: "A freshly registered admin route.",
       handler: () => new Response("ok"),
     };
@@ -175,6 +191,7 @@ describe("API reference is generated from the route registration", () => {
       path: "/demo/public",
       access: "public",
       resource: "archive",
+      title: "Show a thing",
       summary: "A freshly registered public route.",
       handler: () => new Response("ok"),
     });
@@ -218,13 +235,15 @@ describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
   const router = createRouter(getConfig(env as AppEnv));
   const defs = router.routes.map((r) => r.def);
 
-  it("gives every registered route its own heading, under its tier and resource, from the same groups", () => {
+  it("gives every registered route its own heading, its title over its method and path, under its tier and resource", () => {
     const md = referenceMarkdown(buildReference(defs), "https://newsletter.example.com");
-    const headings = [...md.matchAll(/^#### (\S+) (\S+)$/gm)].map(([, m, p]) => `${m} ${p}`);
-    expect(headings.sort()).toEqual(defs.map((d) => `${d.method} ${d.path}`).sort());
+    const headings = [...md.matchAll(/^#### (.+)\n\n`(\S+) (\S+)`$/gm)].map(
+      ([, t, m, p]) => `${t}: ${m} ${p}`,
+    );
+    expect(headings.sort()).toEqual(defs.map((d) => `${d.title}: ${d.method} ${d.path}`).sort());
     expect(md).toContain("Base URL `https://newsletter.example.com`");
     // Tiers, then their resources, then routes, each a level down.
-    expect(md).toMatch(/^## Admin\n\n[^#][\s\S]*?^### Posts\n\n#### \S+ \/api\/posts\S*$/m);
+    expect(md).toMatch(/^## Admin\n\n[^#][\s\S]*?^### Posts\n\n#### .+\n\n`\S+ \/api\/posts\S*`$/m);
     expect(md).not.toMatch(/^## \S+: /m);
     // A route's query table and example come through.
     expect(md).toMatch(/\| Query parameter \| Description \|/);
@@ -237,7 +256,7 @@ describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
     expect(res.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
     const md = await res.text();
     expect(md).toMatch(/^# API reference/);
-    expect(md).toContain("\n#### GET /api/docs/:name.md\n");
+    expect(md).toContain("\n#### Get a doc as Markdown\n\n`GET /api/docs/:name.md`\n");
     expect(md).toContain(`Base URL \`${base}\``);
   });
 });
