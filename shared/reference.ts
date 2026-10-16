@@ -169,3 +169,24 @@ export interface ReferenceResponse {
   objects: ReferenceObject[];
   groups: ReferenceGroup[];
 }
+
+/**
+ * The route's path as a URL path to type: the pattern syntax a URL never carries (a
+ * parameter's regex, an optional segment) is dropped, and `:id`-style parameters stay as
+ * the placeholders to replace. The reference shows its rows and builds its commands this way.
+ */
+export function concretePath(path: string): string {
+  return path.replace(/\([^)]*\)/g, "").replace(/\{[^}]*\}\??/g, "") || "/";
+}
+
+/**
+ * A route's own address in the editor's reference, `#/reference/<anchor>`: its method and its
+ * path to type, lowercased, every run of other characters a hyphen (`post-api-sends-id-cancel`).
+ * Here rather than in the editor so a spec can hold every route's anchor unique.
+ */
+export function routeAnchor(r: { method: string; path: string }): string {
+  return `${r.method}${concretePath(r.path)}`
+    .toLowerCase()
+    .replace(/[^a-z0-9.]+/g, "-")
+    .replace(/-+$/, "");
+}

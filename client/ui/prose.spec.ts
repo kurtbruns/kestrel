@@ -28,10 +28,9 @@ describe("inline Markdown in the API reference's prose", () => {
   it("keeps a link's target only for a web address or a path on this origin", () => {
     const hrefs = (src: string) =>
       [...render(inline(src)).querySelectorAll("a")].map((a) => a.getAttribute("href"));
-    expect(hrefs("[a](https://x.example) [b](/api/sends) [c](//evil.example)")).toEqual([
-      "https://x.example",
-      "/api/sends",
-    ]);
+    expect(
+      hrefs("[a](https://x.example) [b](/api/sends) [c](//evil.example) [d](/\\evil.example)"),
+    ).toEqual(["https://x.example", "/api/sends"]);
     const el = render(inline("[run](javascript:void0) and [jump](#the-send-view)"));
     expect(el.querySelector("a")).toBeNull();
     expect(el.textContent).toBe("run and jump");

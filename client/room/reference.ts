@@ -14,6 +14,7 @@ import type {
   RouteError,
   RouteReturns,
 } from "../../shared/reference";
+import { concretePath, routeAnchor } from "../../shared/reference";
 import { api, describeError } from "../api";
 import { mount } from "../lifecycle";
 import { appState } from "../state";
@@ -24,7 +25,7 @@ import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { inline, prose } from "../ui/prose";
 import { renderError } from "../ui/widgets";
-import { concretePath, curlCommand } from "./curl";
+import { curlCommand } from "./curl";
 import { roomShell } from "./shell";
 
 // Every route the app and Claude can call, generated from the route manifest
@@ -128,16 +129,6 @@ function apiPathHtml(path: string): Html {
   return html`${concretePath(path)
     .split(/(:[A-Za-z_]+)/)
     .map((part, i) => (i % 2 ? html`<span class="api-param">${part}</span>` : part))}`;
-}
-/**
- * A route's own address in the reference, `#/reference/<anchor>`: its method and its path to
- * type, lowercased, every run of other characters a hyphen (`post-api-sends-id-cancel`).
- */
-export function routeAnchor(r: Pick<ReferenceEntry, "method" | "path">): string {
-  return `${r.method}${concretePath(r.path)}`
-    .toLowerCase()
-    .replace(/[^a-z0-9.]+/g, "-")
-    .replace(/-+$/, "");
 }
 /** The link that opens the reference at a route, to share in an issue or hand to Claude. */
 function routeLink(r: ReferenceEntry): string {
@@ -384,6 +375,11 @@ export async function renderReference(
     }
     ev.preventDefault();
     const target = document.getElementById(`api-${sec}`);
+    // A filter may have hidden what the link points at (a route's object, under another
+    // resource): clear it, rather than leave the click to do nothing.
+    if (target?.closest("[hidden]")) {
+      filterTo("");
+    }
     // An object is a collapsed line under its resource: a link to it opens it too.
     if (target instanceof HTMLDetailsElement) {
       target.open = true;

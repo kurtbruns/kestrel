@@ -435,7 +435,9 @@ describe("reference room", () => {
       "A &lt;b&gt;tag&lt;/b&gt; stays text.",
     ]);
     // The overview's prose too.
-    expect($("#api-overview-errors .api-prose").innerHTML).toBe("A refusal names its &lt;field&gt;.");
+    expect($("#api-overview-errors .api-prose").innerHTML).toBe(
+      "A refusal names its &lt;field&gt;.",
+    );
   });
 
   it("copies a route's method and path, and a link that opens the reference at it", async () => {
@@ -488,6 +490,40 @@ describe("reference room", () => {
     await settle();
     expect($$<HTMLDetailsElement>("details.api-route").filter((d) => d.open)).toHaveLength(0);
     expect(scroll).not.toHaveBeenCalled();
+  });
+
+  it("clears a filter that hides the object a route's Returns links to, then opens it", async () => {
+    const schedule: ReferenceGroup[] = [
+      {
+        ...groups[0]!,
+        routes: [
+          ...groups[0]!.routes,
+          {
+            method: "POST",
+            path: "/api/posts/:id/schedule",
+            access: "admin",
+            resource: "posts",
+            title: "Schedule a post",
+            summary: "Schedule a post.",
+            returns: { object: "send", as: "send" },
+          },
+        ],
+      },
+    ];
+    fake = fakeApi([{ path: "/api/reference", reply: () => reference(schedule) }]);
+    await mount(renderReference);
+    await settle();
+    const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
+    const filter = $<HTMLInputElement>("#apiFilter");
+    filter.value = "schedule";
+    filter.dispatchEvent(new Event("input"));
+    // The send view heads Sends, which the filter hid.
+    expect($("#api-admin-sends").hidden).toBe(true);
+    $<HTMLElement>("#route-post-api-posts-id-schedule .api-obj-link").click();
+    expect(filter.value).toBe("");
+    expect($("#api-admin-sends").hidden).toBe(false);
+    expect($<HTMLDetailsElement>("#api-objects-send").open).toBe(true);
+    expect(scroll.mock.instances).toEqual([$("#api-objects-send")]);
   });
 
   it("marks a query parameter the route can't do without", async () => {

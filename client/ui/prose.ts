@@ -12,7 +12,8 @@ const INLINE = /`([^`]+)`|\*\*([^*]+)\*\*|\[([^\]]+)\]\(([^)\s]+)\)/g;
 
 /** Whether a link's target is one to follow: a web address, or a path on this origin. */
 function safeHref(href: string): boolean {
-  return /^https:\/\//i.test(href) || /^\/(?!\/)/.test(href);
+  // A second `/`, or a `\` a browser reads as one, would make it another host's address.
+  return /^https:\/\//i.test(href) || /^\/(?![/\\])/.test(href);
 }
 
 /** A line of inline Markdown as markup. */

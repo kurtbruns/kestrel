@@ -4236,6 +4236,8 @@ button.api-filter-clear svg {
   border: 1px solid var(--line);
   border-radius: 6px;
   margin: 4px 0 10px;
+  /* Opened from a route's Returns, it lands below the bar and its resource's pinned heading. */
+  scroll-margin-top: calc(var(--bar-h) + 44px);
 }
 .api-object-sum {
   display: flex;

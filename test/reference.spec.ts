@@ -2,6 +2,7 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import apiDoc from "../docs/API.md";
+import { routeAnchor } from "../shared/reference";
 import {
   ERASED_MARKER_MEANING,
   FLAG_MEANING,
@@ -149,6 +150,15 @@ describe("API reference is generated from the route registration", () => {
 
   it("is self-describing: the reference endpoint appears in its own listing", () => {
     expect(defs.some((d) => d.method === "GET" && d.path === "/api/reference")).toBe(true);
+  });
+
+  it("gives every route its own address in the editor's reference", () => {
+    // The anchor is a page's element id and a link someone shares, so two routes can't share one.
+    const anchors = defs.map((d) => routeAnchor(d));
+    expect(new Set(anchors).size).toBe(defs.length);
+    expect(routeAnchor({ method: "POST", path: "/api/sends/:id/cancel" })).toBe(
+      "post-api-sends-id-cancel",
+    );
   });
 
   it("names every route by what it does, each name its own (the reference leads with it)", () => {

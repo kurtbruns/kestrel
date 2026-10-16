@@ -2,7 +2,7 @@
 // instance, the credential headers its tier needs, and the example body when it has one,
 // or for a form upload its required fields.
 
-import type { ReferenceEntry } from "../../shared/reference";
+import { concretePath, type ReferenceEntry } from "../../shared/reference";
 
 /** How this instance authenticates the admin tier, as the boot probe reported it. */
 export type AuthMode = "access" | "dev";
@@ -18,15 +18,6 @@ function authLines(mode: AuthMode): string[] {
         '-H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET"',
       ]
     : ['-H "Authorization: Bearer $TOKEN"'];
-}
-
-/**
- * The route's path as a URL path to type: the pattern syntax a URL never carries (a
- * parameter's regex, an optional segment) is dropped, and `:id`-style parameters stay as
- * the placeholders to replace. The reference shows its rows this way too.
- */
-export function concretePath(path: string): string {
-  return path.replace(/\([^)]*\)/g, "").replace(/\{[^}]*\}\??/g, "") || "/";
 }
 
 /**
