@@ -17,7 +17,7 @@ A few things to know as you write:
 
 ## Test it
 
-**Send test email** sends the real email, through the same template and code as the send, to the addresses you name. **Settings → Default test recipients** fills them in for you. Nobody on your list gets anything, and a test's unsubscribe link unsubscribes no one.
+**Send test email** sends the real email, through the same template and code as the send, to the addresses you name. **Settings → Default test recipients** fills them in for you. Nobody on your list gets anything, nothing appears in your archive, and a test's unsubscribe link unsubscribes no one.
 
 Mail clients each draw email a little differently, so trust a test over **Preview**, especially for tables, code, and HTML. A test needs an email provider, which [Connect Amazon SES](../get-started/04-ses.md) sets up.
 
