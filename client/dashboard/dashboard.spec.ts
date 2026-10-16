@@ -29,6 +29,8 @@ const post = (over: Partial<PostListItem> = {}): PostListItem => ({
   unlisted_token: "t-p1",
   archive_url: "https://news.example.com/archive/owls",
   unlisted_url: "https://news.example.com/email/t-p1",
+  published_at: null,
+  archive_live: false,
   subject: "<b>Owls</b> & co",
   status: "draft",
   email_only: false,

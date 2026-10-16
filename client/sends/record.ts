@@ -590,7 +590,7 @@ function renderFrozenRecord(
         dialog.close();
         // The send's next report brings its links; the listing shows now, as the server
         // answered whether the archive address answers.
-        const archive = res.archive_answers ? res.post.archive_url : null;
+        const archive = res.post.archive_live ? res.post.archive_url : null;
         view = { ...view, email_only: res.post.email_only, links: { ...view.links, archive } };
         paintPost();
         toast(

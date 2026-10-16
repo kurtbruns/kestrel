@@ -29,6 +29,7 @@ const postReply =
         slug: "herons",
         unlisted_token: "t0k3n",
         unlisted_url: "https://newsletter.example.com/email/t0k3n",
+        published_at: stage === "sending" || stage === "sent" ? FIRE_AT : null,
         email_only: emailOnly,
         status: stage === "sending" ? "scheduled" : stage,
       },

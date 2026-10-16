@@ -140,7 +140,11 @@ describe("router", () => {
       },
       {
         path: "/api/posts/p1",
-        reply: () => jsonResponse({ post: { slug: "herons", status: "draft" }, scheduled: null }),
+        reply: () =>
+          jsonResponse({
+            post: { slug: "herons", status: "draft", published_at: null },
+            scheduled: null,
+          }),
       },
     ]);
     await at("#/web/post/p1");

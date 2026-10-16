@@ -4,18 +4,28 @@
 
 import { archivePostUrl, unlistedPostUrl } from "../../shared/archive_url";
 import type { Post } from "../../shared/posts";
+import type { Publication } from "../db/sends";
 import type { Config } from "../env";
 
-/** A stored post as the API answers it: with its archive address and unlisted link, absolute,
- *  so a client reads where the post goes rather than building it. */
-export function withAddresses<T extends Pick<Post, "slug" | "unlisted_token">>(
+/**
+ * A stored post as the API answers it: with its archive address and unlisted link, absolute, so
+ * a client reads where the post goes rather than building it, and where it stands for readers
+ * (SPEC §5). `publication` is its published send, or null while unpublished: `published_at` is
+ * when that send started, and `archive_live` whether the archive address shows the post now.
+ */
+export function withAddresses<T extends Pick<Post, "slug" | "unlisted_token" | "email_only">>(
   config: Pick<Config, "appOrigin" | "archiveOrigin" | "archiveBasePath">,
   post: T,
-): T & Pick<Post, "archive_url" | "unlisted_url"> {
+  publication: Publication | null,
+): T & Pick<Post, "archive_url" | "unlisted_url" | "published_at" | "archive_live"> {
   return {
     ...post,
     archive_url: archivePostUrl(config.archiveOrigin, config.archiveBasePath, post.slug),
     unlisted_url: unlistedPostUrl(config.appOrigin, post.unlisted_token),
+    published_at: publication?.published_at ?? null,
+    archive_live:
+      publication !== null &&
+      archiveAnswers({ emailOnly: post.email_only, webLink: publication.web_link }),
   };
 }
 

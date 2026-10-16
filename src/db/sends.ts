@@ -252,6 +252,38 @@ export function publishedSendForPost(db: D1Database, postId: string): Promise<Se
     .first<SendRow>();
 }
 
+/** Where a post's published send stands for its addresses (SPEC §5): when it started, and which
+ *  address its email carries. */
+export interface Publication {
+  published_at: number;
+  web_link: "unlisted" | "archive";
+}
+
+/** Each listed post's publication, by post id; a post absent from the map is unpublished. One
+ *  read for a whole page of posts. */
+export async function publicationsFor(
+  db: D1Database,
+  postIds: string[],
+): Promise<Map<string, Publication>> {
+  if (postIds.length === 0) {
+    return new Map();
+  }
+  // A post has at most one published send (it is closed once sent); MAX keeps the rule if not,
+  // and SQLite takes the other bare column from the row MAX chose.
+  const { results } = await db
+    .prepare(
+      `SELECT s.post_id AS post_id, MAX(${PUBLISHED_AT}) AS published_at, s.web_link AS web_link
+         FROM sends s
+        WHERE s.post_id IN (SELECT value FROM json_each(?)) AND ${PUBLISHED_SEND}
+        GROUP BY s.post_id`,
+    )
+    .bind(JSON.stringify(postIds))
+    .all<Publication & { post_id: string }>();
+  return new Map(
+    results.map((r) => [r.post_id, { published_at: r.published_at, web_link: r.web_link }]),
+  );
+}
+
 /** One published post for the public archive index (§5): the frozen subject, the
  *  slug that addresses its archive page, and when its send started. */
 export interface PublishedPost {

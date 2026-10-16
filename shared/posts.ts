@@ -9,8 +9,8 @@ export type PostStatus = "draft" | "scheduled" | "sent";
 export interface Post {
   id: string;
   /**
-   * The post's archive address, `<archive origin><base path>/<slug>` (SPEC §4): unique among
-   * all posts, drafts included, and fixed once the post's send starts.
+   * The last part of the post's archive address, `archive_url` (SPEC §4): unique among all
+   * posts, drafts included, and fixed once the post's send starts.
    */
   slug: string;
   /**
@@ -31,6 +31,19 @@ export interface Post {
   archive_url: string;
   /** The post's unlisted link, absolute: the "view in browser" every email of it carries (SPEC §5). */
   unlisted_url: string;
+  /**
+   * When the post's send started, which is when it was published (SPEC §5); null before. Its
+   * unlisted link shows the post exactly when this is set. `status` can't say it: a post stays
+   * `scheduled` while its send is going out.
+   */
+  published_at: number | null;
+  /**
+   * Whether `archive_url` shows the post now (SPEC §5): once published, while it is listed, or
+   * whatever the listing for a post whose emails carry that address (sent before unlisted
+   * links). Where a reader can see it: `archive_url` when this is true, otherwise
+   * `unlisted_url` once `published_at` is set.
+   */
+  archive_live: boolean;
   subject: string;
   status: PostStatus;
   /**
@@ -173,12 +186,6 @@ export interface PostSettingsBody {
 export interface PostSettingsResponse {
   post: Post;
   slug_taken: SlugTaken;
-  /**
-   * Whether the post's archive address answers now (SPEC §5): once its send has started, while
-   * it is listed, or whatever the listing for a post whose email links that address. A send's
-   * `links.archive` follows the same rule.
-   */
-  archive_answers: boolean;
   /** False when the post was already listed as asked: nothing was written. */
   changed: boolean;
 }

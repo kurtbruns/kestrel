@@ -112,11 +112,10 @@ export async function renderWebVersion(
     if (signal.aborted) {
       return;
     }
-    // Once the send starts the post is public, and its web version is that page: go there,
-    // by its unlisted link, which opens the page whatever the listing.
-    const live = data ? data.post.unlisted_url : null;
-    if (data && (data.sending || data.post.status === "sent") && live) {
-      leaveFor(live);
+    // Once the post is published its web version is that page: go there, by its unlisted
+    // link, which opens the page whatever the listing.
+    if (data && data.post.published_at !== null) {
+      leaveFor(data.post.unlisted_url);
       return;
     }
     const bar = webBar(data !== null);

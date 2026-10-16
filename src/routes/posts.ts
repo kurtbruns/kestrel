@@ -15,9 +15,9 @@ import {
   currentSendSeq,
   getActiveSendForPost,
   latestSentSendForPost,
-  publishedSendForPost,
+  publicationsFor,
 } from "../db/sends";
-import { archiveAnswers, withAddresses } from "../lib/archive_address";
+import { withAddresses } from "../lib/archive_address";
 import { fieldError, optBoolean, optString, optStringOrNull, readJsonObject } from "../lib/body";
 import { badRequest, json, notFound, refusal } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
@@ -79,6 +79,16 @@ function baseRevision(c: RequestContext, body: EditBody): string | null {
   return body.base_revision;
 }
 
+/** What a draft's answer carries as its publication: a draft has never been published, since a
+ *  published post never goes back to being one (SPEC §2). Saves answer only drafts. */
+const UNPUBLISHED = null;
+
+/** A post as the API answers it, any state: its addresses and where it stands for readers. */
+async function answered(c: RequestContext, post: posts.PostRow) {
+  const published = await publicationsFor(c.env.DB, [post.id]);
+  return withAddresses(c.config, post, published.get(post.id) ?? null);
+}
+
 /** Expose a post's current revision as an ETag so a client can send it back as `If-Match`. */
 function revisionHeaders(post: posts.PostRow): HeadersInit | undefined {
   return post.current_revision ? { ETag: `"${post.current_revision}"` } : undefined;
@@ -118,7 +128,7 @@ export async function createPost(c: RequestContext): Promise<Response> {
   const { input } = await readBody(c, { optional: true });
   const { post, revision } = await slugGuarded(() => posts.createPost(c.env.DB, input, author(c)));
   const body: PostSavedResponse = {
-    post: withAddresses(c.config, post),
+    post: withAddresses(c.config, post, UNPUBLISHED),
     slug_taken: await posts.slugTakenFor(c.env.DB, post),
     revision_id: revision.id,
   };
@@ -157,8 +167,12 @@ export async function listPosts(c: RequestContext): Promise<Response> {
     posts.countPosts(c.env.DB, filter),
     posts.listPosts(c.env.DB, filter, page),
   ]);
+  const published = await publicationsFor(
+    c.env.DB,
+    rows.map((row) => row.id),
+  );
   const body: PostListResponse = {
-    posts: rows.map((row) => withAddresses(c.config, row)),
+    posts: rows.map((row) => withAddresses(c.config, row, published.get(row.id) ?? null)),
     page: listPage(total, page),
     cursor: encodeSendCursor({ seq, at: now }),
   };
@@ -180,7 +194,7 @@ export async function getPost(c: RequestContext): Promise<Response> {
   // redirect to the sent record view (#/sent/:id).
   const sent = post.status === "sent" ? await latestSentSendForPost(c.env.DB, post.id) : null;
   const body: PostResponse = {
-    post: withAddresses(c.config, post),
+    post: await answered(c, post),
     slug_taken: await posts.slugTakenFor(c.env.DB, post),
     markdown: revision?.markdown ?? "",
     author: revision?.author ?? null, // who wrote the current revision — the freshness poll names them
@@ -214,7 +228,7 @@ export async function updatePost(c: RequestContext): Promise<Response> {
       message:
         "A save must name the revision it was based on. Read the post, then save with its current_revision as base_revision or If-Match.",
       field: "base_revision",
-      post: withAddresses(c.config, post),
+      post: withAddresses(c.config, post, UNPUBLISHED),
     };
     return json(required, 428, revisionHeaders(post));
   }
@@ -233,7 +247,7 @@ export async function updatePost(c: RequestContext): Promise<Response> {
     posts.updatePost(c.env.DB, post, body.input, author(c)),
   );
   const saved: PostSavedResponse = {
-    post: withAddresses(c.config, updated),
+    post: withAddresses(c.config, updated, UNPUBLISHED),
     slug_taken: await posts.slugTakenFor(c.env.DB, updated),
     revision_id: revision.id,
   };
@@ -330,13 +344,9 @@ export async function setSettings(c: RequestContext): Promise<Response> {
   const input = await resolveSettings(c.env.DB, post, fields);
   const changed = await applySettings(c.env.DB, post, fields, input);
   const now = changed ? unwrap(await posts.getPost(c.env.DB, post.id), "post") : post;
-  const published = await publishedSendForPost(c.env.DB, now.id);
   const answer: PostSettingsResponse = {
-    post: withAddresses(c.config, now),
+    post: await answered(c, now),
     slug_taken: await posts.slugTakenFor(c.env.DB, now),
-    archive_answers:
-      published !== null &&
-      archiveAnswers({ emailOnly: now.email_only, webLink: published.web_link }),
     changed,
   };
   return json(answer);

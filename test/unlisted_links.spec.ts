@@ -103,43 +103,65 @@ describe("every email carries the post's unlisted link (SPEC §5)", () => {
   });
 });
 
-describe("a post carries its addresses, absolute, in every state (SPEC §4, §5)", () => {
+describe("a post carries its addresses and where it stands for readers (SPEC §4, §5)", () => {
   it("on its read, its saves, the list, and a settings change, a draft included", async () => {
     const config = getConfig(env);
     const archive = (slug: string) => `${config.archiveOrigin}${config.archiveBasePath}/${slug}`;
     const created = await readJson(await call("POST", "/api/posts", { subject: "Barn Owls" }));
     const id = created.post.id;
     const unlisted = `${ORIGIN}/email/${created.post.unlisted_token}`;
-    expect(created.post).toMatchObject({
+    // A draft's address is where it will go, though nothing shows there yet.
+    const draft = {
       archive_url: archive("barn-owls"),
       unlisted_url: unlisted,
-    });
-    // A draft's address is where it will go, though nothing answers there yet.
-    expect((await read(id)).post).toMatchObject({ archive_url: archive("barn-owls") });
-    const listed = await readJson(await call("GET", "/api/posts"));
-    expect(listed.posts[0]).toMatchObject({
-      archive_url: archive("barn-owls"),
-      unlisted_url: unlisted,
-    });
+      published_at: null,
+      archive_live: false,
+    };
+    expect(created.post).toMatchObject(draft);
+    expect((await read(id)).post).toMatchObject(draft);
+    const saved = await readJson(
+      await call("PUT", `/api/posts/${id}`, {
+        markdown: "# Barn Owls\n\nmore",
+        base_revision: created.post.current_revision,
+      }),
+    );
+    expect(saved.post).toMatchObject(draft);
+    expect((await readJson(await call("GET", "/api/posts"))).posts[0]).toMatchObject(draft);
     const moved = await readJson(await setListing(id, { slug: "owls-at-dusk" }));
-    expect(moved).toMatchObject({
-      post: { archive_url: archive("owls-at-dusk"), unlisted_url: unlisted },
-      archive_answers: false,
-    });
+    expect(moved.post).toMatchObject({ ...draft, archive_url: archive("owls-at-dusk") });
   });
 
-  it("says on a settings change whether the archive address answers, by the rule the archive serves (SPEC §5)", async () => {
-    const { id, sendId } = await sendPost("Listed Owls");
-    expect((await readJson(await setListing(id, { email_only: true }))).archive_answers).toBe(
-      false,
-    );
-    expect((await readJson(await setListing(id, { email_only: false }))).archive_answers).toBe(
-      true,
-    );
-    // A send frozen before unlisted links carries the archive address, which then answers
-    // whatever the listing.
-    await setRow(sendId, { web_link: "archive" });
-    expect((await readJson(await setListing(id, { email_only: true }))).archive_answers).toBe(true);
+  it("says when it was published and whether its archive address shows it, as the archive serves it", async () => {
+    const live = async (id: string) => {
+      const { post } = await read(id);
+      const listed = (await readJson(await call("GET", "/api/posts"))).posts.find(
+        (p: { id: string }) => p.id === id,
+      );
+      // The read and the list agree, and the flag is what the address actually does.
+      expect(listed).toMatchObject({
+        published_at: post.published_at,
+        archive_live: post.archive_live,
+      });
+      const page = await get(new URL(post.archive_url).pathname);
+      expect(page.status === 200, post.archive_url).toBe(post.archive_live);
+      return post;
+    };
+    const listed = await sendPost("Listed Owls");
+    const listedNow = await live(listed.id);
+    expect(listedNow.published_at).toEqual(expect.any(Number));
+    expect(listedNow.archive_live).toBe(true);
+
+    const quiet = await sendPost("Quiet Gulls", true);
+    expect(await live(quiet.id)).toMatchObject({ archive_live: false });
+    expect((await read(quiet.id)).post.published_at).toEqual(expect.any(Number));
+
+    // Taken out of the archive, then a send frozen before unlisted links, whose emails carry
+    // the archive address, so it shows whatever the listing.
+    const off = await readJson(await setListing(listed.id, { email_only: true }));
+    expect(off.post.archive_live).toBe(false);
+    expect(await live(listed.id)).toMatchObject({ archive_live: false });
+    await setRow(listed.sendId, { web_link: "archive" });
+    expect(await live(listed.id)).toMatchObject({ archive_live: true });
   });
 });
 

@@ -194,11 +194,11 @@ describe("sent record", () => {
           id: "p1",
           status: "sent",
           archive_url: `https://birds.example/archive/${post.slug ?? "owls"}`,
+          archive_live: !post.email_only,
           ...post,
         },
         slug_taken: null,
         changed: true,
-        archive_answers: !post.email_only,
       }),
     });
     /** The post's read, which Add to archive takes the address from. */

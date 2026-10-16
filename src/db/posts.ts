@@ -10,8 +10,13 @@ import { stampSendsOfPostStmt, tombstoneSendsStmt } from "./sends";
 // The row shapes live in shared/ so the editor reads the same definitions; the names here
 // are the Worker's own.
 export type { PostStatus };
-/** A post as stored: the wire `Post` without the addresses a route builds from config. */
-export type PostRow = Omit<Post, "archive_url" | "unlisted_url">;
+
+/** What a route adds to a stored post: its addresses, built from config, and where it stands
+ *  for readers, read from its published send (`withAddresses`). */
+type Answered = "archive_url" | "unlisted_url" | "published_at" | "archive_live";
+
+/** A post as stored: the wire `Post` without what a route adds. */
+export type PostRow = Omit<Post, Answered>;
 
 export interface RevisionRow {
   id: string;
@@ -272,7 +277,7 @@ export async function getByUnlistedToken(db: D1Database, token: string): Promise
 }
 
 /** A list row as stored: the wire `PostListItem` without the addresses a route builds. */
-export type PostListRow = Omit<PostListItem, "archive_url" | "unlisted_url">;
+export type PostListRow = Omit<PostListItem, Answered>;
 
 /** Narrow the post list by `status` (one status, or a set — the Drafts view passes
  *  `['draft','scheduled']`) and a subject contains-search. */

@@ -472,7 +472,7 @@ export function createRouter({
       summary:
         "Create a draft post. Its slug follows the subject (`slug_auto: true`) unless you send a `slug`, which sets it by hand.",
       description:
-        "The post is made with its unlisted link, `unlisted_url` (`<app origin>/email/<unlisted_token>`), which every test and send of it carries as view-in-browser and which never changes (SPEC §5). Every post a route answers carries both its addresses, absolute: `unlisted_url`, and `archive_url`, where a listed post is published once its send starts, whether or not anything answers there yet. The slug is the post's archive address, unique among all posts, drafts included (SPEC §4). A slug sent by hand must be lowercase letters and numbers with single hyphens, a 400 `slug_invalid` otherwise, and no other post's, a 409 `slug_taken` otherwise. A slug that follows the subject takes the subject's slug, or the first free number (`-2`) when another post holds it, and `slug_taken` in the answer names the slug it couldn't take.",
+        "The post is made with its unlisted link, `unlisted_url` (`<app origin>/email/<unlisted_token>`), which every test and send of it carries as view-in-browser and which never changes (SPEC §5). Every post a route answers carries both its addresses, absolute: `unlisted_url`, and `archive_url`, where a listed post is published once its send starts, whether or not it shows anything yet. Beside them, `published_at` is when the post's send started (null before), and `archive_live` whether `archive_url` shows the post now. A reader can see the post at `archive_url` when `archive_live`, otherwise at `unlisted_url` once `published_at` is set; which to share is the publisher's call. `status` stays `scheduled` while the send is going out, so read `published_at`, not `status`, for whether a post is public. The slug is the post's archive address, unique among all posts, drafts included (SPEC §4). A slug sent by hand must be lowercase letters and numbers with single hyphens, a 400 `slug_invalid` otherwise, and no other post's, a 409 `slug_taken` otherwise. A slug that follows the subject takes the subject's slug, or the first free number (`-2`) when another post holds it, and `slug_taken` in the answer names the slug it couldn't take.",
       example: {
         request: { subject: "Hello, world", markdown: "# Hello\n\nWelcome." },
         response: {
@@ -482,6 +482,11 @@ export function createRouter({
             slug: "hello-world",
             slug_auto: true,
             unlisted_token: "9f2c41d0-7ab35e8c-6d1f04b2-a7e9c350",
+            archive_url: "https://newsletter.example.com/archive/hello-world",
+            unlisted_url:
+              "https://newsletter.example.com/email/9f2c41d0-7ab35e8c-6d1f04b2-a7e9c350",
+            published_at: null,
+            archive_live: false,
           },
           slug_taken: null,
           revision_id: "r_1",
@@ -578,7 +583,7 @@ export function createRouter({
       summary:
         "Set a post's publishing options: where it is listed (`email_only`) and its archive address (`slug`, `slug_auto`) (SPEC §4, §5).",
       description:
-        "Any subset of the three. Allowed in any state, a scheduled or sent post's included: none is part of the frozen email, which carries the post's unlisted link, so a change never re-makes a scheduled send or alters a sent one (I3). `email_only: true` mails the post as usual but leaves it out of the archive index and the landing page, and its archive address stops answering, though it stays the post's; its unlisted link opens the page. `false` lists it. Schedule and Send now take the same three fields; a reschedule takes none, since it moves only the time. `slug` sets the archive address by hand and `slug_auto: true` has it follow the subject again, as for a save: a malformed slug is a 400 `slug_invalid` and another post's a 409 `slug_taken`. Once the post's send has started, or while its scheduled email (frozen before unlisted links) links its archive address, its address is fixed: a change to it is a 409 `slug_permanent`, while naming the address it has is fine. Each of the post's sends carries the listing and the address in its view, so they take a new `rev` and the send feed reports them. Answers with the post (its `archive_url` and `unlisted_url` among it), its `slug_taken`, `archive_answers`, whether its archive address answers now (once its send has started, while it is listed, or whatever the listing for a post whose email links that address), and `changed: false` when nothing changed. A body naming none of the three, or a field of the wrong type, is a 400 naming it.",
+        "Any subset of the three. Allowed in any state, a scheduled or sent post's included: none is part of the frozen email, which carries the post's unlisted link, so a change never re-makes a scheduled send or alters a sent one (I3). `email_only: true` mails the post as usual but leaves it out of the archive index and the landing page, and its archive address stops answering, though it stays the post's; its unlisted link opens the page. `false` lists it. Schedule and Send now take the same three fields; a reschedule takes none, since it moves only the time. `slug` sets the archive address by hand and `slug_auto: true` has it follow the subject again, as for a save: a malformed slug is a 400 `slug_invalid` and another post's a 409 `slug_taken`. Once the post's send has started, or while its scheduled email (frozen before unlisted links) links its archive address, its address is fixed: a change to it is a 409 `slug_permanent`, while naming the address it has is fine. Each of the post's sends carries the listing and the address in its view, so they take a new `rev` and the send feed reports them. Answers with the post as it now stands (its `archive_live` says at once whether its archive address shows it), its `slug_taken`, and `changed: false` when nothing changed. A body naming none of the three, or a field of the wrong type, is a 400 naming it.",
       example: {
         request: { email_only: false, slug: "hello-world" },
         response: {
@@ -590,9 +595,10 @@ export function createRouter({
             archive_url: "https://newsletter.example.com/archive/hello-world",
             unlisted_url:
               "https://newsletter.example.com/email/9f2c41d0-7ab35e8c-6d1f04b2-a7e9c350",
+            published_at: 1768467600000,
+            archive_live: true,
           },
           slug_taken: null,
-          archive_answers: true,
           changed: true,
         },
       },
