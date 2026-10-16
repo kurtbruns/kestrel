@@ -66,10 +66,10 @@ export function openResolveModal(
 
 /**
  * Edit a scheduled send's schedule: the Schedule dialog again, for a post already scheduled, with
- * its time and, under it, the post's settings. Save applies whatever changed, through one
- * reschedule (SPEC §6): a moved time moves the send without canceling or re-editing (the content
- * stays frozen, I3, and the cancelable window is kept, I6), and the time it already has stays,
- * so a change to the settings alone is saved as it is. Cancel leaves both as they were. Shared by
+ * its time and, under it, the post's settings. Save applies whatever changed, each through its own
+ * route: the settings through the post's (SPEC §5), then a moved time through a reschedule
+ * (SPEC §6), which moves the send without canceling or re-editing (the content stays frozen, I3,
+ * and the cancelable window is kept, I6). Cancel leaves both as they were. Shared by
  * the editor's scheduled banner and the Sent page's scheduled card (SPEC §8), so `onDone`
  * re-renders whichever surface opened it. The banner passes the post's settings it holds; the
  * card has only the send, so the dialog reads the post first.
@@ -122,46 +122,72 @@ export async function openRescheduleModal(
         m.error("Pick a valid date & time", when);
         return;
       }
-      // The time it already has stays, however near: the server keeps it without a move, so a
-      // reschedule that changes only the settings works up to the fire time (SPEC §6).
+      // The time it already has stays, however near: only a moved time is checked against the
+      // lead, so a change to the settings alone saves up to the fire time (SPEC §6).
       const unchanged = t === cur.getTime();
       if (!unchanged && isTooSoon(t)) {
         m.error(tooSoonText(), when);
         return;
       }
-      try {
-        // The settings go with the move, checked before it and applied once it is accepted
-        // (SPEC §6), so a refused move changes nothing.
-        await api(`/api/sends/${send.id}/reschedule`, {
-          method: "POST",
-          json: {
-            fire_at: new Date(t).toISOString(),
-            email_only: working.emailOnly,
-            ...settingsChange(stored, working),
-          },
-        });
+      const change = settingsChange(stored, working);
+      if (unchanged && !change) {
         m.close();
-        // Said after the act, so it can say exactly what changed.
-        toast(unchanged ? "Saved" : "Rescheduled");
-        onDone();
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 404) {
-          // The send went with its post. Say so in words (the API names only "send"), and
-          // read the feed now so the page showing it follows: the editor goes to Drafts with
-          // the same message, which shows as one toast.
-          m.close();
-          toast("This post was deleted elsewhere.");
-          readSendsNow();
-          return;
+        return;
+      }
+      /** The send went with its post. Say so in words (the API names only "send" or "post"),
+       *  and read the feed now so the page showing it follows: the editor goes to Drafts with
+       *  the same message, which shows as one toast. */
+      const deleted = (e: unknown) => {
+        if (!(e instanceof ApiError && e.status === 404)) {
+          return false;
         }
-        if (e instanceof ApiError && e.field === "fire_at") {
-          m.error(message(e), when);
+        m.close();
+        toast("This post was deleted elsewhere.");
+        readSendsNow();
+        return true;
+      };
+      // Each part through its own route, the settings first (SPEC §5, §6): a refused address,
+      // the likeliest failure, then stops the save before the time moves.
+      if (change) {
+        try {
+          await api(`/api/posts/${send.post_id}/settings`, { method: "PUT", json: change });
+        } catch (e) {
+          if (!deleted(e) && !showSlugRefusal(box, "rs", e)) {
+            m.error(message(e));
+          }
           return;
-        }
-        if (!showSlugRefusal(box, "rs", e)) {
-          m.error(message(e));
         }
       }
+      if (!unchanged) {
+        try {
+          await api(`/api/sends/${send.id}/reschedule`, {
+            method: "POST",
+            json: { fire_at: new Date(t).toISOString() },
+          });
+        } catch (e) {
+          if (deleted(e)) {
+            return;
+          }
+          if (change) {
+            // The settings are saved and stay so, since they may change in any state; say
+            // that the time didn't move, and show both surfaces as they now stand.
+            m.close();
+            toast(`Settings saved. The send time didn’t change: ${message(e)}`);
+            onDone();
+            return;
+          }
+          if (e instanceof ApiError && e.field === "fire_at") {
+            m.error(message(e), when);
+          } else {
+            m.error(message(e));
+          }
+          return;
+        }
+      }
+      m.close();
+      // Said after the act, so it can say exactly what changed.
+      toast(unchanged ? "Saved" : "Rescheduled");
+      onDone();
     });
   when.focus();
 }

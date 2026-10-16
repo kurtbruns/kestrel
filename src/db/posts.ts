@@ -10,7 +10,8 @@ import { stampSendsOfPostStmt, tombstoneSendsStmt } from "./sends";
 // The row shapes live in shared/ so the editor reads the same definitions; the names here
 // are the Worker's own.
 export type { PostStatus };
-export type PostRow = Post;
+/** A post as stored: the wire `Post` without the addresses a route builds from config. */
+export type PostRow = Omit<Post, "archive_url" | "unlisted_url">;
 
 export interface RevisionRow {
   id: string;
@@ -30,12 +31,12 @@ export interface PostInput {
 
 // SQLite has no boolean: `slug_auto` and `email_only` are stored as 0 or 1, and every read
 // turns them back into the wire's booleans here, so nothing above this module sees the integer.
-type Stored<T extends Post> = Omit<T, "slug_auto" | "email_only"> & {
+type Stored<T extends PostRow> = Omit<T, "slug_auto" | "email_only"> & {
   slug_auto: number;
   email_only: number;
 };
 
-function fromStored<T extends Post>(row: Stored<T>): T {
+function fromStored<T extends PostRow>(row: Stored<T>): T {
   return {
     ...row,
     slug_auto: row.slug_auto === 1,
@@ -158,7 +159,7 @@ export function isSlugCollision(err: unknown): boolean {
   );
 }
 
-/** A change to a post's settings (SPEC §4, §5): any subset, as `ListingBody`, its slug already
+/** A change to a post's settings (SPEC §4, §5): any subset, as `PostSettingsBody`, its slug already
  *  resolved (`resolveSlug`). */
 export interface PublishingInput {
   emailOnly?: boolean;
@@ -270,7 +271,8 @@ export async function getByUnlistedToken(db: D1Database, token: string): Promise
   return row && fromStored(row);
 }
 
-export type PostListRow = PostListItem;
+/** A list row as stored: the wire `PostListItem` without the addresses a route builds. */
+export type PostListRow = Omit<PostListItem, "archive_url" | "unlisted_url">;
 
 /** Narrow the post list by `status` (one status, or a set — the Drafts view passes
  *  `['draft','scheduled']`) and a subject contains-search. */

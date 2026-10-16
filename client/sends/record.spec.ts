@@ -183,14 +183,22 @@ describe("sent record", () => {
   // that can still change, its listing, never the record (SPEC §5, I3), and both changes of
   // visibility ask first.
   describe("the post, beside its delivery", () => {
-    /** The listing route, answering the post as the server would after the change. */
-    const listingRoute = (post: Record<string, unknown>) => ({
+    /** The settings route, answering the post as the server would after the change: its
+     *  address, and whether that address answers, since the post was sent with the unlisted
+     *  link, only while it is listed. */
+    const listingRoute = (post: { email_only: boolean; slug?: string }) => ({
       method: "PUT",
-      path: "/api/posts/p1/listing",
+      path: "/api/posts/p1/settings",
       reply: () => ({
-        post: { id: "p1", status: "sent", ...post },
+        post: {
+          id: "p1",
+          status: "sent",
+          archive_url: `https://birds.example/archive/${post.slug ?? "owls"}`,
+          ...post,
+        },
         slug_taken: null,
         changed: true,
+        archive_answers: !post.email_only,
       }),
     });
     /** The post's read, which Add to archive takes the address from. */
@@ -254,11 +262,11 @@ describe("sent record", () => {
       expect($(".modal .url-gone").textContent).toBe("birds.example/p1");
       $("#eoCancel").click();
       expect(document.querySelector(".modal")).toBeNull();
-      expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/listing")).toBe(false);
+      expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/settings")).toBe(false);
       $("#recListing").click();
       $("#eoGo").click();
       await vi.advanceTimersByTimeAsync(0);
-      const put = fake.calls.find((c) => c.url.pathname === "/api/posts/p1/listing");
+      const put = fake.calls.find((c) => c.url.pathname === "/api/posts/p1/settings");
       expect(put?.json()).toEqual({ email_only: true });
       expect(document.querySelector(".modal")).toBeNull();
       // Now its unlisted link, which the email carries, and the way back.
@@ -296,7 +304,7 @@ describe("sent record", () => {
       );
       $("#addArchGo").click();
       await vi.advanceTimersByTimeAsync(0);
-      const put = fake.calls.find((c) => c.url.pathname === "/api/posts/p1/listing");
+      const put = fake.calls.find((c) => c.url.pathname === "/api/posts/p1/settings");
       expect(put?.json()).toEqual({ email_only: false });
       expect($("#toasts").textContent).toContain(
         "Added to your archive at birds.example/archive/owls",

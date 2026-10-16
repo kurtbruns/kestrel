@@ -1,6 +1,6 @@
 // The sent record view and the live in-flight watch.
 
-import type { ListingBody, ListingResponse, PostResponse } from "../../shared/posts";
+import type { PostResponse, PostSettingsBody, PostSettingsResponse } from "../../shared/posts";
 import type {
   DeliveryListResponse,
   DeliveryOutcomes,
@@ -13,12 +13,7 @@ import type {
 } from "../../shared/sends";
 import { isErasedPlaceholder } from "../../shared/subscribers";
 import { ApiError, api, apiFile, describeError } from "../api";
-import {
-  heldAdviceHtml,
-  noEmailProvider,
-  postArchiveUrl,
-  providerNotConnected,
-} from "../deployment";
+import { heldAdviceHtml, noEmailProvider, providerNotConnected } from "../deployment";
 import { every, mount } from "../lifecycle";
 import { mountSettingsForm, type Publishing, publishingOf, shortUrl } from "../posts/publishing";
 import { followSend, readSendsNow } from "../send_state";
@@ -584,21 +579,18 @@ function renderFrozenRecord(
   };
   /** Change the listing from a confirming dialog: it closes on success and shows a refusal in
    *  place. Answers the post as it now stands. */
-  const setListing = (go: HTMLButtonElement, body: ListingBody, dialog: Modal) =>
+  const setListing = (go: HTMLButtonElement, body: PostSettingsBody, dialog: Modal) =>
     busy(go, body.email_only ? "Updating…" : "Adding…", async () => {
       dialog.clearError();
       try {
-        const res = await api<ListingResponse>(`/api/posts/${send.post_id}/listing`, {
+        const res = await api<PostSettingsResponse>(`/api/posts/${send.post_id}/settings`, {
           method: "PUT",
           json: body,
         });
         dialog.close();
-        // The send's next report brings its links; the listing shows now. An older send's
-        // email links its archive address, which keeps answering whatever the listing.
-        const archive =
-          !res.post.email_only || view.web_link === "archive"
-            ? postArchiveUrl(res.post.slug)
-            : null;
+        // The send's next report brings its links; the listing shows now, as the server
+        // answered whether the archive address answers.
+        const archive = res.archive_answers ? res.post.archive_url : null;
         view = { ...view, email_only: res.post.email_only, links: { ...view.links, archive } };
         paintPost();
         toast(

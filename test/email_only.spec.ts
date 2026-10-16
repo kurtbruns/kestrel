@@ -52,7 +52,7 @@ const schedule = (id: string, body: Record<string, unknown> = {}) =>
     ...body,
   });
 
-const setListing = (id: string, body: unknown) => call("PUT", `/api/posts/${id}/listing`, body);
+const setListing = (id: string, body: unknown) => call("PUT", `/api/posts/${id}/settings`, body);
 
 /** A post sent through the sweep, its listing as given: scheduled, then made due and swept. */
 async function sendPost(
@@ -106,32 +106,28 @@ describe("a post's listing (SPEC §5)", () => {
     expect(again.send.email_only).toBe(true);
   });
 
-  it("changes with a reschedule, which answers changed even at the same time", async () => {
+  it("is no field of a reschedule, which moves only the time: each setting is a 400 that moves nothing (SPEC §6)", async () => {
     const id = await makeDraft();
     const { send } = await readJson(await schedule(id));
-    const res = await call("POST", `/api/sends/${send.id}/reschedule`, {
-      fire_at: send.fire_at,
-      email_only: true,
-    });
-    expect(res.status).toBe(200);
-    const answer = await readJson(res);
-    expect(answer.changed).toBe(true);
-    expect(answer.send.email_only).toBe(true);
-    expect(answer.send.fire_at).toBe(send.fire_at);
-    expect((await post(id)).email_only).toBe(true);
+    for (const field of [{ email_only: true }, { slug: "elsewhere" }, { slug_auto: false }]) {
+      const res = await call("POST", `/api/sends/${send.id}/reschedule`, {
+        fire_at: Date.now() + 2 * DAY,
+        ...field,
+      });
+      expect(res.status, JSON.stringify(field)).toBe(400);
+      expect((await readJson(res)).field).toBe(Object.keys(field)[0]);
+    }
+    expect((await getSend(env.DB, send.id))?.fire_at).toBe(send.fire_at);
+    expect((await post(id)).email_only).toBe(false);
   });
 
-  it("is left alone by a reschedule that is refused", async () => {
+  it("changes on a scheduled post through its settings, leaving the send time (SPEC §5)", async () => {
     const id = await makeDraft();
     const { send } = await readJson(await schedule(id));
-    await cancel(send.id);
-    const res = await call("POST", `/api/sends/${send.id}/reschedule`, {
-      fire_at: Date.now() + 2 * DAY,
-      email_only: true,
-    });
-    expect(res.status).toBe(409);
-    expect((await readJson(res)).error).toBe("send_canceled");
-    expect((await post(id)).email_only).toBe(false);
+    const res = await readJson(await setListing(id, { email_only: true }));
+    expect(res.changed).toBe(true);
+    const now = await readJson(await call("GET", `/api/sends/${send.id}`));
+    expect(now.send).toMatchObject({ email_only: true, fire_at: send.fire_at });
   });
 });
 
@@ -166,7 +162,7 @@ describe("the public pages and an email-only post (SPEC §5)", () => {
   });
 });
 
-describe("PUT /api/posts/:id/listing (SPEC §5)", () => {
+describe("PUT /api/posts/:id/settings (SPEC §5)", () => {
   it("switches a sent post either way, and the lists follow", async () => {
     const sent = await sendPost("Owls", false);
     const off = await setListing(sent.id, { email_only: true });
@@ -245,7 +241,7 @@ describe("PUT /api/posts/:id/listing (SPEC §5)", () => {
     expect((await posts.getPost(env.DB, id))?.email_only).toBe(false);
   });
 
-  it("refuses a non-boolean email_only on schedule, Send now, and reschedule, scheduling nothing", async () => {
+  it("refuses a non-boolean email_only on schedule and Send now, scheduling nothing", async () => {
     const id = await makeDraft();
     for (const res of [
       await schedule(id, { email_only: "true" }),
@@ -255,14 +251,6 @@ describe("PUT /api/posts/:id/listing (SPEC §5)", () => {
       expect((await readJson(res)).field).toBe("email_only");
     }
     expect((await post(id)).status).toBe("draft");
-    const { send } = await readJson(await schedule(id));
-    const moved = await call("POST", `/api/sends/${send.id}/reschedule`, {
-      fire_at: Date.now() + 2 * DAY,
-      email_only: "true",
-    });
-    expect(moved.status).toBe(400);
-    expect((await readJson(moved)).field).toBe("email_only");
-    expect((await getSend(env.DB, send.id))?.fire_at).toBe(send.fire_at);
   });
 
   it("answers 404 for a post that isn't there", async () => {

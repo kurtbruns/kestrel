@@ -27,6 +27,8 @@ const post = (over: Partial<PostListItem> = {}): PostListItem => ({
   slug: "owls",
   slug_auto: true,
   unlisted_token: "t-p1",
+  archive_url: "https://news.example.com/archive/owls",
+  unlisted_url: "https://news.example.com/email/t-p1",
   subject: "<b>Owls</b> & co",
   status: "draft",
   email_only: false,

@@ -28,6 +28,7 @@ const postReply =
         id: "p1",
         slug: "herons",
         unlisted_token: "t0k3n",
+        unlisted_url: "https://newsletter.example.com/email/t0k3n",
         email_only: emailOnly,
         status: stage === "sending" ? "scheduled" : stage,
       },

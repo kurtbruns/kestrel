@@ -4,7 +4,7 @@
 // post only when the publisher presses that dialog's act, and show a refused address under its
 // field. One module, so the choice reads the same everywhere (DESIGN §3).
 
-import type { ListingBody, Post } from "../../shared/posts";
+import type { Post, PostSettingsBody } from "../../shared/posts";
 import { slugify } from "../../shared/slug";
 import { ApiError } from "../api";
 import { postArchiveUrl } from "../deployment";
@@ -157,12 +157,12 @@ function wireSettingsForm(
 }
 
 /**
- * What a working copy changes about the stored settings, as `PUT /api/posts/:id/listing` (and
+ * What a working copy changes about the stored settings, as `PUT /api/posts/:id/settings` (and
  * Schedule, Send now, and Edit schedule) take it, or null when it changes nothing. A fixed address
  * never changes, and one handed back to the subject asks the server to derive it again.
  */
-export function settingsChange(saved: Publishing, working: Publishing): ListingBody | null {
-  const body: ListingBody = {};
+export function settingsChange(saved: Publishing, working: Publishing): PostSettingsBody | null {
+  const body: PostSettingsBody = {};
   if (working.emailOnly !== saved.emailOnly) {
     body.email_only = working.emailOnly;
   }

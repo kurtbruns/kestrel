@@ -472,7 +472,7 @@ export function createRouter({
       summary:
         "Create a draft post. Its slug follows the subject (`slug_auto: true`) unless you send a `slug`, which sets it by hand.",
       description:
-        "The post is made with its unlisted link, `<app origin>/email/<unlisted_token>`, which every test and send of it carries as view-in-browser and which never changes (SPEC §5). The slug is the post's archive address, unique among all posts, drafts included (SPEC §4). A slug sent by hand must be lowercase letters and numbers with single hyphens, a 400 `slug_invalid` otherwise, and no other post's, a 409 `slug_taken` otherwise. A slug that follows the subject takes the subject's slug, or the first free number (`-2`) when another post holds it, and `slug_taken` in the answer names the slug it couldn't take.",
+        "The post is made with its unlisted link, `unlisted_url` (`<app origin>/email/<unlisted_token>`), which every test and send of it carries as view-in-browser and which never changes (SPEC §5). Every post a route answers carries both its addresses, absolute: `unlisted_url`, and `archive_url`, where a listed post is published once its send starts, whether or not anything answers there yet. The slug is the post's archive address, unique among all posts, drafts included (SPEC §4). A slug sent by hand must be lowercase letters and numbers with single hyphens, a 400 `slug_invalid` otherwise, and no other post's, a 409 `slug_taken` otherwise. A slug that follows the subject takes the subject's slug, or the first free number (`-2`) when another post holds it, and `slug_taken` in the answer names the slug it couldn't take.",
       example: {
         request: { subject: "Hello, world", markdown: "# Hello\n\nWelcome." },
         response: {
@@ -571,23 +571,32 @@ export function createRouter({
     },
     {
       method: "PUT",
-      path: "/api/posts/:id/listing",
+      path: "/api/posts/:id/settings",
       access: "admin",
       accepts: JSON_BODY,
       resource: "posts",
       summary:
         "Set a post's publishing options: where it is listed (`email_only`) and its archive address (`slug`, `slug_auto`) (SPEC §4, §5).",
       description:
-        "Any subset of the three. Allowed in any state, a scheduled or sent post's included: none is part of the frozen email, which carries the post's unlisted link, so a change never re-makes a scheduled send or alters a sent one (I3). `email_only: true` mails the post as usual but leaves it out of the archive index and the landing page, and its archive address stops answering, though it stays the post's; its unlisted link opens the page. `false` lists it. Schedule, Send now, and a reschedule take the same three fields. `slug` sets the archive address by hand and `slug_auto: true` has it follow the subject again, as for a save: a malformed slug is a 400 `slug_invalid` and another post's a 409 `slug_taken`. Once the post's send has started, or while its scheduled email (frozen before unlisted links) links its archive address, its address is fixed: a change to it is a 409 `slug_permanent`, while naming the address it has is fine. Each of the post's sends carries the listing and the address in its view, so they take a new `rev` and the send feed reports them. Answers with the post, its `slug_taken`, and `changed: false` when nothing changed. A body naming none of the three, or a field of the wrong type, is a 400 naming it.",
+        "Any subset of the three. Allowed in any state, a scheduled or sent post's included: none is part of the frozen email, which carries the post's unlisted link, so a change never re-makes a scheduled send or alters a sent one (I3). `email_only: true` mails the post as usual but leaves it out of the archive index and the landing page, and its archive address stops answering, though it stays the post's; its unlisted link opens the page. `false` lists it. Schedule and Send now take the same three fields; a reschedule takes none, since it moves only the time. `slug` sets the archive address by hand and `slug_auto: true` has it follow the subject again, as for a save: a malformed slug is a 400 `slug_invalid` and another post's a 409 `slug_taken`. Once the post's send has started, or while its scheduled email (frozen before unlisted links) links its archive address, its address is fixed: a change to it is a 409 `slug_permanent`, while naming the address it has is fine. Each of the post's sends carries the listing and the address in its view, so they take a new `rev` and the send feed reports them. Answers with the post (its `archive_url` and `unlisted_url` among it), its `slug_taken`, `archive_answers`, whether its archive address answers now (once its send has started, while it is listed, or whatever the listing for a post whose email links that address), and `changed: false` when nothing changed. A body naming none of the three, or a field of the wrong type, is a 400 naming it.",
       example: {
         request: { email_only: false, slug: "hello-world" },
         response: {
-          post: { id: "p_abc123", status: "sent", slug: "hello-world", email_only: false },
+          post: {
+            id: "p_abc123",
+            status: "sent",
+            slug: "hello-world",
+            email_only: false,
+            archive_url: "https://newsletter.example.com/archive/hello-world",
+            unlisted_url:
+              "https://newsletter.example.com/email/9f2c41d0-7ab35e8c-6d1f04b2-a7e9c350",
+          },
           slug_taken: null,
+          archive_answers: true,
           changed: true,
         },
       },
-      handler: postRoutes.setListing,
+      handler: postRoutes.setSettings,
     },
     {
       method: "GET",
@@ -731,7 +740,7 @@ export function createRouter({
       description:
         "Freezes the current draft, with the template and identity as they stand, onto a send row and soft-locks the post; cancelable until its fire time. A later template or identity change re-makes that frozen email after the publisher confirms it (SPEC §6); there is no per-send template to name, and a `template_revision` field is a 400. `fire_at` is epoch milliseconds or an ISO-8601 timestamp with a `Z` or `±hh:mm` offset; a timestamp without one is a 400, since the Worker cannot know which local time was meant. `fire_at` must be at least the minimum lead out, a 400 `fire_at_too_soon` otherwise (for the soonest send, use Send now, `POST /api/posts/:id/send`): " +
         lead +
-        ". The time is then rounded up to the next whole minute (one already on the minute stays), since the sweep fires sends on the minute; the lead is checked on the time as requested, so rounding only lengthens the window. `email_only` (optional) sets the post's listing as it is scheduled (SPEC §5): `true` mails it as usual but leaves it out of the archive index and the landing page, `false` lists it; absent, the post keeps the listing it has, which is in the archive unless it was set otherwise. `slug` and `slug_auto` (optional) set its archive address as `PUT /api/posts/:id/listing` does, checked before anything is frozen, so a 400 `slug_invalid` or 409 `slug_taken` schedules nothing, and a refused schedule changes neither. None is part of the frozen email. Answers with the new send's view (as `GET /api/sends/:id` describes it) and a `cursor` to follow it from. Refusals: 409 `active_send_exists` when the post already has its one active send (carried as `send`), 409 `post_not_draft`, 400 `subject_required` for an empty subject, 409 `settings_changed` when a template or identity save kept landing while it froze (try again), and 409 `provider_not_connected` while no email provider is connected (SPEC §9).",
+        ". The time is then rounded up to the next whole minute (one already on the minute stays), since the sweep fires sends on the minute; the lead is checked on the time as requested, so rounding only lengthens the window. `email_only` (optional) sets the post's listing as it is scheduled (SPEC §5): `true` mails it as usual but leaves it out of the archive index and the landing page, `false` lists it; absent, the post keeps the listing it has, which is in the archive unless it was set otherwise. `slug` and `slug_auto` (optional) set its archive address as `PUT /api/posts/:id/settings` does, checked before anything is frozen, so a 400 `slug_invalid` or 409 `slug_taken` schedules nothing, and a refused schedule changes neither. None is part of the frozen email. Answers with the new send's view (as `GET /api/sends/:id` describes it) and a `cursor` to follow it from. Refusals: 409 `active_send_exists` when the post already has its one active send (carried as `send`), 409 `post_not_draft`, 400 `subject_required` for an empty subject, 409 `settings_changed` when a template or identity save kept landing while it froze (try again), and 409 `provider_not_connected` while no email provider is connected (SPEC §9).",
       example: {
         request: { fire_at: "2026-01-16T09:00:00Z" },
         response: { send: scheduledExample, cursor: "57.1768467610000" },
@@ -749,7 +758,7 @@ export function createRouter({
       description:
         "The same freeze as scheduling, with the template and identity as they stand, and `fire_at` set to now plus the minimum lead, rounded up to the next whole minute as every fire time is: " +
         lead +
-        ". For nearly all of that window the send is inside the minimum lead, so a template or identity save that would re-make it is refused until it has fired. An optional JSON body may carry `email_only`, `slug`, and `slug_auto`, the post's settings, as for scheduling. A second call for a post already in its window answers with that send and `idempotent: true`, and changes nothing, its listing included; one that names settings the post doesn't have is a 409 `active_send_exists` carrying the send, so a caller that asked for email only never reads success for a post going out listed (change them with `PUT /api/posts/:id/listing`). The other refusals are as for scheduling.",
+        ". For nearly all of that window the send is inside the minimum lead, so a template or identity save that would re-make it is refused until it has fired. An optional JSON body may carry `email_only`, `slug`, and `slug_auto`, the post's settings, as for scheduling. A second call for a post already in its window answers with that send and `idempotent: true`, and changes nothing, its listing included; one that names settings the post doesn't have is a 409 `active_send_exists` carrying the send, so a caller that asked for email only never reads success for a post going out listed (change them with `PUT /api/posts/:id/settings`). The other refusals are as for scheduling.",
       example: {
         request: { email_only: true },
         response: { send: scheduledExample, cursor: "57.1768467610000" },
@@ -992,10 +1001,10 @@ export function createRouter({
       description:
         "Updates only `fire_at` on a send still in its review window: the frozen render is untouched (the audience is resolved when the send fires) and the review window is preserved; a re-made send keeps its `remade_at`. Distinct from cancel → edit → schedule again, which is for content changes. The same `fire_at` form as scheduling (epoch milliseconds or an ISO-8601 timestamp with a `Z` or `±hh:mm` offset), and the same minimum lead, a 400 `fire_at_too_soon` otherwise: " +
         lead +
-        ". As when scheduling, the new time is rounded up to the next whole minute, after the lead is checked on the time as requested. A move to the time the send already has (after that rounding) answers 200 with `changed: false` before the lead is checked, so a retried move is safe. Once the fire time has passed it is a 409 `window_closed`, and a canceled send is a 409 `send_canceled` (schedule the post again instead). `email_only`, `slug`, and `slug_auto` (optional) change the post's settings along with the time (SPEC §4, §5): a slug is checked before the move, so a 400 `slug_invalid` or 409 `slug_taken` moves nothing, and the settings change only once the move is accepted; `changed` is true when anything changed. " +
+        ". As when scheduling, the new time is rounded up to the next whole minute, after the lead is checked on the time as requested. A move to the time the send already has (after that rounding) answers 200 with `changed: false` before the lead is checked, so a retried move is safe. Once the fire time has passed it is a 409 `window_closed`, and a canceled send is a 409 `send_canceled` (schedule the post again instead). The post's settings are not a reschedule's: `email_only`, `slug`, or `slug_auto` is a 400 naming the field, which moves nothing; change them with `PUT /api/posts/:id/settings`. " +
         actionText,
       example: {
-        request: { fire_at: "2026-01-16T09:00:00Z", email_only: false },
+        request: { fire_at: "2026-01-16T09:00:00Z" },
         response: { send: scheduledExample, cursor: "58.1768467620000", changed: true },
       },
       handler: sendRoutes.reschedule,

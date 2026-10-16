@@ -4,11 +4,11 @@
 
 import type { ImageUploadResponse } from "../../shared/images";
 import type {
-  ListingBody,
-  ListingResponse,
   PostEditBody,
   PostResponse,
   PostSavedResponse,
+  PostSettingsBody,
+  PostSettingsResponse,
   TestSendResponse,
 } from "../../shared/posts";
 import {
@@ -32,7 +32,6 @@ import {
   notConnectedScheduleLine,
   notConnectedTestLine,
   notConnectedWarning,
-  postUnlistedUrl,
   providerNotConnected,
   sendNowWhenText,
   tooSoonText,
@@ -351,8 +350,8 @@ export async function renderEditor(
   };
   /** Save a change to the post's settings (the listing route), and show what the server made
    *  of it. Throws the refusal, for the dialog that asked to say it. */
-  const saveListing = async (body: ListingBody): Promise<void> => {
-    const res = await api<ListingResponse>(`/api/posts/${id}/listing`, {
+  const saveListing = async (body: PostSettingsBody): Promise<void> => {
+    const res = await api<PostSettingsResponse>(`/api/posts/${id}/settings`, {
       method: "PUT",
       json: body,
     });
@@ -465,7 +464,7 @@ export async function renderEditor(
             // editor holds only an unpublished post: once its send starts, the editor hands
             // off to the send page (and a web version opened after that goes on to the
             // public page itself).
-            previewOpensWebVersion(doc, postUnlistedUrl(post.unlisted_token), webVersionUrl);
+            previewOpensWebVersion(doc, post.unlisted_url, webVersionUrl);
             previewFrame.style.height = `${doc.body.scrollHeight + 24}px`;
           }
         } catch {}

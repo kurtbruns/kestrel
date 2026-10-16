@@ -3,15 +3,21 @@
 import { encodeSendCursor } from "../../shared/cursor";
 import type {
   BaseRequiredError,
-  ListingResponse,
   PostListResponse,
   PostResponse,
   PostSavedResponse,
+  PostSettingsResponse,
   StaleRevisionError,
 } from "../../shared/posts";
 import * as images from "../db/images";
 import * as posts from "../db/posts";
-import { currentSendSeq, getActiveSendForPost, latestSentSendForPost } from "../db/sends";
+import {
+  currentSendSeq,
+  getActiveSendForPost,
+  latestSentSendForPost,
+  publishedSendForPost,
+} from "../db/sends";
+import { archiveAnswers, withAddresses } from "../lib/archive_address";
 import { fieldError, optBoolean, optString, optStringOrNull, readJsonObject } from "../lib/body";
 import { badRequest, json, notFound, refusal } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
@@ -112,7 +118,7 @@ export async function createPost(c: RequestContext): Promise<Response> {
   const { input } = await readBody(c, { optional: true });
   const { post, revision } = await slugGuarded(() => posts.createPost(c.env.DB, input, author(c)));
   const body: PostSavedResponse = {
-    post,
+    post: withAddresses(c.config, post),
     slug_taken: await posts.slugTakenFor(c.env.DB, post),
     revision_id: revision.id,
   };
@@ -152,7 +158,7 @@ export async function listPosts(c: RequestContext): Promise<Response> {
     posts.listPosts(c.env.DB, filter, page),
   ]);
   const body: PostListResponse = {
-    posts: rows,
+    posts: rows.map((row) => withAddresses(c.config, row)),
     page: listPage(total, page),
     cursor: encodeSendCursor({ seq, at: now }),
   };
@@ -174,7 +180,7 @@ export async function getPost(c: RequestContext): Promise<Response> {
   // redirect to the sent record view (#/sent/:id).
   const sent = post.status === "sent" ? await latestSentSendForPost(c.env.DB, post.id) : null;
   const body: PostResponse = {
-    post,
+    post: withAddresses(c.config, post),
     slug_taken: await posts.slugTakenFor(c.env.DB, post),
     markdown: revision?.markdown ?? "",
     author: revision?.author ?? null, // who wrote the current revision — the freshness poll names them
@@ -208,7 +214,7 @@ export async function updatePost(c: RequestContext): Promise<Response> {
       message:
         "A save must name the revision it was based on. Read the post, then save with its current_revision as base_revision or If-Match.",
       field: "base_revision",
-      post,
+      post: withAddresses(c.config, post),
     };
     return json(required, 428, revisionHeaders(post));
   }
@@ -227,7 +233,7 @@ export async function updatePost(c: RequestContext): Promise<Response> {
     posts.updatePost(c.env.DB, post, body.input, author(c)),
   );
   const saved: PostSavedResponse = {
-    post: updated,
+    post: withAddresses(c.config, updated),
     slug_taken: await posts.slugTakenFor(c.env.DB, updated),
     revision_id: revision.id,
   };
@@ -305,7 +311,7 @@ async function slugGuarded<T>(write: () => Promise<T>): Promise<T> {
  * (I3); a repeat of what the post already has answers `changed: false`. A sent post's address
  * is fixed, and a slug is refused when malformed or another post's (`resolveSettings`).
  */
-export async function setListing(c: RequestContext): Promise<Response> {
+export async function setSettings(c: RequestContext): Promise<Response> {
   const fields = readSettingsBody(await readJsonObject(c));
   if (
     fields.emailOnly === undefined &&
@@ -324,9 +330,13 @@ export async function setListing(c: RequestContext): Promise<Response> {
   const input = await resolveSettings(c.env.DB, post, fields);
   const changed = await applySettings(c.env.DB, post, fields, input);
   const now = changed ? unwrap(await posts.getPost(c.env.DB, post.id), "post") : post;
-  const answer: ListingResponse = {
-    post: now,
+  const published = await publishedSendForPost(c.env.DB, now.id);
+  const answer: PostSettingsResponse = {
+    post: withAddresses(c.config, now),
     slug_taken: await posts.slugTakenFor(c.env.DB, now),
+    archive_answers:
+      published !== null &&
+      archiveAnswers({ emailOnly: now.email_only, webLink: published.web_link }),
     changed,
   };
   return json(answer);

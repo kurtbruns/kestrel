@@ -9,7 +9,6 @@
 
 import type { PostResponse } from "../../shared/posts";
 import { ApiError, api, apiText, describeError } from "../api";
-import { postUnlistedUrl } from "../deployment";
 import { mount, onAbort } from "../lifecycle";
 import { EMAIL_FRAME_SANDBOX, framedCopy, openLinksInNewTab } from "../ui/email_frame";
 import { type Html, html, setHtml } from "../ui/html";
@@ -115,7 +114,7 @@ export async function renderWebVersion(
     }
     // Once the send starts the post is public, and its web version is that page: go there,
     // by its unlisted link, which opens the page whatever the listing.
-    const live = data ? postUnlistedUrl(data.post.unlisted_token) : null;
+    const live = data ? data.post.unlisted_url : null;
     if (data && (data.sending || data.post.status === "sent") && live) {
       leaveFor(live);
       return;

@@ -23,13 +23,21 @@ export interface Post {
    * post, never changed, and carried as "view in browser" by every test and send.
    */
   unlisted_token: string;
+  /**
+   * The post's archive address, absolute, whether or not it answers yet (SPEC §4, §5): where a
+   * listed post is published once its send starts. A send's `links.archive` is the same address
+   * only while it answers.
+   */
+  archive_url: string;
+  /** The post's unlisted link, absolute: the "view in browser" every email of it carries (SPEC §5). */
+  unlisted_url: string;
   subject: string;
   status: PostStatus;
   /**
    * The post's listing (SPEC §5): true when it is email only, mailed as usual but left out of
    * the archive index and the landing page, its archive address answering nothing; false,
    * the default, when it is listed in the archive. Not part of the frozen render, so it can
-   * change in any state, a sent post's included (`PUT /api/posts/:id/listing`).
+   * change in any state, a sent post's included (`PUT /api/posts/:id/settings`).
    */
   email_only: boolean;
   /** The current revision's id; the editor carries it on every save (optimistic concurrency). */
@@ -147,12 +155,12 @@ export interface StaleRevisionError {
 }
 
 /**
- * What PUT /api/posts/:id/listing takes: the post's settings (SPEC §4, §5), any subset of them.
+ * What PUT /api/posts/:id/settings takes: the post's settings (SPEC §4, §5), any subset of them.
  * None is part of the frozen email, so they can change while the post is scheduled, and the
  * listing once it is sent too; the slug only until the post's send starts. Schedule, Send now,
  * and a reschedule take the same three fields, applied with the act.
  */
-export interface ListingBody {
+export interface PostSettingsBody {
   email_only?: boolean;
   /** An archive address set by hand: lowercase letters, numbers, and single hyphens, and no
    *  other post's. Turns `slug_auto` off. */
@@ -161,10 +169,16 @@ export interface ListingBody {
   slug_auto?: boolean;
 }
 
-/** PUT /api/posts/:id/listing: the post as it now stands, and whether the act changed it. */
-export interface ListingResponse {
+/** PUT /api/posts/:id/settings: the post as it now stands, and whether the act changed it. */
+export interface PostSettingsResponse {
   post: Post;
   slug_taken: SlugTaken;
+  /**
+   * Whether the post's archive address answers now (SPEC §5): once its send has started, while
+   * it is listed, or whatever the listing for a post whose email links that address. A send's
+   * `links.archive` follows the same rule.
+   */
+  archive_answers: boolean;
   /** False when the post was already listed as asked: nothing was written. */
   changed: boolean;
 }

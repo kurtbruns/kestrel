@@ -46,6 +46,7 @@ const draft = (over: Record<string, unknown> = {}): Draft => ({
     slug: "owls",
     slug_auto: true,
     unlisted_token: "t0k3n",
+    unlisted_url: "https://newsletter.example.com/email/t0k3n",
     status: "draft",
     email_only: false,
     current_revision: "r1",
@@ -80,7 +81,7 @@ function draftServer(initial = draft()) {
       const post: Record<string, unknown> = { ...state.post, ...body, current_revision: `r${n}` };
       return server.settle(post, body);
     },
-    /** A change to the post's settings (`PUT …/listing`): no revision, as the server writes
+    /** A change to the post's settings (`PUT …/settings`): no revision, as the server writes
      *  none for one. */
     listing(req: FakeRequest) {
       const body = req.json() as Record<string, unknown>;
@@ -1735,7 +1736,7 @@ describe("editor view", () => {
       { method: "PUT", path: "/api/posts/p1", reply: (req: FakeRequest) => server.put(req) },
       {
         method: "PUT",
-        path: "/api/posts/p1/listing",
+        path: "/api/posts/p1/settings",
         reply: (req: FakeRequest) => server.listing(req),
       },
       { path: "/api/subscribers", reply: () => ({ counts: { confirmed: 3 }, page: { total: 3 } }) },
@@ -1750,7 +1751,7 @@ describe("editor view", () => {
         reply: () => ({ send: { id: "s2", fire_at: Date.now() + 360_000 } }),
       },
     ];
-    const listings = () => fake.calls.filter((c) => c.url.pathname === "/api/posts/p1/listing");
+    const listings = () => fake.calls.filter((c) => c.url.pathname === "/api/posts/p1/settings");
 
     it("shows the post's settings under the time, which say where it will go", async () => {
       await open(routes(draftServer()));
@@ -1846,7 +1847,7 @@ describe("editor view", () => {
   describe("Post settings (DESIGN §3)", () => {
     const listingRoute = (server: ReturnType<typeof draftServer>) => ({
       method: "PUT",
-      path: "/api/posts/p1/listing",
+      path: "/api/posts/p1/settings",
       reply: (req: FakeRequest) => server.listing(req),
     });
 
@@ -1868,7 +1869,7 @@ describe("editor view", () => {
       include.checked = false;
       include.dispatchEvent(new Event("change"));
       $("#psCancel").click();
-      expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/listing")).toBe(false);
+      expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/settings")).toBe(false);
       expect($("#headEmailOnly").hidden).toBe(true);
       expect(fake.unhandled).toEqual([]);
     });
@@ -1882,7 +1883,7 @@ describe("editor view", () => {
       include.dispatchEvent(new Event("change"));
       $("#psSave").click();
       await vi.advanceTimersByTimeAsync(0);
-      const put = fake.calls.find((c) => c.url.pathname === "/api/posts/p1/listing");
+      const put = fake.calls.find((c) => c.url.pathname === "/api/posts/p1/settings");
       expect(put?.json()).toEqual({ email_only: true });
       expect(document.querySelector(".modal")).toBeNull();
       expect($("#headEmailOnly").hidden).toBe(false);
@@ -1907,7 +1908,7 @@ describe("editor view", () => {
       expect($("#psNote").textContent).toBe("");
       $("#psSave").click();
       await vi.advanceTimersByTimeAsync(0);
-      const put = fake.calls.find((c) => c.url.pathname === "/api/posts/p1/listing");
+      const put = fake.calls.find((c) => c.url.pathname === "/api/posts/p1/settings");
       expect(put?.json()).toEqual({ slug: "dusk-owls" });
       expect(document.querySelector(".modal")).toBeNull();
     });
@@ -1933,7 +1934,7 @@ describe("editor view", () => {
       expect($<HTMLInputElement>("#psSlug").value).toBe("barn-owls");
       $("#psSave").click();
       await vi.advanceTimersByTimeAsync(0);
-      const put = fake.calls.find((c) => c.url.pathname === "/api/posts/p1/listing");
+      const put = fake.calls.find((c) => c.url.pathname === "/api/posts/p1/settings");
       expect(put?.json()).toEqual({ slug_auto: true });
     });
 

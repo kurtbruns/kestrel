@@ -1,6 +1,6 @@
 /**
  * A post's settings as a request carries them (SPEC §4, §5): its listing (`email_only`) and its
- * archive address (`slug`, `slug_auto`). The listing route, Schedule, Send now, and a reschedule
+ * archive address (`slug`, `slug_auto`). The settings route, Schedule, and Send now
  * all read them here and resolve them through the same rules, so a slug is refused the same way
  * wherever it is set, before anything is written.
  */

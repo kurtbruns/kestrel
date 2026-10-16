@@ -38,7 +38,7 @@ async function makeDraft(subject: string, extra: Record<string, unknown> = {}): 
 
 const read = async (id: string) => readJson(await call("GET", `/api/posts/${id}`));
 
-const setListing = (id: string, body: unknown) => call("PUT", `/api/posts/${id}/listing`, body);
+const setListing = (id: string, body: unknown) => call("PUT", `/api/posts/${id}/settings`, body);
 
 async function schedule(id: string, emailOnly = false): Promise<string> {
   const res = await call("POST", `/api/posts/${id}/schedule`, {
@@ -100,6 +100,46 @@ describe("every email carries the post's unlisted link (SPEC §5)", () => {
     expect((await read(id)).post.unlisted_token).toBe(before.unlisted_token);
     const other = (await read(await makeDraft("First Subject"))).post;
     expect(other.unlisted_token).not.toBe(before.unlisted_token);
+  });
+});
+
+describe("a post carries its addresses, absolute, in every state (SPEC §4, §5)", () => {
+  it("on its read, its saves, the list, and a settings change, a draft included", async () => {
+    const config = getConfig(env);
+    const archive = (slug: string) => `${config.archiveOrigin}${config.archiveBasePath}/${slug}`;
+    const created = await readJson(await call("POST", "/api/posts", { subject: "Barn Owls" }));
+    const id = created.post.id;
+    const unlisted = `${ORIGIN}/email/${created.post.unlisted_token}`;
+    expect(created.post).toMatchObject({
+      archive_url: archive("barn-owls"),
+      unlisted_url: unlisted,
+    });
+    // A draft's address is where it will go, though nothing answers there yet.
+    expect((await read(id)).post).toMatchObject({ archive_url: archive("barn-owls") });
+    const listed = await readJson(await call("GET", "/api/posts"));
+    expect(listed.posts[0]).toMatchObject({
+      archive_url: archive("barn-owls"),
+      unlisted_url: unlisted,
+    });
+    const moved = await readJson(await setListing(id, { slug: "owls-at-dusk" }));
+    expect(moved).toMatchObject({
+      post: { archive_url: archive("owls-at-dusk"), unlisted_url: unlisted },
+      archive_answers: false,
+    });
+  });
+
+  it("says on a settings change whether the archive address answers, by the rule the archive serves (SPEC §5)", async () => {
+    const { id, sendId } = await sendPost("Listed Owls");
+    expect((await readJson(await setListing(id, { email_only: true }))).archive_answers).toBe(
+      false,
+    );
+    expect((await readJson(await setListing(id, { email_only: false }))).archive_answers).toBe(
+      true,
+    );
+    // A send frozen before unlisted links carries the archive address, which then answers
+    // whatever the listing.
+    await setRow(sendId, { web_link: "archive" });
+    expect((await readJson(await setListing(id, { email_only: true }))).archive_answers).toBe(true);
   });
 });
 
@@ -248,19 +288,6 @@ describe("the archive address (SPEC §4, §5)", () => {
     });
     expect(res.status).toBe(201);
     expect((await read(id)).post).toMatchObject({ slug: "my-letter", status: "scheduled" });
-  });
-
-  it("is checked before a reschedule moves anything", async () => {
-    await makeDraft("Taken Name");
-    const id = await makeDraft("Mine");
-    const sendId = await schedule(id);
-    const before = (await readJson(await call("GET", `/api/sends/${sendId}`))).send.fire_at;
-    const res = await call("POST", `/api/sends/${sendId}/reschedule`, {
-      fire_at: new Date(Date.now() + 2 * DAY).toISOString(),
-      slug: "taken-name",
-    });
-    expect(res.status).toBe(409);
-    expect((await readJson(await call("GET", `/api/sends/${sendId}`))).send.fire_at).toBe(before);
   });
 
   it("is fixed once the send starts: a change to it is refused, and naming it again is fine", async () => {
