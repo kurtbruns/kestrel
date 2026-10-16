@@ -1886,6 +1886,10 @@ describe("editor view", () => {
       expect(put?.json()).toEqual({ email_only: true });
       expect(document.querySelector(".modal")).toBeNull();
       expect($("#headEmailOnly").hidden).toBe(false);
+      // The lists' mark, an envelope and the words, not a pill.
+      expect($("#headEmailOnly").className).toBe("email-only-mark");
+      expect($("#headEmailOnly").textContent?.trim()).toBe("Email only");
+      expect($("#headEmailOnly svg")).not.toBeNull();
       expect(puts()).toHaveLength(0); // no revision: the settings aren't part of the draft
     });
 

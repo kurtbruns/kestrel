@@ -1558,18 +1558,6 @@ td a:hover {
   color: var(--status-sending-fg);
   border-color: var(--status-sending-line);
 }
-/* Email only (SPEC §5): a fact about where a post lives, so the draft grey (DESIGN §8). It
-   sits beside a subject, a little smaller than a status badge. */
-.badge.email-only {
-  background: var(--status-draft-bg);
-  color: var(--status-draft-fg);
-  border-color: var(--status-draft-line);
-  font-size: 11.5px;
-  padding: 1px 7px;
-  margin-left: 6px;
-  vertical-align: 1px;
-  white-space: nowrap;
-}
 /* A list's title with its Email only mark (sends/progress.ts): the title wraps within its room
    and the mark, an envelope and muted words, stays whole on the title's line, so it never drops
    onto a line of its own. */

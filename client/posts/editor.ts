@@ -225,7 +225,7 @@ export async function renderEditor(
     <div class="editor-head">
       <a href="#/drafts" class="back">← Drafts</a>
       <div class="editor-head-right">
-        <span class="badge email-only" id="headEmailOnly"${post.email_only && !locked ? null : HIDDEN}>Email only</span>
+        <span class="email-only-mark" id="headEmailOnly"${post.email_only && !locked ? null : HIDDEN}>${icon("mail")}Email only</span>
         <a class="ghost btn" id="webLink" href="${webVersionUrl}" target="_blank" rel="noopener" aria-label="Web version (opens in a new tab)">Web version ↗</a>
         <button type="button" class="ghost" id="settingsBtn">${icon("settings")}<span>Post settings</span></button>
       </div>
