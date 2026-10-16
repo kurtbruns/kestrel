@@ -377,6 +377,24 @@ describe("settings view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("names a sandbox notice by what it tells of, since it is about no send", async () => {
+    await open([
+      {
+        path: "/api/settings",
+        reply: () =>
+          response({
+            settings: { notifications: { to: "me@b.c" } },
+            notificationStatus: {
+              lastSent: { kind: "sandbox", subject: "", at: 1_800_000_000_000 },
+              lastFailure: null,
+            },
+          }),
+      },
+    ]);
+    expect($("#notifyStatus").textContent).toMatch(/, signup refused by the SES sandbox$/);
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("saves the notifications address on the save bar, and holds the test until it is saved", async () => {
     await open([
       { path: "/api/settings", reply: () => response() },

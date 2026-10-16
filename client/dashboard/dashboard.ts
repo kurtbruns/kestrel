@@ -128,6 +128,19 @@ function computeHealth(live: SendView[]): HealthAlert[] {
           : html`<a href="#/sent">${stuck.length} sends</a> have handed off no one for a while, with no retry or provider problem to explain it.`,
     });
   }
+  // A rate limit the deployment causes itself (SPEC §12): the server marks it worth a look,
+  // since a burst never lasts, and its words name the setting.
+  const throttled = live.flatMap((s) => {
+    const c = conditionOf(s, "provider_unavailable");
+    return c?.severity === "warn" ? [{ s, c }] : [];
+  });
+  const [firstThrottled] = throttled;
+  if (firstThrottled) {
+    alerts.push({
+      level: "amber",
+      text: html`<a href="#/sent/${firstThrottled.s.id}">${firstThrottled.s.subject}</a>: ${firstThrottled.c.message}`,
+    });
+  }
   // Bounce spike (SPEC §8): the server's reading of a recent send's confirmed bounces over
   // its audience at fire. Read-only reporting: it never throttles or halts a send.
   const spiky = live.flatMap((s) => {

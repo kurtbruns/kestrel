@@ -144,7 +144,7 @@ describe("sent view", () => {
         id: "ref",
         subject: "Paused one",
         halt_reason: "account",
-        halt_cause: "suspended",
+        halt_cause: "paused",
         halt_error: "ses 400 SendingPausedException: Account is paused",
         halted_at: NOW - 60_000,
       }),
@@ -157,9 +157,11 @@ describe("sent view", () => {
     expect(cards).toHaveLength(1);
     expect(cards[0]!.textContent).toContain("Paused one");
     expect(cards[0]!.textContent).toContain("ses 400 SendingPausedException: Account is paused");
-    expect(cards[0]!.textContent).toContain("in the SES console");
+    expect(cards[0]!.textContent).toContain("put-account-sending-attributes --sending-enabled");
     // Words without a closing stop get one; the next sentence follows a single period.
-    expect(cards[0]!.textContent).toContain("Account is paused. Settle the account’s standing");
+    expect(cards[0]!.textContent).toContain(
+      "Account is paused. Sending is paused for the SES account",
+    );
     expect(cards[0]!.querySelector("a")!.getAttribute("href")).toBe("#/sent/ref");
     expect(cards[0]!.querySelector("button")).toBeNull(); // nothing in the app to press
     expect(document.querySelector(".active-card")).toBeNull();
@@ -498,7 +500,9 @@ describe("sent view", () => {
       { phase: "needs-attention" },
     );
     await vi.advanceTimersByTimeAsync(3000);
-    expect($("#stuck .stuck-card").textContent).toMatch(/Daily quota exceeded\. Wait for/);
+    expect($("#stuck .stuck-card").textContent).toMatch(
+      /Daily quota exceeded\. SES’s 24-hour quota/,
+    );
     expect(document.querySelector(".active-card")).toBeNull();
     srv.edit("act", { halt_reason: null, halt_cause: null, halt_error: null });
     await vi.advanceTimersByTimeAsync(3000);

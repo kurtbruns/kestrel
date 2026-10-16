@@ -26,7 +26,11 @@ import { type Budget, metered } from "../send/budget";
 import { idleSince } from "../send/stuck";
 import { isWedged } from "../send/wedged";
 import { getNotifier } from "./channel";
-import { composeImportNotification, composeNotification } from "./compose";
+import {
+  composeImportNotification,
+  composeNotification,
+  composeSandboxNotification,
+} from "./compose";
 
 /** Record the events, list the due, read the destination, and claim them: four statements. */
 const OPEN_COST = 4;
@@ -47,6 +51,7 @@ const MAX_PER_TICK = 10;
 export function stillHolds(n: notifications.DueAny, now: number): boolean {
   switch (n.kind) {
     case "import":
+    case "sandbox":
       return true;
     case "finished":
       return true;
@@ -96,12 +101,21 @@ export async function notifyPublisher(env: AppEnv, budget: Budget): Promise<void
       await notifications.recordNotificationOutcome(db, n, { status: "cleared" }, Date.now());
       continue;
     }
-    const about = n.kind === "import" ? { importId: n.import_id } : { sendId: n.send_id };
-    const key = `${n.send_id ?? n.import_id}-${n.kind}-${n.episode}`;
+    const about =
+      n.kind === "import"
+        ? { importId: n.import_id }
+        : n.kind === "sandbox"
+          ? {}
+          : { sendId: n.send_id };
+    const key = `${n.send_id ?? n.import_id ?? "account"}-${n.kind}-${n.episode}`;
     budget.request(); // the channel's request, which counts whether or not it succeeds
     try {
       const email =
-        n.kind === "import" ? composeImportNotification(n, config) : composeNotification(n, config);
+        n.kind === "import"
+          ? composeImportNotification(n, config)
+          : n.kind === "sandbox"
+            ? composeSandboxNotification(config)
+            : composeNotification(n, config);
       await notifier.send(to, email, key);
       await notifications.recordNotificationOutcome(db, n, { status: "sent" }, Date.now());
       log.info("notify.sent", { ...about, kind: n.kind, channel: notifier.channel });

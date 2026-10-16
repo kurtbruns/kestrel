@@ -18,21 +18,59 @@ export type SendStatus = "scheduled" | "sending" | "sent" | "canceled";
 export type HaltReason = "unavailable" | "account";
 
 /**
- * What a refusal is about, so the advice can name the fix: the access key or its permissions,
- * a deployment setting naming something the provider can't find (an SES configuration set),
- * the sender (an unverified domain or from-address), a spent sending quota, the account
- * paused or suspended by the provider, a rate limit, the provider itself failing, or no
- * provider connected to the deployment at all (SPEC §9).
+ * What a refusal is about, so the advice can name the fix and who makes it (SPEC §12): the
+ * access key or its permissions (`credentials`), an AWS account not signed up for the
+ * provider (`opt_in`), a deployment setting naming something the provider can't find (an SES
+ * configuration set, `configuration`, or the dedicated IP pool one names, `sending_pool`), a
+ * request the provider reads as naming something Kestrel never sends (`unsupported`), the
+ * sender's identity (`sender`) or its custom MAIL FROM domain (`mail_from`), an account still
+ * in the provider's sandbox, which mails only verified addresses (`sandbox`), a spent sending
+ * quota, the account shut down (`suspended`), its sending paused (`paused`) or a
+ * configuration set's (`set_paused`), the email's content (`content`) or a batch the provider
+ * reads as invalid (`invalid_request`), which are one send's alone, a rate limit, the
+ * provider itself failing (`outage`), or no provider connected to the deployment at all
+ * (SPEC §9).
  */
 export type HaltCause =
   | "credentials"
+  | "opt_in"
   | "configuration"
+  | "sending_pool"
+  | "unsupported"
   | "sender"
+  | "mail_from"
+  | "sandbox"
   | "quota"
   | "suspended"
+  | "paused"
+  | "set_paused"
+  | "content"
+  | "invalid_request"
   | "rate_limit"
   | "outage"
   | "not_connected";
+
+/**
+ * The refusals that are about one send rather than the account (SPEC §12): the provider
+ * refuses that send's email, or a batch of it, and would take another send's. No other send
+ * waits on one, and its words say "this send" rather than "the account".
+ */
+export const SEND_OWN_HALT_CAUSES: readonly HaltCause[] = ["content", "invalid_request"];
+
+/** Whether a refusal is the send's own rather than the account's (`SEND_OWN_HALT_CAUSES`). */
+export function isSendOwnHalt(cause: HaltCause | null): boolean {
+  return cause !== null && SEND_OWN_HALT_CAUSES.includes(cause);
+}
+
+/**
+ * How much a halt outranks another in one run (SPEC §12): a provider only unavailable
+ * least, then a refusal of one send's own email, then a refusal of the account, which every
+ * other send waits on, so the send records the one the publisher and the other sends must
+ * hear.
+ */
+export function haltRank(halt: { reason: HaltReason; cause: HaltCause | null }): number {
+  return halt.reason === "unavailable" ? 0 : isSendOwnHalt(halt.cause) ? 1 : 2;
+}
 
 /**
  * The advice for a send held for want of a provider (SPEC §9), in its parts: the setup step,
@@ -47,29 +85,105 @@ export const NOT_CONNECTED_ADVICE = {
 } as const;
 
 /**
- * What to do about the provider refusing the account, by what the refusal is about
- * (SPEC §12). The fix is always outside the app: nothing in it can change a credential or
- * the provider's view of the account (SPEC §9). One wording for the watch and the notification
- * that tells the publisher, so the two never advise differently. Plain text: a page that
- * links the not-connected step builds it from `NOT_CONNECTED_ADVICE`.
+ * What to do about the provider refusing the account or a send, by what the refusal is about
+ * (SPEC §12), and who does it: almost always whoever runs the deployment, in the provider's
+ * console or the deployment's settings, since nothing in the app can change a credential or
+ * the provider's view of the account (SPEC §9); the publisher, when a subscriber's address
+ * explains it. One wording for the watch and the notification that tells the publisher, so
+ * the two never advise differently. Plain text: a page that links the not-connected step
+ * builds it from `NOT_CONNECTED_ADVICE`.
  */
 export function refusalAdvice(cause: HaltCause | null): string {
   switch (cause) {
     case "credentials":
-      return "Replace the SES access key in the deployment’s secrets, or give it ses:SendEmail and ses:SendBulkEmail in its IAM policy.";
+      return "Whoever runs the deployment replaces the SES access key in its secrets, or gives the key ses:SendEmail and ses:SendBulkEmail in its IAM policy.";
+    case "opt_in":
+      return "The AWS account isn’t signed up for SES: whoever runs the deployment enables SES for the account in the region AWS_REGION names, or settles the account’s activation or billing with AWS.";
     case "configuration":
-      return "Check that the SES_CONFIGURATION_SET secret names a configuration set in your SES region, or create the set in the SES console.";
+      return "Whoever runs the deployment checks that the SES_CONFIGURATION_SET secret names a configuration set in the SES region, or creates the set in the SES console.";
+    case "sending_pool":
+      return "The configuration set SES_CONFIGURATION_SET names sends through a dedicated IP pool SES can’t find: whoever runs the deployment picks an existing pool in the set’s sending options, or removes the pool, in the SES console.";
+    case "unsupported":
+      return "SES read the request as naming something Kestrel never sends, such as a stored template: whoever runs the deployment checks that AWS_REGION names a region that offers SES, and updates Kestrel.";
     case "sender":
-      return "Verify the sending domain or from-address with the provider.";
+      return "Whoever runs the deployment verifies the From address, or its domain, in SES, in the region AWS_REGION names.";
+    case "mail_from":
+      return "SES says the sending domain isn’t verified, or it can’t read the sender’s custom MAIL FROM domain’s MX record: whoever runs the deployment checks that the sending domain is verified in the region AWS_REGION names, and checks the MAIL FROM domain’s MX record in DNS or sets the identity’s Behavior on MX failure to use the default MAIL FROM domain, in the SES console.";
+    case "sandbox":
+      return "The SES account is still in the sandbox, which mails only addresses verified in SES: whoever runs the deployment requests production access on the SES console’s account dashboard. To test before then, verify the reader’s address in SES.";
     case "quota":
-      return "Wait for SES’s 24-hour quota to free up, or ask AWS to raise it in the Service Quotas console.";
+      return "SES’s 24-hour quota frees up on its own. In the sandbox (200 a day), whoever runs the deployment requests production access; otherwise they can ask AWS to raise the quota in the Service Quotas console.";
     case "suspended":
-      return "Settle the account’s standing with the provider (for SES, in the SES console).";
+      return "AWS has shut down the account’s sending, and only AWS can lift it: whoever runs the deployment opens a case with AWS Support from the SES console.";
+    case "paused":
+      return "Sending is paused for the SES account. If AWS paused it under review, its email to the AWS account’s address says what to fix; if it was turned off by hand, whoever runs the deployment turns it back on (aws sesv2 put-account-sending-attributes --sending-enabled).";
+    case "set_paused":
+      return "Sending is turned off on the configuration set SES_CONFIGURATION_SET names, by hand or by an alarm set up on it: whoever runs the deployment turns it back on (aws sesv2 put-configuration-set-sending-options --sending-enabled, naming the set).";
+    case "content":
+      return "SES refuses this email itself, not a reader or the account, and the email can’t change once its send has started: whoever runs the deployment asks AWS Support what SES refuses in it, quoting SES’s words.";
+    case "invalid_request":
+      return "SES refused a batch of this send as invalid. If its words name an address, remove that subscriber: the send skips anyone no longer on the list, and resumes at its next retry.";
     case "not_connected":
       return `${NOT_CONNECTED_ADVICE.step}${NOT_CONNECTED_ADVICE.guide}${NOT_CONNECTED_ADVICE.after}`;
     default:
-      return "Fix the account with the provider.";
+      return "Whoever runs the deployment fixes the account with the provider.";
   }
+}
+
+/**
+ * How many rate-limit halts in a row, with nothing taken between them, mark a throttle the
+ * deployment causes itself (SPEC §12): a burst clears within a second and every retry after
+ * the first is minutes out, so a provider that still refuses the first request of each retry
+ * is being asked for more a second than the account allows (SES_MAX_SEND_RATE above it).
+ */
+export const SELF_THROTTLE_HALTS = 3;
+
+/** Whether a send's halt is a rate limit that has outlasted any burst (`SELF_THROTTLE_HALTS`). */
+export function isSelfThrottled(
+  send: Pick<Send, "halt_reason" | "halt_cause" | "halt_retries">,
+): boolean {
+  return (
+    send.halt_reason === "unavailable" &&
+    send.halt_cause === "rate_limit" &&
+    send.halt_retries >= SELF_THROTTLE_HALTS
+  );
+}
+
+/** The provider's words as a sentence the copy around them can follow. */
+function sentence(error: string | null): string {
+  const text = error?.trim() || "no detail given";
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
+/**
+ * The `refused` condition's words (SPEC §12), by whose refusal it is: no provider connected,
+ * the provider refusing this send's own email (`isSendOwnHalt`), or the account. "Because of
+ * this" keeps the claim to this refusal: readers recorded unsent earlier in the send, for
+ * their own failures, stay so.
+ */
+export function refusedMessage(cause: HaltCause | null, error: string | null): string {
+  const advice = refusalAdvice(cause);
+  if (cause === "not_connected") {
+    return `No email provider is connected, so this send is held where it is. ${advice} No one has been marked unsent because of this, and the send goes out at its first retry after a provider is connected.`;
+  }
+  if (isSendOwnHalt(cause)) {
+    return `The provider is refusing this send: ${sentence(error)} ${advice} No one has been marked unsent because of this, and the send tries again on its own, spaced out the longer this lasts.`;
+  }
+  return `The provider is refusing the account: ${sentence(error)} ${advice} No one has been marked unsent because of this, and the send resumes on its own at its next retry once the account is fixed.`;
+}
+
+/**
+ * The `provider_unavailable` condition's words (SPEC §12): an outage or a rate limit, which
+ * clears on its own, or a rate limit that has outlasted any burst (`isSelfThrottled`), which
+ * names the setting that causes it.
+ */
+export function unavailableMessage(
+  send: Pick<Send, "halt_reason" | "halt_cause" | "halt_retries" | "halt_error">,
+): string {
+  if (isSelfThrottled(send)) {
+    return `The provider keeps refusing for its sending rate: ${sentence(send.halt_error)} A burst clears within a second, and this has refused the first request of ${send.halt_retries} retries in a row, minutes apart, so the deployment is asking for more a second than the account allows. Whoever runs the deployment sets SES_MAX_SEND_RATE to the maximum send rate on the SES console’s account dashboard (1 a second in the sandbox), and deploys. The send retries on its own meanwhile, and no one has been marked unsent because of this.`;
+  }
+  return `The provider is unavailable: ${sentence(send.halt_error)} The send retries on its own, spaced out the longer this lasts, and no one has been marked unsent because of this.`;
 }
 
 /** The provider's standing refusal of a send, while one lasts. */
@@ -336,8 +450,9 @@ interface ConditionBase {
  * - `stuck`: still sending, with no recipient handed off for the stuck threshold and no
  *   halt or wedge to explain it: the sweep has stopped, or every run fails.
  * - `wedged`: recipients whose delivery is unknown; `count` of them, settled by Resolve.
- * - `refused`: the provider refuses the account; its `cause`, `error`, the `advice` for the
- *   fix (outside the app), and `retry_at`. No action: the send resumes on its own.
+ * - `refused`: the provider refuses the account, or this send's own email (`isSendOwnHalt`);
+ *   its `cause`, `error`, the `advice` for the fix (outside the app), and `retry_at`. No
+ *   action: the send resumes on its own.
  * - `provider_unavailable`: the provider is down or rate-limiting; retried at `retry_at`.
  * - `bounce_spike`: a recently sent send's confirmed bounces reached the danger zone.
  * - `remade`: a template or identity change re-made the scheduled email after its last test.

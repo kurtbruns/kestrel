@@ -6,6 +6,7 @@
 import { decodeSendCursor, encodeSendCursor } from "../../shared/cursor";
 import {
   refusalAdvice,
+  refusedMessage,
   type SendAction,
   type SendCondition,
   type SendFeedResponse,
@@ -114,12 +115,6 @@ export function sendView(row: SendSummary, over: Partial<SendView> = {}): SendVi
   };
 }
 
-/** The provider's words as a sentence, as the server ends them. */
-const words = (error: string | null) => {
-  const text = error?.trim() || "no detail given";
-  return /[.!?]$/.test(text) ? text : `${text}.`;
-};
-
 /** Conditions as the server words them, for a spec's scripted sends. */
 export const condition = {
   wedged: (count: number, id = "x"): SendCondition => ({
@@ -129,6 +124,19 @@ export const condition = {
     message: `The provider never answered for ${count} recipient${count === 1 ? "" : "s"}, so whether they were mailed is unknown.`,
     action: { name: "resolve", method: "POST", path: `/api/sends/${id}/resolve` },
     count,
+  }),
+  /** The provider unavailable; `selfThrottled` as the server marks a rate limit the
+   *  deployment causes itself (SPEC §12). */
+  unavailable: (selfThrottled: boolean): SendCondition => ({
+    kind: "provider_unavailable",
+    severity: selfThrottled ? "warn" : "info",
+    since: 1_000,
+    message: selfThrottled
+      ? "The provider keeps refusing for its sending rate: Maximum sending rate exceeded. Whoever runs the deployment sets SES_MAX_SEND_RATE."
+      : "The provider is unavailable: ses 503.",
+    action: null,
+    error: selfThrottled ? "Maximum sending rate exceeded." : "ses 503",
+    retry_at: null,
   }),
   stuck: (): SendCondition => ({
     kind: "stuck",
@@ -142,12 +150,12 @@ export const condition = {
     kind: "refused",
     severity: "action",
     since: 1_000,
-    message: `The provider is refusing the account: ${error} Replace the SES access key in the deployment’s secrets, or give it ses:SendEmail and ses:SendBulkEmail in its IAM policy.`,
+    message: `The provider is refusing the account: ${error} Whoever runs the deployment replaces the SES access key in its secrets, or gives the key ses:SendEmail and ses:SendBulkEmail in its IAM policy.`,
     action: null,
     cause: "credentials",
     error,
     advice:
-      "Replace the SES access key in the deployment’s secrets, or give it ses:SendEmail and ses:SendBulkEmail in its IAM policy.",
+      "Whoever runs the deployment replaces the SES access key in its secrets, or gives the key ses:SendEmail and ses:SendBulkEmail in its IAM policy.",
     retry_at: retryAt,
   }),
   bounceSpike: (bounced: number, rate: number): SendCondition => ({
@@ -216,10 +224,7 @@ export function sendServer(rows: SendSummary[] = []) {
         kind: "refused",
         severity: "action",
         since: row.halted_at,
-        message:
-          row.halt_cause === "not_connected"
-            ? `No email provider is connected, so this send is held where it is. ${refusalAdvice(row.halt_cause)} No one has been marked unsent, and the send goes out at its first retry after a provider is connected.`
-            : `The provider is refusing the account: ${words(row.halt_error)} ${refusalAdvice(row.halt_cause)} No one has been marked unsent, and the send resumes on its own at its next retry once the account is fixed.`,
+        message: refusedMessage(row.halt_cause, row.halt_error),
         action: null,
         cause: row.halt_cause,
         error: row.halt_error ?? "",

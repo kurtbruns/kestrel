@@ -354,8 +354,9 @@ The **health block** on the dashboard, the **attention cards** on Sent, and an *
 | --- | --- | --- |
 | Missed fire time | red | Health line; the scheduled card and banner read "Missed its fire time · N min late". |
 | Wedged send | red | Health line linking to the send; attention card and the watch carry **Resolve…**. |
-| Provider refusing the account | red | Health line, attention card, and watch alert, each with the provider's words and one sentence of advice. No control: nothing in the app fixes it, so the subject links to its watch. The copy says no one has been marked unsent and the send resumes once the account is fixed, and the watch names the next retry. |
+| Provider refusing the account, or this send | red | Health line, attention card, and watch alert, each with the provider's words and one sentence of advice that names the fix and who makes it. No control: nothing in the app fixes it, so the subject links to its watch. The watch's headline says "refusing this account", or "refusing this send" when the provider refuses the send's own email. The copy says no one has been marked unsent because of this, so it stays true beside readers unsent earlier, and the send resumes once it is fixed, and the watch names the next retry. |
 | In flight too long | amber | Health line, a note on its active-send and In progress cards, and a line at the top of its watch. |
+| Rate limit the deployment causes | amber | Health line and a line at the top of its watch, in the server's words, which name `SES_MAX_SEND_RATE`. An ordinary outage or rate limit raises nothing (below). |
 | Bounce spike | amber | Health line linking to the send's record. |
 | No provider connected | amber, or red once it holds a send | Below. |
 

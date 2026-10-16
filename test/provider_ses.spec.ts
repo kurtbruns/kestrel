@@ -36,6 +36,12 @@ function newProvider(): SesProvider {
 
 const UNSUB = "https://app.example.com/unsubscribe?token=deadbeef";
 
+/** An entry SES refused because an identity it names isn't verified, in SES's words. */
+const notVerified = (who: string) => ({
+  Status: "MESSAGE_REJECTED",
+  Error: `Email address is not verified. The following identities failed the check in region US-EAST-1: ${who}`,
+});
+
 /** A rendered email still carrying the unsubscribe sentinel (as render() emits). */
 function renderedFixture(): RenderedEmail {
   return {
@@ -268,7 +274,7 @@ describe("SesProvider.sendBatch", () => {
       [{ email: "me@example.com", unsubscribeUrl: UNSUB }],
       { purpose: "test", tag: "t" },
     );
-    expect(r).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "suspended" } });
+    expect(r).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "paused" } });
   });
 
   it("answers a test to several addresses when a later request gets no answer, naming who got what", async () => {
@@ -375,13 +381,20 @@ describe("SesProvider.sendBatch", () => {
 
   it.each([
     ["ACCOUNT_DAILY_QUOTA_EXCEEDED", "account", "quota"],
-    ["ACCOUNT_SENDING_PAUSED", "account", "suspended"],
+    ["ACCOUNT_SENDING_PAUSED", "account", "paused"],
+    ["CONFIGURATION_SET_SENDING_PAUSED", "account", "set_paused"],
     ["ACCOUNT_SUSPENDED", "account", "suspended"],
-    ["MAIL_FROM_DOMAIN_NOT_VERIFIED", "account", "sender"],
+    ["MAIL_FROM_DOMAIN_NOT_VERIFIED", "account", "mail_from"],
     ["CONFIGURATION_SET_DOES_NOT_EXIST", "account", "configuration"],
     ["CONFIGURATION_SET_NOT_FOUND", "account", "configuration"],
+    ["INVALID_SENDING_POOL_NAME", "account", "sending_pool"],
+    ["TEMPLATE_DOES_NOT_EXIST", "account", "unsupported"],
+    ["TEMPLATE_NOT_FOUND", "account", "unsupported"],
     ["ACCOUNT_THROTTLED", "unavailable", "rate_limit"],
     ["TRANSIENT_FAILURE", "unavailable", "outage"],
+    // Several plain failures with nothing taken are SES's, not each recipient's.
+    ["FAILED", "unavailable", "outage"],
+    ["INVALID_PARAMETER", "account", "invalid_request"],
   ])("halts a batch whose entries all came back %s (SPEC §12)", async (status, reason, cause) => {
     answerSes(() => ({ Status: status, Error: "SES's words" }));
     const r = await newProvider().sendBatch(
@@ -409,29 +422,151 @@ describe("SesProvider.sendBatch", () => {
       ["a@example.com", "b@example.com"].map((email) => ({ email, unsubscribeUrl: UNSUB })),
       { purpose: "list", tag: "send-1" },
     );
-    expect(r).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "suspended" } });
+    expect(r).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "paused" } });
   });
 
-  it("halts an entry rejected for the sender's own identity, but fails one naming only the recipient", async () => {
-    const notVerified = (who: string) => ({
-      Status: "MESSAGE_REJECTED",
-      Error: `Email address is not verified. The following identities failed the check in region US-EAST-1: ${who}`,
-    });
+  it("halts an entry rejected for the sender's own identity, by its address or its domain (SPEC §12)", async () => {
     const one = [{ email: "reader@example.com", unsubscribeUrl: UNSUB }];
-    answerSes(() => notVerified("newsletter@send.example.com"));
+    for (const who of ["newsletter@send.example.com", "send.example.com", "example.com"]) {
+      answerSes(() => notVerified(who));
+      expect(
+        await newProvider().sendBatch(renderedFixture(), one, { purpose: "list", tag: "s" }),
+      ).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "sender" } });
+    }
+  });
+
+  it("holds a send the SES sandbox refuses readers of, marking no one unsent and keeping those it took (SPEC §12)", async () => {
+    // In the sandbox SES takes the verified reader and refuses the others by name: the
+    // account's status, not the readers', so they wait with no attempt spent.
+    answerSes((to) => (to === "verified@example.com" ? entryOk() : notVerified(to)));
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      ["verified@example.com", "a@example.com", "b@example.com"].map((email) => ({
+        email,
+        unsubscribeUrl: UNSUB,
+      })),
+      { purpose: "list", tag: "s" },
+    );
+    expect(r).toMatchObject({
+      kind: "answered",
+      results: [
+        { email: "verified@example.com", accepted: true },
+        { email: "a@example.com", accepted: false, retryable: true, held: true },
+        { email: "b@example.com", accepted: false, retryable: true, held: true },
+      ],
+      halt: { reason: "account", cause: "sandbox" },
+    });
+  });
+
+  it("never takes a reader whose address holds the sender's for the sender (SPEC §12)", async () => {
+    // From newsletter@send.example.com; the reader's address contains it as a substring.
+    const reader = "thenewsletter@send.example.com";
+    answerSes(() => notVerified(reader));
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      [{ email: reader, unsubscribeUrl: UNSUB }],
+      { purpose: "list", tag: "s" },
+    );
+    expect(r).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "sandbox" } });
+    answerSes(() => notVerified("newsletter@send.example.com.au"));
     expect(
-      await newProvider().sendBatch(renderedFixture(), one, {
-        purpose: "list",
-        tag: "s",
-      }),
-    ).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "sender" } });
-    answerSes(() => notVerified("reader@example.com"));
+      await newProvider().sendBatch(
+        renderedFixture(),
+        [{ email: "x@example.com", unsubscribeUrl: UNSUB }],
+        {
+          purpose: "list",
+          tag: "s",
+        },
+      ),
+    ).toMatchObject({ kind: "halted", halt: { cause: "sandbox" } });
+  });
+
+  it("halts a batch whose every entry SES rejected for its content, rather than marking the batch unsent", async () => {
+    answerSes(() => ({ Status: "MESSAGE_REJECTED", Error: "The message contained a virus." }));
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      ["a@example.com", "b@example.com"].map((email) => ({ email, unsubscribeUrl: UNSUB })),
+      { purpose: "list", tag: "s" },
+    );
+    expect(r).toEqual({
+      kind: "halted",
+      halt: {
+        reason: "account",
+        cause: "content",
+        error: "ses MESSAGE_REJECTED: The message contained a virus.",
+      },
+    });
+  });
+
+  it.each([
+    ["INVALID_PARAMETER", false],
+    ["INVALID_PARAMETER_VALUE", false],
+    ["FAILED", true],
+  ])(
+    "fails an entry SES answers %s as the recipient's own (retryable: %s)",
+    async (status, retryable) => {
+      answerSes((to) =>
+        to === "bad@example.com" ? { Status: status, Error: "words" } : entryOk(),
+      );
+      const r = await newProvider().sendBatch(
+        renderedFixture(),
+        ["ok@example.com", "bad@example.com"].map((email) => ({ email, unsubscribeUrl: UNSUB })),
+        { purpose: "list", tag: "s" },
+      );
+      expect(r).toEqual({
+        kind: "answered",
+        results: [
+          { email: "ok@example.com", accepted: true, providerId: expect.any(String) },
+          { email: "bad@example.com", accepted: false, retryable, error: `ses ${status}: words` },
+        ],
+      });
+    },
+  );
+
+  it("leaves out an entry with no status or one SES doesn't document, logging it, so it waits for Resolve (I4)", async () => {
+    // SES may have taken it (an entry's status and message id are both optional), so it is
+    // neither re-sent nor recorded unsent, and the batch can't be halted as a whole.
+    const warns = vi.spyOn(console, "warn");
+    answerSes((to) =>
+      to === "odd@example.com"
+        ? ({ Error: "?" } as never)
+        : { Status: "SOMETHING_NEW", MessageId: "m-new" },
+    );
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      ["new@example.com", "odd@example.com"].map((email) => ({ email, unsubscribeUrl: UNSUB })),
+      { purpose: "list", tag: "s" },
+    );
+    expect(r).toEqual({ kind: "answered", results: [] });
     expect(
-      await newProvider().sendBatch(renderedFixture(), one, {
-        purpose: "list",
-        tag: "s",
-      }),
-    ).toMatchObject({ kind: "answered", results: [{ accepted: false, retryable: false }] });
+      logged(warns)
+        .filter((l) => l.event === "provider.unrecognized")
+        .map((l) => l.status),
+    ).toEqual(["SOMETHING_NEW", null]);
+  });
+
+  it("holds a one-entry request SES rejected for content, unless its words name the reader", async () => {
+    const one = [{ email: "reader@example.com", unsubscribeUrl: UNSUB }];
+    const send = () =>
+      newProvider().sendBatch(renderedFixture(), one, { purpose: "list", tag: "s" });
+    answerSes(() => ({ Status: "MESSAGE_REJECTED", Error: "The message contained a virus." }));
+    expect(await send()).toMatchObject({ kind: "halted", halt: { cause: "content" } });
+    answerSes(() => ({ Status: "MESSAGE_REJECTED", Error: "Rejected: reader@example.com." }));
+    expect(await send()).toMatchObject({
+      kind: "answered",
+      results: [{ email: "reader@example.com", accepted: false, retryable: false }],
+    });
+  });
+
+  it("reads the sender in SES's words when a sentence's period follows it", async () => {
+    answerSes(() => notVerified("newsletter@send.example.com."));
+    expect(
+      await newProvider().sendBatch(
+        renderedFixture(),
+        [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
+        { purpose: "list", tag: "s" },
+      ),
+    ).toMatchObject({ kind: "halted", halt: { cause: "sender" } });
   });
 
   it("leaves out a recipient SES's answer has no result for, so its fate stays unknown (SPEC §12)", async () => {
@@ -487,22 +622,21 @@ describe("SesProvider.sendBatch", () => {
     expect(r).toMatchObject({ kind: "halted", halt: { ...halt } });
   });
 
-  it("reads the quota wording only on a throttle, not on a rejected message", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({ __type: "MessageRejected", message: "Daily message quota exceeded." }),
-        { status: 400 },
-      ),
-    );
-    const r = await newProvider().sendBatch(
-      renderedFixture(),
-      [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
-      { purpose: "list", tag: "send-1" },
-    );
-    expect(r).toMatchObject({ kind: "answered", results: [{ accepted: false, retryable: false }] });
+  it("reads the quota wording on a throttle or a limit, but not on a rejected message", async () => {
+    const answer = (__type: string, message: string) =>
+      vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(new Response(JSON.stringify({ __type, message }), { status: 400 }));
+    const one = [{ email: "reader@example.com", unsubscribeUrl: UNSUB }];
+    const send = () =>
+      newProvider().sendBatch(renderedFixture(), one, { purpose: "list", tag: "s" });
+    answer("LimitExceededException", "Daily sending quota exceeded.");
+    expect(await send()).toMatchObject({ kind: "halted", halt: { cause: "quota" } });
+    answer("MessageRejected", "Daily message quota exceeded.");
+    expect(await send()).toMatchObject({ kind: "halted", halt: { cause: "content" } });
   });
 
-  it("fails every recipient of a request SES refuses with a 400 for good", async () => {
+  it("fails the one recipient of a request SES refuses as invalid, for good", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -544,24 +678,178 @@ describe("SesProvider.sendBatch", () => {
     });
   });
 
-  it("halts a 5xx as unavailable", async () => {
+  it.each([
+    [500, "InternalFailure"],
+    [503, "ServiceUnavailable"],
+    [504, ""],
+    [400, "RequestAbortedException"],
+  ])(
+    "throws a list batch's %i %s as no answer, since SES may have taken it (I4)",
+    async (status, type) => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify(type ? { __type: type, message: "words" } : {}), { status }),
+      );
+      await expect(
+        newProvider().sendBatch(
+          renderedFixture(),
+          [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
+          { purpose: "list", tag: "send-1" },
+        ),
+      ).rejects.toThrow(/SES may have taken the batch/);
+    },
+  );
+
+  it("halts a one-off message's 5xx as unavailable", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("<internal>", { status: 500 }));
     const r = await newProvider().sendBatch(
       renderedFixture(),
       [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
-      {
-        purpose: "list",
-        tag: "send-1",
-      },
+      { purpose: "test", tag: "t" },
     );
-    expect(r).toMatchObject({ kind: "halted", halt: { reason: "unavailable" } });
+    expect(r).toMatchObject({ kind: "halted", halt: { reason: "unavailable", cause: "outage" } });
   });
 
   it.each([
-    [400, "SendingPausedException", "Account is paused", "suspended"],
+    [408, "RequestTimeoutException", "outage"],
+    [400, "LimitExceededException", "outage"],
+    [400, "ThrottlingException", "rate_limit"],
+  ])(
+    "holds a %i %s as SES unavailable, marking no one unsent (SPEC §12)",
+    async (status, type, cause) => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ __type: type, message: "words" }), { status }),
+      );
+      const r = await newProvider().sendBatch(
+        renderedFixture(),
+        ["a@example.com", "b@example.com"].map((email) => ({ email, unsubscribeUrl: UNSUB })),
+        { purpose: "list", tag: "send-1" },
+      );
+      expect(r).toEqual({
+        kind: "halted",
+        halt: { reason: "unavailable", cause, error: `ses ${status} ${type}: words` },
+      });
+    },
+  );
+
+  it("halts a request-level content refusal for the operator, rather than working through the list", async () => {
+    for (const [status, type] of [
+      [400, "MessageRejected"],
+      [413, "RequestEntityTooLargeException"],
+    ] as const) {
+      vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+        new Response(JSON.stringify({ __type: type, message: "no" }), { status }),
+      );
+      const r = await newProvider().sendBatch(
+        renderedFixture(),
+        ["a@example.com", "b@example.com"].map((email) => ({ email, unsubscribeUrl: UNSUB })),
+        { purpose: "list", tag: "send-1" },
+      );
+      expect(r).toEqual({
+        kind: "halted",
+        halt: { reason: "account", cause: "content", error: `ses ${status} ${type}: no` },
+      });
+    }
+  });
+
+  it("refuses only the recipient SES's invalid-request words name, holding the rest for the next request", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          __type: "BadRequestException",
+          message: "Illegal address: bad@example.com.",
+        }),
+        { status: 400 },
+      ),
+    );
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      // "notbad@example.com" holds the named address inside it, and is not it.
+      ["ok@example.com", "bad@example.com", "notbad@example.com"].map((email) => ({
+        email,
+        unsubscribeUrl: UNSUB,
+      })),
+      { purpose: "list", tag: "send-1" },
+    );
+    const error = "ses 400 BadRequestException: Illegal address: bad@example.com.";
+    expect(r).toEqual({
+      kind: "answered",
+      results: [
+        {
+          email: "ok@example.com",
+          accepted: false,
+          retryable: true,
+          error: "not sent",
+          held: true,
+        },
+        { email: "bad@example.com", accepted: false, retryable: false, error },
+        {
+          email: "notbad@example.com",
+          accepted: false,
+          retryable: true,
+          error: "not sent",
+          held: true,
+        },
+      ],
+    });
+  });
+
+  it("holds a batch SES refuses as invalid without naming anyone, rather than marking it unsent", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ __type: "BadRequestException", message: "Invalid input" }), {
+        status: 400,
+      }),
+    );
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      ["a@example.com", "b@example.com"].map((email) => ({ email, unsubscribeUrl: UNSUB })),
+      { purpose: "list", tag: "send-1" },
+    );
+    expect(r).toEqual({
+      kind: "halted",
+      halt: {
+        reason: "account",
+        cause: "invalid_request",
+        error: "ses 400 BadRequestException: Invalid input",
+      },
+    });
+  });
+
+  it("keeps a malformed address out of the request, so it can't take its batch with it", async () => {
+    const { requests } = answerSes();
+    const bad = [
+      "bad addr@example.com",
+      "a..b@example.com",
+      "x@example..com",
+      "x@-x.com",
+      "nodot@localhost",
+    ];
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      [...bad, "reader@example.com"].map((email) => ({ email, unsubscribeUrl: UNSUB })),
+      { purpose: "list", tag: "send-1" },
+    );
+    expect(
+      requests.map((q) => q.BulkEmailEntries.map((e) => e.Destination.ToAddresses[0])),
+    ).toEqual([["reader@example.com"]]);
+    expect(r).toMatchObject({
+      kind: "answered",
+      results: [
+        ...bad.map((email) => ({ email, accepted: false, retryable: false })),
+        { email: "reader@example.com", accepted: true },
+      ],
+    });
+  });
+
+  it.each([
+    [400, "SendingPausedException", "Account is paused", "paused"],
+    [400, "SendingPausedException", "Configuration set sending is currently paused.", "set_paused"],
     [400, "AccountSuspendedException", "Account is suspended", "suspended"],
-    [400, "MailFromDomainNotVerifiedException", "MAIL FROM domain is not verified", "sender"],
+    [400, "MailFromDomainNotVerifiedException", "MAIL FROM domain is not verified", "mail_from"],
     [403, "UnrecognizedClientException", "The token included is invalid", "credentials"],
+    [403, "OptInRequired", "The AWS account needs a subscription", "opt_in"],
+    [401, "NotAuthorized", "no", "credentials"],
+    [404, "UnknownOperationException", "unknown", "unsupported"],
+    [400, "MalformedHttpRequestException", "bad body", "unsupported"],
     [
       404,
       "NotFoundException",
@@ -637,13 +925,13 @@ describe("SesProvider.sendBatch", () => {
       kind: "halted",
       halt: {
         reason: "account",
-        cause: "suspended",
+        cause: "paused",
         error: "ses 400 SendingPausedException: Account is paused",
       },
     });
   });
 
-  it("halts a MessageRejected naming the sender's own identity, but not one naming only the recipient", async () => {
+  it("halts a MessageRejected naming the sender's own identity as the sender's, and one naming only recipients as the sandbox (SPEC §12)", async () => {
     const rejected = (message: string) =>
       new Response(JSON.stringify({ __type: "MessageRejected", message }), { status: 400 });
     const from = "newsletter@send.example.com";
@@ -675,8 +963,8 @@ describe("SesProvider.sendBatch", () => {
         tag: "s",
       }),
     ).toMatchObject({
-      kind: "answered",
-      results: [{ accepted: false, retryable: false }],
+      kind: "halted",
+      halt: { reason: "account", cause: "sandbox" },
     });
     expect(spy).toHaveBeenCalledTimes(2);
   });

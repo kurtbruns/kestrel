@@ -33,6 +33,7 @@
  * and reads only what the run already holds, so logging costs no query and no decision.
  */
 
+import { haltRank } from "../../shared/sends";
 import type { DeliveryOutcome, DeliveryWork } from "../db/sends";
 import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
@@ -94,12 +95,11 @@ const CLOSE_COST = 4;
  *  and its close. */
 export const MIN_RUN_COST = OPEN_COST + GROUP_COST + 1 + CLOSE_COST;
 
-/** The halt a group records: an account refusal outranks a provider that is only
- *  unavailable, since it is the one the publisher has to act on. */
+/** The halt a group records (`haltRank`): an account refusal outranks one send's own, which
+ *  outranks a provider that is only unavailable, since the publisher has to act on it and
+ *  the account's other sends wait on it. */
 function worseHalt(current: BatchHalt | null, next: BatchHalt): BatchHalt {
-  return !current || (current.reason === "unavailable" && next.reason === "account")
-    ? next
-    : current;
+  return !current || haltRank(next) > haltRank(current) ? next : current;
 }
 
 function chunk<T>(items: T[], size: number): T[][] {

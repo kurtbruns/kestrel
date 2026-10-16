@@ -278,7 +278,7 @@ describe("a send scheduled before the provider was disconnected", () => {
     });
     // Said as what it is, the fix once: no provider is refusing anything.
     expect(refused?.message).toBe(
-      `No email provider is connected, so this send is held where it is. ${ADVICE} No one has been marked unsent, and the send goes out at its first retry after a provider is connected.`,
+      `No email provider is connected, so this send is held where it is. ${ADVICE} No one has been marked unsent because of this, and the send goes out at its first retry after a provider is connected.`,
     );
   });
 

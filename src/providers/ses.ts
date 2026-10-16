@@ -20,9 +20,11 @@
  * its whole batch for Resolve.
  *
  * Failures: SES answers a request either with an error that speaks for all of it, or with
- * one result an entry. An error, or an entry status, that is about SES or the account rather
- * than the recipient (`classifySesError`, `classifySesEntry`) halts the batch when nothing in
- * it was accepted, and otherwise sends those recipients back to wait for the next tick.
+ * one result an entry. An error, or an entry status, that is about SES, the account, or the
+ * email rather than the recipient (`classifySesError`, `classifySesEntry`) halts the batch
+ * when nothing in it was accepted, and otherwise sends those recipients back to wait for the
+ * next tick, so no failure that isn't a recipient's is recorded against one (SPEC §12). A
+ * server error is treated as no answer, since AWS says one can follow a request SES took.
  *
  * Webhook: `parseWebhook` verifies the SNS signature and that the message came from
  * this deployment's `SNS_TOPIC_ARN`, then confirms a subscription or normalizes an SES
@@ -34,12 +36,13 @@
  * `email` service, so we set `service: "ses"` explicitly.
  */
 import { AwsClient } from "aws4fetch";
+import { haltRank } from "../../shared/sends";
 import type { AppEnv, Config } from "../env";
 import { log } from "../lib/log";
 import { unwrap } from "../lib/unwrap";
 import {
   type SesTemplateContent,
-  sesCanAddress,
+  sesAddressProblem,
   sesFromAddress,
   sesTemplateContent,
   sesTemplateData,
@@ -100,14 +103,17 @@ function textResponse(body: string, status: number): Response {
   return new Response(body, { status, headers: { "content-type": "text/plain; charset=utf-8" } });
 }
 
-/** Error types that are about the account or its credentials, never a recipient, by
- *  what the operator has to fix. */
+/** Error types that are about the account, its credentials, or the deployment, never a
+ *  recipient, by what has to be fixed and who fixes it (`refusalAdvice`). */
 const ACCOUNT_ERROR_TYPES = new Map<string, HaltCause>([
-  // AWS paused the account's sending (it does so on bounce or complaint trouble) or
-  // restricted it for good; either way, until the operator acts in the SES console.
-  ["SendingPausedException", "suspended"],
+  // AWS restricted the account's sending for good, over its sending practices.
   ["AccountSuspendedException", "suspended"],
-  ["MailFromDomainNotVerifiedException", "sender"],
+  // Sending is paused: by AWS under review, or turned off by hand (`sendingPaused` tells a
+  // configuration set's pause apart by SES's words).
+  ["SendingPausedException", "paused"],
+  // SES's API reference says the sending domain isn't verified, its troubleshooting page that
+  // it can't read the custom MAIL FROM domain's MX record; the advice names both.
+  ["MailFromDomainNotVerifiedException", "mail_from"],
   // A resource the request names doesn't exist. Kestrel names only its configuration set
   // (SES_CONFIGURATION_SET), so this is a typo, a set deleted after setup, or the wrong
   // region: the deployment's to fix, and the same for every recipient, so it holds the send
@@ -115,93 +121,216 @@ const ACCOUNT_ERROR_TYPES = new Map<string, HaltCause>([
   // resource that could be missing, so a 404 then isn't expected, and the advice still points
   // at the one setting that would cause it.
   ["NotFoundException", "configuration"],
+  // An action SES doesn't know: the request and the endpoint disagree.
+  ["UnknownOperationException", "unsupported"],
+  // A request SES couldn't parse as HTTP is Kestrel's to fix, never a recipient's.
+  ["MalformedHttpRequestException", "unsupported"],
+  // The AWS account isn't signed up for SES, which the key can't change.
+  ["OptInRequired", "opt_in"],
   // The credentials themselves: unknown, wrongly signed, expired, or not permitted (a key
   // whose policy lacks `ses:SendBulkEmail` among them).
   ["UnrecognizedClientException", "credentials"],
   ["InvalidClientTokenId", "credentials"],
   ["SignatureDoesNotMatch", "credentials"],
+  ["IncompleteSignature", "credentials"],
   ["ExpiredTokenException", "credentials"],
   ["AccessDeniedException", "credentials"],
+  ["NotAuthorized", "credentials"],
+  // The request as a whole is too large: the email itself, the same for every batch of it.
+  ["RequestEntityTooLargeException", "content"],
 ]);
 
+/** Error types that say SES didn't take the request for a reason of its own that the next
+ *  request may not meet: it never received the whole request (408), or it limits a resource
+ *  for now (`LimitExceededException`, which AWS describes only as too many of one). */
+const UNAVAILABLE_ERROR_TYPES = new Set(["RequestTimeoutException", "LimitExceededException"]);
+
 /**
- * Whether an SES error response halts the batch, and why; null when it is about the
- * message (a rejected message, an invalid request), which no retry changes. The
- * account-level types, any 401 or 403, a 404 (a configuration set SES can't find, whatever
- * type it carries), and a rejection because the sender's own identity
- * is not verified (`senderUnverified`, which the caller works out from the message) need
- * the operator, as does a spent daily quota, which SES reports as the same throttle as its
- * per-second rate and tells apart only by the message: it won't lift for up to a day, so
- * the operator hears "quota". Any other throttling (a 429, or a
- * throttling type on a 400) and a 5xx are SES being unavailable: the next request would get
- * the same answer, so the batch waits for the next tick instead. An SES error response
- * always means SES did not accept the request, so none of these leaves the fate unknown.
+ * Error types after which SES's answer leaves the request's fate unknown, as no answer does
+ * (the caller throws, and the send loop leaves the batch for Resolve, I4): AWS says a
+ * request it aborted ended "before a response could be returned", not that it was never
+ * acted on.
+ */
+const UNKNOWN_FATE_ERROR_TYPES = new Set(["RequestAbortedException"]);
+
+/** Whether an SES error response leaves the request's fate unknown (`UNKNOWN_FATE_ERROR_TYPES`,
+ *  or a 5xx, which AWS says can follow a request it already accepted). */
+export function sesFateUnknown(status: number, type: string): boolean {
+  return status >= 500 || UNKNOWN_FATE_ERROR_TYPES.has(type);
+}
+
+/**
+ * The identities SES's "not verified" words name, lowercased, or null when the words aren't
+ * that refusal. SES says "Email address is not verified. The following identities failed the
+ * check in region R: id1, id2, …", ending in an ellipsis when it can't list them all, and an
+ * identity is the sender's address or domain or, while the account is in the sandbox, a
+ * recipient's address.
+ */
+export function unverifiedIdentities(message: string): string[] | null {
+  if (!/not verified/i.test(message)) {
+    return null;
+  }
+  const list = /failed the check in region[^:]*:(.*)$/is.exec(message)?.[1] ?? "";
+  return list
+    .split(",")
+    .map((id) =>
+      id
+        .trim()
+        .replace(/(\.\.\.|…|\.)$/, "")
+        .trim()
+        .toLowerCase(),
+    )
+    .filter(Boolean);
+}
+
+/**
+ * Whether an identity SES names is this deployment's sender: its exact address, or a domain
+ * identity that covers it (its own domain or a parent of it). Never a substring of the
+ * address, so a reader `thenews@example.com` is never taken for the sender `news@example.com`.
+ */
+export function isSenderIdentity(identity: string, from: string): boolean {
+  const address = bareAddress(from);
+  if (identity.includes("@")) {
+    return identity === address;
+  }
+  const domain = address.slice(address.lastIndexOf("@") + 1);
+  return identity === domain || domain.endsWith(`.${identity}`);
+}
+
+/**
+ * Whose a "not verified" refusal is: the sender's, when SES names the sender's identity
+ * (a sending identity that lapsed, or the wrong region), else the account's sandbox, which
+ * mails only verified addresses and names the recipients it refused. Null when the words
+ * aren't that refusal. With no identity readable in the words, it is the sender's: only the
+ * sender's identity is checked outside the sandbox.
+ */
+export function verificationCause(message: string, from: string): "sender" | "sandbox" | null {
+  const ids = unverifiedIdentities(message);
+  if (ids === null) {
+    return null;
+  }
+  if (ids.length === 0 || ids.some((id) => isSenderIdentity(id, from))) {
+    return "sender";
+  }
+  return "sandbox";
+}
+
+/**
+ * Whether an SES error response halts the batch, and why; null when it may be about a
+ * recipient (an invalid request, a bad address), which the caller weighs by how many
+ * recipients the request carried. The account-level types and any 401 or 403, a 404 (a
+ * configuration set SES can't find, whatever type it carries), and a "not verified" refusal
+ * (`verificationCause`: the sender's identity, or the sandbox refusing recipients) need
+ * whoever runs the deployment, as does a spent daily quota, which SES reports as a throttle
+ * or a limit and tells apart only by its words: it won't lift for up to a day. Any other
+ * rejected message is a refusal of the email itself (`content`), the same for every batch of
+ * it, so it holds the send rather than working through the list. Any other throttling (a
+ * 429, or a throttling type on a 400), a request SES never received whole (408), a limit, and
+ * a 5xx are SES being unavailable: the batch waits for its retry. A 5xx may follow a request
+ * SES accepted, so a list send's caller checks `sesFateUnknown` before this.
  */
 export function classifySesError(
   status: number,
   type: string,
   message = "",
-  senderUnverified = false,
+  from = "",
 ): Omit<BatchHalt, "error"> | null {
   const throttled = status === 429 || /throttl|toomany/i.test(type);
-  const cause =
-    ACCOUNT_ERROR_TYPES.get(type) ??
-    (status === 404 ? "configuration" : undefined) ??
-    (senderUnverified
-      ? "sender"
-      : throttled && /daily message quota/i.test(message)
-        ? "quota"
-        : undefined);
-  if (cause || status === 401 || status === 403) {
-    return { reason: "account", cause: cause ?? "credentials" };
+  if (
+    (throttled || type === "LimitExceededException") &&
+    /daily (message|sending) quota/i.test(message)
+  ) {
+    return account("quota");
+  }
+  const named = ACCOUNT_ERROR_TYPES.get(type);
+  if (named) {
+    return account(named === "paused" && /configuration set/i.test(message) ? "set_paused" : named);
+  }
+  if (type === "MessageRejected") {
+    return account(verificationCause(message, from) ?? "content");
+  }
+  if (status === 404) {
+    return account("configuration");
+  }
+  if (status === 401 || status === 403) {
+    return account("credentials");
   }
   if (throttled) {
-    return { reason: "unavailable", cause: "rate_limit" };
+    return unavailable("rate_limit");
   }
-  if (status >= 500) {
-    return { reason: "unavailable", cause: "outage" };
+  if (status === 408 || UNAVAILABLE_ERROR_TYPES.has(type) || status >= 500) {
+    return unavailable("outage");
   }
   return null;
 }
 
-const account = (cause: HaltCause): Omit<BatchHalt, "error"> => ({
-  reason: "account",
-  cause,
-});
-const unavailable = (cause: HaltCause): Omit<BatchHalt, "error"> => ({
-  reason: "unavailable",
-  cause,
-});
+function account(cause: HaltCause): Omit<BatchHalt, "error"> {
+  return { reason: "account", cause };
+}
+function unavailable(cause: HaltCause): Omit<BatchHalt, "error"> {
+  return { reason: "unavailable", cause };
+}
 
 /** Entry statuses that are about SES, the account, or the deployment's settings, never the
- *  recipient. A configuration set, sending pool, or template SES can't find is the
- *  deployment's to fix, in its settings, not the key's. */
+ *  recipient. A configuration set or sending pool SES can't find is the deployment's to fix,
+ *  in its settings, not the key's; a template Kestrel never names is the request and the
+ *  endpoint disagreeing. */
 const ENTRY_HALTS = new Map<string, Omit<BatchHalt, "error">>([
   ["ACCOUNT_SUSPENDED", account("suspended")],
-  ["ACCOUNT_SENDING_PAUSED", account("suspended")],
-  ["CONFIGURATION_SET_SENDING_PAUSED", account("suspended")],
-  ["MAIL_FROM_DOMAIN_NOT_VERIFIED", account("sender")],
+  ["ACCOUNT_SENDING_PAUSED", account("paused")],
+  ["CONFIGURATION_SET_SENDING_PAUSED", account("set_paused")],
+  ["MAIL_FROM_DOMAIN_NOT_VERIFIED", account("mail_from")],
   ["ACCOUNT_DAILY_QUOTA_EXCEEDED", account("quota")],
   ["CONFIGURATION_SET_DOES_NOT_EXIST", account("configuration")],
   ["CONFIGURATION_SET_NOT_FOUND", account("configuration")],
-  ["INVALID_SENDING_POOL_NAME", account("configuration")],
-  ["TEMPLATE_DOES_NOT_EXIST", account("configuration")],
-  ["TEMPLATE_NOT_FOUND", account("configuration")],
+  ["INVALID_SENDING_POOL_NAME", account("sending_pool")],
+  ["TEMPLATE_DOES_NOT_EXIST", account("unsupported")],
+  ["TEMPLATE_NOT_FOUND", account("unsupported")],
   ["ACCOUNT_THROTTLED", unavailable("rate_limit")],
   ["TRANSIENT_FAILURE", unavailable("outage")],
 ]);
 
+/** Entry statuses that are the recipient's own: an invalid parameter (its address) is
+ *  permanent, and `FAILED`, which AWS leaves unexplained, is retried a bounded number of
+ *  times like any recipient's own transient error. */
+const ENTRY_RECIPIENT_FAILURES = new Map<string, { retryable: boolean }>([
+  ["INVALID_PARAMETER", { retryable: false }],
+  ["INVALID_PARAMETER_VALUE", { retryable: false }],
+  ["FAILED", { retryable: true }],
+]);
+
+/** What one entry's failed result means for its recipient. */
+export type EntryVerdict =
+  /** About SES or the account: the recipient is held back with no attempt spent. */
+  | { kind: "halt"; halt: Omit<BatchHalt, "error"> }
+  /** The recipient's own failure, permanent unless `retryable`, unless SES answered more
+   *  than one entry so and took none, which makes it the request's (`sendBulk`). */
+  | { kind: "recipient"; retryable: boolean }
+  /** SES rejected the message for this entry: the email's, unless SES took another entry
+   *  of the request or named this recipient (`sendBulk`). */
+  | { kind: "rejected" }
+  /** A status SES doesn't document, or none: whether it took the message is unknown. */
+  | { kind: "unknown" };
+
 /**
- * Whether one entry's failed result is about SES or the account rather than its recipient,
- * and why; null when it is the recipient's alone (a rejected message, an invalid parameter,
- * a plain `FAILED`), which is permanent for them. A rejection because the sender's own
- * identity is not verified (`senderUnverified`) is the operator's, as on a whole request.
+ * What one entry's failed result means. A status SES doesn't document, or none at all, says
+ * neither that the recipient failed nor that SES didn't take the message (an entry's status
+ * and message id are both optional), so its fate is unknown, as a missing result's is.
  */
-export function classifySesEntry(
-  status: string,
-  senderUnverified = false,
-): Omit<BatchHalt, "error"> | null {
-  return ENTRY_HALTS.get(status) ?? (senderUnverified ? account("sender") : null);
+export function classifySesEntry(status: string, words = "", from = ""): EntryVerdict {
+  const halt = ENTRY_HALTS.get(status);
+  if (halt) {
+    return { kind: "halt", halt };
+  }
+  if (status === "MESSAGE_REJECTED") {
+    const verification = verificationCause(words, from);
+    return verification ? { kind: "halt", halt: account(verification) } : { kind: "rejected" };
+  }
+  const own = ENTRY_RECIPIENT_FAILURES.get(status);
+  if (own) {
+    return { kind: "recipient", retryable: own.retryable };
+  }
+  return { kind: "unknown" };
 }
 
 interface BulkEntryResult {
@@ -210,10 +339,11 @@ interface BulkEntryResult {
   Error?: string;
 }
 
-/** A batch's halt, or the halt that outranks it: an account refusal is the one the
- *  publisher has to act on, so it wins over a provider that is only unavailable. */
+/** A batch's halt, or the halt that outranks it (`haltRank`): an account refusal is the one
+ *  the publisher has to act on, so it wins over a provider that is only unavailable, and
+ *  one the account's other sends wait on wins over one send's own. */
 function worse(a: BatchHalt | null, b: BatchHalt): BatchHalt {
-  return !a || (a.reason === "unavailable" && b.reason === "account") ? b : a;
+  return !a || haltRank(b) > haltRank(a) ? b : a;
 }
 
 export class SesProvider implements EmailProvider {
@@ -265,17 +395,13 @@ export class SesProvider implements EmailProvider {
     const out: PerRecipientResult[] = [];
     const sendable: Recipient[] = [];
     for (const r of recipients) {
-      if (sesCanAddress(r.email)) {
+      const problem = sesAddressProblem(r.email);
+      if (problem === null) {
         sendable.push(r);
       } else {
         // SES refuses such an address for the whole request, so it stays out of it and
         // fails alone.
-        out.push({
-          email: r.email,
-          accepted: false,
-          retryable: false,
-          error: "ses can't send to an address with characters outside ASCII",
-        });
+        out.push({ email: r.email, accepted: false, retryable: false, error: problem });
       }
     }
     const content = sesTemplateContent(rendered);
@@ -373,8 +499,9 @@ export class SesProvider implements EmailProvider {
    * (that risks a duplicate, violating I4): it throws, and the send loop leaves its
    * recipients `dispatched` for a human. A request SES never answers is ended the same
    * way: the timeout rejects the fetch, so it throws down that same path. aws4fetch
-   * carries `signal` onto the signed Request. A real HTTP error response is unambiguous:
-   * SES did NOT accept.
+   * carries `signal` onto the signed Request. An HTTP error response says SES did not
+   * accept, except a 5xx or an aborted request (`sesFateUnknown`), which a list send treats
+   * as no answer.
    */
   private post(
     path: "outbound-emails" | "outbound-bulk-emails",
@@ -391,18 +518,16 @@ export class SesProvider implements EmailProvider {
     });
   }
 
-  /** An SES error response as a halt, or as SES's words when it is about the message. */
-  private async refusal(res: Response): Promise<{ halt: BatchHalt | null; error: string }> {
+  /** An SES error response: its type, its halt, or SES's words when it may be about a
+   *  recipient. */
+  private async refusal(
+    res: Response,
+  ): Promise<{ type: string; halt: BatchHalt | null; error: string }> {
     const bodyText = await res.text().catch(() => "");
     const { type, message } = parseSesError(bodyText, res.headers.get("x-amzn-ErrorType"));
     const error = sesErrorText(res.status, type, message);
-    const halt = classifySesError(
-      res.status,
-      type,
-      message,
-      type === "MessageRejected" && this.namesSender(message),
-    );
-    return { halt: halt ? { ...halt, error } : null, error };
+    const halt = classifySesError(res.status, type, message, this.from);
+    return { type, halt: halt ? { ...halt, error } : null, error };
   }
 
   /** One SendEmail with the inline template, for a one-off message to one recipient. */
@@ -456,17 +581,17 @@ export class SesProvider implements EmailProvider {
     });
 
     if (!res.ok) {
-      const { halt, error } = await this.refusal(res);
+      const { type, halt, error } = await this.refusal(res);
+      // AWS says a server error or a timeout can follow a request SES already accepted, and
+      // a retry then mails a second copy, so such an answer is no answer: it throws, and the
+      // send loop leaves the batch for Resolve (I4).
+      if (sesFateUnknown(res.status, type)) {
+        throw new Error(`${error} (SES may have taken the batch before answering)`);
+      }
       if (halt) {
         return { kind: "halted", halt };
       }
-      // Any other 4xx refuses the request's content (too large for a template, say),
-      // which is the same for every recipient in it, so it is permanent for each. A test
-      // of the same post meets the same refusal first (I5).
-      return {
-        kind: "answered",
-        results: batch.map((r) => ({ email: r.email, accepted: false, retryable: false, error })),
-      };
+      return this.invalidBatch(batch, error);
     }
 
     // SES took the request. Results come one an entry, in the entries' order; a recipient
@@ -481,6 +606,9 @@ export class SesProvider implements EmailProvider {
     }
     const results: PerRecipientResult[] = [];
     const heldBack: { email: string; error: string }[] = [];
+    // Failures that are the recipient's only if SES's answer singles them out.
+    const rejected: { email: string; error: string }[] = [];
+    const own: { email: string; error: string; status: string; retryable: boolean }[] = [];
     let halt: BatchHalt | null = null;
     let short = false;
     for (const [i, r] of batch.entries()) {
@@ -495,16 +623,55 @@ export class SesProvider implements EmailProvider {
         continue;
       }
       const words = entry.Error ?? "";
-      const error = sesEntryErrorText(status || "FAILED", words);
-      const entryHalt = classifySesEntry(
-        status,
-        status === "MESSAGE_REJECTED" && this.namesSender(words),
-      );
-      if (entryHalt) {
-        halt = worse(halt, { ...entryHalt, error });
+      const error = sesEntryErrorText(status || "no status", words);
+      const verdict = classifySesEntry(status, words, this.from);
+      if (verdict.kind === "unknown") {
+        // Left out like a missing result, so it waits for Resolve: never re-sent (I4), and
+        // never recorded unsent on a guess.
+        log.warn("provider.unrecognized", { provider: "ses", status: status || null, error });
+        short = true;
+      } else if (verdict.kind === "halt") {
+        halt = worse(halt, { ...verdict.halt, error });
         heldBack.push({ email: r.email, error });
-      } else {
+      } else if (namesAddress(words, r.email)) {
+        // SES's words name this recipient: theirs, whatever else the answer says.
         results.push({ email: r.email, accepted: false, retryable: false, error });
+      } else if (verdict.kind === "rejected") {
+        rejected.push({ email: r.email, error });
+      } else {
+        own.push({ email: r.email, error, status, retryable: verdict.retryable });
+      }
+    }
+    const tookAny = results.some((r) => r.accepted);
+    // SES rejecting the message, with nothing in the request taken, is a refusal of the email
+    // itself, the same for every batch of it, so it holds the send for whoever runs the
+    // deployment rather than working through the list (AWS documents MESSAGE_REJECTED only
+    // for content). A rejection beside a recipient SES took is that recipient's alone.
+    if (rejected.length > 0 && !tookAny) {
+      halt = worse(halt, {
+        reason: "account",
+        cause: "content",
+        error: unwrap(rejected[0], "a rejection").error,
+      });
+      heldBack.push(...rejected);
+    } else {
+      for (const r of rejected) {
+        results.push({ email: r.email, accepted: false, retryable: false, error: r.error });
+      }
+    }
+    // An invalid parameter or a plain failure on several entries, with nothing taken, is the
+    // request's rather than each recipient's: the parameters every entry shares, or SES
+    // itself. It holds the batch, as an invalid batch or an outage, rather than mark it unsent.
+    for (const r of own) {
+      const alike = own.filter((o) => o.status === r.status).length;
+      if (alike > 1 && !tookAny) {
+        halt = worse(halt, {
+          ...(r.status === "FAILED" ? unavailable("outage") : account("invalid_request")),
+          error: r.error,
+        });
+        heldBack.push({ email: r.email, error: r.error });
+      } else {
+        results.push({ email: r.email, accepted: false, retryable: r.retryable, error: r.error });
       }
     }
     // The request speaks as a whole only when SES answered every recipient and took none:
@@ -529,11 +696,34 @@ export class SesProvider implements EmailProvider {
     return { kind: "answered", results, halt };
   }
 
-  /** Whether SES's "not verified" words name this deployment's own sender, which makes a
-   *  rejection the operator's (a sandbox account, or a sending identity that lapsed)
-   *  rather than the recipient's. */
-  private namesSender(message: string): boolean {
-    return /not verified/i.test(message) && message.toLowerCase().includes(bareAddress(this.from));
+  /**
+   * A list batch SES refused as invalid, for a reason that may be one recipient's (a bad
+   * address SES's syntax check refuses) rather than the email's. A batch of one is that
+   * recipient's own, permanently. In a larger batch, a recipient SES's words name is
+   * refused alone and the rest go back to the queue, untouched, for the next request; with
+   * no one named, no one can be blamed, so the send holds for a person to read SES's words
+   * (`invalid_request`), rather than mark a whole batch unsent for one address.
+   */
+  private invalidBatch(batch: Recipient[], error: string): SendBatchResult {
+    if (batch.length === 1) {
+      const only = unwrap(batch[0], "a recipient");
+      return {
+        kind: "answered",
+        results: [{ email: only.email, accepted: false, retryable: false, error }],
+      };
+    }
+    const named = batch.filter((r) => namesAddress(error, r.email));
+    if (named.length === 0) {
+      return { kind: "halted", halt: { reason: "account", cause: "invalid_request", error } };
+    }
+    return {
+      kind: "answered",
+      results: batch.map((r) =>
+        named.includes(r)
+          ? { email: r.email, accepted: false, retryable: false, error }
+          : { email: r.email, accepted: false, retryable: true, error: "not sent", held: true },
+      ),
+    };
   }
 
   async parseWebhook(req: Request, env: AppEnv): Promise<WebhookResult> {
@@ -640,4 +830,24 @@ function parseSesError(
 function bareAddress(from: string): string {
   const angle = /<([^>]+)>/.exec(from);
   return (angle?.[1] ?? from).trim().toLowerCase();
+}
+
+/** Characters that can stand next to an address inside it, so a match beside one is part of
+ *  a longer address, not this one. */
+const ADDRESS_CHAR = /[a-z0-9.!#$%&'*+/=?^_`{|}~@-]/i;
+
+/** Whether SES's words name this exact address, never as part of a longer one (`thenews@`
+ *  holds `news@` inside it). A sentence's closing period after it still counts. */
+export function namesAddress(words: string, email: string): boolean {
+  const text = words.toLowerCase();
+  const target = email.toLowerCase();
+  for (let at = text.indexOf(target); at >= 0; at = text.indexOf(target, at + 1)) {
+    const before = text[at - 1];
+    const after = text.slice(at + target.length, at + target.length + 2);
+    const endsHere = after === "" || !ADDRESS_CHAR.test(after[0] ?? "") || /^\.(\s|$)/.test(after);
+    if ((before === undefined || !ADDRESS_CHAR.test(before)) && endsHere) {
+      return true;
+    }
+  }
+  return false;
 }

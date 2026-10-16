@@ -10,6 +10,7 @@ import type {
   SendResponse,
   SendView,
 } from "../../shared/sends";
+import { isSendOwnHalt } from "../../shared/sends";
 import { isErasedPlaceholder } from "../../shared/subscribers";
 import { ApiError, api, apiFile, describeError } from "../api";
 import { heldAdviceHtml, noEmailProvider, providerNotConnected } from "../deployment";
@@ -111,7 +112,8 @@ function phaseBlurb(prog: SendView): string {
     return `No email provider is connected, so nothing goes out until one is; ${nextRetry(halt.retry_at)}.`;
   }
   if (has(prog, "refused") && halt) {
-    return `The provider is refusing this account, so nothing more goes out until it’s fixed; ${nextRetry(halt.retry_at)}.`;
+    const what = isSendOwnHalt(halt.cause) ? "this send" : "this account";
+    return `The provider is refusing ${what}, so nothing more goes out until it’s fixed; ${nextRetry(halt.retry_at)}.`;
   }
   if (prog.phase === "backing-off" && halt?.reason === "unavailable") {
     return `The provider is unavailable; ${nextRetry(halt.retry_at)}.`;
@@ -217,14 +219,21 @@ function watchBodyHtml(prog: SendView): Html {
   // own headline, and the fix said once, with no provider's words to quote: the step as the
   // link every not-connected line carries (or, in the local preview, the restart).
   const unconnected = refused?.cause === "not_connected";
+  // The provider refusing this send's own email rather than the account (SPEC §12).
+  const ownRefusal = isSendOwnHalt(refused?.cause ?? null);
   // In flight too long (SPEC §12): the amber the dashboard's health line and the Sent
   // page's card give the same condition, in the server's words.
   const stuck = conditionOf(prog, "stuck");
+  // A rate limit the deployment causes itself (SPEC §12), which the server marks worth a
+  // look: the same amber, in its words, which name the setting.
+  const unavailable = conditionOf(prog, "provider_unavailable");
+  const throttled = unavailable?.severity === "warn" ? unavailable : undefined;
   return html`
     ${stuck ? html`<div class="health amber" role="status"><span class="health-dot">⚠️</span><div>${stuck.message}</div></div>` : null}
+    ${throttled ? html`<div class="health amber" role="status"><span class="health-dot">⚠️</span><div>${throttled.message}</div></div>` : null}
     ${
       refused
-        ? html`<div class="health red" role="alert"><span class="health-dot">⚠️</span><div><strong>${unconnected ? "No email provider is connected" : "The provider is refusing this account"}</strong>${unconnected ? null : html`<div>${refused.error}</div>`}<div class="refused-advice">${unconnected ? heldAdviceHtml() : refused.advice}</div><div>${refused.since === null ? null : `Since ${fmt(refused.since)}. `}No one has been marked unsent, and once ${unconnected ? "one is connected" : "this is fixed"} the send resumes at its next retry${refused.retry_at === null ? "" : `, ${fmt(refused.retry_at)}`}.</div></div></div>`
+        ? html`<div class="health red" role="alert"><span class="health-dot">⚠️</span><div><strong>${unconnected ? "No email provider is connected" : ownRefusal ? "The provider is refusing this send" : "The provider is refusing this account"}</strong>${unconnected ? null : html`<div>${refused.error}</div>`}<div class="refused-advice">${unconnected ? heldAdviceHtml() : refused.advice}</div><div>${refused.since === null ? null : `Since ${fmt(refused.since)}. `}No one has been marked unsent because of this, and once ${unconnected ? "one is connected" : "this is fixed"} the send resumes at its next retry${refused.retry_at === null ? "" : `, ${fmt(refused.retry_at)}`}.</div></div></div>`
         : null
     }
     <div class="wbars">

@@ -107,7 +107,11 @@ If AWS asks for more detail, reply in the support case. If it denies the request
 - Bounces and complaints reach the app through SNS, and it stops mailing those addresses automatically.
 - How many subscribers the newsletter expects, and how often it sends.
 
-Your account stays in the sandbox until AWS grants access, so don't go live before then. In the sandbox, a signup from any address you haven't verified fails, and a post reaches only your verified addresses.
+Your account stays in the sandbox until AWS grants access, so don't go live before then. In the sandbox, SES refuses mail to any address you haven't verified:
+
+- A signup from an unverified address gets no confirmation email. The app emails the publisher about it, at most once a day.
+- A post goes to your verified addresses and then waits, with the line "The provider is refusing the account" and SES's words. No reader is marked unsent. Once AWS grants access, the post goes to the rest at its next retry, mailing no one twice.
+- A daily quota refusal in the sandbox (200 emails a day) means the same thing: request production access rather than a higher quota.
 
 When AWS grants access, the **Account dashboard** shows your daily quota and your maximum send rate. You set the rate in the app in section 8. The rate decides how fast a send goes out, and [As your list grows](../guides/09-as-your-list-grows.md) says when to ask AWS to raise it.
 

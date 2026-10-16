@@ -938,6 +938,23 @@ describe("sent record", () => {
     expect(fake.unhandled).toHaveLength(0);
   });
 
+  it("flags a rate limit the deployment causes itself in amber, in the server's words, and an ordinary outage not at all", async () => {
+    let selfThrottled = true;
+    const current = () =>
+      sendView(inFlight(), {
+        phase: "backing-off",
+        conditions: [condition.unavailable(selfThrottled)],
+      });
+    fake = watching(current);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#watchBody .health.amber").textContent).toContain("SES_MAX_SEND_RATE");
+    selfThrottled = false;
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(document.querySelector("#watchBody .health.amber")).toBeNull();
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
   it("gives no rate or time to finish while the send is paused, and both while it hands off", async () => {
     let paused = true;
     const current = () =>

@@ -14,6 +14,7 @@ import type {
   SendStatus,
   SendSummary,
 } from "../../shared/sends";
+import { SEND_OWN_HALT_CAUSES } from "../../shared/sends";
 import type { ScheduledSendRef } from "../../shared/settings";
 import { isErasedPlaceholder } from "../../shared/subscribers";
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
@@ -1017,7 +1018,8 @@ export interface AccountHalt {
  * send, so a send that would start or resume while one stands waits on it rather than ask
  * the provider again. A refusal outranks an outage, and of each the one retried last is the
  * newest word. A wedged send's halt is not counted: nothing retries it, so it says nothing
- * about the provider now.
+ * about the provider now. Nor is a refusal of one send's own email (`SEND_OWN_HALT_CAUSES`),
+ * which the provider would not meet on another send.
  */
 export async function accountHalt(
   db: D1Database,
@@ -1030,10 +1032,11 @@ export async function accountHalt(
          FROM sends
         WHERE status = 'sending' AND id <> ? AND halt_reason IS NOT NULL
           AND halt_retry_at > ? AND NOT ${WEDGED_SEND}
+          AND (halt_cause IS NULL OR halt_cause NOT IN (SELECT value FROM json_each(?)))
         ORDER BY halt_reason = 'account' DESC, halt_retry_at DESC
         LIMIT 1`,
     )
-    .bind(sendId, aheadOf)
+    .bind(sendId, aheadOf, JSON.stringify(SEND_OWN_HALT_CAUSES))
     .first<{
       id: string;
       halt_reason: HaltReason;

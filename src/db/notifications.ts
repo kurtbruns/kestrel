@@ -64,8 +64,18 @@ export interface DueImportNotification {
   suppressions_added: number;
 }
 
+/** A notice that the SES sandbox refused a signup's confirmation, due; one a UTC day, whose
+ *  start is its episode. It carries nothing else: no send, no import, and no address. */
+export interface DueSandboxNotification {
+  send_id: null;
+  import_id: null;
+  kind: "sandbox";
+  episode: number;
+  attempts: number;
+}
+
 /** Any notification that is due. */
-export type DueAny = DueNotification | DueImportNotification;
+export type DueAny = DueNotification | DueImportNotification | DueSandboxNotification;
 
 /** What names one notification: its send, kind, and episode, or for an import notice its import. */
 export interface NotificationKey {
@@ -85,6 +95,25 @@ export function importNotice(db: D1Database, importId: string, now: number): D1P
       "INSERT INTO notifications (send_id, import_id, kind, episode, created_at, updated_at) VALUES (NULL, ?, 'import', 0, ?, ?)",
     )
     .bind(importId, now, now);
+}
+
+/** The start of the UTC day `now` falls in: a sandbox notice's episode. */
+export function utcDayStart(now: number): number {
+  return Math.floor(now / 86_400_000) * 86_400_000;
+}
+
+/**
+ * Record that the publisher is to be told the SES sandbox refused a signup's confirmation
+ * (SPEC §7, §8): once a UTC day however many it refuses, which the partial unique index on
+ * the day makes an ignored insert rather than a second notice.
+ */
+export async function sandboxNotice(db: D1Database, now: number): Promise<void> {
+  await db
+    .prepare(
+      "INSERT OR IGNORE INTO notifications (send_id, import_id, kind, episode, created_at, updated_at) VALUES (NULL, NULL, 'sandbox', ?, ?, ?)",
+    )
+    .bind(utcDayStart(now), now, now)
+    .run();
 }
 
 /**
@@ -144,13 +173,22 @@ export async function dueNotifications(db: D1Database, limit: number): Promise<D
          FROM notifications n
          LEFT JOIN sends s ON s.id = n.send_id
          LEFT JOIN imports i ON i.id = n.import_id
-        WHERE n.status = 'pending' AND (s.id IS NOT NULL OR i.id IS NOT NULL)
+        WHERE n.status = 'pending' AND (s.id IS NOT NULL OR i.id IS NOT NULL OR n.kind = 'sandbox')
         ORDER BY n.created_at ASC, n.send_id ASC, n.kind ASC
         LIMIT ?`,
     )
     .bind(limit)
     .all<Record<string, unknown>>();
   return results.map((r): DueAny => {
+    if (r.kind === "sandbox") {
+      return {
+        send_id: null,
+        import_id: null,
+        kind: "sandbox",
+        episode: r.episode as number,
+        attempts: r.attempts as number,
+      };
+    }
     if (r.kind === "import") {
       return {
         send_id: null,

@@ -21,11 +21,14 @@ import {
   BOUNCE_SPIKE_RECENT_MS,
   type ConditionSeverity,
   dailyWritesSendMessage,
+  isSelfThrottled,
   refusalAdvice,
+  refusedMessage,
   type SendAction,
   type SendCondition,
   type SendSummary,
   sendSpendsDailyWrites,
+  unavailableMessage,
 } from "../../shared/sends";
 import { MISSED_THRESHOLD_MS } from "../lib/time";
 import { stuckAt } from "./stuck";
@@ -33,12 +36,6 @@ import { isWedged } from "./wedged";
 
 const minutes = (ms: number) => Math.max(1, Math.round(ms / 60_000));
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-
-/** The provider's words as a sentence the copy around them can follow. */
-function sentence(error: string | null): string {
-  const text = error?.trim() || "no detail given";
-  return /[.!?]$/.test(text) ? text : `${text}.`;
-}
 
 const action = (send: Pick<SendSummary, "id">, name: SendAction["name"]): SendAction => ({
   name,
@@ -138,29 +135,25 @@ export function sendConditions(
     // report one: only Resolve moves it.
     const retried = !isWedged(send);
     if (retried && send.halt_reason === "account") {
-      const advice = refusalAdvice(send.halt_cause);
       out.push({
         kind: "refused",
         severity: "action",
         since: send.halted_at,
-        // No provider connected (SPEC §9) is held like a refusal but is no provider's doing,
-        // so it is said as what it is, with the fix once.
-        message:
-          send.halt_cause === "not_connected"
-            ? `No email provider is connected, so this send is held where it is. ${advice} No one has been marked unsent, and the send goes out at its first retry after a provider is connected.`
-            : `The provider is refusing the account: ${sentence(send.halt_error)} ${advice} No one has been marked unsent, and the send resumes on its own at its next retry once the account is fixed.`,
+        message: refusedMessage(send.halt_cause, send.halt_error),
         action: null,
         cause: send.halt_cause,
         error: send.halt_error ?? "",
-        advice,
+        advice: refusalAdvice(send.halt_cause),
         retry_at: send.halt_retry_at,
       });
     } else if (retried && send.halt_reason === "unavailable") {
       out.push({
         kind: "provider_unavailable",
-        severity: "info",
+        // A rate limit that outlasts any burst is the deployment's setting, which a person
+        // fixes, so it is worth a look rather than only shown.
+        severity: isSelfThrottled(send) ? "warn" : "info",
         since: send.halted_at,
-        message: `The provider is unavailable: ${sentence(send.halt_error)} The send retries on its own, spaced out the longer this lasts, and no one has been marked unsent.`,
+        message: unavailableMessage(send),
         action: null,
         error: send.halt_error ?? "",
         retry_at: send.halt_retry_at,

@@ -106,3 +106,31 @@ export function sesFromAddress(from: string): string {
 export function sesCanAddress(email: string): boolean {
   return ASCII_ONLY.test(email);
 }
+
+/** A dot-atom local part (RFC 5322): atoms of the characters an unquoted local part takes,
+ *  joined by single dots. */
+const LOCAL_PART = /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*$/i;
+/** A host name: dotted labels of letters, digits, and inner hyphens, at least two of them. */
+const DOMAIN = /^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i;
+
+/**
+ * Why SES would refuse an address as a destination, or null when it wouldn't: one outside
+ * ASCII, or one that isn't a plain `local@domain` (whitespace, a doubled or stray dot, a
+ * character a host name can't hold). The list's own check is deliberately loose (SPEC §7),
+ * and SES refuses a malformed address for its whole request, so the adapter keeps such an
+ * address out of the request and fails it alone, rather than let it take a batch with it.
+ * A quoted local part is refused too: SES's support for one is not documented, and no
+ * signup form produces one.
+ */
+export function sesAddressProblem(email: string): string | null {
+  if (!sesCanAddress(email)) {
+    return "ses can't send to an address with characters outside ASCII";
+  }
+  const at = email.lastIndexOf("@");
+  const local = email.slice(0, at);
+  const domain = email.slice(at + 1);
+  if (at <= 0 || !LOCAL_PART.test(local) || !DOMAIN.test(domain)) {
+    return "ses can't send to this address: it isn't a well-formed address";
+  }
+  return null;
+}

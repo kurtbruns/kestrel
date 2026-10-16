@@ -5,6 +5,8 @@ import { writesDay } from "../shared/daily_writes";
 import {
   BOUNCE_SPIKE_RECENT_MS,
   DAILY_WRITES_SEND_RECIPIENTS,
+  refusalAdvice,
+  SELF_THROTTLE_HALTS,
   type SendFeedResponse,
   type SendListResponse,
   type SendSummary,
@@ -206,13 +208,12 @@ describe("conditions: one server rule for each kind", () => {
       action: null,
       cause: "quota",
       error: "Daily message quota exceeded",
-      advice:
-        "Wait for SES’s 24-hour quota to free up, or ask AWS to raise it in the Service Quotas console.",
+      advice: refusalAdvice("quota"),
       retry_at: NOW + 60_000,
       since: NOW - 60_000,
     });
     expect(refused[0]?.message).toMatch(
-      /^The provider is refusing the account: Daily message quota exceeded\. Wait/,
+      /^The provider is refusing the account: Daily message quota exceeded\. SES’s 24-hour quota/,
     );
     const outage = sendConditions(
       row({ c_pending: 5, halt_reason: "unavailable", halt_error: "503", halt_retry_at: NOW + 1 }),
@@ -235,6 +236,50 @@ describe("conditions: one server rule for each kind", () => {
     expect(idle[0]?.message).toMatch(
       /^Nothing has gone out for 31 minutes, with no retry or provider problem to explain it\./,
     );
+  });
+
+  it("tells a rate limit that outlasts any burst apart, naming SES_MAX_SEND_RATE (SPEC §12)", () => {
+    const throttled = (halt_retries: number) =>
+      sendConditions(
+        row({
+          c_pending: 5,
+          halt_reason: "unavailable",
+          halt_cause: "rate_limit",
+          halt_error: "ses 429 TooManyRequestsException: Maximum sending rate exceeded.",
+          halt_retries,
+          halted_at: NOW - 60_000,
+          halt_retry_at: NOW + 60_000,
+        }),
+        NOW,
+        null,
+      );
+    const burst = throttled(SELF_THROTTLE_HALTS - 1);
+    expect(burst.map((c) => [c.kind, c.severity])).toEqual([["provider_unavailable", "info"]]);
+    expect(burst[0]?.message).not.toContain("SES_MAX_SEND_RATE");
+    const setting = throttled(SELF_THROTTLE_HALTS);
+    expect(setting.map((c) => [c.kind, c.severity])).toEqual([["provider_unavailable", "warn"]]);
+    expect(setting[0]?.message).toContain("Whoever runs the deployment sets SES_MAX_SEND_RATE");
+  });
+
+  it("says this send, not the account, when the provider refuses its email, and holds no one unsent because of it", () => {
+    const [refused] = sendConditions(
+      row({
+        c_pending: 5,
+        c_unsent: 2,
+        halt_reason: "account",
+        halt_cause: "content",
+        halt_error: "ses 400 MessageRejected: no",
+        halted_at: NOW - 60_000,
+        halt_retry_at: NOW + 60_000,
+      }),
+      NOW,
+      null,
+    );
+    expect(refused).toMatchObject({ kind: "refused", cause: "content" });
+    expect(refused?.message).toMatch(
+      /^The provider is refusing this send: ses 400 MessageRejected: no\. /,
+    );
+    expect(refused?.message).toContain("No one has been marked unsent because of this");
   });
 
   it("reads a bounce spike off a recently sent send at the danger zone, and never off an old or small one", () => {

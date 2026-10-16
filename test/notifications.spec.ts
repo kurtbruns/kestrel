@@ -2,6 +2,7 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { dashboardRouteFromSearch } from "../shared/dashboard_link";
+import { refusalAdvice } from "../shared/sends";
 import type { SendNotificationKind } from "../shared/settings";
 import * as notifications from "../src/db/notifications";
 import * as posts from "../src/db/posts";
@@ -25,10 +26,12 @@ import {
   frozenSend,
   resetDatabase,
   seedConfirmed,
+  tick,
   ticks,
 } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
+import { fetchWith } from "./support/worker_env";
 
 // The publisher is told, by email, when a send goes out or runs into a problem (SPEC §8): once per
 // event, however many ticks the condition lasts, through a channel that is the fake here
@@ -138,9 +141,9 @@ describe("a send that needs the publisher", () => {
     );
     expect(refused!.text).toContain("security token included in the request is invalid");
     expect(refused!.text).toContain(
-      "Replace the SES access key in the deployment’s secrets, or give it ses:SendEmail and ses:SendBulkEmail in its IAM policy.",
+      "Whoever runs the deployment replaces the SES access key in its secrets, or gives the key ses:SendEmail and ses:SendBulkEmail in its IAM policy.",
     );
-    expect(refused!.text).toContain("No one has been marked unsent");
+    expect(refused!.text).toContain("No one has been marked unsent because of this");
 
     await ticks(5);
     expect(fakeNotifications()).toHaveLength(1);
@@ -280,6 +283,55 @@ describe("a send that needs the publisher", () => {
     const send = await dueSend();
     await ticks(2);
     expect((await rows(send.id)).map((r) => r.kind)).toEqual(["finished"]);
+  });
+});
+
+describe("a signup the SES sandbox refuses", () => {
+  /** A provider in the SES sandbox: it refuses every confirmation, naming the reader. */
+  function sandboxed() {
+    transport.sendBatch = async (_r, recipients) => ({
+      kind: "halted",
+      halt: {
+        reason: "account",
+        cause: "sandbox",
+        error: `ses 400 MessageRejected: Email address is not verified. The following identities failed the check in region US-EAST-1: ${recipients[0]!.email}`,
+      },
+    });
+  }
+  const signUp = (email: string) =>
+    fetchWith({}, "/subscribe", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+
+  it("tells the publisher at most once a day, naming no reader, since the reader is told a link is coming (SPEC §7, §8)", async () => {
+    sandboxed();
+    await signUp("ada@example.com");
+    await signUp("bo@example.com");
+    await tick();
+
+    const sent = fakeNotifications();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.subject).toBe(
+      "A signup's confirmation was refused: SES is still in the sandbox",
+    );
+    expect(sent[0]!.text).toContain(refusalAdvice("sandbox"));
+    expect(sent[0]!.text).not.toContain("ada@example.com");
+    expect(sent[0]!.text).toContain("/dashboard/?to=/subscribers");
+
+    // The next UTC day's first refusal is told again.
+    vi.setSystemTime(notifications.utcDayStart(Date.now()) + 86_400_000 + 1_000);
+    await signUp("cy@example.com");
+    await tick();
+    expect(fakeNotifications()).toHaveLength(2);
+  });
+
+  it("tells nothing for a confirmation refused for any other reason", async () => {
+    transport.refuse = "ses 403 UnrecognizedClientException: bad key";
+    await signUp("ada@example.com");
+    await tick();
+    expect(fakeNotifications()).toHaveLength(0);
   });
 });
 
