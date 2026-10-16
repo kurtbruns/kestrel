@@ -49,7 +49,7 @@ Every Access application denies everyone until a policy allows them.
     - **Action:** Allow
     - **Include:** the **Emails** selector, with your email address
 
-1. Keep the login method a new Zero Trust organization starts with: you sign in with your Cloudflare account. To sign in another way, such as a one-time code by email, add it under **Zero Trust → Integrations → Identity providers** first.
+1. Keep the login method a new Zero Trust organization starts with, Cloudflare's own: you enter your email, and confirm the sign-in from the message Cloudflare sends to it. By default it admits only members of your Cloudflare account, so the email in your `Publishers` policy should be one. To let someone sign in another way, such as a one-time code by email, add it under **Zero Trust → Integrations → Identity providers** first.
 
 1. Select **Create**.
 
@@ -57,7 +57,7 @@ Every Access application denies everyone until a policy allows them.
 
 The app verifies each login against your team domain, and checks that it was issued for this application.
 
-1. Find your team domain under **Zero Trust → Settings**. It looks like `YOUR_TEAM.cloudflareaccess.com`.
+1. Find your team domain under **Zero Trust → Settings**. It looks like `YOUR_TEAM.cloudflareaccess.com`. It belongs to your Zero Trust organization, not to this application, so every application in your account shares it. It's also where a signed-out visit to `https://newsletter.example.com/dashboard/` now takes you.
 
 1. Find the application's audience tag. Under **Access controls → Applications**, select **Configure** on your application. On the **Additional settings** tab, copy the **Application Audience (AUD) Tag**.
 
