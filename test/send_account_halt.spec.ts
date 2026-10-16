@@ -90,6 +90,32 @@ describe("a send that comes due during an account refusal", () => {
   });
 });
 
+describe("a post that fires in the tick a held send retries", () => {
+  it("lets the held send ask first, then joins its refusal: one request, one email, the backoff still stepping", async () => {
+    await seedConfirmed(addresses(3));
+    const first = await dueSend({ subject: "First" });
+    transport.refuse = REFUSAL;
+    await sweep(env);
+    const before = await row(first.id);
+    // The post is due exactly when the held send's retry is.
+    vi.setSystemTime(before.halt_retry_at!);
+    const second = await dueSend({ subject: "Second" });
+    const requests = transport.requests;
+    await sweep(env);
+
+    expect(transport.requests).toBe(requests + 1); // the held send's retry, and only it
+    const retried = await row(first.id);
+    expect([retried.halted_at, retried.halt_retries]).toEqual([before.halted_at, 2]);
+    const joined = await row(second.id);
+    expect([joined.halted_at, joined.halt_retries, joined.halt_retry_at]).toEqual([
+      before.halted_at,
+      2,
+      retried.halt_retry_at,
+    ]);
+    expect(await notified("refused")).toEqual([first.id]);
+  });
+});
+
 describe("a send that comes due during an outage the provider went silent in", () => {
   it("strands no batch for Resolve: it joins the outage and reads backing off", async () => {
     allowErrorLogs("send.ambiguous");

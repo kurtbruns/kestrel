@@ -1,6 +1,8 @@
 /**
  * The reconciling sweep — runs once a minute from scheduled(). Four jobs:
- *   1. fire due sends (and loudly flag any that missed their fire time),
+ *   1. fire due sends (and loudly flag any that missed their fire time), after a halted
+ *      send whose retry is due has asked the provider, so a send fired this tick joins a
+ *      halt that still stands instead of starting it over (SPEC §12),
  *   2. resume sends left mid-flight by a crash (expired lease), never a wedged one, which
  *      no run can move until Resolve (`WEDGED_SEND`),
  *   3. flag anomalies (sends in flight too long with nothing handed off, wedged sends
@@ -79,7 +81,29 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
   const db = metered(env.DB, budget);
   const window = new SendWindow(getProvider(config, env).maxRequestRate);
 
-  // 1) Due scheduled sends.
+  // Sends left mid-flight whose lease has expired, and halted ones whose next retry is due.
+  // Read first, so a halt's due retry can run before anything else this tick.
+  const resumable = await sends.resumableSends(db, now, now + HALT_RETRY_SLACK_MS);
+  const resume = async (s: (typeof resumable)[number]): Promise<void> => {
+    if (handled.has(s.id) || !budget.affords(MIN_RUN_COST)) {
+      return;
+    }
+    handled.add(s.id);
+    tick.resumable += 1;
+    await safeRun(env, s.id, budget, window);
+  };
+
+  // 1) A halted send whose retry is due asks the provider first. A halt is the account's or
+  // the provider's, so its answer is every send's: a send fired after it this tick joins a
+  // halt that stands, rather than asking itself and starting the refusal over (a second
+  // email, the backoff back to its first step) (SPEC §12).
+  for (const s of resumable) {
+    if (s.halt_reason !== null) {
+      await resume(s);
+    }
+  }
+
+  // 2) Due scheduled sends.
   for (const s of await sends.dueSends(db, now)) {
     const lag = now - s.fire_at;
     if (lag > MISSED_THRESHOLD_MS) {
@@ -91,22 +115,13 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
     await safeRun(env, s.id, budget, window);
   }
 
-  // 2) Resume interrupted sends whose lease has expired (and halted ones whose next retry
-  // is due), if the budget still has room
-  // for one run after the query that finds them.
-  const resumable = budget.affords(1 + MIN_RUN_COST)
-    ? await sends.resumableSends(db, now, now + HALT_RETRY_SLACK_MS)
-    : [];
+  // 3) The rest: interrupted sends whose lease has expired, while the budget has room for
+  // a run.
   for (const s of resumable) {
-    if (handled.has(s.id)) {
-      continue;
-    }
-    handled.add(s.id);
-    tick.resumable += 1;
-    await safeRun(env, s.id, budget, window);
+    await resume(s);
   }
 
-  // 3) Loud anomaly flags: the ANOMALY_CHECKS held back above, so on the raw handle.
+  // 4) Loud anomaly flags: the ANOMALY_CHECKS held back above, so on the raw handle.
   for (const s of await sends.stuckSends(env.DB, now - STUCK_THRESHOLD_MS)) {
     log.error("send.stuck", {
       sendId: s.id,
@@ -121,7 +136,7 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
     tick.wedged += 1;
   }
 
-  // 4) Tell the publisher: the reserve plus whatever the sends left. Last, and caught, so a
+  // 5) Tell the publisher: the reserve plus whatever the sends left. Last, and caught, so a
   // notification can never delay or break a send.
   try {
     await notifyPublisher(
