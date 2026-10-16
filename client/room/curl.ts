@@ -1,5 +1,6 @@
 // The curl command the API reference offers for a route: the method, the URL on this
-// instance, the credential headers its tier needs, and the example body when it has one.
+// instance, the credential headers its tier needs, and the example body when it has one,
+// or for a form upload its required fields.
 
 import type { ReferenceEntry } from "../../shared/reference";
 
@@ -48,6 +49,11 @@ export function curlCommand(r: ReferenceEntry, origin: string, mode: AuthMode): 
     // Single-quoted for the shell, so a quote inside the JSON closes, escapes, and reopens.
     const body = JSON.stringify(r.example.request).replaceAll("'", `'\\''`);
     lines.push('-H "Content-Type: application/json"', `-d '${body}'`);
+  } else if (r.accepts?.includes("multipart/form-data")) {
+    // A form upload: each field it can't do without, a file as a placeholder path to fill.
+    for (const f of (r.body ?? []).filter((f) => f.required)) {
+      lines.push(`-F "${f.name}=${f.type === "file" ? "@" : ""}:${f.name}"`);
+    }
   }
   return lines.join(" \\\n  ");
 }

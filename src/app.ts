@@ -48,7 +48,7 @@ import { RASTER_IMAGE_TYPES } from "./lib/image_types";
 import { HALT_BACKOFF_MS, MISSED_THRESHOLD_MS } from "./lib/time";
 import { unwrap } from "./lib/unwrap";
 import { buildReference, referenceMarkdown } from "./reference";
-import { type RouteDef, Router } from "./router";
+import { type BodyField, type RouteDef, Router } from "./router";
 import * as archiveRoutes from "./routes/archive";
 import * as devRoutes from "./routes/dev";
 import * as docsRoutes from "./routes/docs";
@@ -139,6 +139,65 @@ export function createRouter({
   const lead = `${formatLead(minLeadMs)} on this deployment (\`deployment.minLeadMs\` in \`GET /api/settings\`); a deployment sets it with \`MIN_LEAD_SECONDS\`, never below ${formatLead(MIN_LEAD_FLOOR_MS)}`;
   // What every send route says of conditions and actions: one server rule, one wording.
   const conditionsText = `\`conditions\` is what is wrong with the send, or worth knowing, now (SPEC §8, §12), derived by the server from the send and the same on every route, most severe first: \`missed\` (still scheduled ${MISSED_THRESHOLD_MS / 60_000} minutes past its fire time: the sweep is not running), \`stuck\` (in flight too long: no recipient handed off for ${STUCK_THRESHOLD_MS / 60_000} minutes and nothing to explain it, since a halt explains the wait until its \`retry_at\` and a wedged send waits for Resolve; a send that keeps handing off is never stuck, however long it takes), \`wedged\` (\`count\` recipients whose delivery is unknown, settled by Resolve), \`refused\` (the provider refusing the account, or this send's own email, with its \`cause\`, its own words as \`error\`, the \`advice\` for the fix, which is outside this API, and \`retry_at\`; the send resumes on its own once the account is fixed, having consumed no one), \`provider_unavailable\` (an outage or a rate limit, retried on its own at \`retry_at\`; \`warn\` rather than \`info\` for a rate limit that has refused the first request of ${SELF_THROTTLE_HALTS} retries in a row, which the deployment's SES_MAX_SEND_RATE causes, and its message says so), \`bounce_spike\` (a send finished within ${BOUNCE_SPIKE_RECENT_MS / 86_400_000} days whose confirmed bounces reached ${BOUNCE_SPIKE_RATE * 100}% of its audience at fire, at least ${BOUNCE_SPIKE_MIN}; \`bounced\` and \`rate\`), \`no_receipts\` (a send finished within ${BOUNCE_SPIKE_RECENT_MS / 86_400_000} days, ${NO_RECEIPTS_AFTER_MS / 60_000} minutes or more after its dispatch finished, with not one delivery, bounce, or complaint receipt for the \`accepted\` recipients the provider took: the provider's events may not be reaching the webhook, so bounces and complaints suppress no one), \`remade\` (a template or identity change re-made the scheduled email after its last test, \`tested_at\`; a test of the post clears it), \`untested\` (\`info\`: no test of the scheduled email has been sent and it was never re-made; a test of the post clears it), and \`daily_writes\` (on the Workers Free plan's limits, a scheduled send to more than ${DAILY_WRITES_SEND_RECIPIENTS.toLocaleString("en-US")} recipients, or to fewer when imports already wrote on the UTC day it fires, which may spend D1's daily allowance of written rows and stop the instance until midnight UTC; \`recipients\`; a warning, never a refusal). Each has a \`severity\` (\`action\`: a person must act; \`warn\`: worth a look; \`info\`), \`since\` (null when the record does not say), a \`message\` to show or relay as it stands, and the \`action\` that settles it, if any. \`actions\` is exactly what the server would accept on the send now, each \`{name, method, path}\`: \`cancel\` and \`reschedule\` while it is scheduled and its fire time is still ahead, \`resolve\` while it is wedged.`;
+  // A post's archive address, and its listing: the post's settings, which Schedule and Send
+  // now take as well as their own route, the address also on a create or a save.
+  const slugField: BodyField = {
+    name: "slug",
+    type: "string",
+    description:
+      "Sets the archive address by hand, and turns `slug_auto` off: lowercase letters and numbers joined by single hyphens, and no other post's.",
+  };
+  const slugAutoField: BodyField = {
+    name: "slug_auto",
+    type: "boolean",
+    description: "`true` has the slug follow the subject again. Not sent with `slug`.",
+  };
+  const postSettingsFields: BodyField[] = [
+    {
+      name: "email_only",
+      type: "boolean",
+      description:
+        "`true` mails the post but leaves it out of the archive index and the landing page, and its archive address stops answering; `false` lists it. Absent, the post keeps the listing it has.",
+    },
+    slugField,
+    slugAutoField,
+  ];
+  // A post's content and address, as a create or a save takes them.
+  const postEditFields: BodyField[] = [
+    { name: "subject", type: "string", description: "The subject line, and the post's title." },
+    { name: "markdown", type: "string", description: "The body, in Markdown." },
+    slugField,
+    slugAutoField,
+  ];
+  // A list's file, as an import's plan and commit take it.
+  const importFileFields: BodyField[] = [
+    {
+      name: "file.name",
+      type: "string",
+      required: true,
+      description: "The file's name: `.csv` for the format, `.txt` for a plain list.",
+    },
+    {
+      name: "file.text",
+      type: "string",
+      required: true,
+      description: `The file's contents as UTF-8 text, at most ${IMPORT_LIMITS.maxBodyBytes / (1024 * 1024)} MB.`,
+    },
+    {
+      name: "plain_list_status",
+      type: '"subscribed" | "unsubscribed" | "bounced"',
+      description:
+        "For a plain list, what its addresses are (default `subscribed`). A 400 on a CSV, whose rows say.",
+    },
+  ];
+  // A fire time, as Schedule and Reschedule take it.
+  const fireAtField: BodyField = {
+    name: "fire_at",
+    type: "epoch ms or ISO-8601",
+    required: true,
+    description:
+      "When to send: epoch milliseconds, or an ISO-8601 timestamp with a `Z` or `±hh:mm` offset (one without is a 400). At least the minimum lead out, then rounded up to the next whole minute.",
+  };
   // What every route that would send says while the deployment has no provider: one code.
   const notConnected =
     "Refused with 409 `provider_not_connected` while no email provider is connected (SPEC §9), since nothing can be sent.";
@@ -387,7 +446,7 @@ export function createRouter({
       summary:
         "Update runtime preferences: test recipients, the publication identity, the email template, the confirmation email wording.",
       description:
-        "Saving a changed template, or an identity field the template renders, re-makes every scheduled send's email at once (SPEC §6, §9), and is refused until the client acknowledges those sends by id in `remake` (409 `remake_required`, listing them) or while any of them is inside the minimum lead (409 `remake_too_close`, with `retry_after`); a save that leaves the email's inputs unchanged asks nothing. `GET /api/settings` lists them under `inUse` beforehand; the response's `remade` says what was re-made, and each of those sends then needs a fresh test. `warnings` is advice that never blocks the save: likely template mistakes, and a mailing address the template leaves out.",
+        "Every field is optional: send only what changes. Saving a changed template, or an identity field the template renders, re-makes every scheduled send's email at once (SPEC §6, §9), and is refused until the client acknowledges those sends by id in `remake` (409 `remake_required`, listing them) or while any of them is inside the minimum lead (409 `remake_too_close`, with `retry_after`); a save that leaves the email's inputs unchanged asks nothing. `GET /api/settings` lists them under `inUse` beforehand; the response's `remade` says what was re-made, and each of those sends then needs a fresh test. `warnings` is advice that never blocks the save: likely template mistakes, and a mailing address the template leaves out.",
       example: {
         request: { emailTemplate: "<style>…</style>…", remake: ["s_xyz789"] },
         response: {
@@ -404,6 +463,57 @@ export function createRouter({
           ],
         },
       },
+      body: [
+        {
+          name: "testRecipients",
+          type: "string[]",
+          description: "The addresses a test goes to when it names none.",
+        },
+        { name: "publication.name", type: "string", description: "The publication's name." },
+        { name: "publication.tagline", type: "string", description: "One line under the name." },
+        {
+          name: "publication.address",
+          type: "string",
+          description: "The mailing address the template prints in each email's footer.",
+        },
+        {
+          name: "emailTemplate",
+          type: "string",
+          description:
+            "The email template's HTML. One missing the unsubscribe link or the body is a 400 (I2).",
+        },
+        {
+          name: "confirmationEmail.subject",
+          type: "string",
+          description: "The confirmation email's subject.",
+        },
+        {
+          name: "confirmationEmail.body",
+          type: "string",
+          description: "Its text above the button.",
+        },
+        {
+          name: "confirmationEmail.buttonLabel",
+          type: "string",
+          description: "Its button's label.",
+        },
+        {
+          name: "confirmationEmail.reassurance",
+          type: "string",
+          description: "Its line under the button.",
+        },
+        {
+          name: "notifications.to",
+          type: "string",
+          description: "The address the publisher's notifications go to (SPEC §8).",
+        },
+        {
+          name: "remake",
+          type: "string[]",
+          description:
+            "The id of every scheduled send this save would re-make, acknowledging it (`inUse.sends` in `GET /api/settings`).",
+        },
+      ],
       handler: settingsRoutes.update,
     },
     {
@@ -415,7 +525,23 @@ export function createRouter({
       title: "Upload the logo",
       summary: "Upload the publication logo (multipart `file`); served publicly via /media.",
       description:
-        "The logo is part of the identity, so when the template renders it and sends are scheduled this re-makes their emails under the same rule as `PUT /api/settings`, acknowledged as `?remake=` (comma-separated send ids) since the request carries no JSON body; the bytes are written only once the refusals are ruled out. The image is stored as sent: every surface shows the logo as a square, and an email stretches one that isn't, so send a square image at least 256 × 256 px (the editor crops and scales to that before uploading).",
+        "The logo is part of the identity, so when the template renders it and sends are scheduled this re-makes their emails under the same rule as `PUT /api/settings`, acknowledged in `remake`; the bytes are written only once the refusals are ruled out. The image is stored as sent (the editor crops and scales it before uploading).",
+      query: [
+        {
+          name: "remake",
+          description:
+            "The ids of the scheduled sends this would re-make, comma-separated, acknowledging them as `PUT /api/settings` takes `remake`.",
+        },
+      ],
+      body: [
+        {
+          name: "file",
+          type: "file",
+          required: true,
+          description:
+            "The logo: a PNG, JPEG, WebP, or GIF, square and at least 256 × 256 px, since every surface shows it as a square and an email stretches one that isn't.",
+        },
+      ],
       handler: settingsRoutes.uploadLogo,
     },
     {
@@ -426,7 +552,14 @@ export function createRouter({
       title: "Remove the logo",
       summary: "Remove the publication logo.",
       description:
-        "Under the same re-make rule as `PUT /api/settings` when the template renders the logo and sends are scheduled: acknowledged as `?remake=` (comma-separated send ids), refused inside the minimum lead. The image itself stays served, since emails already sent still show it (I3); only what renders from then on loses it.",
+        "Under the same re-make rule as `PUT /api/settings` when the template renders the logo and sends are scheduled: acknowledged in `remake`, refused inside the minimum lead. The image itself stays served, since emails already sent still show it (I3); only what renders from then on loses it.",
+      query: [
+        {
+          name: "remake",
+          description:
+            "The ids of the scheduled sends this would re-make, comma-separated, as for the upload.",
+        },
+      ],
       handler: settingsRoutes.deleteLogo,
     },
     {
@@ -439,8 +572,7 @@ export function createRouter({
       accepts: JSON_BODY,
       resource: "settings",
       title: "Test the email template",
-      summary:
-        "Send a sample post through the saved email template, to `to` or the default recipients (I5).",
+      summary: "Send a sample post through the saved email template (I5).",
       description: `Renders the stored template, never unsaved editor content; saving first is the client's job, and that save may need the re-make acknowledgement (see \`PUT /api/settings\`). The answer names the recipients the provider didn't accept in \`failed\`, so a client can offer exactly those again and no one gets a second copy, and says why for each in \`not_sent\`, in the same order (see \`POST /api/posts/:id/test\`). ${notConnected}`,
       example: {
         request: { to: "you@example.com" },
@@ -453,6 +585,13 @@ export function createRouter({
           subject: "Template test — …",
         },
       },
+      body: [
+        {
+          name: "to",
+          type: "string or string[]",
+          description: `Where to send it, at most ${renderRoutes.MAX_TEMPLATE_TEST_RECIPIENTS} addresses. Omitted, the saved \`testRecipients\`.`,
+        },
+      ],
       handler: renderRoutes.templateTest,
     },
     {
@@ -489,9 +628,9 @@ export function createRouter({
       resource: "posts",
       title: "Create a post",
       summary:
-        "Create a draft post. Its slug follows the subject (`slug_auto: true`) unless you send a `slug`, which sets it by hand.",
+        "Create a draft post. Its slug follows the subject (`slug_auto: true`) unless you send a `slug`. Every field is optional; an empty body makes a blank draft.",
       description:
-        "The post is made with its unlisted link, `unlisted_url` (`<app origin>/email/<unlisted_token>`), which every test and send of it carries as view-in-browser and which never changes (SPEC §5). Every post a route answers carries both its addresses, absolute: `unlisted_url`, and `archive_url`, where a listed post is published once its send starts, whether or not it shows anything yet. Beside them, `published_at` is when the post's send started (null before), and `archive_live` whether `archive_url` shows the post now. A reader can see the post at `archive_url` when `archive_live`, otherwise at `unlisted_url` once `published_at` is set; which to share is the publisher's call. `status` stays `scheduled` while the send is going out, so read `published_at`, not `status`, for whether a post is public. The slug is the post's archive address, unique among all posts, drafts included (SPEC §4). A slug sent by hand must be lowercase letters and numbers with single hyphens, a 400 `slug_invalid` otherwise, and no other post's, a 409 `slug_taken` otherwise. A slug that follows the subject takes the subject's slug, or the first free number (`-2`) when another post holds it, and `subject_slug_held` in the answer names the slug it couldn't take. That field is not a refusal: the save succeeded, with the numbered slug.",
+        "The post is made with its unlisted link, `unlisted_url` (`<app origin>/email/<unlisted_token>`), which every test and send of it carries as view-in-browser and which never changes (SPEC §5). Every post a route answers carries both its addresses, absolute: `unlisted_url`, and `archive_url`, where a listed post is published once its send starts, whether or not it shows anything yet. Beside them, `published_at` is when the post's send started (null before), and `archive_live` whether `archive_url` shows the post now. A reader can see the post at `archive_url` when `archive_live`, otherwise at `unlisted_url` once `published_at` is set; which to share is the publisher's call. `status` stays `scheduled` while the send is going out, so read `published_at`, not `status`, for whether a post is public. The slug is the post's archive address, unique among all posts, drafts included (SPEC §4): a malformed one is a 400 `slug_invalid`, another post's a 409 `slug_taken`. A slug that follows the subject takes the subject's slug, or the first free number (`-2`) when another post holds it, and `subject_slug_held` in the answer names the slug it couldn't take. That field is not a refusal: the save succeeded, with the numbered slug.",
       example: {
         request: { subject: "Hello, world", markdown: "# Hello\n\nWelcome." },
         response: {
@@ -511,6 +650,7 @@ export function createRouter({
           revision_id: "r_1",
         },
       },
+      body: postEditFields,
       handler: postRoutes.createPost,
     },
     {
@@ -568,7 +708,7 @@ export function createRouter({
       summary:
         "Update a draft. Send the revision you read as `base_revision` (or If-Match): a save without one is a 428 `base_required` carrying the post as it stands, and one whose base is no longer current is a 409 `stale_revision`.",
       description:
-        "Only a draft is editable; a scheduled post is soft-locked until its schedule is canceled, and a save to a post that is not a draft is a 409 `post_not_draft` (its message says whether canceling the schedule would unlock it). While the post's slug follows the subject (`slug_auto: true`), every save derives it from the subject again, taking the first free number after the subject's slug (`-2`) when another post holds it, and `subject_slug_held` names the one it couldn't take. Take the slug from the answer. Sending `slug` sets it by hand and turns `slug_auto` off; `slug_auto: true` has it follow the subject again. Sending both is a 400 naming `slug`. A slug set by hand that is malformed is a 400 `slug_invalid`, and one another post holds a 409 `slug_taken`; neither saves anything.",
+        "Only a draft is editable; a scheduled post is soft-locked until its schedule is canceled, and a save to a post that is not a draft is a 409 `post_not_draft` (its message says whether canceling the schedule would unlock it). While the post's slug follows the subject (`slug_auto: true`), every save derives it from the subject again, taking the first free number after the subject's slug (`-2`) when another post holds it, and `subject_slug_held` names the one it couldn't take. Take the slug from the answer. A slug set by hand that is malformed is a 400 `slug_invalid`, and one another post holds a 409 `slug_taken`; neither saves anything.",
       example: {
         request: {
           subject: "Hello again, world",
@@ -585,6 +725,16 @@ export function createRouter({
           },
         },
       },
+      body: [
+        ...postEditFields,
+        {
+          name: "base_revision",
+          type: "string",
+          required: true,
+          description:
+            "The revision this edit is based on, the post's `current_revision` as you read it. An `If-Match` header may carry it instead, and wins.",
+        },
+      ],
       handler: postRoutes.updatePost,
     },
     {
@@ -607,7 +757,7 @@ export function createRouter({
       summary:
         "Set a post's publishing options: where it is listed (`email_only`) and its archive address (`slug`, `slug_auto`) (SPEC §4, §5).",
       description:
-        "Any subset of the three. Allowed in any state, a scheduled or sent post's included: none is part of the frozen email, which carries the post's unlisted link, so a change never re-makes a scheduled send or alters a sent one (I3). `email_only: true` mails the post as usual but leaves it out of the archive index and the landing page, and its archive address stops answering, though it stays the post's; its unlisted link opens the page. `false` lists it. Schedule and Send now take the same three fields; a reschedule takes none, since it moves only the time. `slug` sets the archive address by hand and `slug_auto: true` has it follow the subject again, as for a save: a malformed slug is a 400 `slug_invalid` and another post's a 409 `slug_taken`. Once the post's send has started, or while its scheduled email (frozen before unlisted links) links its archive address, its address is fixed: a change to it is a 409 `slug_permanent`, while naming the address it has is fine. Each of the post's sends carries the listing and the address in its view, so they take a new `rev` and the send feed reports them. Answers with the post as it now stands (its `archive_live` says at once whether its archive address shows it), its `subject_slug_held`, and `changed: false` when nothing changed. A body naming none of the three, or a field of the wrong type, is a 400 naming it.",
+        "Any subset of the three. Allowed in any state, a scheduled or sent post's included: none is part of the frozen email, which carries the post's unlisted link, so a change never re-makes a scheduled send or alters a sent one (I3). An email-only post's archive address stays the post's, and its unlisted link opens the page. Schedule and Send now take the same three fields; a reschedule takes none, since it moves only the time. A malformed slug is a 400 `slug_invalid` and another post's a 409 `slug_taken`. Once the post's send has started, or while its scheduled email (frozen before unlisted links) links its archive address, its address is fixed: a change to it is a 409 `slug_permanent`, while naming the address it has is fine. Each of the post's sends carries the listing and the address in its view, so they take a new `rev` and the send feed reports them. Answers with the post as it now stands (its `archive_live` says at once whether its archive address shows it), its `subject_slug_held`, and `changed: false` when nothing changed. A body naming none of the three, or a field of the wrong type, is a 400 naming it.",
       example: {
         request: { email_only: false, slug: "hello-world" },
         response: {
@@ -626,6 +776,7 @@ export function createRouter({
           changed: true,
         },
       },
+      body: postSettingsFields,
       handler: postRoutes.setSettings,
     },
     {
@@ -656,9 +807,29 @@ export function createRouter({
       resource: "posts",
       title: "Upload an image",
       summary:
-        "Upload an image to a draft (multipart form field `file`); a post that is not a draft is a 409 `post_not_draft`.",
+        "Upload an image to a draft, as a form or the raw bytes; a post that is not a draft is a 409 `post_not_draft`.",
       description:
         "The post's Markdown references the image by the `filename` the response gives, `![a short description](cover.jpg)`, and the render resolves that name to the stored image.",
+      query: [
+        {
+          name: "filename",
+          description:
+            "For a raw upload (the image's own type as `Content-Type`, the bytes as the body), the name to store it under; required then.",
+        },
+      ],
+      body: [
+        {
+          name: "file",
+          type: "file",
+          required: true,
+          description: `The image: a PNG, JPEG, WebP, or GIF, at most ${imageRoutes.MAX_POST_IMAGE_BYTES / (1024 * 1024)} MB.`,
+        },
+        {
+          name: "filename",
+          type: "string",
+          description: "The name to store it under, in place of the file's own.",
+        },
+      ],
       handler: imageRoutes.uploadImage,
     },
     {
@@ -741,6 +912,14 @@ export function createRouter({
           frozen: true,
         },
       },
+      body: [
+        {
+          name: "to",
+          type: "string",
+          required: true,
+          description: "The one address to send it to.",
+        },
+      ],
       handler: renderRoutes.test,
     },
     ...devOnly(
@@ -761,6 +940,25 @@ export function createRouter({
         resource: "dev",
         title: "Load the demo dataset",
         summary: "Load the local demo dataset (local dev only).",
+        query: [
+          {
+            name: "size",
+            description:
+              "`100`, `1k`, `10k`, or `100k`: a generated list of about that many subscribers in place of the curated one.",
+          },
+          {
+            name: "seed",
+            description: "Pins the generated list, so a `size` and `seed` repeat exactly.",
+          },
+        ],
+        body: [
+          {
+            name: "image",
+            type: "file[]",
+            description: "The demo posts' images, each named `<post folder>/<file>`.",
+          },
+          { name: "logo", type: "file", description: "The demo publication's logo." },
+        ],
         handler: devRoutes.seed,
       },
       {
@@ -784,13 +982,14 @@ export function createRouter({
       title: "Schedule a post",
       summary: `Freeze the render and schedule the send for a future time (at least ${formatLead(minLeadMs)} out).`,
       description:
-        "Freezes the current draft, with the template and identity as they stand, onto a send row and soft-locks the post; cancelable until its fire time. A later template or identity change re-makes that frozen email after the publisher confirms it (SPEC §6); there is no per-send template to name, and a `template_revision` field is a 400. `fire_at` is epoch milliseconds or an ISO-8601 timestamp with a `Z` or `±hh:mm` offset; a timestamp without one is a 400, since the Worker cannot know which local time was meant. `fire_at` must be at least the minimum lead out, a 400 `fire_at_too_soon` otherwise (for the soonest send, use Send now, `POST /api/posts/:id/send`): " +
+        "Freezes the current draft, with the template and identity as they stand, onto a send row and soft-locks the post; cancelable until its fire time. A later template or identity change re-makes that frozen email after the publisher confirms it (SPEC §6); there is no per-send template to name, and a `template_revision` field is a 400. A timestamp without an offset is a 400, since the Worker cannot know which local time was meant. `fire_at` must be at least the minimum lead out, a 400 `fire_at_too_soon` otherwise (for the soonest send, use Send now, `POST /api/posts/:id/send`): " +
         lead +
-        ". The time is then rounded up to the next whole minute (one already on the minute stays), since the sweep fires sends on the minute; the lead is checked on the time as requested, so rounding only lengthens the window. `email_only` (optional) sets the post's listing as it is scheduled (SPEC §5): `true` mails it as usual but leaves it out of the archive index and the landing page, `false` lists it; absent, the post keeps the listing it has, which is in the archive unless it was set otherwise. `slug` and `slug_auto` (optional) set its archive address as `PUT /api/posts/:id/settings` does, checked before anything is frozen, so a 400 `slug_invalid` or 409 `slug_taken` schedules nothing, and a refused schedule changes neither. None is part of the frozen email. Answers with the new send's view (as `GET /api/sends/:id` describes it), a `cursor` to follow it from, and `warnings`, what the render found wrong with the frozen copy (an image the post never uploaded, say), which preview and test of the copy report too (SPEC §5). Refusals: 409 `active_send_exists` when the post already has its one active send (carried as `send`), 409 `post_not_draft`, 400 `subject_required` for an empty subject, 409 `settings_changed` when a template or identity save kept landing while it froze (try again), and 409 `provider_not_connected` while no email provider is connected (SPEC §9).",
+        ". The time is then rounded up to the next whole minute (one already on the minute stays), since the sweep fires sends on the minute; the lead is checked on the time as requested, so rounding only lengthens the window. `email_only`, `slug`, and `slug_auto` set the post's listing and address as it is scheduled (SPEC §5), as `PUT /api/posts/:id/settings` does, checked before anything is frozen, so a 400 `slug_invalid` or 409 `slug_taken` schedules nothing, and a refused schedule changes neither. None is part of the frozen email. Answers with the new send's view (as `GET /api/sends/:id` describes it), a `cursor` to follow it from, and `warnings`, what the render found wrong with the frozen copy (an image the post never uploaded, say), which preview and test of the copy report too (SPEC §5). Refusals: 409 `active_send_exists` when the post already has its one active send (carried as `send`), 409 `post_not_draft`, 400 `subject_required` for an empty subject, 409 `settings_changed` when a template or identity save kept landing while it froze (try again), and 409 `provider_not_connected` while no email provider is connected (SPEC §9).",
       example: {
         request: { fire_at: "2026-01-16T09:00:00Z" },
         response: { send: scheduledExample, cursor: "57.1768467610000", warnings: [] },
       },
+      body: [fireAtField, ...postSettingsFields],
       handler: scheduleRoutes.schedule,
     },
     {
@@ -805,11 +1004,12 @@ export function createRouter({
       description:
         "The same freeze as scheduling, with the template and identity as they stand, and `fire_at` set to now plus the minimum lead, rounded up to the next whole minute as every fire time is: " +
         lead +
-        ". For nearly all of that window the send is inside the minimum lead, so a template or identity save that would re-make it is refused until it has fired. An optional JSON body may carry `email_only`, `slug`, and `slug_auto`, the post's settings, as for scheduling. A second call for a post already in its window answers with that send and `idempotent: true`, and changes nothing, its listing included; one that names settings the post doesn't have is a 409 `active_send_exists` carrying the send, so a caller that asked for email only never reads success for a post going out listed (change them with `PUT /api/posts/:id/settings`). Its answer carries `warnings` as scheduling's does, a repeat's included. The other refusals are as for scheduling.",
+        ". For nearly all of that window the send is inside the minimum lead, so a template or identity save that would re-make it is refused until it has fired. The body is optional. A second call for a post already in its window answers with that send and `idempotent: true`, and changes nothing, its listing included; one that names settings the post doesn't have is a 409 `active_send_exists` carrying the send, so a caller that asked for email only never reads success for a post going out listed (change them with `PUT /api/posts/:id/settings`). Its answer carries `warnings` as scheduling's does, a repeat's included. The other refusals are as for scheduling.",
       example: {
         request: { email_only: true },
         response: { send: scheduledExample, cursor: "57.1768467610000", warnings: [] },
       },
+      body: postSettingsFields,
       handler: scheduleRoutes.sendNow,
     },
     {
@@ -1054,7 +1254,7 @@ export function createRouter({
       title: "Reschedule a send",
       summary: "Move a scheduled send's fire time without re-freezing the render (I3, I6).",
       description:
-        "Updates only `fire_at` on a send still in its review window: the frozen render is untouched (the audience is resolved when the send fires) and the review window is preserved; a re-made send keeps its `remade_at`. Distinct from cancel → edit → schedule again, which is for content changes. The same `fire_at` form as scheduling (epoch milliseconds or an ISO-8601 timestamp with a `Z` or `±hh:mm` offset), and the same minimum lead, a 400 `fire_at_too_soon` otherwise: " +
+        "Updates only `fire_at` on a send still in its review window: the frozen render is untouched (the audience is resolved when the send fires) and the review window is preserved; a re-made send keeps its `remade_at`. Distinct from cancel → edit → schedule again, which is for content changes. The same minimum lead as scheduling, a 400 `fire_at_too_soon` otherwise: " +
         lead +
         ". As when scheduling, the new time is rounded up to the next whole minute, after the lead is checked on the time as requested. A move to the time the send already has (after that rounding) answers 200 with `changed: false` before the lead is checked, so a retried move is safe. Once the fire time has passed it is a 409 `window_closed`, and a canceled send is a 409 `send_canceled` (schedule the post again instead). The post's settings are not a reschedule's: `email_only`, `slug`, or `slug_auto` is a 400 naming the field, which moves nothing; change them with `PUT /api/posts/:id/settings`. " +
         actionText,
@@ -1062,6 +1262,7 @@ export function createRouter({
         request: { fire_at: "2026-01-16T09:00:00Z" },
         response: { send: scheduledExample, cursor: "58.1768467620000", changed: true },
       },
+      body: [fireAtField],
       handler: sendRoutes.reschedule,
     },
     {
@@ -1071,10 +1272,9 @@ export function createRouter({
       accepts: JSON_BODY,
       resource: "sends",
       title: "Resolve a wedged send",
-      summary:
-        "Resolve a send wedged on ambiguous (dispatched) deliveries; body {resolution: 'unsent'|'accepted'}.",
+      summary: "Resolve a send wedged on ambiguous (dispatched) deliveries.",
       description:
-        "A request that got no answer leaves its recipients `dispatched` — the loop never re-sends it (I4), so the send can't reach its completion gate. This adjudicates those rows: 'unsent' (assume not sent; the address is picked up by the next post) or 'accepted' (assume sent, operator-confirmed), then completes the send. Never re-mails an already-accepted recipient. Offered in `actions` exactly while the send is wedged. Refusals: 409 `run_in_progress` while a run holds the send (its in-flight rows may still get the provider's answer, so try again a moment later), 409 `not_wedged` when the send is not wedged (nothing ambiguous, recipients still to hand off, or a run yet to look at them) and when another Resolve has settled it. Once a send is wedged no run touches it, so the recipients Resolve settles are the ones the send showed; an `expected_count` in the body is ignored. " +
+        "A request that got no answer leaves its recipients `dispatched` — the loop never re-sends it (I4), so the send can't reach its completion gate. This adjudicates those rows as `resolution` says, then completes the send. Never re-mails an already-accepted recipient. Offered in `actions` exactly while the send is wedged. Refusals: 409 `run_in_progress` while a run holds the send (its in-flight rows may still get the provider's answer, so try again a moment later), 409 `not_wedged` when the send is not wedged (nothing ambiguous, recipients still to hand off, or a run yet to look at them) and when another Resolve has settled it. Once a send is wedged no run touches it, so the recipients Resolve settles are the ones the send showed; an `expected_count` in the body is ignored. " +
         actionText,
       example: {
         request: { resolution: "unsent" },
@@ -1085,6 +1285,15 @@ export function createRouter({
           completed: true,
         },
       },
+      body: [
+        {
+          name: "resolution",
+          type: '"unsent" | "accepted"',
+          required: true,
+          description:
+            "`unsent`: assume they were not sent, so the address is picked up by the next post. `accepted`: assume they were sent, on the publisher's word.",
+        },
+      ],
       handler: sendRoutes.resolve,
     },
 
@@ -1099,6 +1308,15 @@ export function createRouter({
       summary: "Add a subscriber via the normal double opt-in (never an auto-confirm).",
       description: `An address that was erased (SPEC §7) is refused 409 \`erasure_acknowledgement_required\`, with \`erased_at\`, until the request carries \`acknowledge_erasure: true\`: the publisher confirms the person asked to join again. The confirmation then goes as usual, and the person's own confirming lifts the marker. The public form never asks. ${notConnected} Nothing is stored then, since the confirmation could not go.`,
       example: { request: { email: "reader@example.com" } },
+      body: [
+        { name: "email", type: "string", required: true, description: "The address to add." },
+        {
+          name: "acknowledge_erasure",
+          type: "boolean",
+          description:
+            "`true` once the publisher confirms that a person whose address was erased asked to join again.",
+        },
+      ],
       handler: subscriberRoutes.create,
     },
     {
@@ -1259,7 +1477,7 @@ export function createRouter({
       title: "Plan an import",
       summary:
         "Plan an import: what it would do to every row against the list as it stands. Writes nothing, so call it as often as a file needs.",
-      description: `Body \`{ file: { name, text }, plain_list_status? }\`: the file's name (\`.csv\` for the format, \`.txt\` for a plain list) and its contents as UTF-8 text, and for a plain list what its addresses are, \`subscribed\` (the default), \`unsubscribed\`, or \`bounced\` (a 400 naming the field on a CSV, whose rows say). Answers \`counts\` (every row once, by outcome, summing to \`file.rows\`), \`suppressions_added\`, \`confirmed\` (the rows to be confirmed, by \`opt_in\` and \`origin\`), \`rows\` (each row that won't be confirmed, with its outcome), \`sends_growing\` (each send whose audience would grow, with \`gains\`: a scheduled one, or one that fired but hasn't fixed its audience yet), \`attestation\` (\`{ version, text, publication }\` when anyone would be confirmed, else null: \`publication\` is the name \`text\` calls the publication by, its name or else the sender's display name, as every surface names it, or \`this newsletter\` with neither), \`plan_hash\`, and \`daily_writes_warning\` (on the Workers Free plan's limits, the server's words when this import and the imports already committed that UTC day would write more of D1's daily allowance of written rows than it leaves room for, advising importing the file the next day; else null; never a refusal, and outside the hash; a send's share of the day is its own \`daily_writes\` condition). The outcomes and when each applies are in \`GET /api/imports/format\`. Refusals name what was wrong and what was expected: 400 \`unrecognized_format\` (not a file in the format at all, with \`row\` where it shows), 400 \`invalid_field\` (a column or value the format doesn't take, with \`row\`, \`column\`, and \`allowed\` where the values are a set), 400 \`too_many_rows\` (over this deployment's \`limit\`), and 413 \`body_too_large\` (over ${IMPORT_LIMITS.maxBodyBytes / (1024 * 1024)} MB).`,
+      description: `Answers \`counts\` (every row once, by outcome, summing to \`file.rows\`), \`suppressions_added\`, \`confirmed\` (the rows to be confirmed, by \`opt_in\` and \`origin\`), \`rows\` (each row that won't be confirmed, with its outcome), \`sends_growing\` (each send whose audience would grow, with \`gains\`: a scheduled one, or one that fired but hasn't fixed its audience yet), \`attestation\` (\`{ version, text, publication }\` when anyone would be confirmed, else null: \`publication\` is the name \`text\` calls the publication by, its name or else the sender's display name, as every surface names it, or \`this newsletter\` with neither), \`plan_hash\`, and \`daily_writes_warning\` (on the Workers Free plan's limits, the server's words when this import and the imports already committed that UTC day would write more of D1's daily allowance of written rows than it leaves room for, advising importing the file the next day; else null; never a refusal, and outside the hash; a send's share of the day is its own \`daily_writes\` condition). The outcomes and when each applies are in \`GET /api/imports/format\`. Refusals name what was wrong and what was expected: 400 \`unrecognized_format\` (not a file in the format at all, with \`row\` where it shows), 400 \`invalid_field\` (a column or value the format doesn't take, with \`row\`, \`column\`, and \`allowed\` where the values are a set), 400 \`too_many_rows\` (over this deployment's \`limit\`), and 413 \`body_too_large\` (over ${IMPORT_LIMITS.maxBodyBytes / (1024 * 1024)} MB).`,
       example: {
         request: {
           file: {
@@ -1310,6 +1528,7 @@ export function createRouter({
           plan_hash: "9f2c…",
         },
       },
+      body: importFileFields,
       handler: importRoutes.planRoute,
     },
     {
@@ -1322,7 +1541,7 @@ export function createRouter({
       summary:
         "Commit a plan: apply it all, or nothing, in one batch, and keep the import's record. Never sends an email.",
       description:
-        "The plan's body plus `plan_hash`, `attestation: { version, accepted: true }` when the plan returned one, and `acknowledge_sends`: the id of every send in `sends_growing`. It plans again and refuses 409 `plan_stale` when the hash differs (the file, its declared meaning, whether an attestation is needed, or the growing sends changed, or another import was committed since; plan again). The list moving in between is not refused: every write re-checks the list as it stands, so a reader who unsubscribed meanwhile stays unsubscribed, and `differed` lists each row whose result differs from the commit's own plan. 409 `attestation_required` (with the `attestation` to show) when the plan confirms anyone and none was given. 409 `sends_acknowledgement_required` (with the `sends`) when a send that would grow isn't acknowledged, and always for a service token, which can't acknowledge one: the publisher finishes that import in the dashboard. A service token may attest; the record says so, and the publisher is emailed the counts. Answers 201 with the `import` record (never an address), `counts` and `suppressions_added` as applied, `rows` (those not confirmed, as applied), `differed`, and `replayed: false`. A commit repeated with the same plan and file answers 200 with the stored record and `replayed: true`, applying nothing twice. The plan route's refusals apply too.",
+        "Send the plan's body with what it asked for. It plans again and refuses 409 `plan_stale` when the hash differs (the file, its declared meaning, whether an attestation is needed, or the growing sends changed, or another import was committed since; plan again). The list moving in between is not refused: every write re-checks the list as it stands, so a reader who unsubscribed meanwhile stays unsubscribed, and `differed` lists each row whose result differs from the commit's own plan. 409 `attestation_required` (with the `attestation` to show) when the plan confirms anyone and none was given. 409 `sends_acknowledgement_required` (with the `sends`) when a send that would grow isn't acknowledged, and always for a service token, which can't acknowledge one: the publisher finishes that import in the dashboard. A service token may attest; the record says so, and the publisher is emailed the counts. Answers 201 with the `import` record (never an address), `counts` and `suppressions_added` as applied, `rows` (those not confirmed, as applied), `differed`, and `replayed: false`. A commit repeated with the same plan and file answers 200 with the stored record and `replayed: true`, applying nothing twice. The plan route's refusals apply too.",
       example: {
         request: {
           file: { name: "subscribers.csv", text: "email,status,opt_in,origin\r\n…" },
@@ -1331,6 +1550,30 @@ export function createRouter({
           acknowledge_sends: ["s_xyz789"],
         },
       },
+      body: [
+        ...importFileFields,
+        {
+          name: "plan_hash",
+          type: "string",
+          required: true,
+          description: "The `plan_hash` the plan returned.",
+        },
+        {
+          name: "attestation.version",
+          type: "number",
+          description: "The `attestation.version` the plan returned, when it returned one.",
+        },
+        {
+          name: "attestation.accepted",
+          type: "true",
+          description: "The publisher's acceptance of the attestation's words.",
+        },
+        {
+          name: "acknowledge_sends",
+          type: "string[]",
+          description: "The id of every send in the plan's `sends_growing`.",
+        },
+      ],
       handler: importRoutes.commit,
     },
 
@@ -1353,7 +1596,7 @@ export function createRouter({
       resource: "suppressions",
       title: "Block an address",
       summary: "Block an address: the publisher's own decision to stop mailing it (SPEC §7).",
-      description: `${SUBSCRIBER_ACTIONS.block.when} Stores a suppression with \`reason\` \`manual\` and an optional \`detail\` in the publisher's words, and changes no consent status. If they asked to leave, unsubscribe them instead (\`POST /api/subscribers/:id/unsubscribe\`). \`reason\` may be omitted or \`manual\`; any other is a 400, since a bounce or complaint is the provider's to report and an erasure's marker is Erase's to leave. An address already suppressed keeps what it has, its \`detail\` included: the answer is 200 with \`added: false\` and the suppression that stands, rather than 201.`,
+      description: `${SUBSCRIBER_ACTIONS.block.when} Stores a suppression with \`reason\` \`manual\`, and changes no consent status. If they asked to leave, unsubscribe them instead (\`POST /api/subscribers/:id/unsubscribe\`). An address already suppressed keeps what it has, its \`detail\` included: the answer is 200 with \`added: false\` and the suppression that stands, rather than 201.`,
       example: {
         request: { email: "reader@example.com", detail: "Our own test address" },
         response: {
@@ -1366,6 +1609,16 @@ export function createRouter({
           added: true,
         },
       },
+      body: [
+        { name: "email", type: "string", required: true, description: "The address to block." },
+        {
+          name: "reason",
+          type: '"manual"',
+          description:
+            "May be omitted. Any other is a 400: a bounce or complaint is the provider's to report, an erasure's marker Erase's to leave.",
+        },
+        { name: "detail", type: "string", description: "Why, in the publisher's words." },
+      ],
       handler: suppressionRoutes.add,
     },
     {

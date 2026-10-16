@@ -1,6 +1,7 @@
 // The API reference room, rendered from /api/reference.
 
 import type {
+  BodyField,
   QueryParam,
   ReferenceEntry,
   ReferenceGroup,
@@ -46,6 +47,17 @@ function apiQueryHtml(query: QueryParam[] | undefined): Html | null {
   );
   return html`<div class="block"><div class="block-head"><span class="block-label">Query</span></div><table class="api-query"><tbody>${rows}</tbody></table></div>`;
 }
+// A route's body fields, with each one's type and whether the request is refused without it.
+function apiBodyHtml(body: BodyField[] | undefined): Html | null {
+  if (!body?.length) {
+    return null;
+  }
+  const rows = body.map(
+    (f) =>
+      html`<tr><td><code>${f.name}</code>${f.required ? html` <span class="api-req">required</span>` : null}</td><td><code class="api-type">${f.type}</code></td><td class="muted">${f.description}</td></tr>`,
+  );
+  return html`<div class="block"><div class="block-head"><span class="block-label">Body</span></div><table class="api-query api-body"><tbody>${rows}</tbody></table></div>`;
+}
 // The body types a write accepts, from the registration the router enforces them by. A
 // route that takes no body lists none.
 function apiAcceptsHtml(accepts: readonly string[] | undefined): Html | null {
@@ -78,6 +90,7 @@ function apiRouteHtml(r: ReferenceEntry): Html {
         ${r.description ? html`<p class="api-desc muted">${r.description}</p>` : null}
         ${apiQueryHtml(r.query)}
         ${apiAcceptsHtml(r.accepts)}
+        ${apiBodyHtml(r.body)}
         ${apiExample("Request", r.example?.request)}
         ${apiExample("Response", r.example?.response)}
         ${apiCurl(r)}

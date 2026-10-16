@@ -48,6 +48,29 @@ describe("curlCommand", () => {
     );
   });
 
+  it("sends a form upload's required fields as a form, a file as a path to fill", () => {
+    const cmd = curlCommand(
+      route({
+        method: "POST",
+        path: "/api/settings/logo",
+        accepts: ["multipart/form-data"],
+        body: [
+          { name: "file", type: "file", required: true, description: "" },
+          { name: "note", type: "string", description: "" },
+        ],
+      }),
+      origin,
+      "dev",
+    );
+    expect(cmd).toBe(
+      [
+        'curl -X POST "https://news.example.com/api/settings/logo"',
+        '  -H "Authorization: Bearer $TOKEN"',
+        '  -F "file=@:file"',
+      ].join(" \\\n"),
+    );
+  });
+
   it("keeps :params as the placeholders to fill, and drops the pattern syntax a URL never carries", () => {
     const path = (p: string) =>
       curlCommand(route({ path: p, access: "public" }), origin, "dev")?.split("\n")[0];

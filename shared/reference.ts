@@ -43,6 +43,19 @@ export interface QueryParam {
   required?: boolean;
 }
 
+/**
+ * A documented field of a request body. A nested field is named by its dotted path
+ * (`publication.name`), as a 400 names it in `field`. `type` is a short human string
+ * (`string`, `string[]`, `"unsent" | "accepted"`, `file`), not a schema.
+ */
+export interface BodyField {
+  name: string;
+  type: string;
+  /** The request is refused without it. */
+  required?: boolean;
+  description: string;
+}
+
 /** One route as the reference shows it: the manifest metadata, without handler or middleware. */
 export interface ReferenceEntry {
   method: string;
@@ -56,6 +69,8 @@ export interface ReferenceEntry {
   query?: QueryParam[];
   /** The media types the request body may carry; absent when the route takes no body. */
   accepts?: readonly string[];
+  /** The body's fields, a multipart form's included; absent when the route takes no body. */
+  body?: BodyField[];
   example?: RouteExample;
 }
 

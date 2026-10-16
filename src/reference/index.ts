@@ -80,6 +80,7 @@ function entry(r: RouteDef): ReferenceEntry {
     description: r.description,
     query: r.query,
     accepts: r.accepts,
+    body: r.body,
     example: r.example,
   };
 }
@@ -108,8 +109,13 @@ function jsonBlock(label: string, value: unknown): string {
   return `${label}:\n\n\`\`\`json\n${JSON.stringify(value, null, 2)}\n\`\`\``;
 }
 
+/** Text for a Markdown table cell, whose pipes would otherwise split it. */
+function cell(text: string): string {
+  return text.replace(/\|/g, "\\|");
+}
+
 /** One route as a Markdown section: its title as the heading, its method and path beneath,
- *  then the summary, description, body types, query parameters, and example. */
+ *  then the summary, description, body types, query parameters, body fields, and example. */
 function routeMarkdown(r: ReferenceEntry): string {
   const parts = [`#### ${r.title}`, `\`${r.method} ${r.path}\``, r.summary];
   if (r.description) {
@@ -120,10 +126,16 @@ function routeMarkdown(r: ReferenceEntry): string {
   }
   if (r.query?.length) {
     const rows = r.query.map(
-      (q) =>
-        `| \`${q.name}\`${q.required ? " (required)" : ""} | ${q.description.replace(/\|/g, "\\|")} |`,
+      (q) => `| \`${q.name}\`${q.required ? " (required)" : ""} | ${cell(q.description)} |`,
     );
     parts.push(["| Query parameter | Description |", "| --- | --- |", ...rows].join("\n"));
+  }
+  if (r.body?.length) {
+    const rows = r.body.map(
+      (f) =>
+        `| \`${f.name}\`${f.required ? " (required)" : ""} | ${cell(f.type)} | ${cell(f.description)} |`,
+    );
+    parts.push(["| Body field | Type | Description |", "| --- | --- | --- |", ...rows].join("\n"));
   }
   if (r.example?.request !== undefined) {
     parts.push(jsonBlock("Example request", r.example.request));

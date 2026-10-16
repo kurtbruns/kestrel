@@ -17,7 +17,7 @@ import { param } from "../router";
 import { requireDraft } from "./posts";
 
 /** Generous for a photo, still small enough to send: every recipient downloads it. */
-const MAX_POST_IMAGE_BYTES = 5 * 1024 * 1024;
+export const MAX_POST_IMAGE_BYTES = 5 * 1024 * 1024;
 
 function storageKey(postId: string, filename: string): string {
   return `posts/${postId}/${filename}`;

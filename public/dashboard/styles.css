@@ -1947,6 +1947,11 @@ th.num .th-sort {
   white-space: nowrap;
   width: 1%;
 }
+/* A body field's type: short, so it sits between the name and the line on what it is. */
+.api-type {
+  color: var(--muted);
+  font-size: 12px;
+}
 
 /* editor header */
 .editor-head {

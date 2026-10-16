@@ -174,6 +174,39 @@ describe("API reference is generated from the route registration", () => {
     );
   });
 
+  it("documents the fields of every route that takes a body, and of none that takes none", () => {
+    for (const d of defs) {
+      const key = `${d.method} ${d.path}`;
+      // A route that declares a body type says what goes in it, a form upload's file included.
+      expect((d.body?.length ?? 0) > 0, key).toBe((d.accepts?.length ?? 0) > 0);
+      const names = (d.body ?? []).map((f) => f.name);
+      expect(new Set(names).size, key).toBe(names.length);
+    }
+    const byKey = new Map(defs.map((d) => [`${d.method} ${d.path}`, d]));
+    // The fields a client most needs and could only guess before: Resolve's choice, and every
+    // group a settings save takes, named by the dotted path a 400 names it by.
+    expect(byKey.get("POST /api/sends/:id/resolve")?.body).toEqual([
+      expect.objectContaining({
+        name: "resolution",
+        type: '"unsent" | "accepted"',
+        required: true,
+      }),
+    ]);
+    expect(byKey.get("PUT /api/settings")?.body?.map((f) => f.name)).toEqual(
+      expect.arrayContaining([
+        "testRecipients",
+        "publication.name",
+        "emailTemplate",
+        "confirmationEmail.subject",
+        "notifications.to",
+        "remake",
+      ]),
+    );
+    expect(byKey.get("POST /api/settings/logo")?.body).toEqual([
+      expect.objectContaining({ name: "file", type: "file", required: true }),
+    ]);
+  });
+
   it("a newly registered route appears in the reference with no separate doc to touch", () => {
     const r = new Router();
     const added: RouteDef = {
@@ -245,8 +278,11 @@ describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
     // Tiers, then their resources, then routes, each a level down.
     expect(md).toMatch(/^## Admin\n\n[^#][\s\S]*?^### Posts\n\n#### .+\n\n`\S+ \/api\/posts\S*`$/m);
     expect(md).not.toMatch(/^## \S+: /m);
-    // A route's query table and example come through.
+    // A route's query table, body table, and example come through.
     expect(md).toMatch(/\| Query parameter \| Description \|/);
+    expect(md).toContain(
+      '| Body field | Type | Description |\n| --- | --- | --- |\n| `resolution` (required) | "unsent" \\| "accepted" |',
+    );
     expect(md).toContain("Example response:");
   });
 

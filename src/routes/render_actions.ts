@@ -220,7 +220,7 @@ export async function test(c: RequestContext): Promise<Response> {
 // --- template test-send ----------------------------------------------------------
 
 /** How many addresses one template test may fan out to (matches the settings cap). */
-const MAX_TEMPLATE_TEST_RECIPIENTS = 20;
+export const MAX_TEMPLATE_TEST_RECIPIENTS = 20;
 
 // A synthetic post that stands in for {{ .Post.Body }} when testing the TEMPLATE
 // itself — there's no real post to render, so this sample supplies one. It flows

@@ -221,7 +221,7 @@ describe("reference room", () => {
     expect(glyph()).toBe(resting);
   });
 
-  it("lists the body types a write accepts, and none for a route that takes no body", async () => {
+  it("lists the body types and fields a write accepts, and none for a route that takes no body", async () => {
     const withBodies: ReferenceGroup[] = [
       {
         ...groups[0]!,
@@ -235,6 +235,10 @@ describe("reference room", () => {
             title: "Upload an image",
             summary: "Upload an image.",
             accepts: ["multipart/form-data", "image/png"],
+            body: [
+              { name: "file", type: "file", required: true, description: "The image." },
+              { name: "filename", type: "string", description: "A <name> to store it under." },
+            ],
           },
           {
             method: "DELETE",
@@ -256,6 +260,13 @@ describe("reference room", () => {
       "image/png",
     ]);
     expect(del!.querySelector(".api-accepts")).toBeNull();
+    // Each body field with its type, the required one marked; the text stays text.
+    expect($$(".api-body tr", upload!).map((tr) => tr.textContent)).toEqual([
+      "file requiredfileThe image.",
+      "filenamestringA <name> to store it under.",
+    ]);
+    expect(upload!.querySelector(".api-body name")).toBeNull();
+    expect(del!.querySelector(".api-body")).toBeNull();
   });
 
   it("marks a query parameter the route can't do without", async () => {

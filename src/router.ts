@@ -17,7 +17,7 @@
  * handled on a page a reader opens (`readerPage`), which is logged the same way and answered
  * with an HTML page rather than the API's JSON body.
  */
-import type { Access, QueryParam, Resource, RouteExample } from "../shared/reference";
+import type { Access, BodyField, QueryParam, Resource, RouteExample } from "../shared/reference";
 import { requireAuth } from "./auth/middleware";
 import type { AppEnv, Config } from "./env";
 import { getConfig } from "./env";
@@ -97,10 +97,10 @@ function decodePathParams(groups: Record<string, string | undefined>): {
 type Method = "GET" | "POST" | "PUT" | "DELETE";
 
 // The access tier (`admin` is gated by `requireAuth`; `public` and `webhook` carry no auth
-// middleware), the worked example, and the documented query parameter are what the API
+// middleware), the worked example, and the documented query parameter and body field are what the API
 // reference projects from a route, so they live in shared/ where the editor reads the
 // same definitions; re-exported here under the manifest's names.
-export type { Access, QueryParam, RouteExample };
+export type { Access, BodyField, QueryParam, RouteExample };
 
 /**
  * A route declared as data. `method` / `path` / `access` are accurate by
@@ -126,6 +126,12 @@ export interface RouteDef {
    * a request declaring any other type is refused before the handler runs.
    */
   accepts?: readonly string[];
+  /**
+   * The body's fields, documented beside the route that reads them. Authored, not derived
+   * from the reader, so review keeps the two in step; a spec holds every route that takes a
+   * body to carrying one.
+   */
+  body?: BodyField[];
   example?: RouteExample;
   handler: Handler;
   /** Extra middleware beyond the access-derived gate. Rare; composed after the gate. */
