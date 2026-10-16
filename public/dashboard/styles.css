@@ -4078,6 +4078,12 @@ button.api-filter-clear svg {
   font-size: 18px;
   margin: 24px 0 4px;
 }
+/* Where a jump from the rail or an address moves focus: a place to read from, not a control,
+   so it takes no ring. */
+.api-section h2:focus,
+.api-res-head h3:focus {
+  outline: none;
+}
 .api-blurb {
   margin: 0;
   font-size: 14px;

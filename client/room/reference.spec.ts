@@ -400,12 +400,17 @@ describe("reference room", () => {
     expect($$(".api-errors tr", route).map((tr) => tr.textContent)).toEqual([
       "409 window_closedThe fire time has passed. With send.",
     ]);
-    // The object's link jumps to its section without navigating.
+    // The object's link is a real link to its address, and jumps there in place: opened, with
+    // focus on its line, the address in the bar, and the room not rendered again.
+    const link = $<HTMLAnchorElement>(".api-obj-link", route);
+    expect(link.getAttribute("href")).toBe("#/reference/objects-send");
     const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
-    $<HTMLElement>(".api-obj-link", route).click();
+    link.click();
     expect(scroll.mock.instances).toEqual([$("#api-objects-send")]);
     expect($<HTMLDetailsElement>("#api-objects-send").open).toBe(true);
-    expect(location.hash).toBe("#/reference");
+    expect(document.activeElement).toBe($("#api-objects-send > summary"));
+    expect(location.hash).toBe("#/reference/objects-send");
+    expect(fake.calls).toHaveLength(1);
   });
 
   it("renders a route's prose as inline Markdown: code, bold, and paragraphs, its HTML as text", async () => {
@@ -552,15 +557,55 @@ describe("reference room", () => {
     );
   });
 
-  it("jumps to a tier or a resource from the rail without navigating", async () => {
+  it("jumps to a tier or a resource from the rail in place, its address in the bar, with focus on its heading", async () => {
     fake = fakeApi([{ path: "/api/reference", reply: () => reference(groups) }]);
     await mount(renderReference);
     await settle();
+    // Each rail link is a real link to the part it names, so it opens in a new tab as well.
+    expect($$<HTMLAnchorElement>("#apiNav a").map((a) => a.getAttribute("href"))).toEqual([
+      "#/reference/overview",
+      "#/reference/overview-errors",
+      "#/reference/admin",
+      "#/reference/admin-posts",
+      "#/reference/admin-sends",
+      "#/reference/public",
+    ]);
     const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
     $("#apiNav a[data-sec='public']").click();
+    expect(document.activeElement).toBe($("#api-public > h2"));
     $("#apiNav a[data-sec='admin-sends']").click();
     expect(scroll.mock.instances).toEqual([$("#api-public"), $("#api-admin-sends")]);
-    expect(location.hash).toBe("#/reference");
+    expect(document.activeElement).toBe($("#api-admin-sends .api-res-head h3"));
+    expect(location.hash).toBe("#/reference/admin-sends");
+    expect(fake.calls).toHaveLength(1); // the room isn't rendered again
+    // A modified click (a new tab) is left to the browser.
+    const cmd = new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true });
+    $("#apiNav a[data-sec='admin-posts']").dispatchEvent(cmd);
+    expect(cmd.defaultPrevented).toBe(false);
+    expect(scroll).toHaveBeenCalledTimes(2);
+  });
+
+  it("opens at the part of the page its address names, with focus there", async () => {
+    const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
+    fake = fakeApi([{ path: "/api/reference", reply: () => reference(groups) }]);
+    await mount((root, signal) => renderReference(root, signal, "admin-sends"));
+    await settle();
+    expect(scroll.mock.instances).toEqual([$("#api-admin-sends")]);
+    expect(document.activeElement).toBe($("#api-admin-sends .api-res-head h3"));
+    // A tier opens none of its rows.
+    expect($$<HTMLDetailsElement>("#api-admin-sends details").filter((d) => d.open)).toEqual([]);
+    unmount();
+    scroll.mockClear();
+    await mount((root, signal) => renderReference(root, signal, "objects-send"));
+    await settle();
+    expect(scroll.mock.instances).toEqual([$("#api-objects-send")]);
+    expect($<HTMLDetailsElement>("#api-objects-send").open).toBe(true);
+    expect(document.activeElement).toBe($("#api-objects-send > summary"));
+    // A route's address focuses its line.
+    unmount();
+    await mount((root, signal) => renderReference(root, signal, "get-api-posts-id"));
+    await settle();
+    expect(document.activeElement).toBe($("#route-get-api-posts-id summary"));
   });
 
   it("lights the rail for the last tier or resource heading scrolled under the bar, and stops following once the room is left", async () => {
@@ -647,7 +692,7 @@ describe("reference room", () => {
         .filter((li) => !li.hidden)
         .map((li) => `${$(".api-method", li).textContent} ${$(".api-path", li).textContent}`);
 
-    expect(filter.placeholder).toBe("Filter routes by name, method, or path");
+    expect(filter.placeholder).toBe("Filter by name, path, URL, or error code");
     expect($("#apiFilterClear").hidden).toBe(true);
     type("post create");
     expect($("#apiFilterClear").hidden).toBe(false);
@@ -691,6 +736,86 @@ describe("reference room", () => {
     expect(shown()).toHaveLength(5);
     expect($("#apiEmpty").hidden).toBe(true);
     expect(fake.unhandled).toEqual([]);
+  });
+
+  it("finds a route by a refusal code it gives, the object it returns, or a real URL, and a topic by its title", async () => {
+    const findable: ReferenceGroup[] = [
+      {
+        ...groups[0]!,
+        routes: [
+          ...groups[0]!.routes,
+          {
+            method: "POST",
+            path: "/api/posts/:id/schedule",
+            access: "admin",
+            resource: "posts",
+            title: "Schedule a post",
+            summary: "Schedule it.",
+            returns: { object: "send", as: "send" },
+            errors: [{ status: 409, code: "stale_revision" }],
+          },
+          {
+            method: "GET",
+            path: "/api/posts/:id{[a-z0-9]+}/revisions/:rev?",
+            access: "admin",
+            resource: "posts",
+            title: "Read a revision",
+            summary: "One revision.",
+          },
+        ],
+      },
+      groups[1]!,
+    ];
+    fake = fakeApi([{ path: "/api/reference", reply: () => reference(findable) }]);
+    await mount(renderReference);
+    await settle();
+    const filter = $<HTMLInputElement>("#apiFilter");
+    const type = (value: string) => {
+      filter.value = value;
+      filter.dispatchEvent(new Event("input"));
+    };
+    const shown = () =>
+      $$("li[data-hay]")
+        .filter((li) => !li.hidden)
+        .map((li) => li.id);
+    const topics = () =>
+      $$("#api-overview .api-res")
+        .filter((res) => !res.hidden)
+        .map((res) => res.id);
+
+    // A refusal code pasted from a response, though neither path nor summary says it.
+    type("stale_revision");
+    expect(shown()).toEqual(["route-post-api-posts-id-schedule"]);
+    // The object a route returns, by its title.
+    type("send view");
+    expect(shown()).toEqual(["route-post-api-posts-id-schedule"]);
+    // A real URL, the path parameters filled in: only the route it calls, its query dropped.
+    type(`${location.origin}/api/posts/abc123/schedule?x=1`);
+    expect(shown()).toEqual(["route-post-api-posts-id-schedule"]);
+    type("delete /api/posts/abc123");
+    expect(shown()).toEqual([]);
+    type("get /api/posts/abc123");
+    expect(shown()).toEqual(["route-get-api-posts-id"]);
+    type("/api/posts/abc123/revisions/r7/");
+    expect(shown()).toEqual(["route-get-api-posts-id-revisions-rev"]);
+    expect(topics()).toEqual([]);
+    expect($("#api-overview").hidden).toBe(true);
+    // A topic is found by its title, and Errors by any code in its table.
+    type("errors");
+    expect(topics()).toEqual(["api-overview-errors"]);
+    expect(shown()).toEqual([]);
+    expect($("#apiEmpty").hidden).toBe(true);
+    expect($("#apiNav a[data-sec='overview-errors']").hidden).toBe(false);
+    type("window_closed");
+    expect(topics()).toEqual(["api-overview-errors"]);
+    // Nothing found points to Getting started, whose link clears the filter to reach it.
+    type("nothing-matches");
+    expect($("#apiEmpty").hidden).toBe(false);
+    vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
+    $("#apiEmpty a[data-sec='overview']").click();
+    expect(filter.value).toBe("");
+    expect($("#api-overview").hidden).toBe(false);
+    expect(document.activeElement).toBe($("#api-overview > h2"));
   });
 
   it("focuses the filter on / unless the reader is typing elsewhere, and stops listening once the room is left", async () => {

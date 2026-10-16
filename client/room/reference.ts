@@ -103,7 +103,7 @@ function apiReturnsHtml(
     return null;
   }
   const link = r.object
-    ? html`<a href="#/reference" class="api-obj-link" data-sec="objects-${r.object}">${objects.get(r.object) ?? r.object}</a>`
+    ? html`<a href="#/reference/objects-${r.object}" class="api-obj-link" data-sec="objects-${r.object}">${objects.get(r.object) ?? r.object}</a>`
     : null;
   const what = link
     ? r.as
@@ -154,10 +154,25 @@ function objectHeads(ref: ReferenceResponse): Map<string, ReferenceObject[]> {
   }
   return heads;
 }
+/**
+ * What the filter finds a route by: its name, method, path, and summary, the refusal codes it
+ * gives of its own (a code pasted from a response), and the object it returns, by key and title.
+ */
+function routeHay(r: ReferenceEntry, look: Lookups): string {
+  const obj = r.returns?.object;
+  return [
+    r.title,
+    r.method,
+    concretePath(r.path),
+    r.summary,
+    ...(r.errors ?? []).map((e) => e.code),
+    ...(obj ? [obj, look.objects.get(obj) ?? "", r.returns?.as ?? ""] : []),
+  ]
+    .join(" ")
+    .toLowerCase();
+}
 function apiRouteHtml(r: ReferenceEntry, look: Lookups): Html {
-  // What the filter matches: the route's name, the method, the path, and the summary.
-  const hay = `${r.title} ${r.method} ${concretePath(r.path)} ${r.summary}`.toLowerCase();
-  return html`<li data-hay="${hay}" id="route-${routeAnchor(r)}"><details class="api-route">
+  return html`<li data-hay="${routeHay(r, look)}" data-path="${concretePath(r.path).toLowerCase()}" id="route-${routeAnchor(r)}"><details class="api-route">
       <summary class="api-route-sum">
         <span class="api-method m-${r.method}">${r.method}</span>
         <span class="api-route-name"><span class="api-route-title">${r.title}</span><code class="api-path">${apiPathHtml(r.path)}</code></span>
@@ -205,14 +220,14 @@ function apiResourceHtml(g: ReferenceGroup, res: ReferenceResource, look: Lookup
   const routes = routesIn(g, res);
   const objects = look.heads.get(sec) ?? [];
   return html`<div class="api-res" id="api-${sec}" data-sec="${sec}">
-      <div class="api-res-head"><h3>${res.title}</h3></div>
+      <div class="api-res-head"><h3 tabindex="-1">${res.title}</h3></div>
       ${objects.map(apiObjectHtml)}
       <ul class="api-rows">${routes.map((r) => apiRouteHtml(r, look))}</ul>
     </div>`;
 }
 function apiSectionHtml(g: ReferenceGroup, look: Lookups): Html {
   return html`<section class="api-section" id="api-${g.access}" data-tier="${g.access}">
-      <h2>${g.title}</h2>
+      <h2 tabindex="-1">${g.title}</h2>
       <p class="api-blurb muted">${inline(g.blurb)}</p>
       ${g.resources.map((res) => apiResourceHtml(g, res, look))}
     </section>`;
@@ -229,16 +244,19 @@ function apiRefusalsHtml(groups: readonly ReferenceRefusalGroup[]): Html {
   ]);
   return html`<table class="api-query api-refusals"><tbody>${rows}</tbody></table>`;
 }
-// The topics every route shares, before the routes: a static section the route filter hides.
+// The topics every route shares, before the routes. The filter matches a topic as a whole, by
+// its title, and Errors by every refusal code too, so a pasted code no route gives of its own
+// still finds what it means.
 function apiOverviewHtml(ref: ReferenceResponse): Html {
+  const codes = ref.refusals.flatMap((g) => g.codes.map((c) => c.code));
   const concept = (c: ReferenceConcept) =>
-    html`<div class="api-res" id="api-overview-${c.key}" data-sec="overview-${c.key}">
-      <div class="api-res-head"><h3>${c.title}</h3></div>
+    html`<div class="api-res" id="api-overview-${c.key}" data-sec="overview-${c.key}" data-hay="${[c.title, ...(c.key === "errors" ? codes : [])].join(" ").toLowerCase()}">
+      <div class="api-res-head"><h3 tabindex="-1">${c.title}</h3></div>
       ${prose(c.text, "api-prose")}
       ${c.key === "errors" ? apiRefusalsHtml(ref.refusals) : null}
     </div>`;
-  return html`<section class="api-section" id="api-overview" data-tier="overview" data-static>
-      <h2>Getting started</h2>
+  return html`<section class="api-section" id="api-overview" data-tier="overview">
+      <h2 tabindex="-1">Getting started</h2>
       ${ref.concepts.map(concept)}
     </section>`;
 }
@@ -247,46 +265,59 @@ function apiOverviewHtml(ref: ReferenceResponse): Html {
 // for moving.
 function apiNavHtml(ref: ReferenceResponse): Html {
   const part = (sec: string, title: string) =>
-    html`<a href="#/reference" class="api-nav-res" data-sec="${sec}">${title}</a>`;
-  return html`<a href="#/reference" class="api-nav-tier" data-sec="overview" data-tier="overview">Getting started</a>${ref.concepts.map(
+    html`<a href="#/reference/${sec}" class="api-nav-res" data-sec="${sec}">${title}</a>`;
+  return html`<a href="#/reference/overview" class="api-nav-tier" data-sec="overview" data-tier="overview">Getting started</a>${ref.concepts.map(
     (c) => part(`overview-${c.key}`, c.title),
   )}${ref.groups.map(
     (g) =>
-      html`<a href="#/reference" class="api-nav-tier" data-sec="${g.access}" data-tier="${g.access}">${g.title}</a>${
+      html`<a href="#/reference/${g.access}" class="api-nav-tier" data-sec="${g.access}" data-tier="${g.access}">${g.title}</a>${
         g.resources.length > 1
-          ? g.resources.map(
-              (res) =>
-                html`<a href="#/reference" class="api-nav-res" data-sec="${g.access}-${res.key}">${res.title}</a>`,
-            )
+          ? g.resources.map((res) => part(`${g.access}-${res.key}`, res.title))
           : null
       }`,
   )}`;
 }
 
 /**
- * Show only the routes whose name, method, path, or summary contains every word of the query,
- * with the resources, tiers, and rail links that still hold one. An empty query shows
- * everything. The last tier still shown is marked, so it keeps the room to scroll
- * up under the bar that the last tier has.
+ * Whether a typed or pasted address is a call to a route's path: a full URL or a path, any
+ * query or fragment dropped, matching segment for segment, a `:param` segment matching any one.
+ */
+function callsPath(term: string, path: string): boolean {
+  const at = term.replace(/^[a-z]+:\/\/[^/]*/, "").replace(/[?#].*$/, "");
+  if (!at.startsWith("/")) {
+    return false;
+  }
+  const want = at.replace(/(.)\/+$/, "$1").split("/");
+  const have = path.split("/");
+  return (
+    want.length === have.length &&
+    have.every((seg, i) => (seg.startsWith(":") ? want[i] !== "" : seg === want[i]))
+  );
+}
+/** Whether a route row or a topic holds a word of the query: in its hay, or as a call to its path. */
+function holds(el: HTMLElement, word: string): boolean {
+  const path = el.dataset.path;
+  return (el.dataset.hay ?? "").includes(word) || (path !== undefined && callsPath(word, path));
+}
+
+/**
+ * Show only the routes and topics that hold every word of the query (routeHay, callsPath), with
+ * the resources, tiers, and rail links that still hold one. An empty query shows everything.
+ * The last tier still shown is marked, so it keeps the room to scroll up under the bar that the
+ * last tier has.
  */
 function applyFilter(query: string, navEl: HTMLElement, contentEl: HTMLElement): void {
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   let shown = 0;
   for (const sec of $$<HTMLElement>(".api-section", contentEl)) {
-    // What every route shares has no rows to match: shown whole, and out of the way while filtering.
-    if (sec.dataset.static !== undefined) {
-      sec.hidden = terms.length > 0;
-      for (const a of $$<HTMLElement>(`a[data-sec^="${sec.dataset.tier}"]`, navEl)) {
-        a.hidden = sec.hidden;
-      }
-      continue;
-    }
     let inTier = 0;
     for (const res of $$<HTMLElement>(".api-res", sec)) {
+      // A topic matches as a whole; a resource by its routes.
+      const topic = res.dataset.hay !== undefined;
       let inRes = 0;
-      for (const li of $$<HTMLElement>("li[data-hay]", res)) {
-        const hit = terms.every((w) => (li.dataset.hay ?? "").includes(w));
-        li.hidden = !hit;
+      for (const item of topic ? [res] : $$<HTMLElement>("li[data-hay]", res)) {
+        const hit = terms.every((w) => holds(item, w));
+        item.hidden = !hit;
         inRes += hit ? 1 : 0;
       }
       res.hidden = inRes === 0;
@@ -347,8 +378,32 @@ function spyRail(navEl: HTMLElement, contentEl: HTMLElement): void {
 }
 
 /**
- * The API reference room. `anchor` (from `#/reference/<anchor>`) names a route to open and
- * scroll to once the reference is in; one that names none opens the reference at its top.
+ * Bring what an address names into view, and the reader's focus with it, so the keyboard and a
+ * screen reader carry on from there rather than from the link: a route or an object opened with
+ * focus on its line, a tier or a resource with focus on its heading.
+ */
+function reveal(target: HTMLElement): void {
+  const into =
+    target instanceof HTMLDetailsElement
+      ? target
+      : target.matches("li")
+        ? target.querySelector("details")
+        : null;
+  if (into) {
+    into.open = true;
+  }
+  target.scrollIntoView({ block: "start" });
+  const focus = into
+    ? into.querySelector<HTMLElement>(":scope > summary")
+    : target.querySelector<HTMLElement>(":scope > h2, :scope > .api-res-head h3");
+  focus?.focus({ preventScroll: true });
+}
+
+/**
+ * The API reference room. `anchor` (from `#/reference/<anchor>`) names what to bring into view
+ * once the reference is in: a route (`post-api-sends-id-cancel`), opened, or a part of the page
+ * the rail and Returns links name (`admin-sends`, `objects-send`, `overview-errors`). One that
+ * names nothing opens the reference at its top.
  */
 export async function renderReference(
   root: HTMLElement,
@@ -366,25 +421,24 @@ export async function renderReference(
   const navEl = $("#apiNav");
   const contentEl = $("#apiContent");
   // Delegate clicks synchronously with one listener each on the stable nav and page, so they
-  // survive the async fill below: a rail click, or a route's link to an object, jumps there.
+  // survive the async fill below: a rail click, or a route's link to an object, jumps there
+  // in place. Each is a real link to its address, so a modified click (a new tab) is the
+  // browser's, and the address bar follows the jump without a hashchange that would render
+  // the room again.
   const jump = (ev: MouseEvent) => {
     const a = ev.target instanceof Element ? ev.target.closest<HTMLElement>("a[data-sec]") : null;
-    const sec = a?.dataset.sec;
-    if (!sec) {
+    const target = a?.dataset.sec ? document.getElementById(`api-${a.dataset.sec}`) : null;
+    if (!target || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) {
       return;
     }
     ev.preventDefault();
-    const target = document.getElementById(`api-${sec}`);
     // A filter may have hidden what the link points at (a route's object, under another
     // resource): clear it, rather than leave the click to do nothing.
-    if (target?.closest("[hidden]")) {
+    if (target.closest("[hidden]")) {
       filterTo("");
     }
-    // An object is a collapsed line under its resource: a link to it opens it too.
-    if (target instanceof HTMLDetailsElement) {
-      target.open = true;
-    }
-    target?.scrollIntoView({ block: "start" });
+    history.replaceState(history.state, "", a?.getAttribute("href") ?? location.hash);
+    reveal(target);
   };
   navEl.addEventListener("click", jump);
   contentEl.addEventListener("click", jump);
@@ -406,7 +460,7 @@ export async function renderReference(
   setHtml(navEl, apiNavHtml(ref));
   setHtml(
     contentEl,
-    html`<header class="api-head"><h1>API reference</h1><p class="muted">Generated from the route registration, so every endpoint the app and Claude can call is listed here. Base URL <code>${location.origin}</code>.</p><div class="api-filter">${icon("search")}<input type="search" id="apiFilter" placeholder="Filter routes by name, method, or path" autocomplete="off" aria-label="Filter routes" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd><button type="button" class="icon api-filter-clear" id="apiFilterClear" aria-label="Clear filter" hidden>${icon("x")}</button></div></header>${apiOverviewHtml(ref)}${ref.groups.map((g) => apiSectionHtml(g, look))}<p class="api-empty muted" id="apiEmpty" hidden>No routes match. Try a path segment like <code>sends</code> or a method like <code>DELETE</code>.</p>`,
+    html`<header class="api-head"><h1>API reference</h1><p class="muted">Generated from the route registration, so every endpoint the app and Claude can call is listed here. Base URL <code>${location.origin}</code>.</p><div class="api-filter">${icon("search")}<input type="search" id="apiFilter" placeholder="Filter by name, path, URL, or error code" autocomplete="off" aria-label="Filter routes" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd><button type="button" class="icon api-filter-clear" id="apiFilterClear" aria-label="Clear filter" hidden>${icon("x")}</button></div></header>${apiOverviewHtml(ref)}${ref.groups.map((g) => apiSectionHtml(g, look))}<p class="api-empty muted" id="apiEmpty" hidden>Nothing matches. Try a path segment like <code>sends</code>, a method like <code>DELETE</code>, or a code like <code>stale_revision</code>, or start from <a href="#/reference/overview" data-sec="overview">Getting started</a>.</p>`,
   );
   const filterEl = $<HTMLInputElement>("#apiFilter");
   const clearEl = $("#apiFilterClear");
@@ -450,10 +504,11 @@ export async function renderReference(
   // Its own page: start at the top, not wherever the last doc was scrolled to, or at the
   // route the address names, opened.
   window.scrollTo(0, 0);
-  const target = anchor ? document.getElementById(`route-${anchor}`) : null;
+  const target = anchor
+    ? (document.getElementById(`route-${anchor}`) ?? document.getElementById(`api-${anchor}`))
+    : null;
   if (target) {
-    $<HTMLDetailsElement>("details", target).open = true;
-    target.scrollIntoView({ block: "start" });
+    reveal(target);
   }
   spy();
 }
