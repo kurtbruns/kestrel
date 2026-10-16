@@ -1507,8 +1507,7 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     expect(result.events).toHaveLength(0);
   });
 
-  it("rejects a signing cert served from an untrusted host", async () => {
-    allowErrorLogs("webhook.refused");
+  it("rejects a signing cert served from an untrusted host, as a stranger's request, logging no error", async () => {
     const signer = await makeSigner();
     // The message points its SigningCertURL at a non-SNS host.
     signer.certUrl = "https://evil.example.com/cert.pem";

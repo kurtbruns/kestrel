@@ -244,23 +244,39 @@ async function fetchVerifyKey(certUrl: string, hash: "SHA-1" | "SHA-256"): Promi
 }
 
 /**
- * What checking a message's signature found: `valid`; `invalid` for anything that is not
- * SNS's signature over this message (a bad version, an untrusted cert host, a cert that
- * won't parse, or a mismatch); or `unavailable` when SNS's certificate host could not be
- * reached or answered 5xx or 429, which says nothing about the message, so the caller can
- * ask SNS to retry it rather than refuse it for good.
+ * What checking a message's signature found: `valid`; `unsigned` when it does not claim
+ * an SNS signature at all (none, an unknown version, or a cert URL off SNS's host), as a
+ * stray request to a public URL doesn't; `invalid` when it claims one that does not hold
+ * (a cert that won't parse, or a mismatch); or `unavailable` when SNS's certificate host
+ * could not be reached or answered 5xx or 429, which says nothing about the message, so
+ * the caller can ask SNS to retry it rather than refuse it for good.
  */
-export type SnsSignatureCheck = "valid" | "invalid" | "unavailable";
+export type SnsSignatureCheck = "valid" | "unsigned" | "invalid" | "unavailable";
+
+/** Whether a SigningCertURL is https on SNS's own host, the only place a cert is fetched from. */
+function isSnsCertUrl(certUrl: string): boolean {
+  try {
+    const u = new URL(certUrl);
+    return u.protocol === "https:" && isSnsHost(u.hostname);
+  } catch {
+    return false;
+  }
+}
 
 /** Verify an SNS message signature. Never throws; only `valid` may be acted on. */
 export async function verifySnsSignature(msg: SnsEnvelope): Promise<SnsSignatureCheck> {
-  if (!msg.Signature || !msg.SigningCertURL) {
-    return "invalid";
+  if (
+    typeof msg.Signature !== "string" ||
+    !msg.Signature ||
+    typeof msg.SigningCertURL !== "string" ||
+    !isSnsCertUrl(msg.SigningCertURL)
+  ) {
+    return "unsigned";
   }
   const hash =
     msg.SignatureVersion === "2" ? "SHA-256" : msg.SignatureVersion === "1" ? "SHA-1" : null;
   if (!hash) {
-    return "invalid";
+    return "unsigned";
   }
 
   let key: CryptoKey;

@@ -272,7 +272,7 @@ SNS delivers events only to a subscriber that has confirmed. The app confirms on
     | Maximum delay retries | `6` |
     | Retry-backoff function | Exponential |
 
-    SNS then keeps trying for about 40 minutes. It can't retry for longer than an hour, and it never retries an event the app refused. The app refuses only an event that isn't from your topic, and logs each refusal as an error.
+    SNS then keeps trying for most of an hour, the longest it allows. It never retries an event the app refused. The app refuses only an event it can't verify came from your topic, and logs an error when one claims to be from SNS.
 
 1. **(Optional)** Keep what SNS still can't deliver. On the subscription, choose **Edit**, and set a **Redrive policy (dead-letter queue)** to an SQS queue of your own. SNS then moves an event there instead of discarding it, where you can read it later. [Amazon SNS dead-letter queues](https://docs.aws.amazon.com/sns/latest/dg/sns-dead-letter-queues.html) covers the queue and its permissions.
 

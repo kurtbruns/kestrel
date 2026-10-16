@@ -747,9 +747,11 @@ export class SesProvider implements EmailProvider {
     }
 
     // SNS discards for good a message answered 4xx and retries one answered 5xx, so a
-    // refusal here is the last anyone hears of a bounce or complaint SNS really sent: it is
-    // logged at error, naming the topic the message claims and the one expected, and a
-    // failure that says nothing about the message asks SNS to try again instead.
+    // refusal of a message that claims SNS's signature is the last anyone hears of a bounce
+    // or complaint SNS may really have sent: it is logged at error, naming the topic the
+    // message claims and the one expected, and a failure that says nothing about the
+    // message asks SNS to try again instead. A request claiming no signature at all is a
+    // stranger's, refused with only the route's own line, so it can't bury a real refusal.
     const topic = typeof msg.TopicArn === "string" ? msg.TopicArn.slice(0, 256) : null;
     const refuse = (reason: "signature" | "topic", body: string): WebhookResult => {
       log.error("webhook.refused", { provider: "ses", reason, topic, expected: expectedTopic });
@@ -761,6 +763,9 @@ export class SesProvider implements EmailProvider {
     if (signature === "unavailable") {
       log.warn("webhook.cert_unavailable", { provider: "ses", topic });
       return { events: [], response: textResponse("signing certificate unavailable", 503) };
+    }
+    if (signature === "unsigned") {
+      return { events: [], response: textResponse("invalid signature", 403) };
     }
     if (signature !== "valid") {
       return refuse("signature", "invalid signature");
