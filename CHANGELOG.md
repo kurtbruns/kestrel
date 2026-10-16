@@ -10,6 +10,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+## [1.12.0] - 2026-10-16
+
 **Upgrading from 1.11.0.** Five database migrations, which `npm run sync-migrations` brings in: apply them before you deploy with `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development). `0007_sends_progress_at` adds a column recording when each send last handed anyone off, and writes no rows. `0008_notifications_sandbox` rebuilds the small notifications table to admit a new kind, copying its rows once. `0009_post_email_only` adds each post's listing, reading every existing post as listed in the archive, so the archive shows what it did before; it adds a column with a default and rewrites no rows. `0010_unlisted_links` gives every post its unlisted link, and records that every send made before it links its archive address, so those addresses keep answering whatever the post's listing; a send scheduled between the migration and the deploy counts as one made before. It writes each post row once. `0011_sends_render_warnings` adds a column keeping what the render found wrong with each scheduled email, reading every earlier send as having found nothing; it adds a column with a default and rewrites no rows. Run `npm run check-context` in your instance's repository: this release changes the operator's Claude context, and a copy you've edited is merged by hand. An instance verified with an earlier release has its test post in the archive: open it under **Sent** and select **Remove from archive…**. Two API changes can break a script of yours, listed under Breaking: one that reads a send's halt `cause` reads new values, and one that sets a slug by hand handles a 409 `slug_taken` by choosing another, where it used to get a numbered slug.
 
 ### Breaking
@@ -481,7 +483,8 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
-[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.11.0...HEAD
+[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.12.0...HEAD
+[1.12.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.12.0
 [1.11.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.11.0
 [1.10.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.10.0
 [1.9.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.9.0
