@@ -10,9 +10,13 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+**Upgrading from 1.12.0.** Run `npm run check-context` in your instance's repository: this release changes the operator's Claude context, and a copy you've edited is merged by hand.
+
 ### Added
 
 - A scheduled post that no test has been sent for says so on the editor's scheduled banner until the first test lands, and the API carries it as an `untested` condition (`info`) on the send and in the feed, so Claude can tell whether the email was tested (SPEC §8).
+- **Clear** in a subscriber's ⋯ menu lifts a bounce or a complaint, after a dialog that says the address failed or reported spam, and to clear a bounce only when you know its cause is gone and a complaint only when the reader asks for your posts again, which before only the API could do (SPEC §7). It is never offered on an erasure's marker. The list's legend, under What you can do, and the API reference say when to use it, in the same words.
+- The operator's Claude context tells Claude to clear a complaint only when the publisher says the reader asked for their mail again, not merely that the problem is gone, since a complaint was the reader's own act.
 
 ## [1.12.0] - 2026-10-16
 
@@ -26,8 +30,6 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Added
 
 - `GET /api/whoami` names a service token by its Client ID, as `tokenId`, so you can check which token Claude is using, and Resolve's note on a wedged send names the token that resolved it. Each service call is logged as `auth.service`, and an Access sign-in that is neither a person nor a service token as `auth.unidentified` (warn), with the names of the claims it carried and never their values (SPEC §11, §12).
-- **Clear** in a subscriber's ⋯ menu lifts a bounce or a complaint, after a dialog that says the address failed or reported spam, and to clear a bounce only when you know its cause is gone and a complaint only when the reader asks for your posts again, which before only the API could do (SPEC §7). It is never offered on an erasure's marker. The list's legend, under What you can do, and the API reference say when to use it, in the same words.
-- The operator's Claude context tells Claude to clear a complaint only when the publisher says the reader asked for their mail again, not merely that the problem is gone, since a complaint was the reader's own act. `npm run check-context` offers the change to an existing instance.
 - The publisher is emailed, at most once a day and naming no one, when the SES sandbox refuses a signup's confirmation, since the reader was told a link is on its way (SPEC §7, §8).
 - A recent send with no delivery, bounce, or complaint receipt at all an hour after it went out says so, amber, on its record and the dashboard, as `no_receipts` in its conditions: SES's reports are probably not reaching the webhook, so its bounces and complaints suppress no one. Connect Amazon SES now sets a longer SNS retry policy on the topic, and mentions a dead-letter queue as optional (SPEC §8).
 - **Email only**: a post can be sent to subscribers without being listed in the public archive or on the home page, and its archive address answers nothing (SPEC §5). Uncheck **Include in archive** in the editor's new **Post settings**, or in the Schedule, Send now, or Edit schedule dialog, and change it later on a sent post's page (**Remove from archive…**, which takes its archive address down while keeping it the post's, or **Add to archive…**; both ask first). Its page answers at the email's unlisted link and asks search engines not to index it. A draft's head and the Drafts and Sent lists mark it with an envelope and "Email only" in muted text, a scheduled post's banner says where it's going, and a post in the archive carries no mark. The API carries it as `email_only` on posts and sends, on the schedule and Send now bodies, and through `PUT /api/posts/:id/settings`, which also sets the slug; a reschedule still moves only the time. Every post the API answers carries its two addresses, absolute, as `archive_url` and `unlisted_url`, with `published_at` (when its send started) and `archive_live` (whether the archive address shows it now).
