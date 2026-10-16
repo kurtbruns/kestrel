@@ -167,7 +167,7 @@ describe("dev seed — scaled (parametric, DB-backed)", () => {
 
     // The summary is what the seed meant to write; everything below reads back what it did.
     const loaded = await stored();
-    expect(loaded.posts).toEqual({ sent: 4, scheduled: 1, draft: 2 });
+    expect(loaded.posts).toEqual({ sent: 5, scheduled: 1, draft: 2 });
     expect(summary.posts).toEqual(loaded.posts);
     const { suppressed, ...subscribers } = loaded.counts;
     expect(subscribers).toEqual(summary.subscribers);
@@ -180,8 +180,9 @@ describe("dev seed — scaled (parametric, DB-backed)", () => {
     expect(loaded.audience).toBe(loaded.counts.confirmed - suppressed);
     expect(summary.audience).toBe(loaded.audience);
 
+    // The list's four sends, after the operator's one-recipient test send (SPEC §5).
     const sent = (await listSends(env.DB))
-      .filter((s) => s.status === "sent")
+      .filter((s) => s.status === "sent" && s.subject !== "Test email")
       .sort((x, y) => x.fire_at - y.fire_at);
     expect(sent).toHaveLength(4);
     const recipients = sent.map((s) => s.recipient_count);
@@ -193,8 +194,10 @@ describe("dev seed — scaled (parametric, DB-backed)", () => {
       expect(r).not.toBe(loaded.audience);
     }
     // Every recipient count is backed by exactly that many delivery rows on its own send.
-    expect(loaded.sentDeliveries).toEqual(recipients.map((n) => ({ recipients: n, rows: n })));
-    expect(loaded.deliveries).toBe(recipients.reduce((x, y) => x + y, 0));
+    expect(loaded.sentDeliveries).toEqual(
+      [1, ...recipients].map((n) => ({ recipients: n, rows: n })),
+    );
+    expect(loaded.deliveries).toBe(recipients.reduce((x, y) => x + y, 1));
     expect(summary.deliveries).toBe(loaded.deliveries);
 
     // A re-seed starts from empty: rows the first load never wrote don't survive it, and the

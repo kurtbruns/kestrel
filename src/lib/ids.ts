@@ -21,6 +21,13 @@ export function newToken(bytes = 32): string {
  * thousands of subscribers in one request. `getRandomValues` fills at most 65,536 bytes a
  * call, so a larger draw is taken in parts.
  */
+/** A post's unlisted-link token (SPEC §5): 128 random bits as 32 hex digits in four groups of
+ *  eight joined by hyphens, so a reader can keep their place in it. The migration's trigger makes
+ *  the same shape for a post inserted without one. */
+export function newUnlistedToken(): string {
+  return newToken(16).replace(/(.{8})(?=.)/g, "$1-");
+}
+
 export function newTokens(n: number, bytes = 32): string[] {
   const buf = new Uint8Array(n * bytes);
   for (let at = 0; at < buf.length; at += 65_536) {

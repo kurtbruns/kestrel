@@ -17,7 +17,9 @@ const config = () => getConfig(env);
 // regression is obvious.
 const CONFIRMED = 157;
 const PENDING = 3;
-const UNSUBSCRIBED = 15;
+// Fifteen readers who left, and the operator's own test address, unsubscribed after the test
+// send as Verify it works has them do.
+const UNSUBSCRIBED = 16;
 // A bounce and a complaint on confirmed subscribers, plus a suppression on each other consent
 // state (an unsubscribed and a pending address blocked by hand, and an erased person who
 // subscribed again), which shadow no one.
@@ -25,7 +27,15 @@ const SUPPRESSED_CONFIRMED = 2;
 const SUPPRESSED = 5;
 const AUDIENCE_NOW = CONFIRMED - SUPPRESSED_CONFIRMED; // 155
 const SENT_RECIPIENTS = [140, 141, 142, 148]; // oldest → newest
-const TOTAL_DELIVERIES = SENT_RECIPIENTS.reduce((a, b) => a + b, 0); // 571
+// Before them, the operator's email-only test send, to their own second address (SPEC §5).
+const TEST_SUBJECT = "Test email";
+const TOTAL_DELIVERIES = SENT_RECIPIENTS.reduce((a, b) => a + b, 1); // 572
+
+/** The sends on the list's timeline, oldest first: every sent send but the test send. */
+const timelineSends = async () =>
+  (await listSends(env.DB))
+    .filter((s) => s.status === "sent" && s.subject !== TEST_SUBJECT)
+    .sort((a, b) => a.fire_at - b.fire_at);
 
 /** Delivery rows for one send (email + any post-send event) — proves the record is real
  *  rows, not a summary count. */
@@ -72,7 +82,7 @@ describe("dev seed (Field Notes dataset)", () => {
     });
     expect(summary.suppressions).toBe(SUPPRESSED);
     expect(summary.audience).toBe(AUDIENCE_NOW); // confirmed − suppressed (SPEC §7)
-    expect(summary.posts).toEqual({ sent: 4, scheduled: 1, draft: 2 });
+    expect(summary.posts).toEqual({ sent: 5, scheduled: 1, draft: 2 });
     expect(summary.deliveries).toBe(TOTAL_DELIVERIES);
 
     const c = await counts(env.DB);
@@ -87,7 +97,7 @@ describe("dev seed (Field Notes dataset)", () => {
     expect(audience).toHaveLength(AUDIENCE_NOW);
 
     const sends = await listSends(env.DB);
-    expect(sends.filter((s) => s.status === "sent")).toHaveLength(4);
+    expect(sends.filter((s) => s.status === "sent")).toHaveLength(5);
     expect(sends.filter((s) => s.status === "scheduled")).toHaveLength(1);
     // The scheduled post fires in the future — a visible, cancelable window (I6) — and
     // targets today's list, distinct from the frozen historical audiences below.
@@ -133,9 +143,7 @@ describe("dev seed (Field Notes dataset)", () => {
   it("freezes each send's audience as it was AT THAT MOMENT, not the final list", async () => {
     await seedDatabase(env, config());
 
-    const sent = (await listSends(env.DB))
-      .filter((s) => s.status === "sent")
-      .sort((a, b) => a.fire_at - b.fire_at); // chronological
+    const sent = await timelineSends(); // chronological
 
     // The audience grew and churned between sends, so the recipient counts differ from
     // each other and from today's mailable list.
@@ -217,8 +225,50 @@ describe("dev seed (Field Notes dataset)", () => {
     const body = await res.text();
     expect(body).toContain("The hovering hunter");
     // The cover image resolves to the R2-served media URL (bytes land via the route).
-    expect(body).toContain("/media/posts/5eed0001-0000-4000-8000-000000000001/kestrel.webp");
+    expect(body).toContain("/media/posts/5eed0002-0000-4000-8000-000000000002/kestrel.webp");
     expect(body).not.toContain("%%UNSUBSCRIBE_URL%%");
+  });
+
+  it("starts with the operator's email-only test send: to their own address alone, before the list came in, and in no public list (SPEC §5)", async () => {
+    await seedDatabase(env, config());
+    const sends = (await listSends(env.DB)).sort((a, b) => a.fire_at - b.fire_at);
+    const test = sends[0]!;
+    expect(test.subject).toBe(TEST_SUBJECT);
+    expect(test.status).toBe("sent");
+    expect(test.recipient_count).toBe(1);
+    expect((await deliveriesFor(test.id)).map((r) => r.email)).toEqual([
+      "proof@fieldnotes.example",
+    ]);
+    const post = await env.DB.prepare("SELECT email_only FROM posts WHERE id = ?")
+      .bind(test.post_id)
+      .first<{ email_only: number }>();
+    expect(post?.email_only).toBe(1);
+    // Every other post is listed, as a publication's are.
+    const listed = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM posts WHERE email_only = 0",
+    ).first<{ n: number }>();
+    expect(listed?.n).toBe(7);
+    // The test address joined and left around the test, so it is in no later audience.
+    const proof = await env.DB.prepare(
+      "SELECT status, confirmed_at, unsubscribed_at FROM subscribers WHERE email = ?",
+    )
+      .bind("proof@fieldnotes.example")
+      .first<{ status: string; confirmed_at: number; unsubscribed_at: number }>();
+    expect(proof?.status).toBe("unsubscribed");
+    expect(proof!.confirmed_at).toBeLessThan(test.fire_at);
+    expect(proof!.unsubscribed_at).toBeLessThan(sends[1]!.fire_at);
+    // Its page answers at the email's unlisted link, unindexed; it never had an archive
+    // address, and the lists leave it out.
+    const token = await env.DB.prepare("SELECT unlisted_token FROM posts WHERE id = ?")
+      .bind(test.post_id)
+      .first<string>("unlisted_token");
+    const page = await SELF.fetch(`${base}/email/${token}`);
+    expect(page.status).toBe(200);
+    expect(page.headers.get("x-robots-tag")).toBe("noindex");
+    expect((await SELF.fetch(`${base}/archive/test-email`)).status).toBe(404);
+    for (const path of ["/archive", "/"]) {
+      expect(await (await SELF.fetch(`${base}${path}`)).text(), path).not.toContain(TEST_SUBJECT);
+    }
   });
 
   it("keeps drafts and the scheduled post out of the public archive", async () => {
@@ -232,7 +282,7 @@ describe("dev seed (Field Notes dataset)", () => {
   it("is idempotent — re-seeding resets and reloads to the same counts", async () => {
     await seedDatabase(env, config());
     const summary = await seedDatabase(env, config());
-    expect(summary.posts).toEqual({ sent: 4, scheduled: 1, draft: 2 });
+    expect(summary.posts).toEqual({ sent: 5, scheduled: 1, draft: 2 });
     expect(summary.deliveries).toBe(TOTAL_DELIVERIES);
     const c = await counts(env.DB);
     expect(c).toEqual({

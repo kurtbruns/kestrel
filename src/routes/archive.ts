@@ -1,7 +1,7 @@
 /**
  * Public reader pages: the landing page at `/` (§5 front door — identity + a
  * subscribe CTA, never a bounce to admin), the archive index at the archive base
- * path (every published post), and each post page — a started Send's frozen rendered_html,
+ * path (every published post listed in the archive), and each post page — a started Send's frozen rendered_html,
  * the reviewed, delivered copy (I3), with edits that leave the content untouched and
  * only fill reserved anchors: the per-recipient unsubscribe sentinel becomes a generic
  * manage-subscription link (a public page has no single recipient), the inert
@@ -9,9 +9,10 @@
  * that never ships in an email, and the template's email-only regions are left out.
  */
 
-import { getBySlug } from "../db/posts";
-import { listPublishedPosts, publishedSendForPost } from "../db/sends";
+import { getBySlug, getByUnlistedToken, type PostRow } from "../db/posts";
+import { listPublishedPosts, publishedSendForPost, type SendRow } from "../db/sends";
 import type { Config } from "../env";
+import { archiveAnswers } from "../lib/archive_address";
 import {
   ARCHIVE_POST_HEAD,
   archiveDevDashboardChrome,
@@ -69,8 +70,8 @@ export async function landing(c: RequestContext): Promise<Response> {
   });
 }
 
-/** The full public archive index: every published post (its send has started), newest
- *  first, linking to their permanent (canonical) archive URLs — the same address emails carry. */
+/** The full public archive index: every published post (its send has started) listed in the
+ *  archive, an email-only post left out (SPEC §5), newest first, linking to their permanent (canonical) archive URLs — the same address emails carry. */
 export async function archiveIndex(c: RequestContext): Promise<Response> {
   const [posts, identity] = await Promise.all([
     listPublishedPosts(c.env.DB),
@@ -139,16 +140,10 @@ export function nothingHereYetPage(c: RequestContext): Promise<Response> {
   });
 }
 
-export async function archivePage(c: RequestContext): Promise<Response> {
-  const slug = param(c, "slug");
-  const post = await getBySlug(c.env.DB, slug);
-  const send = post ? await publishedSendForPost(c.env.DB, post.id) : null;
-  if (!post || !send) {
-    // One page for every address with no published post, a draft, a scheduled post, or
-    // none at all, so it never reveals that a post is on its way. A test email's "view
-    // in browser" link lands here until the send starts.
-    return nothingHereYetPage(c);
-  }
+/** A published post's page, from its send's frozen copy (`webVersion`). `noindex` for an
+ *  email-only post: anyone with its link can open it, but no list or search engine is
+ *  offered it (SPEC §5). A header, not a meta tag, so the frozen copy is served unchanged (I3). */
+async function postPage(c: RequestContext, post: PostRow, send: SendRow): Promise<Response> {
   const html = webVersion(send.rendered_html, {
     config: c.config,
     identity: await readerIdentity(c, c.config),
@@ -159,7 +154,58 @@ export async function archivePage(c: RequestContext): Promise<Response> {
     headers: {
       ...POST_PAGE_SECURITY_HEADERS,
       "content-type": "text/html; charset=utf-8",
-      "cache-control": "public, max-age=3600",
+      // Checked with the app on every view, since the listing can change at any time: a page
+      // taken out of the archive must stop answering at once, and an unlisted link must start
+      // forwarding once its post is added (SPEC §5).
+      "cache-control": "no-cache",
+      ...(post.email_only ? { "x-robots-tag": "noindex" } : {}),
     },
   });
+}
+
+/**
+ * A post's archive address. It answers only for a published post whose address it is and
+ * while the post is listed (`archiveAnswers`); an email-only post's address answers "Nothing
+ * here yet" though it stays the post's, unless its email carries this address, as one sent
+ * before unlisted links does.
+ */
+export async function archivePage(c: RequestContext): Promise<Response> {
+  const post = await getBySlug(c.env.DB, param(c, "slug"));
+  const send = post ? await publishedSendForPost(c.env.DB, post.id) : null;
+  if (!post || !send || !archiveAnswers({ emailOnly: post.email_only, webLink: send.web_link })) {
+    // One page for every address with no published post, a draft, a scheduled post, an
+    // email-only one, or none at all, so it never reveals that a post is on its way or was
+    // taken down.
+    return nothingHereYetPage(c);
+  }
+  return postPage(c, post, send);
+}
+
+/**
+ * A post's unlisted link, the "view in browser" every email of it carries (SPEC §5). Before
+ * the post's send starts it answers "Nothing here yet", as any unknown token does. Once it
+ * has, a listed post's link forwards to its archive address, temporarily since the listing
+ * can change, and an email-only post's link is its page.
+ */
+export async function unlistedPage(c: RequestContext): Promise<Response> {
+  const post = await getByUnlistedToken(c.env.DB, param(c, "token"));
+  const send = post ? await publishedSendForPost(c.env.DB, post.id) : null;
+  if (!post || !send) {
+    return nothingHereYetPage(c);
+  }
+  // Mail clients' link scanners fetch this on delivery, so the request only reads. The target
+  // is the post's own archive address, never anything the request names, so the link can't be
+  // used as an open redirect. Not cached, so a listing change takes effect at once, and not
+  // indexed, as the unlisted link itself never is.
+  if (!post.email_only) {
+    return new Response(null, {
+      status: 302,
+      headers: {
+        location: archiveUrl(c.config, post.slug),
+        "cache-control": "no-store",
+        "x-robots-tag": "noindex",
+      },
+    });
+  }
+  return postPage(c, post, send);
 }

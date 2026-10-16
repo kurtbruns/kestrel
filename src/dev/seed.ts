@@ -5,7 +5,8 @@
  * headings, emphasis, both kinds of list, links).
  *
  * It models a chronological lifecycle so the app's states are actually exercised:
- * an initial import of already-confirmed subscribers backdated before the first post,
+ * an email-only test send to the operator's own address before anything else (as Verify it
+ * works has them send, SPEC §5), then an initial import of already-confirmed subscribers backdated before the first post,
  * four completed sends spread over time, and — in between — new confirmations (the
  * list grows) and unsubscribes (the list churns), plus a hard bounce and a spam
  * complaint that become suppressions, and a suppression on each other consent state.
@@ -46,7 +47,7 @@ import { recomputeSendCounters } from "../db/sends";
 import { getSettings, newLogoKey, setPublicationLogo, updateSettings } from "../db/settings";
 import { audienceEmails } from "../db/subscribers";
 import type { AppEnv, Config } from "../env";
-import { newId, newToken } from "../lib/ids";
+import { newId, newToken, newUnlistedToken } from "../lib/ids";
 import { probeImageDimensions } from "../lib/image_dims";
 import { DEFAULT_SEED, makePrng } from "../lib/prng";
 import { unwrap } from "../lib/unwrap";
@@ -82,6 +83,8 @@ function demoPostId(position: number): string {
  *  complaint just after), it grows again, then posts #3 and #4 go out. */
 interface Timeline {
   now: number;
+  /** The operator's test send, before the list is imported (Verify it works). */
+  testSendAt: number;
   importAt: number;
   bounceAt: number; // hard bounce reported just after #2
   complaintAt: number; // spam complaint reported just after #2
@@ -98,9 +101,11 @@ export function buildTimeline(now: number): Timeline {
   // issue two days out, a week after it. The list was imported just before the first.
   const first = now - 26 * DAY;
   const send2At = first + WEEK;
+  const importAt = first - 12 * DAY;
   return {
     now,
-    importAt: first - 12 * DAY,
+    testSendAt: importAt - 2 * DAY,
+    importAt,
     bounceAt: send2At + DAY,
     complaintAt: send2At + 2 * DAY,
     scheduledFireAt: onTheMinute(now + 2 * DAY), // on the minute, as the API stores a fire time
@@ -833,6 +838,26 @@ function buildDeliveries(
   });
 }
 
+/**
+ * The operator's own test addresses, as Verify it works has them: subscribed and confirmed
+ * just before the test send, and unsubscribed with the mail client's button just after it, so
+ * they are in no later send's audience and the list's story is unchanged.
+ */
+function testRecipients(posts: DemoPost[], t: Timeline): SeedSubscriber[] {
+  const emails = [...new Set(posts.flatMap((p) => p.sentTo ?? []))];
+  return emails.map((email) => ({
+    id: newId(),
+    email,
+    status: "unsubscribed",
+    confirm_token: newToken(),
+    confirm_sent_at: t.testSendAt - HOUR,
+    unsub_token: newToken(),
+    created_at: t.testSendAt - HOUR,
+    confirmed_at: t.testSendAt - 50 * 60 * 1000,
+    unsubscribed_at: t.testSendAt + 2 * HOUR,
+  }));
+}
+
 // --- render helpers ---------------------------------------------------------
 
 function renderInputFor(
@@ -846,8 +871,11 @@ function renderInputFor(
     slug: demoPost.slug,
     // A demo slug that is just its subject's reads as following it, as a new post's would.
     slug_auto: demoPost.slug === slugify(demoPost.subject),
+    // Made here rather than by the database, since the render below carries it.
+    unlisted_token: newUnlistedToken(),
     subject: demoPost.subject,
     status: demoPost.status,
+    email_only: demoPost.emailOnly ?? false,
     current_revision: `${id}-rev`,
     created_at: at,
     updated_at: at,
@@ -896,7 +924,8 @@ export async function seedDatabase(
   const now = Date.now();
   const timeline = buildTimeline(now);
   const demo = loadDemo();
-  const sentPosts = demo.posts.filter((p) => p.status === "sent").length;
+  // A test send (`sent_to`) goes out before the timeline's sends, so it takes no slot.
+  const sentPosts = demo.posts.filter((p) => p.status === "sent" && !p.sentTo).length;
   if (sentPosts > timeline.sentAt.length) {
     throw new Error(
       `demo/posts has ${sentPosts} sent posts, but the seed timeline has ${timeline.sentAt.length} sends`,
@@ -943,6 +972,7 @@ export async function seedDatabase(
   const size = options?.size;
   const rand = makePrng(options?.seed ?? DEFAULT_SEED);
   const built = size != null ? buildScaledAudience(timeline, size, rand) : buildAudience(timeline);
+  built.subscribers.push(...testRecipients(demo.posts, timeline));
   await insertSubscribers(db, built.subscribers);
   await insertSuppressions(db, built.suppressions);
 
@@ -1033,6 +1063,38 @@ export async function seedDatabase(
       continue;
     }
 
+    // A test send: to the operator's own addresses alone, before the list came in.
+    if (demoPost.sentTo) {
+      const sentAt = timeline.testSendAt;
+      const fireAt = onTheMinute(sentAt) - 60 * 1000;
+      const { post, revision } = renderInputFor(id, demoPost, sentAt, markdown);
+      const result = await render({ post, revision, images }, config, branding);
+      await insertPostWithImages(post, revision);
+      const sendId = newId();
+      await insertSend(db, {
+        id: sendId,
+        post_id: id,
+        status: "sent",
+        fire_at: fireAt,
+        rendered_html: result.html,
+        rendered_text: result.text,
+        subject: result.subject,
+        recipient_count: demoPost.sentTo.length,
+        scheduled_at: fireAt - 6 * 60 * 1000, // Send now: the minimum lead, then the minute
+        started_at: fireAt,
+        completed_at: sentAt,
+      });
+      const deliveries = buildDeliveries(sendId, demoPost.sentTo, sentAt, new Map(), new Set());
+      await insertDeliveries(db, deliveries);
+      await recomputeSendCounters(db, sendId);
+      counts.sent++;
+      counts.deliveries += deliveries.length;
+      if (!demoPost.emailOnly) {
+        archiveUrls.push(`${config.archiveOrigin}${config.archiveBasePath}/${demoPost.slug}`);
+      }
+      continue;
+    }
+
     // sent — its send time and frozen audience come from its timeline slot, so the
     // recipient count and delivery rows reflect the list AS IT WAS then (not today).
     const completedAt = unwrap(timeline.sentAt[sentIndex], "send timeline slot");
@@ -1070,7 +1132,9 @@ export async function seedDatabase(
     await recomputeSendCounters(db, sendId);
     counts.sent++;
     counts.deliveries += deliveries.length;
-    archiveUrls.push(`${config.archiveOrigin}${config.archiveBasePath}/${demoPost.slug}`);
+    if (!demoPost.emailOnly) {
+      archiveUrls.push(`${config.archiveOrigin}${config.archiveBasePath}/${demoPost.slug}`);
+    }
     sentIndex++;
   }
 

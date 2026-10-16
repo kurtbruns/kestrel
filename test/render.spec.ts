@@ -42,8 +42,10 @@ function post(over: Partial<PostRow> = {}): PostRow {
     id: "p1",
     slug: "weekly-news",
     slug_auto: false,
+    unlisted_token: "01234567-89abcdef-01234567-89abcdef",
     subject: "This week in cats",
     status: "draft",
+    email_only: false,
     current_revision: "r1",
     created_at: 0,
     updated_at: 0,
@@ -161,6 +163,16 @@ describe("render (the single render path)", async () => {
     expect(result.html).not.toContain("javascript:");
   });
 
+  it("links every email's web version through the post's unlisted link on the app's origin, never its archive address (SPEC §5)", async () => {
+    const result = await render(
+      { post: post({ slug: "weekly-news" }), revision: revision("body"), images: [] },
+      config,
+    );
+    const link = "https://app.example/email/01234567-89abcdef-01234567-89abcdef";
+    expect(result.text).toContain(`View in browser: ${link}`);
+    expect(result.html).not.toContain("weekly-news");
+  });
+
   it("produces a text part with links and the unsubscribe sentinel", async () => {
     const result = await render(
       { post: post(), revision: revision("Read [here](https://x.com) now"), images: [] },
@@ -168,7 +180,9 @@ describe("render (the single render path)", async () => {
     );
     expect(result.text).toContain("here (https://x.com)");
     expect(result.text).toContain(`Unsubscribe: ${UNSUB_SENTINEL}`);
-    expect(result.text).toContain("View in browser: https://arc.example/archive/weekly-news");
+    expect(result.text).toContain(
+      "View in browser: https://app.example/email/01234567-89abcdef-01234567-89abcdef",
+    );
   });
 
   it("ends the text part's footer with the mailing address only when one is set (SPEC §9)", async () => {
@@ -178,7 +192,7 @@ describe("render (the single render path)", async () => {
       "",
       "—",
       "Powered by Kestrel",
-      "View in browser: https://arc.example/archive/weekly-news",
+      "View in browser: https://app.example/email/01234567-89abcdef-01234567-89abcdef",
       `Unsubscribe: ${UNSUB_SENTINEL}`,
     ];
     const blank = await render(input, config);
@@ -302,7 +316,7 @@ describe("render (the single render path)", async () => {
     expect(result.html).toContain("Field Notes");
     expect(result.html).toContain(UNSUB_SENTINEL);
     // The view-in-browser variable is filled with the archive URL.
-    expect(result.html).toContain("https://arc.example/archive/weekly-news");
+    expect(result.html).toContain("https://app.example/email/01234567-89abcdef-01234567-89abcdef");
     expect(result.warnings).toEqual([]);
   });
 

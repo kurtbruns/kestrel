@@ -79,11 +79,33 @@ describe("posts + revisions", () => {
     expect(r1.markdown).toBe("v1");
   });
 
-  it("deduplicates slugs", async () => {
+  it("gives each post its own slug, drafts included, numbering a following slug another post holds (SPEC §4)", async () => {
     const a = await readJson(await createPost({ subject: "Dup Title" }));
     const b = await readJson(await createPost({ subject: "Dup Title" }));
-    expect(a.post.slug).toBe("dup-title");
-    expect(b.post.slug).toBe("dup-title-2");
+    expect([a.post.slug, b.post.slug]).toEqual(["dup-title", "dup-title-2"]);
+    // The second says why its address isn't the subject's.
+    expect([a.slug_taken, b.slug_taken]).toEqual([null, "dup-title"]);
+  });
+
+  it("numbers a following slug when another post holds the subject's slug, and keeps that number on later saves", async () => {
+    await createPost({ subject: "Spring update" });
+    const created = await readJson(await createPost({ subject: "" }));
+    expect(created.post.slug).toMatch(/^post(-\d+)?$/);
+    const saved = await save(created.post.id, {
+      subject: "Spring update",
+      base_revision: created.revision_id,
+    });
+    expect(saved.post).toMatchObject({ slug: "spring-update-2", slug_auto: true });
+    expect(saved.slug_taken).toBe("spring-update");
+
+    // A third post takes -3 and leaves the second alone, and another save doesn't move the second.
+    const third = await readJson(await createPost({ subject: "Spring update" }));
+    expect(third.post.slug).toBe("spring-update-3");
+    const again = await save(created.post.id, {
+      markdown: "more",
+      base_revision: saved.post.current_revision,
+    });
+    expect(again.post.slug).toBe("spring-update-2");
   });
 
   it("has a slug follow the subject until one is set by hand", async () => {
@@ -123,27 +145,28 @@ describe("posts + revisions", () => {
     expect(post.slug_auto).toBe(false);
   });
 
-  it("drops a following slug's suffix on the next save once the plain slug is free", async () => {
-    const first = await readJson(await createPost({ subject: "Two Directions" }));
-    const second = await readJson(await createPost({ subject: "Two Directions" }));
-    expect(second.post.slug).toBe("two-directions-2");
-
-    const resaved = await save(second.post.id, {
-      markdown: "y",
-      base_revision: second.revision_id,
-    });
-    expect(resaved.post.slug).toBe("two-directions-2"); // still taken: the dedupe holds
-
-    const del = await SELF.fetch(`${base}/api/posts/${first.post.id}`, {
-      method: "DELETE",
-      headers: AUTH,
-    });
-    expect(del.status).toBe(200);
-    const freed = await save(second.post.id, {
-      markdown: "z",
-      base_revision: resaved.post.current_revision,
-    });
-    expect(freed.post.slug).toBe("two-directions");
+  it("refuses a slug set by hand that is malformed or another post's, and saves nothing (SPEC §4)", async () => {
+    await createPost({ subject: "Taken" });
+    const created = await readJson(await createPost({ subject: "Mine", markdown: "v1" }));
+    const attempt = (slug: string) =>
+      SELF.fetch(`${base}/api/posts/${created.post.id}`, {
+        method: "PUT",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ slug, markdown: "v2", base_revision: created.revision_id }),
+      });
+    for (const [slug, status, error] of [
+      ["Has Spaces", 400, "slug_invalid"],
+      ["trailing-", 400, "slug_invalid"],
+      ["taken", 409, "slug_taken"],
+    ] as const) {
+      const res = await attempt(slug);
+      expect(res.status, slug).toBe(status);
+      expect(await res.json(), slug).toMatchObject({ error, field: "slug" });
+    }
+    const read = await readJson(
+      await SELF.fetch(`${base}/api/posts/${created.post.id}`, { headers: AUTH }),
+    );
+    expect(read.post).toMatchObject({ slug: "mine", current_revision: created.revision_id });
   });
 
   it("lists each post's slug mode as true or false (SPEC §4)", async () => {

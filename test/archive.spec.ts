@@ -26,7 +26,7 @@ import {
 import { readerIdentity } from "../src/routes/reader";
 import { cancel, freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
-import { dueSend, resetDatabase, seedConfirmed } from "./support/fixtures";
+import { dueSend, resetDatabase, seedConfirmed, setRow } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH } from "./support/http";
 import { fetchWith } from "./support/worker_env";
 
@@ -351,9 +351,7 @@ describe("a post is published when its send starts (§5)", () => {
 
   it("serves a send still going out at its archive URL, in the index and on the landing page, dated by its start", async () => {
     const { post, sendId } = await frozenPost("Going Out");
-    await env.DB.prepare("UPDATE sends SET status = 'sending', started_at = ? WHERE id = ?")
-      .bind(JAN_5, sendId)
-      .run();
+    await setRow(sendId, { status: "sending", started_at: JAN_5 });
     const send = (await env.DB.prepare("SELECT rendered_html FROM sends WHERE id = ?")
       .bind(sendId)
       .first<{ rendered_html: string }>())!;
@@ -376,11 +374,7 @@ describe("a post is published when its send starts (§5)", () => {
 
   it("dates a finished send by when it started, not when it completed", async () => {
     const { post, sendId } = await frozenPost("Long Send");
-    await env.DB.prepare(
-      "UPDATE sends SET status = 'sent', started_at = ?, completed_at = ? WHERE id = ?",
-    )
-      .bind(JAN_5, JAN_7, sendId)
-      .run();
+    await setRow(sendId, { status: "sent", started_at: JAN_5, completed_at: JAN_7 });
     const r = await reader();
     const body = await (await r.page(post.slug)).text();
     for (const html of [body, r.index, r.landing]) {
@@ -831,7 +825,7 @@ describe("a test email's unsubscribe link", () => {
     const sent = fakeOutbox().find((m) => m.to === "me@example.com")!;
     const hrefs = [...sent.html.matchAll(/href="([^"]+)"/g)].map((m) => new URL(m[1]!));
     const unsub = hrefs.find((u) => u.pathname === "/unsubscribe");
-    const view = hrefs.find((u) => u.pathname === `/archive/${post.slug}`);
+    const view = hrefs.find((u) => u.pathname === `/email/${post.unlisted_token}`);
     expect(unsub).toBeTruthy();
     expect(view).toBeTruthy();
     const unsubPath = `${unsub!.pathname}${unsub!.search}`;

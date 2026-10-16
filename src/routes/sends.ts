@@ -12,7 +12,7 @@ import {
   type SendResponse,
   type SendView,
 } from "../../shared/sends";
-import { getPost } from "../db/posts";
+import { getPost, isSlugCollision, setPublishing } from "../db/posts";
 import * as sends from "../db/sends";
 import { oneOf, readJsonObject } from "../lib/body";
 import { badRequest, HttpError, json, notFound } from "../lib/errors";
@@ -27,6 +27,7 @@ import { feedPace, readAgainAt, SETTLE_FOLLOW_MS } from "../send/feed";
 import { resolveStuckSend } from "../send/resolve";
 import { cancel as cancelSend, reschedule as rescheduleSend } from "../send/schedule";
 import { buildSendView } from "../send/view";
+import { readSettingsBody, resolveSettings, slugRefusal } from "./post_settings";
 import { parseFireAt } from "./schedule";
 
 /** The `GET /api/sends` filters: each a value from its set, or absent; anything else is a 400
@@ -359,8 +360,27 @@ export async function cancel(c: RequestContext): Promise<Response> {
 export async function reschedule(c: RequestContext): Promise<Response> {
   const body = await readJsonObject(c);
   const fireAt = parseFireAt(body.fire_at);
+  const fields = readSettingsBody(body);
   const id = param(c, "id");
-  const { changed } = await rescheduleSend(c.env, id, fireAt, c.config.minLeadMs);
+  // A slug is checked before the move, so a refused one moves nothing; the settings then
+  // change only once the move is accepted, so a refused move changes nothing either. None is
+  // part of the frozen copy (SPEC §4, §5, §6).
+  const send = await sends.getSend(c.env.DB, id);
+  const post = send ? await getPost(c.env.DB, send.post_id) : null;
+  const settings = post ? await resolveSettings(c.env.DB, post, fields, false) : {};
+  const moved = await rescheduleSend(c.env, id, fireAt, c.config.minLeadMs);
+  let listed = false;
+  if (post) {
+    try {
+      listed = await setPublishing(c.env.DB, post, settings);
+    } catch (err) {
+      if (isSlugCollision(err)) {
+        throw slugRefusal("slug_taken");
+      }
+      throw err;
+    }
+  }
+  const changed = moved.changed || listed;
   const response: SendActionResponse = { ...(await answerWith(c, id)), changed };
   return json(response);
 }

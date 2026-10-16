@@ -363,3 +363,27 @@ describe("schema (0001_init)", () => {
     });
   });
 });
+
+describe("schema (0008_unlisted_links)", () => {
+  const insert = (id: string, slug: string) =>
+    env.DB.prepare("INSERT INTO posts (id, slug, created_at, updated_at) VALUES (?, ?, 0, 0)")
+      .bind(id, slug)
+      .run();
+
+  it("gives every post its own 128-bit unlisted token, however it is inserted (SPEC §5)", async () => {
+    await insert("a", "one");
+    await insert("b", "two");
+    const { results } = await env.DB.prepare("SELECT unlisted_token FROM posts ORDER BY id").all<{
+      unlisted_token: string;
+    }>();
+    const [a, b] = results.map((r) => r.unlisted_token);
+    expect(a).toMatch(/^[0-9a-f]{8}(-[0-9a-f]{8}){3}$/);
+    expect(b).toMatch(/^[0-9a-f]{8}(-[0-9a-f]{8}){3}$/);
+    expect(a).not.toBe(b);
+  });
+
+  it("keeps every post's slug its own, drafts included (SPEC §4)", async () => {
+    await insert("a", "spring");
+    await expect(insert("b", "spring")).rejects.toThrow(/UNIQUE constraint failed/);
+  });
+});

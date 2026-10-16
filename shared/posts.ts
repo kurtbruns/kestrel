@@ -8,14 +8,30 @@ export type PostStatus = "draft" | "scheduled" | "sent";
 
 export interface Post {
   id: string;
+  /**
+   * The post's archive address, `<archive origin><base path>/<slug>` (SPEC §4): unique among
+   * all posts, drafts included, and fixed once the post's send starts.
+   */
   slug: string;
   /**
-   * Whether the slug follows the subject: derived from it again, and numbered afresh, on
-   * every draft save. False once a slug is set by hand.
+   * Whether the slug follows the subject: derived from it again on every draft save, unless
+   * another post holds that slug (`slug_taken`). False once a slug is set by hand.
    */
   slug_auto: boolean;
+  /**
+   * The post's unlisted link is `<app origin>/email/<unlisted_token>` (SPEC §5): made with the
+   * post, never changed, and carried as "view in browser" by every test and send.
+   */
+  unlisted_token: string;
   subject: string;
   status: PostStatus;
+  /**
+   * The post's listing (SPEC §5): true when it is email only, mailed as usual but left out of
+   * the archive index and the landing page, its archive address answering nothing; false,
+   * the default, when it is listed in the archive. Not part of the frozen render, so it can
+   * change in any state, a sent post's included (`PUT /api/posts/:id/listing`).
+   */
+  email_only: boolean;
   /** The current revision's id; the editor carries it on every save (optimistic concurrency). */
   current_revision: string | null;
   created_at: number;
@@ -47,9 +63,17 @@ export interface PostListResponse {
   cursor: string;
 }
 
+/**
+ * When the post's slug follows its subject but another post holds the subject's slug, that
+ * slug: the post takes the first free number after it, and a client says why. Null
+ * otherwise (SPEC §4).
+ */
+export type SlugTaken = string | null;
+
 /** GET /api/posts/:id: the post, its current text, and where its send stands. */
 export interface PostResponse {
   post: Post;
+  slug_taken: SlugTaken;
   markdown: string;
   /** Who wrote the current revision; the freshness poll names them. */
   author: string | null;
@@ -82,6 +106,7 @@ export interface PostEditBody {
 /** POST /api/posts and PUT /api/posts/:id: the post as saved, and the revision the save wrote. */
 export interface PostSavedResponse {
   post: Post;
+  slug_taken: SlugTaken;
   revision_id: string;
 }
 
@@ -119,4 +144,27 @@ export interface StaleRevisionError {
   current_revision: string | null;
   updated_at: number;
   author: string | null;
+}
+
+/**
+ * What PUT /api/posts/:id/listing takes: the post's settings (SPEC §4, §5), any subset of them.
+ * None is part of the frozen email, so they can change while the post is scheduled, and the
+ * listing once it is sent too; the slug only until the post's send starts. Schedule, Send now,
+ * and a reschedule take the same three fields, applied with the act.
+ */
+export interface ListingBody {
+  email_only?: boolean;
+  /** An archive address set by hand: lowercase letters, numbers, and single hyphens, and no
+   *  other post's. Turns `slug_auto` off. */
+  slug?: string;
+  /** Have the slug follow the subject again (true), or keep it as it stands (false). */
+  slug_auto?: boolean;
+}
+
+/** PUT /api/posts/:id/listing: the post as it now stands, and whether the act changed it. */
+export interface ListingResponse {
+  post: Post;
+  slug_taken: SlugTaken;
+  /** False when the post was already listed as asked: nothing was written. */
+  changed: boolean;
 }

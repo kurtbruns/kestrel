@@ -7,7 +7,7 @@
  * (preview/archive). Both go through the one token engine (render/template_engine.ts).
  */
 
-import { archivePostUrl } from "../../shared/archive_url";
+import { archivePostUrl, unlistedPostUrl } from "../../shared/archive_url";
 import { emailLogoHtml } from "../../shared/email_logo";
 import type { ImageRow } from "../db/images";
 import type { PostRow, RevisionRow } from "../db/posts";
@@ -63,15 +63,14 @@ export interface RenderResult extends RenderedEmail {
 
 interface RevisionMeta {
   subject: string;
-  slug: string;
 }
 
 function readMeta(revision: RevisionRow, post: PostRow): RevisionMeta {
   try {
     const m = JSON.parse(revision.metadata) as Partial<RevisionMeta>;
-    return { subject: m.subject ?? post.subject, slug: m.slug ?? post.slug };
+    return { subject: m.subject ?? post.subject };
   } catch {
-    return { subject: post.subject, slug: post.slug };
+    return { subject: post.subject };
   }
 }
 
@@ -113,7 +112,10 @@ export async function render(
     );
   }
   const subject = hasSubject ? meta.subject : "(no subject)";
-  const viewInBrowserUrl = archiveUrl(config, meta.slug);
+  // Every email links its web version through the post's unlisted link, never its archive
+  // address: the link works whatever the listing, reveals nothing guessable, and survives a
+  // move of the archive (SPEC §5).
+  const viewInBrowserUrl = unlistedPostUrl(config.appOrigin, input.post.unlisted_token);
 
   // The publisher's template is the email's presentation (SPEC §9). It's validated
   // when it's set; here we surface its warnings on preview/test and, as defense in

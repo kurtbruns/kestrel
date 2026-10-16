@@ -26,6 +26,7 @@ describe("demo content", () => {
       "sent",
       "sent",
       "sent",
+      "sent",
       "scheduled",
       "draft",
       "draft",
@@ -33,8 +34,13 @@ describe("demo content", () => {
     expect(new Set(posts.map((p) => p.slug)).size).toBe(posts.length);
     // The first issue shows the kestrel photo, found from its Markdown, not a field.
     expect(posts.flatMap((p) => p.images)).toEqual(["kestrel.webp"]);
-    expect(posts[0]?.bundle).toBe("1-the-hovering-hunter");
-    expect(posts[0]?.images).toEqual(["kestrel.webp"]);
+    // It opens with the operator's email-only test send, to their own address (SPEC §5).
+    expect(posts[0]?.bundle).toBe("0-test-email");
+    expect(posts[0]?.emailOnly).toBe(true);
+    expect(posts[0]?.sentTo).toEqual(["proof@fieldnotes.example"]);
+    expect(posts.filter((p) => p.emailOnly)).toHaveLength(1);
+    expect(posts[1]?.bundle).toBe("1-the-hovering-hunter");
+    expect(posts[1]?.images).toEqual(["kestrel.webp"]);
   });
 
   it("reads a post's fields and body", () => {
@@ -52,6 +58,29 @@ describe("demo content", () => {
       images: [],
       editedDaysAgo: 3,
     });
+  });
+
+  it("reads a test send: email only, to the addresses it names", () => {
+    const p = parseDemoPost(
+      "0-test",
+      post(
+        "subject: Test\nslug: test\nstatus: sent\nemail_only: true\nsent_to: a@x.example, b@x.example",
+        "Hi.",
+      ),
+    );
+    expect(p.emailOnly).toBe(true);
+    expect(p.sentTo).toEqual(["a@x.example", "b@x.example"]);
+  });
+
+  it("refuses email_only that isn't true or false or sits on a draft, and sent_to off a sent post or a real domain", () => {
+    for (const fm of [
+      "subject: T\nslug: t\nstatus: sent\nemail_only: yes",
+      "subject: T\nslug: t\nstatus: draft\nemail_only: true",
+      "subject: T\nslug: t\nstatus: scheduled\nsent_to: a@x.example",
+      "subject: T\nslug: t\nstatus: sent\nsent_to: someone@gmail.com",
+    ]) {
+      expect(() => parseDemoPost("9-t", post(fm, "Hi.")), fm).toThrow("demo/posts/9-t/index.md");
+    }
   });
 
   it("finds a post's own images by bare filename, and ignores URLs and paths", () => {

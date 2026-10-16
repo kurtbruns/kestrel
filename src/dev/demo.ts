@@ -7,9 +7,11 @@
  * fails loud on anything else, so a typo in a post's front matter stops the seed with
  * the file's name instead of seeding a post that quietly lost a field. The order of
  * the posts in `loadDemo` is the order the posts appear in the dashboard's history: sent posts take
- * the seed timeline's completed sends oldest first, in the order they are listed.
+ * the seed timeline's completed sends oldest first, in the order they are listed, apart from a
+ * test send (`sent_to`), which goes out before the list is imported, to just those addresses.
  */
 
+import testEmail from "../../demo/posts/0-test-email/index.md";
 import hunter from "../../demo/posts/1-the-hovering-hunter/index.md";
 import oldFashionedList from "../../demo/posts/2-an-old-fashioned-list/index.md";
 import publishing from "../../demo/posts/3-publishing/index.md";
@@ -35,6 +37,11 @@ export interface DemoPost {
   images: string[];
   /** Drafts only: how many days ago the draft was last edited. */
   editedDaysAgo?: number;
+  /** Mailed as usual but left out of the archive and the home page (SPEC §5). */
+  emailOnly?: boolean;
+  /** Sent posts only: a test send to just these addresses, before the list is imported, as
+   *  Verify it works sends one to the operator's own second address. */
+  sentTo?: string[];
 }
 
 export interface DemoPublication {
@@ -110,7 +117,12 @@ export function postImages(markdown: string): string[] {
 export function parseDemoPost(bundle: string, text: string): DemoPost {
   const file = `demo/posts/${bundle}/index.md`;
   const { fields, body } = parseFrontMatter(file, text);
-  const f = readFields(file, fields, ["subject", "slug", "status"], ["edited"]);
+  const f = readFields(
+    file,
+    fields,
+    ["subject", "slug", "status"],
+    ["edited", "email_only", "sent_to"],
+  );
   const status = f.status as DemoPostStatus;
   if (!STATUSES.includes(status)) {
     throw new Error(`${file}: status must be sent, scheduled, or draft, not "${f.status}"`);
@@ -122,6 +134,23 @@ export function parseDemoPost(bundle: string, text: string): DemoPost {
       throw new Error(`${file}: "edited" is for drafts, written like "2 days ago"`);
     }
     editedDaysAgo = Number(days[1]);
+  }
+  let emailOnly: boolean | undefined;
+  if (f.email_only != null) {
+    if ((f.email_only !== "true" && f.email_only !== "false") || status === "draft") {
+      throw new Error(`${file}: "email_only" is true or false, on a sent or scheduled post`);
+    }
+    emailOnly = f.email_only === "true";
+  }
+  let sentTo: string[] | undefined;
+  if (f.sent_to != null) {
+    sentTo = f.sent_to
+      .split(",")
+      .map((a) => a.trim())
+      .filter(Boolean);
+    if (status !== "sent" || !sentTo.length || sentTo.some((a) => !a.endsWith(".example"))) {
+      throw new Error(`${file}: "sent_to" is for sent posts, a list of .example addresses`);
+    }
   }
   if (!body) {
     throw new Error(`${file}: the post has no body`);
@@ -135,6 +164,8 @@ export function parseDemoPost(bundle: string, text: string): DemoPost {
     markdown: body,
     images: postImages(body),
     ...(editedDaysAgo != null ? { editedDaysAgo } : {}),
+    ...(emailOnly != null ? { emailOnly } : {}),
+    ...(sentTo ? { sentTo } : {}),
   };
 }
 
@@ -159,6 +190,7 @@ export function parseDemoPublication(file: string, text: string): DemoPublicatio
  *  Worker's startup. */
 export function loadDemo(): { publication: DemoPublication; posts: DemoPost[] } {
   const posts = [
+    ["0-test-email", testEmail],
     ["1-the-hovering-hunter", hunter],
     ["2-an-old-fashioned-list", oldFashionedList],
     ["3-publishing", publishing],

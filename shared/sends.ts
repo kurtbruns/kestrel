@@ -120,6 +120,12 @@ export interface Send {
   remade_at: number | null;
   /** When a test of the frozen copy was last sent while the send was scheduled; null if never. */
   tested_at: number | null;
+  /**
+   * Which address the frozen email carries as "view in browser" (SPEC §5): the post's
+   * unlisted link, or, for a send frozen before unlisted links, its archive address, which
+   * then answers whatever the post's listing.
+   */
+  web_link: "unlisted" | "archive";
   /** Why the provider refused this send's last batch as a whole (SPEC §12), or null once a batch is answered: `unavailable` retries on its own, `account` needs the operator. */
   halt_reason: HaltReason | null;
   /** What that refusal is about, for the advice shown with it. */
@@ -150,7 +156,7 @@ export interface Send {
 }
 
 /** A stored send without the large frozen bodies: what a view is built from. */
-export type SendSummary = Omit<Send, "rendered_html" | "rendered_text">;
+export type SendSummary = Omit<Send, "rendered_html" | "rendered_text" | "web_link">;
 
 /**
  * How long a send may stay `sending` before it is flagged as in flight too long (SPEC
@@ -243,6 +249,18 @@ export interface SendView {
   subject: string;
   /** The stored lifecycle state (SPEC §2); `phase` is the finer reading of it. */
   status: SendStatus;
+  /**
+   * The post's listing (SPEC §5): true when it is email only, mailed as usual but left out
+   * of the archive index and the landing page. The post's, not the send's, so every send of
+   * a post reads the same, and a change to it is a change to each of them (a new `rev`).
+   */
+  email_only: boolean;
+  /**
+   * Which address the send's email carries as "view in browser" (SPEC §5): the post's unlisted
+   * link, or, for a send frozen before unlisted links, its archive address, which then answers
+   * whatever the listing, since every copy of that email links there.
+   */
+  web_link: "unlisted" | "archive";
   /** Where the send's last visible change sits in the change sequence: of two views of one send, the higher `rev` is the newer. */
   rev: number;
   /** The server's clock when the view was read: what the clock derives (phase, conditions, actions, `next_change_at`) is as of then. */
@@ -290,7 +308,13 @@ export interface SendView {
    * can change it (wedged, missed, finished).
    */
   next_change_at: number | null;
-  /** Where the send's other resources are. `archive` is the published post, absolute, once the send has started; null before. */
+  /**
+   * Where the send's other resources are. `archive` is the post's archive address, absolute,
+   * while it answers: once the send has started, while the post is listed (or whatever the
+   * listing, for a send whose email carries that address); null otherwise. `unlisted` is the
+   * post's unlisted link, absolute, which every email of it carries (SPEC §5); it opens the
+   * page once the send has started, forwarding to `archive` while the post is listed.
+   */
   links: {
     self: string;
     email_html: string;
@@ -299,6 +323,7 @@ export interface SendView {
     deliveries_csv: string;
     post: string;
     archive: string | null;
+    unlisted: string | null;
   };
 }
 

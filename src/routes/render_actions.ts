@@ -241,8 +241,11 @@ export function sampleRenderInput(subject = TEMPLATE_TEST_SUBJECT): RenderInput 
     id: "sample",
     slug: "sample-post",
     slug_auto: false,
+    // No post has this token, so the sample's "view in browser" opens "Nothing here yet".
+    unlisted_token: "sample",
     subject,
     status: "draft",
+    email_only: false,
     current_revision: "sample-rev",
     created_at: now,
     updated_at: now,

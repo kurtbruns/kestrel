@@ -11,6 +11,7 @@ import type { RequestContext } from "../router";
 import { param } from "../router";
 import { viewWithCursor } from "../send/describe";
 import { acceptFireAt, freeze } from "../send/schedule";
+import { readSettingsBody, resolveSettings } from "./post_settings";
 
 /** An ISO-8601 timestamp that names its instant: a time part ending in `Z` or `±hh:mm`. */
 const ISO_WITH_OFFSET = /T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/i;
@@ -78,9 +79,12 @@ export async function schedule(c: RequestContext): Promise<Response> {
 
   const body = await readJsonObject(c);
   rejectStrayTemplateChoice(body);
+  const fields = readSettingsBody(body);
   requireConnectedProvider(c.config);
   const fireAt = parseFutureFireAt(body.fire_at, c.config.minLeadMs);
-  const send = await freeze(c.env, c.config, post, fireAt);
+  // A draft has no started send, so its address can still change.
+  const settings = await resolveSettings(c.env.DB, post, fields, false);
+  const send = await freeze(c.env, c.config, post, fireAt, settings);
   const frozen: ScheduleResponse = unwrap(await viewWithCursor(c.env, send.id), "send");
   return json(frozen, 201);
 }
@@ -91,10 +95,13 @@ export async function sendNow(c: RequestContext): Promise<Response> {
     throw notFound("post");
   }
   // Send-now needs no body, so an empty one needs no content type; one that is sent is
-  // read like any other JSON body, only to refuse a stray template choice.
-  rejectStrayTemplateChoice(await readJsonObject(c, { optional: true }));
+  // read like any other JSON body: to refuse a stray template choice, and for the settings.
+  const body = await readJsonObject(c, { optional: true });
+  rejectStrayTemplateChoice(body);
+  const fields = readSettingsBody(body);
 
-  // Idempotent: if a send is already in flight for this post, return it.
+  // Idempotent: if a send is already in flight for this post, return it. A repeat changes
+  // nothing, its settings included: they have their own route.
   const active = await getActiveSendForPost(c.env.DB, post.id);
   if (active) {
     return repeatAnswer(c, active.id);
@@ -105,9 +112,10 @@ export async function sendNow(c: RequestContext): Promise<Response> {
   // the minute at or after it like any other fire time.
   const now = Date.now();
   const fireAt = acceptFireAt(now + c.config.minLeadMs, c.config.minLeadMs, { now });
+  const settings = await resolveSettings(c.env.DB, post, fields, false);
   let send: SendRow;
   try {
-    send = await freeze(c.env, c.config, post, fireAt);
+    send = await freeze(c.env, c.config, post, fireAt, settings);
   } catch (err) {
     // A concurrent send-now (the editor and Claude at once) passed the check above too and froze first.
     // The repeat gets the same answer as one that came after it (SPEC §6); a schedule
