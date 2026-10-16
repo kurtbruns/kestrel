@@ -24,12 +24,12 @@ import { formatLead, MIN_LEAD_FLOOR_MS } from "../shared/sends";
 import { SUBSCRIBER_ACTIONS } from "../shared/subscriber_meanings";
 import { buildInfo } from "./build";
 import type { Config } from "./env";
-import { json } from "./lib/errors";
+import { json, notFound } from "./lib/errors";
 import { RASTER_IMAGE_TYPES } from "./lib/image_types";
 import { unwrap } from "./lib/unwrap";
-import { buildReferenceResponse, referenceMarkdown } from "./reference";
+import { buildReferenceResponse, referenceIndexMarkdown, resourceMarkdown } from "./reference";
 import { sendBrief } from "./reference/objects";
-import { type BodyField, type RouteDef, type RouteRefusal, Router } from "./router";
+import { type BodyField, param, type RouteDef, type RouteRefusal, Router } from "./router";
 import * as archiveRoutes from "./routes/archive";
 import * as devRoutes from "./routes/dev";
 import * as docsRoutes from "./routes/docs";
@@ -347,15 +347,38 @@ export function createRouter({
       path: "/api/reference.md",
       access: "admin",
       resource: "system",
-      title: "Get the API reference as Markdown",
-      summary: "The same reference as one Markdown document, for an agent to read (text/markdown).",
+      title: "Get the API reference's index",
+      summary:
+        "The reference's index as Markdown, for an agent to read first (text/markdown): the topics every route shares, and every route on one line.",
       handler: (c) =>
         docsRoutes.markdownResponse(
-          referenceMarkdown(
+          referenceIndexMarkdown(
             buildReferenceResponse(r.routes.map((route) => route.def)),
             c.url.origin,
           ),
         ),
+    },
+    {
+      method: "GET",
+      path: "/api/reference/:resource.md",
+      access: "admin",
+      resource: "system",
+      title: "Get a resource's reference",
+      summary:
+        "One resource's reference as Markdown (text/markdown): the object its routes return, then each route in full.",
+      description:
+        "`resource` is one the index lists, such as `sends` or `posts`, as each resource's `Reference:` line there names it.",
+      errors: [{ code: "not_found", when: "No route acts on a resource by that name." }],
+      handler: (c) => {
+        const md = resourceMarkdown(
+          buildReferenceResponse(r.routes.map((route) => route.def)),
+          param(c, "resource"),
+        );
+        if (md === null) {
+          throw notFound("resource");
+        }
+        return docsRoutes.markdownResponse(md);
+      },
     },
 
     // --- app settings (authed; runtime preferences, never secrets) ---

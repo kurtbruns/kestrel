@@ -12,7 +12,7 @@ The authority on the import format is the "The file format" section of the publi
 
 ## Before you start
 
-- **Read the truth from the instance, every time.** Call `GET /api/imports/format` and `GET /api/reference` at the start of each migration. They give the columns, the values each takes, the outcomes, the attestation, and this deployment's `limits`. Never write the format from memory, or from this file.
+- **Read the truth from the instance, every time.** Call `GET /api/imports/format` and `GET /api/reference/imports.md` at the start of each migration. They give the columns, the values each takes, the outcomes, the attestation, and this deployment's `limits`. Never write the format from memory, or from this file.
 - **Explain it in Kestrel's words.** For what to tell the publisher about the format, the row limit, and the Workers Free advice, read the rest of that page, above "The file format", with this deployment's numbers from `GET /api/imports/format`. Use them rather than your own account of the format.
 - **Convert to the format the route names as `preferred`,** the full CSV. Fall back to a plain list only when the export holds nothing but addresses, and tell the publisher what a plain list loses, from the route's own `loses`.
 - **Work outside the repository.** Make a working folder outside this repository, such as `~/kestrel-migration/`, for the export, the converter, its tests, and the converted pieces. They hold real addresses, so nothing from the list is ever committed here. A fixture that must be committed uses made-up rows only.
