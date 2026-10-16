@@ -4,6 +4,7 @@ import type { PostListResponse, PostSavedResponse } from "../../shared/posts";
 import { api, describeError } from "../api";
 import { mount } from "../lifecycle";
 import { followSends } from "../send_state";
+import { titleWithLabel } from "../sends/progress";
 import { $, $$ } from "../ui/dom";
 import { fmt } from "../ui/format";
 import { html, setHtml } from "../ui/html";
@@ -58,7 +59,7 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
     root,
     html`<div class="spread page-head"><h1>Drafts</h1><button class="primary" id="newPost">New post</button></div>
     ${listToolbar({ statuses: DRAFT_STATUSES, allValue: DRAFTS_SCOPE, searchPlaceholder: "Search subject…" })}
-    <div id="list" class="muted">Loading…</div>
+    <div id="list"><p class="muted">Loading…</p></div>
     <div id="postsPager"></div>`,
   );
   const newPost = $<HTMLButtonElement>("#newPost", root);
@@ -106,7 +107,7 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
             // show it as `sending` and route it to the live watch, not the editor.
             const sending = p.active_send_status === "sending";
             const href = sending ? `#/sent/${p.active_send_id}` : `#/edit/${p.id}`;
-            return html`<tr class="clickable" data-id="${p.id}" data-target="${href}"><td><a href="${href}">${p.subject || html`<em>untitled</em>`}</a></td><td>${sending ? badge("sending") : badge(p.status)}</td><td class="muted when${p.fire_at ? "" : " empty"}">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted updated">${fmt(p.updated_at)}</td><td class="act"><button class="icon" data-menu="${p.id}" data-status="${sending ? "sending" : p.status}" data-target="${href}" aria-label="Post actions" aria-haspopup="menu">⋯</button></td></tr>`;
+            return html`<tr class="clickable" data-id="${p.id}" data-target="${href}"><td>${titleWithLabel(html`<a href="${href}">${p.subject || html`<em>untitled</em>`}</a>`, p)}</td><td>${sending ? badge("sending") : badge(p.status)}</td><td class="muted when${p.fire_at ? "" : " empty"}">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted updated">${fmt(p.updated_at)}</td><td class="act"><button class="icon" data-menu="${p.id}" data-status="${sending ? "sending" : p.status}" data-target="${href}" aria-label="Post actions" aria-haspopup="menu">⋯</button></td></tr>`;
           },
         )}</tbody></table></div>`,
       );

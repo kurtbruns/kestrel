@@ -18,6 +18,7 @@ import {
   resetShell,
   sendSummary,
   settingsResponse,
+  stubClipboard,
   typeInto,
   unmount,
 } from "../test/support";
@@ -120,13 +121,13 @@ describe("sent record", () => {
     expect($(".rec-people-table").textContent).not.toContain("erased:");
   });
 
-  it("renders the frozen record: tiles, the reconciliation line, and the failures list first", async () => {
+  it("renders the frozen record: tiles, the reconciliation line, and every recipient first", async () => {
     fake = fakeApi([
       ...sentSend().routes,
       {
         path: "/api/sends/x1/deliveries",
         reply: (req) => ({
-          deliveries: req.url.searchParams.get("view") === "failures" ? rows : [],
+          deliveries: req.url.searchParams.get("view") === "all" ? rows : [],
           view: req.url.searchParams.get("view"),
           page,
         }),
@@ -141,10 +142,11 @@ describe("sent record", () => {
     );
     expect($$(".rec-people-table tbody tr")).toHaveLength(2);
     expect($(".rec-people-table tbody tr .rec-out").textContent).toBe("Hard bounce");
-    expect($("#viewPublished")).toBeTruthy();
+    expect($("#recOpen").textContent).toBe("Open\u00a0↗");
     expect(
       fake.calls.find((c) => c.url.pathname.endsWith("/deliveries"))?.url.searchParams.get("view"),
-    ).toBe("failures");
+    ).toBe("all");
+    expect($(".rec-view-btn[aria-pressed='true']").textContent).toBe("All");
     expect($("#recPill").textContent).toBe("Complete");
     // Nothing moves: the record follows its send at the idle pace, reading the feed and
     // nothing else, never the send's whole record again.
@@ -175,6 +177,162 @@ describe("sent record", () => {
     expect($(".rec-card")).toBe(card); // in place, not a remount
     expect($(".rec-n.ok").textContent).toBe("10");
     expect(fake.unhandled).toHaveLength(0);
+  });
+
+  // DESIGN §3: the page in two parts, the post and its delivery. The post holds the one thing
+  // that can still change, its listing, never the record (SPEC §5, I3), and both changes of
+  // visibility ask first.
+  describe("the post, beside its delivery", () => {
+    /** The listing route, answering the post as the server would after the change. */
+    const listingRoute = (post: Record<string, unknown>) => ({
+      method: "PUT",
+      path: "/api/posts/p1/listing",
+      reply: () => ({
+        post: { id: "p1", status: "sent", ...post },
+        slug_taken: null,
+        changed: true,
+      }),
+    });
+    /** The post's read, which Add to archive takes the address from. */
+    const postRoute = (post: Record<string, unknown>) => ({
+      path: "/api/posts/p1",
+      reply: () => ({
+        post: { id: "p1", subject: "Owls at Dusk", status: "sent", ...post },
+        slug_taken: null,
+        markdown: "",
+        author: null,
+        scheduled: null,
+        sending: null,
+        sent: { id: "x1" },
+      }),
+    });
+    beforeEach(() => {
+      appState.appConfig = {
+        ...settingsResponse(),
+        deployment: {
+          ...settingsResponse().deployment,
+          archiveOrigin: "https://birds.example",
+          archiveBasePath: "/archive",
+        },
+      } as typeof appState.appConfig;
+    });
+
+    it("splits the page into the post and its delivery, with a listed post's address and its actions", async () => {
+      const server = sendServer([send()]);
+      fake = fakeApi([...server.routes, noRows]);
+      const clipboard = stubClipboard();
+      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      await mount((r, s) => renderSentRecord("x1", r, s));
+      await vi.advanceTimersByTimeAsync(0);
+      expect($$(".rec-part-title").map((h) => h.textContent)).toEqual(["The post", "Delivery"]);
+      expect($(".rec-post").contains($("#recOpen"))).toBe(true);
+      expect($(".rec-card").contains($(".rec-tiles"))).toBe(true);
+      // The link is one field, its address with Copy and Open; where the post stands is a row
+      // of its own beside the one change it allows.
+      expect($(".rec-link code").textContent).toBe("birds.example/p1");
+      expect($(".rec-link-note").textContent).toBe("The link in the email forwards here.");
+      expect($(".rec-arch-what").textContent?.trim()).toBe(
+        "In your archiveListed on your home page and in your public archive.",
+      );
+      $("#recOpen").click();
+      expect(open).toHaveBeenCalledWith("https://birds.example/p1", "_blank", "noopener");
+      $("#recCopy").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(clipboard).toHaveBeenCalledWith("https://birds.example/p1");
+      expect($("#recListing").textContent).toBe("Remove from archive…");
+      expect(fake.unhandled).toHaveLength(0);
+    });
+
+    it("asks before removing a post from the archive, and says its archive address stops working", async () => {
+      const server = sendServer([send()]);
+      fake = fakeApi([...server.routes, noRows, listingRoute({ email_only: true, slug: "owls" })]);
+      await mount((r, s) => renderSentRecord("x1", r, s));
+      await vi.advanceTimersByTimeAsync(0);
+      $("#recListing").click();
+      expect($(".modal h3").textContent).toBe("Remove this post from your archive?");
+      expect($(".modal .hint").textContent).toContain("its archive address stops working");
+      expect($(".modal .url-gone").textContent).toBe("birds.example/p1");
+      $("#eoCancel").click();
+      expect(document.querySelector(".modal")).toBeNull();
+      expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/listing")).toBe(false);
+      $("#recListing").click();
+      $("#eoGo").click();
+      await vi.advanceTimersByTimeAsync(0);
+      const put = fake.calls.find((c) => c.url.pathname === "/api/posts/p1/listing");
+      expect(put?.json()).toEqual({ email_only: true });
+      expect(document.querySelector(".modal")).toBeNull();
+      // Now its unlisted link, which the email carries, and the way back.
+      expect($(".rec-link code").textContent).toBe("app.birds.example/email/t-p1");
+      expect($(".rec-link-note").textContent).toBe(
+        "Anyone with the link can open it. Nothing lists or indexes it.",
+      );
+      expect($(".rec-arch-what").textContent?.trim()).toBe(
+        "Email onlyNot on your home page or in your public archive.",
+      );
+      expect($("#recListing").textContent).toBe("Add to archive…");
+      expect($("#toasts").textContent).toContain("Removed from your archive");
+      expect(fake.unhandled).toHaveLength(0);
+    });
+
+    it("adds a post to the archive at the address it was sent with, shown read-only", async () => {
+      const server = sendServer();
+      server.put(send(), { email_only: true });
+      fake = fakeApi([
+        ...server.routes,
+        noRows,
+        postRoute({ slug: "owls", slug_auto: true, email_only: true }),
+        listingRoute({ email_only: false, slug: "owls" }),
+      ]);
+      await mount((r, s) => renderSentRecord("x1", r, s));
+      await vi.advanceTimersByTimeAsync(0);
+      $("#recListing").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect($(".modal h3").textContent).toBe("Add this post to your archive?");
+      expect(document.querySelector("#addInclude")).toBeNull(); // adding it is the choice
+      expect($<HTMLInputElement>("#addSlug").value).toBe("owls");
+      expect($<HTMLInputElement>("#addSlug").readOnly).toBe(true);
+      expect($("#addNote").textContent).toBe(
+        "Its address since it was sent: links people shared work again.",
+      );
+      $("#addArchGo").click();
+      await vi.advanceTimersByTimeAsync(0);
+      const put = fake.calls.find((c) => c.url.pathname === "/api/posts/p1/listing");
+      expect(put?.json()).toEqual({ email_only: false });
+      expect($("#toasts").textContent).toContain(
+        "Added to your archive at birds.example/archive/owls",
+      );
+      expect($(".rec-link code").textContent).toBe("birds.example/archive/owls");
+      expect($(".rec-arch-what strong").textContent?.trim()).toBe("In your archive");
+      expect(fake.unhandled).toHaveLength(0);
+    });
+
+    it("words a post sent before unlisted links by what its emails link to", async () => {
+      const server = sendServer();
+      server.put(send(), {
+        email_only: true,
+        web_link: "archive",
+        archive: "https://birds.example/archive/owls",
+      });
+      fake = fakeApi([...server.routes, noRows]);
+      await mount((r, s) => renderSentRecord("x1", r, s));
+      await vi.advanceTimersByTimeAsync(0);
+      // Its emails link the archive address, which keeps answering: that is its web version.
+      expect($(".rec-link code").textContent).toBe("birds.example/archive/owls");
+      expect($(".rec-link-note").textContent).toContain("Its emails link here.");
+      expect(fake.unhandled).toHaveLength(0);
+    });
+
+    it("follows a listing change made elsewhere, from the send's next report", async () => {
+      const server = sendServer([send(SETTLING)]);
+      fake = fakeApi([...server.routes, noRows]);
+      await mount((r, s) => renderSentRecord("x1", r, s));
+      await vi.advanceTimersByTimeAsync(0);
+      expect($("#recListing").textContent).toBe("Remove from archive…");
+      server.edit("x1", {}, { email_only: true }); // Claude made it email only
+      await vi.advanceTimersByTimeAsync(3000);
+      expect($("#recListing").textContent).toBe("Add to archive…");
+      expect(fake.unhandled).toHaveLength(0);
+    });
   });
 
   it("saves the deliveries CSV as the server sends it, under the server's name or deliveries.csv", async () => {
@@ -419,6 +577,8 @@ describe("sent record", () => {
     const lists = () => fake.calls.filter((c) => c.url.pathname.endsWith("/deliveries"));
     await mount((r, s) => renderSentRecord("x1", r, s));
     await vi.advanceTimersByTimeAsync(0);
+    $(".rec-view-btn[data-view='failures']").click();
+    await vi.advanceTimersByTimeAsync(0);
     expect($("#recRows").textContent).toMatch(/No delivery failures/);
     expect($(".rec-n.warn").textContent).toBe("0");
 
@@ -485,16 +645,16 @@ describe("sent record", () => {
     const sent = sentSend(SETTLING);
     let held: ((v: unknown) => void) | null = null;
     const release = () => held?.(null);
-    let failureReads = 0;
+    let allReads = 0;
     fake = fakeApi([
       ...sent.routes,
       {
         path: "/api/sends/x1/deliveries",
         reply: (req) => {
           const view = req.url.searchParams.get("view");
-          const answer = { deliveries: view === "failures" ? rows : [], view, page };
-          // The mount's failures read answers at once; the poll's reload is held open.
-          return view === "failures" && ++failureReads === 2
+          const answer = { deliveries: view === "all" ? rows : [], view, page };
+          // The mount's read of everyone answers at once; the poll's reload is held open.
+          return view === "all" && ++allReads === 2
             ? new Promise((r) => (held = r)).then(() => answer)
             : answer;
         },
@@ -504,11 +664,11 @@ describe("sent record", () => {
     await vi.advanceTimersByTimeAsync(0);
     sent.receipt({ c_delivered: 6, c_accepted: 4 });
     await vi.advanceTimersByTimeAsync(3000); // the refresh's reload is now pending
-    expect(failureReads).toBe(2);
+    expect(allReads).toBe(2);
     $(".rec-view-btn[data-view='delivered']").click();
     await vi.advanceTimersByTimeAsync(0);
     expect($("#recRows").textContent).toMatch(/No delivery receipts confirmed yet/);
-    release(); // the stale failures answer lands last
+    release(); // the stale answer for everyone lands last
     await vi.advanceTimersByTimeAsync(0);
     expect($("#recRows").textContent).toMatch(/No delivery receipts confirmed yet/);
     expect(document.querySelector(".rec-people-table")).toBeNull();

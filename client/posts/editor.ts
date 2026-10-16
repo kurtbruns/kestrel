@@ -1,9 +1,11 @@
-// The post editor: subject/slug, the Markdown composer, autosave with its idle and
+// The post editor: the subject, the Markdown composer, Post settings, autosave with its idle and
 // hard-cap timers, the freshness poll, images, the schedule / send-now dialogs, and a
 // scheduled post's banner, which follows its send until the send page takes over.
 
 import type { ImageUploadResponse } from "../../shared/images";
 import type {
+  ListingBody,
+  ListingResponse,
   PostEditBody,
   PostResponse,
   PostSavedResponse,
@@ -18,6 +20,7 @@ import {
   type SendView,
 } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
+import { slugify } from "../../shared/slug";
 import type { SubscriberListResponse } from "../../shared/subscribers";
 import { ApiError, api, apiText, describeError, isNetworkFailure } from "../api";
 import {
@@ -29,7 +32,7 @@ import {
   notConnectedScheduleLine,
   notConnectedTestLine,
   notConnectedWarning,
-  postArchiveUrl,
+  postUnlistedUrl,
   providerNotConnected,
   sendNowWhenText,
   tooSoonText,
@@ -53,10 +56,19 @@ import {
 import { highlightMarkdown } from "../ui/highlight";
 import { type Html, html, setHtml } from "../ui/html";
 import { type IconName, icon } from "../ui/icons";
-import { busy, fieldError, infoTip, modal, renderError, toast } from "../ui/widgets";
+import { busy, fieldError, modal, renderError, toast } from "../ui/widgets";
 import { createAutosave } from "./autosave";
 import { DirtyTracker } from "./dirty";
 import { trackSaves } from "./pending_save";
+import {
+  destinationHtml,
+  destinationIcon,
+  mountSettingsForm,
+  type Publishing,
+  publishingOf,
+  settingsChange,
+  showSlugRefusal,
+} from "./publishing";
 import { type Author, type Conflict, conflictFromError, RevisionTracker } from "./revisions";
 import { previewOpensWebVersion, webVersionHash } from "./web";
 
@@ -82,6 +94,7 @@ const TOOLBAR: [IconName, string][][] = [
 
 // A bare attribute is markup, not text: spelled once as markup so it can be interpolated.
 const READONLY = html` readonly`;
+const HIDDEN = html` hidden`;
 const ARIA_DISABLED = html` aria-disabled="true"`;
 
 type ComposerTab = "edit" | "preview";
@@ -175,6 +188,11 @@ export async function renderEditor(
     }
   }
   const { post, markdown, scheduled } = data;
+  // The post's publishing settings as stored (SPEC §4, §5): whether it is included in the
+  // archive, and its archive address. Neither is part of the email, so both change while the
+  // post is scheduled too, through Post settings, and a dialog's edits reach them only on Save,
+  // Schedule, or Send now.
+  let pub = publishingOf(post, data.slug_taken);
 
   // The editor now only ever mounts a draft or a scheduled (frozen) post, so `locked`
   // means scheduled — signaled by the scheduled banner, not a status pill.
@@ -207,26 +225,19 @@ export async function renderEditor(
     <div class="editor-head">
       <a href="#/drafts" class="back">← Drafts</a>
       <div class="editor-head-right">
+        <span class="badge email-only" id="headEmailOnly"${post.email_only && !locked ? null : HIDDEN}>Email only</span>
         <a class="ghost btn" id="webLink" href="${webVersionUrl}" target="_blank" rel="noopener" aria-label="Web version (opens in a new tab)">Web version ↗</a>
+        <button type="button" class="ghost" id="settingsBtn">${icon("settings")}<span>Post settings</span></button>
       </div>
     </div>
-    ${locked && scheduled ? html`<div class="banner banner-scheduled"><div class="sched-main"><span id="schedWhen"></span>${heldWhenFiresHtml("banner")}<div class="sched-remade" id="schedRemade" hidden><span id="schedRemadeMsg"></span></div><div class="sched-note" id="schedDailyWrites" hidden><span class="sched-note-mark" aria-hidden="true">⚠️</span><span class="sched-note-msg" id="schedDailyWritesMsg"></span></div></div><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : null}
+    ${locked && scheduled ? html`<div class="banner banner-scheduled banner-split"><div class="banner-top"><div class="sched-main"><span id="schedWhen"></span>${heldWhenFiresHtml("banner")}<div class="sched-remade" id="schedRemade" hidden><span id="schedRemadeMsg"></span></div><div class="sched-note" id="schedDailyWrites" hidden><span class="sched-note-mark" aria-hidden="true">⚠️</span><span class="sched-note-msg" id="schedDailyWritesMsg"></span></div></div><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Edit schedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div><div class="banner-bottom sched-dest"><span class="sched-dest-icon" id="schedDestIcon">${destinationIcon(pub)}</span><span id="schedDest">${destinationHtml(pub)}</span></div></div>` : null}
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
-    <div class="card">
-      <div class="grid2">
-        <div><label for="f-subject">Subject</label><input id="f-subject" value="${post.subject}" placeholder="Untitled"${ro}></div>
-        <div>
-          <div class="label-row">
-            <label for="f-slug">Slug</label>
-            ${infoTip("The web address of this post’s archive page.")}
-          </div>
-          <input id="f-slug" value="${post.slug}"${ro}>
-          ${locked ? null : html`<label class="slug-auto-toggle"><input type="checkbox" id="f-slug-auto">Auto-generate from subject</label>`}
-        </div>
-      </div>
+    <div class="editor-form">
+      <label for="f-subject">Subject</label>
+      <input id="f-subject" value="${post.subject}" placeholder="Untitled"${ro}>
 
       <label for="f-markdown">Body</label>
-      <div class="composer">
+      <div class="composer${locked ? " composer-locked" : ""}">
         <div class="composer-head">
           <div class="ctabs" role="tablist">
             <button type="button" class="ctab active" data-tab="edit" data-text="Edit" role="tab" aria-selected="true"><span class="ctab-label">${icon("editable")}Edit</span></button>
@@ -267,7 +278,6 @@ export async function renderEditor(
   );
 
   const subjectEl = $<HTMLInputElement>("#f-subject");
-  const slugEl = $<HTMLInputElement>("#f-slug");
   const ta = $<HTMLTextAreaElement>("#f-markdown");
   const toolbarEl = $(".toolbar", root);
   const previewFrame = $<HTMLIFrameElement>("#previewFrame");
@@ -292,29 +302,10 @@ export async function renderEditor(
   ta.addEventListener("scroll", syncMdScroll);
   paintMarkdown(); // paint the initial content (a scheduled post is read-only but still highlighted)
 
-  // Whether the slug follows the subject is the post's own (`slug_auto`), never guessed from
-  // its shape: `spring-update-2027` set by hand looks just like a numbered `spring-update`.
-  // While it follows, a save sends no slug of its own and the server derives and numbers it;
-  // once set by hand, the field is what is sent. Either way the field shows only slugs the server
-  // answered with, never the editor's own guess, so it can lag a subject edit until the save
-  // but never shows an address the post won't get.
-  const autoEl = locked ? null : $<HTMLInputElement>("#f-slug-auto");
-  const collect = () => ({
-    subject: subjectEl.value,
-    ...(autoEl?.checked ? { slug_auto: true } : { slug: slugEl.value, slug_auto: false }),
-    markdown: ta.value,
-  });
-  // A save's answer for a slug being typed by hand waits until the field is left (or Enter),
-  // so the cursor is never moved under the publisher; it lands only if the field still
-  // holds what that save sent.
-  let held: { shown: string; slug: string } | null = null;
-  const applyHeld = () => {
-    if (held && slugEl.value === held.shown) {
-      slugEl.value = held.slug;
-      refreshDirty(); // the field now matches what was saved
-    }
-    held = null;
-  };
+  // A save carries the subject and the body. The archive address is a publishing setting, set
+  // in Post settings: a slug that follows the subject is derived again by the server on each
+  // save, which answers with it (SPEC §4).
+  const collect = () => ({ subject: subjectEl.value, markdown: ta.value });
 
   // --- subject validation (SPEC §6: freeze() rejects a subjectless send) ---
   // Surfaced on the field, not by disabling the button. The old guard greyed out
@@ -340,52 +331,87 @@ export async function renderEditor(
     return true;
   }
 
-  // The "Auto-generate from subject" box, checked while the slug follows the subject. The
-  // slug stays editable throughout. Typing your own slug takes manual control (unchecks);
-  // emptying the field, or ticking the box, hands it back to the subject. The slug the
-  // subject gives arrives with the save that leaving the subject makes (or Enter, or the
-  // autosave).
-  if (autoEl) {
-    autoEl.checked = post.slug_auto;
-
-    // Muted while it tracks the subject; normal color once it's set by hand.
-    const reflect = () => slugEl.classList.toggle("slug-auto", autoEl.checked);
-    reflect();
-
-    // Typing a slug takes manual control; clearing it follows the subject again.
-    slugEl.addEventListener("input", () => {
-      autoEl.checked = slugEl.value.trim() === "";
-      reflect();
+  // --- Post settings (DESIGN §3): whether the post is in the archive, and its address ---
+  // A draft's head marks only the exception, a post left out of the archive; a scheduled post's
+  // banner names where it is going instead, on a row of its own under the time and the notes
+  // about sending, apart from the controls that act on the time. The settings themselves
+  // are in a dialog that saves nothing until Save.
+  const headEmailOnly = $("#headEmailOnly");
+  const paintPublishing = () => {
+    // A scheduled post's banner names where it is going, so the head's mark is a draft's.
+    headEmailOnly.hidden = locked || !pub.emailOnly;
+    const destIcon = root.querySelector<HTMLElement>("#schedDestIcon");
+    if (destIcon) {
+      setHtml(destIcon, destinationIcon(pub));
+    }
+    const dest = root.querySelector<HTMLElement>("#schedDest");
+    if (dest) {
+      setHtml(dest, destinationHtml(pub));
+    }
+  };
+  /** Save a change to the post's settings (the listing route), and show what the server made
+   *  of it. Throws the refusal, for the dialog that asked to say it. */
+  const saveListing = async (body: ListingBody): Promise<void> => {
+    const res = await api<ListingResponse>(`/api/posts/${id}/listing`, {
+      method: "PUT",
+      json: body,
     });
-    // Ticking the box saves at once, so the field shows the subject's slug as soon as the
-    // server answers; unticking hands over the field ready to edit.
-    autoEl.addEventListener("change", () => {
-      reflect();
-      markEdited(); // the checkbox changes what a save sends without an input event
-      if (autoEl.checked) {
-        saveDraft(true).catch(() => {}) /* the save cue says why */;
-      } else {
-        slugEl.focus();
-        slugEl.select();
-      }
-    });
-    // Never leave an empty slug: a field left empty follows the subject again. The save
-    // that leaving it makes fills it in; with nothing to save, the post already has the
-    // subject's slug, so the field shows that.
-    slugEl.addEventListener("blur", () => {
-      applyHeld();
-      if (slugEl.value.trim() === "") {
-        autoEl.checked = true;
-        reflect();
-        markEdited();
-        if (!dirty.dirty) {
-          slugEl.value = savedSlug;
+    pub = publishingOf(res.post, res.slug_taken);
+    paintPublishing();
+    if (res.changed) {
+      readSendsNow(); // the post's sends carry the listing: let every view see it
+    }
+  };
+  /** Read the post's settings again, for a change made elsewhere; a failed read leaves what
+   *  the page shows, and the next report tries again. */
+  const rereadPublishing = async () => {
+    try {
+      const fresh = await api<PostResponse>(`/api/posts/${id}`, { signal });
+      pub = publishingOf(fresh.post, fresh.slug_taken);
+      paintPublishing();
+    } catch {}
+  };
+  $("#settingsBtn").onclick = () => {
+    // A working copy: Cancel, Escape, or a click outside leaves the post as it was. On a draft
+    // the subject in the field is the one the address would follow.
+    const working: Publishing = { ...pub, subject: subjectEl.value };
+    const m = modal(
+      html`<h3 id="psHead">Post settings</h3><p class="hint">Neither is part of the email, so both stay open while the post is scheduled.</p><div id="psForm"></div><div class="actions"><button type="button" id="psCancel">Cancel</button><button type="button" class="primary" id="psSave">Save</button></div>`,
+      signal,
+    );
+    const box = $(".modal", m.el);
+    box.setAttribute("aria-labelledby", "psHead");
+    mountSettingsForm($("#psForm", box), working, "ps");
+    $("#psCancel", box).onclick = m.close;
+    const save = $<HTMLButtonElement>("#psSave", box);
+    save.onclick = () =>
+      busy(save, "Saving…", async () => {
+        m.clearError();
+        const body = settingsChange(pub, working);
+        if (!body) {
+          m.close();
+          return;
         }
-      }
-    });
+        try {
+          await saveListing(body);
+          m.close();
+          toast("Post settings saved");
+        } catch (e) {
+          if (signal.aborted || foundGone(e)) {
+            m.close();
+            return;
+          }
+          if (!showSlugRefusal(box, "ps", e)) {
+            m.error(message(e));
+          }
+        }
+      });
+    $<HTMLInputElement>("#psInclude", box).focus();
+  };
 
-    // Clear the empty-subject error as soon as a real subject is typed; it re-fires
-    // on the next Schedule click if the field is still empty (see validateSubject).
+  // Clear the empty-subject error as soon as a real subject is typed; it re-fires on the next
+  // Schedule click if the field is still empty (see validateSubject).
+  if (!locked) {
     subjectEl.addEventListener("input", () => {
       if (subjectEl.value.trim() !== "") {
         clearSubjectError();
@@ -422,9 +448,7 @@ export async function renderEditor(
       syncMdScroll();
     }
   }
-  // The slug the server last saved, which the preview renders with (a dedupe may differ
-  // from what the field shows while it is being typed in).
-  let savedSlug = post.slug;
+
   async function showPreview() {
     showTab("preview");
     try {
@@ -437,11 +461,11 @@ export async function renderEditor(
           const doc = previewFrame.contentDocument;
           if (doc) {
             openLinksInNewTab(doc);
-            // Read on each load, so a slug edited since the last preview is the one
-            // matched. The editor holds only an unpublished post: once its send starts, the
-            // editor hands off to the send page (and a web version opened after that goes
-            // on to the public page itself).
-            previewOpensWebVersion(doc, postArchiveUrl(savedSlug), webVersionUrl);
+            // The email's link is the post's unlisted link, which never changes. The
+            // editor holds only an unpublished post: once its send starts, the editor hands
+            // off to the send page (and a web version opened after that goes on to the
+            // public page itself).
+            previewOpensWebVersion(doc, postUnlistedUrl(post.unlisted_token), webVersionUrl);
             previewFrame.style.height = `${doc.body.scrollHeight + 24}px`;
           }
         } catch {}
@@ -652,33 +676,16 @@ export async function renderEditor(
     // What this save sends is what it saves: an edit typed while it is in flight stays
     // dirty and goes with the next one.
     const fields = collect();
-    let sent = JSON.stringify(fields);
-    const slugShown = slugEl.value;
+    const sent = JSON.stringify(fields);
     try {
       const body: PostEditBody = { ...fields, base_revision: revisions.base };
-      const { post: u } = await api<PostSavedResponse>(`/api/posts/${id}`, {
+      const { post: u, slug_taken } = await api<PostSavedResponse>(`/api/posts/${id}`, {
         method: "PUT",
         json: body,
       });
-      // Show the slug the server gave (derived, numbered if taken), unless the field changed
-      // while the save was out: that edit is unsaved, and the next save brings its own answer.
-      // Focus alone is no reason to drop it, since tabbing through the field changes nothing;
-      // a slug being typed by hand only has it wait until the field is left.
-      if (u.slug && slugEl.value === slugShown) {
-        // A slug set by hand is sent as typed; a following one is the server's to derive.
-        const handSet = "slug" in fields;
-        if (handSet && document.activeElement === slugEl) {
-          held = { shown: slugShown, slug: u.slug }; // being typed by hand: see applyHeld
-        } else {
-          slugEl.value = u.slug;
-        }
-        if (handSet) {
-          sent = JSON.stringify({ ...fields, slug: u.slug }); // what was saved, not what was typed
-        }
-      }
-      if (u.slug) {
-        savedSlug = u.slug;
-      }
+      // The server derives a following slug from the subject on each save (SPEC §4).
+      pub = publishingOf(u, slug_taken);
+      paintPublishing();
       revisions.saved(u.current_revision); // our save is now the newest; poll against it
       dirty.markSaved(sent);
       saveFailed = false;
@@ -701,10 +708,9 @@ export async function renderEditor(
         return "refused";
       }
       saveFailed = true; // the leave guard now prompts rather than silently flushing
-      // A refusal naming the subject or slug is said under that field, and the cue points
-      // there; the server will refuse the same value again, so it is not retried.
-      const named =
-        e instanceof ApiError ? { subject: subjectEl, slug: slugEl }[e.field ?? ""] : undefined;
+      // A refusal naming the subject is said under that field, and the cue points there; the
+      // server will refuse the same value again, so it is not retried.
+      const named = e instanceof ApiError && e.field === "subject" ? subjectEl : undefined;
       if (named) {
         fieldError(named, describeError(e));
         saveError = "fix the field marked above.";
@@ -834,14 +840,14 @@ export async function renderEditor(
     },
   };
 
-  // Typed edits mark dirty; leaving subject/slug, or Enter in one, flushes promptly. The body is
+  // Typed edits mark dirty; leaving the subject, or Enter in it, flushes promptly. The body is
   // left to the idle/cap timers so a toolbar click (which blurs it) doesn't save
   // on every interaction.
   if (!locked) {
-    for (const el of [subjectEl, slugEl, ta]) {
+    for (const el of [subjectEl, ta]) {
       el.addEventListener("input", markEdited);
     }
-    for (const el of [subjectEl, slugEl]) {
+    for (const el of [subjectEl]) {
       el.addEventListener(
         "blur",
         () => saveDraft(true).catch(() => {}) /* the save cue says why */,
@@ -851,9 +857,7 @@ export async function renderEditor(
       el.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) {
           e.preventDefault();
-          saveDraft(true)
-            .then(applyHeld) // Enter commits the slug, so show what it saved as
-            .catch(() => {}); // the save cue says why
+          saveDraft(true).catch(() => {}); // the save cue says why
         }
       });
     }
@@ -1054,7 +1058,14 @@ export async function renderEditor(
         from,
         {
           update(send: SendView, change: StageChange | null) {
+            // A change to the post's settings gives its send a new `rev` with no change of stage,
+            // so such a report may carry a change made elsewhere (Claude, another tab): read the
+            // post again for the banner's row. A stage change hands off below instead.
+            const settingsMayHaveChanged = !change && "rev" in current && send.rev !== current.rev;
             current = send;
+            if (settingsMayHaveChanged) {
+              void rereadPublishing();
+            }
             if (change?.to === "sending" || change?.to === "sent" || change?.to === "complete") {
               toast("Your send started, so this page switched to its live watch.");
               handOff(`#/sent/${send.id}`);
@@ -1096,7 +1107,13 @@ export async function renderEditor(
     }
 
     // --- reschedule (from the scheduled banner): move the fire time, content stays frozen ---
-    reschedBtn.onclick = () => openRescheduleModal(current.id, current.fire_at, remount, signal);
+    reschedBtn.onclick = () =>
+      void openRescheduleModal(
+        { id: current.id, post_id: id, fire_at: current.fire_at },
+        remount,
+        signal,
+        { ...pub },
+      );
 
     // --- cancel schedule (from the scheduled banner) ---
     cancelBtn.onclick = () =>
@@ -1198,7 +1215,7 @@ export async function renderEditor(
       }
       return e.key.length === 1 || e.key === "Enter" || e.key === "Backspace" || e.key === "Delete";
     };
-    const fields: HTMLElement[] = [ta, subjectEl, slugEl];
+    const fields: HTMLElement[] = [ta, subjectEl];
     for (const f of fields) {
       f.addEventListener("keydown", (e) => {
         if (wouldEdit(e)) {
@@ -1350,8 +1367,20 @@ export async function renderEditor(
       // While no provider is connected the server would refuse both views, so the dialog
       // drops the picker and the Send now row and leaves only the standing line (DESIGN §4).
       const notConnected = providerNotConnected();
-      const scheduleView = html`<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick, with a cancelable window until then.</p>${notConnectedScheduleLine()}${dailyWritesLine()}${notConnected ? null : html`<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}">`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Or send as soon as possible.</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
-      const m = modal(scheduleView, signal);
+      // The dialog's own copy of the post's settings (SPEC §4, §5): it opens as stored, the form
+      // under the time edits it, and it reaches the post only when Schedule or Send now is
+      // pressed, so Cancel leaves the post as it was. A following address shows the subject in
+      // the field as it now stands, unless another post holds that slug.
+      const working: Publishing = { ...pub, subject: subjectEl.value };
+      if (working.slugAuto && !working.slugTaken) {
+        working.slug = slugify(working.subject) || working.slug;
+      }
+      const scheduleHint = "It sends at the time you pick, with a cancelable window until then.";
+      const scheduleView = () =>
+        html`<h3 id="schHead">Schedule this post</h3><p class="hint" id="schHint">${scheduleHint}</p>${notConnectedScheduleLine()}${dailyWritesLine()}${notConnected ? null : html`<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}"><div class="dialog-settings" id="schForm"></div>`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Or send as soon as possible.</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
+      // The picked time survives a trip to Send now and back.
+      let picked = def;
+      const m = modal(scheduleView(), signal);
       const box = $(".modal", m.el);
       // Who a send would reach now: the confirmed addresses that aren't suppressed (SPEC §6),
       // read at most once, when a view first needs it. Neither view waits on it: their copy
@@ -1391,6 +1420,21 @@ export async function renderEditor(
         freshnessEl.scrollIntoView({ block: "nearest" });
       };
 
+      // The form under the time edits the dialog's copy; its first line follows the copy.
+      const showForm = () => mountSettingsForm($("#schForm", box), working, "sch");
+      // The dialog's settings go with the act itself, checked and applied together, so a
+      // refused schedule changes neither and a refused address schedules nothing.
+      const settingsBody = () => ({
+        email_only: working.emailOnly,
+        ...settingsChange(pub, working),
+      });
+      /** A refusal of the address goes under its field; any other says itself as it would. */
+      const sayRefusal = (e: unknown) => {
+        if (!showSlugRefusal(box, "sch", e)) {
+          m.error(message(e));
+        }
+      };
+
       const doSchedule = () =>
         busy($<HTMLButtonElement>("#schGo", box), "Scheduling…", async () => {
           m.clearError();
@@ -1414,7 +1458,7 @@ export async function renderEditor(
             }
             await api<ScheduleResponse>(`/api/posts/${id}/schedule`, {
               method: "POST",
-              json: { fire_at: new Date(t).toISOString() },
+              json: { fire_at: new Date(t).toISOString(), ...settingsBody() },
             });
             m.close();
             // Stay on the post, re-rendered in its scheduled state: the window is the
@@ -1433,7 +1477,7 @@ export async function renderEditor(
               m.error(message(e), $<HTMLInputElement>("#schWhen", box));
               return;
             }
-            m.error(message(e));
+            sayRefusal(e);
           }
         });
 
@@ -1450,6 +1494,7 @@ export async function renderEditor(
             // rounded up to the minute (SPEC §6), so it can be up to a minute past the lead.
             const { send } = await api<ScheduleResponse>(`/api/posts/${id}/send`, {
               method: "POST",
+              json: settingsBody(),
             });
             m.close();
             toast(withNoProviderNote(`Sends at ${fmt(send.fire_at)}, cancelable until then.`));
@@ -1460,7 +1505,7 @@ export async function renderEditor(
               foundGone(e);
               return;
             }
-            m.error(message(e));
+            sayRefusal(e);
           }
         });
 
@@ -1476,21 +1521,28 @@ export async function renderEditor(
           return;
         }
         $("#toSendNow", box).onclick = showSendNow;
+        $<HTMLInputElement>("#schWhen", box).value = picked;
+        showForm();
         $("#schWhen", box).focus();
         void paintDailyWrites();
       }
 
       async function showSendNow() {
+        const when = box.querySelector<HTMLInputElement>("#schWhen");
+        if (when) {
+          picked = when.value;
+        }
         setHtml(
           box,
-          html`<h3 id="snHead">Send now?</h3><p class="hint">Sends this draft, as it is now, to <strong id="snWho">your subscribers</strong> in ${sendNowWhenText()}. The post locks until then, and you can cancel any time before it starts sending.</p>${dailyWritesLine()}<div class="altrow altrow-top"><button type="button" class="linkbtn" id="toSchedule">← Back to schedule</button></div><div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`,
+          html`<h3 id="snHead">Send now?</h3><p class="hint">Sends this draft, as it is now, to <strong id="snWho">your subscribers</strong> in ${sendNowWhenText()}. The post locks until then, and you can cancel any time before it starts sending.</p><div class="dialog-settings" id="schForm"></div>${dailyWritesLine()}<div class="actions"><button type="button" class="linkbtn actions-back" id="toSchedule">← Back to schedule</button><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`,
         );
         box.setAttribute("aria-labelledby", "snHead");
         $("#snCancel", box).onclick = m.close;
         $("#snGo", box).onclick = doSendNow;
+        showForm();
         $<HTMLButtonElement>("#snGo", box).disabled = providerNotConnected();
         $("#toSchedule", box).onclick = () => {
-          setHtml(box, scheduleView);
+          setHtml(box, scheduleView());
           wireSchedule();
         };
         $("#snGo", box).focus();

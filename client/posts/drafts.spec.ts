@@ -17,7 +17,13 @@ import { renderDrafts } from "./drafts";
 
 const page = { total: 2, limit: 50, offset: 0, sort: "", dir: "desc" };
 const posts = [
-  { id: "p1", subject: "<b>Owls</b> & co", status: "draft", updated_at: "2026-09-20T10:00:00Z" },
+  {
+    id: "p1",
+    subject: "<b>Owls</b> & co",
+    status: "draft",
+    email_only: true,
+    updated_at: "2026-09-20T10:00:00Z",
+  },
   {
     id: "p2",
     subject: "Waxwings",
@@ -41,7 +47,7 @@ describe("drafts view", () => {
   });
   const postReads = () => fake.calls.filter((c) => c.url.pathname === "/api/posts");
 
-  it("lists drafts and scheduled posts within the drafts scope, with subjects shown as text", async () => {
+  it("lists drafts and scheduled posts within the drafts scope, with subjects shown as text and an email-only post marked", async () => {
     fake = fakeApi([
       ...sendServer().routes,
       { path: "/api/posts", reply: () => ({ posts, page, cursor: "0.0" }) },
@@ -52,6 +58,9 @@ describe("drafts view", () => {
     expect($$("tr[data-id]")).toHaveLength(2);
     expect($("tr[data-id='p1'] a").textContent).toBe("<b>Owls</b> & co");
     expect(document.querySelector("tr[data-id='p1'] b")).toBeNull(); // markup in a subject stays text
+    // Only the exception is marked: an email-only post carries the grey label, a listed one none.
+    expect($("tr[data-id='p1'] .email-only-mark").textContent?.trim()).toBe("Email only");
+    expect(document.querySelector("tr[data-id='p2'] .email-only-mark")).toBeNull();
     expect(postReads()[0]?.url.searchParams.get("status")).toBe("draft,scheduled");
     expect(fake.unhandled).toEqual([]);
   });

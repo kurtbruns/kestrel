@@ -41,19 +41,21 @@ import {
   countdownHtml,
   countdowns,
   deliveredCell,
+  emailOnlyNote,
   needsOperator,
   sendsNow,
+  titleWithLabel,
 } from "./progress";
 
 const message = describeError;
 
-/** A scheduled card's Reschedule and Cancel: offered while the server would take them, and
+/** A scheduled card's Edit schedule and Cancel: offered while the server would take them, and
  *  hidden at the fire time, when the review window closes (SPEC §6), by the countdown's
  *  tick rather than the next read. */
 function windowControls(s: SendView) {
   const buttons = [
     can(s, "reschedule")
-      ? html`<button class="ghost" data-reschedule="${s.id}">Reschedule</button>`
+      ? html`<button class="ghost" data-reschedule="${s.id}">Edit schedule</button>`
       : null,
     can(s, "cancel") ? html`<button class="ghost" data-cancel="${s.id}">Cancel</button>` : null,
   ];
@@ -81,11 +83,11 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
     ${noEmailProvider() ? html`<p class="muted">A local stand-in sends these: they are recorded here, but nothing is delivered.</p>` : null}
     ${notConnectedWarning("sent-not-connected", html`No email provider connected, so nothing can be sent yet. ${connectProviderLink()} to start sending.`)}
     <div id="stuck"></div>
-    <h2>Scheduled</h2><div id="scheduled" class="muted">Loading…</div>
+    <h2>Scheduled</h2><div id="scheduled"><p class="muted">Loading…</p></div>
     <div id="active"></div>
     <h2>Sent posts</h2>
     ${listToolbar({ searchPlaceholder: "Search subject…", failures: true })}
-    <div id="sendsList" class="muted">Loading…</div>
+    <div id="sendsList"><p class="muted">Loading…</p></div>
     <div id="sendsPager"></div>`,
   );
   const stuckEl = $("#stuck", root);
@@ -289,7 +291,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
       }
       const { sends } = res;
       const schedCard = (s: SendView) =>
-        html`<div class="card spread clickable sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${s.audience.count} recipients</div></div>${windowControls(s)}</div>`;
+        html`<div class="card spread clickable sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${s.audience.count} recipients${emailOnlyNote(s)}</div></div>${windowControls(s)}</div>`;
       const [first, ...rest] = sends;
       if (!first) {
         setHtml(schedEl, html`<p class="muted">Nothing scheduled.</p>`);
@@ -330,7 +332,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
       for (const b of $$<HTMLButtonElement>("[data-reschedule]", schedEl)) {
         const s = sends.find((x) => x.id === b.dataset.reschedule);
         if (s) {
-          b.onclick = () => openRescheduleModal(s.id, s.fire_at, afterAct, signal);
+          b.onclick = () => void openRescheduleModal(s, afterAct, signal);
         }
       }
       for (const b of $$<HTMLButtonElement>("[data-cancel]", schedEl)) {
@@ -386,7 +388,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
         listEl,
         html`<div class="table-wrap"><table class="list-table sent-table stacks"><colgroup><col><col class="c-date"><col class="c-num"><col class="c-delivered"></colgroup><thead><tr>${th("Subject", "subject", state)}${th("When", "fire", state)}${th("Recipients", "recipients", state, "num")}<th class="num">Delivered</th></tr></thead><tbody>${sends.map(
           (s) =>
-            html`<tr class="clickable" data-id="${s.id}"><td class="subject"><a href="#/sent/${s.id}">${s.subject}</a></td><td class="muted">${fmt(s.completed_at ?? s.fire_at)}</td><td class="num recipients"><span class="n">${s.audience.count.toLocaleString()}</span></td><td class="num delivered">${deliveredCell(s.counts)}</td></tr>`,
+            html`<tr class="clickable" data-id="${s.id}"><td class="subject">${titleWithLabel(html`<a href="#/sent/${s.id}">${s.subject}</a>`, s)}</td><td class="muted">${fmt(s.completed_at ?? s.fire_at)}</td><td class="num recipients"><span class="n">${s.audience.count.toLocaleString()}</span></td><td class="num delivered">${deliveredCell(s.counts)}</td></tr>`,
         )}</tbody></table></div>`,
       );
       wireSort(listEl, state, loadList);

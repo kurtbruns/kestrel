@@ -9,7 +9,7 @@
 
 import type { PostResponse } from "../../shared/posts";
 import { ApiError, api, apiText, describeError } from "../api";
-import { postArchiveUrl } from "../deployment";
+import { postUnlistedUrl } from "../deployment";
 import { mount, onAbort } from "../lifecycle";
 import { EMAIL_FRAME_SANDBOX, framedCopy, openLinksInNewTab } from "../ui/email_frame";
 import { type Html, html, setHtml } from "../ui/html";
@@ -35,29 +35,12 @@ export function webPostId(kind: string | undefined, id: string | undefined): str
   }
 }
 
-/** Where a post stands, for the bar: a draft or scheduled, and its public address (null
- *  while unknown, so the bar names none). */
-export interface WebBarState {
-  scheduled: boolean;
-  url: string | null;
-}
-
-/** An address as the bar shows it: without its scheme, which says nothing to a reader. */
-function shortUrl(url: string): string {
-  return url.replace(/^https?:\/\//, "");
-}
-
-/** The bar's words: what the page is, as its tag, then where the post stands and where it
- *  will be published (as text, since the address doesn't answer yet), with no date. Null
- *  state: the post couldn't be read, so the bar says only what the page is. */
-export function webBar(state: WebBarState | null): Html {
+/** The bar's words: what the page is, as its tag, then that it isn't live yet, so a faithful
+ *  copy is never mistaken for the public page. Unread (the post couldn't be read), only the
+ *  tag. */
+export function webBar(read: boolean): Html {
   const tag = html`<span class="web-bar-tag">Web version</span>`;
-  if (state === null) {
-    return tag;
-  }
-  const stage = state.scheduled ? "Scheduled" : "Draft";
-  const at = state.url ? html` · will be published at ${shortUrl(state.url)}` : null;
-  return html`${tag} <span class="web-bar-text">${stage}${at}</span>`;
+  return read ? html`${tag} <span class="web-bar-text">Not public yet</span>` : tag;
 }
 
 /** The same address, spelled one way, or null for one that is not a whole URL. */
@@ -69,19 +52,19 @@ function normalUrl(url: string): string | null {
   }
 }
 
-/** In the Preview tab of an unpublished post, every link to the post's own public address
- *  (its "View in browser" link) made to open its web version instead (SPEC §5). That address
+/** In the Preview tab of an unpublished post, every link to the post's unlisted link (its
+ *  "View in browser" link) made to open its web version instead (SPEC §5). That link
  *  answers "Nothing here yet" until the send starts, so a publisher who follows it to see
  *  the post's page would find none; the web version is that page. Only the framed copy
- *  changes: the email's bytes, and every test and send of it, keep the public address.
+ *  changes: the email's bytes, and every test and send of it, keep the unlisted link.
  *  Links to anywhere else, another post's page among them, are left as they are. Only
  *  the address changes: `openLinksInNewTab` still opens the link in a new tab. */
 export function previewOpensWebVersion(
   doc: Document,
-  archiveUrl: string | null,
+  unlistedUrl: string | null,
   webUrl: string,
 ): void {
-  const own = archiveUrl ? normalUrl(archiveUrl) : null;
+  const own = unlistedUrl ? normalUrl(unlistedUrl) : null;
   if (!own) {
     return;
   }
@@ -130,13 +113,14 @@ export async function renderWebVersion(
     if (signal.aborted) {
       return;
     }
-    const url = data ? postArchiveUrl(data.post.slug) : null;
-    // Once the send starts the post is public, and its web version is that page: go there.
-    if (data && (data.sending || data.post.status === "sent") && url) {
-      leaveFor(url);
+    // Once the send starts the post is public, and its web version is that page: go there,
+    // by its unlisted link, which opens the page whatever the listing.
+    const live = data ? postUnlistedUrl(data.post.unlisted_token) : null;
+    if (data && (data.sending || data.post.status === "sent") && live) {
+      leaveFor(live);
       return;
     }
-    const bar = webBar(data ? { scheduled: data.scheduled != null, url } : null);
+    const bar = webBar(data !== null);
     setHtml(
       root,
       html`<div class="web-page">

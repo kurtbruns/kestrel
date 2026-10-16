@@ -1558,6 +1558,54 @@ td a:hover {
   color: var(--status-sending-fg);
   border-color: var(--status-sending-line);
 }
+/* Email only (SPEC §5): a fact about where a post lives, so the draft grey (DESIGN §8). It
+   sits beside a subject, a little smaller than a status badge. */
+.badge.email-only {
+  background: var(--status-draft-bg);
+  color: var(--status-draft-fg);
+  border-color: var(--status-draft-line);
+  font-size: 11.5px;
+  padding: 1px 7px;
+  margin-left: 6px;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+/* A list's title with its Email only mark (sends/progress.ts): the title wraps within its room
+   and the mark, an envelope and muted words, stays whole on the title's line, so it never drops
+   onto a line of its own. */
+.title-with-label {
+  display: flex;
+  /* Centered, not on a baseline: the mark's text is smaller and led by an icon, and only
+     their centers line up with the title's. */
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.title-with-label .title-text {
+  min-width: 0;
+}
+/* Where a table's columns are fixed, a long title ends in an ellipsis, so the row stays one
+   line tall; the whole title is a click away in the post. */
+.list-table .title-with-label .title-text,
+.dash-drafts .title-with-label .title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.email-only-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.email-only-mark svg {
+  width: 13px;
+  height: 13px;
+}
 /* Subscriber consent states borrow a hue that matches the state's meaning: confirmed →
    the sent green, unsubscribed → the draft grey, suppressed → danger red (below). Pending
    awaits double-opt-in — a waiting/attention state — so it takes the amber `warn` scale,
@@ -1810,6 +1858,24 @@ td a:hover {
 .list-table .c-delivered {
   width: 176px;
 }
+/* Every Sent row, on the Sent page and the dashboard, as tall as one with a delivery note under its count, so a row with none (a
+   one-recipient test) sits in the same rhythm as the rest. A row's height is its floor; once
+   the table stacks, each row is a block that takes its own height. */
+/* The dashboard's Drafts card is half the page wide: its date stays on one line, and the title
+   takes what room is left. */
+.dash-drafts {
+  table-layout: fixed;
+}
+.dash-drafts td.edited {
+  width: 11.5em;
+  white-space: nowrap;
+}
+@media (min-width: 721px) {
+  .sent-table tbody tr,
+  .dash-sent tbody tr {
+    height: 56px;
+  }
+}
 .list-table .c-act {
   width: 56px;
 }
@@ -1965,14 +2031,16 @@ body.web-mode .content {
   padding: 10px 44px;
   text-align: left;
 }
+/* The reader pages' Dev pill exactly (`.r-dev-tag` in src/lib/page.ts), so the two read as one. */
 .web-bar-tag {
   display: inline-block;
   margin-right: 10px;
-  font-size: 10px;
+  font-size: 9.5px;
+  line-height: 1.6;
   letter-spacing: 0.09em;
   text-transform: uppercase;
   font-weight: 700;
-  padding: 1px 7px;
+  padding: 2px 7px;
   border-radius: 999px;
   background: var(--accent-on);
   color: var(--accent);
@@ -2415,6 +2483,12 @@ body.web-mode .content {
   border-color: var(--ring);
   box-shadow: 0 0 0 1px var(--ring);
 }
+/* A scheduled post's body is locked, so focus rings it in grey, as the locked subject's is,
+   rather than in the blue that says "type here" (DESIGN §3). */
+.composer.composer-locked:focus-within {
+  border-color: var(--muted);
+  box-shadow: 0 0 0 1px var(--muted);
+}
 .composer-head {
   display: flex;
   align-items: flex-end;
@@ -2621,14 +2695,25 @@ body.web-mode .content {
 }
 .composer-body.locked textarea.editor {
   caret-color: transparent;
+  cursor: default;
 }
-/* The subject and slug of a scheduled post are read-only too, and readonly (unlike disabled)
-   carries no native greying, so they take the same recessed surface as the body: otherwise
-   they read as editable, and the refusal pulses a line far below where the keystroke landed. */
-#f-subject[readonly],
-#f-slug[readonly] {
+/* Its text is muted, as the subject's is, so the body reads as locked at a glance. */
+.composer-body.locked .md-hl code {
+  opacity: 0.72;
+}
+/* The subject of a scheduled post is read-only too, and readonly (unlike disabled) carries no
+   native greying, so it is styled to look locked while keeping what disabled would take away:
+   it can still be focused, selected, and copied, and a keystroke still pulses the foot line.
+   The recessed surface, muted text, an arrow cursor, and a grey focus ring in place of the
+   blue one that says "type here" (DESIGN §3). */
+#f-subject[readonly] {
   background: var(--sunken);
   border-color: var(--line-soft);
+  color: var(--muted);
+  cursor: default;
+}
+#f-subject[readonly]:focus-visible {
+  outline-color: var(--muted);
 }
 .composer-body.dragover::after {
   content: "Drop images to upload";
@@ -2696,6 +2781,11 @@ body.web-mode .content {
   }
 }
 
+/* The editor's subject, body, and actions sit on the page itself, with no card around them:
+   the fields and the composer carry their own borders, aligned with the head and the banner. */
+.editor-form > label:first-child {
+  margin-top: 6px;
+}
 .actions-bar {
   display: flex;
   align-items: center;
@@ -2910,13 +3000,10 @@ body.web-mode .content {
   flex: none;
   white-space: nowrap;
 }
-/* The back link at the top of the Send-now view needs no divider — it returns from,
-   rather than demotes below, the Schedule view. */
-.modal .altrow-top {
-  margin: -4px 0 10px;
-  padding-top: 0;
-  border-top: 0;
-  justify-content: flex-start;
+/* The Send-now view's way back to the Schedule view, at the start of its button row: it
+   returns from, rather than demotes below, the Schedule view, so it takes no row of its own. */
+.modal .actions .actions-back {
+  margin-right: auto;
 }
 /* Link — a text-link-styled action (DESIGN §7), not one of the button roles. Reserved
    for a deliberately subordinate choice, like the in-modal Send now that sits below
@@ -3122,16 +3209,6 @@ textarea.is-invalid {
 .modal .dialog-error {
   margin-top: 12px;
 }
-/* Label + info icon grouped at the top of the slug field. */
-.label-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 14px 0 8px;
-}
-.label-row label {
-  margin: 0;
-}
 /* Info icon: the field explanation lives in its hover/focus tooltip. The padding
    + equal negative margin enlarge the hover/click target to ~28px without moving
    the glyph or growing the label row. */
@@ -3195,28 +3272,6 @@ textarea.is-invalid {
   opacity: 1;
   visibility: visible;
   transform: translateY(0);
-}
-/* The "Auto-generate from subject" toggle, grouped just under the slug field. */
-.slug-auto-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  font-size: 14px;
-  color: var(--muted);
-  cursor: pointer;
-  user-select: none;
-}
-.slug-auto-toggle input {
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  accent-color: var(--ring);
-  cursor: pointer;
-}
-/* Slug is muted while it follows the subject; normal once set by hand. */
-#f-slug.slug-auto {
-  color: var(--muted);
 }
 /* --- Editor-state banner (DESIGN §5): a standing, in-flow line at the top of the
    editor, in two variants. `scheduled` marks a frozen, soft-locked post (SPEC §6);
@@ -3285,16 +3340,327 @@ textarea.is-invalid {
   font-size: 12.5px;
   color: var(--status-scheduled-fg);
 }
-
-.grid2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+/* The Email only box under a dialog's time: the label, then its helper beneath. */
+.listing-check {
+  display: flex;
+  align-items: flex-start;
   gap: 10px;
+  margin: 14px 0 0;
+  font-size: 14px;
+  color: var(--fg);
+  cursor: pointer;
 }
-@media (max-width: 620px) {
-  .grid2 {
-    grid-template-columns: 1fr;
+.listing-check input {
+  width: auto;
+  margin: 3px 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--ring);
+  cursor: pointer;
+}
+.listing-check strong {
+  font-weight: 600;
+}
+.listing-help {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+/* A scheduled post's banner in two rows (DESIGN §4): the time, its notes, and the controls that
+   act on it; then, under a hairline, where the post is going, on a slightly deeper ground. */
+.banner-split {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+}
+.banner-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  font-size: 14px;
+}
+.banner-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-top: 1px solid var(--status-scheduled-line);
+  /* A shade deeper than the banner, so the row reads as its footer rather than a strip of its own. */
+  background: color-mix(in srgb, var(--status-scheduled-fg) 6%, var(--status-scheduled-bg));
+  font-size: 13px;
+}
+.banner-bottom svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.sched-dest-icon {
+  display: flex;
+  flex: none;
+}
+/* A filled icon takes the row's violet; a stroked one (fill="none") already draws in it. */
+.banner-bottom svg:not([fill="none"]),
+#settingsBtn svg {
+  fill: currentColor;
+}
+#schedDest {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sched-dest code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.pub-taken code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--fg);
+}
+/* The settings form in a dialog under the time, set off from it by a rule. */
+.dialog-settings {
+  margin-top: 14px;
+  padding-top: 2px;
+}
+.dialog-settings .listing-check {
+  margin-top: 0;
+}
+/* The archive address as one URL field: the base greyed and fixed, then the slug, the one part
+   to type. The whole field is the label, so a click on the base lands in the slug too. */
+.pub-address {
+  margin-top: 14px;
+}
+.pub-label {
+  display: block;
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.url-field {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+  font-family: var(--mono);
+  font-size: 13px;
+  cursor: text;
+}
+.url-field:focus-within {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 1px var(--ring);
+}
+.url-field.is-invalid {
+  border-color: var(--danger-fg);
+}
+.url-base {
+  display: flex;
+  align-items: center;
+  padding: 8px 0 8px 10px;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.url-field input {
+  flex: 1;
+  min-width: 6em;
+  border: 0;
+  border-radius: 0;
+  padding: 8px 10px 8px 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+}
+.url-field input:focus-visible {
+  outline: none;
+}
+.url-field.readonly {
+  cursor: default;
+  background: var(--sunken);
+}
+.url-field.readonly input {
+  color: var(--muted);
+  font-weight: 500;
+  background: transparent;
+}
+@media (max-width: 480px) {
+  .url-field {
+    flex-direction: column;
   }
+  .url-base {
+    padding-bottom: 0;
+  }
+  .url-field input {
+    padding-left: 10px;
+  }
+}
+/* A refused address, in the server's words, under its field. */
+.pub-error {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--danger-fg);
+}
+/* The Post settings button carries a gear before its words. */
+#settingsBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+#settingsBtn svg {
+  width: 16px;
+  height: 16px;
+}
+.pub-taken {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.pub-taken svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  margin-top: 2px;
+}
+.pub-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+/* A sent post's page in two parts (DESIGN §3): the post, then its delivery. */
+.rec-head-page {
+  margin-bottom: 14px;
+}
+.rec-part-title {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.rec-web {
+  display: grid;
+}
+.rec-link-label {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+/* The link as one field: the address, then Copy and Open attached to it. */
+.rec-link {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--sunken);
+}
+/* An address is one line, shortened at its end, since Copy carries it whole. */
+.rec-link code {
+  flex: 1 1 auto;
+  align-self: center;
+  min-width: 0;
+  padding: 8px 10px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rec-link button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 35px;
+  padding: 0 11px;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.rec-link button:hover {
+  color: var(--fg);
+  background: var(--hover);
+}
+.rec-link button.rec-open {
+  color: var(--accent);
+  font-weight: 500;
+}
+.rec-link-note {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+}
+/* Where the post stands, in words beside the one change it allows (which asks first). */
+.rec-arch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin: 14px -16px 0;
+  padding: 14px 16px 0;
+  border-top: 1px solid var(--line);
+}
+/* A post with no web link yet has only its standing to show, with no rule above it. */
+.rec-web > .rec-arch:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.rec-arch-what {
+  flex: 1 1 220px;
+  min-width: 0;
+  font-size: 14px;
+}
+.rec-arch-what strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.rec-arch-what svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--muted);
+}
+.rec-arch-what svg:not([fill="none"]) {
+  fill: currentColor;
+}
+.rec-arch-note {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+/* The address Remove from archive takes down, struck through in its dialog. */
+.url-gone {
+  padding: 8px 10px;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 620px) {
   .tb {
     width: 34px;
     height: 34px;
@@ -4209,7 +4575,8 @@ button.api-filter-clear svg {
   gap: 10px;
 }
 
-/* Setup checklist — shared by the first-run dashboard and Getting started. */
+/* Setup steps: the first-run checklist, and the regular dashboard's Finish setting up card
+   (one component, two layouts). The card is the compact one. */
 .setup-title {
   margin-top: 0;
 }
@@ -4281,6 +4648,20 @@ button.api-filter-clear svg {
   font: 12.5px var(--mono);
   color: var(--muted);
   word-break: break-all;
+}
+.setup-card {
+  margin-bottom: 20px;
+}
+.setup-card .setup-title {
+  font-size: 16px;
+}
+.setup-card .setup-steps li {
+  padding: 8px 2px;
+}
+.setup-card .setup-steps li::before {
+  width: 22px;
+  height: 22px;
+  font-size: 12px;
 }
 
 /* ============================================================
@@ -4377,6 +4758,17 @@ button.copied svg {
 /* A Copy beside a value keeps its size however long the value runs. */
 .pub-row button.copy-btn {
   flex: 0 0 auto;
+}
+/* In a sent post's link field, Copy is a segment of the field like Open: square, full height,
+   and divided from the address, so its hover fills the segment rather than a chip inside it. */
+.rec-link button.copy-btn {
+  padding: 0 11px;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--card);
+}
+.rec-link button.copy-btn:hover {
+  background: var(--hover);
 }
 
 /* --- groups: the sections kept together by whom they serve (DESIGN §3). A group has no

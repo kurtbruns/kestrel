@@ -1,5 +1,5 @@
 // The dashboard (home): counts, the active send widget, drafts and sent tables, the
-// setup checklist, and quick actions.
+// setup steps (the first-run checklist, then the Finish setting up card), and quick actions.
 
 import type { PostListItem, PostListResponse } from "../../shared/posts";
 import type { SendListResponse, SendView } from "../../shared/sends";
@@ -23,9 +23,11 @@ import {
   countdownHtml,
   countdowns,
   deliveredCell,
+  emailOnlyNote,
   has,
   needsOperator,
   sendsNow,
+  titleWithLabel,
 } from "../sends/progress";
 import { appState } from "../state";
 import { addSubscriberModal } from "../subscribers/dialogs";
@@ -58,7 +60,9 @@ interface HealthAlert {
 // not about a send is the deployment's: no email provider connected (SPEC §9), an amber
 // standing state with no time, read from the deployment reflection, gone once one is set.
 // When that state is holding a send, the two are said as one red line instead of two.
-function computeHealth(live: SendView[]): HealthAlert[] {
+// While the Finish setting up card carries its Connect Amazon SES step, the card says the
+// not-connected state and the amber line is left out, so it is said once (DESIGN §3).
+function computeHealth(live: SendView[], setupSaysNotConnected = false): HealthAlert[] {
   const alerts: HealthAlert[] = [];
   // Missed only past the server's tolerance: an ordinary slow tick is never a miss (§12).
   const missed = live.filter((s) => has(s, "missed"));
@@ -141,7 +145,7 @@ function computeHealth(live: SendView[]): HealthAlert[] {
       text: html`<a href="#/sent/${firstSpike.s.id}">${firstSpike.s.subject}</a>: ${firstSpike.c.message}`,
     });
   }
-  if (notConnected && !held.length) {
+  if (notConnected && !held.length && !setupSaysNotConnected) {
     alerts.push({
       level: "amber",
       text: html`<span class="dash-not-connected">No email provider connected, so nothing can be sent yet. ${connectProviderLink()} to start sending.</span>`,
@@ -208,20 +212,39 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   const pub = derivePublication(appState.appConfig);
   const deployment = appState.appConfig?.deployment ?? null;
 
-  // First run, with nothing written yet: replace the body with the onboarding checklist (the
-  // shared Getting-started component) rather than a wall of empty tiles. It ends at the
-  // first post, not the first subscriber, so bringing a list in (a step on it) doesn't
-  // take away the steps after it.
+  // A post listed in the archive has been published (its send started): the step that ends
+  // setup. An email-only post (Verify it works' test send) doesn't count (SPEC §5).
+  const archived = () =>
+    sends.some((s) => (s.status === "sending" || s.status === "sent") && !s.email_only);
+  // What the setup steps read as done, from what the app already knows (DESIGN §3).
+  const setupProgress = (): SetupProgress => ({
+    named: Boolean(appState.appConfig?.settings.publication?.name?.trim()),
+    onList: counts.confirmed + counts.pending,
+    archived: archived(),
+  });
+
+  // First run, with nothing written yet: replace the body with the setup checklist rather
+  // than a wall of empty tiles. It ends at the first post, not the first subscriber, so
+  // bringing a list in (a step on it) doesn't take away the steps after it; from the first
+  // post the same steps are the Finish setting up card below.
   if (!posts.length) {
     setHtml(
       root,
       html`<div class="dash-head"><div><h1>${pub.name}</h1>${
         pub.tagline ? html`<p class="muted dash-tagline">${pub.tagline}</p>` : null
-      }<p class="muted">Let’s get your first post out the door.</p></div></div>${setupChecklistHtml(pub, deployment, counts)}<section class="dash-section"><h2>API access</h2>${apiConnectCard(false)}</section>`,
+      }<p class="muted">Let’s get your first post out the door.</p></div></div>${setupStepsHtml(pub, deployment, setupProgress(), "checklist")}<section class="dash-section"><h2>API access</h2>${apiConnectCard(false)}</section>`,
     );
     wireDashActions(root, remount, signal);
     return;
   }
+
+  // The Finish setting up card, while setup is open: until its last step, a post listed in
+  // the archive published, is done, so the step's check and the card ending are one moment.
+  const setupOpen = () => !archived();
+  const setupCardHtml = () =>
+    setupOpen() ? setupStepsHtml(pub, deployment, setupProgress(), "card") : html``;
+  const healthNow = () =>
+    healthHtml(computeHealth(sendsNow(sends, reported), setupOpen() && providerNotConnected()));
 
   // Each tile deep-links into the roster pre-filtered on its criterion
   // (#/subscribers/<filter>), so a count is a way in, not just a number.
@@ -245,9 +268,9 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
 
   const drafts = posts.filter((p) => p.status === "draft").slice(0, 5);
   const draftsHtml = drafts.length
-    ? html`<div class="table-wrap"><table><tbody>${drafts.map(
+    ? html`<div class="table-wrap"><table class="dash-drafts"><tbody>${drafts.map(
         (p) =>
-          html`<tr class="clickable" data-id="${p.id}"><td><a href="#/edit/${p.id}">${p.subject || html`<em>untitled</em>`}</a></td><td class="muted">edited ${fmt(p.updated_at)}</td></tr>`,
+          html`<tr class="clickable" data-id="${p.id}"><td>${titleWithLabel(html`<a href="#/edit/${p.id}">${p.subject || html`<em>untitled</em>`}</a>`, p)}</td><td class="muted edited">edited ${fmt(p.updated_at)}</td></tr>`,
       )}</tbody></table></div>`
     : html`<p class="muted">No drafts in progress.</p>`;
 
@@ -277,7 +300,8 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       <div><h1>${pub.name}</h1>${pub.tagline ? html`<p class="muted dash-tagline">${pub.tagline}</p>` : null}</div>
       <button class="primary" data-act="new-post">New post</button>
     </div>
-    <div id="dashHealth">${healthHtml(computeHealth(sendsNow(sends, reported)))}</div>
+    <div id="dashHealth">${healthNow()}</div>
+    <div id="dashSetup">${setupCardHtml()}</div>
     <div id="dashActive">${dashActiveHtml(activeOf(sendsNow(sends, reported)))}</div>
     <section class="dash-section"><h2>Subscribers</h2>${tilesHtml}</section>
     <div class="dash-cols">
@@ -331,6 +355,8 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       tickCountdowns(); // the fresh cards are empty until the next tick
       setHtml($("#dashSent", root), dashSentHtml(sends));
       wireDashSentRows(root);
+      setHtml($("#dashSetup", root), setupCardHtml());
+      wireDashButtons($("#dashSetup", root), remount, signal); // Copy is delegated from root
       paintLive();
     } catch {
       /* a background read: the sections keep their last render until the next change */
@@ -338,7 +364,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   };
   const paintLive = () => {
     const now = sendsNow(sends, reported);
-    setHtml($("#dashHealth", root), healthHtml(computeHealth(now)));
+    setHtml($("#dashHealth", root), healthNow());
     setHtml($("#dashActive", root), dashActiveHtml(activeOf(now)));
     wireDashActiveCards(root);
     patchDelivered(root, [...reported.values()]);
@@ -377,13 +403,14 @@ function dashSentHtml(sends: SendView[]): Html {
   if (!recent.length) {
     return html`<p class="muted">No sends yet.</p>`;
   }
-  return html`<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Status</th><th class="num">Recipients</th><th class="num">Delivered</th><th></th></tr></thead><tbody>${recent.map(
+  return html`<div class="table-wrap"><table class="dash-sent"><thead><tr><th>Subject</th><th>Status</th><th class="num">Recipients</th><th class="num">Delivered</th><th></th></tr></thead><tbody>${recent.map(
     (s) => {
-      // The published post, which the send's view links once it has started.
-      const url = s.links.archive;
-      return html`<tr class="clickable" data-send="${s.id}"><td><a href="#/sent/${s.id}">${s.subject}</a></td><td>${badge(s.status)}</td><td class="num">${s.audience.count.toLocaleString()}</td><td class="num delivered">${deliveredCell(s.counts)}</td><td class="act">${
+      // The published post, which the send's view links once it has started: its archive
+      // page, or an email-only post's page at its unlisted link, so the link says which.
+      const url = s.email_only ? s.links.unlisted : s.links.archive;
+      return html`<tr class="clickable" data-send="${s.id}"><td>${titleWithLabel(html`<a href="#/sent/${s.id}">${s.subject}</a>`, s)}</td><td>${badge(s.status)}</td><td class="num">${s.audience.count.toLocaleString()}</td><td class="num delivered">${deliveredCell(s.counts)}</td><td class="act">${
         url
-          ? html`<a class="ghost-link" href="${url}" target="_blank" rel="noopener">Archive&nbsp;↗</a>`
+          ? html`<a class="ghost-link" href="${url}" target="_blank" rel="noopener">${s.email_only ? html`Web version&nbsp;↗` : html`Archive&nbsp;↗`}</a>`
           : null
       }</td></tr>`;
     },
@@ -424,7 +451,7 @@ function dashScheduledHtml(scheduled: SendView[]): Html {
   const held = heldWhenFiresHtml("card");
   return html`${scheduled.map(
     (s) =>
-      html`<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${s.audience.count} recipients</div>${held}${has(s, "remade") ? html`<div class="sched-remade-mark">Look changed since your last test</div>` : null}</div></div>`,
+      html`<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${s.audience.count} recipients${emailOnlyNote(s)}</div>${held}${has(s, "remade") ? html`<div class="sched-remade-mark">Look changed since your last test</div>` : null}</div></div>`,
   )}`;
 }
 function wireDashScheduledCards(root: HTMLElement): void {
@@ -458,9 +485,15 @@ function wireDashActiveCards(root: HTMLElement): void {
   }
 }
 
-// Controls shared by the Dashboard and the Getting-started view: hash navigation,
-// "New post", "Add subscriber", and copy buttons.
+// The dashboard's controls, on the regular dashboard, the first-run checklist, and the Finish
+// setting up card: hash navigation, "New post", "Add subscriber", and copy buttons.
 function wireDashActions(root: HTMLElement, reload: () => void, signal: AbortSignal): void {
+  wireDashButtons(root, reload, signal);
+  wireCopy(root);
+}
+
+/** The buttons under `root`, each wired by assignment, so wiring a repainted part again is safe. */
+function wireDashButtons(root: HTMLElement, reload: () => void, signal: AbortSignal): void {
   for (const b of $$("[data-nav]", root)) {
     b.onclick = () => {
       location.hash = b.dataset.nav ?? "";
@@ -472,10 +505,8 @@ function wireDashActions(root: HTMLElement, reload: () => void, signal: AbortSig
   for (const b of $$("[data-act='add-sub']", root)) {
     b.onclick = () => addSubscriberModal(reload, signal);
   }
-  wireCopy(root);
 }
 
-// The onboarding checklist, shared by the first-run dashboard and Getting-started.
 // The "API access" card. Two states: an invitation to connect Claude, or — once Claude
 // (the `service` principal, SPEC §4) has edited here — a plain "Claude is connected" note.
 // Shared by the populated dashboard and the first-run state (a card below the setup
@@ -500,28 +531,46 @@ function apiConnectCard(connected: boolean): Html {
 }
 
 /**
- * The first-run checklist, in the order the steps depend on each other, each one the
- * publisher's to take except connecting a provider, which shows only until one is. Writing a post
- * comes late because its New post creates a draft, which ends the first-run page; sharing
- * comes last so a visitor finds a post in the archive. While no provider is connected,
- * connecting one replaces the check-your-setup step (nothing can be checked before it) and
- * the subscribe step says signups wait for it (the page is closed). Bringing a list comes
- * before writing, for a publisher moving from another service; it reads as done once the
- * list has subscribers, which a fresh publication skips. The Publishing docs' section of the
- * same name (docs/publishing/README.md) follows these steps, so a change here changes it.
+ * What the setup steps read as done, each from what the app already knows (DESIGN §3).
+ * Checking the setup is never read as done: a send the operator made to verify the instance
+ * says nothing about whether the publisher has checked theirs.
  */
-function setupChecklistHtml(
+interface SetupProgress {
+  /** A name has been set in Settings. */
+  named: boolean;
+  /** Confirmed and pending subscribers on the list. */
+  onList: number;
+  /** A post listed in the archive has been published: setup is done. */
+  archived: boolean;
+}
+
+/**
+ * The setup steps, in one of two layouts: the first-run `checklist` that stands in for the
+ * dashboard until the first post, and the compact `card` the regular dashboard carries until
+ * the first post listed in the archive is published. One list, so the two can't drift. The
+ * steps go in the order they depend on each other, each the publisher's to take except
+ * connecting a provider, which shows only until one is: while none is, connecting replaces
+ * the check-your-setup step (nothing can be checked before it) and the subscribe step says
+ * signups wait for it. A step reads as done only from what the app knows. Checking the setup
+ * and sharing the link are guidance and never read as done; sending a post to the archive is
+ * the one that ends setup, so its check and the card clearing happen together. The Publishing docs'
+ * section of the same name (docs/publishing/README.md) follows these steps, so a change here
+ * changes it.
+ */
+function setupStepsHtml(
   pub: Publication,
   deployment: DeploymentView | null,
-  counts: SubscriberCounts,
+  progress: SetupProgress,
+  layout: "checklist" | "card",
 ): Html {
   const subscribeUrl = `${deployment?.appOrigin || location.origin}/subscribe`;
   const notConnected = providerNotConnected();
-  const onList = counts.confirmed + counts.pending;
-  return html`<div class="card setup">
-    <h2 class="setup-title">Set up your publication</h2>
+  const { onList } = progress;
+  const done = (yes: boolean) => (yes ? " setup-done" : "");
+  return html`<div class="card setup${layout === "card" ? " setup-card" : ""}">
+    <h2 class="setup-title">${layout === "card" ? "Finish setting up" : "Set up your publication"}</h2>
     <ol class="setup-steps">
-      <li><div class="setup-step-main"><strong>Name your publication</strong><span class="muted">Currently “${pub.name}”. Set the name, tagline, and brand in Settings.</span></div><button data-nav="#/settings">Settings</button></li>
+      <li class="setup-name${done(progress.named)}"><div class="setup-step-main"><strong>Name your publication</strong><span class="muted">Currently “${pub.name}”. Set the name, tagline, and brand in Settings.</span></div><button data-nav="#/settings">Settings</button></li>
       ${
         notConnected
           ? html`<li class="setup-connect"><div class="setup-step-main"><strong>Connect Amazon SES</strong><span class="muted">Nothing can be sent, and signups stay closed, until SES is connected.</span></div><button data-nav="${CONNECT_PROVIDER_HREF}">Connect Amazon SES</button></li>`
@@ -532,7 +581,7 @@ function setupChecklistHtml(
           ? html`<li class="setup-done setup-list"><div class="setup-step-main"><strong>Bring your existing list</strong><span class="muted">${onList.toLocaleString()} ${onList === 1 ? "subscriber" : "subscribers"} on your list.</span></div><button data-nav="#/subscribers">Subscribers</button></li>`
           : html`<li class="setup-list"><div class="setup-step-main"><strong>Bring your existing list</strong><span class="muted">Import the subscribers you have on another service, with the consent they gave there. Skip this if you’re starting fresh.</span></div><button data-nav="#/subscribers/import">Import</button></li>`
       }
-      <li><div class="setup-step-main"><strong>Write your first post</strong><span class="muted">Draft a post in Markdown and preview it exactly as the email.</span></div><button class="primary" data-act="new-post">New post</button></li>
+      <li class="setup-write${done(progress.archived)}"><div class="setup-step-main"><strong>Send your first post to the archive</strong><span class="muted">Write a post, test it, and send it. Setup is done once a post in your archive goes out.</span></div>${layout === "card" ? html`<button data-act="new-post">New post</button>` : html`<button class="primary" data-act="new-post">New post</button>`}</li>
       ${
         notConnected
           ? html`<li class="setup-subscribe"><div class="setup-step-main"><strong>Share your subscribe link</strong><span class="muted">Signups open once an email provider is connected; until then the page says they aren’t open yet.</span></div></li>`

@@ -30,6 +30,10 @@ export interface SendExtras {
   eta_ms?: number | null;
   /** The published post's page, which the server links once the send has started. */
   archive?: string | null;
+  /** The post's listing (SPEC §5), when it is email only. */
+  email_only?: boolean;
+  /** Which address the send's email carries, `archive` for a send frozen before unlisted links. */
+  web_link?: "unlisted" | "archive";
 }
 
 /**
@@ -54,6 +58,8 @@ export function sendView(row: SendSummary, over: Partial<SendView> = {}): SendVi
     post_id: row.post_id,
     subject: row.subject,
     status: row.status,
+    email_only: false,
+    web_link: "unlisted",
     rev: row.rev,
     as_of: Date.now(),
     fire_at: row.fire_at,
@@ -108,6 +114,10 @@ export function sendView(row: SendSummary, over: Partial<SendView> = {}): SendVi
       archive:
         row.status === "sending" || row.status === "sent"
           ? `https://birds.example/${row.post_id}`
+          : null,
+      unlisted:
+        row.status === "sending" || row.status === "sent"
+          ? `https://app.birds.example/email/t-${row.post_id}`
           : null,
     },
     ...over,
@@ -264,6 +274,8 @@ export function sendServer(rows: SendSummary[] = []) {
       conditions,
       actions,
       next_change_at: nextChange(s, now),
+      email_only: s.extras.email_only ?? false,
+      web_link: s.extras.web_link ?? "unlisted",
       dispatch: { done: 0, percent: 0, rate_per_min: null, eta_ms: s.extras.eta_ms ?? null },
       ...(s.extras.archive === undefined
         ? {}

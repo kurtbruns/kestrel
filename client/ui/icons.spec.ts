@@ -26,6 +26,7 @@ const ALL = {
   quote: true,
   readonly: true,
   search: true,
+  settings: true,
   send: true,
   ul: true,
   upload: true,

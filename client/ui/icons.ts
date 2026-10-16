@@ -33,6 +33,7 @@ import quote from "./icons/quote.svg";
 import readonly from "./icons/readonly.svg";
 import search from "./icons/search.svg";
 import send from "./icons/send.svg";
+import settings from "./icons/settings.svg";
 import ul from "./icons/ul.svg";
 import upload from "./icons/upload.svg";
 import x from "./icons/x.svg";
@@ -62,6 +63,7 @@ const ICONS = {
   readonly: unsafeHtml(readonly),
   search: unsafeHtml(search),
   send: unsafeHtml(send),
+  settings: unsafeHtml(settings),
   ul: unsafeHtml(ul),
   upload: unsafeHtml(upload),
   book: unsafeHtml(book),

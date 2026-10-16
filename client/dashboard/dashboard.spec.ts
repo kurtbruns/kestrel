@@ -26,8 +26,10 @@ const post = (over: Partial<PostListItem> = {}): PostListItem => ({
   id: "p1",
   slug: "owls",
   slug_auto: true,
+  unlisted_token: "t-p1",
   subject: "<b>Owls</b> & co",
   status: "draft",
+  email_only: false,
   current_revision: "r1",
   created_at: NOW - 100_000,
   updated_at: NOW - 50_000,
@@ -445,7 +447,7 @@ describe("dashboard", () => {
         "Name your publication",
         "Connect Amazon SES",
         "Bring your existing list",
-        "Write your first post",
+        "Send your first post to the archive",
         "Share your subscribe link",
       ]);
       expect($(".setup-connect button").dataset.nav).toBe("#/docs/ses");
@@ -460,7 +462,8 @@ describe("dashboard", () => {
 
     it("raises an amber line in the health block on a populated dashboard, linking to connect one", async () => {
       withProvider("none");
-      fake = world([post()], sendServer(), counts);
+      // A listed post has gone out, so setup is finished and the health block says it.
+      fake = world([post()], sendServer([send()]), counts);
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
       // In the health block's own warning treatment (DESIGN §4), with nothing wrong on a send.
@@ -472,6 +475,17 @@ describe("dashboard", () => {
       );
       expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/ses");
       expect(line.querySelector("button")).toBeNull(); // a standing line: nothing to dismiss
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("says it once while setup is open: the Finish setting up card's Connect step, not a health line", async () => {
+      withProvider("none");
+      fake = world([post()], sendServer(), counts);
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect($(".setup-card .setup-title").textContent).toBe("Finish setting up");
+      expect($(".setup-card .setup-connect button").textContent).toBe("Connect Amazon SES");
+      expect(document.querySelector("#dashHealth .health")).toBeNull();
       expect(fake.unhandled).toEqual([]);
     });
 
@@ -538,7 +552,7 @@ describe("dashboard", () => {
           "Name your publication",
           "Check your setup",
           "Bring your existing list",
-          "Write your first post",
+          "Send your first post to the archive",
           "Share your subscribe link",
         ]);
         expect($(".setup-url").textContent, provider).toBe("https://app.birds.example/subscribe");
@@ -556,6 +570,116 @@ describe("dashboard", () => {
         fake.restore();
       }
     });
+  });
+
+  // DESIGN §3: setup's steps stay reachable after the first post, until a post listed in the
+  // archive is published (SPEC §5).
+  describe("Finish setting up", () => {
+    const card = () => document.querySelector(".setup-card");
+    const done = () => $$(".setup-card .setup-done strong").map((s) => s.textContent);
+
+    it("carries the same steps as the first-run checklist once a draft exists, under the health block", async () => {
+      fake = world([post()], sendServer(), none);
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect($(".setup-card .setup-title").textContent).toBe("Finish setting up");
+      expect($$(".setup-card .setup-steps li strong").map((s) => s.textContent)).toEqual([
+        "Name your publication",
+        "Check your setup",
+        "Bring your existing list",
+        "Send your first post to the archive",
+        "Share your subscribe link",
+      ]);
+      expect($("#dashSetup").previousElementSibling?.id).toBe("dashHealth");
+      expect(document.querySelector(".tiles")).not.toBeNull(); // the regular dashboard
+      // One Primary per view: the head's New post. The card's is Ghost.
+      expect($$("button.primary[data-act='new-post']")).toHaveLength(1);
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("marks done only what the app knows: a name set, subscribers; never checking the setup, which is guidance", async () => {
+      // A scheduled send and a sent email-only one: an operator's checks say nothing about
+      // whether the publisher checked theirs, and neither is in the archive.
+      const srv = sendServer([scheduled()]);
+      srv.put(send(), { email_only: true });
+      fake = world([post()], srv, counts);
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(done()).toEqual(["Name your publication", "Bring your existing list"]);
+      expect($(".setup-card .setup-check button").textContent).toBe("Docs");
+      // Every step but the archive one can be done, and the card still waits on it.
+      expect($(".setup-card .setup-write button").textContent).toBe("New post");
+      unmount();
+      fake.restore();
+      const c = config();
+      c.settings.publication = { name: "", tagline: "", address: "", logoUrl: "" };
+      appState.appConfig = c;
+      fake = world([post()], sendServer(), none);
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(done()).toEqual([]);
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("stays while the only sends are email only, so Verify it works' test send doesn't end setup", async () => {
+      const srv = sendServer();
+      srv.put(send(), { email_only: true });
+      fake = world([post({ status: "sent" })], srv, counts);
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(card()).not.toBeNull();
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("clears once a post listed in the archive has started sending, and doesn't come back on a later read", async () => {
+      const srv = sendServer([scheduled({ fire_at: NOW + 30_000 })]);
+      fake = world([post({ status: "scheduled" })], srv, counts);
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(card()).not.toBeNull();
+      // The sweep starts it: published, so the archive shows its first post.
+      srv.edit("x2", { status: "sending", started_at: Date.now(), c_pending: 40 });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(card()).toBeNull();
+      expect(fake.unhandled).toEqual([]);
+    });
+  });
+
+  it("marks an email-only post in the Sent table, and links its web version rather than the archive", async () => {
+    const srv = sendServer();
+    srv.put(send(), { email_only: true, archive: "https://birds.example/archive/waxwings" });
+    srv.put(send({ id: "x4", post_id: "p5", subject: "Wrens" }));
+    fake = world([post()], srv);
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(0);
+    const quiet = $("tr[data-send='x1']");
+    expect($(".email-only-mark", quiet).textContent?.trim()).toBe("Email only");
+    expect($(".ghost-link", quiet).textContent).toBe("Web version\u00a0↗");
+    const listed = $("tr[data-send='x4']");
+    expect(listed.querySelector(".email-only-mark")).toBeNull();
+    expect($(".ghost-link", listed).textContent).toBe("Archive\u00a0↗");
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("marks an email-only post's scheduled card, and only that one", async () => {
+    const srv = sendServer();
+    srv.put(scheduled(), { email_only: true });
+    fake = world([post()], srv);
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#dashScheduled .sched-card .sched-email-only").textContent).toBe("Email only");
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("marks an email-only draft beside its title, and only that one (DESIGN §2)", async () => {
+    fake = world([post(), post({ id: "p2", subject: "Wrens", email_only: true })], sendServer());
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(0);
+    const label = (id: string) =>
+      document.querySelector(`tr[data-id='${id}'] .email-only-mark`)?.textContent?.trim() ?? null;
+    expect(label("p2")).toBe("Email only");
+    expect(label("p1")).toBeNull();
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("opens the post from a draft row or a scheduled card, the record from a sent row, and the watch from the active card", async () => {

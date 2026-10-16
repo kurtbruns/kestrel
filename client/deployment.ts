@@ -1,7 +1,7 @@
 // Reads of the deployment reflection (appState.appConfig.deployment; SPEC §9), fetched once
 // at boot: the build reference, the archive URL, the minimum lead, and the no-provider notes.
 
-import { archivePostUrl } from "../shared/archive_url";
+import { archivePostUrl, unlistedPostUrl } from "../shared/archive_url";
 import {
   DEFAULT_MIN_LEAD_MS,
   formatLead,
@@ -229,7 +229,7 @@ export function notConnectedScheduleLine(): Html | null {
 }
 
 /**
- * The Reschedule dialog's line. Moving a send already scheduled is still accepted (it sends
+ * The Edit schedule dialog's line. Moving a send already scheduled is still accepted (it sends
  * nothing), so its control stays live; the line says the send is held when it fires.
  */
 export function notConnectedRescheduleLine(): Html | null {
@@ -251,4 +251,11 @@ export function withNoProviderNote(msg: string): string {
 export function postArchiveUrl(slug: string): string | null {
   const d = appState.appConfig?.deployment;
   return d ? archivePostUrl(d.archiveOrigin, d.archiveBasePath, slug) : null;
+}
+
+/** A post's unlisted link, the "view in browser" its emails carry, by the Worker's formula
+ *  (shared/archive_url.ts), or null before the reflection has loaded. */
+export function postUnlistedUrl(token: string): string | null {
+  const d = appState.appConfig?.deployment;
+  return d ? unlistedPostUrl(d.appOrigin, token) : null;
 }
