@@ -486,7 +486,7 @@ describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
       buildReferenceResponse(defs),
       "https://newsletter.example.com",
     );
-    const lines = [...md.matchAll(/^- (.+): `(\S+) (\S+)`\. /gm)].map(
+    const lines = [...md.matchAll(/^- (.+): `(\S+) (\S+)`$/gm)].map(
       ([, t, m, p]) => `${t}: ${m} ${p}`,
     );
     expect(lines.sort()).toEqual(defs.map((d) => `${d.title}: ${d.method} ${d.path}`).sort());
@@ -517,7 +517,8 @@ describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
     );
     expect(sends).toContain("Example response:");
     // A route off the admin tier says so on its call line.
-    expect(docs.get("subscriptions")).toContain("`POST /subscribe` (public, no authentication)");
+    expect(docs.get("subscriptions")).toContain("`POST /subscribe` (public: no authentication)");
+    expect(docs.get("delivery")).toContain("`POST /webhooks/ses` (webhook: the provider signs it");
     // The refusals every route shares are said once, in the index, never in a route's own.
     for (const doc of docs.values()) {
       expect(doc).not.toContain("`unauthorized`");
@@ -531,7 +532,7 @@ describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
     expect(res.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
     const index = await res.text();
     expect(index).toMatch(/^# API reference/);
-    expect(index).toContain("- Get a doc as Markdown: `GET /api/docs/:name.md`. ");
+    expect(index).toContain("- Get a doc as Markdown: `GET /api/docs/:name.md`\n");
     expect(index).toContain(`Base URL \`${base}\``);
     const sends = await SELF.fetch(`${base}/api/reference/sends.md`, { headers: AUTH });
     expect(sends.status).toBe(200);

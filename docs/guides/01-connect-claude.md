@@ -76,7 +76,7 @@ Read GET /api/reference.md first, then the reference of the resource
 you're working with, such as GET /api/reference/sends.md, before calling it.
 ```
 
-For Claude the reference is Markdown in two levels: `GET /api/reference.md` is the index, with what every route shares and each route on one line, and `GET /api/reference/<resource>.md` holds one resource's routes in full, so Claude reads only what its work needs. The JSON at `GET /api/reference` is the whole reference in one answer, as the editor reads it. So are the docs served as Markdown: `GET /api/docs/publishing.md` lists the publisher's pages, `GET /api/docs/self-hosting.md` this guide's, and each page is at `GET /api/docs/<slug>.md`.
+For Claude the reference is Markdown in two levels: `GET /api/reference.md` is the index, with what every route shares and each route on one line, and `GET /api/reference/<resource>.md` holds one resource's routes in full, so Claude reads only what its work needs. The JSON at `GET /api/reference` is the whole reference in one answer, as the editor reads it. The docs are served as Markdown too: `GET /api/docs/publishing.md` lists the publisher's pages, `GET /api/docs/self-hosting.md` this guide's, and each page is at `GET /api/docs/<slug>.md`.
 
 Claude reads the reference, and from there can list the posts, write a draft, and schedule it. The reference lists the body types each route takes. Most take JSON, sent with `Content-Type: application/json`. An image upload takes a multipart form, or the image file itself.
 

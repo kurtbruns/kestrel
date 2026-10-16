@@ -10,10 +10,11 @@
  * follows (./concepts.ts), the refusal codes (./refusals.ts), and the objects routes return
  * (./objects.ts), so a route's own entry says only what is its own.
  *
- * This is a Markdown-free, structured render — distinct from both the operator
- * docs (src/docs/, Markdown→web-page) and the single email render path (I5).
- * Served read-only through the authed `/api/reference` route (see routes/docs.ts
- * for the sibling docs surface it mirrors).
+ * It is projected two ways: the structured response the editor renders, and Markdown for an
+ * agent (an index, and a document per resource). Both are distinct from the operator docs
+ * (src/docs/, Markdown→web-page) and the single email render path (I5).
+ * Served read-only through the authed `/api/reference`, `/api/reference.md`, and
+ * `/api/reference/<resource>.md` routes (see routes/docs.ts for the sibling docs surface).
  */
 
 import { headingAnchor } from "../../shared/docs";
@@ -130,7 +131,6 @@ export function buildReferenceResponse(routes: readonly RouteDef[]): ReferenceRe
   };
 }
 
-/** A link to an object's section. */
 /** A link to an object's section: in this resource's own document, or in its resource's. */
 function objectLink(key: ObjectKey, from: Resource): string {
   const { title, resource } = OBJECTS[key];
@@ -233,12 +233,20 @@ function cell(text: string): string {
   return text.replace(/\|/g, "\\|");
 }
 
+/** What a route's call line says of its tier: nothing for the admin tier, whose authentication
+ *  the index describes, and how the others differ. */
+const TIER_NOTE: Record<Access, string> = {
+  admin: "",
+  public: " (public: no authentication)",
+  webhook: " (webhook: the provider signs it; not for clients to call)",
+};
+
 /** One route as a Markdown section: its title as the heading, its method and path beneath,
  *  then the summary, description, body types, query parameters, body fields, what it
  *  returns, its own refusals, and example. */
 function routeMarkdown(r: ReferenceEntry): string {
   // A route off the admin tier says so on its call line, since its authentication differs.
-  const tier = r.access === "admin" ? "" : ` (${r.access}, no authentication)`;
+  const tier = TIER_NOTE[r.access];
   const parts = [`## ${r.title}`, `\`${r.method} ${r.path}\`${tier}`, r.summary];
   if (r.description) {
     parts.push(r.description);
@@ -304,7 +312,7 @@ export function referenceIndexMarkdown(ref: ReferenceResponse, origin: string): 
     const resources = g.resources.map((res) => {
       const lines = g.routes
         .filter((r) => r.resource === res.key)
-        .map((r) => `- ${r.title}: \`${r.method} ${r.path}\`. ${r.summary}`);
+        .map((r) => `- ${r.title}: \`${r.method} ${r.path}\``);
       return [
         `### ${res.title}`,
         `Reference: \`GET ${resourcePath(res.key)}\``,
