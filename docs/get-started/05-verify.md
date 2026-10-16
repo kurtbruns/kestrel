@@ -2,7 +2,7 @@
 
 Some things only show up with real email: whether inboxes trust your mail, how it looks in a real mail client, and whether bounces and unsubscribes come back to the app. Check them now, while the list is empty and every email goes only to you.
 
-In this guide, you send yourself a test email, reply to it, and check that it passes authentication. Then you set up notifications, send a real post to yourself as a subscriber, and unsubscribe. Finally, you check that bounces and complaints reach the app, read the app's logs, and check that SES can send to anyone.
+In this guide, you send yourself a test email, reply to it, and check that it passes authentication. Then you set up notifications, send a real post to yourself as a subscriber, and unsubscribe. Finally, you check that bounces and complaints reach the app, read the app's logs, check that SES can send to anyone, and clean up the test subscribers.
 
 ## Before you begin
 
@@ -59,9 +59,13 @@ This is a real send, to a list of one. It proves the whole path: subscribing, co
 
 1. Open the post, select **Schedule**, and then **Send now**. Every send waits at least five minutes before it goes out, so you can cancel a mistake.
 
-1. Cancel the send, to see that canceling stops it. Then select **Send now** again, and let it go.
+1. Uncheck **Include in archive**. The post still goes to subscribers, but it's sent as email only: it isn't in the public archive or on the home page. That way the test proves the send without becoming the publication's first archived post, and the dashboard keeps its **Finish setting up** steps for the publisher.
+
+1. Cancel the send, to see that canceling stops it. Then select **Schedule** and **Send now** again, check that **Include in archive** is still unchecked, and let it go.
 
 1. When the send finishes, the post arrives at your second address. A notification arrives at your first, with the subject `Sent:` and the post's title.
+
+If you verified this instance before Email only existed, the test post is in the archive. Open it under **Sent**, and select **Remove from archive…**.
 
 ## 5. Unsubscribe
 
@@ -107,6 +111,18 @@ The app writes a log line for each thing it does, and Cloudflare keeps them for 
 1. Check that `SES_MAX_SEND_RATE` in `wrangler.jsonc` matches that rate, and that you deployed after setting it, as [Connect Amazon SES](04-ses.md#8-set-the-provider-and-deploy) describes.
 
 If the dashboard still says sandbox, AWS hasn't answered yet. Every other section works in the sandbox, so come back to this one when it does.
+
+## 9. Clean up the test subscribers
+
+The checks leave test addresses on the list. Erase them, so the publisher starts with only real readers.
+
+1. In the editor, open **Subscribers**.
+
+1. Erase `bounce@simulator.amazonses.com` and `complaint@simulator.amazonses.com`. Open each one's menu (⋯), and select **Erase**.
+
+1. Erase your second address too, if it won't be a reader.
+
+Erasing keeps a do-not-contact marker, but the person can subscribe again through the subscribe page. Erasing your own address doesn't lock you out.
 
 When every section gives the result it describes, your instance is ready for subscribers.
 

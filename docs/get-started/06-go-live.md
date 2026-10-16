@@ -4,7 +4,7 @@ At this point, your instance should be deployed, verified, and out of the SES sa
 
 ## Start publishing
 
-The rest happens in the editor, at `https://newsletter.example.com/dashboard/`. The Publishing docs walk through it in the order of the dashboard's setup checklist, starting with [Name your publication](../publishing/03-name-your-publication.md). The checklist itself shows only until the first post exists, so the test post from [Verify it works](05-verify.md) has already hidden it.
+The rest happens in the editor, at `https://newsletter.example.com/dashboard/`. The Publishing docs walk through it in the order of the dashboard's setup checklist, starting with [Name your publication](../publishing/03-name-your-publication.md).
 
 If someone else is the publisher, let them sign in first:
 

@@ -42,7 +42,7 @@ Neither one is the publication's name, tagline, or logo. You set those in the ed
 
 ### `ARCHIVE_BASE_PATH`
 
-Every post sent carries its archive link, `ARCHIVE_BASE_PATH` followed by the post's slug, and those links are permanent. Changing the prefix later breaks every link already mailed, so pick it before the first send. To keep links from an older install working, set it to the prefix they use, such as `/newsletter`.
+A listed post's archive address is `ARCHIVE_BASE_PATH` followed by the post's slug. Emails link through each post's unlisted link, `/email/<token>` on `APP_ORIGIN`, which forwards to the archive address, so changing the prefix later breaks no email that carries one, only archive addresses people have shared. Emails sent by 1.11 or earlier carry the archive address itself, and changing the prefix breaks those. To keep links from an older install working, set it to the prefix they use, such as `/newsletter`.
 
 A missing leading slash is added, and a trailing slash is dropped.
 
