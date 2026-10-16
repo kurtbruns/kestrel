@@ -4212,6 +4212,41 @@ button.api-filter-clear svg {
 .api-empty {
   margin: 20px 0;
 }
+/* An object, first under the resource whose routes return it: one collapsed line that opens
+   to its fields and example. */
+.api-object {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin: 4px 0 10px;
+}
+.api-object-sum {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  list-style: none;
+  cursor: pointer;
+}
+.api-object-sum::-webkit-details-marker {
+  display: none;
+}
+.api-object-sum:hover {
+  background: var(--hover);
+}
+.api-object-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  font-size: 13px;
+}
+.api-object[open] .api-chev {
+  transform: rotate(45deg);
+}
+.api-object-detail {
+  padding: 0 10px 12px;
+}
 /* Reference room on mobile. The bar stays ONE row at --bar-h, the same as on desktop, so
    the in-page anchors (scroll-margin-top) and the scroll-spy line keep clearing it: the back
    link is a --bar-h square holding its arrow, the wordmark and the two tabs follow, and the

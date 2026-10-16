@@ -132,6 +132,21 @@ function apiPathHtml(path: string): Html {
 interface Lookups {
   meanings: Meanings;
   objects: ReadonlyMap<string, string>;
+  /** The objects each resource section opens with, by its `<tier>-<resource>` key. */
+  heads: ReadonlyMap<string, ReferenceObject[]>;
+}
+
+/** Each object under the first tier that lists its resource, keyed as that resource's section. */
+function objectHeads(ref: ReferenceResponse): Map<string, ReferenceObject[]> {
+  const heads = new Map<string, ReferenceObject[]>();
+  for (const o of ref.objects) {
+    const g = ref.groups.find((t) => t.resources.some((res) => res.key === o.resource));
+    if (g) {
+      const sec = `${g.access}-${o.resource}`;
+      heads.set(sec, [...(heads.get(sec) ?? []), o]);
+    }
+  }
+  return heads;
 }
 function apiRouteHtml(r: ReferenceEntry, look: Lookups): Html {
   // What the filter matches: the route's name, the method, the path, and the summary.
@@ -159,11 +174,28 @@ function apiRouteHtml(r: ReferenceEntry, look: Lookups): Html {
 /** A resource's routes within a tier, in the order the tier lists them. */
 const routesIn = (g: ReferenceGroup, res: ReferenceResource) =>
   g.routes.filter((r) => r.resource === res.key);
+// An object its resource's routes return, first under the resource as Stripe puts it: one
+// collapsed line that opens to its fields and example.
+function apiObjectHtml(o: ReferenceObject): Html {
+  return html`<details class="api-object" id="api-objects-${o.key}">
+      <summary class="api-object-sum">
+        <span class="api-object-name"><span class="api-route-title">${o.title}</span><span class="muted">${o.fields.length} ${o.fields.length === 1 ? "field" : "fields"}</span></span>
+        <span class="api-chev" aria-hidden="true"></span>
+      </summary>
+      <div class="api-object-detail">
+        ${apiProseHtml(o.description)}
+        ${apiFieldsTable(o.fields)}
+        ${apiExample("Example", o.example)}
+      </div>
+    </details>`;
+}
 function apiResourceHtml(g: ReferenceGroup, res: ReferenceResource, look: Lookups): Html {
   const sec = `${g.access}-${res.key}`;
   const routes = routesIn(g, res);
+  const objects = look.heads.get(sec) ?? [];
   return html`<div class="api-res" id="api-${sec}" data-sec="${sec}">
       <div class="api-res-head"><h3>${res.title}</h3></div>
+      ${objects.map(apiObjectHtml)}
       <ul class="api-rows">${routes.map((r) => apiRouteHtml(r, look))}</ul>
     </div>`;
 }
@@ -188,43 +220,27 @@ function apiRefusalsHtml(groups: readonly ReferenceRefusalGroup[]): Html {
   );
   return html`<table class="api-query api-refusals"><tbody>${rows}</tbody></table>`;
 }
-// What every route shares, before the routes: a static section the route filter hides.
+// The topics every route shares, before the routes: a static section the route filter hides.
 function apiOverviewHtml(ref: ReferenceResponse): Html {
   const concept = (c: ReferenceConcept) =>
     html`<div class="api-res" id="api-overview-${c.key}" data-sec="overview-${c.key}">
       <div class="api-res-head"><h3>${c.title}</h3></div>
       ${apiProseHtml(c.text)}
-      ${c.key === "rules" ? apiRefusalsHtml(ref.refusals) : null}
+      ${c.key === "errors" ? apiRefusalsHtml(ref.refusals) : null}
     </div>`;
   return html`<section class="api-section" id="api-overview" data-tier="overview" data-static>
-      <h2>Overview</h2>
+      <h2>Getting started</h2>
       ${ref.concepts.map(concept)}
     </section>`;
 }
-// Each object a route returns, described once.
-function apiObjectsHtml(objects: readonly ReferenceObject[]): Html {
-  const object = (o: ReferenceObject) =>
-    html`<div class="api-res" id="api-objects-${o.key}" data-sec="objects-${o.key}">
-      <div class="api-res-head"><h3>${o.title}</h3></div>
-      <p class="api-prose">${o.description}</p>
-      ${apiFieldsTable(o.fields)}
-      ${apiExample("Example", o.example)}
-    </div>`;
-  return html`<section class="api-section" id="api-objects" data-tier="objects" data-static>
-      <h2>Objects</h2>
-      ${objects.map(object)}
-    </section>`;
-}
-// The rail: the overview and the objects, then each tier, each with its parts beneath it. A
-// tier with one resource lists only the tier, since the resource would repeat it. No counts:
-// the rail is for moving.
+// The rail: the topics, then each tier, each with its parts beneath it. A tier with one
+// resource lists only the tier, since the resource would repeat it. No counts: the rail is
+// for moving.
 function apiNavHtml(ref: ReferenceResponse): Html {
   const part = (sec: string, title: string) =>
     html`<a href="#/reference" class="api-nav-res" data-sec="${sec}">${title}</a>`;
-  return html`<a href="#/reference" class="api-nav-tier" data-sec="overview" data-tier="overview">Overview</a>${ref.concepts.map(
+  return html`<a href="#/reference" class="api-nav-tier" data-sec="overview" data-tier="overview">Getting started</a>${ref.concepts.map(
     (c) => part(`overview-${c.key}`, c.title),
-  )}<a href="#/reference" class="api-nav-tier" data-sec="objects" data-tier="objects">Objects</a>${ref.objects.map(
-    (o) => part(`objects-${o.key}`, o.title),
   )}${ref.groups.map(
     (g) =>
       html`<a href="#/reference" class="api-nav-tier" data-sec="${g.access}" data-tier="${g.access}">${g.title}</a>${
@@ -341,7 +357,12 @@ export async function renderReference(root: HTMLElement, signal: AbortSignal): P
       return;
     }
     ev.preventDefault();
-    document.getElementById(`api-${sec}`)?.scrollIntoView({ block: "start" });
+    const target = document.getElementById(`api-${sec}`);
+    // An object is a collapsed line under its resource: a link to it opens it too.
+    if (target instanceof HTMLDetailsElement) {
+      target.open = true;
+    }
+    target?.scrollIntoView({ block: "start" });
   };
   navEl.addEventListener("click", jump);
   contentEl.addEventListener("click", jump);
@@ -355,12 +376,13 @@ export async function renderReference(root: HTMLElement, signal: AbortSignal): P
   const look: Lookups = {
     meanings: new Map(ref.refusals.flatMap((g) => g.codes.map((c) => [c.code, c.meaning]))),
     objects: new Map(ref.objects.map((o) => [o.key, o.title])),
+    heads: objectHeads(ref),
   };
 
   setHtml(navEl, apiNavHtml(ref));
   setHtml(
     contentEl,
-    html`<header class="api-head"><h1>API reference</h1><p class="muted">Generated from the route registration, so every endpoint the app and Claude can call is listed here. Base URL <code>${location.origin}</code>.</p><div class="api-filter">${icon("search")}<input type="search" id="apiFilter" placeholder="Filter routes by name, method, or path" autocomplete="off" aria-label="Filter routes" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd><button type="button" class="icon api-filter-clear" id="apiFilterClear" aria-label="Clear filter" hidden>${icon("x")}</button></div></header>${apiOverviewHtml(ref)}${apiObjectsHtml(ref.objects)}${ref.groups.map((g) => apiSectionHtml(g, look))}<p class="api-empty muted" id="apiEmpty" hidden>No routes match. Try a path segment like <code>sends</code> or a method like <code>DELETE</code>.</p>`,
+    html`<header class="api-head"><h1>API reference</h1><p class="muted">Generated from the route registration, so every endpoint the app and Claude can call is listed here. Base URL <code>${location.origin}</code>.</p><div class="api-filter">${icon("search")}<input type="search" id="apiFilter" placeholder="Filter routes by name, method, or path" autocomplete="off" aria-label="Filter routes" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd><button type="button" class="icon api-filter-clear" id="apiFilterClear" aria-label="Clear filter" hidden>${icon("x")}</button></div></header>${apiOverviewHtml(ref)}${ref.groups.map((g) => apiSectionHtml(g, look))}<p class="api-empty muted" id="apiEmpty" hidden>No routes match. Try a path segment like <code>sends</code> or a method like <code>DELETE</code>.</p>`,
   );
   const filterEl = $<HTMLInputElement>("#apiFilter");
   const clearEl = $("#apiFilterClear");

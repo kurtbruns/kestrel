@@ -329,15 +329,18 @@ describe("API reference is generated from the route registration", () => {
     expect([...named].sort()).toEqual(Object.keys(REFUSAL_STATUS).sort());
   });
 
-  it("describes every object a route returns, once, and links each route to it", () => {
+  it("describes every object a route returns, once, first under its resource, and links each route to it", () => {
     const ref = buildReferenceResponse(defs);
     const md = referenceMarkdown(ref, "https://newsletter.example.com");
     const returned = ref.groups.flatMap((g) => g.routes).flatMap((r) => r.returns?.object ?? []);
     expect(new Set(returned)).toEqual(new Set(ref.objects.map((o) => o.key)));
     for (const o of ref.objects) {
-      expect(md.match(new RegExp(`^### ${o.title}$`, "gm")), o.key).toHaveLength(1);
+      expect(md.match(new RegExp(`^#### ${o.title}$`, "gm")), o.key).toHaveLength(1);
       expect(md).toContain(`](#${o.title.toLowerCase().replaceAll(" ", "-")})`);
     }
+    // Stripe's order: the object heads its resource, before the routes that return it.
+    expect(md).toMatch(/^### Sends\n\n#### The send view\n/m);
+    expect(md).toMatch(/^### Posts\n\n#### The post object\n[\s\S]*?^#### The revision object$/m);
     const byKey = new Map(
       ref.groups.flatMap((g) => g.routes).map((r) => [`${r.method} ${r.path}`, r]),
     );
@@ -358,8 +361,18 @@ describe("API reference is generated from the route registration", () => {
     expect(md.match(/recipient handed off for 30 minutes/g)).toHaveLength(1);
     expect(md.match(/retried after 1, 2, 5, 15, and 30 minutes/g)).toHaveLength(1);
     expect(md.match(/"deliveries_csv":/g)).toHaveLength(1);
-    // And the rules every route follows lead, with the refusal table.
-    expect(md).toMatch(/^## Rules every route follows\n\n\*\*One shape per resource/m);
+    // And the topics lead, in plain sentences, the refusal table under Errors.
+    expect([...md.matchAll(/^## (.+)$/gm)].map(([, t]) => t).slice(0, 5)).toEqual([
+      "Authentication",
+      "Errors",
+      "Lists and paging",
+      "Acting safely",
+      "Following changes",
+    ]);
+    expect(md).not.toContain("**");
+    expect(md).toMatch(
+      /^## Errors\n[\s\S]*?\| Next move \| Refusal \| Meaning \|[\s\S]*?^## Lists and paging$/m,
+    );
     expect(md).toContain("| Read again, then decide | 409 `stale_revision` |");
     expect(md.indexOf("## Following changes")).toBeLessThan(md.indexOf("## Admin"));
   });
@@ -433,7 +446,9 @@ describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
     expect(headings.sort()).toEqual(defs.map((d) => `${d.title}: ${d.method} ${d.path}`).sort());
     expect(md).toContain("Base URL `https://newsletter.example.com`");
     // Tiers, then their resources, then routes, each a level down.
-    expect(md).toMatch(/^## Admin\n\n[^#][\s\S]*?^### Posts\n\n#### .+\n\n`\S+ \/api\/posts\S*`$/m);
+    expect(md).toMatch(
+      /^## Admin\n\n[^#][\s\S]*?^### Posts\n\n[\s\S]*?^#### .+\n\n`\S+ \/api\/posts\S*`$/m,
+    );
     expect(md).not.toMatch(/^## \S+: /m);
     // A route's query table, body table, and example come through.
     expect(md).toMatch(/\| Query parameter \| Description \|/);

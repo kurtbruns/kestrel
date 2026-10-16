@@ -86,7 +86,11 @@ const groups: ReferenceGroup[] = [
 // and one object, so a route's links into them have somewhere to land.
 const shared: Omit<ReferenceResponse, "groups"> = {
   concepts: [
-    { key: "rules", title: "Rules", text: "One shape per <resource>.\n\nActs are safe to repeat." },
+    {
+      key: "errors",
+      title: "Errors",
+      text: "A refusal names its <field>.\n\nEvery code, by what to do next:",
+    },
   ],
   refusals: [
     {
@@ -97,6 +101,7 @@ const shared: Omit<ReferenceResponse, "groups"> = {
   objects: [
     {
       key: "send",
+      resource: "sends",
       title: "The send view",
       description: "One send.",
       fields: [
@@ -131,16 +136,14 @@ describe("reference room", () => {
     await mount(renderReference);
     await settle();
     expect($(".room-switch [aria-current='page']").textContent).toBe("API");
-    // What every route shares comes first, then the tiers.
+    // The topics every route shares come first, then the tiers.
     expect($$(".api-section").map((s) => s.id)).toEqual([
       "api-overview",
-      "api-objects",
       "api-admin",
       "api-public",
     ]);
     expect($$(".api-res").map((r) => r.id)).toEqual([
-      "api-overview-rules",
-      "api-objects-send",
+      "api-overview-errors",
       "api-admin-posts",
       "api-admin-sends",
       "api-public-subscriptions",
@@ -150,19 +153,15 @@ describe("reference room", () => {
     const nav = $$("#apiNav a");
     expect(nav.map((a) => a.dataset.sec)).toEqual([
       "overview",
-      "overview-rules",
-      "objects",
-      "objects-send",
+      "overview-errors",
       "admin",
       "admin-posts",
       "admin-sends",
       "public",
     ]);
     expect(nav.map((a) => a.textContent)).toEqual([
-      "Overview",
-      "Rules",
-      "Objects",
-      "The send view",
+      "Getting started",
+      "Errors",
       "Admin",
       "Posts",
       "Sends",
@@ -334,16 +333,23 @@ describe("reference room", () => {
     expect(upload!.querySelector(".api-errors")).toBeNull();
   });
 
-  it("describes what every route shares once: the rules, the refusal codes, and each object's fields", async () => {
+  it("describes what every route shares once: the topics, the refusal codes, and each object first under its resource", async () => {
     fake = fakeApi([{ path: "/api/reference", reply: () => reference(groups) }]);
     await mount(renderReference);
     await settle();
-    // A concept's paragraphs, as text.
-    expect($$("#api-overview-rules .api-prose").map((p) => p.textContent)).toEqual([
-      "One shape per <resource>.",
-      "Acts are safe to repeat.",
+    // A topic's paragraphs, as text, the refusal table under Errors.
+    expect($$("#api-overview-errors .api-prose").map((p) => p.textContent)).toEqual([
+      "A refusal names its <field>.",
+      "Every code, by what to do next:",
     ]);
-    expect(document.querySelector("#api-overview-rules .api-prose resource")).toBeNull();
+    expect(document.querySelector("#api-overview-errors .api-prose field")).toBeNull();
+    // The object is one collapsed line, first under the resource whose routes return it.
+    const object = $<HTMLDetailsElement>("#api-admin-sends > details.api-object");
+    expect(object.id).toBe("api-objects-send");
+    expect(object.open).toBe(false);
+    expect($(".api-object-sum", object).textContent?.replace(/\s+/g, " ").trim()).toBe(
+      "The send view1 field",
+    );
     // The refusal table, each group led by its next move.
     expect($$(".api-refusals tr").map((tr) => tr.textContent)).toEqual([
       "Nothing: the act no longer applies409 window_closedThe fire time has passed.",
@@ -450,7 +456,7 @@ describe("reference room", () => {
     const nav = $("#apiNav");
     const active = () => $$("a.active", nav).map((a) => a.dataset.sec);
     // Past the top, the overview and the objects are above the line too.
-    const shared = ["api-overview", "api-overview-rules", "api-objects", "api-objects-send"];
+    const shared = ["api-overview", "api-overview-errors"];
     const scrollTo = (ids: string[]) => {
       scrolled = ids.length ? [...shared, ...ids] : [];
       window.dispatchEvent(new Event("scroll"));
@@ -527,12 +533,9 @@ describe("reference room", () => {
     expect(shown()).toEqual(["POST /api/posts"]);
     expect($("#api-admin-sends").hidden).toBe(true);
     expect($("#api-public").hidden).toBe(true);
-    // The overview and the objects have no rows to match, so a filter puts them away.
+    // The topics have no rows to match, so a filter puts them away.
     expect($("#api-overview").hidden).toBe(true);
-    expect($("#api-objects").hidden).toBe(true);
     expect($$("#apiNav a").map((a) => (a.hidden ? "hidden" : a.dataset.sec))).toEqual([
-      "hidden",
-      "hidden",
       "hidden",
       "hidden",
       "admin",
@@ -602,7 +605,7 @@ describe("reference room", () => {
     expect($("#apiContent .error").textContent).toMatch(/went wrong on the server/);
     $("[data-retry]").click();
     await settle();
-    expect($$(".api-section")).toHaveLength(4);
+    expect($$(".api-section")).toHaveLength(3);
     expect($$("details.api-route")).toHaveLength(5);
     expect(fake.calls).toHaveLength(2);
   });

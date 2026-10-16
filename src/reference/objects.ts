@@ -591,6 +591,7 @@ const SETTINGS_FIELDS: ReferenceField[] = [
  */
 export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
   send: {
+    resource: "sends",
     title: "The send view",
     description:
       "One send, the one shape every send route carries: the list, one send, the feed, and every act's answer and refusal (SPEC §8). A client keeps one copy current from any of them and tells two apart by `rev`. The stored facts, with what the server derives from them as of `as_of`. Its email and its recipient rows have routes of their own.",
@@ -598,14 +599,16 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
     example: SEND_EXAMPLE,
   },
   post: {
-    title: "Post",
+    resource: "posts",
+    title: "The post object",
     description:
       "A subject and a Markdown body, with its archive address and its unlisted link (SPEC §4, §5). Editable only as a draft; its settings (listing and address) change in any state.",
     fields: POST_FIELDS,
     example: POST_EXAMPLE,
   },
   revision: {
-    title: "Revision",
+    resource: "posts",
+    title: "The revision object",
     description: "One saved version of a post. Read-only.",
     fields: REVISION_FIELDS,
     example: {
@@ -618,7 +621,8 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
     },
   },
   subscriber: {
-    title: "Subscriber",
+    resource: "subscribers",
+    title: "The subscriber object",
     description:
       "An address, its consent, its suppression, and how it joined (SPEC §7). Consent status and suppression are separate axes.",
     fields: SUBSCRIBER_FIELDS,
@@ -638,7 +642,8 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
     },
   },
   suppression: {
-    title: "Suppression",
+    resource: "suppressions",
+    title: "The suppression object",
     description: `An address that isn't mailed, whatever its consent, and why (SPEC §7). ${SUPPRESSED_MEANING}`,
     fields: SUPPRESSION_FIELDS,
     example: {
@@ -649,7 +654,8 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
     },
   },
   import_plan: {
-    title: "Import plan",
+    resource: "imports",
+    title: "The import plan",
     description:
       "What an import would do to every row against the list as it stands (SPEC §7). A plan writes nothing; a commit applies it whole or not at all.",
     fields: IMPORT_PLAN_FIELDS,
@@ -685,7 +691,8 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
     },
   },
   settings: {
-    title: "The settings",
+    resource: "settings",
+    title: "The settings object",
     description:
       "The runtime preferences, one resource that never holds a secret, with deploy configuration reflected read-only (SPEC §9).",
     fields: SETTINGS_FIELDS,

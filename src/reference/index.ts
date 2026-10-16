@@ -168,10 +168,10 @@ function returnsMarkdown(r: RouteReturns): string {
   return r.fields?.length ? `${lead}\n\n${fieldTable(r.fields)}` : lead;
 }
 
-/** One object as a Markdown section: its description, fields, and example. */
+/** One object as a Markdown section, first under its resource: its description, fields, and example. */
 function objectMarkdown(o: ReferenceObject): string {
   return [
-    `### ${o.title}`,
+    `#### ${o.title}`,
     o.description,
     fieldTable(o.fields),
     jsonBlock("Example", o.example),
@@ -185,10 +185,7 @@ function refusalsMarkdown(groups: ReferenceResponse["refusals"]): string {
       (c, i) => `| ${i === 0 ? g.move : ""} | ${c.status} \`${c.code}\` | ${cell(c.meaning)} |`,
     ),
   );
-  return [
-    "### Refusals",
-    ["| Next move | Refusal | Meaning |", "| --- | --- | --- |", ...rows].join("\n"),
-  ].join("\n\n");
+  return ["| Next move | Refusal | Meaning |", "| --- | --- | --- |", ...rows].join("\n");
 }
 
 /** The width a JSON example keeps an object or array on one line within. */
@@ -286,28 +283,33 @@ function routeMarkdown(r: ReferenceEntry): string {
 }
 
 /**
- * The reference as one Markdown document, for an agent to read (SPEC §11): what every route
- * shares (the rules and the refusal codes, lists, following changes, then the objects, a `###`
- * each), then a `##` heading per tier, a `###` per resource within it, and a `####` per route,
- * named by its title. A projection of the same response `buildReferenceResponse` returns, so it
- * can't drift from the JSON. `origin` is the base URL the paths hang off.
+ * The reference as one Markdown document, for an agent to read (SPEC §11): the topics every
+ * route shares (authentication, errors with the refusal table, paging, acting safely, following
+ * changes), a `##` each, then a `##` per tier, a `###` per resource within it, and under each
+ * resource its object, if it heads one, then a `####` per route, named by its title. A
+ * projection of the same response `buildReferenceResponse` returns, so it can't drift from the
+ * JSON. `origin` is the base URL the paths hang off.
  */
 export function referenceMarkdown(ref: ReferenceResponse, origin: string): string {
-  const head = `# API reference\n\nEvery route this instance serves, generated from its registration, so every endpoint the editor and Claude can call is listed here. Base URL \`${origin}\`. Admin routes take the same authentication as the editor: Claude sends its service token. What every route shares is described once, first: the rules, the refusal codes, lists, following changes, and the objects routes return.`;
+  const head = `# API reference\n\nEvery route this instance serves, generated from its registration. Base URL \`${origin}\`. The topics below hold what every route shares; each resource then opens with the object its routes return, and each route says only what is its own.`;
   const concepts = ref.concepts.map((c) =>
-    [`## ${c.title}`, c.text, ...(c.key === "rules" ? [refusalsMarkdown(ref.refusals)] : [])].join(
+    [`## ${c.title}`, c.text, ...(c.key === "errors" ? [refusalsMarkdown(ref.refusals)] : [])].join(
       "\n\n",
     ),
   );
-  const objects = ["## Objects", ...ref.objects.map(objectMarkdown)].join("\n\n");
+  // An object heads its resource once, in the first tier that lists the resource.
+  const placed = new Set<string>();
   const tiers = ref.groups.map((g) => {
-    const resources = g.resources.map((res) =>
-      [
+    const resources = g.resources.map((res) => {
+      const objects = placed.has(res.key) ? [] : ref.objects.filter((o) => o.resource === res.key);
+      placed.add(res.key);
+      return [
         `### ${res.title}`,
+        ...objects.map(objectMarkdown),
         ...g.routes.filter((r) => r.resource === res.key).map(routeMarkdown),
-      ].join("\n\n"),
-    );
+      ].join("\n\n");
+    });
     return [`## ${g.title}`, g.blurb, ...resources].join("\n\n");
   });
-  return `${[head, ...concepts, objects, ...tiers].join("\n\n")}\n`;
+  return `${[head, ...concepts, ...tiers].join("\n\n")}\n`;
 }

@@ -72,9 +72,11 @@ export type ObjectKey =
   | "import_plan"
   | "settings";
 
-/** An object, described once: its fields, each with one line, and an example. */
+/** An object, described once, at the top of its resource: its fields, each with one line, and an example. */
 export interface ReferenceObject {
   key: ObjectKey;
+  /** The resource it heads, as Stripe puts "The Customer object" first under Customers. */
+  resource: Resource;
   title: string;
   description: string;
   fields: ReferenceField[];
