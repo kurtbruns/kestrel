@@ -797,6 +797,9 @@ describe("fire times fall on the minute", () => {
 });
 
 describe("a send that may spend D1's daily writes (SPEC §8)", () => {
+  // A new send also carries `untested` until a test lands; these tests are about the other.
+  const writes = <T extends { kind: string }>(conditions: T[]) =>
+    conditions.filter((c) => c.kind === "daily_writes");
   async function scheduleTo(recipients: number, vars: Record<string, string> = {}) {
     await seedConfirmed(addresses(recipients));
     const id = await makeDraft();
@@ -811,7 +814,7 @@ describe("a send that may spend D1's daily writes (SPEC §8)", () => {
 
   it("is scheduled with a warning on Workers Free's limits, never refused, and every read carries it", async () => {
     const send = await scheduleTo(DAILY_WRITES_SEND_RECIPIENTS + 1);
-    expect(send.conditions.map((c: { kind: string }) => c.kind)).toEqual(["daily_writes"]);
+    expect(writes(send.conditions)).toHaveLength(1);
     expect(send.conditions[0]).toMatchObject({
       severity: "warn",
       recipients: DAILY_WRITES_SEND_RECIPIENTS + 1,
@@ -820,10 +823,10 @@ describe("a send that may spend D1's daily writes (SPEC §8)", () => {
     const read = await readJson(
       await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH }),
     );
-    expect(read.send.conditions.map((c: { kind: string }) => c.kind)).toEqual(["daily_writes"]);
+    expect(writes(read.send.conditions)).toHaveLength(1);
     const feed = await readJson(await SELF.fetch(`${base}/api/sends/feed`, { headers: AUTH }));
     expect(
-      feed.conditions.map((c: { kind: string; send_id: string }) => [c.kind, c.send_id]),
+      writes<{ kind: string; send_id: string }>(feed.conditions).map((c) => [c.kind, c.send_id]),
     ).toEqual([["daily_writes", send.id]]);
   });
 
@@ -859,7 +862,7 @@ describe("a send that may spend D1's daily writes (SPEC §8)", () => {
       expect(commit.status).toBe(201);
     }
     const send = await scheduleTo(2_000);
-    expect(send.conditions).toEqual([
+    expect(writes(send.conditions)).toEqual([
       expect.objectContaining({
         kind: "daily_writes",
         recipients: 4_000,
@@ -873,7 +876,7 @@ describe("a send that may spend D1's daily writes (SPEC §8)", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(utcDayStart(Date.now()) + 12 * 3_600_000);
     const send = await scheduleTo(500); // 7,000 rows: fits the day on its own
-    expect(send.conditions).toEqual([]);
+    expect(writes(send.conditions)).toEqual([]);
     const first = await readJson(await SELF.fetch(`${base}/api/sends/feed`, { headers: AUTH }));
     // An earlier import today wrote 63,003 rows, recorded the way a commit records it.
     await env.DB.prepare(
@@ -909,7 +912,7 @@ describe("a send that may spend D1's daily writes (SPEC §8)", () => {
       }),
     );
     const followed = next.sends.find((s: { id: string }) => s.id === send.id);
-    expect(followed?.conditions).toEqual([
+    expect(writes(followed?.conditions ?? [])).toEqual([
       {
         kind: "daily_writes",
         severity: "warn",
@@ -921,17 +924,17 @@ describe("a send that may spend D1's daily writes (SPEC §8)", () => {
       },
     ]);
     const list = await readJson(await SELF.fetch(`${base}/api/sends`, { headers: AUTH }));
-    expect(list.sends[0].conditions.map((c: { kind: string }) => c.kind)).toEqual(["daily_writes"]);
+    expect(writes(list.sends[0].conditions)).toHaveLength(1);
   });
 
   it("weighs a send alone on a day with no imports", async () => {
-    expect((await scheduleTo(4_000)).conditions).toEqual([]);
+    expect(writes((await scheduleTo(4_000)).conditions)).toEqual([]);
   });
 
   it("carries no warning at the threshold, or on Workers Paid", async () => {
-    expect((await scheduleTo(DAILY_WRITES_SEND_RECIPIENTS)).conditions).toEqual([]);
+    expect(writes((await scheduleTo(DAILY_WRITES_SEND_RECIPIENTS)).conditions)).toEqual([]);
     await resetDatabase();
     const paid = await scheduleTo(DAILY_WRITES_SEND_RECIPIENTS + 1, { SUBREQUEST_BUDGET: "1000" });
-    expect(paid.conditions).toEqual([]);
+    expect(writes(paid.conditions)).toEqual([]);
   });
 });

@@ -230,7 +230,7 @@ export async function renderEditor(
         <button type="button" class="ghost" id="settingsBtn">${icon("settings")}<span>Post settings</span></button>
       </div>
     </div>
-    ${locked && scheduled ? html`<div class="banner banner-scheduled banner-split"><div class="banner-top"><div class="sched-main"><span id="schedWhen"></span>${heldWhenFiresHtml("banner")}<div class="sched-remade" id="schedRemade" hidden><span id="schedRemadeMsg"></span></div><div class="sched-note" id="schedDailyWrites" hidden><span class="sched-note-mark" aria-hidden="true">⚠️</span><span class="sched-note-msg" id="schedDailyWritesMsg"></span></div></div><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Edit schedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div><div class="banner-bottom sched-dest"><span class="sched-dest-icon" id="schedDestIcon">${destinationIcon(pub)}</span><span id="schedDest">${destinationHtml(pub)}</span></div></div>` : null}
+    ${locked && scheduled ? html`<div class="banner banner-scheduled banner-split"><div class="banner-top"><div class="sched-main"><span id="schedWhen"></span>${heldWhenFiresHtml("banner")}<div class="sched-remade" id="schedRemade" hidden><span id="schedRemadeMsg"></span></div><div class="sched-remade" id="schedUntested" hidden><span id="schedUntestedMsg"></span></div><div class="sched-note" id="schedDailyWrites" hidden><span class="sched-note-mark" aria-hidden="true">⚠️</span><span class="sched-note-msg" id="schedDailyWritesMsg"></span></div></div><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Edit schedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div><div class="banner-bottom sched-dest"><span class="sched-dest-icon" id="schedDestIcon">${destinationIcon(pub)}</span><span id="schedDest">${destinationHtml(pub)}</span></div></div>` : null}
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
     <div class="editor-form">
       <label for="f-subject">Subject</label>
@@ -1034,15 +1034,20 @@ export async function renderEditor(
     // A template or identity change re-made the frozen email, so an earlier test no longer
     // shows what will go out. The server says so until a test of the re-made copy lands,
     // the same fact Claude reads. The banner only says so: Send test email is in the actions
-    // bar below, and a second one here would crowd the banner's own controls.
+    // bar below, and a second one here would crowd the banner's own controls. A send never
+    // tested at all says so the same way, until its first test lands.
     // On Workers Free's limits, a send too large for D1's daily writes says so here too, in
     // the server's words, for as long as it is scheduled (DESIGN §4). It never blocks.
     const remadeEl = $("#schedRemade");
+    const untestedEl = $("#schedUntested");
     const dailyWritesEl = $("#schedDailyWrites");
     const paintConditions = () => {
       const remade = conditionOf(current, "remade");
       remadeEl.hidden = !remade;
       $("#schedRemadeMsg").textContent = remade?.message ?? "";
+      const untested = conditionOf(current, "untested");
+      untestedEl.hidden = !untested;
+      $("#schedUntestedMsg").textContent = untested?.message ?? "";
       const dailyWrites = conditionOf(current, "daily_writes");
       dailyWritesEl.hidden = !dailyWrites;
       $("#schedDailyWritesMsg").textContent = dailyWrites?.message ?? "";

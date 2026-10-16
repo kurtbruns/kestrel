@@ -489,6 +489,7 @@ interface ConditionBase {
  *   took, long after its dispatch finished: the provider's events may not be reaching the
  *   app; `accepted` is how many wait on one.
  * - `remade`: a template or identity change re-made the scheduled email after its last test.
+ * - `untested`: no test of the scheduled email has been sent, and it was never re-made.
  * - `daily_writes`: on Workers Free's limits, a scheduled send to more recipients than D1's
  *   daily writes comfortably cover, after what imports already wrote on the UTC day it
  *   fires; `recipients` is its audience as scheduled.
@@ -508,6 +509,7 @@ export type SendCondition =
   | (ConditionBase & { kind: "bounce_spike"; bounced: number; rate: number })
   | (ConditionBase & { kind: "no_receipts"; accepted: number })
   | (ConditionBase & { kind: "remade"; tested_at: number | null })
+  | (ConditionBase & { kind: "untested" })
   | (ConditionBase & { kind: "daily_writes"; recipients: number });
 
 /** The kinds of condition. */

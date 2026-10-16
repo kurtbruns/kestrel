@@ -7,7 +7,7 @@
  * against the fire time; stuck by `stuckAt`, the clock against the send's last progress;
  * wedged by `isWedged`; refused and provider_unavailable
  * by the halt the send carries; bounce_spike by its confirmed bounces over its audience at
- * fire; no_receipts by its counters long after dispatch finished; remade by its last re-make against its last test; daily_writes by its audience as
+ * fire; no_receipts by its counters long after dispatch finished; remade by its last re-make against its last test; untested by a test never sent; daily_writes by its audience as
  * scheduled and what imports wrote on the UTC day it fires, on Workers Free's limits only.
  * Each carries its severity, since when (null when the record does not say), the server's
  * words for it, and the action that settles it, if the API has one. The actions are exactly what the server would accept on
@@ -118,6 +118,19 @@ export function sendConditions(
         tested_at: send.tested_at,
       });
     }
+  }
+
+  // Never tested and never re-made: the test is the publisher's check on the frozen copy
+  // (SPEC §6), so say none has been sent. A re-made send untested says `remade` instead.
+  if (send.status === "scheduled" && send.tested_at === null && send.remade_at === null) {
+    out.push({
+      kind: "untested",
+      severity: "info",
+      since: send.scheduled_at,
+      message:
+        "No test of this email has been sent yet. Send yourself a test to check what will go out.",
+      action: null,
+    });
   }
 
   if (send.status === "sending") {

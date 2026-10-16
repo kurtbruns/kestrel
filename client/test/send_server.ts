@@ -265,6 +265,16 @@ export function sendServer(rows: SendSummary[] = []) {
         tested_at: row.tested_at,
       });
     }
+    if (row.status === "scheduled" && row.tested_at === null && row.remade_at === null) {
+      conditions.push({
+        kind: "untested",
+        severity: "info",
+        since: row.scheduled_at,
+        message:
+          "No test of this email has been sent yet. Send yourself a test to check what will go out.",
+        action: null,
+      });
+    }
     conditions.push(...(extras.conditions ?? []));
     // What the server would take now: the window's controls until the fire time, Resolve
     // while wedged.

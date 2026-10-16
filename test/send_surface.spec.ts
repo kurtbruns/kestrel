@@ -90,7 +90,7 @@ describe("conditions: one server rule for each kind", () => {
   const kinds = (s: SendSummary) => sendConditions(s, NOW, null).map((c) => c.kind);
 
   it("reads missed only past the tolerance, and remade only while the last test predates the re-make", () => {
-    const sched = { status: "scheduled" as const, fire_at: NOW - 60_000 };
+    const sched = { status: "scheduled" as const, fire_at: NOW - 60_000, tested_at: NOW - 90_000 };
     expect(kinds(row(sched))).toEqual([]);
     const missed = sendConditions(
       row({ ...sched, fire_at: NOW - MISSED_THRESHOLD_MS - 1 }),
@@ -108,11 +108,33 @@ describe("conditions: one server rule for each kind", () => {
     expect(kinds(row({ ...remade, tested_at: NOW - 5 }))).toEqual([]);
   });
 
+  it("reads untested on a scheduled send never tested and never re-made, as info (SPEC §8)", () => {
+    const sched = { status: "scheduled" as const, fire_at: NOW + 60_000, scheduled_at: NOW - 10 };
+    expect(sendConditions(row(sched), NOW, null)).toEqual([
+      {
+        kind: "untested",
+        severity: "info",
+        since: NOW - 10,
+        // The editor shows this message as is.
+        message:
+          "No test of this email has been sent yet. Send yourself a test to check what will go out.",
+        action: null,
+      },
+    ]);
+    expect(kinds(row({ ...sched, tested_at: NOW - 5 }))).toEqual([]);
+    // Re-made and never tested is `remade`'s to say, not both.
+    expect(kinds(row({ ...sched, remade_at: NOW - 5 }))).toEqual(["remade"]);
+    // Only a scheduled send: one that went out untested is not flagged after the fact.
+    expect(kinds(row({ ...sched, status: "sending", started_at: NOW - 5 }))).toEqual([]);
+    expect(kinds(row({ ...sched, status: "canceled", completed_at: NOW - 5 }))).toEqual([]);
+  });
+
   it("warns of D1's daily writes only on Free's limits, past the threshold, while the send is scheduled (SPEC §8)", () => {
     const sched = {
       status: "scheduled" as const,
       fire_at: NOW + 60_000,
       scheduled_at: NOW - 10,
+      tested_at: NOW - 5,
       recipient_count: DAILY_WRITES_SEND_RECIPIENTS + 1,
     };
     const free = (s: SendSummary) => sendConditions(s, NOW, writesDay(NOW, 0));
@@ -138,6 +160,7 @@ describe("conditions: one server rule for each kind", () => {
       status: "scheduled" as const,
       fire_at: NOW + 60_000,
       scheduled_at: NOW - 10,
+      tested_at: NOW - 5,
       recipient_count: 3_000, // 42,000 rows: over the budget only beside the imports
     };
     expect(sendConditions(row(sched), NOW, day)).toEqual([
@@ -391,6 +414,7 @@ describe("every route reads a send the same way", () => {
     expect(feed.sends).toEqual([]);
     expect(feed.conditions.map((c) => [c.send_id, c.subject, c.kind])).toEqual([
       [wedged.id, "Wedged", "wedged"],
+      [upcoming.id, "Upcoming", "untested"],
     ]);
   });
 
@@ -403,6 +427,21 @@ describe("every route reads a send the same way", () => {
     expect((await readJson(test)).frozen).toBe(true);
     expect((await sends.getSend(env.DB, send.id))?.tested_at).not.toBeNull();
     expect(has(await readView(send.id), "remade")).toBe(false);
+  });
+});
+
+describe("a send never tested", () => {
+  it("carries untested until a test of the frozen copy lands, on the send and in the feed (SPEC §8)", async () => {
+    const readFeed = async (): Promise<SendFeedResponse> =>
+      readJson(await SELF.fetch(`${base}/api/sends/feed`, { headers: AUTH }));
+    const send = await frozenSend(Date.now() + 3_600_000, { subject: "Untested" });
+    expect(has(await readView(send.id), "untested")).toBe(true);
+    const fed = await readFeed();
+    expect(fed.conditions.map((c) => [c.send_id, c.kind])).toEqual([[send.id, "untested"]]);
+    const test = await post(`/api/posts/${send.post_id}/test`, { to: "me@example.com" });
+    expect(test.status).toBe(200);
+    expect(has(await readView(send.id), "untested")).toBe(false);
+    expect((await readFeed()).conditions).toEqual([]);
   });
 });
 
