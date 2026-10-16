@@ -1,4 +1,4 @@
--- 0008_unlisted_links: every post gets its own unlisted link, and every send records which
+-- 0010_unlisted_links: every post gets its own unlisted link, and every send records which
 -- address its email carries (SPEC §5).
 --
 -- Every email's "view in browser" link used to be the post's archive address,

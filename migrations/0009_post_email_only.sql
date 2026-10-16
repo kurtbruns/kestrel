@@ -1,4 +1,4 @@
--- 0007_post_email_only: whether a post is listed in the public archive (SPEC §5).
+-- 0009_post_email_only: whether a post is listed in the public archive (SPEC §5).
 --
 -- A post is in the archive (0, the default) or email only (1): mailed exactly as a listed
 -- post is, but left out of the archive index and the landing page; 0008 decides what its

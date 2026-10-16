@@ -17,8 +17,8 @@ export const SHIPPED_MIGRATIONS: readonly string[] = [
   "0004_keyed_pending_to_resolve.sql",
   "0005_imports.sql",
   "0006_deliveries_fewer_indexes.sql",
-  "0007_post_email_only.sql",
-  "0008_unlisted_links.sql",
+  "0009_post_email_only.sql",
+  "0010_unlisted_links.sql",
 ];
 
 /**

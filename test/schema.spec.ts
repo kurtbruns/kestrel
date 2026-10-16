@@ -364,7 +364,7 @@ describe("schema (0001_init)", () => {
   });
 });
 
-describe("schema (0008_unlisted_links)", () => {
+describe("schema (0010_unlisted_links)", () => {
   const insert = (id: string, slug: string) =>
     env.DB.prepare("INSERT INTO posts (id, slug, created_at, updated_at) VALUES (?, ?, 0, 0)")
       .bind(id, slug)
@@ -401,7 +401,7 @@ describe("schema (0008_unlisted_links)", () => {
     await insert("a", "one");
     await insert("b", "two");
     await env.DB.prepare("UPDATE posts SET unlisted_token = NULL").run();
-    const migration = FOLDER.find((m) => m.name === "0008_unlisted_links.sql");
+    const migration = FOLDER.find((m) => m.name === "0010_unlisted_links.sql");
     const backfill = (migration?.queries ?? []).filter((q) =>
       /^UPDATE posts SET unlisted_token/.test(q),
     );
