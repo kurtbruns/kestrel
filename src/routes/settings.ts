@@ -76,7 +76,7 @@ import type { Principal, RequestContext } from "../router";
 import { insideLead, saveSettingsRemaking } from "../send/remake";
 
 /** Logos are small brand assets; keep them well under any provider's object limits. */
-const MAX_LOGO_BYTES = 512 * 1024;
+export const MAX_LOGO_BYTES = 512 * 1024;
 
 /** The non-secret, deploy-time facts the editor shows read-only, and how the reader of
  *  them signed in (`authMode`, from the principal: a per-request fact, never config). */
@@ -299,7 +299,7 @@ export async function uploadLogo(c: RequestContext): Promise<Response> {
     throw badRequest("The logo file is empty.");
   }
   if (bytes.byteLength > MAX_LOGO_BYTES) {
-    throw badRequest("The logo must be 512 KB or smaller.");
+    throw badRequest(`The logo must be ${MAX_LOGO_BYTES / 1024} KB or smaller.`);
   }
   // A timestamp names the upload's key, so a new upload never lands on an old key, even
   // after a removal, and nothing already sent changes what it shows (I3).

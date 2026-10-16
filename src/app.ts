@@ -251,6 +251,21 @@ export function createRouter({
       title: "Get who is signed in",
       summary:
         "The authenticated principal and the auth mode: how this request signed in (access or dev). A service token's principal carries its Client ID as `tokenId`.",
+      returns: {
+        fields: [
+          {
+            name: "principal",
+            type: "{ kind, email, tokenId }",
+            description:
+              "`kind` `human`, signed in as `email`, or `service`, a service token as Claude uses, with no `email` and its Client ID as `tokenId` when the token names one.",
+          },
+          {
+            name: "auth.mode",
+            type: '"access" | "dev"',
+            description: "How this request signed in.",
+          },
+        ],
+      },
       handler: (c) => {
         const { kind, email, tokenId, via } = unwrap(c.principal, "principal");
         return json({ principal: { kind, email, tokenId }, auth: { mode: via } });
@@ -518,8 +533,7 @@ export function createRouter({
           name: "file",
           type: "file",
           required: true,
-          description:
-            "The logo: a PNG, JPEG, WebP, or GIF, square and at least 256 × 256 px, since every surface shows it as a square and an email stretches one that isn't.",
+          description: `The logo: a PNG, JPEG, WebP, or GIF, at most ${settingsRoutes.MAX_LOGO_BYTES / 1024} KB, square and at least 256 × 256 px, since every surface shows it as a square and an email stretches one that isn't.`,
         },
       ],
       errors: remakeRefusals,
@@ -803,6 +817,8 @@ export function createRouter({
       resource: "posts",
       title: "Delete a post",
       summary: "Delete a draft and its revisions.",
+      description:
+        "Its images go with it. Answers `{ deleted: true }`; a repeat, with the post gone, is a 404.",
       errors: [notDraft],
       handler: postRoutes.deletePost,
     },
@@ -944,6 +960,8 @@ export function createRouter({
       resource: "posts",
       title: "Delete an image",
       summary: "Delete one image from a draft.",
+      description:
+        "`filename` is the name the upload answered. The Markdown is left as it is, so a reference to the image no longer resolves and its render warns. Answers `{ deleted: true }`; a repeat, with the image gone, is a 404.",
       errors: [notDraft],
       handler: imageRoutes.deleteImage,
     },
@@ -1047,6 +1065,8 @@ export function createRouter({
         resource: "dev",
         title: "Read the fake outbox",
         summary: "Inspect the fake transport's outbox (local dev only).",
+        description:
+          "Answers `messages`, each email the fake transport took since the server started (`to`, `subject`, `html`, `text`, `providerId`, `sentAt`), and the `notifications` it would have sent. Held in memory, so a restart empties it.",
         handler: renderRoutes.devOutbox,
       },
       {
@@ -1057,6 +1077,8 @@ export function createRouter({
         resource: "dev",
         title: "Load the demo dataset",
         summary: "Load the local demo dataset (local dev only).",
+        description:
+          "Resets the database first, as `POST /api/dev/reset` does, then loads the demo publication. Answers what it loaded: `subscribers` by status, `suppressions`, `audience`, `posts` by status, `deliveries`, `imagesWritten`, `logoWritten`, and `urls`.",
         query: [
           {
             name: "size",
@@ -1085,6 +1107,8 @@ export function createRouter({
         resource: "dev",
         title: "Reset the database",
         summary: "Reset the local database to a fresh install (local dev only).",
+        description:
+          "Clears every table, the settings included, and the uploaded logo. Answers `{ reset: true, url }`, `url` the editor's.",
         handler: devRoutes.reset,
       },
     ),
@@ -1120,10 +1144,7 @@ export function createRouter({
       title: "Send a post now",
       summary:
         "Send now: freeze and schedule one minimum lead out, on the minute, cancelable until then. Idempotent per post.",
-      description:
-        "The same freeze as scheduling, `fire_at` now plus the minimum lead (" +
-        lead +
-        "), rounded up to the next whole minute. For nearly all that window the send is inside the lead, so a template or identity save that would re-make it is refused until it fires. The body is optional. A second call for a post already in its window answers with that send and changes nothing, its settings included.",
+      description: `The same freeze as scheduling, \`fire_at\` now plus the minimum lead (${formatLead(minLeadMs)}, as Schedule a post describes), rounded up to the next whole minute. For nearly all that window the send is inside the lead, so a template or identity save that would re-make it is refused until it fires. The body is optional. A second call for a post already in its window answers with that send and changes nothing, its settings included.`,
       example: {
         request: { email_only: true },
         response: { send: scheduledBrief, cursor: "57.1768467610000", warnings: [] },
@@ -1357,6 +1378,21 @@ export function createRouter({
           page: { total: 1, limit: 50, offset: 0, sort: "email", dir: "asc" },
         },
       },
+      returns: {
+        fields: [
+          {
+            name: "deliveries",
+            type: "object[]",
+            description:
+              "One row a recipient, as the record holds it: `email`; `status`, the hand-off (`pending`, `dispatched` awaiting the provider's answer, `accepted`, `unsent`, `skipped`); `event`, what the provider reported after (`delivered`, `bounced`, `complained`, or null), which a row counts under in place of `accepted`; `event_detail` and `event_at`; `error`, the last failed hand-off's words; `attempts`, its hand-offs tried; and `bounce_kind` (`hard` or `soft`) on a bounce.",
+          },
+          {
+            name: "view",
+            type: "string",
+            description: "The view read, `failures` when none was asked.",
+          },
+        ],
+      },
       handler: sendRoutes.deliveries,
     },
     {
@@ -1365,7 +1401,8 @@ export function createRouter({
       access: "admin",
       resource: "sends",
       title: "Export a send's deliveries",
-      summary: "The send's per-recipient delivery record as CSV (email, status, event, error).",
+      summary:
+        "The send's per-recipient delivery record as CSV (`email`, `status`, `event`, `event_at` as ISO-8601, `error`), every row, unpaged.",
       handler: sendRoutes.deliveriesCsv,
     },
     {
@@ -1402,10 +1439,7 @@ export function createRouter({
       resource: "sends",
       title: "Reschedule a send",
       summary: "Move a scheduled send's fire time without re-freezing the render (I3, I6).",
-      description:
-        "Moves only `fire_at`, within the review window: the frozen email is untouched and a re-made send keeps its `remade_at` (I3, I6). For a content change, cancel, edit, and schedule again. The same minimum lead as scheduling (" +
-        lead +
-        "), and the time is rounded up to the next whole minute as when scheduling. A move to the time it already has answers `changed: false` before the lead is checked. `email_only`, `slug`, or `slug_auto` is a 400: those are the post's, at `PUT /api/posts/:id/settings`.",
+      description: `Moves only \`fire_at\`, within the review window: the frozen email is untouched and a re-made send keeps its \`remade_at\` (I3, I6). For a content change, cancel, edit, and schedule again. The same minimum lead as scheduling (${formatLead(minLeadMs)}, as \`POST /api/posts/:id/schedule\` describes), and the time is rounded up to the next whole minute as when scheduling. A move to the time it already has answers \`changed: false\` before the lead is checked. \`email_only\`, \`slug\`, or \`slug_auto\` is a 400: those are the post's, at \`PUT /api/posts/:id/settings\`.`,
       example: {
         request: { fire_at: "2026-01-16T09:00:00Z" },
         response: {
@@ -1685,7 +1719,77 @@ export function createRouter({
       summary:
         "Everything about the import format (SPEC §7), from the definition the importer reads with: the files it takes, the columns, the rules, this deployment's limits, the outcomes, and the attestation.",
       description:
-        "Read it before converting a list. The full CSV (`kestrel-subscribers/1`, what the export writes) is preferred, since it carries unsubscribes, bounces, and how each person joined; a plain `.txt` of addresses is the fallback. Another service's export is converted first; nothing is guessed. `limits.max_rows` is this deployment's, with `max_rows_reason` when it is below the format's own.",
+        "Read it before converting a list. The full CSV (`kestrel-subscribers/1`, what the export writes) is preferred, since it carries unsubscribes, bounces, and how each person joined; a plain `.txt` of addresses is the fallback. Another service's export is converted first; nothing is guessed. Split a list larger than `limits` into several imports, each its own plan and commit.",
+      returns: {
+        fields: [
+          {
+            name: "format",
+            type: "string",
+            description: "The format's name, `kestrel-subscribers/1`.",
+          },
+          {
+            name: "versions",
+            type: "string[]",
+            description: "The format versions an import reads.",
+          },
+          {
+            name: "preferred",
+            type: "{ kind, why }",
+            description: "The file to prefer (`csv`), and why, in words to relay.",
+          },
+          {
+            name: "files",
+            type: "object[]",
+            description:
+              "Each file an import takes: `kind` (`csv` or `txt`), `name`, `when` to use it, `loses` (what a list loses in it, each a sentence to relay; empty for the CSV), and its `template` route.",
+          },
+          {
+            name: "columns",
+            type: "object[]",
+            description:
+              "The CSV's columns, in order: `name`, `required`, `values` (a fixed set, or null), `takes` (what it takes otherwise), and `meaning`.",
+          },
+          {
+            name: "plain_list",
+            type: "{ statuses, default, rules }",
+            description:
+              "A plain list's declared `statuses` (each `{ value, means }`, the `plain_list_status` a plan takes), the `default`, and its `rules` in words.",
+          },
+          {
+            name: "limits.max_rows",
+            type: "number",
+            description: `The most rows this deployment takes in one import: ${IMPORT_LIMITS.maxRows.toLocaleString("en-US")}, or ${IMPORT_LIMITS.maxRowsFree.toLocaleString("en-US")} on the Workers Free plan's limits. More is refused as \`too_many_rows\`.`,
+          },
+          {
+            name: "limits.max_rows_reason",
+            type: "string | null",
+            description:
+              "Why `max_rows` is below the format's own, in words to relay to the publisher; null when it isn't.",
+          },
+          {
+            name: "limits.max_body_bytes",
+            type: "number",
+            description: `The most bytes the request, and the file's text, may hold: ${IMPORT_LIMITS.maxBodyBytes / (1024 * 1024)} MB. More is refused as \`body_too_large\`.`,
+          },
+          {
+            name: "limits.max_evidence_bytes",
+            type: "number",
+            description: `The most bytes one row's \`evidence\` may hold, as JSON: ${IMPORT_LIMITS.maxEvidenceBytes}. More is refused as \`invalid_field\`, naming the row.`,
+          },
+          {
+            name: "outcomes",
+            type: "object[]",
+            description:
+              "Every outcome a plan counts a row under (its `counts` keys), each `{ outcome, when }`.",
+          },
+          {
+            name: "attestation",
+            type: "{ version, text }",
+            description:
+              "What the publisher attests when an import confirms anyone; a plan answers it with the publication named.",
+          },
+        ],
+      },
       handler: importRoutes.format,
     },
     {
@@ -1793,7 +1897,7 @@ export function createRouter({
       access: "admin",
       resource: "suppressions",
       title: "List suppressions",
-      summary: "List suppressed addresses, never mailed whatever their status, with why.",
+      summary: "List suppressed addresses, with why.",
       description: "Newest first, up to 1,000, whether or not the address is on the list.",
       returns: { object: "suppression", as: "suppressions", list: true },
       handler: suppressionRoutes.list,
@@ -1861,9 +1965,12 @@ export function createRouter({
       method: "POST",
       path: "/webhooks/ses",
       access: "webhook",
-      resource: "delivery",
+      resource: "sends",
       title: "Receive SES notifications",
-      summary: "SES/SNS bounce + complaint notifications (SNS-signature-verified in the adapter).",
+      summary:
+        "Amazon SNS's subscription handshake and SES's delivery, bounce, and complaint events, each request SNS-signature-verified.",
+      description:
+        "The provider's to call, never a client's. An event lands on its send's delivery rows; a hard bounce or a complaint also suppresses the address.",
       handler: webhookRoutes.ses,
     },
 
@@ -2034,9 +2141,12 @@ export function createRouter({
       method: "GET",
       path: "/media/:key(.*)",
       access: "public",
-      resource: "media",
+      resource: "archive",
       title: "Serve an image",
-      summary: "Serve image bytes from storage (public; readers + archive load these).",
+      summary:
+        "An image's bytes from storage: a post's images and the logo, as emails and reader pages load them.",
+      description:
+        "`key` is the image's storage key, the end of its `url`. Cached an hour. A key that names nothing is a 404.",
       handler: imageRoutes.serveMedia,
     },
   ];

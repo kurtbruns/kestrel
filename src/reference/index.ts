@@ -27,6 +27,7 @@ import type {
   ReferenceObject,
   ReferenceResource,
   ReferenceResponse,
+  ReferenceTable,
   Resource,
   RouteReturns,
 } from "../../shared/reference";
@@ -75,8 +76,6 @@ const RESOURCE_TITLES: Record<Resource, string> = {
   suppressions: "Suppressions",
   subscriptions: "Subscriptions",
   archive: "Archive",
-  media: "Media",
-  delivery: "Delivery events",
   settings: "Settings",
   system: "System",
   dev: "Development",
@@ -164,12 +163,24 @@ function returnsMarkdown(r: RouteReturns, from: Resource): string {
   return r.fields?.length ? `${lead}\n\n${fieldTable(r.fields)}` : lead;
 }
 
-/** One object as a Markdown section, first under its resource: its description, fields, and example. */
+/** A table of a field's values as a `###` under its object, its cells' pipes escaped. */
+function tableMarkdown(t: ReferenceTable): string {
+  const row = (cells: readonly string[]) => `| ${cells.map(cell).join(" | ")} |`;
+  return [
+    `### ${t.title}`,
+    t.description,
+    [row(t.columns), row(t.columns.map(() => "---")), ...t.rows.map(row)].join("\n"),
+  ].join("\n\n");
+}
+
+/** One object as a Markdown section, first under its resource: its description, fields, its
+ *  tables, and example. */
 function objectMarkdown(o: ReferenceObject): string {
   return [
     `## ${o.title}`,
     o.description,
     fieldTable(o.fields),
+    ...(o.tables ?? []).map(tableMarkdown),
     jsonBlock("Example", o.example),
   ].join("\n\n");
 }
@@ -298,6 +309,7 @@ export function resourcePath(key: Resource): string {
  * route shares (authentication, errors with the refusal table, paging, acting safely,
  * following changes), a `##` each, then a `##` per tier and a `###` per resource, listing
  * each route on one line with the resource's own document to read before calling one. A
+ * resource with routes in two tiers is listed once, under the first. A
  * projection of the same response `buildReferenceResponse` returns, so it can't drift from
  * the JSON. `origin` is the base URL the paths hang off.
  */
@@ -308,18 +320,34 @@ export function referenceIndexMarkdown(ref: ReferenceResponse, origin: string): 
       "\n\n",
     ),
   );
-  const tiers = ref.groups.map((g) => {
-    const resources = g.resources.map((res) => {
-      const lines = g.routes
-        .filter((r) => r.resource === res.key)
-        .map((r) => `- ${r.title}: \`${r.method} ${r.path}\``);
+  // A resource is listed once, under the first tier that has it, with every route that acts
+  // on it: one off that tier says so on its line, as its own document's call line does.
+  const all = ref.groups.flatMap((g) => g.routes);
+  const listed = new Set<Resource>();
+  const tiers = ref.groups.flatMap((g) => {
+    const fresh = g.resources.filter((res) => !listed.has(res.key));
+    for (const res of fresh) {
+      listed.add(res.key);
+    }
+    if (!fresh.length) {
+      return [];
+    }
+    const resources = fresh.map((res) => {
+      const routes = [
+        ...g.routes.filter((r) => r.resource === res.key),
+        ...all.filter((r) => r.resource === res.key && r.access !== g.access),
+      ];
+      const lines = routes.map(
+        (r) =>
+          `- ${r.title}: \`${r.method} ${r.path}\`${r.access === g.access ? "" : TIER_NOTE[r.access]}`,
+      );
       return [
         `### ${res.title}`,
         `Reference: \`GET ${resourcePath(res.key)}\``,
         lines.join("\n"),
       ].join("\n\n");
     });
-    return [`## ${g.title}`, g.blurb, ...resources].join("\n\n");
+    return [[`## ${g.title}`, g.blurb, ...resources].join("\n\n")];
   });
   return `${[head, ...concepts, ...tiers].join("\n\n")}\n`;
 }

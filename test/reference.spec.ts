@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import apiDoc from "../docs/API.md";
 import { type ReferenceResponse, routeAnchor } from "../shared/reference";
+import { refusalAdvice } from "../shared/sends";
 import {
   ERASED_MARKER_MEANING,
   FLAG_MEANING,
@@ -128,10 +129,12 @@ describe("API reference is generated from the route registration", () => {
     const said = (key: "subscriber" | "suppression") => JSON.stringify(OBJECTS[key]);
     for (const key of ["subscriber", "suppression"] as const) {
       expect(said(key)).toContain(SUPPRESSED_MEANING);
-      for (const [flag, meaning] of Object.entries(FLAG_MEANING)) {
-        if (flag !== "erased") {
-          expect(said(key)).toContain(meaning);
-        }
+    }
+    // The reasons' meanings are said once, under the suppression, each flag's once.
+    for (const [flag, meaning] of Object.entries(FLAG_MEANING)) {
+      if (flag !== "erased") {
+        expect(said("suppression").split(meaning).length - 1).toBe(1);
+        expect(said("subscriber")).not.toContain(meaning);
       }
     }
     // The roster shows an erasure's marker only on someone who signed up again; the list of
@@ -504,7 +507,8 @@ describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
       buildReferenceResponse(defs),
       "https://newsletter.example.com",
     );
-    const lines = [...md.matchAll(/^- (.+): `(\S+) (\S+)`$/gm)].map(
+    // A route off its resource's tier carries its tier's note after the path.
+    const lines = [...md.matchAll(/^- (.+): `(\S+) (\S+)`(?: \(.+\))?$/gm)].map(
       ([, t, m, p]) => `${t}: ${m} ${p}`,
     );
     expect(lines.sort()).toEqual(defs.map((d) => `${d.title}: ${d.method} ${d.path}`).sort());
@@ -512,6 +516,14 @@ describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
     expect(md).toMatch(
       /^## Admin\n\n[^#][\s\S]*?^### Posts\n\nReference: `GET \/api\/reference\/posts\.md`\n\n- /m,
     );
+    // A resource with routes in two tiers is listed once, under the first, its other routes
+    // marked: health is a public route among the admin tier's System.
+    const headings = [...md.matchAll(/^### (.+)$/gm)].map(([, h]) => h);
+    expect(headings.length).toBe(new Set(headings).size);
+    expect(md).toMatch(
+      /^### System\n[\s\S]*?^- Check health: `GET \/health` \(public: no authentication\)$/m,
+    );
+    expect(md).not.toContain("## Webhooks");
     // The index carries no route's detail: that is the resource's own reference.
     expect(md).not.toContain("| Body field |");
     expect(md).not.toContain("Example response:");
@@ -536,12 +548,40 @@ describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
     expect(sends).toContain("Example response:");
     // A route off the admin tier says so on its call line.
     expect(docs.get("subscriptions")).toContain("`POST /subscribe` (public: no authentication)");
-    expect(docs.get("delivery")).toContain("`POST /webhooks/ses` (webhook: the provider signs it");
+    expect(sends).toContain("`POST /webhooks/ses` (webhook: the provider signs it");
     // The refusals every route shares are said once, in the index, never in a route's own.
     for (const doc of docs.values()) {
       expect(doc).not.toContain("`unauthorized`");
     }
     expect(resourceMarkdown(ref, "nothing")).toBeNull();
+  });
+
+  it("tables each condition kind and halt cause under the send view, with its remedy (SPEC §8, §12)", () => {
+    const sends = resourceMarkdown(buildReferenceResponse(defs), "sends") ?? "";
+    const table = (title: string) =>
+      sends.split(`\n### ${title}\n`)[1]?.split("\n\n")[1]?.split("\n").slice(2) ?? [];
+    const kinds = table("Condition kinds").map((row) => row.split(" | ")[0]);
+    expect(kinds).toEqual(
+      [
+        "missed",
+        "stuck",
+        "wedged",
+        "refused",
+        "provider_unavailable",
+        "bounce_spike",
+        "no_receipts",
+        "remade",
+        "untested",
+        "daily_writes",
+      ].map((k) => `| \`${k}\``),
+    );
+    expect(sends).toContain("| `missed` | `action` | none |");
+    expect(sends).toContain("checks the Worker's Cron Trigger (`triggers.crons`)");
+    // An account cause's fix is the advice its condition carries, word for word.
+    expect(table("Halt causes")).toContain(
+      `| \`sandbox\` | \`account\` | ${refusalAdvice("sandbox")} |`,
+    );
+    expect(table("Halt causes")).toHaveLength(17);
   });
 
   it("is served as text/markdown when authed: the index, and each resource's reference", async () => {

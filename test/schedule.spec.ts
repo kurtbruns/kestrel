@@ -682,7 +682,7 @@ describe("the minimum lead is the deployment's own", () => {
     expect(minute.deployment.minLeadMs).toBe(60_000);
   });
 
-  it("states the lead and its floor on every route that enforces it in the API reference", async () => {
+  it("states the lead on every route that enforces it in the API reference, and its floor once", async () => {
     const ref = await readJson(await fetchWith(MINUTE_LEAD, "/api/reference", { headers: AUTH }));
     const routes = ref.groups.flatMap((g: any) => g.routes);
     for (const path of [
@@ -691,9 +691,11 @@ describe("the minimum lead is the deployment's own", () => {
       "/api/sends/:id/reschedule",
     ]) {
       const route = routes.find((r: any) => r.path === path && r.method === "POST");
-      expect(route?.description, path).toMatch(/1 minute on this deployment/);
-      expect(route?.description, path).toMatch(/MIN_LEAD_SECONDS/);
+      expect(route?.description, path).toMatch(/1 minute/);
     }
+    const schedule = routes.find((r: any) => r.path === "/api/posts/:id/schedule");
+    expect(schedule?.description).toMatch(/1 minute on this deployment/);
+    expect(schedule?.description).toMatch(/MIN_LEAD_SECONDS/);
   });
 });
 

@@ -25,9 +25,7 @@ export type Resource =
   | "imports"
   | "suppressions"
   | "subscriptions"
-  | "archive"
-  | "media"
-  | "delivery";
+  | "archive";
 
 /** A worked request/response pair for the API reference. Hand-authored, co-located with the route. */
 export interface RouteExample {
@@ -72,6 +70,18 @@ export type ObjectKey =
   | "import_plan"
   | "settings";
 
+/**
+ * A table an object carries beside its fields, for a field whose values each have more to say
+ * than one line holds (a condition's kind: its severity, its fields, its remedy). Cells are
+ * inline Markdown; each row has one cell per column.
+ */
+export interface ReferenceTable {
+  title: string;
+  description: string;
+  columns: string[];
+  rows: string[][];
+}
+
 /** An object, described once, at the top of its resource: its fields, each with one line, and an example. */
 export interface ReferenceObject {
   key: ObjectKey;
@@ -80,6 +90,8 @@ export interface ReferenceObject {
   title: string;
   description: string;
   fields: ReferenceField[];
+  /** Tables of a field's values, after the fields. */
+  tables?: ReferenceTable[];
   example: unknown;
 }
 

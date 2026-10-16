@@ -211,13 +211,13 @@ describe("reference room", () => {
         access: "webhook",
         title: "Webhooks",
         blurb: "Provider callbacks.",
-        resources: [{ key: "delivery", title: "Delivery events" }],
+        resources: [{ key: "sends", title: "Sends" }],
         routes: [
           {
             method: "POST",
             path: "/webhooks/ses",
             access: "webhook",
-            resource: "delivery",
+            resource: "sends",
             title: "SES events",
             summary: "SES events.",
           },
@@ -239,7 +239,7 @@ describe("reference room", () => {
         `  -d '{"subject":"Owls"}'`,
       ].join(" \\\n"),
     );
-    expect(curlOf($("#api-webhook-delivery details.api-route"))).toBeUndefined();
+    expect(curlOf($("#api-webhook-sends details.api-route"))).toBeUndefined();
   });
 
   it("copies a code block's plain text, not its highlighted markup, and shows a check for a moment", async () => {

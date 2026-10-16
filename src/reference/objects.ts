@@ -9,13 +9,21 @@
 import { DAILY_WRITES_SEND_RECIPIENTS, FREE_PLAN_LIST } from "../../shared/free_plan";
 import type { ImportPlanResponse } from "../../shared/imports";
 import type { Post, RevisionResponse } from "../../shared/posts";
-import type { ObjectKey, ReferenceField, ReferenceObject } from "../../shared/reference";
+import type {
+  ObjectKey,
+  ReferenceField,
+  ReferenceObject,
+  ReferenceTable,
+} from "../../shared/reference";
 import {
   BOUNCE_SPIKE_MIN,
   BOUNCE_SPIKE_RATE,
   BOUNCE_SPIKE_RECENT_MS,
   type ConditionKind,
+  type HaltCause,
+  type HaltReason,
   NO_RECEIPTS_AFTER_MS,
+  refusalAdvice,
   SELF_THROTTLE_HALTS,
   type SendView,
   STUCK_THRESHOLD_MS,
@@ -120,25 +128,153 @@ export function sendBrief(over: Partial<SendView> = {}): Partial<SendView> {
   };
 }
 
+/** One condition kind as the reference's table gives it. */
+interface ConditionKindDoc {
+  /** Its severity, or both when it rises. */
+  severity: string;
+  /** The fields its kind carries beside the ones every condition has. */
+  fields: string;
+  /** What it means, in words to tell the publisher. */
+  meaning: string;
+  /** What settles it, and who acts. */
+  remedy: string;
+}
+
 /**
- * What each condition on a send means, most severe first, as the send view lists them. A
- * Record over `ConditionKind`, so a new condition fails to compile until it is described here.
+ * Every condition kind, as the send view's table lists them. A Record over `ConditionKind`, so
+ * a new condition fails to compile until it is described here; the severities and fields are
+ * the ones `sendConditions` (src/send/conditions.ts) gives.
  */
-const CONDITION_MEANING: Record<ConditionKind, string> = {
-  missed: `Still scheduled ${MISSED_THRESHOLD_MS / 60_000} minutes past its fire time: the sweep is not running.`,
-  stuck: `No recipient handed off for ${STUCK_THRESHOLD_MS / 60_000} minutes, with no halt or wedge to explain it. A send that keeps handing off is never stuck.`,
-  wedged: "`count` recipients whose delivery is unknown, settled by Resolve (its `action`).",
-  refused:
-    "An `account` halt: its `cause`, its words as `error`, the `advice` for the fix, and `retry_at`.",
-  provider_unavailable: `An \`unavailable\` halt, retried at \`retry_at\`; \`warn\` once a rate limit has refused ${SELF_THROTTLE_HALTS} retries' first requests in a row (SES_MAX_SEND_RATE set too high).`,
-  bounce_spike: `A send finished within ${RECENT_DAYS} days whose confirmed bounces reached ${BOUNCE_SPIKE_RATE * 100}% of its audience at fire, at least ${BOUNCE_SPIKE_MIN}: \`bounced\` and \`rate\`.`,
-  no_receipts: `A send finished within ${RECENT_DAYS} days, ${NO_RECEIPTS_AFTER_MS / 60_000} minutes past dispatch, with no receipt for any of its \`accepted\`: the provider's events may not be reaching the webhook.`,
-  remade:
-    "A template or identity change re-made the scheduled email after its last test, `tested_at`; a test of the post clears it.",
-  untested:
-    "`info`: no test of the scheduled email has been sent, and it was never re-made; a test of the post clears it.",
-  daily_writes: `On the Workers Free plan's limits, a scheduled send to more than ${DAILY_WRITES_SEND_RECIPIENTS.toLocaleString("en-US")} recipients, judged by its audience alone, which may spend D1's daily written rows and stop the instance until midnight UTC: \`recipients\`. Never a refusal.`,
+const CONDITION_KINDS: Record<ConditionKind, ConditionKindDoc> = {
+  missed: {
+    severity: "`action`",
+    fields: "",
+    meaning: `Still scheduled ${MISSED_THRESHOLD_MS / 60_000} minutes past its fire time: the sweep that fires sends is not running.`,
+    remedy:
+      "Whoever runs the deployment checks the Worker's Cron Trigger (`triggers.crons`) and its logs; locally, `npm run dev` runs the sweep. The send goes out as soon as the sweep runs again; nothing in this API fires it.",
+  },
+  stuck: {
+    severity: "`warn`",
+    fields: "",
+    meaning: `Sending, with no recipient handed off for ${STUCK_THRESHOLD_MS / 60_000} minutes and no halt or wedge to explain it: the sweep has stopped, every run on it fails, or another send is taking every tick. A send that keeps handing off, however slowly, is never stuck.`,
+    remedy:
+      "If another send is going out, this one picks up once it finishes. Otherwise whoever runs the deployment reads the logs and checks the Cron Trigger. It carries on from where it stopped, mailing no one twice.",
+  },
+  wedged: {
+    severity: "`action`",
+    fields: "`count`",
+    meaning:
+      "`count` recipients whose hand-off the provider never answered, so whether they were mailed is unknown, and the send can't finish until they are resolved.",
+    remedy:
+      "The publisher decides, through the condition's `action` (Resolve): `unsent`, the safe default (they may miss this post), or `accepted`, only when they know those readers got it.",
+  },
+  refused: {
+    severity: "`action`",
+    fields: "`cause`, `error`, `advice`, `retry_at`",
+    meaning:
+      "The provider refuses the account, or this send's own email (`cause` `content` or `invalid_request`); `error` is its words. No one is marked unsent.",
+    remedy:
+      "`advice` names the fix and who makes it, by `cause` (the halt causes below); almost always outside this API. The send retries on its own at `retry_at` and resumes once the fix lands.",
+  },
+  provider_unavailable: {
+    severity: `\`info\`, or \`warn\` after ${SELF_THROTTLE_HALTS} rate-limit halts in a row`,
+    fields: "`error`, `retry_at`",
+    meaning:
+      "An outage or a rate limit on the provider's side; the send waits, retried at `retry_at`. No one is marked unsent.",
+    remedy:
+      "Nothing, while `info`: it retries on its own. At `warn` the deployment asks for more a second than the account allows: whoever runs it sets `SES_MAX_SEND_RATE` to the account's maximum send rate, and deploys.",
+  },
+  bounce_spike: {
+    severity: "`warn`",
+    fields: "`bounced`, `rate`",
+    meaning: `A send finished within ${RECENT_DAYS} days whose confirmed bounces reached ${BOUNCE_SPIKE_RATE * 100}% of its audience at fire (at least ${BOUNCE_SPIKE_MIN}), where providers put a sender under review.`,
+    remedy:
+      "The publisher checks the addresses on its deliveries (`view=bounced`); a hard bounce is already suppressed. It warns only, never halting a send.",
+  },
+  no_receipts: {
+    severity: "`warn`",
+    fields: "`accepted`",
+    meaning: `A send finished within ${RECENT_DAYS} days, ${NO_RECEIPTS_AFTER_MS / 60_000} minutes past dispatch, with no receipt for any of its \`accepted\`: the provider's events may not be reaching the webhook, so its bounces and complaints suppress no one.`,
+    remedy:
+      "Whoever runs the deployment looks for `webhook.refused` in the logs and checks the provider's event subscription. It clears once any receipt lands.",
+  },
+  remade: {
+    severity: "`info`",
+    fields: "`tested_at`",
+    meaning:
+      "A template or identity change re-made the scheduled email after its last test (`tested_at`, or null for none): its content and fire time are the same, its look may not be.",
+    remedy: "A test of the post (`POST /api/posts/:id/test`) clears it.",
+  },
+  untested: {
+    severity: "`info`",
+    fields: "",
+    meaning: "No test of the scheduled email has been sent, and it was never re-made.",
+    remedy: "A test of the post (`POST /api/posts/:id/test`) clears it.",
+  },
+  daily_writes: {
+    severity: "`warn`",
+    fields: "`recipients`",
+    meaning: `On the Workers Free plan's limits, a scheduled send to more than ${DAILY_WRITES_SEND_RECIPIENTS.toLocaleString("en-US")} recipients, judged by its audience alone, which may spend D1's daily written rows and stop the instance until midnight UTC.`,
+    remedy:
+      "Never a refusal: the send goes out as scheduled. Whoever runs the deployment can move to Workers Paid, whose limits a send this size fits.",
+  },
 };
+
+/**
+ * Which halt each cause is, so the halt causes' table reads every cause off one Record: a new
+ * `HaltCause` fails to compile until it is placed.
+ */
+const HALT_CAUSE_REASON: Record<HaltCause, HaltReason> = {
+  outage: "unavailable",
+  rate_limit: "unavailable",
+  credentials: "account",
+  opt_in: "account",
+  configuration: "account",
+  sending_pool: "account",
+  unsupported: "account",
+  sender: "account",
+  mail_from: "account",
+  sandbox: "account",
+  quota: "account",
+  suspended: "account",
+  paused: "account",
+  set_paused: "account",
+  not_connected: "account",
+  content: "account",
+  invalid_request: "account",
+};
+
+/** The fix for an `unavailable` halt's cause; an `account` one's is `refusalAdvice`, the words its condition carries. */
+const UNAVAILABLE_FIX: Partial<Record<HaltCause, string>> = {
+  outage: "The provider is down. Nothing to do: the send retries on its own.",
+  rate_limit:
+    "The provider refused for its sending rate. Nothing to do, unless it keeps happening (the condition turns `warn`): then `SES_MAX_SEND_RATE` is set above the account's maximum send rate.",
+};
+
+/** The send view's tables: each condition kind, and each halt cause with its fix. */
+const SEND_TABLES: ReferenceTable[] = [
+  {
+    title: "Condition kinds",
+    description:
+      "Each `conditions` entry's `kind`. Show its `message` as it stands; this says what it means and what settles it.",
+    columns: ["Kind", "Severity", "Fields", "Meaning", "Remedy"],
+    rows: (Object.keys(CONDITION_KINDS) as ConditionKind[]).map((kind) => {
+      const k = CONDITION_KINDS[kind];
+      return [`\`${kind}\``, k.severity, k.fields || "none", k.meaning, k.remedy];
+    }),
+  },
+  {
+    title: "Halt causes",
+    description:
+      "A halt's `cause`, the `cause` a `refused` condition carries. An `account` cause's fix is the `advice` its condition carries, word for word; a send's own (`content`, `invalid_request`) holds no other send.",
+    columns: ["Cause", "Halt", "Fix"],
+    rows: (Object.keys(HALT_CAUSE_REASON) as HaltCause[]).map((cause) => [
+      `\`${cause}\``,
+      `\`${HALT_CAUSE_REASON[cause]}\``,
+      UNAVAILABLE_FIX[cause] ?? refusalAdvice(cause),
+    ]),
+  },
+];
 
 const SEND_FIELDS: ReferenceField[] = [
   { name: "id", type: "string", description: "The send's id." },
@@ -229,7 +365,7 @@ const SEND_FIELDS: ReferenceField[] = [
       },
       {
         value: "account",
-        description: `The provider refusing the account, or this send's own email, retried ${retrySchedule(HALT_BACKOFF_MS.account)}. \`cause\` names what: \`credentials\`, \`opt_in\`, \`configuration\`, \`sending_pool\`, \`unsupported\`, \`sender\`, \`mail_from\`, \`sandbox\`, \`quota\`, \`suspended\`, \`paused\`, \`set_paused\`, \`not_connected\`, or this send's own \`content\` or \`invalid_request\`. The fix is outside this API; the send resumes once it lands.`,
+        description: `The provider refusing the account, or this send's own email, retried ${retrySchedule(HALT_BACKOFF_MS.account)}. \`cause\` names what (the halt causes below, each with its fix). The fix is outside this API; the send resumes once it lands.`,
       },
     ],
   },
@@ -256,11 +392,7 @@ const SEND_FIELDS: ReferenceField[] = [
     name: "conditions",
     type: "object[]",
     description:
-      "What is wrong with the send, or worth knowing, now (SPEC §8, §12), most severe first. Each has `kind`, `severity` (`action`: a person must act; `warn`; `info`), `since` (or null), a `message` to show as it stands, the `action` that settles it or null, and the fields its kind names.",
-    values: (Object.keys(CONDITION_MEANING) as ConditionKind[]).map((kind) => ({
-      value: kind,
-      description: CONDITION_MEANING[kind],
-    })),
+      "What is wrong with the send, or worth knowing, now (SPEC §8, §12), most severe first. Each has `kind` (the condition kinds below), `severity` (`action`: a person must act; `warn`: worth a look; `info`: worth knowing), `since` (or null), a `message` to show as it stands, the `action` that settles it or null, and the fields its kind names.",
   },
   {
     name: "actions",
@@ -393,19 +525,31 @@ const STATUS_VALUES = (Object.keys(STATUS_MEANING) as SubscriberStatus[]).map((s
 }));
 
 /**
- * The suppression reasons, each with the flag the editor shows and what it means. The roster
- * shows an erasure's marker only on someone who signed up again; a list of suppressions holds
- * markers with no subscriber, so it takes the context-free meaning.
+ * Where each suppression reason comes from, beside the flag the editor shows it as and that
+ * flag's meaning in the legend's words: an import's bounce or complaint reads as one seen
+ * here, so it names the reason it reads as, and only its source tells the two apart.
  */
-function reasonValues(erased: string) {
-  return (Object.keys(SUPPRESSION_FLAG) as SuppressionReason[]).map((reason) => {
-    const flag: SuppressionFlag = SUPPRESSION_FLAG[reason];
-    return {
-      value: reason,
-      description: `Shown as ${flag}: ${flag === "erased" ? erased : FLAG_MEANING[flag]}`,
-    };
-  });
-}
+const REASON_SOURCE: Record<SuppressionReason, string> = {
+  bounce: "The provider reported a hard bounce here.",
+  import_bounce: "An import carried it in from the service the list came from.",
+  complaint: "The provider reported a spam complaint here.",
+  import_complaint: "An import carried it in from the service the list came from.",
+  manual: "",
+  erased: "",
+};
+const READS_AS: Partial<Record<SuppressionReason, SuppressionReason>> = {
+  import_bounce: "bounce",
+  import_complaint: "complaint",
+};
+
+/** The suppression reasons, each with the flag the editor shows and where it came from. */
+const REASON_VALUES = (Object.keys(SUPPRESSION_FLAG) as SuppressionReason[]).map((reason) => {
+  const flag: SuppressionFlag = SUPPRESSION_FLAG[reason];
+  const same = READS_AS[reason];
+  const meaning = flag === "erased" ? ERASED_MARKER_MEANING : FLAG_MEANING[flag];
+  const lead = same ? `Shown as ${flag}, as \`${same}\` is.` : `Shown as ${flag}: ${meaning}`;
+  return { value: reason, description: `${lead} ${REASON_SOURCE[reason]}`.trim() };
+});
 
 const SUBSCRIBER_FIELDS: ReferenceField[] = [
   { name: "id", type: "string", description: "The subscriber's id." },
@@ -425,8 +569,7 @@ const SUBSCRIBER_FIELDS: ReferenceField[] = [
   {
     name: "suppression_reason",
     type: "string | null",
-    description: "Why, and whose decision it was; in a list row.",
-    values: reasonValues(FLAG_MEANING.erased),
+    description: `Why, and whose decision it was, as a suppression's \`reason\` (Suppressions); in a list row. On the roster \`erased\` means: ${FLAG_MEANING.erased}`,
   },
   {
     name: "suppression_detail",
@@ -474,12 +617,12 @@ const SUBSCRIBER_FIELDS: ReferenceField[] = [
 ];
 
 const SUPPRESSION_FIELDS: ReferenceField[] = [
-  { name: "email", type: "string", description: "The address, never mailed while it stands." },
+  { name: "email", type: "string", description: "The address." },
   {
     name: "reason",
     type: "string",
-    description: `Why, and whose decision it was. ${SUPPRESSED_MEANING}`,
-    values: reasonValues(ERASED_MARKER_MEANING),
+    description: "Why, and whose decision it was.",
+    values: REASON_VALUES,
   },
   {
     name: "detail",
@@ -588,6 +731,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
     description:
       "One send, the one shape every send route carries: the list, one send, the feed, and every act's answer and refusal (SPEC §8). A client keeps one copy current from any of them and tells two apart by `rev`. The stored facts, with what the server derives from them as of `as_of`. Its email and its recipient rows have routes of their own.",
     fields: SEND_FIELDS,
+    tables: SEND_TABLES,
     example: SEND_EXAMPLE,
   },
   post: {
@@ -641,7 +785,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
   suppression: {
     resource: "suppressions",
     title: "The suppression object",
-    description: `An address that isn't mailed, whatever its consent, and why (SPEC §7). ${SUPPRESSED_MEANING}`,
+    description: `An address that isn't mailed, and why (SPEC §7). ${SUPPRESSED_MEANING}`,
     fields: SUPPRESSION_FIELDS,
     example: {
       email: "reader@example.com",

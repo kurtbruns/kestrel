@@ -2008,6 +2008,22 @@ th.num .th-sort {
   border: 0;
   border-radius: 0 0 8px 8px;
 }
+/* A table of a field's values under an object (the send's condition kinds): wider than a
+   phone, so it scrolls on its own rather than widening the page. */
+.api-table-wrap {
+  overflow-x: auto;
+  margin-top: 8px;
+}
+.api-table th {
+  padding: 5px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  background: var(--hover);
+}
+.api-table td {
+  min-width: 8ch;
+}
 /* A refusal's status, beside its code. */
 .api-status {
   font: 600 12px var(--mono);

@@ -11,6 +11,7 @@ import type {
   ReferenceRefusalGroup,
   ReferenceResource,
   ReferenceResponse,
+  ReferenceTable,
   RouteError,
   RouteReturns,
 } from "../../shared/reference";
@@ -212,6 +213,16 @@ function apiRouteHtml(r: ReferenceEntry, look: Lookups): Html {
 /** A resource's routes within a tier, in the order the tier lists them. */
 const routesIn = (g: ReferenceGroup, res: ReferenceResource) =>
   g.routes.filter((r) => r.resource === res.key);
+// A table of a field's values, under its object's fields: a head row, then a row per value.
+function apiTableHtml(t: ReferenceTable): Html {
+  return html`<div class="block"><div class="block-head"><span class="block-label">${t.title}</span></div>
+      ${prose(t.description, "api-prose")}
+      <div class="api-table-wrap"><table class="api-query api-table"><thead><tr>${t.columns.map((c) => html`<th>${c}</th>`)}</tr></thead><tbody>${t.rows.map(
+        (r) =>
+          html`<tr>${r.map((c, i) => html`<td class="${i ? "muted" : ""}">${inline(c)}</td>`)}</tr>`,
+      )}</tbody></table></div>
+    </div>`;
+}
 // An object its resource's routes return, first under the resource as Stripe puts it: one
 // collapsed line that opens to its fields and example.
 function apiObjectHtml(o: ReferenceObject): Html {
@@ -224,6 +235,7 @@ function apiObjectHtml(o: ReferenceObject): Html {
       <div class="api-route-detail">
         ${prose(o.description, "api-prose")}
         ${apiFieldsTable(o.fields)}
+        ${(o.tables ?? []).map(apiTableHtml)}
         ${apiExample("Example", o.example)}
       </div>
     </details>`;
