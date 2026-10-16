@@ -213,7 +213,7 @@ export async function freeze(
 }
 
 /** The refusal for a post that already has its one active send, carrying that send. */
-async function activeSendExists(env: AppEnv, send: SendRow) {
+export async function activeSendExists(env: AppEnv, send: Pick<SendRow, "id">) {
   return refusal(409, "active_send_exists", ACTIVE_SEND_EXISTS, {
     send: await viewSend(env, send.id),
   });

@@ -382,6 +382,19 @@ describe("schema (0008_unlisted_links)", () => {
     expect(a).not.toBe(b);
   });
 
+  it("records a send inserted without naming its link as carrying the archive address, as the previous release's Worker inserts one (SPEC §5)", async () => {
+    // The previous release's Worker keeps serving between this migration and the deploy, and
+    // after a rollback; every send it freezes links the archive address.
+    await insert("a", "one");
+    await env.DB.prepare(
+      "INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, scheduled_at) VALUES ('s1', 'a', 'scheduled', 0, '', '', '', 0)",
+    ).run();
+    const row = await env.DB.prepare("SELECT web_link FROM sends WHERE id = 's1'").first<{
+      web_link: string;
+    }>();
+    expect(row?.web_link).toBe("archive");
+  });
+
   it("keeps every post's slug its own, drafts included (SPEC §4)", async () => {
     await insert("a", "spring");
     await expect(insert("b", "spring")).rejects.toThrow(/UNIQUE constraint failed/);

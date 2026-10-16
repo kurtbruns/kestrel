@@ -749,7 +749,7 @@ export function createRouter({
       description:
         "The same freeze as scheduling, with the template and identity as they stand, and `fire_at` set to now plus the minimum lead, rounded up to the next whole minute as every fire time is: " +
         lead +
-        ". For nearly all of that window the send is inside the minimum lead, so a template or identity save that would re-make it is refused until it has fired. An optional JSON body may carry `email_only`, `slug`, and `slug_auto`, the post's settings, as for scheduling. A second call for a post already in its window answers with that send and `idempotent: true`, and changes nothing, its listing included; the other refusals are as for scheduling.",
+        ". For nearly all of that window the send is inside the minimum lead, so a template or identity save that would re-make it is refused until it has fired. An optional JSON body may carry `email_only`, `slug`, and `slug_auto`, the post's settings, as for scheduling. A second call for a post already in its window answers with that send and `idempotent: true`, and changes nothing, its listing included; one that names settings the post doesn't have is a 409 `active_send_exists` carrying the send, so a caller that asked for email only never reads success for a post going out listed (change them with `PUT /api/posts/:id/listing`). The other refusals are as for scheduling.",
       example: {
         request: { email_only: true },
         response: { send: scheduledExample, cursor: "57.1768467610000" },

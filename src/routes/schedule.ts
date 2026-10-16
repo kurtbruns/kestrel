@@ -10,8 +10,8 @@ import { requireConnectedProvider } from "../providers";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { viewWithCursor } from "../send/describe";
-import { acceptFireAt, freeze } from "../send/schedule";
-import { readSettingsBody, resolveSettings } from "./post_settings";
+import { acceptFireAt, activeSendExists, freeze } from "../send/schedule";
+import { readSettingsBody, resolveSettings, type SettingsBody } from "./post_settings";
 
 /** An ISO-8601 timestamp that names its instant: a time part ending in `Z` or `±hh:mm`. */
 const ISO_WITH_OFFSET = /T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/i;
@@ -104,7 +104,7 @@ export async function sendNow(c: RequestContext): Promise<Response> {
   // nothing, its settings included: they have their own route.
   const active = await getActiveSendForPost(c.env.DB, post.id);
   if (active) {
-    return repeatAnswer(c, active.id);
+    return repeatAnswer(c, active.id, fields);
   }
 
   requireConnectedProvider(c.config);
@@ -123,7 +123,7 @@ export async function sendNow(c: RequestContext): Promise<Response> {
     if (err instanceof HttpError && err.code === "active_send_exists") {
       const winner = await getActiveSendForPost(c.env.DB, post.id);
       if (winner) {
-        return repeatAnswer(c, winner.id);
+        return repeatAnswer(c, winner.id, fields);
       }
     }
     throw err;
@@ -132,8 +132,26 @@ export async function sendNow(c: RequestContext): Promise<Response> {
   return json(frozen, 201);
 }
 
-/** A repeated send-now's answer: the post's active send, marked `idempotent`. */
-async function repeatAnswer(c: RequestContext, sendId: string): Promise<Response> {
+/**
+ * A repeated send-now's answer: the post's active send, marked `idempotent`. A repeat changes
+ * nothing, so one asking for settings the post doesn't have is refused with that send
+ * (`active_send_exists`) rather than answered as if it had them: a client that asked for email
+ * only would otherwise read success while the post goes out listed (SPEC §5).
+ */
+async function repeatAnswer(
+  c: RequestContext,
+  sendId: string,
+  fields: SettingsBody,
+): Promise<Response> {
+  // Read again: the send this repeats may have set them as it froze.
+  const post = unwrap(await getPost(c.env.DB, param(c, "id")), "post");
+  const differs =
+    (fields.emailOnly !== undefined && fields.emailOnly !== post.email_only) ||
+    (fields.slug !== undefined && fields.slug !== post.slug) ||
+    (fields.slugAuto !== undefined && fields.slugAuto !== post.slug_auto);
+  if (differs) {
+    throw await activeSendExists(c.env, { id: sendId });
+  }
   const repeat: ScheduleResponse = {
     ...unwrap(await viewWithCursor(c.env, sendId), "send"),
     idempotent: true,

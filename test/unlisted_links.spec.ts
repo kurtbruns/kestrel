@@ -185,8 +185,30 @@ describe("the archive address (SPEC §4, §5)", () => {
     const sendId = await schedule(id);
     const checked = await getPost(env.DB, id); // the check sees a scheduled post
     await fire(sendId);
-    await setPublishing(env.DB, checked!, { slug: { slug: "the-spring-letter", auto: false } });
-    expect((await read(id)).post.slug).toBe("spring-update");
+    const outcome = await setPublishing(env.DB, checked!, {
+      emailOnly: true,
+      slug: { slug: "the-spring-letter", auto: false },
+    });
+    // Refused whole, so the caller can say so: the listing that rode with it isn't written either.
+    expect(outcome).toBe("address_fixed");
+    expect((await read(id)).post).toMatchObject({ slug: "spring-update", email_only: false });
+  });
+
+  it("lets a listing change land after the send starts when it names the address the post has (SPEC §5)", async () => {
+    const id = await makeDraft("Spring Update");
+    const sendId = await schedule(id);
+    const checked = await getPost(env.DB, id);
+    await fire(sendId);
+    // As a settings form sends it: every field, the slug unchanged.
+    const outcome = await setPublishing(env.DB, checked!, {
+      emailOnly: true,
+      slug: { slug: "spring-update", auto: checked!.slug_auto },
+    });
+    expect(outcome).toBe("changed");
+    expect((await read(id)).post).toMatchObject({ slug: "spring-update", email_only: true });
+    const res = await setListing(id, { email_only: false, slug: "spring-update" });
+    expect(res.status).toBe(200);
+    expect((await readJson(res)).changed).toBe(true);
   });
 
   it("is refused, not renamed, when malformed or another post's, wherever it is set", async () => {

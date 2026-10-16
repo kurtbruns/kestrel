@@ -818,8 +818,8 @@ export function insertScheduledSendStmt(
   const guard = settingsVersionIs(settingsVersion);
   return db
     .prepare(
-      `INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, scheduled_at, rev)
-       SELECT ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ${NEXT_REV}
+      `INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, scheduled_at, web_link, rev)
+       SELECT ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, 'unlisted', ${NEXT_REV}
         WHERE ${guard.sql}`,
     )
     .bind(

@@ -224,8 +224,8 @@ export async function insertSend(db: D1Database, row: SeedSend): Promise<void> {
   await db
     .prepare(
       `INSERT INTO sends
-         (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, audience_resolved_at, rev)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ${NEXT_REV})`,
+         (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, audience_resolved_at, web_link, rev)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, 'unlisted', ${NEXT_REV})`,
     )
     .bind(
       row.id,

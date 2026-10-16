@@ -437,6 +437,28 @@ describe("schedule / send / cancel + soft-lock", () => {
     expect(second.send.id).toBe(first.send.id);
   });
 
+  it("refuses a send-now repeat that asks for settings the post doesn't have, rather than answering success (SPEC §5)", async () => {
+    const id = await makeDraft();
+    const sendNow = (body: unknown) =>
+      SELF.fetch(`${base}/api/posts/${id}/send`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify(body),
+      });
+    const first = await readJson(await sendNow({}));
+    // The post went in listed; a repeat asking for email only would change nothing.
+    const refused = await sendNow({ email_only: true });
+    expect(refused.status).toBe(409);
+    expect(await readJson(refused)).toMatchObject({
+      error: "active_send_exists",
+      send: { id: first.send.id, email_only: false },
+    });
+    // A repeat naming what the post has is still the idempotent answer.
+    const repeat = await sendNow({ email_only: false });
+    expect(repeat.status).toBe(200);
+    expect((await readJson(repeat)).idempotent).toBe(true);
+  });
+
   it("refuses a stray template_revision on schedule and send-now (400): a send is made with the template as it stands", async () => {
     const id = await makeDraft();
     const sched = await SELF.fetch(`${base}/api/posts/${id}/schedule`, {

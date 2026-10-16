@@ -19,7 +19,7 @@ import { slugRefusal } from "../lib/slug_refusals";
 import { unwrap } from "../lib/unwrap";
 import type { RequestContext } from "../router";
 import { param } from "../router";
-import { readSettingsBody, resolveSettings } from "./post_settings";
+import { applySettings, readSettingsBody, resolveSettings } from "./post_settings";
 
 function author(c: RequestContext): string | null {
   return c.principal?.email ?? c.principal?.kind ?? null;
@@ -322,7 +322,7 @@ export async function setListing(c: RequestContext): Promise<Response> {
     throw notFound("post");
   }
   const input = await resolveSettings(c.env.DB, post, fields);
-  const changed = await slugGuarded(() => posts.setPublishing(c.env.DB, post, input));
+  const changed = await applySettings(c.env.DB, post, fields, input);
   const now = changed ? unwrap(await posts.getPost(c.env.DB, post.id), "post") : post;
   const answer: ListingResponse = {
     post: now,

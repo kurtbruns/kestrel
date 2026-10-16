@@ -6,7 +6,7 @@
  */
 
 import type { PostRow, PublishingInput } from "../db/posts";
-import { resolveSlug } from "../db/posts";
+import { isSlugCollision, resolveSlug, setPublishing } from "../db/posts";
 import { getActiveSendForPost, publishedSendForPost } from "../db/sends";
 import { fieldError, type JsonObject, optBoolean, optString } from "../lib/body";
 import { slugPermanent, slugRefusal } from "../lib/slug_refusals";
@@ -64,6 +64,33 @@ export async function resolveSettings(
   }
   input.slug = resolved;
   return input;
+}
+
+/**
+ * Write a resolved settings change, answering whether anything changed. The checks in
+ * `resolveSettings` ran before the write, so the write holds two of them itself: a slug another
+ * post took in between is a 409 `slug_taken`, and a send that started in between is a 409
+ * `slug_permanent`. Either way nothing is written, the listing included.
+ */
+export async function applySettings(
+  db: D1Database,
+  post: PostRow,
+  body: SettingsBody,
+  input: PublishingInput,
+): Promise<boolean> {
+  let outcome: Awaited<ReturnType<typeof setPublishing>>;
+  try {
+    outcome = await setPublishing(db, post, input);
+  } catch (err) {
+    if (isSlugCollision(err)) {
+      throw slugRefusal("slug_taken");
+    }
+    throw err;
+  }
+  if (outcome === "address_fixed") {
+    throw slugPermanent(body.slug !== undefined ? "slug" : "slug_auto", "sent");
+  }
+  return outcome === "changed";
 }
 
 /** Why a post's address can no longer move, or null while it can: its send has started, or its

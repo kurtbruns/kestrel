@@ -184,11 +184,14 @@ export function setPublishingStmt(
     binds.push(input.emailOnly ? 1 : 0);
   }
   const where = ["id = ?"];
-  if (input.slug !== undefined) {
+  // Only a slug that moves is written, and only it is held to the rule that an address is fixed
+  // once the send starts (SPEC §4): the check before this write can't see a send that starts
+  // between the two, so the write holds the rule itself. A form that names the slug the post
+  // already has carries no such guard, so its listing change always lands.
+  if (slugMoves(post, input)) {
+    const slug = unwrap(input.slug, "slug");
     sets.push("slug = ?", "slug_auto = ?");
-    binds.push(input.slug.slug, input.slug.auto ? 1 : 0);
-    // An address is fixed once the send starts (SPEC §4): the check before this write can't see
-    // a send that starts between the two, so the write holds the rule itself.
+    binds.push(slug.slug, slug.auto ? 1 : 0);
     where.push(
       "NOT EXISTS (SELECT 1 FROM sends WHERE sends.post_id = posts.id AND sends.status IN ('sending', 'sent'))",
     );
@@ -203,12 +206,18 @@ export function setPublishingStmt(
     .bind(...binds, post.id, ...(guard?.binds ?? []));
 }
 
+/** Whether a settings change moves the post's slug, or whether it follows the subject. */
+function slugMoves(post: PostRow, input: PublishingInput): boolean {
+  return (
+    input.slug !== undefined &&
+    (input.slug.slug !== post.slug || input.slug.auto !== post.slug_auto)
+  );
+}
+
 /** Whether a settings change changes anything about the post. */
 export function publishingChanges(post: PostRow, input: PublishingInput): boolean {
   return (
-    (input.emailOnly !== undefined && input.emailOnly !== post.email_only) ||
-    (input.slug !== undefined &&
-      (input.slug.slug !== post.slug || input.slug.auto !== post.slug_auto))
+    (input.emailOnly !== undefined && input.emailOnly !== post.email_only) || slugMoves(post, input)
   );
 }
 
@@ -217,18 +226,22 @@ export function publishingChanges(post: PostRow, input: PublishingInput): boolea
  * is part of the frozen email (I3). Answers whether anything changed, so a repeat of the same
  * choice writes nothing. Each of the post's sends carries the settings on its view, so the same
  * batch gives them a new `rev` and a client following sends sees the change (SPEC §8). The
- * caller has resolved the slug and refused a change to a published post's.
+ * caller has resolved the slug and refused a change to a published post's; `address_fixed`
+ * means the post's send started after that check, and nothing was written, its listing included.
  */
 export async function setPublishing(
   db: D1Database,
   post: PostRow,
   input: PublishingInput,
-): Promise<boolean> {
+): Promise<"changed" | "unchanged" | "address_fixed"> {
   if (!publishingChanges(post, input)) {
-    return false;
+    return "unchanged";
   }
-  await db.batch([setPublishingStmt(db, post, input), stampSendsOfPostStmt(db, post.id)]);
-  return true;
+  const [written] = await db.batch([
+    setPublishingStmt(db, post, input),
+    stampSendsOfPostStmt(db, post.id),
+  ]);
+  return unwrap(written, "settings write").meta.changes > 0 ? "changed" : "address_fixed";
 }
 
 export async function getPost(db: D1Database, id: string): Promise<PostRow | null> {

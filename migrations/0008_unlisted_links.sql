@@ -14,7 +14,11 @@
 -- inserting a post leaves it without a link. The unique index keeps every link a post's own.
 --
 -- sends.web_link: which address the send's email carries as its "view in browser" link,
--- `unlisted` from this release on, or `archive` for a send frozen before it. A post whose
+-- `unlisted` from this release on, or `archive` for a send frozen before it. The column defaults
+-- to `archive`, which every existing send takes, and this release's Worker names `unlisted` on
+-- every send it freezes: a send frozen by the previous release's Worker while it still serves,
+-- between this migration and the deploy or after a rollback, carries its archive address, and
+-- the default records it so. A post whose
 -- published send carries `archive` keeps its archive address answering whatever its listing,
 -- since every copy of that email links there. A re-make freezes a new copy, so it moves a
 -- scheduled send to `unlisted`.
@@ -35,6 +39,5 @@ BEGIN
     || '-' || substr(unlisted_token, 17, 8) || '-' || substr(unlisted_token, 25, 8) WHERE id = NEW.id;
 END;
 
-ALTER TABLE sends ADD COLUMN web_link TEXT NOT NULL DEFAULT 'unlisted'
+ALTER TABLE sends ADD COLUMN web_link TEXT NOT NULL DEFAULT 'archive'
   CHECK (web_link IN ('unlisted', 'archive'));
-UPDATE sends SET web_link = 'archive';
