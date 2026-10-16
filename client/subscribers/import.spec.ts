@@ -62,7 +62,7 @@ function planFor(name: string, over: Partial<ImportPlanResponse> = {}): ImportPl
     sends_growing: [],
     attestation: { version: 1, text: ATTEST, publication: "Birds Weekly" },
     plan_hash: "hash-1",
-    daily_writes_warning: null,
+    workers_plan_advice: null,
     ...over,
   };
 }
@@ -223,7 +223,7 @@ describe("import view", () => {
               kept_unsubscribed: 2,
               blocked_by_suppression: 1,
             }),
-            daily_writes_warning:
+            workers_plan_advice:
               "On the Workers Free plan’s limits, this import leaves 3,025 confirmed subscribers.",
           }),
       },
@@ -251,7 +251,7 @@ describe("import view", () => {
       "kept_unsubscribed",
     ]);
     // The plan's warning is shown as the plan returns it.
-    expect($(".imp-warn").textContent).toBe(
+    expect($(".workers-plan").textContent).toBe(
       "On the Workers Free plan’s limits, this import leaves 3,025 confirmed subscribers.",
     );
     // The attestation the plan returns, unticked, and the publication named under it.

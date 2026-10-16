@@ -8,7 +8,6 @@
 // the same code, so what is documented and what is accepted cannot drift apart. Pure and
 // dependency-free: the Worker and the editor both import it.
 
-import { dailyWritesPercent } from "./daily_writes";
 import { isValidEmail, normalizeEmail } from "./email";
 import { publicationName } from "./publication";
 
@@ -46,15 +45,6 @@ export const IMPORT_LIMITS = {
   /** One row's `evidence`, in bytes of its JSON. */
   maxEvidenceBytes: 500,
 } as const;
-
-/**
- * The import plan's warning, on the Workers Free plan's limits, when this import and the day's
- * earlier ones would write `rows` of D1's daily allowance, past `DAILY_WRITES_BUDGET`.
- * `earlier`: imports were already committed today (UTC).
- */
-export function dailyWritesImportWarning(rows: number, earlier: boolean): string {
-  return `On the Workers Free plan’s limits, ${earlier ? "this import and today’s earlier ones" : "this import"} would use about ${dailyWritesPercent(rows)}% of the database’s daily allowance of writes. Running out stops this newsletter until midnight UTC. Import this file tomorrow (UTC), or move to Workers Paid.`;
-}
 
 /**
  * Rows per page of the export, set by the server, never the client. Workers Free's 10 ms of
@@ -885,8 +875,8 @@ export interface ImportPlanResponse {
   attestation: { version: number; text: string; publication: string } | null;
   /** What the commit must name, so it applies this plan and no other. */
   plan_hash: string;
-  /** On the Workers Free plan's limits, when this import and the day's earlier ones (UTC) would write more of D1's daily allowance than the budget leaves room for: the server's words, to show as they stand. Null otherwise. Never a refusal. */
-  daily_writes_warning: string | null;
+  /** On the Workers Free plan's limits, when this import would leave more confirmed subscribers than Free suits (`FREE_PLAN_LIST`): the server's advice to move to Workers Paid, to show as it stands. Null otherwise. Never a refusal. */
+  workers_plan_advice: string | null;
 }
 
 /** The body of a commit: the plan's body, the plan's hash, and the publisher's answers. */

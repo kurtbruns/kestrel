@@ -6,13 +6,13 @@
  * editor word them with, so the reference can't describe them differently.
  */
 
+import { DAILY_WRITES_SEND_RECIPIENTS, FREE_PLAN_LIST } from "../../shared/free_plan";
 import type { ObjectKey, ReferenceField, ReferenceObject } from "../../shared/reference";
 import {
   BOUNCE_SPIKE_MIN,
   BOUNCE_SPIKE_RATE,
   BOUNCE_SPIKE_RECENT_MS,
   type ConditionKind,
-  DAILY_WRITES_SEND_RECIPIENTS,
   NO_RECEIPTS_AFTER_MS,
   SELF_THROTTLE_HALTS,
   STUCK_THRESHOLD_MS,
@@ -123,7 +123,7 @@ const CONDITION_MEANING: Record<ConditionKind, string> = {
     "A template or identity change re-made the scheduled email after its last test, `tested_at`; a test of the post clears it.",
   untested:
     "`info`: no test of the scheduled email has been sent, and it was never re-made; a test of the post clears it.",
-  daily_writes: `On the Workers Free plan's limits, a scheduled send to more than ${DAILY_WRITES_SEND_RECIPIENTS.toLocaleString("en-US")} recipients (fewer after the day's imports), which may spend D1's daily written rows: \`recipients\`. Never a refusal.`,
+  daily_writes: `On the Workers Free plan's limits, a scheduled send to more than ${DAILY_WRITES_SEND_RECIPIENTS.toLocaleString("en-US")} recipients, judged by its audience alone, which may spend D1's daily written rows and stop the instance until midnight UTC: \`recipients\`. Never a refusal.`,
 };
 
 const SEND_FIELDS: ReferenceField[] = [
@@ -513,10 +513,9 @@ const IMPORT_PLAN_FIELDS: ReferenceField[] = [
   },
   { name: "plan_hash", type: "string", description: "What the commit names, to apply this plan." },
   {
-    name: "daily_writes_warning",
+    name: "workers_plan_advice",
     type: "string | null",
-    description:
-      "On the Workers Free plan's limits, the server's words when this import and the day's earlier ones would write more of D1's daily allowance than it leaves room for. Never a refusal.",
+    description: `On the Workers Free plan's limits, the server's words when this import would leave more than ${FREE_PLAN_LIST.toLocaleString("en-US")} confirmed subscribers, advising Workers Paid; else null. Never a refusal, and outside the hash.`,
   },
 ];
 
@@ -549,7 +548,7 @@ const SETTINGS_FIELDS: ReferenceField[] = [
     name: "deployment.freePlanLimits",
     type: "boolean",
     description:
-      "True on the Workers Free plan's limits (`SUBREQUEST_BUDGET` unset): the import limit, the export's page, and the daily-writes warnings follow it.",
+      "True on the Workers Free plan's limits (`SUBREQUEST_BUDGET` unset): the import limit, the export's page, the `daily_writes` condition, and `workers_plan_advice` follow it.",
   },
   {
     name: "inUse",
@@ -666,7 +665,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
         publication: "Field Notes",
       },
       plan_hash: "9f2c…",
-      daily_writes_warning: null,
+      workers_plan_advice: null,
     },
   },
   settings: {

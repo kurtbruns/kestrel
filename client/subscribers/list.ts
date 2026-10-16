@@ -80,7 +80,7 @@ export async function renderSubscribers(
     root,
     html`
     <div class="spread page-head"><h1>Subscribers</h1><span class="row"><button type="button" class="ghost" id="importSubs">Import</button><button type="button" class="ghost" id="exportSubs">Export</button><button class="primary" id="addSub">Add subscriber</button></span></div>
-    <div class="card sub-summary"><div class="sub-summary-head"><div id="subCounts" class="row muted" role="group" aria-label="Show">Loading…</div><button type="button" class="sub-legend-toggle" id="subLegendToggle" aria-expanded="false" aria-controls="subLegend">Legend</button></div>${legend()}</div>
+    <div class="card sub-summary"><div class="sub-summary-head"><div id="subCounts" class="row muted" role="group" aria-label="Show">Loading…</div><button type="button" class="sub-legend-toggle" id="subLegendToggle" aria-expanded="false" aria-controls="subLegend">Legend</button></div><p class="workers-plan" id="subWorkersPlan" role="status" hidden></p>${legend()}</div>
     ${listToolbar({ statuses: SUB_STATUSES, suppressible: true, searchPlaceholder: "Search email…" })}
     <div id="subList" class="muted">Loading…</div>
     <div id="subPager"></div>`,
@@ -100,6 +100,10 @@ export async function renderSubscribers(
       // its slice of the list (wireCountFilters, below). Only the counts repaint, so the
       // legend stays open or closed across a reload.
       paintCounts($("#subCounts"), c, state);
+      // On Workers Free's limits, a list past what Free suits: the server's advice, as it stands.
+      const plan = $("#subWorkersPlan");
+      plan.hidden = !data.workers_plan_advice;
+      plan.textContent = data.workers_plan_advice ?? "";
       // Suppressions alone are no subscribers, so a list of only them still points the way in.
       const listEmpty = c.pending + c.confirmed + c.unsubscribed === 0;
       renderSubTable(listEl, data.subscribers, state, load, signal, listEmpty);

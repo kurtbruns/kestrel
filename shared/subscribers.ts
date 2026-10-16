@@ -78,6 +78,8 @@ export interface SubscriberListResponse {
   counts: SubscriberCounts;
   subscribers: SubscriberListItem[];
   page: PageMeta;
+  /** On the Workers Free plan's limits, once the confirmed list is past what Free suits (`FREE_PLAN_LIST`): the server's advice to move to Workers Paid, to show as it stands. Null otherwise. */
+  workers_plan_advice: string | null;
 }
 
 /**

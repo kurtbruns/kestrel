@@ -15,10 +15,9 @@
  */
 
 import { unlistedPostUrl } from "../../shared/archive_url";
-import type { WritesDay } from "../../shared/daily_writes";
 import type { SendHalt, SendPhase, SendSummary, SendView } from "../../shared/sends";
 import { countsOf, type SendCounts, type SendStatus } from "../db/sends";
-import type { Config } from "../env";
+import { type Config, onFreePlanLimits } from "../env";
 import { archiveAnswers } from "../lib/archive_address";
 import { archiveUrl } from "../render/render";
 import { sendActions, sendConditions } from "./conditions";
@@ -189,15 +188,16 @@ export type SendViewRow = SendSummary & {
  * Build the view of a send (the frozen bodies play no part). `hasRetries` is the cheap
  * EXISTS probe (see `hasActiveRetries`) — pass false when the send is not `sending`, where
  * it never affects the phase. `now` is the server's clock for everything derived, carried
- * as `as_of`. `day` is the UTC day so far on Workers Free's limits (`readWritesDay`), null
- * on any other deployment.
+ * as `as_of`.
  */
 export function buildSendView(
   send: SendViewRow,
-  config: Pick<Config, "provider" | "appOrigin" | "archiveOrigin" | "archiveBasePath">,
+  config: Pick<
+    Config,
+    "provider" | "appOrigin" | "archiveOrigin" | "archiveBasePath" | "subrequestBudget"
+  >,
   hasRetries: boolean,
   now: number,
-  day: WritesDay | null,
 ): SendView {
   const counts = countsOf(send);
   const published = send.status === "sending" || send.status === "sent";
@@ -298,7 +298,7 @@ export function buildSendView(
     delivery: { confirmed, percent_of_accepted: deliveryPercent },
     provider: { name: config.provider, halt },
     phase,
-    conditions: sendConditions(send, now, day),
+    conditions: sendConditions(send, now, onFreePlanLimits(config)),
     actions: sendActions(send, now),
     next_change_at: nextChangeAt(send, now),
     links: {

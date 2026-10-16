@@ -271,7 +271,7 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
             ? html`<div class="row imp-links"><button type="button" class="ghost" id="impNotImported">Download the ${rowsText(notImported)} not imported as subscribed (CSV)</button></div>`
             : null
         }
-        ${p.daily_writes_warning ? html`<p class="hint daily-writes imp-warn" role="status">${p.daily_writes_warning}</p>` : null}
+        ${p.workers_plan_advice ? html`<p class="workers-plan" role="status">${p.workers_plan_advice}</p>` : null}
       </section>
       <section class="card imp-card imp-confirm">
         <h2>Confirm</h2>

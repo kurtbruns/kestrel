@@ -66,7 +66,7 @@ It's also how the app tells Workers Free from Workers Paid. At the default, the 
 
 - One import takes up to 1,000 rows, since Free's 10 ms of CPU a request can't plan and commit more. Above it, up to 10,000 ([Limits in detail](../publishing/01-your-list.md#limits-in-detail)).
 - An export reads 1,000 rows a page. Above it, 10,000.
-- The app warns before a send to more than 5,000 recipients (fewer on a day with imports), and on an import plan that, with the day's earlier imports, would use most of a day's writes. Either may use up D1's daily allowance of 100,000 rows written, which stops the app until midnight UTC ([As your list grows](../guides/09-as-your-list-grows.md)). Neither warning stops you. Above the default, neither appears.
+- Workers Free suits a list of up to about 1,000 subscribers. Past about 5,000, one send can use up the day's database writes and stop the newsletter until midnight UTC. So the Dashboard and the Subscribers screen recommend Workers Paid once the confirmed list passes 1,000, and so does an import plan that would take it past. The app also warns before a send to more than 5,000 recipients ([As your list grows](../guides/09-as-your-list-grows.md)). None of these stops you. Above the default, none appears, so set it on an account already on Workers Paid.
 
 Never set it above your plan's limit. A minute that hits the cap is cut off mid-batch, and the send stalls until a later minute picks it up. A value below 30 is raised to 30, the least a minute needs to send anything and still send a notification.
 

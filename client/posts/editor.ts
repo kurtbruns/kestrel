@@ -2,6 +2,7 @@
 // hard-cap timers, the freshness poll, images, the schedule / send-now dialogs, and a
 // scheduled post's banner, which follows its send until the send page takes over.
 
+import { DAILY_WRITES_SEND_RECIPIENTS, dailyWritesSendWarning } from "../../shared/free_plan";
 import type { ImageUploadResponse } from "../../shared/images";
 import type {
   PostEditBody,
@@ -11,14 +12,7 @@ import type {
   PostSettingsResponse,
   TestSendResponse,
 } from "../../shared/posts";
-import {
-  DAILY_WRITES_SEND_RECIPIENTS,
-  dailyWritesSendWarning,
-  type ScheduleResponse,
-  type SendAction,
-  type SendResponse,
-  type SendView,
-} from "../../shared/sends";
+import type { ScheduleResponse, SendAction, SendResponse, SendView } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import { slugify } from "../../shared/slug";
 import type { SubscriberListResponse } from "../../shared/subscribers";

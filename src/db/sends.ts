@@ -65,18 +65,6 @@ const CURRENT_REV =
 /** The number a write to a send takes: above every change before it. */
 export const NEXT_REV = `(${CURRENT_REV} + 1)`;
 
-/**
- * Give every send scheduled to fire before `until` a new number, with nothing else changed:
- * on Workers Free's limits an import commits this beside its writes, since what the day's
- * imports wrote is part of those sends' `daily_writes` condition (SPEC §8), and a client
- * following the feed learns of a change only from a send's number.
- */
-export function restampSendsFiringBeforeStmt(db: D1Database, until: number): D1PreparedStatement {
-  return db
-    .prepare(`UPDATE sends SET rev = ${NEXT_REV} WHERE status = 'scheduled' AND fire_at < ?`)
-    .bind(until);
-}
-
 /** Run before deleting the sends `where` names, in the same batch and with the same
  *  predicate: each leaves a tombstone at the next number, which the feed reports as
  *  removed to a client whose cursor is below it. `where` is fixed SQL over `sends`, never

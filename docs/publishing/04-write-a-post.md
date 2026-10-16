@@ -60,7 +60,7 @@ So a recipient count shown before the send is a snapshot. An import that adds su
 ### Warnings when you schedule
 
 - **No email provider connected.** The Schedule dialog can't schedule until one is connected ([Connect Amazon SES](../get-started/04-ses.md)). If the provider goes after a post is scheduled, the post is held, stays cancelable, and goes out once one is connected.
-- **Daily database writes.** On Cloudflare's free Workers plan, a large send may use up the day's writes. The dialog warns you without stopping you, as [Bring your existing list](01-your-list.md#limits) explains.
+- **Daily database writes.** On Cloudflare's free Workers plan, a send to more than about 5,000 recipients may use up the day's writes. The dialog warns you without stopping you, as [Bring your existing list](01-your-list.md#limits) explains.
 
 ### When it sends
 

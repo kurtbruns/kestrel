@@ -2,7 +2,6 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import referencePage from "../docs/publishing/01-your-list.md?raw";
-import { utcDayStart } from "../shared/daily_writes";
 import {
   EXPORT_PAGE_ROWS,
   type ExportResponse,
@@ -1153,79 +1152,77 @@ describe("the export, a page at a time (SPEC §8)", () => {
   });
 });
 
-describe("an import that may spend D1's daily writes (SPEC §7)", () => {
-  // Noon UTC today, so the day can't turn between an earlier import and the plan.
-  const NOON = utcDayStart(Date.now()) + 12 * 3_600_000;
-
-  beforeEach(() => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(NOON);
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  // An import already committed at `createdAt` that brought in `created` new subscribers:
-  // 7 rows each, and 3 for its record.
-  async function seedImport(createdAt: number, created: number): Promise<void> {
-    await env.DB.prepare(
-      "INSERT INTO imports (id, created_at, principal_kind, principal_email, attestation_version, file_name, file_sha256, plan_hash, counts, suppressions_added) VALUES (?, ?, 'service', NULL, 1, 'earlier.csv', 'sha', ?, ?, 0)",
-    )
-      .bind(
-        `imp-${createdAt}-${created}`,
-        createdAt,
-        `hash-${createdAt}-${created}`,
-        JSON.stringify(counts({ create_confirmed: created })),
-      )
-      .run();
-  }
-
-  async function planAdding(added: number, vars: Record<string, string> = {}) {
+describe("an import that leaves the list past what Workers Free suits (SPEC §7)", () => {
+  async function planOf(
+    file: { name: string; text: string },
+    extra: Record<string, unknown> = {},
+    vars: Record<string, string> = {},
+  ) {
     const res = await fetchWith(vars, `${base}/api/imports/plan`, {
       method: "POST",
       headers: JSON_AUTH,
-      body: JSON.stringify({
-        file: {
-          name: "new.txt",
-          text: addresses(added)
-            .map((e) => `new.${e}`)
-            .join("\n"),
-        },
-      }),
+      body: JSON.stringify({ file, ...extra }),
     });
     expect(res.status).toBe(200);
     return (await readJson(res)) as ImportPlanResponse;
   }
 
-  it("warns on Workers Free's limits when it and today's earlier imports would pass the budget, and still plans", async () => {
-    await seedImport(utcDayStart(NOON), 9_000); // 63,003 rows
-    // A plan counts Claude's notice too, since who commits isn't known yet: 7 a subscriber,
-    // 3 for the record, 4 for the notice.
-    const over = await planAdding(1_000); // 7,007 more: 70,010, past 70,000
-    expect(over.counts.create_confirmed).toBe(1_000);
-    expect(over.daily_writes_warning).toBe(
-      "On the Workers Free plan’s limits, this import and today’s earlier ones would use about 70% of the database’s daily allowance of writes. Running out stops this newsletter until midnight UTC. Import this file tomorrow (UTC), or move to Workers Paid.",
+  const adding = (added: number) => ({
+    name: "new.txt",
+    text: addresses(added)
+      .map((e) => `new.${e}`)
+      .join("\n"),
+  });
+
+  it("advises Workers Paid on Free's limits once the confirmed list it leaves passes 1,000, and still plans", async () => {
+    await seedConfirmed(addresses(600));
+    expect((await planOf(adding(400))).workers_plan_advice).toBe(null); // 1,000: within
+    const over = await planOf(adding(401));
+    expect(over.counts.create_confirmed).toBe(401);
+    expect(over.workers_plan_advice).toBe(
+      "On the Workers Free plan’s limits, this import leaves 1,001 confirmed subscribers. Workers Free suits a list of up to about 1,000 subscribers. Past about 5,000, one send can use up the day’s database writes and stop this newsletter until midnight UTC. Move to Workers Paid, or, if the account is on it already, set SUBREQUEST_BUDGET to 10000.",
     );
-    expect((await planAdding(998)).daily_writes_warning).toBe(null); // 6,993 more: 69,996, within
   });
 
-  it("counts only the imports of the current UTC day", async () => {
-    await seedImport(utcDayStart(NOON) - 1, 9_000); // the last moment of yesterday
-    expect((await planAdding(1_000)).daily_writes_warning).toBe(null);
+  it("counts the confirmed subscribers it unsubscribes as leaving the list", async () => {
+    const emails = addresses(1_001);
+    await seedConfirmed(emails);
+    const leaving = await planOf(
+      { name: "left.txt", text: `${emails[0]}\n` },
+      { plain_list_status: "unsubscribed" },
+    );
+    expect(leaving.counts.mark_unsubscribed).toBe(1);
+    expect(leaving.workers_plan_advice).toBe(null); // 1,000 left confirmed
   });
 
-  it("leaves a send's share of the day to the send, so a large list alone never warns the import", async () => {
-    await seedConfirmed(addresses(6_000));
-    expect((await planAdding(1)).daily_writes_warning).toBe(null);
+  it("counts the pending subscribers it confirms as joining the confirmed list", async () => {
+    await seedConfirmed(addresses(1_000));
+    await seedPending("waiting@x.io");
+    const confirming = await planOf({ name: "list.txt", text: "waiting@x.io\n" });
+    expect(confirming.counts.confirm_pending).toBe(1);
+    expect(confirming.workers_plan_advice).toMatch(
+      /this import leaves 1,001 confirmed subscribers/,
+    );
   });
 
-  it("carries no warning on Workers Paid, and the warning never changes the plan's hash", async () => {
-    await seedImport(utcDayStart(NOON), 9_000);
-    const free = await planAdding(1_000);
-    const paid = await planAdding(1_000, PAID);
-    expect(free.daily_writes_warning).not.toBe(null);
-    expect(paid.daily_writes_warning).toBe(null);
+  it("subtracts nothing for a pending subscriber it unsubscribes", async () => {
+    await seedConfirmed(addresses(1_001));
+    await seedPending("waiting@x.io");
+    const leaving = await planOf(
+      { name: "left.txt", text: "waiting@x.io\n" },
+      { plain_list_status: "unsubscribed" },
+    );
+    expect(leaving.counts.mark_unsubscribed).toBe(1);
+    // Still 1,001 confirmed: the one who left was never on the confirmed list.
+    expect(leaving.workers_plan_advice).toMatch(/this import leaves 1,001 confirmed subscribers/);
+  });
+
+  it("carries no advice on Workers Paid, and the advice never changes the plan's hash", async () => {
+    await seedConfirmed(addresses(1_000));
+    const free = await planOf(adding(1));
+    const paid = await planOf(adding(1), {}, PAID);
+    expect(free.workers_plan_advice).not.toBe(null);
+    expect(paid.workers_plan_advice).toBe(null);
     expect(paid.plan_hash).toBe(free.plan_hash);
   });
 });

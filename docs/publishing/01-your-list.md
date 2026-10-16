@@ -2,7 +2,7 @@
 
 Moving to Kestrel from another newsletter service means bringing your subscribers with you, along with the consent they gave there. This guide explains how to export your list from the old service, convert it to Kestrel's format, and import it under **Subscribers → Import**. It also covers what carries over, the limits on an import, and taking your list out again. Kestrel shows you what an import will do before anything changes, and an import never emails your subscribers.
 
-**The first decision is whether to upgrade to Cloudflare's Workers Paid plan.** With more than about 5,000 subscribers, it's recommended to upgrade before you import. The free plan caps database writes per day, and a large import plus a send can use them up. When that happens, the app stops working until midnight UTC. Workers Paid is $5 a month and has no daily cap, and [As your list grows](../guides/09-as-your-list-grows.md) walks through the upgrade.
+**The first decision is whether to upgrade to Cloudflare's Workers Paid plan.** Workers Free suits a list of up to about 1,000 subscribers. Past about 5,000, one send can use up the day's database writes and stop the newsletter until midnight UTC. With more than about 1,000 subscribers, it's recommended to upgrade before you import. Workers Paid is $5 a month and has no daily cap, and [As your list grows](../guides/09-as-your-list-grows.md) walks through the upgrade.
 
 If you're starting without a list, skip this step and go on to [Write and send a post](04-write-a-post.md).
 
@@ -50,7 +50,7 @@ A few things hold whatever the file says:
 ## Limits
 
 - **Rows.** Up to 10,000 in one import, or 1,000 on Cloudflare's free Workers plan. The import screen says which applies. Split a larger list into several files, and import them one at a time.
-- **Daily writes.** On the free Workers plan, an import or a large send warns you when it would use most of the day's database writes. Neither warning stops anything. [Limits in detail](01-your-list.md#limits-in-detail) gives the numbers.
+- **The free plan.** On the free Workers plan, an import that would take your list past about 1,000 subscribers recommends Workers Paid, and so do the Dashboard and the Subscribers screen once it's past. A send to more than about 5,000 warns too. None of these stops anything.
 
 ## Taking your list out
 
@@ -143,8 +143,7 @@ A subscriber an import confirmed is **confirmed**, like anyone who confirmed in 
 
 - **Rows:** up to 10,000 in one import. On the free Workers plan's limits it's 1,000, since that plan's processing time per request can't plan and commit more. [`SUBREQUEST_BUDGET`](../reference/01-configuration.md#subrequest_budget) tells Kestrel which plan it's on.
 - **Size:** an import request of at most 10 MB, and at most 500 bytes of `evidence` a row.
-- **Daily database writes on the free Workers plan:** 100,000 written rows a day. Once they're spent, the app stops working until midnight UTC. Each new subscriber an import brings in writes 7 rows, and a send writes about 14 a recipient. So an import of 1,000 new subscribers uses about 7% of a day, and about ten of them use most of it.
-- **The warnings:** an import's plan warns when it and the day's earlier imports, by UTC, would use more than 70% of the day's writes. It suggests importing the file the next day. A scheduled post warns when its send and that day's imports would use most of the day. With no imports, that's a send to more than 5,000 recipients. It suggests sending the next day, and its banner repeats the warning while it's scheduled. Neither warning stops anything.
+- **The free Workers plan:** it suits a list of up to about 1,000 subscribers. Past about 5,000, one send can use up the day's database writes and stop the newsletter until midnight UTC. An import's plan recommends Workers Paid when it would leave more than 1,000 confirmed subscribers, and the Dashboard and the Subscribers screen say the same while the list is past it. A scheduled post to more than 5,000 recipients warns before it's scheduled, and its banner repeats the warning while it's scheduled. None of these stops anything. [As your list grows](../guides/09-as-your-list-grows.md) has the numbers behind them.
 
 ### Exporting
 

@@ -18,6 +18,7 @@
  */
 
 import { UNLISTED_PATH } from "../shared/archive_url";
+import { FREE_PLAN_LIST } from "../shared/free_plan";
 import { IMPORT_LIMITS } from "../shared/imports";
 import type { ReferenceField, ReferenceResponse } from "../shared/reference";
 import { formatLead, MIN_LEAD_FLOOR_MS } from "../shared/sends";
@@ -1555,6 +1556,11 @@ export function createRouter({
             type: "object",
             description:
               "The whole list, whatever the filter: `pending`, `confirmed`, `unsubscribed`, and `suppressed`, subscribers whose address is suppressed whatever their status, so it overlaps the others and matches `suppressed=only`.",
+          },
+          {
+            name: "workers_plan_advice",
+            type: "string | null",
+            description: `On the Workers Free plan's limits (\`SUBREQUEST_BUDGET\` unset), once \`counts.confirmed\` passes ${FREE_PLAN_LIST.toLocaleString("en-US")}: the server's words advising Workers Paid, to show or relay as they stand; else null. Kestrel judges the plan from its config, so the words also cover an account already on Paid whose budget was never raised.`,
           },
           pageField,
         ],

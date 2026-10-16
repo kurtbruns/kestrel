@@ -8,19 +8,18 @@
  * wedged by `isWedged`; refused and provider_unavailable
  * by the halt the send carries; bounce_spike by its confirmed bounces over its audience at
  * fire; no_receipts by its counters long after dispatch finished; remade by its last re-make against its last test; untested by a test never sent; daily_writes by its audience as
- * scheduled and what imports wrote on the UTC day it fires, on Workers Free's limits only.
+ * scheduled alone, on Workers Free's limits only.
  * Each carries its severity, since when (null when the record does not say), the server's
  * words for it, and the action that settles it, if the API has one. The actions are exactly what the server would accept on
  * the send right now, so a client offers a control only while pressing it would work.
  */
 
-import type { WritesDay } from "../../shared/daily_writes";
+import { dailyWritesSendWarning, sendSpendsDailyWrites } from "../../shared/free_plan";
 import {
   BOUNCE_SPIKE_MIN,
   BOUNCE_SPIKE_RATE,
   BOUNCE_SPIKE_RECENT_MS,
   type ConditionSeverity,
-  dailyWritesSendMessage,
   isSelfThrottled,
   NO_RECEIPTS_AFTER_MS,
   refusalAdvice,
@@ -28,7 +27,6 @@ import {
   type SendAction,
   type SendCondition,
   type SendSummary,
-  sendSpendsDailyWrites,
   unavailableMessage,
 } from "../../shared/sends";
 import { MISSED_THRESHOLD_MS } from "../lib/time";
@@ -71,26 +69,18 @@ export function bySeverity<T extends Pick<SendCondition, "severity" | "since">>(
 }
 
 /**
- * The send's open conditions, most severe first. `day`: on Workers Free's limits, the UTC day
- * so far (what its imports wrote); null on any other deployment.
+ * The send's open conditions, most severe first. `freePlan`: the deployment runs on Workers
+ * Free's limits (`onFreePlanLimits`).
  */
-export function sendConditions(
-  send: SendSummary,
-  now: number,
-  day: WritesDay | null,
-): SendCondition[] {
+export function sendConditions(send: SendSummary, now: number, freePlan: boolean): SendCondition[] {
   const out: SendCondition[] = [];
 
-  if (
-    day !== null &&
-    send.status === "scheduled" &&
-    sendSpendsDailyWrites(send.recipient_count, send.fire_at, day)
-  ) {
+  if (freePlan && send.status === "scheduled" && sendSpendsDailyWrites(send.recipient_count)) {
     out.push({
       kind: "daily_writes",
       severity: "warn",
       since: send.scheduled_at,
-      message: dailyWritesSendMessage(send.recipient_count, send.fire_at, day),
+      message: dailyWritesSendWarning(send.recipient_count),
       action: null,
       recipients: send.recipient_count,
     });

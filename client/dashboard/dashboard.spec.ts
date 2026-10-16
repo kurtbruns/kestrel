@@ -196,6 +196,26 @@ describe("dashboard", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("shows the server's advice to move to Workers Paid by the subscriber count, and nothing without it (SPEC §7)", async () => {
+    const advice =
+      "This list has 1,200 confirmed subscribers, on the Workers Free plan’s limits. Workers Free suits a list of up to about 1,000 subscribers.";
+    fake = world([post()], sendServer(), counts, [
+      {
+        path: "/api/subscribers",
+        reply: () => ({ counts, subscribers: [], page, workers_plan_advice: advice }),
+      },
+    ]);
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(0);
+    expect($(".dash-section .tiles + #dashWorkersPlan").textContent).toBe(advice);
+    fake.restore();
+    fake = world([post()], sendServer());
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.querySelector("#dashWorkersPlan")).toBeNull();
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("reports Claude as connected once the service principal has authored a revision", async () => {
     fake = world([post({ author: "service" })], sendServer());
     await mount(renderDashboard);

@@ -1,6 +1,7 @@
 /** Authed subscriber admin routes. */
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
+import { freePlanListNotice, pastFreePlanList } from "../../shared/free_plan";
 import type {
   EraseResponse,
   ErasureAcknowledgementRequired,
@@ -9,6 +10,7 @@ import type {
   SubscriberResponse,
 } from "../../shared/subscribers";
 import * as subscribers from "../db/subscribers";
+import { onFreePlanLimits } from "../env";
 import { fieldError, optBoolean, optString, readJsonObject } from "../lib/body";
 import { HttpError, json, notFound, refusal } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
@@ -108,6 +110,10 @@ export async function list(c: RequestContext): Promise<Response> {
     counts,
     subscribers: annotated,
     page: listPage(total, page),
+    workers_plan_advice:
+      onFreePlanLimits(c.config) && pastFreePlanList(counts.confirmed)
+        ? freePlanListNotice(counts.confirmed)
+        : null,
   };
   return json(body);
 }

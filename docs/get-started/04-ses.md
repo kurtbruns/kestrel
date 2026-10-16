@@ -227,7 +227,7 @@ Until now the app has run with no email provider connected, refusing to send. Se
     }
     ```
 
-    On Workers Paid, also add `"SUBREQUEST_BUDGET": "10000"`, the plan's limit, so each minute sends more. Leave it out on Workers Free. [As your list grows](../guides/09-as-your-list-grows.md) says when the plan is worth it.
+    On Workers Paid, also add `"SUBREQUEST_BUDGET": "10000"`, the plan's limit, so each minute sends more. Leave it out on Workers Free, which suits a list of up to about 1,000 subscribers. [As your list grows](../guides/09-as-your-list-grows.md) says why.
 
     When AWS grants production access, set `SES_MAX_SEND_RATE` to the maximum send rate on the **Account dashboard**, and deploy again. The app keeps to that rate, so SES doesn't throttle your send.
 

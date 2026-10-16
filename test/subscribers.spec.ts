@@ -11,6 +11,7 @@ import type { EmailProvider, SendBatchResult } from "../src/providers/types";
 import { resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 import { allowErrorLogs } from "./support/log";
+import { fetchWith } from "./support/worker_env";
 
 let seq = 0;
 const uniqueEmail = () => `person-${Date.now()}-${seq++}@example.com`;
@@ -889,5 +890,23 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     expect(res.status).toBe(200);
     expect(await readJson(res)).toMatchObject({ subscriber: { status: "unsubscribed" } });
     expect(await subs.audienceEmails(env.DB)).not.toContain(email);
+  });
+});
+
+describe("the list past what Workers Free suits (SPEC §7)", () => {
+  const PAID = { SUBREQUEST_BUDGET: "10000" };
+  const advice = async (vars: Record<string, string> = {}) =>
+    (await readJson(await fetchWith(vars, `${base}/api/subscribers`, { headers: AUTH })))
+      .workers_plan_advice;
+
+  it("carries the advice to move to Workers Paid once the confirmed list passes 1,000, on Free's limits only", async () => {
+    await resetDatabase();
+    await seedConfirmed(Array.from({ length: 1_000 }, (_, i) => `r${i}@example.com`));
+    expect(await advice()).toBe(null); // 1,000: what Free suits
+    await seedConfirmed(["one-more@example.com"]);
+    expect(await advice()).toBe(
+      "This list has 1,001 confirmed subscribers, on the Workers Free plan’s limits. Workers Free suits a list of up to about 1,000 subscribers. Past about 5,000, one send can use up the day’s database writes and stop this newsletter until midnight UTC. Move to Workers Paid, or, if the account is on it already, set SUBREQUEST_BUDGET to 10000.",
+    );
+    expect(await advice(PAID)).toBe(null);
   });
 });

@@ -109,7 +109,7 @@ export interface DeploymentView {
   simulation: SimulationView | null;
   /** True when `provider` is `none` because local dev previews the not-connected state (`SIMULATE_SENDS=not-connected`), whose way out is a restart, not a deploy: always false once deployed. */
   notConnectedPreview: boolean;
-  /** True on the Workers Free plan's limits (`SUBREQUEST_BUDGET` unset): the import limit, the export's page, and the warnings about D1's daily writes follow it. */
+  /** True on the Workers Free plan's limits (`SUBREQUEST_BUDGET` unset): the import limit, the export's page, and the advice to move to Workers Paid follow it. */
   freePlanLimits: boolean;
 }
 

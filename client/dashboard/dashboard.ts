@@ -221,6 +221,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   let posts: PostListItem[];
   let first: SendListResponse;
   let counts: SubscriberCounts;
+  let workersPlanAdvice: string | null;
   try {
     // The health line scans every send and the archive-link slug map needs every post,
     // so ask for a full window rather than the list default (50). Subscribers is only
@@ -233,6 +234,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
     posts = p.posts;
     first = s;
     counts = subs.counts;
+    workersPlanAdvice = subs.workers_plan_advice;
   } catch (e) {
     renderError(root, describeError(e), remount);
     return;
@@ -334,7 +336,11 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
     <div id="dashHealth">${healthNow()}</div>
     <div id="dashSetup">${setupCardHtml()}</div>
     <div id="dashActive">${dashActiveHtml(activeOf(sendsNow(sends, reported)))}</div>
-    <section class="dash-section"><h2>Subscribers</h2>${tilesHtml}</section>
+    <section class="dash-section"><h2>Subscribers</h2>${tilesHtml}${
+      workersPlanAdvice
+        ? html`<p class="workers-plan" id="dashWorkersPlan" role="status">${workersPlanAdvice}</p>`
+        : null
+    }</section>
     <div class="dash-cols">
       <section class="dash-section"><h2>Scheduled</h2><div id="dashScheduled">${dashScheduledHtml(scheduledOf(sends))}</div></section>
       <section class="dash-section"><h2>Drafts</h2>${draftsHtml}</section>

@@ -6780,8 +6780,10 @@ body.has-savebar .content {
   font-weight: 600;
   margin: 14px 0 4px;
 }
-/* The same amber box the Schedule dialog gives D1's daily-writes warning (DESIGN §4). */
-.hint.daily-writes.imp-warn {
+/* On Workers Free's limits, the advice to move to Workers Paid on a list past what Free suits,
+   on the Dashboard, the Subscribers screen, and an import's plan (DESIGN §4): the same amber
+   box the Schedule dialog gives D1's daily-writes warning. */
+.workers-plan {
   color: var(--warn-fg);
   background: var(--warn-bg);
   border: 1px solid var(--warn-line);

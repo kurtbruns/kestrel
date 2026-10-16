@@ -246,7 +246,7 @@ export const DEFAULT_SUBREQUEST_BUDGET = 50;
 /**
  * Whether the deployment runs on the Workers Free plan's limits, judged from
  * `SUBREQUEST_BUDGET` left at Free's default: the one setting that tells Free from Paid, for
- * the import limit, the export's page, and the warnings about D1's daily writes (SPEC §8).
+ * the import limit, the export's page, and the advice to move to Workers Paid (SPEC §7, §8).
  */
 export function onFreePlanLimits(config: Pick<Config, "subrequestBudget">): boolean {
   return config.subrequestBudget <= DEFAULT_SUBREQUEST_BUDGET;

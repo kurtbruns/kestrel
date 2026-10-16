@@ -2,7 +2,6 @@
  * A send's view built straight from a row, for specs of the pure derivation: the same
  * `buildSendView` every route uses, with a fixed provider name and no archive.
  */
-import { writesDay } from "../../shared/daily_writes";
 import type { SendSummary, SendView } from "../../shared/sends";
 import type { ProviderName } from "../../src/env";
 import { buildSendView } from "../../src/send/view";
@@ -35,10 +34,10 @@ export function viewOf(
       appOrigin: base,
       archiveOrigin: base,
       archiveBasePath: "/",
+      // The default budget: Workers Free's limits.
+      subrequestBudget: 50,
     },
     hasRetries,
     now,
-    // The default budget is Workers Free's limits, with no import yet that day.
-    writesDay(now, 0),
   );
 }

@@ -85,12 +85,31 @@ describe("subscribers view", () => {
     vi.restoreAllMocks();
   });
 
+  it("shows the server's advice to move to Workers Paid under the counts, in its words (SPEC §7)", async () => {
+    const advice =
+      "This list has 1,200 confirmed subscribers, on the Workers Free plan’s limits. Workers Free suits a list of up to about 1,000 subscribers.";
+    fake = fakeApi([
+      {
+        path: "/api/subscribers",
+        reply: () => ({ counts, subscribers: subs, page, workers_plan_advice: advice }),
+      },
+    ]);
+    await mount((r, s) => renderSubscribers(undefined, r, s));
+    await settle();
+    expect($(".sub-summary #subWorkersPlan").hidden).toBe(false);
+    // Under the counts, above the legend, so opening the legend never pushes it down.
+    expect($(".sub-summary-head + #subWorkersPlan + #subLegend")).toBeTruthy();
+    expect($("#subWorkersPlan").textContent).toBe(advice);
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("shows the counts, the roster with the suppression flag and its reason, and the actions each row allows", async () => {
     fake = fakeApi([
       { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
     ]);
     await mount((r, s) => renderSubscribers(undefined, r, s));
     await settle();
+    expect($("#subWorkersPlan").hidden).toBe(true); // no advice from the server, none shown
     expect($("#subCounts").textContent).toMatch(
       /2 confirmed.*1 pending.*0 unsubscribed.*1 suppressed/,
     );

@@ -2,7 +2,7 @@
 
 Before your readers get anything, see it arrive yourself, and make sure a problem will reach you without your watching for it. Send yourself a test and reply to it, subscribe yourself, and set where Kestrel emails you.
 
-If you're bringing a list of more than about 5,000 subscribers, upgrade to Cloudflare's Workers Paid plan before you import it. On the free plan, a large import and a send can use up the day's database writes. Then the app stops working until midnight UTC. [As your list grows](../guides/09-as-your-list-grows.md) walks through the upgrade.
+If you're bringing a list of more than about 1,000 subscribers, upgrade to Cloudflare's Workers Paid plan before you import it. Workers Free suits a list of up to about 1,000 subscribers. Past about 5,000, one send can use up the day's database writes and stop the newsletter until midnight UTC. [As your list grows](../guides/09-as-your-list-grows.md) walks through the upgrade.
 
 ## Send yourself a test
 
@@ -26,5 +26,5 @@ Until an email provider is connected, nothing can be sent, and the dashboard say
 
 ## As your list grows
 
-A growing list meets your Amazon SES daily sending quota, longer sends, and on Cloudflare's free Workers plan, a cap on daily database writes. Kestrel tells you when you reach each one, and [As your list grows](../guides/09-as-your-list-grows.md) covers raising each.
+A growing list meets your Amazon SES daily sending quota, longer sends, and on Cloudflare's free Workers plan, a cap on daily database writes. Kestrel tells you when you reach each one (on the free plan, from about 1,000 subscribers), and [As your list grows](../guides/09-as-your-list-grows.md) covers raising each.
 
