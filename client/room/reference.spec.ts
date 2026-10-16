@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ReferenceGroup } from "../../shared/reference";
+import type { ReferenceGroup, ReferenceResponse } from "../../shared/reference";
 import {
   $,
   $$,
@@ -82,6 +82,37 @@ const groups: ReferenceGroup[] = [
   },
 ];
 
+// What every route shares, as the Worker describes it once: one concept, one refusal group,
+// and one object, so a route's links into them have somewhere to land.
+const shared: Omit<ReferenceResponse, "groups"> = {
+  concepts: [
+    { key: "rules", title: "Rules", text: "One shape per <resource>.\n\nActs are safe to repeat." },
+  ],
+  refusals: [
+    {
+      move: "Nothing: the act no longer applies",
+      codes: [{ code: "window_closed", status: 409, meaning: "The fire time has passed." }],
+    },
+  ],
+  objects: [
+    {
+      key: "send",
+      title: "The send view",
+      description: "One send.",
+      fields: [
+        {
+          name: "status",
+          type: "string",
+          description: "Its state.",
+          values: [{ value: "scheduled", description: "Cancelable." }],
+        },
+      ],
+      example: { id: "s1" },
+    },
+  ],
+};
+const reference = (g: ReferenceGroup[]): ReferenceResponse => ({ ...shared, groups: g });
+
 describe("reference room", () => {
   let fake: FakeApi;
   beforeEach(() => {
@@ -96,12 +127,20 @@ describe("reference room", () => {
   });
 
   it("renders each tier's resources as groups of collapsed rows, and a rail of tiers and resources", async () => {
-    fake = fakeApi([{ path: "/api/reference", reply: () => ({ groups }) }]);
+    fake = fakeApi([{ path: "/api/reference", reply: () => reference(groups) }]);
     await mount(renderReference);
     await settle();
     expect($(".room-switch [aria-current='page']").textContent).toBe("API");
-    expect($$(".api-section").map((s) => s.id)).toEqual(["api-admin", "api-public"]);
+    // What every route shares comes first, then the tiers.
+    expect($$(".api-section").map((s) => s.id)).toEqual([
+      "api-overview",
+      "api-objects",
+      "api-admin",
+      "api-public",
+    ]);
     expect($$(".api-res").map((r) => r.id)).toEqual([
+      "api-overview-rules",
+      "api-objects-send",
       "api-admin-posts",
       "api-admin-sends",
       "api-public-subscriptions",
@@ -110,12 +149,25 @@ describe("reference room", () => {
     // The rail lists a tier's resources only when it has more than one.
     const nav = $$("#apiNav a");
     expect(nav.map((a) => a.dataset.sec)).toEqual([
+      "overview",
+      "overview-rules",
+      "objects",
+      "objects-send",
       "admin",
       "admin-posts",
       "admin-sends",
       "public",
     ]);
-    expect(nav.map((a) => a.textContent)).toEqual(["Admin", "Posts", "Sends", "Public"]);
+    expect(nav.map((a) => a.textContent)).toEqual([
+      "Overview",
+      "Rules",
+      "Objects",
+      "The send view",
+      "Admin",
+      "Posts",
+      "Sends",
+      "Public",
+    ]);
     expect($(".api-head p").textContent).toContain(`Base URL ${location.origin}.`);
     // Every row starts collapsed: badge, then the route's name over its path.
     const rows = $$<HTMLDetailsElement>("#api-admin-posts details.api-route");
@@ -173,7 +225,7 @@ describe("reference room", () => {
         ],
       },
     ];
-    fake = fakeApi([{ path: "/api/reference", reply: () => ({ groups: withWebhook }) }]);
+    fake = fakeApi([{ path: "/api/reference", reply: () => reference(withWebhook) }]);
     await mount(renderReference);
     await settle();
     const curlOf = (row: Element) =>
@@ -193,7 +245,7 @@ describe("reference room", () => {
 
   it("copies a code block's plain text, not its highlighted markup, and shows a check for a moment", async () => {
     const writeText = stubClipboard();
-    fake = fakeApi([{ path: "/api/reference", reply: () => ({ groups }) }]);
+    fake = fakeApi([{ path: "/api/reference", reply: () => reference(groups) }]);
     await mount(renderReference);
     await settle();
     vi.useFakeTimers();
@@ -259,7 +311,7 @@ describe("reference room", () => {
         ],
       },
     ];
-    fake = fakeApi([{ path: "/api/reference", reply: () => ({ groups: withBodies }) }]);
+    fake = fakeApi([{ path: "/api/reference", reply: () => reference(withBodies) }]);
     await mount(renderReference);
     await settle();
     const [upload, del] = $$(".api-route");
@@ -282,6 +334,71 @@ describe("reference room", () => {
     expect(upload!.querySelector(".api-errors")).toBeNull();
   });
 
+  it("describes what every route shares once: the rules, the refusal codes, and each object's fields", async () => {
+    fake = fakeApi([{ path: "/api/reference", reply: () => reference(groups) }]);
+    await mount(renderReference);
+    await settle();
+    // A concept's paragraphs, as text.
+    expect($$("#api-overview-rules .api-prose").map((p) => p.textContent)).toEqual([
+      "One shape per <resource>.",
+      "Acts are safe to repeat.",
+    ]);
+    expect(document.querySelector("#api-overview-rules .api-prose resource")).toBeNull();
+    // The refusal table, each group led by its next move.
+    expect($$(".api-refusals tr").map((tr) => tr.textContent)).toEqual([
+      "Nothing: the act no longer applies409 window_closedThe fire time has passed.",
+    ]);
+    // An object's fields, an enum's values under its line, and its example.
+    expect($$("#api-objects-send .api-fields tr").map((tr) => tr.textContent)).toEqual([
+      "statusstringIts state.scheduled Cancelable.",
+    ]);
+    expect($$("#api-objects-send .block-label").map((l) => l.textContent)).toEqual(["Example"]);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("links what a route returns to its object, and fills a refusal's line from the refusal table", async () => {
+    const withReturns: ReferenceGroup[] = [
+      {
+        ...groups[0]!,
+        resources: [{ key: "sends", title: "Sends" }],
+        routes: [
+          {
+            method: "POST",
+            path: "/api/sends/:id/cancel",
+            access: "admin",
+            resource: "sends",
+            title: "Cancel a send",
+            summary: "Cancel a send.",
+            returns: {
+              object: "send",
+              as: "send",
+              fields: [
+                { name: "changed", type: "boolean", description: "False when nothing changed." },
+              ],
+            },
+            errors: [{ status: 409, code: "window_closed", details: ["send"] }],
+          },
+        ],
+      },
+    ];
+    fake = fakeApi([{ path: "/api/reference", reply: () => reference(withReturns) }]);
+    await mount(renderReference);
+    await settle();
+    const route = $(".api-route");
+    expect($(".api-returns", route).textContent).toBe("send: The send view, and:");
+    expect($$(".api-fields tr", route).map((tr) => tr.textContent)).toEqual([
+      "changedbooleanFalse when nothing changed.",
+    ]);
+    expect($$(".api-errors tr", route).map((tr) => tr.textContent)).toEqual([
+      "409 window_closedThe fire time has passed. With send.",
+    ]);
+    // The object's link jumps to its section without navigating.
+    const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
+    $<HTMLElement>(".api-obj-link", route).click();
+    expect(scroll.mock.instances).toEqual([$("#api-objects-send")]);
+    expect(location.hash).toBe("#/reference");
+  });
+
   it("marks a query parameter the route can't do without", async () => {
     const withToken: ReferenceGroup[] = [
       {
@@ -299,17 +416,17 @@ describe("reference room", () => {
         ],
       },
     ];
-    fake = fakeApi([{ path: "/api/reference", reply: () => ({ groups: withToken }) }]);
+    fake = fakeApi([{ path: "/api/reference", reply: () => reference(withToken) }]);
     await mount(renderReference);
     await settle();
-    expect($(".api-query td").textContent).toBe("token required");
+    expect($(".api-route .api-query td").textContent).toBe("token required");
     expect($$("code", $$(".block").at(-1)!).at(-1)?.textContent).toBe(
       `curl "${location.origin}/confirm?token=:token"`,
     );
   });
 
   it("jumps to a tier or a resource from the rail without navigating", async () => {
-    fake = fakeApi([{ path: "/api/reference", reply: () => ({ groups }) }]);
+    fake = fakeApi([{ path: "/api/reference", reply: () => reference(groups) }]);
     await mount(renderReference);
     await settle();
     const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
@@ -320,7 +437,7 @@ describe("reference room", () => {
   });
 
   it("lights the rail for the last tier or resource heading scrolled under the bar, and stops following once the room is left", async () => {
-    fake = fakeApi([{ path: "/api/reference", reply: () => ({ groups }) }]);
+    fake = fakeApi([{ path: "/api/reference", reply: () => reference(groups) }]);
     await mount(renderReference);
     await settle();
     // No layout here, so place the headings by hand: `scrolled` names those above the line.
@@ -332,12 +449,14 @@ describe("reference room", () => {
     }
     const nav = $("#apiNav");
     const active = () => $$("a.active", nav).map((a) => a.dataset.sec);
+    // Past the top, the overview and the objects are above the line too.
+    const shared = ["api-overview", "api-overview-rules", "api-objects", "api-objects-send"];
     const scrollTo = (ids: string[]) => {
-      scrolled = ids;
+      scrolled = ids.length ? [...shared, ...ids] : [];
       window.dispatchEvent(new Event("scroll"));
     };
     scrollTo([]);
-    expect(active()).toEqual(["admin"]); // at the top, the first tier
+    expect(active()).toEqual(["overview"]); // at the top, the overview
     scrollTo(["api-admin", "api-admin-posts", "api-admin-sends"]);
     expect(active()).toEqual(["admin-sends"]);
     // A jump straight to a tier lights the tier, before any of its resources pass the line;
@@ -388,7 +507,7 @@ describe("reference room", () => {
   });
 
   it("filters rows by name, method, path, or summary, with the headings and rail links that still hold one", async () => {
-    fake = fakeApi([{ path: "/api/reference", reply: () => ({ groups }) }]);
+    fake = fakeApi([{ path: "/api/reference", reply: () => reference(groups) }]);
     await mount(renderReference);
     await settle();
     const filter = $<HTMLInputElement>("#apiFilter");
@@ -408,7 +527,14 @@ describe("reference room", () => {
     expect(shown()).toEqual(["POST /api/posts"]);
     expect($("#api-admin-sends").hidden).toBe(true);
     expect($("#api-public").hidden).toBe(true);
+    // The overview and the objects have no rows to match, so a filter puts them away.
+    expect($("#api-overview").hidden).toBe(true);
+    expect($("#api-objects").hidden).toBe(true);
     expect($$("#apiNav a").map((a) => (a.hidden ? "hidden" : a.dataset.sec))).toEqual([
+      "hidden",
+      "hidden",
+      "hidden",
+      "hidden",
       "admin",
       "admin-posts",
       "hidden",
@@ -430,6 +556,7 @@ describe("reference room", () => {
     $("#apiFilterClear").click();
     expect(filter.value).toBe("");
     expect(shown()).toHaveLength(5);
+    expect($("#api-overview").hidden).toBe(false);
     expect($("#apiFilterClear").hidden).toBe(true);
     expect(document.activeElement).toBe(filter);
 
@@ -443,7 +570,7 @@ describe("reference room", () => {
   });
 
   it("focuses the filter on / unless the reader is typing elsewhere, and stops listening once the room is left", async () => {
-    fake = fakeApi([{ path: "/api/reference", reply: () => ({ groups }) }]);
+    fake = fakeApi([{ path: "/api/reference", reply: () => reference(groups) }]);
     await mount(renderReference);
     await settle();
     const filter = $<HTMLInputElement>("#apiFilter");
@@ -467,7 +594,7 @@ describe("reference room", () => {
     fake = fakeApi([
       {
         path: "/api/reference",
-        reply: () => (failures-- > 0 ? jsonResponse({ error: "down" }, 500) : { groups }),
+        reply: () => (failures-- > 0 ? jsonResponse({ error: "down" }, 500) : reference(groups)),
       },
     ]);
     await mount(renderReference);
@@ -475,7 +602,7 @@ describe("reference room", () => {
     expect($("#apiContent .error").textContent).toMatch(/went wrong on the server/);
     $("[data-retry]").click();
     await settle();
-    expect($$(".api-section")).toHaveLength(2);
+    expect($$(".api-section")).toHaveLength(4);
     expect($$("details.api-route")).toHaveLength(5);
     expect(fake.calls).toHaveLength(2);
   });

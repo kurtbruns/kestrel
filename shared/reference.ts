@@ -1,6 +1,6 @@
-// The API reference as the API carries it (GET /api/reference): the access tiers the
-// route manifest draws, the resources inside them, one route's documented metadata, and
-// the routes grouped by tier.
+// The API reference as the API carries it (GET /api/reference): the concepts and objects it
+// describes once, the access tiers the route manifest draws, the resources inside them, one
+// route's documented metadata, and the routes grouped by tier.
 // The Worker generates this shape from its own registration and the editor renders it;
 // one definition, so neither can drift.
 
@@ -44,16 +44,65 @@ export interface QueryParam {
 }
 
 /**
- * A documented field of a request body. A nested field is named by its dotted path
- * (`publication.name`), as a 400 names it in `field`. `type` is a short human string
- * (`string`, `string[]`, `"unsent" | "accepted"`, `file`), not a schema.
+ * A documented field, of a request body, a response, or an object. A nested field is named by
+ * its dotted path (`publication.name`), as a 400 names it in `field`. `type` is a short human
+ * string (`string`, `number | null`, `"unsent" | "accepted"`, `file`), not a schema.
  */
-export interface BodyField {
+export interface ReferenceField {
   name: string;
   type: string;
+  description: string;
+  /** An enum's values, each with one line of meaning. */
+  values?: { value: string; description: string }[];
+}
+
+/** A documented field of a request body. */
+export interface BodyField extends ReferenceField {
   /** The request is refused without it. */
   required?: boolean;
+}
+
+/** An object the reference describes once, which routes say they return. */
+export type ObjectKey =
+  | "send"
+  | "post"
+  | "revision"
+  | "subscriber"
+  | "suppression"
+  | "import_plan"
+  | "settings";
+
+/** An object, described once: its fields, each with one line, and an example. */
+export interface ReferenceObject {
+  key: ObjectKey;
+  title: string;
   description: string;
+  fields: ReferenceField[];
+  example: unknown;
+}
+
+/**
+ * What a route answers: an object described once (under `as` in the body, a list of them when
+ * `list`, or the whole body when `as` is absent), plus only the fields this route adds.
+ */
+export interface RouteReturns {
+  object?: ObjectKey;
+  as?: string;
+  list?: boolean;
+  fields?: ReferenceField[];
+}
+
+/** A concept the reference states once, ahead of the routes: Markdown paragraphs. */
+export interface ReferenceConcept {
+  key: string;
+  title: string;
+  text: string;
+}
+
+/** The refusal codes for one next move, each with its status and one line. */
+export interface ReferenceRefusalGroup {
+  move: string;
+  codes: { code: string; status: number; meaning: string }[];
 }
 
 /** A refusal a route gives of its own, beyond the ones every route of its tier shares. */
@@ -61,8 +110,8 @@ export interface RouteError {
   status: number;
   /** The `error` the refusal's body carries. */
   code: string;
-  /** One line on the condition. */
-  when: string;
+  /** One line on the condition as this route gives it; absent when the code's own meaning says it all. */
+  when?: string;
   /** The fields the body carries beside `error` and `message` (`send`, `retry_after`). */
   details?: string[];
 }
@@ -82,6 +131,8 @@ export interface ReferenceEntry {
   accepts?: readonly string[];
   /** The body's fields, a multipart form's included; absent when the route takes no body. */
   body?: BodyField[];
+  /** What it answers: an object described once, and the fields of its own. */
+  returns?: RouteReturns;
   /** The refusals the route gives of its own; the ones its tier shares are stated once. */
   errors?: RouteError[];
   example?: RouteExample;
@@ -106,7 +157,13 @@ export interface ReferenceGroup {
   routes: ReferenceEntry[];
 }
 
-/** GET /api/reference: every route, grouped by tier. */
+/**
+ * GET /api/reference: the concepts every route follows, the refusal codes, the objects routes
+ * return, and every route, grouped by tier.
+ */
 export interface ReferenceResponse {
+  concepts: ReferenceConcept[];
+  refusals: ReferenceRefusalGroup[];
+  objects: ReferenceObject[];
   groups: ReferenceGroup[];
 }

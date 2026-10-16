@@ -17,7 +17,14 @@
  * handled on a page a reader opens (`readerPage`), which is logged the same way and answered
  * with an HTML page rather than the API's JSON body.
  */
-import type { Access, BodyField, QueryParam, Resource, RouteExample } from "../shared/reference";
+import type {
+  Access,
+  BodyField,
+  QueryParam,
+  Resource,
+  RouteExample,
+  RouteReturns,
+} from "../shared/reference";
 import { requireAuth } from "./auth/middleware";
 import type { AppEnv, Config } from "./env";
 import { getConfig } from "./env";
@@ -106,7 +113,8 @@ export type { Access, BodyField, QueryParam, RouteExample };
 /** A refusal as a route declares it: the code, from the codes the API refuses with. */
 export interface RouteRefusal {
   code: RefusalCode;
-  when: string;
+  /** What is this route's own about it; absent when the code's one line says it all. */
+  when?: string;
   details?: string[];
 }
 
@@ -140,6 +148,8 @@ export interface RouteDef {
    * body to carrying one.
    */
   body?: BodyField[];
+  /** What it answers: an object the reference describes once, and the fields of its own. */
+  returns?: RouteReturns;
   /**
    * The refusals this route gives of its own, each one line, its status read from the code.
    * Leave out the ones every route of the tier shares (no credential, a cross-site write, a

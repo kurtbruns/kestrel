@@ -1947,6 +1947,32 @@ th.num .th-sort {
   white-space: nowrap;
   width: 1%;
 }
+/* What every route shares, described once ahead of the routes: concept prose, an object's
+   description, an enum's values under a field's line, and the refusal table's next moves. */
+.api-prose {
+  margin: 8px 0 0;
+  font-size: 14px;
+  max-width: 72ch;
+}
+.api-values {
+  margin: 4px 0 0;
+  padding-left: 16px;
+}
+.api-values li {
+  margin: 2px 0;
+}
+.api-returns {
+  margin: 4px 0 6px;
+  font-size: 13.5px;
+}
+.api-refusals {
+  margin-top: 10px;
+}
+.api-refusals td.api-move {
+  white-space: normal;
+  width: 24%;
+  font-weight: 600;
+}
 /* A refusal's status, beside its code. */
 .api-status {
   font: 600 12px var(--mono);

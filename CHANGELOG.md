@@ -20,6 +20,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- The API reference opens with what every route shares, described once: the rules every route follows with the table of refusal codes, how lists page, how to follow changes to sends, and each object a route returns (the send view, a post, a subscriber, and the rest) field by field. Each route then says which object it returns and only what is its own, so the send's conditions and its full example appear once rather than on several routes. `GET /api/reference` carries them as `concepts`, `refusals`, `objects`, and each route's `returns`.
 - The API reference names each route by what it does ("Schedule a post", "Reschedule a send"), with the method and path beneath, in the editor and in `/api/reference.md`, and its filter matches the name; `GET /api/reference` carries it as each route's `title`.
 
 ### Added

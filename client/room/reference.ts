@@ -3,11 +3,16 @@
 import type {
   BodyField,
   QueryParam,
+  ReferenceConcept,
   ReferenceEntry,
+  ReferenceField,
   ReferenceGroup,
+  ReferenceObject,
+  ReferenceRefusalGroup,
   ReferenceResource,
   ReferenceResponse,
   RouteError,
+  RouteReturns,
 } from "../../shared/reference";
 import { api, describeError } from "../api";
 import { mount } from "../lifecycle";
@@ -23,9 +28,13 @@ import { roomShell } from "./shell";
 
 // Every route the app and Claude can call, generated from the route manifest
 // (src/app.ts) and served as JSON by the authed /api/reference route. The SPA renders
-// it natively: a rail of tiers and their resources beside the route list, where each
-// route is one scannable row led by its name, a native <details>, that opens in place to
-// its full documentation.
+// it natively: a rail beside the page, which opens with what every route shares (the
+// rules, the refusal codes, lists, following changes, and the objects routes return) and
+// then lists each tier's routes, each one scannable row led by its name, a native
+// <details>, that opens in place to its full documentation.
+
+/** What a refusal code means, from the refusal table, for a route line that adds nothing. */
+type Meanings = ReadonlyMap<string, string>;
 function apiExample(label: string, value: unknown): Html | null {
   return value === undefined
     ? null
@@ -59,16 +68,47 @@ function apiBodyHtml(body: BodyField[] | undefined): Html | null {
   );
   return html`<div class="block"><div class="block-head"><span class="block-label">Body</span></div><table class="api-query api-body"><tbody>${rows}</tbody></table></div>`;
 }
-// The refusals the route gives of its own, each with its status and the fields it carries.
-function apiErrorsHtml(errors: RouteError[] | undefined): Html | null {
+// The refusals the route gives of its own, each with its status and the fields it carries,
+// and when: the route's own words, or the code's meaning from the refusal table.
+function apiErrorsHtml(errors: RouteError[] | undefined, meanings: Meanings): Html | null {
   if (!errors?.length) {
     return null;
   }
   const rows = errors.map(
     (e) =>
-      html`<tr><td><span class="api-status">${e.status}</span> <code>${e.code}</code></td><td class="muted">${e.when}${e.details?.length ? html` With ${e.details.map((d, i) => html`${i ? ", " : ""}<code>${d}</code>`)}.` : null}</td></tr>`,
+      html`<tr><td><span class="api-status">${e.status}</span> <code>${e.code}</code></td><td class="muted">${e.when ?? meanings.get(e.code) ?? ""}${e.details?.length ? html` With ${e.details.map((d, i) => html`${i ? ", " : ""}<code>${d}</code>`)}.` : null}</td></tr>`,
   );
   return html`<div class="block"><div class="block-head"><span class="block-label">Refusals</span></div><table class="api-query api-errors"><tbody>${rows}</tbody></table></div>`;
+}
+// Fields with their types and one line each, an enum's values listed under its line.
+function apiFieldsTable(fields: readonly ReferenceField[]): Html {
+  const rows = fields.map(
+    (f) =>
+      html`<tr><td><code>${f.name}</code></td><td><code class="api-type">${f.type}</code></td><td class="muted">${f.description}${
+        f.values?.length
+          ? html`<ul class="api-values">${f.values.map((v) => html`<li><code>${v.value}</code> ${v.description}</li>`)}</ul>`
+          : null
+      }</td></tr>`,
+  );
+  return html`<table class="api-query api-fields"><tbody>${rows}</tbody></table>`;
+}
+// What a route answers: the object it returns, linked to its section, and its own fields.
+function apiReturnsHtml(
+  r: RouteReturns | undefined,
+  objects: ReadonlyMap<string, string>,
+): Html | null {
+  if (!r) {
+    return null;
+  }
+  const link = r.object
+    ? html`<a href="#/reference" class="api-obj-link" data-sec="objects-${r.object}">${objects.get(r.object) ?? r.object}</a>`
+    : null;
+  const what = link
+    ? r.as
+      ? html`<p class="api-returns"><code>${r.as}</code>: ${r.list ? html`a list of ${link}` : link}${r.fields?.length ? ", and:" : null}</p>`
+      : html`<p class="api-returns">${link}${r.fields?.length ? ", and:" : null}</p>`
+    : null;
+  return html`<div class="block"><div class="block-head"><span class="block-label">Returns</span></div>${what}${r.fields?.length ? apiFieldsTable(r.fields) : null}</div>`;
 }
 // The body types a write accepts, from the registration the router enforces them by. A
 // route that takes no body lists none.
@@ -88,7 +128,12 @@ function apiPathHtml(path: string): Html {
     .split(/(:[A-Za-z_]+)/)
     .map((part, i) => (i % 2 ? html`<span class="api-param">${part}</span>` : part))}`;
 }
-function apiRouteHtml(r: ReferenceEntry): Html {
+/** What a route's detail looks up in the rest of the reference. */
+interface Lookups {
+  meanings: Meanings;
+  objects: ReadonlyMap<string, string>;
+}
+function apiRouteHtml(r: ReferenceEntry, look: Lookups): Html {
   // What the filter matches: the route's name, the method, the path, and the summary.
   const hay = `${r.title} ${r.method} ${concretePath(r.path)} ${r.summary}`.toLowerCase();
   return html`<li data-hay="${hay}"><details class="api-route">
@@ -103,7 +148,8 @@ function apiRouteHtml(r: ReferenceEntry): Html {
         ${apiQueryHtml(r.query)}
         ${apiAcceptsHtml(r.accepts)}
         ${apiBodyHtml(r.body)}
-        ${apiErrorsHtml(r.errors)}
+        ${apiReturnsHtml(r.returns, look.objects)}
+        ${apiErrorsHtml(r.errors, look.meanings)}
         ${apiExample("Request", r.example?.request)}
         ${apiExample("Response", r.example?.response)}
         ${apiCurl(r)}
@@ -113,25 +159,73 @@ function apiRouteHtml(r: ReferenceEntry): Html {
 /** A resource's routes within a tier, in the order the tier lists them. */
 const routesIn = (g: ReferenceGroup, res: ReferenceResource) =>
   g.routes.filter((r) => r.resource === res.key);
-function apiResourceHtml(g: ReferenceGroup, res: ReferenceResource): Html {
+function apiResourceHtml(g: ReferenceGroup, res: ReferenceResource, look: Lookups): Html {
   const sec = `${g.access}-${res.key}`;
   const routes = routesIn(g, res);
   return html`<div class="api-res" id="api-${sec}" data-sec="${sec}">
       <div class="api-res-head"><h3>${res.title}</h3></div>
-      <ul class="api-rows">${routes.map(apiRouteHtml)}</ul>
+      <ul class="api-rows">${routes.map((r) => apiRouteHtml(r, look))}</ul>
     </div>`;
 }
-function apiSectionHtml(g: ReferenceGroup): Html {
+function apiSectionHtml(g: ReferenceGroup, look: Lookups): Html {
   return html`<section class="api-section" id="api-${g.access}" data-tier="${g.access}">
       <h2>${g.title}</h2>
       <p class="api-blurb muted">${g.blurb}</p>
-      ${g.resources.map((res) => apiResourceHtml(g, res))}
+      ${g.resources.map((res) => apiResourceHtml(g, res, look))}
     </section>`;
 }
-// The rail: each tier, then its resources beneath it. A tier with one resource lists only
-// the tier, since the resource would repeat it. No counts: the rail is for moving.
-function apiNavHtml(groups: ReferenceGroup[]): Html {
-  return html`${groups.map(
+/** Markdown paragraphs as paragraphs. */
+function apiProseHtml(text: string): Html {
+  return html`${text.split(/\n\n+/).map((p) => html`<p class="api-prose">${p}</p>`)}`;
+}
+// The refusal codes, grouped by the client's next move.
+function apiRefusalsHtml(groups: readonly ReferenceRefusalGroup[]): Html {
+  const rows = groups.flatMap((g) =>
+    g.codes.map(
+      (c, i) =>
+        html`<tr><td class="api-move">${i === 0 ? g.move : null}</td><td><span class="api-status">${c.status}</span> <code>${c.code}</code></td><td class="muted">${c.meaning}</td></tr>`,
+    ),
+  );
+  return html`<table class="api-query api-refusals"><tbody>${rows}</tbody></table>`;
+}
+// What every route shares, before the routes: a static section the route filter hides.
+function apiOverviewHtml(ref: ReferenceResponse): Html {
+  const concept = (c: ReferenceConcept) =>
+    html`<div class="api-res" id="api-overview-${c.key}" data-sec="overview-${c.key}">
+      <div class="api-res-head"><h3>${c.title}</h3></div>
+      ${apiProseHtml(c.text)}
+      ${c.key === "rules" ? apiRefusalsHtml(ref.refusals) : null}
+    </div>`;
+  return html`<section class="api-section" id="api-overview" data-tier="overview" data-static>
+      <h2>Overview</h2>
+      ${ref.concepts.map(concept)}
+    </section>`;
+}
+// Each object a route returns, described once.
+function apiObjectsHtml(objects: readonly ReferenceObject[]): Html {
+  const object = (o: ReferenceObject) =>
+    html`<div class="api-res" id="api-objects-${o.key}" data-sec="objects-${o.key}">
+      <div class="api-res-head"><h3>${o.title}</h3></div>
+      <p class="api-prose">${o.description}</p>
+      ${apiFieldsTable(o.fields)}
+      ${apiExample("Example", o.example)}
+    </div>`;
+  return html`<section class="api-section" id="api-objects" data-tier="objects" data-static>
+      <h2>Objects</h2>
+      ${objects.map(object)}
+    </section>`;
+}
+// The rail: the overview and the objects, then each tier, each with its parts beneath it. A
+// tier with one resource lists only the tier, since the resource would repeat it. No counts:
+// the rail is for moving.
+function apiNavHtml(ref: ReferenceResponse): Html {
+  const part = (sec: string, title: string) =>
+    html`<a href="#/reference" class="api-nav-res" data-sec="${sec}">${title}</a>`;
+  return html`<a href="#/reference" class="api-nav-tier" data-sec="overview" data-tier="overview">Overview</a>${ref.concepts.map(
+    (c) => part(`overview-${c.key}`, c.title),
+  )}<a href="#/reference" class="api-nav-tier" data-sec="objects" data-tier="objects">Objects</a>${ref.objects.map(
+    (o) => part(`objects-${o.key}`, o.title),
+  )}${ref.groups.map(
     (g) =>
       html`<a href="#/reference" class="api-nav-tier" data-sec="${g.access}" data-tier="${g.access}">${g.title}</a>${
         g.resources.length > 1
@@ -154,6 +248,14 @@ function applyFilter(query: string, navEl: HTMLElement, contentEl: HTMLElement):
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   let shown = 0;
   for (const sec of $$<HTMLElement>(".api-section", contentEl)) {
+    // What every route shares has no rows to match: shown whole, and out of the way while filtering.
+    if (sec.dataset.static !== undefined) {
+      sec.hidden = terms.length > 0;
+      for (const a of $$<HTMLElement>(`a[data-sec^="${sec.dataset.tier}"]`, navEl)) {
+        a.hidden = sec.hidden;
+      }
+      continue;
+    }
     let inTier = 0;
     for (const res of $$<HTMLElement>(".api-res", sec)) {
       let inRes = 0;
@@ -230,9 +332,9 @@ export async function renderReference(root: HTMLElement, signal: AbortSignal): P
   );
   const navEl = $("#apiNav");
   const contentEl = $("#apiContent");
-  // Delegate clicks synchronously with one listener on the stable nav, so it survives
-  // the async fill below: a rail click jumps to that tier or resource.
-  navEl.addEventListener("click", (ev) => {
+  // Delegate clicks synchronously with one listener each on the stable nav and page, so they
+  // survive the async fill below: a rail click, or a route's link to an object, jumps there.
+  const jump = (ev: MouseEvent) => {
     const a = ev.target instanceof Element ? ev.target.closest<HTMLElement>("a[data-sec]") : null;
     const sec = a?.dataset.sec;
     if (!sec) {
@@ -240,19 +342,25 @@ export async function renderReference(root: HTMLElement, signal: AbortSignal): P
     }
     ev.preventDefault();
     document.getElementById(`api-${sec}`)?.scrollIntoView({ block: "start" });
-  });
-  let groups: ReferenceGroup[];
+  };
+  navEl.addEventListener("click", jump);
+  contentEl.addEventListener("click", jump);
+  let ref: ReferenceResponse;
   try {
-    ({ groups } = await api<ReferenceResponse>("/api/reference", { signal }));
+    ref = await api<ReferenceResponse>("/api/reference", { signal });
   } catch (e) {
     renderError(contentEl, describeError(e), () => mount(renderReference));
     return;
   }
+  const look: Lookups = {
+    meanings: new Map(ref.refusals.flatMap((g) => g.codes.map((c) => [c.code, c.meaning]))),
+    objects: new Map(ref.objects.map((o) => [o.key, o.title])),
+  };
 
-  setHtml(navEl, apiNavHtml(groups));
+  setHtml(navEl, apiNavHtml(ref));
   setHtml(
     contentEl,
-    html`<header class="api-head"><h1>API reference</h1><p class="muted">Generated from the route registration, so every endpoint the app and Claude can call is listed here. Base URL <code>${location.origin}</code>.</p><div class="api-filter">${icon("search")}<input type="search" id="apiFilter" placeholder="Filter routes by name, method, or path" autocomplete="off" aria-label="Filter routes" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd><button type="button" class="icon api-filter-clear" id="apiFilterClear" aria-label="Clear filter" hidden>${icon("x")}</button></div></header>${groups.map(apiSectionHtml)}<p class="api-empty muted" id="apiEmpty" hidden>No routes match. Try a path segment like <code>sends</code> or a method like <code>DELETE</code>.</p>`,
+    html`<header class="api-head"><h1>API reference</h1><p class="muted">Generated from the route registration, so every endpoint the app and Claude can call is listed here. Base URL <code>${location.origin}</code>.</p><div class="api-filter">${icon("search")}<input type="search" id="apiFilter" placeholder="Filter routes by name, method, or path" autocomplete="off" aria-label="Filter routes" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd><button type="button" class="icon api-filter-clear" id="apiFilterClear" aria-label="Clear filter" hidden>${icon("x")}</button></div></header>${apiOverviewHtml(ref)}${apiObjectsHtml(ref.objects)}${ref.groups.map((g) => apiSectionHtml(g, look))}<p class="api-empty muted" id="apiEmpty" hidden>No routes match. Try a path segment like <code>sends</code> or a method like <code>DELETE</code>.</p>`,
   );
   const filterEl = $<HTMLInputElement>("#apiFilter");
   const clearEl = $("#apiFilterClear");

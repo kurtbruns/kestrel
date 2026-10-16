@@ -6,6 +6,10 @@
  * second doc to edit — the same principle as `ARCHIVE_BASE_PATH` driving both the
  * emitted URL and the route it serves (SPEC §11).
  *
+ * Beside the routes it carries what they share, described once: the concepts every route
+ * follows (./concepts.ts), the refusal codes (./refusals.ts), and the objects routes return
+ * (./objects.ts), so a route's own entry says only what is its own.
+ *
  * This is a Markdown-free, structured render — distinct from both the operator
  * docs (src/docs/, Markdown→web-page) and the single email render path (I5).
  * Served read-only through the authed `/api/reference` route (see routes/docs.ts
@@ -13,13 +17,20 @@
  */
 import type {
   Access,
+  ObjectKey,
   ReferenceEntry,
+  ReferenceField,
   ReferenceGroup,
+  ReferenceObject,
   ReferenceResource,
+  ReferenceResponse,
   Resource,
+  RouteReturns,
 } from "../../shared/reference";
 import type { RouteDef } from "../router";
-import { REFUSAL_STATUS } from "./refusals";
+import { referenceConcepts } from "./concepts";
+import { OBJECTS, referenceObjects } from "./objects";
+import { REFUSAL_STATUS, refusalGroups } from "./refusals";
 
 // The entry and group shapes live in shared/ so the editor reads the same definitions;
 // re-exported here as the reference's own.
@@ -82,6 +93,7 @@ function entry(r: RouteDef): ReferenceEntry {
     query: r.query,
     accepts: r.accepts,
     body: r.body,
+    returns: r.returns,
     errors: r.errors?.map((e) => ({ status: REFUSAL_STATUS[e.code], ...e })),
     example: r.example,
   };
@@ -106,13 +118,121 @@ export function buildReference(routes: readonly RouteDef[]): ReferenceGroup[] {
   }).filter((g) => g.routes.length > 0);
 }
 
-/** The refusals every route of a tier shares, stated once rather than on each route. */
-const SHARED_REFUSALS =
-  "A refusal is `{ error, message }` with its status, plus `field` when it is about the request. Each route lists only the refusals of its own. Every admin route also answers 401 `unauthorized` without a credential, and every admin write 403 `cross_site_request` when another site's page sent it and 415 `unsupported_media_type` for a body type it doesn't take. Any route answers 400 `bad_request` naming the `field` for a body or query value it can't take, and 404 `not_found` when a path's id names nothing.";
+/** The whole reference: what every route shares, described once, then the routes. */
+export function buildReferenceResponse(routes: readonly RouteDef[]): ReferenceResponse {
+  return {
+    concepts: referenceConcepts(),
+    refusals: refusalGroups(),
+    objects: referenceObjects(),
+    groups: buildReference(routes),
+  };
+}
+
+/** A heading's anchor as GitHub and most Markdown renderers make it, for a link to an object. */
+export function headingAnchor(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9 _-]/g, "")
+    .replace(/ /g, "-");
+}
+
+/** A link to an object's section. */
+function objectLink(key: ObjectKey): string {
+  const { title } = OBJECTS[key];
+  return `[${title}](#${headingAnchor(title)})`;
+}
+
+/** Fields as a Markdown table, an enum's values listed in its line. */
+function fieldTable(fields: readonly ReferenceField[]): string {
+  const rows = fields.map((f) => {
+    const values = f.values?.length
+      ? ` ${f.values.map((v) => `\`${v.value}\`: ${v.description}`).join(" ")}`
+      : "";
+    return `| \`${f.name}\` | ${cell(f.type)} | ${cell(f.description + values)} |`;
+  });
+  return ["| Field | Type | Description |", "| --- | --- | --- |", ...rows].join("\n");
+}
+
+/** What a route answers: the object it returns, linked, and the fields of its own. */
+function returnsMarkdown(r: RouteReturns): string {
+  const what = r.object
+    ? r.as
+      ? `\`${r.as}\`, ${r.list ? `a list of ${objectLink(r.object)}` : objectLink(r.object)}`
+      : objectLink(r.object)
+    : "";
+  const lead = r.fields?.length
+    ? what
+      ? `Returns ${what}, and:`
+      : "Returns:"
+    : `Returns ${what}.`;
+  return r.fields?.length ? `${lead}\n\n${fieldTable(r.fields)}` : lead;
+}
+
+/** One object as a Markdown section: its description, fields, and example. */
+function objectMarkdown(o: ReferenceObject): string {
+  return [
+    `### ${o.title}`,
+    o.description,
+    fieldTable(o.fields),
+    jsonBlock("Example", o.example),
+  ].join("\n\n");
+}
+
+/** The refusal codes as one table, each group led by the client's next move. */
+function refusalsMarkdown(groups: ReferenceResponse["refusals"]): string {
+  const rows = groups.flatMap((g) =>
+    g.codes.map(
+      (c, i) => `| ${i === 0 ? g.move : ""} | ${c.status} \`${c.code}\` | ${cell(c.meaning)} |`,
+    ),
+  );
+  return [
+    "### Refusals",
+    ["| Next move | Refusal | Meaning |", "| --- | --- | --- |", ...rows].join("\n"),
+  ].join("\n\n");
+}
+
+/** The width a JSON example keeps an object or array on one line within. */
+const JSON_LINE = 80;
+
+/** A JSON value on one line, spaced as a person would write it. */
+function oneLine(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value) ?? "null";
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(oneLine).join(", ")}]`;
+  }
+  const entries = Object.entries(value).map(([k, v]) => `${JSON.stringify(k)}: ${oneLine(v)}`);
+  return entries.length ? `{ ${entries.join(", ")} }` : "{}";
+}
+
+/**
+ * JSON indented two spaces a level, except that an object or array that fits on one line
+ * stays on it: an example reads the same, in far fewer lines.
+ */
+export function compactJson(value: unknown, indent = "", lead = 0): string {
+  const flat = oneLine(value);
+  if (value === null || typeof value !== "object") {
+    return flat;
+  }
+  // `lead` is what precedes the value on its first line (an object's key), which it must fit beside.
+  if (indent.length + lead + flat.length <= JSON_LINE) {
+    return flat;
+  }
+  const inner = `${indent}  `;
+  const items = Array.isArray(value)
+    ? value.map((v) => `${inner}${compactJson(v, inner)}`)
+    : Object.entries(value).map(([k, v]) => {
+        const key = `${JSON.stringify(k)}: `;
+        return `${inner}${key}${compactJson(v, inner, key.length)}`;
+      });
+  const [open, close] = Array.isArray(value) ? ["[", "]"] : ["{", "}"];
+  return `${open}\n${items.join(",\n")}\n${indent}${close}`;
+}
 
 /** A JSON value as a fenced block, for an example. */
 function jsonBlock(label: string, value: unknown): string {
-  return `${label}:\n\n\`\`\`json\n${JSON.stringify(value, null, 2)}\n\`\`\``;
+  return `${label}:\n\n\`\`\`json\n${compactJson(value)}\n\`\`\``;
 }
 
 /** Text for a Markdown table cell, whose pipes would otherwise split it. */
@@ -121,14 +241,15 @@ function cell(text: string): string {
 }
 
 /** One route as a Markdown section: its title as the heading, its method and path beneath,
- *  then the summary, description, body types, query parameters, body fields, its own
- *  refusals, and example. */
+ *  then the summary, description, body types, query parameters, body fields, what it
+ *  returns, its own refusals, and example. */
 function routeMarkdown(r: ReferenceEntry): string {
   const parts = [`#### ${r.title}`, `\`${r.method} ${r.path}\``, r.summary];
   if (r.description) {
     parts.push(r.description);
   }
-  if (r.accepts?.length) {
+  // A body is JSON unless the route says otherwise (the rules say so once).
+  if (r.accepts?.length && !(r.accepts.length === 1 && r.accepts[0] === "application/json")) {
     parts.push(`Body: ${r.accepts.map((t) => `\`${t}\``).join(", ")}.`);
   }
   if (r.query?.length) {
@@ -144,12 +265,16 @@ function routeMarkdown(r: ReferenceEntry): string {
     );
     parts.push(["| Body field | Type | Description |", "| --- | --- | --- |", ...rows].join("\n"));
   }
+  if (r.returns) {
+    parts.push(returnsMarkdown(r.returns));
+  }
   if (r.errors?.length) {
-    const rows = r.errors.map(
+    // One line each; a code's meaning is in the refusal table, so a line adds only its own.
+    const lines = r.errors.map(
       (e) =>
-        `| ${e.status} \`${e.code}\` | ${cell(e.when)}${e.details?.length ? ` With ${e.details.map((d) => `\`${d}\``).join(", ")}.` : ""} |`,
+        `- ${e.status} \`${e.code}\`${e.details?.length ? `, with ${e.details.map((d) => `\`${d}\``).join(", ")}` : ""}${e.when ? `: ${e.when}` : ""}`,
     );
-    parts.push(["| Refusal | When |", "| --- | --- |", ...rows].join("\n"));
+    parts.push(["Refusals:", ...lines].join("\n"));
   }
   if (r.example?.request !== undefined) {
     parts.push(jsonBlock("Example request", r.example.request));
@@ -161,14 +286,21 @@ function routeMarkdown(r: ReferenceEntry): string {
 }
 
 /**
- * The reference as one Markdown document, for an agent to read (SPEC §11): a `##` heading per
- * tier, a `###` per resource within it, and a `####` per route, named by its title. A projection of the same
- * groups `buildReference` returns, so it can't drift from the JSON. `origin` is the base URL
- * the paths hang off.
+ * The reference as one Markdown document, for an agent to read (SPEC §11): what every route
+ * shares (the rules and the refusal codes, lists, following changes, then the objects, a `###`
+ * each), then a `##` heading per tier, a `###` per resource within it, and a `####` per route,
+ * named by its title. A projection of the same response `buildReferenceResponse` returns, so it
+ * can't drift from the JSON. `origin` is the base URL the paths hang off.
  */
-export function referenceMarkdown(groups: readonly ReferenceGroup[], origin: string): string {
-  const head = `# API reference\n\nEvery route this instance serves, generated from its registration, so every endpoint the editor and Claude can call is listed here. Base URL \`${origin}\`. Admin routes take the same authentication as the editor: Claude sends its service token.\n\n${SHARED_REFUSALS}`;
-  const tiers = groups.map((g) => {
+export function referenceMarkdown(ref: ReferenceResponse, origin: string): string {
+  const head = `# API reference\n\nEvery route this instance serves, generated from its registration, so every endpoint the editor and Claude can call is listed here. Base URL \`${origin}\`. Admin routes take the same authentication as the editor: Claude sends its service token. What every route shares is described once, first: the rules, the refusal codes, lists, following changes, and the objects routes return.`;
+  const concepts = ref.concepts.map((c) =>
+    [`## ${c.title}`, c.text, ...(c.key === "rules" ? [refusalsMarkdown(ref.refusals)] : [])].join(
+      "\n\n",
+    ),
+  );
+  const objects = ["## Objects", ...ref.objects.map(objectMarkdown)].join("\n\n");
+  const tiers = ref.groups.map((g) => {
     const resources = g.resources.map((res) =>
       [
         `### ${res.title}`,
@@ -177,5 +309,5 @@ export function referenceMarkdown(groups: readonly ReferenceGroup[], origin: str
     );
     return [`## ${g.title}`, g.blurb, ...resources].join("\n\n");
   });
-  return `${[head, ...tiers].join("\n\n")}\n`;
+  return `${[head, ...concepts, objects, ...tiers].join("\n\n")}\n`;
 }

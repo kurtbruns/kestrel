@@ -1,6 +1,6 @@
 # Kestrel API
 
-The shape of Kestrel's authoring API: the rules every route follows, so a client that has learned one route can predict the rest. The spec (`docs/SPEC.md`) says what both clients can rely on; this document says the shape they rely on it through. The generated API reference, served in the admin surface and built from the route registration in `src/app.ts`, lists every route, field, and example, so this document names concepts and never restates a route.
+The shape of Kestrel's authoring API: the rules every route follows, so a client that has learned one route can predict the rest. The spec (`docs/SPEC.md`) says what both clients can rely on; this document says the shape they rely on it through. The generated API reference, served in the admin surface and built from the route registration in `src/app.ts`, lists every route, field, and example, so this document names concepts and never restates a route. The reference opens with these rules in the words a client needs (`src/reference/concepts.ts`), and the refusal table below (`src/reference/refusals.ts`), because Claude reads the reference and never this document: a change to a principle or a code changes both in the same commit.
 
 **Who this is for.** Whoever adds to the API or builds a client for it, human or Claude.
 
@@ -110,6 +110,6 @@ An error nothing handled answers `500` `internal_error` on the API. On a reader 
 1. Start from the spec. If the change alters what a client can rely on, the spec changes first (`.claude/rules/maintainer.md`).
 2. Put it on an existing resource and an existing way of reading or acting if it fits (principles 2 and 3).
 3. Pass principle 9's questions, and write the one sentence the reference will carry.
-4. Register it in `src/app.ts` with its title (the act, as "Schedule a post"), summary, body types and fields, query parameters, its own refusals, and example, so the reference and the gate come from the same entry.
+4. Register it in `src/app.ts` with its title (the act, as "Schedule a post"), a sentence or two of summary and description saying what it does and the rule that is its alone, its body types and fields, query parameters, what it returns, its own refusals, and one example, so the reference and the gate come from the same entry. A resource it returns is named, never described: each object (the send view, a post, a subscriber, and the rest) is described once, field by field, in `src/reference/objects.ts`, and a route lists only the fields it adds beside it. An idea several routes share goes in a concept section (`src/reference/concepts.ts`), not in route prose.
 5. A new refusal code goes in `src/reference/refusals.ts`, with its status, and in the table above, in the row for the client's next move.
 6. Update this document only if the change adds a rule or a kind of concept, not a field.
