@@ -176,13 +176,18 @@ export interface BaseRequiredError {
   post: Post;
 }
 
-/** The 409 a save gets when its base revision is no longer the newest. */
+/**
+ * The 409 a save gets when its base revision is no longer the newest: the post as it stands and
+ * its current text, so the client can re-apply its change without reading it again.
+ */
 export interface StaleRevisionError {
   error: "stale_revision";
   message: string;
   current_revision: string | null;
   updated_at: number;
   author: string | null;
+  post: Post;
+  markdown: string;
 }
 
 /**

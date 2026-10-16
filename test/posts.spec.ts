@@ -305,6 +305,10 @@ describe("posts + revisions", () => {
     expect(body.error).toBe("stale_revision");
     expect(body.current_revision).toBe(rev2);
     expect(body.author).toBe("service"); // the service principal; the editor maps this to "Claude"
+    // The post as it stands, with its text, so the client can re-apply without reading again.
+    expect(body.post.id).toBe(id);
+    expect(body.post.current_revision).toBe(rev2);
+    expect(body.markdown).toBe("v2");
 
     // The draft is untouched — no clobber.
     const got = await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH }));

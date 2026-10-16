@@ -156,6 +156,12 @@ function isForeignBrowserRequest(c: RequestContext): boolean {
   return origin !== null && origin !== c.url.origin;
 }
 
+/** Whether a request's body is empty or only whitespace, read from a clone so the body stays unread. */
+async function isEmptyBody(req: Request): Promise<boolean> {
+  const bytes = await req.clone().arrayBuffer();
+  return new TextDecoder().decode(bytes).trim() === "";
+}
+
 /**
  * Refuse a write another site's page could have made the publisher's browser send with
  * their session (SPEC §11): one a browser marks as foreign (`isForeignBrowserRequest`),
@@ -163,10 +169,12 @@ function isForeignBrowserRequest(c: RequestContext): boolean {
  * send a form encoding or `text/plain` and a page can't send any other type across
  * origins without a preflight the app never grants. A request that declares no type
  * passes the second check; the route's reader decides whether a body without one is
- * acceptable (`readJsonObject` refuses one that is not empty).
+ * acceptable (`readJsonObject` refuses one that is not empty). On a route that takes no
+ * body, an empty body declared `application/json` passes too, since HTTP helpers send that
+ * type by habit and it is the one type no page elsewhere can send without a preflight.
  */
 function refuseForeignWrite(accepts: readonly string[]): Middleware {
-  return (c) => {
+  return async (c) => {
     if (isForeignBrowserRequest(c)) {
       throw new HttpError(
         403,
@@ -176,6 +184,9 @@ function refuseForeignWrite(accepts: readonly string[]): Middleware {
     }
     const type = mediaTypeOf(c.req);
     if (type !== undefined && !accepts.includes(type)) {
+      if (accepts.length === 0 && type === "application/json" && (await isEmptyBody(c.req))) {
+        return undefined;
+      }
       throw unsupportedMediaType(
         accepts.length === 0
           ? `this route takes no body, so no Content-Type (got ${type})`

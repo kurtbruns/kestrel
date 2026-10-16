@@ -633,6 +633,8 @@ export function createRouter({
       resource: "posts",
       summary:
         "Upload an image to a draft (multipart form field `file`); a post that is not a draft is a 409 `post_not_draft`.",
+      description:
+        "The post's Markdown references the image by the `filename` the response gives, `![a short description](cover.jpg)`, and the render resolves that name to the stored image.",
       handler: imageRoutes.uploadImage,
     },
     {

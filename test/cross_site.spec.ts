@@ -171,6 +171,25 @@ describe("each admin route takes only the body types it declares", () => {
     expect((await post("/api/sends/s_missing/cancel", {})).status).toBe(404);
   });
 
+  it("lets an empty JSON body through to a route that takes none, and refuses a non-empty one", async () => {
+    const id = await newDraft();
+    // HTTP helpers declare application/json by habit, with nothing to send.
+    for (const body of [undefined, "", " \n"]) {
+      const res = await post(`/api/posts/${id}/preview`, {
+        headers: { "content-type": "application/json; charset=utf-8" },
+        body,
+      });
+      expect(res.status, JSON.stringify(body)).toBe(200);
+    }
+    // A body the route would ignore is still refused, so no 200 drops part of a request.
+    const filled = await post(`/api/posts/${id}/preview`, {
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ markdown: "ignored" }),
+    });
+    expect(filled.status).toBe(415);
+    expect((await readJson(filled)).error).toBe("unsupported_media_type");
+  });
+
   it("refuses an upload whose type the route doesn't take", async () => {
     const id = await newDraft();
     const text = await post(`/api/posts/${id}/images?filename=a.png`, {

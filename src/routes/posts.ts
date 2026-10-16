@@ -215,7 +215,7 @@ export async function getPost(c: RequestContext): Promise<Response> {
 /**
  * Optimistic concurrency (SPEC §4): the client sends the revision it loaded (via
  * `If-Match`/`base_revision`), and if another save has advanced the post since, the
- * save is rejected with 409 naming the newer revision instead of clobbering it — so
+ * save is rejected with 409 carrying the newer revision instead of clobbering it — so
  * a stale tab, or a stale Claude edit, learns its view is out of date rather than
  * silently overwriting the other writer. A save with no base is refused with 428 and
  * the post as it stands, so leaving the base out can't be a way around the check.
@@ -242,6 +242,8 @@ export async function updatePost(c: RequestContext): Promise<Response> {
       current_revision: post.current_revision,
       updated_at: post.updated_at,
       author: current?.author ?? null,
+      post: withAddresses(c.config, post, UNPUBLISHED),
+      markdown: current?.markdown ?? "",
     };
     return json(stale, 409, revisionHeaders(post));
   }
