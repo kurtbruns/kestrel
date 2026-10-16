@@ -19,6 +19,8 @@ A problem with your email provider never marks anyone unsent. The send waits whe
 
 ## Before a send
 
+- **A test says "The provider refused it".** Your provider didn't take the test, and its own words follow, with the fix where Kestrel knows it. Sending again gets the same answer until that's fixed. While Amazon SES is in its sandbox, it sends only to addresses verified in SES, so verify the address you test with in the SES console, or request production access, as [Connect Amazon SES](../get-started/04-ses.md#5-request-production-access) describes. Words about the account, such as a key or the sending domain, point at the same fix as [a send the provider refuses](06-troubleshooting.md#a-send-is-waiting-or-held).
+- **A test says "The provider didn't answer, so the test may have arrived".** Kestrel can't tell whether your provider took it. Check the inbox before you send again, since a second test may arrive twice.
 - **"The template or publication details changed this email's look after your last test".** Send a new test of the post, since your last one no longer shows what goes out.
 - **The daily database writes warning.** On Cloudflare's free Workers plan, a large send may use up the day's writes, and then the app stops working until midnight UTC. [Bring your existing list](01-your-list.md#limits) explains the limit, and when to upgrade to Workers Paid.
 

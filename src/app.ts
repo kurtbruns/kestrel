@@ -426,13 +426,14 @@ export function createRouter({
       resource: "settings",
       summary:
         "Send a sample post through the saved email template, to `to` or the default recipients (I5).",
-      description: `Renders the stored template, never unsaved editor content; saving first is the client's job, and that save may need the re-make acknowledgement (see \`PUT /api/settings\`). The answer names the recipients the provider didn't accept in \`failed\`, so a client can offer exactly those again and no one gets a second copy. ${notConnected}`,
+      description: `Renders the stored template, never unsaved editor content; saving first is the client's job, and that save may need the re-make acknowledgement (see \`PUT /api/settings\`). The answer names the recipients the provider didn't accept in \`failed\`, so a client can offer exactly those again and no one gets a second copy, and says why for each in \`not_sent\`, in the same order (see \`POST /api/posts/:id/test\`). ${notConnected}`,
       example: {
         request: { to: "you@example.com" },
         response: {
           sent: 1,
           total: 1,
           failed: [],
+          not_sent: [],
           provider: "fake",
           subject: "Template test — …",
         },
@@ -646,12 +647,13 @@ export function createRouter({
       summary:
         "Send a test to one address through the same per-recipient path as a real send (I5).",
       description:
-        "Once the post is scheduled this sends its frozen copy, exactly as it will fire, and once sent the record's; a draft's test is a live render (SPEC §5). The response's `frozen` says which. A test of a scheduled send's frozen copy is recorded as its `tested_at`, which clears the send's `remade` condition. " +
+        "Once the post is scheduled this sends its frozen copy, exactly as it will fire, and once sent the record's; a draft's test is a live render (SPEC §5). The response's `frozen` says which. A test of a scheduled send's frozen copy is recorded as its `tested_at`, which clears the send's `remade` condition. `sent` is true only when the provider took the test. When it didn't, `not_sent` says why: the provider's own words as `error` (never a credential), a `message` to show or relay as it stands, with the fix where it is known (the same advice as a send's `refused` condition, so a test refused for the account or the address isn't simply tried again), and `may_have_arrived`, true when the provider never answered: then the test may be in the inbox, and the answer is still a 200, never a server error. " +
         notConnected,
       example: {
         request: { to: "you@example.com" },
         response: {
           sent: true,
+          not_sent: null,
           provider: "ses",
           to: "you@example.com",
           subject: "Hello, world",

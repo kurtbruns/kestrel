@@ -23,7 +23,7 @@ import { fieldError, type JsonObject, optString, readJsonObject } from "../lib/b
 import { badRequest, json, notFound } from "../lib/errors";
 import { POST_PAGE_SECURITY_HEADERS } from "../lib/page_headers";
 import { fakeNotifications } from "../notify/fake";
-import { getProvider, perRecipient, requireConnectedProvider } from "../providers";
+import { getProvider, requireConnectedProvider } from "../providers";
 import { fakeOutbox } from "../providers/fake";
 import {
   type RenderedEmail,
@@ -34,6 +34,7 @@ import {
 import { type EmailBranding, resolveBranding } from "../render/template_engine";
 import type { RequestContext } from "../router";
 import { param } from "../router";
+import { sendTest } from "../services/test_send";
 import { webVersion } from "./archive";
 import { testUnsubscribeUrl } from "./public";
 import { readerIdentity } from "./reader";
@@ -177,23 +178,28 @@ export async function test(c: RequestContext): Promise<Response> {
   // Each press is a deliberate new send, never a retry of the last one, so it carries a
   // key of its own: the fake records once per key and address, and would fold a second
   // test into the first.
-  const [res] = perRecipient(
-    await provider.sendBatch(email, recipients, {
+  const [res] = await sendTest(
+    provider,
+    email,
+    recipients,
+    {
       purpose: "test",
       tag: `test-${input.post.id}`,
       batchKey: `test-${input.post.id}-${crypto.randomUUID()}`,
-    }),
-    recipients,
+    },
+    { test: "post", postId: input.post.id },
   );
+  const sent = res?.sent === true;
 
   // A test of a scheduled send's frozen copy is the sign-off the re-make rule asks for
   // (SPEC §6, §8): record it, which settles the send's `remade` condition.
-  if (frozen && res?.accepted === true) {
+  if (frozen && sent) {
     await markTested(c.env.DB, frozen.id, readAt, Date.now());
   }
 
   const result: TestSendResponse = {
-    sent: res?.accepted === true,
+    sent,
+    not_sent: res && !res.sent ? res.notSent : null,
     provider: provider.name,
     to,
     subject: email.subject,
@@ -327,22 +333,22 @@ export async function templateTest(c: RequestContext): Promise<Response> {
   // keys its rolls on it), so it is as fresh as the key.
   const testId = `template-test-${crypto.randomUUID()}`;
   const batch = recipients.map((email) => ({ email, unsubscribeUrl }));
-  const results = perRecipient(
-    await provider.sendBatch(result, batch, {
-      purpose: "test",
-      tag: testId,
-      batchKey: testId,
-    }),
+  const answers = await sendTest(
+    provider,
+    result,
     batch,
+    { purpose: "test", tag: testId, batchKey: testId },
+    { test: "template" },
   );
-  // The addresses the provider didn't take, so the client can offer exactly those again
-  // and no one gets a second copy.
-  const failed = results.filter((r) => !r.accepted).map((r) => r.email);
+  // The addresses the provider didn't take, with why, so the client can offer exactly
+  // those again and no one gets a second copy.
+  const notSent = answers.flatMap((a) => (a.sent ? [] : [{ email: a.email, ...a.notSent }]));
 
   const report: TemplateTestResponse = {
-    sent: results.filter((r) => r.accepted).length,
+    sent: answers.length - notSent.length,
     total: recipients.length,
-    failed,
+    failed: notSent.map((n) => n.email),
+    not_sent: notSent,
     provider: provider.name,
     recipients,
     subject: result.subject,

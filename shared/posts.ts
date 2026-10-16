@@ -93,9 +93,26 @@ export interface PreviewResponse {
   frozen: boolean;
 }
 
+/**
+ * Why a test didn't go to an address, as the provider answered (SPEC §5): its own words,
+ * and the server's sentence saying what that means and what to do, to show or relay as it
+ * stands.
+ */
+export interface TestNotSent {
+  /** True when the provider never answered, so the test may have arrived all the same. */
+  may_have_arrived: boolean;
+  /** The provider's own words. Never carries a credential. */
+  error: string;
+  /** The sentence to show: what happened, then the fix where it is known. */
+  message: string;
+}
+
 /** POST /api/posts/:id/test: one test delivery through the same render as a real send (I5). */
 export interface TestSendResponse {
+  /** True only when the provider took the test. */
   sent: boolean;
+  /** Why it wasn't sent; null when it was. */
+  not_sent: TestNotSent | null;
   provider: string;
   to: string;
   subject: string;

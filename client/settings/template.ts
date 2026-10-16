@@ -816,7 +816,7 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
             // The dialog stays open with only the addresses that didn't get it, so Send again
             // tries those and no one gets a second copy.
             to.value = r.failed.join("\n");
-            m.error(notSentMessage(r.sent, r.total, r.failed));
+            m.error(notSentMessage(r.sent, r.total, r.not_sent));
             return;
           }
           m.close();

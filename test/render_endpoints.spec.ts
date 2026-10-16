@@ -1,11 +1,15 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { TestSendResponse } from "../shared/posts";
+import { refusalAdvice } from "../shared/sends";
 import type { TemplateTestResponse } from "../shared/settings";
 import { FakeProvider } from "../src/providers/fake";
+import type { Recipient, SendBatchResult } from "../src/providers/types";
 import { SENTTO_SENTINEL, UNSUB_SENTINEL } from "../src/render/template_engine";
 import { sweep } from "../src/send/sweep";
 import { AUTH, base, JSON_AUTH, PNG_1x1, readJson } from "./support/http";
+import { logged } from "./support/log";
 
 async function draftWithImage(title: string): Promise<string> {
   const created = await readJson(
@@ -502,5 +506,200 @@ describe("web version (GET /api/posts/:id/web)", () => {
 
   it("404s for an unknown post", async () => {
     expect((await SELF.fetch(`${base}/api/posts/nope/web`, { headers: AUTH })).status).toBe(404);
+  });
+});
+
+describe("a test that isn't sent says why (SPEC §5)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** The provider's answer to every test, in place of the fake's acceptance. */
+  function answerTests(answer: (recipients: Recipient[]) => Promise<SendBatchResult>) {
+    vi.spyOn(FakeProvider.prototype, "sendBatch").mockImplementation((_rendered, recipients) =>
+      answer(recipients),
+    );
+  }
+
+  async function postTest(to: string): Promise<{ status: number; body: TestSendResponse }> {
+    const created = await readJson(
+      await SELF.fetch(`${base}/api/posts`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ subject: "Owls", markdown: "Hoot." }),
+      }),
+    );
+    const res = await SELF.fetch(`${base}/api/posts/${created.post.id}/test`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ to }),
+    });
+    return { status: res.status, body: (await readJson(res)) as TestSendResponse };
+  }
+
+  // SES's sandbox answer to an address not verified in it, naming that address.
+  const sandboxWords = (to: string) =>
+    `ses 400 MessageRejected: Email address is not verified. The following identities failed the check in region US-EAST-1: ${to}`;
+
+  it("a refused post test carries the provider's words, and says resending gets the same answer", async () => {
+    const warn = vi.spyOn(console, "warn");
+    answerTests(async (recipients) => ({
+      kind: "answered",
+      results: recipients.map((r) => ({
+        email: r.email,
+        accepted: false,
+        retryable: false,
+        error: sandboxWords(r.email),
+      })),
+    }));
+    const { status, body } = await postTest("unverified@example.com");
+    expect(status).toBe(200);
+    expect(body.sent).toBe(false);
+    expect(body.not_sent).toEqual({
+      may_have_arrived: false,
+      error: sandboxWords("unverified@example.com"),
+      message: `The provider refused it: ${sandboxWords("unverified@example.com")}. Sending to this address again gets the same answer until what the provider names is fixed.`,
+    });
+    // Logged without the address: SES's words keep only its domain (SPEC §12).
+    const lines = logged(warn).filter((l) => l.event === "test.refused");
+    expect(lines).toEqual([
+      expect.objectContaining({ level: "warn", provider: "fake", test: "post", count: 1 }),
+    ]);
+    expect(JSON.stringify(lines)).not.toContain("unverified@");
+  });
+
+  it("a post test the provider refuses for the account says the fix (the same advice as a send's refusal)", async () => {
+    answerTests(async () => ({
+      kind: "halted",
+      halt: {
+        reason: "account",
+        cause: "sender",
+        error: "ses 400 MailFromDomainNotVerifiedException",
+      },
+    }));
+    const { body } = await postTest("me@example.com");
+    expect(body.sent).toBe(false);
+    expect(body.not_sent).toEqual({
+      may_have_arrived: false,
+      error: "ses 400 MailFromDomainNotVerifiedException",
+      message: `The provider refused it: ses 400 MailFromDomainNotVerifiedException. ${refusalAdvice("sender")} Sending the test again gets the same answer until that is fixed.`,
+    });
+  });
+
+  it("a post test the provider can't take right now says to send it again shortly", async () => {
+    answerTests(async () => ({
+      kind: "halted",
+      halt: {
+        reason: "unavailable",
+        cause: "rate_limit",
+        error: "ses 429 TooManyRequestsException",
+      },
+    }));
+    const { body } = await postTest("me@example.com");
+    expect(body.not_sent?.message).toBe(
+      "The provider can’t take mail right now: ses 429 TooManyRequestsException. Send the test again in a few minutes.",
+    );
+  });
+
+  it("a post test the provider never answers may have arrived, and is never a server error", async () => {
+    const warn = vi.spyOn(console, "warn");
+    answerTests(async () => {
+      throw new Error("The operation was aborted due to timeout");
+    });
+    const { status, body } = await postTest("me@example.com");
+    expect(status).toBe(200);
+    expect(body.sent).toBe(false);
+    expect(body.not_sent).toEqual({
+      may_have_arrived: true,
+      error: "The operation was aborted due to timeout",
+      message:
+        "The provider didn’t answer, so the test may have arrived: The operation was aborted due to timeout. Check the inbox before sending it again.",
+    });
+    expect(logged(warn).filter((l) => l.event === "test.unknown")).toEqual([
+      expect.objectContaining({ level: "warn", provider: "fake", test: "post", count: 1 }),
+    ]);
+  });
+
+  it("a sent post test carries no reason", async () => {
+    const { body } = await postTest("me@example.com");
+    expect(body.sent).toBe(true);
+    expect(body.not_sent).toBeNull();
+  });
+
+  it("a template test says why for each address it missed, keeping a later one's 'may have arrived'", async () => {
+    const warn = vi.spyOn(console, "warn");
+    answerTests(async ([a, b, c]) => ({
+      kind: "answered",
+      results: [
+        { email: a!.email, accepted: false, retryable: false, error: sandboxWords(a!.email) },
+        {
+          email: b!.email,
+          accepted: false,
+          retryable: false,
+          error: "ses gave no answer (timeout), so it may have arrived",
+          unknown: true,
+        },
+        { email: c!.email, accepted: false, retryable: true, error: "not sent" },
+      ],
+    }));
+    const tos = ["first@example.com", "second@example.com", "third@example.com"];
+    const res = await SELF.fetch(`${base}/api/settings/template/test`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ to: tos }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await readJson(res)) as TemplateTestResponse;
+    expect(body.sent).toBe(0);
+    expect(body.failed).toEqual(tos);
+    expect(body.not_sent).toEqual([
+      {
+        email: "first@example.com",
+        may_have_arrived: false,
+        error: sandboxWords("first@example.com"),
+        message: `The provider refused it: ${sandboxWords("first@example.com")}. Sending to this address again gets the same answer until what the provider names is fixed.`,
+      },
+      {
+        email: "second@example.com",
+        may_have_arrived: true,
+        error: "ses gave no answer (timeout), so it may have arrived",
+        message:
+          "The provider didn’t answer, so the test may have arrived: ses gave no answer (timeout), so it may have arrived. Check the inbox before sending it again.",
+      },
+      {
+        email: "third@example.com",
+        may_have_arrived: false,
+        error: "not sent",
+        message: "It wasn’t sent: not sent. Send the test again to try it.",
+      },
+    ]);
+    const lines = logged(warn).filter((l) => l.event.startsWith("test."));
+    expect(lines.map((l) => [l.event, l.test, l.count])).toEqual([
+      ["test.unknown", "template", 1],
+      ["test.refused", "template", 2],
+    ]);
+    expect(JSON.stringify(lines)).not.toMatch(/first@|second@|third@/);
+  });
+
+  it("a template test refused for the account gives each address the refusal's advice", async () => {
+    answerTests(async () => ({
+      kind: "halted",
+      halt: {
+        reason: "account",
+        cause: "credentials",
+        error: "ses 403 UnrecognizedClientException",
+      },
+    }));
+    const res = await SELF.fetch(`${base}/api/settings/template/test`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ to: ["a@example.com", "b@example.com"] }),
+    });
+    const body = (await readJson(res)) as TemplateTestResponse;
+    expect(body.not_sent.map((n) => n.message)).toEqual(
+      Array(2).fill(
+        `The provider refused it: ses 403 UnrecognizedClientException. ${refusalAdvice("credentials")} Sending the test again gets the same answer until that is fixed.`,
+      ),
+    );
   });
 });

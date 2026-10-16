@@ -299,7 +299,7 @@ describe("SesProvider.sendBatch", () => {
       kind: "answered",
       results: [
         { email: "a@example.com", accepted: true, providerId: "m1" },
-        { email: "b@example.com", accepted: false, retryable: false },
+        { email: "b@example.com", accepted: false, retryable: false, unknown: true },
         { email: "c@example.com", accepted: false, retryable: true },
       ],
     });

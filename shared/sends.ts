@@ -150,7 +150,7 @@ export function isSelfThrottled(
 }
 
 /** The provider's words as a sentence the copy around them can follow. */
-function sentence(error: string | null): string {
+export function sentence(error: string | null): string {
   const text = error?.trim() || "no detail given";
   return /[.!?]$/.test(text) ? text : `${text}.`;
 }

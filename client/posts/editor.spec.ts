@@ -1681,6 +1681,36 @@ describe("editor view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("says why a test wasn't sent, in the server's words, rather than inviting a retry that can't work (SPEC §5)", async () => {
+    const message =
+      "The provider refused it: ses 400 MessageRejected: Email address is not verified. Sending to this address again gets the same answer until what the provider names is fixed.";
+    await open([
+      { path: "/api/posts/p1", reply: () => draft() },
+      { path: "/api/settings", reply: () => ({ settings: { testRecipients: [] } }) },
+      {
+        method: "POST",
+        path: "/api/posts/p1/test",
+        reply: () => ({
+          sent: false,
+          not_sent: {
+            may_have_arrived: false,
+            error: "ses 400 MessageRejected: Email address is not verified.",
+            message,
+          },
+          warnings: [],
+        }),
+      },
+    ]);
+    $("#testBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    typeInto($<HTMLTextAreaElement>("#testTo"), "you@b.c");
+    $("#tGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($(".modal .dialog-error").textContent).toBe(`!${message}`);
+    expect($<HTMLTextAreaElement>("#testTo").value).toBe("you@b.c");
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("says a time inside the minimum lead under the picker, in words, before asking the server (SPEC §6)", async () => {
     const server = draftServer(draft({ subject: "Owls" }));
     await open([

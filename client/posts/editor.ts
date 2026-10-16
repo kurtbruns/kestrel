@@ -47,6 +47,7 @@ import {
   lateStr,
   notSentMessage,
   parseAddresses,
+  type TestMiss,
   toLocalInput,
   untilStr,
 } from "../ui/format";
@@ -1283,8 +1284,7 @@ export async function renderEditor(
           // One request per address, each on its own, so one that fails doesn't stop the
           // rest, and the dialog can name exactly the ones to try again.
           let sent = 0;
-          const failed: string[] = [];
-          const reasons = new Set<string>(); // each distinct reason once, in the order met
+          const missed: TestMiss[] = [];
           let lastWarnings: string[] | null = null;
           for (const addr of addrs) {
             try {
@@ -1295,7 +1295,7 @@ export async function renderEditor(
               if (r.sent) {
                 sent++;
               } else {
-                failed.push(addr);
+                missed.push({ email: addr, message: r.not_sent?.message ?? "" });
               }
               lastWarnings = r.warnings;
             } catch (e) {
@@ -1304,8 +1304,7 @@ export async function renderEditor(
               if (isNotFound(e) || (e instanceof ApiError && e.status === 401)) {
                 throw e;
               }
-              failed.push(addr);
-              reasons.add(describeError(e));
+              missed.push({ email: addr, message: describeError(e) });
             }
           }
           showWarnings(lastWarnings);
@@ -1314,11 +1313,11 @@ export async function renderEditor(
           if (locked && sent > 0) {
             readSendsNow();
           }
-          if (failed.length) {
+          if (missed.length) {
             // The dialog stays open with only the addresses that didn't get it, so Send again
             // tries those and no one gets a second copy.
-            to.value = failed.join("\n");
-            m.error(notSentMessage(sent, addrs.length, failed, [...reasons]));
+            to.value = missed.map((x) => x.email).join("\n");
+            m.error(notSentMessage(sent, addrs.length, missed));
             return;
           }
           m.close();

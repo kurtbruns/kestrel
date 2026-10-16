@@ -75,6 +75,8 @@ A cursor from a database that has since gone back in time, such as after a resto
 
 The client takes an act from the resource's `actions`, so it offers only what the server would accept now. The answer carries the resource as it stands after the act, `changed`, and a new `cursor`, so the client updates its copy without another read. A refused act carries the resource too.
 
+A test send is an act whose outcome is the provider's, not the server's, so the provider not taking it is an answer, never a refusal: `sent: false` with `not_sent`, the provider's own words as `error`, a `message` to show or relay as it stands (what happened, then the fix where it is known, worded as a send's `refused` condition is), and `may_have_arrived` for a provider that never answered. A template test carries one per address it missed.
+
 ### Planning, then committing
 
 An act that changes many things at once, on the strength of the publisher's consent, is split in two: a **plan** that says what the act would do and writes nothing, and a **commit** that applies that plan whole or not at all. Importing a list is the one such act (SPEC §7). The plan carries a hash of what the publisher's consent rests on, and the commit names it, so a commit applies the plan the publisher saw or is refused with `plan_stale`. Changes to the data in between that the consent doesn't rest on are applied safely and reported in the answer, not refused. The hash is also the commit's idempotency key: a commit repeated after a lost answer returns the first one's result, marked `replayed`, and applies nothing twice.

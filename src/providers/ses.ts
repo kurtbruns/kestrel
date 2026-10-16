@@ -433,6 +433,7 @@ export class SesProvider implements EmailProvider {
             accepted: false,
             retryable: false,
             error: `ses gave no answer (${words}), so it may have arrived`,
+            unknown: true,
           });
         }
         for (const rest of sendable.slice(at + size)) {
