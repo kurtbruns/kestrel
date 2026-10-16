@@ -404,7 +404,90 @@ describe("reference room", () => {
     const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
     $<HTMLElement>(".api-obj-link", route).click();
     expect(scroll.mock.instances).toEqual([$("#api-objects-send")]);
+    expect($<HTMLDetailsElement>("#api-objects-send").open).toBe(true);
     expect(location.hash).toBe("#/reference");
+  });
+
+  it("renders a route's prose as inline Markdown: code, bold, and paragraphs, its HTML as text", async () => {
+    const withProse: ReferenceGroup[] = [
+      {
+        ...groups[0]!,
+        resources: [{ key: "sends", title: "Sends" }],
+        routes: [
+          {
+            method: "GET",
+            path: "/api/sends/feed",
+            access: "admin",
+            resource: "sends",
+            title: "Follow changes to sends",
+            summary: "What changed since `since`.",
+            description: "Pass the **cursor** of a read.\n\nA <b>tag</b> stays text.",
+          },
+        ],
+      },
+    ];
+    fake = fakeApi([{ path: "/api/reference", reply: () => reference(withProse) }]);
+    await mount(renderReference);
+    await settle();
+    expect($(".api-summary").innerHTML).toBe("What changed since <code>since</code>.");
+    expect($$(".api-desc").map((p) => p.innerHTML)).toEqual([
+      "Pass the <strong>cursor</strong> of a read.",
+      "A &lt;b&gt;tag&lt;/b&gt; stays text.",
+    ]);
+    // The overview's prose too.
+    expect($("#api-overview-errors .api-prose").innerHTML).toBe("A refusal names its &lt;field&gt;.");
+  });
+
+  it("copies a route's method and path, and a link that opens the reference at it", async () => {
+    const writeText = stubClipboard();
+    fake = fakeApi([{ path: "/api/reference", reply: () => reference(groups) }]);
+    await mount(renderReference);
+    await settle();
+    const route = $("#route-get-api-posts-id");
+    $<HTMLButtonElement>(".api-route-tools [aria-label='Copy method and path']", route).click();
+    $<HTMLButtonElement>(
+      ".api-route-tools [aria-label='Copy a link to this route']",
+      route,
+    ).click();
+    await settle();
+    expect(writeText.mock.calls.map(([text]) => text)).toEqual([
+      "GET /api/posts/:id",
+      `${location.origin}${location.pathname}#/reference/get-api-posts-id`,
+    ]);
+    // Each row has its own address, from its method and the path to type.
+    expect($$("li[data-hay]").map((li) => li.id)).toEqual([
+      "route-get-api-posts",
+      "route-post-api-posts",
+      "route-get-api-posts-id",
+      "route-post-api-sends-id-cancel",
+      "route-get-subscribe",
+    ]);
+  });
+
+  it("opens and scrolls to the route its address names, and the filter still narrows from there", async () => {
+    const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
+    fake = fakeApi([{ path: "/api/reference", reply: () => reference(groups) }]);
+    await mount((root, signal) => renderReference(root, signal, "post-api-sends-id-cancel"));
+    await settle();
+    const target = $("#route-post-api-sends-id-cancel");
+    expect($<HTMLDetailsElement>("details", target).open).toBe(true);
+    expect(scroll.mock.instances).toEqual([target]);
+    expect($$<HTMLDetailsElement>("details.api-route").filter((d) => d.open)).toHaveLength(1);
+    const filter = $<HTMLInputElement>("#apiFilter");
+    filter.value = "post create";
+    filter.dispatchEvent(new Event("input"));
+    expect(
+      $$("li[data-hay]")
+        .filter((li) => !li.hidden)
+        .map((li) => li.id),
+    ).toEqual(["route-post-api-posts"]);
+    // An address that names no route opens the reference at its top, nothing opened.
+    unmount();
+    scroll.mockClear();
+    await mount((root, signal) => renderReference(root, signal, "get-nothing"));
+    await settle();
+    expect($$<HTMLDetailsElement>("details.api-route").filter((d) => d.open)).toHaveLength(0);
+    expect(scroll).not.toHaveBeenCalled();
   });
 
   it("marks a query parameter the route can't do without", async () => {

@@ -17,11 +17,12 @@ import type {
 import { api, describeError } from "../api";
 import { mount } from "../lifecycle";
 import { appState } from "../state";
-import { codeBlock, wireCopy } from "../ui/copy";
+import { codeBlock, copyFace, wireCopy } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
 import { highlightCurl, highlightJson } from "../ui/highlight";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
+import { inline, prose } from "../ui/prose";
 import { renderError } from "../ui/widgets";
 import { concretePath, curlCommand } from "./curl";
 import { roomShell } from "./shell";
@@ -53,7 +54,7 @@ function apiQueryHtml(query: QueryParam[] | undefined): Html | null {
   }
   const rows = query.map(
     (q) =>
-      html`<tr><td><code>${q.name}</code>${q.required ? html` <span class="api-req">required</span>` : null}</td><td class="muted">${q.description}</td></tr>`,
+      html`<tr><td><code>${q.name}</code>${q.required ? html` <span class="api-req">required</span>` : null}</td><td class="muted">${inline(q.description)}</td></tr>`,
   );
   return html`<div class="block"><div class="block-head"><span class="block-label">Query</span></div><table class="api-query"><tbody>${rows}</tbody></table></div>`;
 }
@@ -64,7 +65,7 @@ function apiBodyHtml(body: BodyField[] | undefined): Html | null {
   }
   const rows = body.map(
     (f) =>
-      html`<tr><td><code>${f.name}</code>${f.required ? html` <span class="api-req">required</span>` : null}</td><td><code class="api-type">${f.type}</code></td><td class="muted">${f.description}</td></tr>`,
+      html`<tr><td><code>${f.name}</code>${f.required ? html` <span class="api-req">required</span>` : null}</td><td><code class="api-type">${f.type}</code></td><td class="muted">${inline(f.description)}</td></tr>`,
   );
   return html`<div class="block"><div class="block-head"><span class="block-label">Body</span></div><table class="api-query api-body"><tbody>${rows}</tbody></table></div>`;
 }
@@ -76,7 +77,7 @@ function apiErrorsHtml(errors: RouteError[] | undefined, meanings: Meanings): Ht
   }
   const rows = errors.map(
     (e) =>
-      html`<tr><td><span class="api-status">${e.status}</span> <code>${e.code}</code></td><td class="muted">${e.when ?? meanings.get(e.code) ?? ""}${e.details?.length ? html` With ${e.details.map((d, i) => html`${i ? ", " : ""}<code>${d}</code>`)}.` : null}</td></tr>`,
+      html`<tr><td><span class="api-status">${e.status}</span> <code>${e.code}</code></td><td class="muted">${inline(e.when ?? meanings.get(e.code) ?? "")}${e.details?.length ? html` With ${e.details.map((d, i) => html`${i ? ", " : ""}<code>${d}</code>`)}.` : null}</td></tr>`,
   );
   return html`<div class="block"><div class="block-head"><span class="block-label">Refusals</span></div><table class="api-query api-errors"><tbody>${rows}</tbody></table></div>`;
 }
@@ -84,9 +85,9 @@ function apiErrorsHtml(errors: RouteError[] | undefined, meanings: Meanings): Ht
 function apiFieldsTable(fields: readonly ReferenceField[]): Html {
   const rows = fields.map(
     (f) =>
-      html`<tr><td><code>${f.name}</code></td><td><code class="api-type">${f.type}</code></td><td class="muted">${f.description}${
+      html`<tr><td><code>${f.name}</code></td><td><code class="api-type">${f.type}</code></td><td class="muted">${inline(f.description)}${
         f.values?.length
-          ? html`<ul class="api-values">${f.values.map((v) => html`<li><code>${v.value}</code> ${v.description}</li>`)}</ul>`
+          ? html`<ul class="api-values">${f.values.map((v) => html`<li><code>${v.value}</code> ${inline(v.description)}</li>`)}</ul>`
           : null
       }</td></tr>`,
   );
@@ -128,6 +129,20 @@ function apiPathHtml(path: string): Html {
     .split(/(:[A-Za-z_]+)/)
     .map((part, i) => (i % 2 ? html`<span class="api-param">${part}</span>` : part))}`;
 }
+/**
+ * A route's own address in the reference, `#/reference/<anchor>`: its method and its path to
+ * type, lowercased, every run of other characters a hyphen (`post-api-sends-id-cancel`).
+ */
+export function routeAnchor(r: Pick<ReferenceEntry, "method" | "path">): string {
+  return `${r.method}${concretePath(r.path)}`
+    .toLowerCase()
+    .replace(/[^a-z0-9.]+/g, "-")
+    .replace(/-+$/, "");
+}
+/** The link that opens the reference at a route, to share in an issue or hand to Claude. */
+function routeLink(r: ReferenceEntry): string {
+  return `${location.origin}${location.pathname}#/reference/${routeAnchor(r)}`;
+}
 /** What a route's detail looks up in the rest of the reference. */
 interface Lookups {
   meanings: Meanings;
@@ -151,15 +166,20 @@ function objectHeads(ref: ReferenceResponse): Map<string, ReferenceObject[]> {
 function apiRouteHtml(r: ReferenceEntry, look: Lookups): Html {
   // What the filter matches: the route's name, the method, the path, and the summary.
   const hay = `${r.title} ${r.method} ${concretePath(r.path)} ${r.summary}`.toLowerCase();
-  return html`<li data-hay="${hay}"><details class="api-route">
+  return html`<li data-hay="${hay}" id="route-${routeAnchor(r)}"><details class="api-route">
       <summary class="api-route-sum">
         <span class="api-method m-${r.method}">${r.method}</span>
         <span class="api-route-name"><span class="api-route-title">${r.title}</span><code class="api-path">${apiPathHtml(r.path)}</code></span>
         <span class="api-chev" aria-hidden="true"></span>
       </summary>
       <div class="api-route-detail">
-        <p class="api-summary">${r.summary}</p>
-        ${r.description ? html`<p class="api-desc muted">${r.description}</p>` : null}
+        <div class="api-route-tools">
+          <code class="api-call">${r.method} ${concretePath(r.path)}</code>
+          <button type="button" class="copy-btn" data-copy="${`${r.method} ${concretePath(r.path)}`}" data-copy-word="Copy path" aria-label="Copy method and path">${copyFace(false, "Copy path")}</button>
+          <button type="button" class="copy-btn" data-copy="${routeLink(r)}" data-copy-word="Copy link" aria-label="Copy a link to this route">${copyFace(false, "Copy link")}</button>
+        </div>
+        <p class="api-summary">${inline(r.summary)}</p>
+        ${r.description ? prose(r.description, "api-desc muted") : null}
         ${apiQueryHtml(r.query)}
         ${apiAcceptsHtml(r.accepts)}
         ${apiBodyHtml(r.body)}
@@ -183,7 +203,7 @@ function apiObjectHtml(o: ReferenceObject): Html {
         <span class="api-chev" aria-hidden="true"></span>
       </summary>
       <div class="api-object-detail">
-        ${apiProseHtml(o.description)}
+        ${prose(o.description, "api-prose")}
         ${apiFieldsTable(o.fields)}
         ${apiExample("Example", o.example)}
       </div>
@@ -202,13 +222,9 @@ function apiResourceHtml(g: ReferenceGroup, res: ReferenceResource, look: Lookup
 function apiSectionHtml(g: ReferenceGroup, look: Lookups): Html {
   return html`<section class="api-section" id="api-${g.access}" data-tier="${g.access}">
       <h2>${g.title}</h2>
-      <p class="api-blurb muted">${g.blurb}</p>
+      <p class="api-blurb muted">${inline(g.blurb)}</p>
       ${g.resources.map((res) => apiResourceHtml(g, res, look))}
     </section>`;
-}
-/** Markdown paragraphs as paragraphs. */
-function apiProseHtml(text: string): Html {
-  return html`${text.split(/\n\n+/).map((p) => html`<p class="api-prose">${p}</p>`)}`;
 }
 // The refusal codes, grouped by the client's next move: each move a heading row across the
 // table, so a code and its meaning keep the width.
@@ -217,7 +233,7 @@ function apiRefusalsHtml(groups: readonly ReferenceRefusalGroup[]): Html {
     html`<tr class="api-move"><th colspan="2">${g.move}</th></tr>`,
     ...g.codes.map(
       (c) =>
-        html`<tr><td><span class="api-status">${c.status}</span> <code>${c.code}</code></td><td class="muted">${c.meaning}</td></tr>`,
+        html`<tr><td><span class="api-status">${c.status}</span> <code>${c.code}</code></td><td class="muted">${inline(c.meaning)}</td></tr>`,
     ),
   ]);
   return html`<table class="api-query api-refusals"><tbody>${rows}</tbody></table>`;
@@ -227,7 +243,7 @@ function apiOverviewHtml(ref: ReferenceResponse): Html {
   const concept = (c: ReferenceConcept) =>
     html`<div class="api-res" id="api-overview-${c.key}" data-sec="overview-${c.key}">
       <div class="api-res-head"><h3>${c.title}</h3></div>
-      ${apiProseHtml(c.text)}
+      ${prose(c.text, "api-prose")}
       ${c.key === "errors" ? apiRefusalsHtml(ref.refusals) : null}
     </div>`;
   return html`<section class="api-section" id="api-overview" data-tier="overview" data-static>
@@ -339,7 +355,15 @@ function spyRail(navEl: HTMLElement, contentEl: HTMLElement): void {
   }
 }
 
-export async function renderReference(root: HTMLElement, signal: AbortSignal): Promise<void> {
+/**
+ * The API reference room. `anchor` (from `#/reference/<anchor>`) names a route to open and
+ * scroll to once the reference is in; one that names none opens the reference at its top.
+ */
+export async function renderReference(
+  root: HTMLElement,
+  signal: AbortSignal,
+  anchor?: string,
+): Promise<void> {
   setHtml(
     root,
     roomShell(
@@ -372,7 +396,9 @@ export async function renderReference(root: HTMLElement, signal: AbortSignal): P
   try {
     ref = await api<ReferenceResponse>("/api/reference", { signal });
   } catch (e) {
-    renderError(contentEl, describeError(e), () => mount(renderReference));
+    renderError(contentEl, describeError(e), () =>
+      mount((r, sig) => renderReference(r, sig, anchor)),
+    );
     return;
   }
   const look: Lookups = {
@@ -425,7 +451,13 @@ export async function renderReference(root: HTMLElement, signal: AbortSignal): P
   applyFilter("", navEl, contentEl);
   // The rail follows the reading position, and the filter, which moves every heading.
   window.addEventListener("scroll", spy, { passive: true, signal });
-  // Its own page — start at the top, not wherever the last doc was scrolled to.
+  // Its own page: start at the top, not wherever the last doc was scrolled to, or at the
+  // route the address names, opened.
   window.scrollTo(0, 0);
+  const target = anchor ? document.getElementById(`route-${anchor}`) : null;
+  if (target) {
+    $<HTMLDetailsElement>("details", target).open = true;
+    target.scrollIntoView({ block: "start" });
+  }
   spy();
 }

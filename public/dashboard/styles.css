@@ -4111,6 +4111,8 @@ button.api-filter-clear svg {
 }
 .api-rows > li {
   border-bottom: 1px solid var(--line);
+  /* A route opened from its address lands below the bar and its resource's pinned heading. */
+  scroll-margin-top: calc(var(--bar-h) + 44px);
 }
 /* One route per row: badge, then the route's name over its path, a native disclosure that
    opens in place to the full documentation. The name leads, since a reader looks for an act. */
@@ -4192,6 +4194,18 @@ button.api-filter-clear svg {
 }
 .api-route-detail {
   padding: 2px 6px 18px 82px;
+}
+/* An opened route's call, to copy as it is or as a link that opens the reference at it. */
+.api-route-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 2px 0 8px;
+}
+.api-call {
+  font: 13px var(--mono);
+  overflow-wrap: anywhere;
 }
 .api-summary {
   margin: 2px 0 0;

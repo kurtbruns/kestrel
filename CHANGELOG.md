@@ -20,6 +20,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- In the editor's API reference, each route has its own address (`#/reference/post-api-sends-id-cancel`) that opens the page at it, an opened route offers **Copy path** and **Copy link**, and descriptions render their inline code, bold text, links, and paragraphs instead of showing raw backticks.
 - The API reference opens with short topics every route shares (authentication, errors with the table of refusal codes, paging, acting safely, following changes to sends), and each resource opens with the object its routes return (the send view, a post, a subscriber, and the rest), described once field by field. Each route then says which object it returns and only what is its own, so the send's conditions and its full example appear once rather than on several routes. `GET /api/reference` carries them as `concepts`, `refusals`, `objects`, and each route's `returns`.
 - The API reference names each route by what it does ("Schedule a post", "Reschedule a send"), with the method and path beneath, in the editor and in `/api/reference.md`, and its filter matches the name; `GET /api/reference` carries it as each route's `title`.
 

@@ -80,7 +80,7 @@ export function route(): Promise<void> {
     return mount(renderSettings);
   }
   if (view === "reference") {
-    return mount(renderReference);
+    return mount((root, signal) => renderReference(root, signal, arg));
   }
   if (view === "docs") {
     return mount((root, signal) => renderDocs(arg, root, signal, sub));
