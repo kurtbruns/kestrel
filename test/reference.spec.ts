@@ -14,7 +14,7 @@ import { requireAuth } from "../src/auth/middleware";
 import { type AppEnv, getConfig } from "../src/env";
 import { buildReference, buildReferenceResponse, referenceMarkdown } from "../src/reference";
 import { OBJECTS } from "../src/reference/objects";
-import { REFUSAL_STATUS } from "../src/reference/refusals";
+import { REFUSAL_STATUS, refusalGroups } from "../src/reference/refusals";
 import { type RouteDef, Router } from "../src/router";
 import { AUTH, base } from "./support/http";
 
@@ -327,6 +327,9 @@ describe("API reference is generated from the route registration", () => {
         .filter((code) => !notCodes.has(code)),
     );
     expect([...named].sort()).toEqual(Object.keys(REFUSAL_STATUS).sort());
+    // Each code in one group only: a code listed under two moves would merge into one silently.
+    const grouped = refusalGroups().flatMap((g) => g.codes.map((c) => c.code));
+    expect(grouped.length).toBe(Object.keys(REFUSAL_STATUS).length);
   });
 
   it("describes every object a route returns, once, first under its resource, and links each route to it", () => {

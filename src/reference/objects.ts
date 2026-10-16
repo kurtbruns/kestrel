@@ -406,7 +406,7 @@ const SUBSCRIBER_FIELDS: ReferenceField[] = [
   {
     name: "suppressed",
     type: "boolean",
-    description: `Whether the address is suppressed. ${SUPPRESSED_MEANING}`,
+    description: `Whether the address is suppressed; in a list row, and beside \`subscriber\` in one subscriber's answer. ${SUPPRESSED_MEANING}`,
   },
   {
     name: "suppression_reason",

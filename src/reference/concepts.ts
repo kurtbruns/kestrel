@@ -23,7 +23,7 @@ const ERRORS = [
 
 const ACTING = [
   "A send says what can be done with it now: `actions` lists exactly the acts the server would accept, each with its method and path, and `conditions` says what is wrong, in words to show. Offer those rather than working them out from other fields.",
-  "Repeating an act is safe: one that already took effect answers success with `changed: false`, so after a lost answer, send it again. An act on a send applies to the send as it stands, whatever you last read of it. Saving a post is the exception: a save names the revision it was based on (`base_revision` or `If-Match`) and is refused once someone else has saved, so no edit is overwritten unseen.",
+  "Repeating an act is safe, so after a lost answer, send it again: one that already took effect answers success, and each route says how its repeat reads (`changed: false` on a send's cancel or reschedule, `idempotent` on Send now, `replayed` on an import's commit). An act on a send applies to the send as it stands, whatever you last read of it. Saving a post is the exception: a save names the revision it was based on (`base_revision` or `If-Match`) and is refused once someone else has saved, so no edit is overwritten unseen.",
 ];
 
 const LISTS =

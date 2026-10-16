@@ -15,6 +15,8 @@
  * Served read-only through the authed `/api/reference` route (see routes/docs.ts
  * for the sibling docs surface it mirrors).
  */
+
+import { headingAnchor } from "../../shared/docs";
 import type {
   Access,
   ObjectKey,
@@ -126,14 +128,6 @@ export function buildReferenceResponse(routes: readonly RouteDef[]): ReferenceRe
     objects: referenceObjects(),
     groups: buildReference(routes),
   };
-}
-
-/** A heading's anchor as GitHub and most Markdown renderers make it, for a link to an object. */
-export function headingAnchor(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9 _-]/g, "")
-    .replace(/ /g, "-");
 }
 
 /** A link to an object's section. */

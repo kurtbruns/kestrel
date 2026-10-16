@@ -164,7 +164,11 @@ export function createRouter({
   const notConnected: RouteRefusal = { code: "provider_not_connected" };
   const remakeRefusals: RouteRefusal[] = [
     { code: "remake_required", details: ["sends"] },
-    { code: "remake_too_close", details: ["retry_after"] },
+    {
+      code: "remake_too_close",
+      when: "A send it would re-make is inside the minimum lead; that send fires unchanged, so tell the publisher it goes out as it stands.",
+      details: ["retry_after", "sends"],
+    },
     { code: "conflict" },
   ];
   const slugRefusals: RouteRefusal[] = [{ code: "slug_invalid" }, { code: "slug_taken" }];
@@ -197,7 +201,7 @@ export function createRouter({
   const pageField: ReferenceField = {
     name: "page",
     type: "object",
-    description: "The list's `{ total, limit, offset, sort, dir }` (Lists).",
+    description: "The list's `{ total, limit, offset, sort, dir }` (Lists and paging).",
   };
   const freezeWarningsField: ReferenceField = {
     name: "warnings",
@@ -210,7 +214,7 @@ export function createRouter({
     type: "boolean",
     description: "False when the send already stood as asked, and nothing was written.",
   };
-  // A list's page size and offset, the same on every list (see Lists).
+  // A list's page size and offset, the same on every list (see Lists and paging).
   const pageParams = [
     { name: "limit", description: "Page size (default 50, max 200)." },
     { name: "offset", description: "Rows to skip." },
@@ -715,6 +719,8 @@ export function createRouter({
           sent: null,
         },
       },
+      description:
+        "The answer carries `ETag`, the current revision, to send back as `If-Match` on a save. To place a revision id in the history (for a merge after `stale_revision`), list the revisions: each carries its `id` and its number `n`.",
       handler: postRoutes.getPost,
     },
     {
@@ -876,6 +882,16 @@ export function createRouter({
         },
       ],
       errors: [notDraft],
+      returns: {
+        fields: [
+          {
+            name: "image",
+            type: "object",
+            description:
+              "`{ filename, content_type, width, height, url }`: `filename` is the name the post's Markdown references it by, `![a short description](filename)`.",
+          },
+        ],
+      },
       handler: imageRoutes.uploadImage,
     },
     {
@@ -885,6 +901,16 @@ export function createRouter({
       resource: "posts",
       title: "List a post's images",
       summary: "List a post's images.",
+      returns: {
+        fields: [
+          {
+            name: "images",
+            type: "object[]",
+            description:
+              "Each `{ filename, content_type, width, height, url }`, as an upload answers it.",
+          },
+        ],
+      },
       handler: imageRoutes.listImages,
     },
     {
@@ -909,6 +935,27 @@ export function createRouter({
         "Render the post to its email (returns the hosted URL, subject, warnings, and `frozen`).",
       description:
         "Once the post is scheduled this is its frozen copy, exactly as it will fire, and once sent the record's; a draft renders live (SPEC §5). A frozen copy's `warnings` are the ones its render gave when it was frozen or last re-made.",
+      returns: {
+        fields: [
+          {
+            name: "url",
+            type: "string",
+            description:
+              "The rendered email as a page behind the admin gate, `GET /api/posts/:id/preview`: not a public link.",
+          },
+          { name: "subject", type: "string", description: "The email's subject." },
+          {
+            name: "warnings",
+            type: "string[]",
+            description: "What the render found wrong (an image the post never uploaded, say).",
+          },
+          {
+            name: "frozen",
+            type: "boolean",
+            description: "Whether it is a scheduled or sent send's frozen copy.",
+          },
+        ],
+      },
       handler: renderRoutes.preview,
     },
     {
@@ -1377,7 +1424,7 @@ export function createRouter({
           type: '"unsent" | "accepted"',
           required: true,
           description:
-            "`unsent`: assume they were not sent, so the address is picked up by the next post. `accepted`: assume they were sent, on the publisher's word.",
+            "The publisher's choice, after you relay the `wedged` condition's message; never choose it yourself. `unsent`: assume they were not sent, so the address is picked up by the next post. `accepted`: assume they were sent.",
         },
       ],
       errors: [
@@ -1471,7 +1518,8 @@ export function createRouter({
         ...pageParams,
         {
           name: "email",
-          description: "Exact-match lookup of a single subscriber (bypasses the list).",
+          description:
+            "An exact address: answers `{ subscriber, suppressed }`, as `GET /api/subscribers/:id` does, in place of the list, or 404 when no one has it.",
         },
       ],
       returns: {
@@ -1560,6 +1608,17 @@ export function createRouter({
       title: "Unsubscribe a subscriber",
       summary: "Unsubscribe a subscriber at their request (SPEC §7).",
       description: `${SUBSCRIBER_ACTIONS.unsubscribe.when} Immediate and idempotent, as their own unsubscribe link is (I2): it removes consent and never confirms anyone. To stop mailing an address on your own judgment, block it instead (\`POST /api/suppressions\`), which records that the decision was yours.`,
+      returns: {
+        object: "subscriber",
+        as: "subscriber",
+        fields: [
+          {
+            name: "suppressed",
+            type: "boolean",
+            description: "Whether its address is suppressed.",
+          },
+        ],
+      },
       handler: subscriberRoutes.unsubscribe,
     },
     {
@@ -1682,7 +1741,8 @@ export function createRouter({
         {
           name: "acknowledge_sends",
           type: "string[]",
-          description: "The id of every send in the plan's `sends_growing`.",
+          description:
+            "The id of every send in the plan's `sends_growing`. Only a person can give it: a service token is refused `sends_acknowledgement_required` whatever it sends, and the publisher finishes that import in the dashboard.",
         },
       ],
       errors: [
