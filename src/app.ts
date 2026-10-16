@@ -1317,8 +1317,7 @@ export function createRouter({
       access: "admin",
       resource: "suppressions",
       summary: "Clear an address's suppression, so it may be mailed again (SPEC §7).",
-      description:
-        "A deliberate, rare act. Unblocking a block (`manual`) undoes a block by hand, the publisher's or one an import brought; clear one only on the publisher's word. Clearing a bounce or complaint lets mail go to an address that failed or reported spam, so do it only when the publisher knows the reason is gone. An erasure's marker (`erased`) is never cleared here: only the person's own confirmation lifts it, so it refuses 409 `erasure_marker` and leaves it. An erasure that found a block already on the address keeps the block instead of a marker, and clearing that block clears the address. Answers `cleared: false` when the address had no suppression.",
+      description: `${SUBSCRIBER_ACTIONS.clear.when} A deliberate, rare act. Unblocking a block (\`manual\`) undoes a block by hand, the publisher's or one an import brought; clear one only on the publisher's word. An erasure's marker (\`erased\`) is never cleared here: only the person's own confirmation lifts it, so it refuses 409 \`erasure_marker\` and leaves it. An erasure that found a block already on the address keeps the block instead of a marker, and clearing that block clears the address. Answers \`cleared: false\` when the address had no suppression.`,
       example: { response: { email: "reader@example.com", cleared: true } },
       handler: suppressionRoutes.clear,
     },

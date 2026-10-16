@@ -326,7 +326,7 @@ function renderSubTable(
         const flag = row.suppression_reason ? SUPPRESSION_FLAG[row.suppression_reason] : null;
         if (flag === "bounced" || flag === "complaint") {
           items.push({
-            label: "Clear",
+            label: SUBSCRIBER_ACTIONS.clear.label,
             danger: true,
             onClick: () => confirmClear(row, flag, reload, signal),
           });

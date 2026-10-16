@@ -101,6 +101,7 @@ describe("API reference is generated from the route registration", () => {
     );
     expect(describe("POST /api/suppressions")).toContain(SUBSCRIBER_ACTIONS.block.when);
     expect(describe("POST /api/subscribers/:id/erase")).toContain(SUBSCRIBER_ACTIONS.erase.when);
+    expect(describe("DELETE /api/suppressions/:email")).toContain(SUBSCRIBER_ACTIONS.clear.when);
     expect(describe("DELETE /api/suppressions/:email")).toContain("erasure_marker");
   });
 

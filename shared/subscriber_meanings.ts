@@ -52,7 +52,8 @@ export interface SubscriberAction {
 
 /**
  * The acts on a subscriber, each recording whose decision it was: an unsubscribe and an
- * erasure are the person's, made on their request; a block is the publisher's own.
+ * erasure are the person's, made on their request; a block is the publisher's own, and so
+ * is clearing a bounce or complaint, which overrides the provider's verdict.
  */
 export const SUBSCRIBER_ACTIONS = {
   unsubscribe: {
@@ -62,6 +63,10 @@ export const SUBSCRIBER_ACTIONS = {
   block: {
     label: "Block",
     when: "When you decide yourself to stop mailing an address. Their status stays as it was, and you can unblock it.",
+  },
+  clear: {
+    label: "Clear",
+    when: "When you know the reason for a bounce or complaint is gone, such as a reader who tells you their mailbox is fixed. Mail goes again to an address that failed or reported spam.",
   },
   erase: {
     label: "Erase",

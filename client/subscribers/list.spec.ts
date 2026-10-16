@@ -517,6 +517,10 @@ describe("subscribers view", () => {
         "Block",
         "When you decide yourself to stop mailing an address. Their status stays as it was, and you can unblock it.",
       ],
+      [
+        "Clear",
+        "When you know the reason for a bounce or complaint is gone, such as a reader who tells you their mailbox is fixed. Mail goes again to an address that failed or reported spam.",
+      ],
       ["Erase", "When they ask you to delete their data. It can’t be undone."],
     ]);
     expect($$("#subLegend h2").map((h) => h.textContent)).toEqual([
