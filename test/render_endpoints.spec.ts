@@ -537,9 +537,9 @@ describe("a test that isn't sent says why (SPEC §5)", () => {
     return { status: res.status, body: (await readJson(res)) as TestSendResponse };
   }
 
-  // SES's sandbox answer to an address not verified in it, naming that address.
-  const sandboxWords = (to: string) =>
-    `ses 400 MessageRejected: Email address is not verified. The following identities failed the check in region US-EAST-1: ${to}`;
+  // A rejection that is the address's own: SES refuses the message for that recipient. (A
+  // sandbox account's refusal of an unverified address is the account's, a halt, below.)
+  const rejectedWords = (to: string) => `ses MESSAGE_REJECTED: Illegal address: ${to}`;
 
   it("a refused post test carries the provider's words, and says resending gets the same answer", async () => {
     const warn = vi.spyOn(console, "warn");
@@ -549,7 +549,7 @@ describe("a test that isn't sent says why (SPEC §5)", () => {
         email: r.email,
         accepted: false,
         retryable: false,
-        error: sandboxWords(r.email),
+        error: rejectedWords(r.email),
       })),
     }));
     const { status, body } = await postTest("unverified@example.com");
@@ -557,8 +557,8 @@ describe("a test that isn't sent says why (SPEC §5)", () => {
     expect(body.sent).toBe(false);
     expect(body.not_sent).toEqual({
       may_have_arrived: false,
-      error: sandboxWords("unverified@example.com"),
-      message: `The provider refused it: ${sandboxWords("unverified@example.com")}. Sending to this address again gets the same answer until what the provider names is fixed.`,
+      error: rejectedWords("unverified@example.com"),
+      message: `The provider refused it: ${rejectedWords("unverified@example.com")}. Sending to this address again gets the same answer until what the provider names is fixed.`,
     });
     // Logged without the address: SES's words keep only its domain (SPEC §12).
     const lines = logged(warn).filter((l) => l.event === "test.refused");
@@ -583,6 +583,22 @@ describe("a test that isn't sent says why (SPEC §5)", () => {
       may_have_arrived: false,
       error: "ses 400 MailFromDomainNotVerifiedException",
       message: `The provider refused it: ses 400 MailFromDomainNotVerifiedException. ${refusalAdvice("sender")} Sending the test again gets the same answer until that is fixed.`,
+    });
+  });
+
+  it("a post test the SES sandbox refuses says to request production access, not to send again (SPEC §12)", async () => {
+    const words =
+      "ses 400 MessageRejected: Email address is not verified. The following identities failed the check in region US-EAST-1: unverified@example.com";
+    answerTests(async () => ({
+      kind: "halted",
+      halt: { reason: "account", cause: "sandbox", error: words },
+    }));
+    const { body } = await postTest("unverified@example.com");
+    expect(body.sent).toBe(false);
+    expect(body.not_sent).toEqual({
+      may_have_arrived: false,
+      error: words,
+      message: `The provider refused it: ${words}. ${refusalAdvice("sandbox")} Sending the test again gets the same answer until that is fixed.`,
     });
   });
 
@@ -631,7 +647,7 @@ describe("a test that isn't sent says why (SPEC §5)", () => {
     answerTests(async ([a, b, c]) => ({
       kind: "answered",
       results: [
-        { email: a!.email, accepted: false, retryable: false, error: sandboxWords(a!.email) },
+        { email: a!.email, accepted: false, retryable: false, error: rejectedWords(a!.email) },
         {
           email: b!.email,
           accepted: false,
@@ -661,8 +677,8 @@ describe("a test that isn't sent says why (SPEC §5)", () => {
       {
         email: "first@example.com",
         may_have_arrived: false,
-        error: sandboxWords("first@example.com"),
-        message: `The provider refused it: ${sandboxWords("first@example.com")}. Sending to this address again gets the same answer until what the provider names is fixed.`,
+        error: rejectedWords("first@example.com"),
+        message: `The provider refused it: ${rejectedWords("first@example.com")}. Sending to this address again gets the same answer until what the provider names is fixed.`,
       },
       {
         email: "second@example.com",
