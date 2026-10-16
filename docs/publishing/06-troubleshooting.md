@@ -75,7 +75,7 @@ Under **Subscribers**, a suppressed address keeps its status and carries a label
 
 ### Lifting a suppression
 
-Lift one only when you know the address works again, such as a reader who tells you their mailbox is fixed. Mailing an address that keeps failing can hurt every send after it. In a subscriber's ⋯ menu, **Unblock** lifts a block and **Clear** lifts a bounce or a complaint, after asking you to confirm. Past records keep the bounce or complaint where it happened.
+Lift one only when you know the address works again, such as a reader who tells you their mailbox is fixed. Mailing an address that keeps failing can hurt every send after it. A complaint is different: the reader marked your mail as spam, so lift it only when they ask you for your posts again. Providers allow far fewer complaints than bounces. In a subscriber's ⋯ menu, **Unblock** lifts a block and **Clear** lifts a bounce or a complaint, after asking you to confirm. Past records keep the bounce or complaint where it happened.
 
 ## An import is refused
 

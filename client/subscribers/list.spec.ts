@@ -396,13 +396,13 @@ describe("subscribers view", () => {
     pick("s3", "Clear");
     expect($(".modal h3").textContent).toBe("Clear this complaint?");
     expect($(".modal .hint").textContent).toBe(
-      "Lets mail go again to <script>@b.c, an address that reported your mail as spam. Clear it only when you know the reason is gone. They’ll receive posts again only once they’re confirmed.",
+      "Lets mail go again to <script>@b.c, an address that reported your mail as spam. Clear it only when they’ve asked you to send them your posts again. They’ll receive posts again only once they’re confirmed.",
     );
     $("#cCancel").click();
     pick("s2", "Clear");
     expect($(".modal h3").textContent).toBe("Clear this bounce?");
     expect($(".modal .hint").textContent).toBe(
-      "Lets mail go again to bad@b.c, an address where mail failed. Clear it only when you know the reason is gone. They’re confirmed, so they’ll receive your posts again.",
+      "Lets mail go again to bad@b.c, an address where mail failed. Clear it only when you know the reason is gone, such as a reader who tells you their mailbox is fixed. They’re confirmed, so they’ll receive your posts again.",
     );
     expect($("#cGo").classList.contains("danger")).toBe(true);
     $("#cGo").click();
@@ -519,7 +519,7 @@ describe("subscribers view", () => {
       ],
       [
         "Clear",
-        "When you know the reason for a bounce or complaint is gone, such as a reader who tells you their mailbox is fixed. Mail goes again to an address that failed or reported spam.",
+        "When you know a bounce’s cause is gone, such as a reader who tells you their mailbox is fixed, or when someone who marked your mail as spam asks you for it again. Mail goes again to an address that failed or reported spam.",
       ],
       ["Erase", "When they ask you to delete their data. It can’t be undone."],
     ]);

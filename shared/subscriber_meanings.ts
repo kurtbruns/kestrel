@@ -66,7 +66,7 @@ export const SUBSCRIBER_ACTIONS = {
   },
   clear: {
     label: "Clear",
-    when: "When you know the reason for a bounce or complaint is gone, such as a reader who tells you their mailbox is fixed. Mail goes again to an address that failed or reported spam.",
+    when: "When you know a bounce’s cause is gone, such as a reader who tells you their mailbox is fixed, or when someone who marked your mail as spam asks you for it again. Mail goes again to an address that failed or reported spam.",
   },
   erase: {
     label: "Erase",

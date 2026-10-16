@@ -277,8 +277,9 @@ export function confirmUnblock(sub: Subscriber, onDone: () => void, signal: Abor
 /**
  * Clear lifts a bounce or a complaint, which records someone else's verdict on the address
  * (the provider's, or the previous service's), so it is the riskier way back to mailing it:
- * the dialog says the address failed or reported spam, and to clear it only when the
- * publisher knows the reason is gone, as the API reference does (SPEC §7).
+ * the dialog says the address failed or reported spam (SPEC §7). A bounce is cleared once the
+ * publisher knows its cause is gone. A complaint was the person's own act, and providers
+ * tolerate far fewer of them, so only the person asking for the mail again clears one.
  */
 export function confirmClear(
   sub: Subscriber,
@@ -289,14 +290,14 @@ export function confirmClear(
   const what = flag === "bounced" ? "bounce" : "complaint";
   const why =
     flag === "bounced"
-      ? "an address where mail failed"
-      : "an address that reported your mail as spam";
+      ? "an address where mail failed. Clear it only when you know the reason is gone, such as a reader who tells you their mailbox is fixed"
+      : "an address that reported your mail as spam. Clear it only when they’ve asked you to send them your posts again";
   const mailed =
     sub.status === "confirmed"
       ? "They’re confirmed, so they’ll receive your posts again."
       : "They’ll receive posts again only once they’re confirmed.";
   const m = modal(
-    html`<h3>Clear this ${what}?</h3><p class="hint">Lets mail go again to <strong>${sub.email}</strong>, ${why}. Clear it only when you know the reason is gone. ${mailed}</p><div class="actions"><button type="button" id="cCancel">Cancel</button><button type="button" class="danger" id="cGo">Clear</button></div>`,
+    html`<h3>Clear this ${what}?</h3><p class="hint">Lets mail go again to <strong>${sub.email}</strong>, ${why}. ${mailed}</p><div class="actions"><button type="button" id="cCancel">Cancel</button><button type="button" class="danger" id="cGo">Clear</button></div>`,
     signal,
   );
   const go = $<HTMLButtonElement>("#cGo", m.el);
