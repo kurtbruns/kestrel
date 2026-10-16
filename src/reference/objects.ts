@@ -11,6 +11,7 @@ import {
   BOUNCE_SPIKE_MIN,
   BOUNCE_SPIKE_RATE,
   BOUNCE_SPIKE_RECENT_MS,
+  type ConditionKind,
   DAILY_WRITES_SEND_RECIPIENTS,
   NO_RECEIPTS_AFTER_MS,
   SELF_THROTTLE_HALTS,
@@ -104,6 +105,26 @@ export function sendBrief(over: Record<string, unknown> = {}): Record<string, un
     ...over,
   };
 }
+
+/**
+ * What each condition on a send means, most severe first, as the send view lists them. A
+ * Record over `ConditionKind`, so a new condition fails to compile until it is described here.
+ */
+const CONDITION_MEANING: Record<ConditionKind, string> = {
+  missed: `Still scheduled ${MISSED_THRESHOLD_MS / 60_000} minutes past its fire time: the sweep is not running.`,
+  stuck: `No recipient handed off for ${STUCK_THRESHOLD_MS / 60_000} minutes, with no halt or wedge to explain it. A send that keeps handing off is never stuck.`,
+  wedged: "`count` recipients whose delivery is unknown, settled by Resolve (its `action`).",
+  refused:
+    "An `account` halt: its `cause`, its words as `error`, the `advice` for the fix, and `retry_at`.",
+  provider_unavailable: `An \`unavailable\` halt, retried at \`retry_at\`; \`warn\` once a rate limit has refused ${SELF_THROTTLE_HALTS} retries' first requests in a row (SES_MAX_SEND_RATE set too high).`,
+  bounce_spike: `A send finished within ${RECENT_DAYS} days whose confirmed bounces reached ${BOUNCE_SPIKE_RATE * 100}% of its audience at fire, at least ${BOUNCE_SPIKE_MIN}: \`bounced\` and \`rate\`.`,
+  no_receipts: `A send finished within ${RECENT_DAYS} days, ${NO_RECEIPTS_AFTER_MS / 60_000} minutes past dispatch, with no receipt for any of its \`accepted\`: the provider's events may not be reaching the webhook.`,
+  remade:
+    "A template or identity change re-made the scheduled email after its last test, `tested_at`; a test of the post clears it.",
+  untested:
+    "`info`: no test of the scheduled email has been sent, and it was never re-made; a test of the post clears it.",
+  daily_writes: `On the Workers Free plan's limits, a scheduled send to more than ${DAILY_WRITES_SEND_RECIPIENTS.toLocaleString("en-US")} recipients (fewer after the day's imports), which may spend D1's daily written rows: \`recipients\`. Never a refusal.`,
+};
 
 const SEND_FIELDS: ReferenceField[] = [
   { name: "id", type: "string", description: "The send's id." },
@@ -222,52 +243,10 @@ const SEND_FIELDS: ReferenceField[] = [
     type: "object[]",
     description:
       "What is wrong with the send, or worth knowing, now (SPEC §8, §12), most severe first. Each has `kind`, `severity` (`action`: a person must act; `warn`; `info`), `since` (or null), a `message` to show as it stands, the `action` that settles it or null, and the fields its kind names.",
-    values: [
-      {
-        value: "missed",
-        description: `Still scheduled ${MISSED_THRESHOLD_MS / 60_000} minutes past its fire time: the sweep is not running.`,
-      },
-      {
-        value: "stuck",
-        description: `No recipient handed off for ${STUCK_THRESHOLD_MS / 60_000} minutes, with no halt or wedge to explain it. A send that keeps handing off is never stuck.`,
-      },
-      {
-        value: "wedged",
-        description:
-          "`count` recipients whose delivery is unknown, settled by Resolve (its `action`).",
-      },
-      {
-        value: "refused",
-        description:
-          "An `account` halt: its `cause`, its words as `error`, the `advice` for the fix, and `retry_at`.",
-      },
-      {
-        value: "provider_unavailable",
-        description: `An \`unavailable\` halt, retried at \`retry_at\`; \`warn\` once a rate limit has refused ${SELF_THROTTLE_HALTS} retries' first requests in a row (SES_MAX_SEND_RATE set too high).`,
-      },
-      {
-        value: "bounce_spike",
-        description: `A send finished within ${RECENT_DAYS} days whose confirmed bounces reached ${BOUNCE_SPIKE_RATE * 100}% of its audience at fire, at least ${BOUNCE_SPIKE_MIN}: \`bounced\` and \`rate\`.`,
-      },
-      {
-        value: "no_receipts",
-        description: `A send finished within ${RECENT_DAYS} days, ${NO_RECEIPTS_AFTER_MS / 60_000} minutes past dispatch, with no receipt for any of its \`accepted\`: the provider's events may not be reaching the webhook.`,
-      },
-      {
-        value: "remade",
-        description:
-          "A template or identity change re-made the scheduled email after its last test, `tested_at`; a test of the post clears it.",
-      },
-      {
-        value: "untested",
-        description:
-          "`info`: no test of the scheduled email has been sent, and it was never re-made; a test of the post clears it.",
-      },
-      {
-        value: "daily_writes",
-        description: `On the Workers Free plan's limits, a scheduled send to more than ${DAILY_WRITES_SEND_RECIPIENTS.toLocaleString("en-US")} recipients (fewer after the day's imports), which may spend D1's daily written rows: \`recipients\`. Never a refusal.`,
-      },
-    ],
+    values: (Object.keys(CONDITION_MEANING) as ConditionKind[]).map((kind) => ({
+      value: kind,
+      description: CONDITION_MEANING[kind],
+    })),
   },
   {
     name: "actions",
