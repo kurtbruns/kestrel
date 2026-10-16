@@ -6,6 +6,11 @@
 import type { BuildInfo } from "./build";
 import type { TestNotSent } from "./posts";
 
+/** One address a template test missed, and why. */
+export interface TemplateTestMiss extends TestNotSent {
+  email: string;
+}
+
 /** The double opt-in confirmation email's editable copy (SPEC §7). */
 export interface ConfirmationEmailCopy {
   /** The email subject. */
@@ -188,7 +193,7 @@ export interface TemplateTestResponse {
   /** The recipients the provider didn't accept, in the order asked; empty when all were sent. */
   failed: string[];
   /** Why each address in `failed` wasn't sent, in the same order. */
-  not_sent: (TestNotSent & { email: string })[];
+  not_sent: TemplateTestMiss[];
   provider: string;
   recipients: string[];
   subject: string;

@@ -72,20 +72,26 @@ export interface TestMiss {
  */
 export function notSentMessage(sent: number, total: number, missed: TestMiss[]): string {
   const byReason = new Map<string, string[]>();
+  const unexplained: string[] = [];
   for (const m of missed) {
     if (m.message) {
       byReason.set(m.message, [...(byReason.get(m.message) ?? []), m.email]);
+    } else {
+      unexplained.push(m.email);
     }
   }
   if (!byReason.size) {
     return sent
-      ? `Sent to ${sent} of ${total}. Not sent to ${missed.map((m) => m.email).join(", ")}. Send again to try those.`
+      ? `Sent to ${sent} of ${total}. Not sent to ${unexplained.join(", ")}. Send again to try those.`
       : "Not sent. Send again to try.";
   }
   // Name the addresses whenever there was more than one, so each reason says whose it is.
   const reasons = [...byReason].map(([message, emails]) =>
     total > 1 ? `${emails.join(", ")}: ${message}` : message,
   );
+  if (unexplained.length) {
+    reasons.push(`Not sent to ${unexplained.join(", ")}.`);
+  }
   return sent
     ? `Sent to ${sent} of ${total}. ${reasons.join(" ")} Send again goes only to those.`
     : reasons.join(" ");

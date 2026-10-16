@@ -299,8 +299,54 @@ describe("SesProvider.sendBatch", () => {
       kind: "answered",
       results: [
         { email: "a@example.com", accepted: true, providerId: "m1" },
-        { email: "b@example.com", accepted: false, retryable: false, unknown: true },
-        { email: "c@example.com", accepted: false, retryable: true },
+        {
+          email: "b@example.com",
+          accepted: false,
+          retryable: false,
+          error: "ses gave no answer (connection reset)",
+          unknown: true,
+        },
+        {
+          email: "c@example.com",
+          accepted: false,
+          retryable: true,
+          error: "not tried, since an earlier request got no answer",
+        },
+      ],
+    });
+  });
+
+  it("answers a test to several addresses when the first request gets no answer: that one may have arrived, the rest weren't tried", async () => {
+    let n = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      n += 1;
+      throw new Error("The operation was aborted due to timeout");
+    });
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      ["a@example.com", "b@example.com", "c@example.com"].map((email) => ({
+        email,
+        unsubscribeUrl: UNSUB,
+      })),
+      { purpose: "test", tag: "t" },
+    );
+    expect(n).toBe(1);
+    expect(r).toEqual({
+      kind: "answered",
+      results: [
+        {
+          email: "a@example.com",
+          accepted: false,
+          retryable: false,
+          error: "ses gave no answer (The operation was aborted due to timeout)",
+          unknown: true,
+        },
+        ...["b@example.com", "c@example.com"].map((email) => ({
+          email,
+          accepted: false,
+          retryable: true,
+          error: "not tried, since an earlier request got no answer",
+        })),
       ],
     });
   });

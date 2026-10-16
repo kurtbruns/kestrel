@@ -53,20 +53,25 @@ export async function sendTest(
     return recipients.map((r) => ({ email: r.email, sent: false, notSent }));
   }
   const halt = answer.halt;
-  const answers: TestAnswer[] = perRecipient(answer, recipients).map((r) =>
-    r.accepted
-      ? { email: r.email, sent: true }
-      : {
-          email: r.email,
-          sent: false,
-          // A halted request speaks for every recipient in it; an answered one only for
-          // those it held back.
-          notSent: why(r, answer.kind === "halted" || r.held ? halt : undefined),
-        },
-  );
-  const unsent = answers.flatMap((a) => (a.sent ? [] : [a.notSent]));
-  const unknown = unsent.filter((n) => n.may_have_arrived);
-  const refused = unsent.filter((n) => !n.may_have_arrived);
+  const unknown: TestNotSent[] = [];
+  const refused: TestNotSent[] = [];
+  const answers = perRecipient(answer, recipients).map((r): TestAnswer => {
+    if (r.accepted) {
+      return { email: r.email, sent: true };
+    }
+    // A halted request speaks for every recipient in it; an answered one only for those
+    // it held back.
+    const covering = answer.kind === "halted" || r.held ? halt : undefined;
+    const notSent = why(r, covering);
+    if (notSent.may_have_arrived) {
+      unknown.push(notSent);
+    } else if (covering || !r.retryable) {
+      // A recipient never tried (after an earlier request got no answer) was refused by no
+      // one, so only the line about that request explains it.
+      refused.push(notSent);
+    }
+    return { email: r.email, sent: false, notSent };
+  });
   if (unknown[0]) {
     logNotSent(provider, kind, unknown.length, unknown[0]);
   }

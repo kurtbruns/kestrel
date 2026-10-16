@@ -636,10 +636,15 @@ describe("a test that isn't sent says why (SPEC §5)", () => {
           email: b!.email,
           accepted: false,
           retryable: false,
-          error: "ses gave no answer (timeout), so it may have arrived",
+          error: "ses gave no answer (timeout)",
           unknown: true,
         },
-        { email: c!.email, accepted: false, retryable: true, error: "not sent" },
+        {
+          email: c!.email,
+          accepted: false,
+          retryable: true,
+          error: "not tried, since an earlier request got no answer",
+        },
       ],
     }));
     const tos = ["first@example.com", "second@example.com", "third@example.com"];
@@ -662,21 +667,22 @@ describe("a test that isn't sent says why (SPEC §5)", () => {
       {
         email: "second@example.com",
         may_have_arrived: true,
-        error: "ses gave no answer (timeout), so it may have arrived",
+        error: "ses gave no answer (timeout)",
         message:
-          "The provider didn’t answer, so the test may have arrived: ses gave no answer (timeout), so it may have arrived. Check the inbox before sending it again.",
+          "The provider didn’t answer, so the test may have arrived: ses gave no answer (timeout). Check the inbox before sending it again.",
       },
       {
         email: "third@example.com",
         may_have_arrived: false,
-        error: "not sent",
-        message: "It wasn’t sent: not sent. Send the test again to try it.",
+        error: "not tried, since an earlier request got no answer",
+        message:
+          "It wasn’t sent: not tried, since an earlier request got no answer. Send the test again to try it.",
       },
     ]);
     const lines = logged(warn).filter((l) => l.event.startsWith("test."));
     expect(lines.map((l) => [l.event, l.test, l.count])).toEqual([
       ["test.unknown", "template", 1],
-      ["test.refused", "template", 2],
+      ["test.refused", "template", 1],
     ]);
     expect(JSON.stringify(lines)).not.toMatch(/first@|second@|third@/);
   });

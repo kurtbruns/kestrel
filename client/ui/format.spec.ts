@@ -53,6 +53,15 @@ describe("notSentMessage", () => {
     );
   });
 
+  it("still names an address that came back with no reason beside others that did", () => {
+    expect(
+      notSentMessage(0, 2, [
+        { email: "a@b.c", message: refused },
+        { email: "b@b.c", message: "" },
+      ]),
+    ).toBe(`a@b.c: ${refused} Not sent to b@b.c.`);
+  });
+
   it("falls back to inviting a retry when there is no reason to give", () => {
     expect(notSentMessage(0, 1, [{ email: "you@b.c", message: "" }])).toBe(
       "Not sent. Send again to try.",

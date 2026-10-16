@@ -418,12 +418,13 @@ export class SesProvider implements EmailProvider {
             ? await this.sendBulk(content, batch)
             : await this.sendSingle(content, unwrap(batch[0], "a recipient"));
       } catch (err) {
-        // A request with no answer. On the first, it is the caller's to handle (the send
-        // loop leaves the batch for Resolve). After it, a one-off caller (a template test to
-        // several addresses) gets the answers it already has: this recipient's fate is
-        // unknown, and the rest were never sent. A list batch always throws, so the send
-        // loop leaves every recipient whose fate is unknown in flight (I4).
-        if (opts.purpose === "list" || (at === 0 && out.length === 0)) {
+        // A request with no answer. When it is the call's only request, it is the caller's to
+        // handle (the send loop leaves the batch for Resolve). Otherwise a one-off caller (a
+        // template test to several addresses) gets an answer for each: this recipient's fate
+        // is unknown, those before it were answered, and the rest were never tried. A list
+        // batch always throws, so the send loop leaves every recipient whose fate is unknown
+        // in flight (I4).
+        if (opts.purpose === "list" || (out.length === 0 && sendable.length === batch.length)) {
           throw err;
         }
         const words = err instanceof Error ? err.message : String(err);
@@ -432,12 +433,17 @@ export class SesProvider implements EmailProvider {
             email: r.email,
             accepted: false,
             retryable: false,
-            error: `ses gave no answer (${words}), so it may have arrived`,
+            error: `ses gave no answer (${words})`,
             unknown: true,
           });
         }
         for (const rest of sendable.slice(at + size)) {
-          out.push({ email: rest.email, accepted: false, retryable: true, error: "not sent" });
+          out.push({
+            email: rest.email,
+            accepted: false,
+            retryable: true,
+            error: "not tried, since an earlier request got no answer",
+          });
         }
         break;
       }
