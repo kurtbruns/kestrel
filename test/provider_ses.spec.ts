@@ -878,6 +878,54 @@ describe("SesProvider.sendBatch", () => {
     },
   );
 
+  // A badly signed request is answered with the Authorization header or the canonical
+  // request echoed back; SES's words keep their meaning and lose the credential (SPEC §9).
+  const echoed = (status: number, type: string, message: string) =>
+    vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ __type: type, message }), { status }));
+  const LEAKED = /AKIA|ASIA|5d672d79|IQoJb3/;
+
+  it("halts a 403 SignatureDoesNotMatch on the key without carrying the credential it echoes", async () => {
+    echoed(
+      403,
+      "SignatureDoesNotMatch",
+      "The request signature we calculated does not match. The Canonical String was 'POST\nx-amz-security-token:IQoJb3JpZ2luX2VjEJr//////////wEaCXVzLWVhc3QtMSJH\n' and the String-to-Sign was '20261016/us-east-1/ses/aws4_request' for ASIAIOSFODNN7EXAMPLE",
+    );
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
+      { purpose: "list", tag: "send-1" },
+    );
+    expect(r).toEqual({
+      kind: "halted",
+      halt: {
+        reason: "account",
+        cause: "credentials",
+        error:
+          "ses 403 SignatureDoesNotMatch: The request signature we calculated does not match. The Canonical String was 'POST\nx-amz-security-token:…\n' and the String-to-Sign was '20261016/us-east-1/ses/aws4_request' for …",
+      },
+    });
+    expect(JSON.stringify(r)).not.toMatch(LEAKED);
+  });
+
+  it("keeps the Credential and Signature an IncompleteSignatureException echoes out of SES's words", async () => {
+    echoed(
+      400,
+      "IncompleteSignatureException",
+      "Authorization header requires existence of either a 'X-Amz-Date' or a 'Date' header. Authorization=AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20261016/us-east-1/ses/aws4_request, SignedHeaders=content-type;host;x-amz-date, Signature=5d672d79c15b13162d9279b0855cfba6789a8edb4c82c400e06b5924a6f2b5d7",
+    );
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
+      { purpose: "test", tag: "t" },
+    );
+    expect(JSON.stringify(r)).toContain(
+      "ses 400 IncompleteSignatureException: Authorization header requires existence of either a 'X-Amz-Date' or a 'Date' header. Authorization=AWS4-HMAC-SHA256 Credential=…, SignedHeaders=content-type;host;x-amz-date, Signature=…",
+    );
+    expect(JSON.stringify(r)).not.toMatch(LEAKED);
+  });
+
   it.each(["test", "confirmation"] as const)(
     "holds a %s SES answers with a configuration set it can't find, rather than failing the address (SPEC §12)",
     async (purpose) => {

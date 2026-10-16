@@ -39,6 +39,7 @@ import { AwsClient } from "aws4fetch";
 import { haltRank } from "../../shared/sends";
 import type { AppEnv, Config } from "../env";
 import { log } from "../lib/log";
+import { redactCredentials } from "../lib/redact";
 import { unwrap } from "../lib/unwrap";
 import {
   type SesTemplateContent,
@@ -88,15 +89,16 @@ export function sesTraits(config: Config): ProviderTraits & { maxRequestRate: nu
   };
 }
 
-/** An SES error response as the operator reads it: the status, then SES's type and message. */
+/** An SES error response as the operator reads it: the status, then SES's type and message,
+ *  with any credential a signature error echoes back redacted. */
 export function sesErrorText(status: number, type: string, message: string): string {
   const detail = [type, message].filter(Boolean).join(": ");
-  return `ses ${status}${detail ? ` ${detail}` : ""}`;
+  return redactCredentials(`ses ${status}${detail ? ` ${detail}` : ""}`);
 }
 
 /** One entry's failed result as the operator reads it: SES's status, then its words. */
 export function sesEntryErrorText(status: string, error: string): string {
-  return `ses ${status}${error ? `: ${error}` : ""}`;
+  return redactCredentials(`ses ${status}${error ? `: ${error}` : ""}`);
 }
 
 function textResponse(body: string, status: number): Response {
