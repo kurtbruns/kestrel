@@ -40,7 +40,7 @@ export interface Principal {
   /** A service token's Client ID (Access's `common_name`, or the dev token's stand-in),
    *  which names the token so two are told apart and the right one revoked (SPEC §11).
    *  Absent on a human, and on a service token that carried none. */
-  clientId?: string;
+  tokenId?: string;
   /** How this request authenticated: a Cloudflare Access assertion, or the local dev token.
    *  What `auth.mode` reports, so it says how the caller got in rather than what is configured. */
   via: "access" | "dev";

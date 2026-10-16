@@ -72,10 +72,10 @@ export function principalFromClaims(
   const claims = Object.keys(payload).sort().join(",");
   // A service token carries its Client ID in `common_name`, already authorized by the
   // app's Service Auth policy.
-  const clientId = typeof payload.common_name === "string" ? payload.common_name : undefined;
-  if (clientId) {
+  const tokenId = typeof payload.common_name === "string" ? payload.common_name : undefined;
+  if (tokenId) {
     log.info("auth.service", { claims });
-    return { kind: "service", clientId, via: "access" };
+    return { kind: "service", tokenId, via: "access" };
   }
   // Neither a person nor a service token: some other kind of Access rule admitted it.
   log.warn("auth.unidentified", { claims });

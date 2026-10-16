@@ -21,7 +21,7 @@ const DEV_ISSUER = "kestrel-dev";
 const DEV_AUDIENCE = "kestrel-admin";
 
 /** The Client ID every local service token carries, shaped like an Access one. */
-export const DEV_CLIENT_ID = "kestrel-dev.access";
+export const DEV_TOKEN_ID = "kestrel-dev.access";
 
 const keyFor = (secret: string): Uint8Array => new TextEncoder().encode(secret);
 
@@ -31,7 +31,7 @@ export async function mintDevToken(
   claims: { email?: string } = {},
   ttl: string = "12h",
 ): Promise<string> {
-  return new SignJWT(claims.email ? { email: claims.email } : { common_name: DEV_CLIENT_ID })
+  return new SignJWT(claims.email ? { email: claims.email } : { common_name: DEV_TOKEN_ID })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuer(DEV_ISSUER)
     .setAudience(DEV_AUDIENCE)
@@ -51,8 +51,8 @@ export async function verifyDevToken(token: string, secret: string): Promise<Pri
     if (email) {
       return { kind: "human", email, via: "dev" };
     }
-    const clientId = typeof payload.common_name === "string" ? payload.common_name : undefined;
-    return { kind: "service", via: "dev", ...(clientId ? { clientId } : {}) };
+    const tokenId = typeof payload.common_name === "string" ? payload.common_name : undefined;
+    return { kind: "service", via: "dev", ...(tokenId ? { tokenId } : {}) };
   } catch {
     return null;
   }

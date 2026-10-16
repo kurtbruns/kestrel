@@ -236,10 +236,10 @@ export function createRouter({
       access: "admin",
       resource: "system",
       summary:
-        "The authenticated principal and the auth mode: how this request signed in (access or dev). A service token's principal carries its Client ID as `clientId`.",
+        "The authenticated principal and the auth mode: how this request signed in (access or dev). A service token's principal carries its Client ID as `tokenId`.",
       handler: (c) => {
-        const { kind, email, clientId, via } = unwrap(c.principal, "principal");
-        return json({ principal: { kind, email, clientId }, auth: { mode: via } });
+        const { kind, email, tokenId, via } = unwrap(c.principal, "principal");
+        return json({ principal: { kind, email, tokenId }, auth: { mode: via } });
       },
     },
     {

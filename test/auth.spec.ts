@@ -3,7 +3,7 @@ import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRouter } from "../src/app";
 import { isHumanAllowed, principalFromClaims } from "../src/auth/access";
-import { DEV_CLIENT_ID, mintDevToken, verifyDevToken } from "../src/auth/dev_token";
+import { DEV_TOKEN_ID, mintDevToken, verifyDevToken } from "../src/auth/dev_token";
 import type { AppEnv } from "../src/env";
 import { getConfig } from "../src/env";
 import type { Principal, RequestContext } from "../src/router";
@@ -49,7 +49,7 @@ describe("Access claims to a principal", () => {
     const payload = { common_name: CLIENT_ID, sub: "", iss: "https://team", aud: ["aud-tag"] };
     expect(principalFromClaims(payload, ["you@example.com"])).toEqual({
       kind: "service",
-      clientId: CLIENT_ID,
+      tokenId: CLIENT_ID,
       via: "access",
     });
     expect(lines()).toEqual([
@@ -140,7 +140,7 @@ describe("auth on the admin surface", () => {
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      principal: { kind: "service", clientId: DEV_CLIENT_ID },
+      principal: { kind: "service", tokenId: DEV_TOKEN_ID },
       auth: { mode: "dev" },
     });
   });
@@ -336,7 +336,7 @@ describe("the auth mode follows how the request signed in", () => {
       headers: await assertion({ common_name: "e367c0ffee5eb4.access" }),
     });
     expect(await service.json()).toEqual({
-      principal: { kind: "service", clientId: "e367c0ffee5eb4.access" },
+      principal: { kind: "service", tokenId: "e367c0ffee5eb4.access" },
       auth: { mode: "access" },
     });
     // One with neither claim is still admitted for now, with no name to give.

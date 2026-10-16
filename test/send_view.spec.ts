@@ -10,7 +10,7 @@ import type {
   SendView,
 } from "../shared/sends";
 import { STUCK_THRESHOLD_MS } from "../shared/sends";
-import { DEV_CLIENT_ID } from "../src/auth/dev_token";
+import { DEV_TOKEN_ID } from "../src/auth/dev_token";
 import * as posts from "../src/db/posts";
 import type { SendRow } from "../src/db/sends";
 import * as sends from "../src/db/sends";
@@ -180,7 +180,7 @@ describe("one SendView on every route", () => {
     const row = await env.DB.prepare("SELECT error FROM deliveries WHERE send_id = ?")
       .bind(send.id)
       .first<{ error: string }>();
-    expect(row?.error).toContain(`(service ${DEV_CLIENT_ID})`);
+    expect(row?.error).toContain(`(service ${DEV_TOKEN_ID})`);
   });
 
   it("gives no time to finish while the send backs off, and one between ticks", async () => {

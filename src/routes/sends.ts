@@ -393,8 +393,7 @@ export async function resolve(c: RequestContext): Promise<Response> {
   const request = await readJsonObject(c);
   const outcome = oneOf(request, "resolution", ["unsent", "accepted"]);
   const principal = unwrap(c.principal, "principal");
-  const actor =
-    principal.email ?? (principal.clientId ? `service ${principal.clientId}` : "service");
+  const actor = principal.email ?? (principal.tokenId ? `service ${principal.tokenId}` : "service");
   const id = param(c, "id");
   const { resolved, completed } = await resolveStuckSend(c.env, id, outcome, actor);
   const body: ResolveResponse = { ...(await answerWith(c, id)), resolved, completed };

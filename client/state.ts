@@ -6,7 +6,7 @@ import type { SettingsResponse } from "../shared/settings";
 
 /** The boot probe's answer (GET /api/whoami): who we are and which auth mode gates this surface. */
 export interface Session {
-  principal: { kind: "human" | "service"; email?: string; clientId?: string };
+  principal: { kind: "human" | "service"; email?: string; tokenId?: string };
   auth: { mode: "access" | "dev" };
 }
 
