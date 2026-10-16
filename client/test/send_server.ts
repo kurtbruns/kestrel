@@ -75,7 +75,19 @@ export function sendView(row: SendSummary, over: Partial<SendView> = {}): SendVi
       fixed_at: row.audience_resolved_at,
     },
     counts,
-    dispatch: { done: 0, percent: 0, rate_per_min: null, eta_ms: null },
+    dispatch: {
+      done: 0,
+      percent: 0,
+      rate_per_min: null,
+      eta_ms: null,
+      duration_ms:
+        row.status === "sent" &&
+        row.started_at !== null &&
+        row.completed_at !== null &&
+        row.completed_at >= row.started_at
+          ? row.completed_at - row.started_at
+          : null,
+    },
     delivery: {
       confirmed: row.c_delivered + row.c_bounced + row.c_complained,
       percent_of_accepted: 0,
@@ -290,7 +302,19 @@ export function sendServer(rows: SendSummary[] = []) {
       next_change_at: nextChange(s, now),
       email_only: s.extras.email_only ?? false,
       web_link: s.extras.web_link ?? "unlisted",
-      dispatch: { done: 0, percent: 0, rate_per_min: null, eta_ms: s.extras.eta_ms ?? null },
+      dispatch: {
+        done: 0,
+        percent: 0,
+        rate_per_min: null,
+        eta_ms: s.extras.eta_ms ?? null,
+        duration_ms:
+          s.row.status === "sent" &&
+          s.row.started_at !== null &&
+          s.row.completed_at !== null &&
+          s.row.completed_at >= s.row.started_at
+            ? s.row.completed_at - s.row.started_at
+            : null,
+      },
       ...(s.extras.archive === undefined
         ? {}
         : { links: { ...sendView(s.row).links, archive: s.extras.archive } }),

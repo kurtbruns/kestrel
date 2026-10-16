@@ -535,6 +535,8 @@ function renderFrozenRecord(
   }
   const total = outcomes.recipients;
   const sentAt = send.completed_at ?? send.fire_at;
+  const duration = send.dispatch.duration_ms;
+  const durationLabel = duration === null ? null : fmtDuration(Math.max(duration, 1));
 
   // The page splits in two (DESIGN §3): the post, what it is on the web and what can still be
   // done with it, and its delivery, the record of how the send went, which nothing changes.
@@ -546,7 +548,7 @@ function renderFrozenRecord(
     </div>
     <div class="rec-head rec-head-page">
       <div class="watch-title"><h1>${send.subject || html`<em>untitled</em>`}</h1><span id="recPill">${phasePill(send.phase)}</span></div>
-      <div class="rec-meta">Sent ${fmt(sentAt)} · ${total.toLocaleString()} recipients</div>
+      <div class="rec-meta">Sent ${fmt(sentAt)}${durationLabel === null ? "" : ` · went out in ${durationLabel}`} · ${total.toLocaleString()} recipients</div>
     </div>
     <section class="card rec-post" aria-labelledby="recPostTitle">
       <h2 class="rec-part-title" id="recPostTitle">The post</h2>

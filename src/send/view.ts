@@ -214,6 +214,13 @@ export function buildSendView(
 
   const done = Math.max(0, total - counts.pending - counts.in_flight);
   const dispatchPercent = total > 0 ? round((100 * done) / total) : 0;
+  const dispatchDurationMs =
+    send.status === "sent" &&
+    send.started_at !== null &&
+    send.completed_at !== null &&
+    send.completed_at >= send.started_at
+      ? send.completed_at - send.started_at
+      : null;
 
   // Throughput and time to finish, counted in sweep ticks (`tickEstimate`). Reported only
   // while sending; the time to finish only while handing off (below).
@@ -294,6 +301,7 @@ export function buildSendView(
       percent: dispatchPercent,
       rate_per_min: ratePerMin,
       eta_ms: handingOff ? etaMs : null,
+      duration_ms: dispatchDurationMs,
     },
     delivery: { confirmed, percent_of_accepted: deliveryPercent },
     provider: { name: config.provider, halt },
