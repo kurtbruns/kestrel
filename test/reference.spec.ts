@@ -319,6 +319,7 @@ describe("API reference is generated from the route registration", () => {
       "reason",
       "erased_at",
       "acknowledge_erasure",
+      "markdown",
     ]);
     const named = new Set(
       [...section.matchAll(/`([a-z][a-z_]+)`/g)]

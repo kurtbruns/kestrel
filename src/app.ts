@@ -826,7 +826,7 @@ export function createRouter({
         {
           code: "stale_revision",
           when: "Another save landed since the base revision.",
-          details: ["current_revision", "updated_at", "author"],
+          details: ["current_revision", "updated_at", "author", "post", "markdown"],
         },
         notDraft,
         ...slugRefusals,
