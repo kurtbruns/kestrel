@@ -352,8 +352,10 @@ describe("reference room", () => {
     );
     // The refusal table, each group led by its next move.
     expect($$(".api-refusals tr").map((tr) => tr.textContent)).toEqual([
-      "Nothing: the act no longer applies409 window_closedThe fire time has passed.",
+      "Nothing: the act no longer applies",
+      "409 window_closedThe fire time has passed.",
     ]);
+    expect($(".api-refusals tr.api-move th").getAttribute("colspan")).toBe("2");
     // An object's fields, an enum's values under its line, and its example.
     expect($$("#api-objects-send .api-fields tr").map((tr) => tr.textContent)).toEqual([
       "statusstringIts state.scheduled Cancelable.",

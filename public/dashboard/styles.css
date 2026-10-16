@@ -1968,10 +1968,12 @@ th.num .th-sort {
 .api-refusals {
   margin-top: 10px;
 }
-.api-refusals td.api-move {
-  white-space: normal;
-  width: 24%;
+.api-refusals tr.api-move th {
+  padding: 10px 10px 4px;
+  font-size: 12.5px;
   font-weight: 600;
+  text-align: left;
+  background: var(--hover);
 }
 /* A refusal's status, beside its code. */
 .api-status {

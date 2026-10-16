@@ -377,6 +377,20 @@ describe("API reference is generated from the route registration", () => {
     expect(md.indexOf("## Following changes")).toBeLessThan(md.indexOf("## Admin"));
   });
 
+  it("shows each answer's send at the change its cursor stands at, as the server answers", () => {
+    // An answer's cursor is the change sequence at its read, and the send in it is as of that
+    // read: an act's answer carries the send its act just changed, so its rev is the cursor's.
+    let checked = 0;
+    for (const d of defs) {
+      const res = d.example?.response as { send?: { rev?: number }; cursor?: string } | undefined;
+      if (res?.send?.rev !== undefined && res.cursor !== undefined) {
+        expect(res.send.rev, `${d.method} ${d.path}`).toBe(Number(res.cursor.split(".")[0]));
+        checked++;
+      }
+    }
+    expect(checked).toBe(6);
+  });
+
   it("a newly registered route appears in the reference with no separate doc to touch", () => {
     const r = new Router();
     const added: RouteDef = {

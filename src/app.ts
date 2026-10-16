@@ -1308,7 +1308,7 @@ export function createRouter({
         "The review window closes at the fire time (SPEC §6). A send canceled already answers `changed: false`, so a retried cancel is safe.",
       example: {
         response: {
-          send: sendBrief({ status: "canceled", phase: "canceled" }),
+          send: sendBrief({ status: "canceled", phase: "canceled", rev: 58 }),
           cursor: "58.1768467620000",
           changed: true,
         },
@@ -1337,7 +1337,11 @@ export function createRouter({
         "), and the time is rounded up to the next whole minute as when scheduling. A move to the time it already has answers `changed: false` before the lead is checked. `email_only`, `slug`, or `slug_auto` is a 400: those are the post's, at `PUT /api/posts/:id/settings`.",
       example: {
         request: { fire_at: "2026-01-16T09:00:00Z" },
-        response: { send: scheduledBrief, cursor: "58.1768467620000", changed: true },
+        response: {
+          send: { ...scheduledBrief, rev: 58 },
+          cursor: "58.1768467620000",
+          changed: true,
+        },
       },
       body: [fireAtField],
       errors: [
@@ -1361,7 +1365,7 @@ export function createRouter({
       example: {
         request: { resolution: "unsent" },
         response: {
-          send: sendBrief({ status: "sent", phase: "settling" }),
+          send: sendBrief({ status: "sent", phase: "settling", rev: 58 }),
           cursor: "58.1768467620000",
           resolved: 12,
           completed: true,

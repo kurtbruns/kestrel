@@ -210,14 +210,16 @@ function apiSectionHtml(g: ReferenceGroup, look: Lookups): Html {
 function apiProseHtml(text: string): Html {
   return html`${text.split(/\n\n+/).map((p) => html`<p class="api-prose">${p}</p>`)}`;
 }
-// The refusal codes, grouped by the client's next move.
+// The refusal codes, grouped by the client's next move: each move a heading row across the
+// table, so a code and its meaning keep the width.
 function apiRefusalsHtml(groups: readonly ReferenceRefusalGroup[]): Html {
-  const rows = groups.flatMap((g) =>
-    g.codes.map(
-      (c, i) =>
-        html`<tr><td class="api-move">${i === 0 ? g.move : null}</td><td><span class="api-status">${c.status}</span> <code>${c.code}</code></td><td class="muted">${c.meaning}</td></tr>`,
+  const rows = groups.flatMap((g) => [
+    html`<tr class="api-move"><th colspan="2">${g.move}</th></tr>`,
+    ...g.codes.map(
+      (c) =>
+        html`<tr><td><span class="api-status">${c.status}</span> <code>${c.code}</code></td><td class="muted">${c.meaning}</td></tr>`,
     ),
-  );
+  ]);
   return html`<table class="api-query api-refusals"><tbody>${rows}</tbody></table>`;
 }
 // The topics every route shares, before the routes: a static section the route filter hides.
