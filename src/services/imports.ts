@@ -24,6 +24,7 @@ import {
   IMPORT_OUTCOMES,
   type ImportCommitResponse,
   type ImportDifference,
+  type ImportFileError,
   type ImportFileKind,
   type ImportOutcome,
   type ImportPlanResponse,
@@ -197,15 +198,9 @@ export function fileSha256(text: string): Promise<string> {
 }
 
 /** A 400 a client fixes by changing the file, with what was wrong and where. */
-function fileRefusal(error: {
-  code: string;
-  message: string;
-  row?: number;
-  column?: string;
-  allowed?: readonly string[];
-}): HttpError {
+function fileRefusal(error: ImportFileError): HttpError {
   const { code, message, ...at } = error;
-  return new HttpError(400, code, message, { field: "file", ...at });
+  return new HttpError(code, message, { field: "file", ...at });
 }
 
 /**
@@ -231,7 +226,6 @@ export async function planImport(
 ): Promise<Plan> {
   const tooMany = (rows: string) =>
     new HttpError(
-      400,
       "too_many_rows",
       `The file has ${rows} rows; one import takes at most ${maxRows.toLocaleString("en-US")}.${maxRowsReason ? ` ${maxRowsReason}` : ""} Split it into files of up to ${maxRows.toLocaleString("en-US")} rows.`,
       { field: "file", limit: maxRows },
@@ -256,7 +250,6 @@ export async function planImport(
   const { kind, rows } = parsed.file;
   if (kind === "csv" && input.plainListStatus !== null) {
     throw new HttpError(
-      400,
       "bad_request",
       "plain_list_status is for a plain list (.txt); a CSV says each row’s status itself",
       { field: "plain_list_status" },
@@ -608,7 +601,6 @@ export async function commitImport(
 /** The 409 for a commit whose plan no longer hashes the same. */
 export function planStale(): HttpError {
   return refusal(
-    409,
     "plan_stale",
     "The import would no longer do what its plan said: the file, its declared meaning, whether an attestation is needed, or the scheduled sends it would grow have changed, or another import was committed since. Plan it again and review the new plan.",
   );

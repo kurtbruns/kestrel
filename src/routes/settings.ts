@@ -197,7 +197,7 @@ export async function notificationTest(c: RequestContext): Promise<Response> {
   } catch (err) {
     const error = String((err as Error)?.message ?? err);
     await recordNotificationTest(c.env.DB, error, Date.now());
-    throw new HttpError(502, "notify_failed", error);
+    throw new HttpError("notify_failed", error);
   }
   await recordNotificationTest(c.env.DB, null, Date.now());
   const body: NotificationTestResponse = { to, channel: notifier.channel };

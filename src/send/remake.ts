@@ -63,7 +63,6 @@ function remakeRequired(sends: ScheduledSendRef[]): HttpError {
   // The body the editor reads (shared/settings.ts); the error and message fields are HttpError's.
   const details: Omit<RemakeRequiredError, "error" | "message"> = { sends };
   return new HttpError(
-    409,
     "remake_required",
     `Saving this change re-makes ${n} scheduled email${n === 1 ? "" : "s"}. Pass their ids in \`remake\` to confirm.`,
     details,
@@ -74,7 +73,6 @@ function remakeTooClose(sends: ScheduledSendRef[], retryAfter: number, now: numb
   const first = unwrap(sends[0], "send inside the lead");
   const minutes = Math.max(1, Math.ceil((first.fire_at - now) / 60_000));
   return new HttpError(
-    409,
     "remake_too_close",
     `“${first.subject}” sends in ${minutes} minute${minutes === 1 ? "" : "s"}. Try again once it has sent.`,
     { retry_after: retryAfter, sends },

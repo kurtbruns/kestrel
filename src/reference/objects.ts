@@ -7,6 +7,8 @@
  */
 
 import { DAILY_WRITES_SEND_RECIPIENTS, FREE_PLAN_LIST } from "../../shared/free_plan";
+import type { ImportPlanResponse } from "../../shared/imports";
+import type { Post, RevisionResponse } from "../../shared/posts";
 import type { ObjectKey, ReferenceField, ReferenceObject } from "../../shared/reference";
 import {
   BOUNCE_SPIKE_MIN,
@@ -15,8 +17,10 @@ import {
   type ConditionKind,
   NO_RECEIPTS_AFTER_MS,
   SELF_THROTTLE_HALTS,
+  type SendView,
   STUCK_THRESHOLD_MS,
 } from "../../shared/sends";
+import type { SettingsResponse } from "../../shared/settings";
 import {
   ERASED_MARKER_MEANING,
   FLAG_MEANING,
@@ -25,7 +29,12 @@ import {
   SUPPRESSION_FLAG,
   type SuppressionFlag,
 } from "../../shared/subscriber_meanings";
-import type { SubscriberStatus, SuppressionReason } from "../../shared/subscribers";
+import type {
+  SubscriberListItem,
+  SubscriberStatus,
+  Suppression,
+  SuppressionReason,
+} from "../../shared/subscribers";
 import { HALT_BACKOFF_MS, MISSED_THRESHOLD_MS } from "../lib/time";
 
 /** A halt's retry schedule in words, read off `HALT_BACKOFF_MS` so the two can't drift:
@@ -39,6 +48,11 @@ export function retrySchedule(steps: readonly number[]): string {
       : `${minutes[0]}`;
   return `after ${head} minutes and then every ${last} minutes`;
 }
+
+/** A wire type with any field left out at any depth, for an example that shows only the fields
+ *  that tell it (the settings' template and deploy reflection run long). Each field it does show
+ *  is still checked against the type. */
+type Abridged<T> = { [K in keyof T]?: T[K] extends object ? Abridged<T[K]> : T[K] };
 
 const RECENT_DAYS = BOUNCE_SPIKE_RECENT_MS / 86_400_000;
 
@@ -86,13 +100,13 @@ const SEND_EXAMPLE = {
     archive: null,
     unlisted: "https://newsletter.example.com/email/9f2c41d0-7ab35e8c-6d1f04b2-a7e9c350",
   },
-};
+} satisfies SendView;
 
 /**
  * A send as a route's example shows it: the fields that tell its state, since the whole view
  * is described once under Objects. `over` sets what this route's answer changes.
  */
-export function sendBrief(over: Record<string, unknown> = {}): Record<string, unknown> {
+export function sendBrief(over: Partial<SendView> = {}): Partial<SendView> {
   return {
     id: SEND_EXAMPLE.id,
     subject: SEND_EXAMPLE.subject,
@@ -283,7 +297,7 @@ const POST_EXAMPLE = {
   current_revision: "r_1",
   created_at: 1768381200000,
   updated_at: 1768381200000,
-};
+} satisfies Post;
 
 const POST_FIELDS: ReferenceField[] = [
   { name: "id", type: "string", description: "The post's id." },
@@ -596,7 +610,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
       created_at: 1768381200000,
       metadata: { subject: "Hello, world", slug: "hello-world" },
       markdown: "# Hello\n\nWelcome.",
-    },
+    } satisfies RevisionResponse,
   },
   subscriber: {
     resource: "subscribers",
@@ -608,6 +622,10 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
       id: "sub_1",
       email: "reader@example.com",
       status: "confirmed",
+      confirm_token: null,
+      confirm_sent_at: 1768381200000,
+      confirm_attempt_at: 1768381200000,
+      unsub_token: "6d1f04b2-a7e9c350-9f2c41d0-7ab35e8c",
       origin: "kestrel",
       opt_in: "double",
       consent_evidence: '{"confirmed_ip":"203.0.113.7"}',
@@ -617,7 +635,8 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
       unsubscribed_at: null,
       suppressed: false,
       suppression_reason: null,
-    },
+      suppression_detail: null,
+    } satisfies SubscriberListItem,
   },
   suppression: {
     resource: "suppressions",
@@ -629,7 +648,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
       reason: "manual",
       detail: "Our own test address",
       created_at: 1760400000000,
-    },
+    } satisfies Suppression,
   },
   import_plan: {
     resource: "imports",
@@ -645,7 +664,20 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
         addresses: 2,
         plain_list_status: null,
       },
-      counts: { create_confirmed: 1, create_unsubscribed: 1, unchanged: 0, invalid: 0 },
+      counts: {
+        create_confirmed: 1,
+        confirm_pending: 0,
+        unchanged: 0,
+        mark_unsubscribed: 0,
+        create_unsubscribed: 1,
+        kept_confirmed_newer: 0,
+        kept_unsubscribed: 0,
+        blocked_by_suppression: 0,
+        suppression_added: 0,
+        left_out: 0,
+        invalid: 0,
+        merged: 0,
+      },
       suppressions_added: 0,
       confirmed: { opt_in: { double: 1, single: 0, unknown: 0 }, origin: { sendy: 1 } },
       rows: [
@@ -666,7 +698,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
       },
       plan_hash: "9f2c…",
       workers_plan_advice: null,
-    },
+    } satisfies ImportPlanResponse,
   },
   settings: {
     resource: "settings",
@@ -690,7 +722,8 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
         retry_after: null,
         identityFields: ["name", "tagline", "logoUrl", "address"],
       },
-    },
+      notificationStatus: { lastSent: null, lastFailure: null },
+    } satisfies Abridged<SettingsResponse>,
   },
 };
 

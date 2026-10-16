@@ -38,7 +38,6 @@ export function getProvider(config: Config, env: AppEnv): EmailProvider {
 export function requireConnectedProvider(config: Config): void {
   if (config.provider === "none") {
     throw refusal(
-      503,
       "provider_not_connected",
       "No email provider is connected, so nothing can be sent yet. Connect one (the setup guide walks through it), then try again.",
     );

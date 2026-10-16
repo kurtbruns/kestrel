@@ -176,6 +176,27 @@ export interface BaseRequiredError {
   post: Post;
 }
 
+/** One saved version of a post: who saved it, when, and the subject and slug it was saved with. */
+export interface PostRevision {
+  /** Its number, from 1, oldest first: the `:n` that reads it. */
+  n: number;
+  /** What a save names as `base_revision`. */
+  id: string;
+  author: string | null;
+  created_at: number;
+  metadata: { subject: string; slug: string };
+}
+
+/** GET /api/posts/:id/revisions: the history, oldest first, without the bodies. */
+export interface RevisionListResponse {
+  revisions: (PostRevision & { is_current: boolean })[];
+}
+
+/** GET /api/posts/:id/revisions/:n: one revision, with its body. */
+export interface RevisionResponse extends PostRevision {
+  markdown: string;
+}
+
 /**
  * The 409 a save gets when its base revision is no longer the newest: the post as it stands and
  * its current text, so the client can re-apply its change without reading it again.

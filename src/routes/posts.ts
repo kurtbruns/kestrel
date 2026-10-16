@@ -7,6 +7,8 @@ import type {
   PostResponse,
   PostSavedResponse,
   PostSettingsResponse,
+  RevisionListResponse,
+  RevisionResponse,
   StaleRevisionError,
 } from "../../shared/posts";
 import * as images from "../db/images";
@@ -107,12 +109,11 @@ export async function requireDraft(c: RequestContext): Promise<posts.PostRow> {
     throw notFound("post");
   }
   if (post.status === "sent") {
-    throw refusal(409, "post_not_draft", "This post has been sent, so it can’t be changed.");
+    throw refusal("post_not_draft", "This post has been sent, so it can’t be changed.");
   }
   if (post.status !== "draft") {
     const active = await getActiveSendForPost(c.env.DB, post.id);
     throw refusal(
-      409,
       "post_not_draft",
       active?.status === "sending"
         ? "This post is being sent, so it can’t be changed."
@@ -272,7 +273,7 @@ export async function listRevisions(c: RequestContext): Promise<Response> {
     throw notFound("post");
   }
   const revs = await posts.listRevisions(c.env.DB, post.id);
-  return json({
+  const body: RevisionListResponse = {
     revisions: revs.map((r, i) => ({
       n: i + 1,
       id: r.id,
@@ -281,7 +282,8 @@ export async function listRevisions(c: RequestContext): Promise<Response> {
       is_current: r.id === post.current_revision,
       metadata: JSON.parse(r.metadata),
     })),
-  });
+  };
+  return json(body);
 }
 
 export async function getRevision(c: RequestContext): Promise<Response> {
@@ -297,14 +299,15 @@ export async function getRevision(c: RequestContext): Promise<Response> {
   if (!rev) {
     throw notFound("revision");
   }
-  return json({
+  const body: RevisionResponse = {
     n,
     id: rev.id,
     author: rev.author,
     created_at: rev.created_at,
     markdown: rev.markdown,
     metadata: JSON.parse(rev.metadata),
-  });
+  };
+  return json(body);
 }
 
 /** How many times a write whose slug the server chose runs before a collision is refused. */

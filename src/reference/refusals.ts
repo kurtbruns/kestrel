@@ -115,7 +115,7 @@ export type RefusalCode = keyof typeof ALL;
 /** The status each code carries. */
 export const REFUSAL_STATUS = Object.fromEntries(
   Object.entries(ALL).map(([code, [status]]) => [code, status]),
-) as Record<RefusalCode, number>;
+) as { [C in RefusalCode]: (typeof ALL)[C][0] };
 
 /** The refusal table, as the reference shows it. */
 export function refusalGroups(): ReferenceRefusalGroup[] {

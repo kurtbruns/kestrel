@@ -210,7 +210,6 @@ function refuseForeignWrite(accepts: readonly string[]): Middleware {
   return async (c) => {
     if (isForeignBrowserRequest(c)) {
       throw new HttpError(
-        403,
         "cross_site_request",
         "a page on another site can't act on the admin API",
       );

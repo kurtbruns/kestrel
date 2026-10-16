@@ -38,7 +38,6 @@ export async function create(c: RequestContext): Promise<Response> {
         erased_at: suppression.created_at,
       };
       throw refusal(
-        409,
         "erasure_acknowledgement_required",
         `${email} was erased at the person’s request. Send a confirmation only if they have asked to join again; confirming it lifts the erasure. To send it, add acknowledge_erasure: true.`,
         details,
@@ -48,7 +47,6 @@ export async function create(c: RequestContext): Promise<Response> {
   const outcome = await requestSubscription(c, email);
   if (outcome.kind === "failed") {
     throw new HttpError(
-      502,
       "confirmation_not_sent",
       outcome.delivered === "unknown"
         ? `No answer from the email provider, so the confirmation may not have reached ${email}: ${outcome.error}`
@@ -155,7 +153,6 @@ export async function erase(c: RequestContext): Promise<Response> {
   }
   if (outcome.kind === "in_flight") {
     throw refusal(
-      409,
       "run_in_progress",
       "A send is handing this subscriber to the email provider right now, so they can’t be erased this moment. Try again in a minute.",
     );

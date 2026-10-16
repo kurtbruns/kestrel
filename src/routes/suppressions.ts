@@ -53,7 +53,6 @@ export async function clear(c: RequestContext): Promise<Response> {
   const outcome = await subscribers.clearSuppression(c.env.DB, email);
   if (outcome === "erased") {
     throw refusal(
-      409,
       "erasure_marker",
       "This address was erased. Only the person’s own confirmation lifts its do-not-contact marker.",
     );

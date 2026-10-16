@@ -101,7 +101,7 @@ export function acceptFireAt(
   { now = Date.now() }: { now?: number } = {},
 ): number {
   if (requested < now + minLeadMs) {
-    throw refusal(400, "fire_at_too_soon", tooSoonMessage(minLeadMs), {
+    throw refusal("fire_at_too_soon", tooSoonMessage(minLeadMs), {
       field: "fire_at",
     });
   }
@@ -133,7 +133,6 @@ export async function freeze(
   }
   if (post.status !== "draft") {
     throw refusal(
-      409,
       "post_not_draft",
       post.status === "sent"
         ? "This post has already been sent, so it can’t be scheduled again."
@@ -144,7 +143,7 @@ export async function freeze(
   // check here covers both Schedule and Send-now and both clients (editor + API);
   // whitespace-only counts as empty.
   if (!post.subject.trim()) {
-    throw refusal(400, "subject_required", "Add a subject before you schedule or send this post.", {
+    throw refusal("subject_required", "Add a subject before you schedule or send this post.", {
       field: "subject",
     });
   }
@@ -202,7 +201,7 @@ export async function freeze(
         const winner = await getActiveSendForPost(env.DB, post.id);
         throw winner
           ? await activeSendExists(env, winner)
-          : refusal(409, "active_send_exists", ACTIVE_SEND_EXISTS);
+          : refusal("active_send_exists", ACTIVE_SEND_EXISTS);
       }
       throw err;
     }
@@ -211,7 +210,6 @@ export async function freeze(
     }
   }
   throw refusal(
-    409,
     "settings_changed",
     "The template or the publication’s details changed while this was being scheduled. Try again.",
   );
@@ -219,7 +217,7 @@ export async function freeze(
 
 /** The refusal for a post that already has its one active send, carrying that send. */
 export async function activeSendExists(env: AppEnv, send: Pick<SendRow, "id">) {
-  return refusal(409, "active_send_exists", ACTIVE_SEND_EXISTS, {
+  return refusal("active_send_exists", ACTIVE_SEND_EXISTS, {
     send: await viewSend(env, send.id),
   });
 }
@@ -251,7 +249,7 @@ async function windowClosed(env: AppEnv, send: SendRow, what: string) {
     send.status === "scheduled"
       ? "its fire time has passed and it’s about to send"
       : `it’s ${send.status}`;
-  return refusal(409, "window_closed", `This send can no longer be ${what}: ${why}.`, {
+  return refusal("window_closed", `This send can no longer be ${what}: ${why}.`, {
     send: await viewSend(env, send.id),
   });
 }
@@ -280,14 +278,9 @@ export async function reschedule(
   const send = await readForAction(env, sendId);
   const now = Date.now();
   if (send.status === "canceled") {
-    throw refusal(
-      409,
-      "send_canceled",
-      "This send was canceled. Schedule the post again instead.",
-      {
-        send: await viewSend(env, send.id),
-      },
-    );
+    throw refusal("send_canceled", "This send was canceled. Schedule the post again instead.", {
+      send: await viewSend(env, send.id),
+    });
   }
   if (send.status !== "scheduled" || send.fire_at <= now) {
     throw await windowClosed(env, send, "rescheduled");

@@ -9,12 +9,11 @@ import { refusal } from "./errors";
 export function slugRefusal(code: "slug_invalid" | "slug_taken") {
   return code === "slug_invalid"
     ? refusal(
-        400,
         "slug_invalid",
         "Use lowercase letters and numbers, with single hyphens between words, up to 80 characters.",
         { field: "slug" },
       )
-    : refusal(409, "slug_taken", "Another post already has this address. Choose another.", {
+    : refusal("slug_taken", "Another post already has this address. Choose another.", {
         field: "slug",
       });
 }
@@ -23,7 +22,6 @@ export function slugRefusal(code: "slug_invalid" | "slug_taken") {
  *  frozen before unlisted links, already links to that address. */
 export function slugPermanent(field: "slug" | "slug_auto", why: "sent" | "linked") {
   return refusal(
-    409,
     "slug_permanent",
     why === "sent"
       ? "This post’s archive address is fixed once it’s sent, since people may have its link."

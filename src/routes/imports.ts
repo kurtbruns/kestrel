@@ -83,7 +83,6 @@ function refuseOversize(c: RequestContext, bytes?: number): void {
   const declared = Number(c.req.headers.get("content-length") ?? "0");
   if ((bytes ?? declared) > IMPORT_LIMITS.maxBodyBytes) {
     throw new HttpError(
-      413,
       "body_too_large",
       `The request is over ${IMPORT_LIMITS.maxBodyBytes / (1024 * 1024)} MB. Split the file into smaller imports.`,
     );
@@ -175,7 +174,6 @@ export async function commit(c: RequestContext): Promise<Response> {
     !(attestation?.accepted === true && attestation.version === p.attestation.version)
   ) {
     throw refusal(
-      409,
       "attestation_required",
       `This import confirms ${p.counts.create_confirmed + p.counts.confirm_pending} subscribers, so it needs the publisher’s attestation: "${p.attestation.text}" Send attestation: { version: ${ATTESTATION.version}, accepted: true } once they have given it.`,
       { attestation: p.attestation },
@@ -184,7 +182,6 @@ export async function commit(c: RequestContext): Promise<Response> {
   if (p.sendsGrowing.length > 0) {
     if (principal.kind === "service") {
       throw refusal(
-        409,
         "sends_acknowledgement_required",
         "This import would add people to the audience of a scheduled send, which only a person can acknowledge. Ask the publisher to finish it in the dashboard (Subscribers, Import), choosing the same file: the same plan appears there.",
         { sends: p.sendsGrowing },
@@ -193,7 +190,6 @@ export async function commit(c: RequestContext): Promise<Response> {
     const missing = p.sendsGrowing.filter((s) => !acknowledged.has(s.id));
     if (missing.length > 0) {
       throw refusal(
-        409,
         "sends_acknowledgement_required",
         `This import would add ${p.sendsGrowing[0]?.gains ?? 0} people to the audience of ${missing.length === 1 ? "a scheduled send" : `${missing.length} scheduled sends`} not yet acknowledged. Acknowledge each one by its id in acknowledge_sends.`,
         { sends: missing },

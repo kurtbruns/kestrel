@@ -28,6 +28,17 @@ import { AUTH, base } from "./support/http";
 // that it can't drift — every live route is listed, its documented tier is the
 // tier that actually gates it, and a newly registered route shows up for free.
 
+// The Worker's source and the shared modules, as text: where a refusal code is thrown or answered.
+const GIVING_SOURCES = {
+  ...import.meta.glob("../src/**/*.ts", { query: "?raw", import: "default", eager: true }),
+  ...import.meta.glob("../shared/*.ts", { query: "?raw", import: "default", eager: true }),
+};
+
+/** Source text with its comments removed, since a code named in a comment is never given. */
+function withoutComments(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
+
 /** Every resource's own reference, by its key, as `/api/reference/<key>.md` serves it. */
 function resourceDocs(ref: ReferenceResponse): Map<string, string> {
   const keys = new Set(ref.groups.flatMap((g) => g.resources.map((res) => res.key)));
@@ -53,6 +64,28 @@ describe("API reference is generated from the route registration", () => {
       for (const r of g.routes) {
         expect(r.access).toBe(g.access);
       }
+    }
+  });
+
+  it("describes each object by the fields its example carries, no more and no fewer", () => {
+    // Each example satisfies its wire type in shared/ (src/reference/objects.ts), so the
+    // compiler holds the example to the wire; this holds the described fields to the example.
+    // A field's name before its first dot is the object's own field, and one row may name two
+    // fields that share a line ("confirm_token, unsub_token").
+    const notInExample: Partial<Record<keyof typeof OBJECTS, string[]>> = {
+      // The example is one revision's read, with its body; the history's rows carry
+      // `is_current` in its place.
+      revision: ["is_current"],
+    };
+    for (const [key, o] of Object.entries(OBJECTS)) {
+      const described = new Set(
+        o.fields.flatMap((f) => f.name.split(", ").map((name) => name.split(".")[0])),
+      );
+      const shown = [
+        ...Object.keys(o.example as object),
+        ...(notInExample[key as keyof typeof OBJECTS] ?? []),
+      ];
+      expect([...described].sort(), key).toEqual(shown.sort());
     }
   });
 
@@ -234,65 +267,24 @@ describe("API reference is generated from the route registration", () => {
 
   it("lists the refusals each route gives of its own, with the status its code carries", () => {
     // Each route that refuses with a state of its own declares it, so a client can expect the
-    // refusal rather than read it as a failure.
-    const expected: Record<string, string[]> = {
-      "PUT /api/settings": ["remake_required", "remake_too_close", "conflict"],
-      "POST /api/settings/logo": ["remake_required", "remake_too_close", "conflict"],
-      "DELETE /api/settings/logo": ["remake_required", "remake_too_close", "conflict"],
-      "POST /api/posts": ["slug_invalid", "slug_taken"],
-      "PUT /api/posts/:id": [
-        "base_required",
-        "stale_revision",
-        "post_not_draft",
-        "slug_invalid",
-        "slug_taken",
-      ],
-      "DELETE /api/posts/:id": ["post_not_draft"],
-      "PUT /api/posts/:id/settings": ["slug_invalid", "slug_taken", "slug_permanent"],
-      "POST /api/posts/:id/images": ["post_not_draft"],
-      "DELETE /api/posts/:id/images/:filename": ["post_not_draft"],
-      "POST /api/posts/:id/schedule": [
-        "fire_at_too_soon",
-        "active_send_exists",
-        "post_not_draft",
-        "subject_required",
-        "settings_changed",
-        "provider_not_connected",
-        "slug_invalid",
-        "slug_taken",
-      ],
-      "GET /api/sends/feed": ["cursor_ahead"],
-      "POST /api/sends/:id/cancel": ["window_closed"],
-      "POST /api/sends/:id/reschedule": ["fire_at_too_soon", "window_closed", "send_canceled"],
-      "POST /api/sends/:id/resolve": ["run_in_progress", "not_wedged"],
-      "POST /api/subscribers": [
-        "erasure_acknowledgement_required",
-        "provider_not_connected",
-        "confirmation_not_sent",
-      ],
-      "POST /api/subscribers/:id/erase": ["run_in_progress"],
-      "POST /api/imports": [
-        "plan_stale",
-        "attestation_required",
-        "sends_acknowledgement_required",
-        "unrecognized_format",
-        "invalid_field",
-        "too_many_rows",
-        "body_too_large",
-      ],
-      "DELETE /api/suppressions/:email": ["erasure_marker"],
-      "POST /subscribe": ["provider_not_connected"],
-    };
+    // refusal rather than read it as a failure. A route's codes are typed against the registry
+    // (src/reference/refusals.ts), as is every code src/ throws, so which route lists which
+    // code is the manifest's to say; this pins the rules that run across routes.
     const listed = new Map(
       buildReference(defs)
         .flatMap((g) => g.routes)
         .map((r) => [`${r.method} ${r.path}`, r.errors ?? []]),
     );
-    for (const [key, codes] of Object.entries(expected)) {
+    // Every route under the re-make rule (SPEC §9) gives its refusals.
+    for (const key of [
+      "PUT /api/settings",
+      "POST /api/settings/logo",
+      "DELETE /api/settings/logo",
+    ]) {
       expect(
         listed.get(key)?.map((e) => e.code),
         key,
-      ).toEqual(codes);
+      ).toEqual(["remake_required", "remake_too_close", "conflict"]);
     }
     // Every route that would send says it is refused while no provider is connected.
     for (const key of [
@@ -315,6 +307,32 @@ describe("API reference is generated from the route registration", () => {
     expect(listed.get("POST /api/sends/:id/resolve")?.[1]).toEqual(
       expect.objectContaining({ status: 409, code: "not_wedged", details: ["send"] }),
     );
+  });
+
+  it("documents every code the API refuses with on a route, or among those every route shares", () => {
+    // The compiler holds every code thrown to the registry; this holds the registry to the
+    // routes. A code no route lists is one the index states once for every route (its Errors
+    // topic) or a fault of the deployment's; any other is a refusal no client could expect.
+    const shared = [
+      "unsupported_media_type",
+      "internal_error",
+      "settings_corrupt",
+      "unauthorized",
+      "forbidden",
+      "cross_site_request",
+    ];
+    const onRoutes = new Set<string>(defs.flatMap((d) => (d.errors ?? []).map((e) => e.code)));
+    const unlisted = Object.keys(REFUSAL_STATUS).filter((code) => !onRoutes.has(code));
+    expect(unlisted.sort()).toEqual([...shared].sort());
+    // And every code is one the API gives: named outside the manifest and the reference, where
+    // something throws or answers with it, so the reference can't keep a code nothing gives.
+    const elsewhere = Object.entries(GIVING_SOURCES)
+      .filter(([file]) => !file.startsWith("../src/reference/") && file !== "../src/app.ts")
+      .map(([, text]) => withoutComments(text as string))
+      .join("\n");
+    for (const code of Object.keys(REFUSAL_STATUS)) {
+      expect(elsewhere.includes(`"${code}"`), code).toBe(true);
+    }
   });
 
   it("knows the same refusal codes as docs/API.md's Refusing section, so neither drifts from the other", () => {

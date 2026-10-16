@@ -71,8 +71,8 @@ export async function resolveStuckSend(
   if (!send) {
     throw notFound("send");
   }
-  const refuse = async (code: string, message: string) =>
-    refusal(409, code, message, { send: await viewSend(env, send.id) });
+  const refuse = async (code: "run_in_progress" | "not_wedged", message: string) =>
+    refusal(code, message, { send: await viewSend(env, send.id) });
   const now = Date.now();
   if (send.status === "sending" && send.locked_until !== null && send.locked_until > now) {
     throw await refuse(

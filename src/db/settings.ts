@@ -270,7 +270,6 @@ function parseStored(data: string): Record<string, unknown> {
     length: data.length,
   });
   throw new HttpError(
-    500,
     "settings_corrupt",
     "The stored settings can’t be read, so they are left as they are and nothing will save over them. The server log (settings.corrupt) says what’s wrong.",
   );
@@ -348,7 +347,7 @@ export const WRITE_RETRIES = 5;
  *  fault (500). */
 export class SettingsContention extends HttpError {
   constructor() {
-    super(409, "conflict", "The settings were changed at the same moment. Try again.");
+    super("conflict", "The settings were changed at the same moment. Try again.");
   }
 }
 
