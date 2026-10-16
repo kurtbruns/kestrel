@@ -84,7 +84,7 @@ export async function openRescheduleModal(
   if (!saved) {
     try {
       const read = await api<PostResponse>(`/api/posts/${send.post_id}`, { signal });
-      saved = publishingOf(read.post, read.slug_taken);
+      saved = publishingOf(read.post, read.subject_slug_held);
     } catch (e) {
       if (!signal.aborted) {
         toast(message(e));
@@ -92,7 +92,9 @@ export async function openRescheduleModal(
       return;
     }
   }
-  const stored = saved;
+  // What the post holds: after a Save whose settings landed but whose time was refused, the
+  // settings saved, so a second Save sends only what is still to change.
+  let stored: Publishing = saved;
   // The dialog's copy: Cancel leaves the post as it was.
   const working: Publishing = { ...stored };
   const minStr = toLocalInput(earliestFireAt());
@@ -112,7 +114,14 @@ export async function openRescheduleModal(
   mountSettingsForm($("#rsForm", box), working, "rs");
   const go = $<HTMLButtonElement>("#rsGo", box);
   const when = $<HTMLInputElement>("#rsWhen", box);
-  $("#rsCancel", box).onclick = m.close;
+  // Settings saved by a Save whose time was then refused: closing shows them on the page.
+  let savedSome = false;
+  $("#rsCancel", box).onclick = () => {
+    m.close();
+    if (savedSome) {
+      onDone();
+    }
+  };
   go.onclick = () =>
     busy(go, "Saving…", async () => {
       m.clearError();
@@ -168,15 +177,25 @@ export async function openRescheduleModal(
           if (deleted(e)) {
             return;
           }
+          const timeRefused = e instanceof ApiError && e.field === "fire_at";
           if (change) {
-            // The settings are saved and stay so, since they may change in any state; say
-            // that the time didn't move, and show both surfaces as they now stand.
+            // The settings are saved and stay so, since they may change in any state.
+            stored = { ...working };
+            savedSome = true;
+            if (timeRefused) {
+              // A time the publisher can fix, such as one the server's clock finds too soon:
+              // keep the dialog, saying the settings landed, so only the time is left.
+              m.error(`Settings saved. ${message(e)}`, when);
+              return;
+            }
+            // The time can't move at all (the send has just fired): say so, and show both
+            // surfaces as they now stand.
             m.close();
             toast(`Settings saved. The send time didn’t change: ${message(e)}`);
             onDone();
             return;
           }
-          if (e instanceof ApiError && e.field === "fire_at") {
+          if (timeRefused) {
             m.error(message(e), when);
           } else {
             m.error(message(e));

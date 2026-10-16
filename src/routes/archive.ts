@@ -71,7 +71,7 @@ export async function landing(c: RequestContext): Promise<Response> {
 }
 
 /** The full public archive index: every published post (its send has started) listed in the
- *  archive, an email-only post left out (SPEC §5), newest first, linking to their permanent (canonical) archive URLs — the same address emails carry. */
+ *  archive, an email-only post left out (SPEC §5), newest first, linking to their permanent (canonical) archive URLs. */
 export async function archiveIndex(c: RequestContext): Promise<Response> {
   const [posts, identity] = await Promise.all([
     listPublishedPosts(c.env.DB),

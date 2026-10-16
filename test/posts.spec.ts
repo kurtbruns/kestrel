@@ -84,7 +84,7 @@ describe("posts + revisions", () => {
     const b = await readJson(await createPost({ subject: "Dup Title" }));
     expect([a.post.slug, b.post.slug]).toEqual(["dup-title", "dup-title-2"]);
     // The second says why its address isn't the subject's.
-    expect([a.slug_taken, b.slug_taken]).toEqual([null, "dup-title"]);
+    expect([a.subject_slug_held, b.subject_slug_held]).toEqual([null, "dup-title"]);
   });
 
   it("numbers a following slug when another post holds the subject's slug, and keeps that number on later saves", async () => {
@@ -96,7 +96,7 @@ describe("posts + revisions", () => {
       base_revision: created.revision_id,
     });
     expect(saved.post).toMatchObject({ slug: "spring-update-2", slug_auto: true });
-    expect(saved.slug_taken).toBe("spring-update");
+    expect(saved.subject_slug_held).toBe("spring-update");
 
     // A third post takes -3 and leaves the second alone, and another save doesn't move the second.
     const third = await readJson(await createPost({ subject: "Spring update" }));

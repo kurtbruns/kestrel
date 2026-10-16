@@ -20,4 +20,6 @@ export async function resetCommand(argv) {
     "[reset] done — the local database is a fresh install (no posts, subscribers, or settings).",
   );
   console.log(`  view the first-run dashboard: ${url || `${base}/dashboard/`}`);
+  // An open editor tab holds the settings it read when it loaded (the old name and logo).
+  console.log("  reload any dashboard tab already open, so it reads the fresh install.");
 }

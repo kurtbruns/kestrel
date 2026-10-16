@@ -33,7 +33,7 @@ import { renderEditor } from "./editor";
 type Draft = {
   post: Record<string, unknown>;
   /** The subject's slug, when another post holds it and so the address didn't follow. */
-  slug_taken: string | null;
+  subject_slug_held: string | null;
   markdown: string;
   author: string | null;
   scheduled?: { id: string; fire_at: number; remade_at: number | null } | null;
@@ -47,6 +47,7 @@ const draft = (over: Record<string, unknown> = {}): Draft => ({
     slug_auto: true,
     unlisted_token: "t0k3n",
     unlisted_url: "https://newsletter.example.com/email/t0k3n",
+    published_at: null,
     status: "draft",
     email_only: false,
     current_revision: "r1",
@@ -55,7 +56,7 @@ const draft = (over: Record<string, unknown> = {}): Draft => ({
   },
   markdown: "# Owls\n\nHoot.",
   author: "a@b.c",
-  slug_taken: null,
+  subject_slug_held: null,
 });
 
 /**
@@ -111,11 +112,11 @@ function draftServer(initial = draft()) {
         }
         post.slug_auto = false;
       }
-      let slug_taken: string | null = null;
+      let subject_slug_held: string | null = null;
       if (post.slug_auto) {
         const want = slugify(String(post.subject)) || "post";
         if (server.taken.has(want)) {
-          slug_taken = want;
+          subject_slug_held = want;
           let n = 2;
           while (server.taken.has(`${want}-${n}`)) {
             n += 1;
@@ -125,8 +126,8 @@ function draftServer(initial = draft()) {
           post.slug = want;
         }
       }
-      state = { ...state, post, slug_taken };
-      return { post: state.post, slug_taken };
+      state = { ...state, post, subject_slug_held };
+      return { post: state.post, subject_slug_held };
     },
     /** Slugs other posts hold. */
     taken: new Set<string>(),

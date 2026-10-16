@@ -58,11 +58,12 @@ describe("sent view", () => {
         slug: "waxwings",
         slug_auto: true,
         unlisted_token: "t-p7",
+        published_at: null,
         status: "scheduled",
         email_only: false,
         ...over,
       },
-      slug_taken: null,
+      subject_slug_held: null,
       markdown: "",
       author: null,
       scheduled: null,
@@ -342,6 +343,54 @@ describe("sent view", () => {
     expect($(".modal .pub-error").textContent).toBe(
       "Another post already has this address. Choose another.",
     );
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("keeps the dialog when only the time is refused, the settings saved, and sends just the time again (SPEC §6)", async () => {
+    const srv = sendServer();
+    srv.put(scheduled(), { email_only: true });
+    let tries = 0;
+    fake = fakeApi([
+      { method: "PUT", path: "/api/posts/p7/settings", reply: () => ({}) },
+      {
+        method: "POST",
+        path: "/api/sends/sch/reschedule",
+        reply: () =>
+          ++tries === 1
+            ? jsonResponse(
+                {
+                  error: "fire_at_too_soon",
+                  message: "Pick a time at least 5 minutes from now.",
+                  field: "fire_at",
+                },
+                400,
+              )
+            : {},
+      },
+      postRead({ email_only: true }),
+      ...srv.routes,
+    ]);
+    await mount(renderSent);
+    await vi.advanceTimersByTimeAsync(0);
+    $("[data-reschedule='sch']").click();
+    await vi.advanceTimersByTimeAsync(0);
+    const include = $<HTMLInputElement>("#rsInclude");
+    include.checked = true;
+    include.dispatchEvent(new Event("change"));
+    $<HTMLInputElement>("#rsWhen").value = toLocalInput(new Date(NOW + 3 * 86_400_000));
+    $("#rsGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.querySelector(".modal")).not.toBeNull();
+    expect($(".modal").textContent).toContain(
+      "Settings saved. Pick a time at least 5 minutes from now.",
+    );
+    $<HTMLInputElement>("#rsWhen").value = toLocalInput(new Date(NOW + 4 * 86_400_000));
+    $("#rsGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    const settingsPuts = fake.calls.filter((c) => c.url.pathname === "/api/posts/p7/settings");
+    expect(settingsPuts).toHaveLength(1); // already saved, so not sent again
+    expect(document.querySelector(".modal")).toBeNull();
+    expect($("#toasts").textContent).toContain("Rescheduled");
     expect(fake.unhandled).toEqual([]);
   });
 

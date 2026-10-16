@@ -640,7 +640,7 @@ function renderFrozenRecord(
     }
     // The same settings form as the editor's, without its Include in archive box, since adding
     // the post is the choice, and with its address shown read-only.
-    const saved = publishingOf(read.post, read.slug_taken);
+    const saved = publishingOf(read.post, read.subject_slug_held);
     const working: Publishing = { ...saved, emailOnly: false };
     const m = modal(
       html`<h3 id="addArchHead">Add this post to your archive?</h3>

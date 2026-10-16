@@ -548,7 +548,7 @@ An index of what was decided and the alternative each choice was made over, in t
 - **A post is published when its send starts**, over when it finishes (§5).
 - **Archive pages carry light public chrome** filled into reserved anchors, over a bare frozen render (§5).
 - **A post can be email only, chosen when it is scheduled and changeable after**, over withdrawing a sent post, which would break the link in every copy of the email, and over hiding test sends by a rule that guesses (§5).
-- **Every email links its web version through a permanent unlisted link of its own, on the app's origin**, over the archive address, which made an email-only post's page guessable, made every draft hold a unique slug, and tied every email ever sent to the archive's base path (§5).
+- **Every email links its web version through a permanent unlisted link of its own, on the app's origin**, over the archive address, which made an email-only post's page guessable from its subject, fixed the address from the moment a post was scheduled, and tied every email ever sent to the archive's base path (§5).
 - **Making a sent post email only takes its archive address down and keeps it the post's**, over leaving the address answering, which would leave an email-only post findable at a guessable address, and over freeing it, which would let another post take links people shared (§5).
 - **Scheduling is core**, over deferring it to a later version (§6).
 - **Scheduling makes the email; a template or identity change re-makes the scheduled ones**, over applying the template at fire time and over pinning a template per send with a history (§6, §9).

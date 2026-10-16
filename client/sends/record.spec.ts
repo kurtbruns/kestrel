@@ -197,7 +197,7 @@ describe("sent record", () => {
           archive_live: !post.email_only,
           ...post,
         },
-        slug_taken: null,
+        subject_slug_held: null,
         changed: true,
       }),
     });
@@ -205,8 +205,14 @@ describe("sent record", () => {
     const postRoute = (post: Record<string, unknown>) => ({
       path: "/api/posts/p1",
       reply: () => ({
-        post: { id: "p1", subject: "Owls at Dusk", status: "sent", ...post },
-        slug_taken: null,
+        post: {
+          id: "p1",
+          subject: "Owls at Dusk",
+          status: "sent",
+          published_at: 1_700_000_000_000,
+          ...post,
+        },
+        subject_slug_held: null,
         markdown: "",
         author: null,
         scheduled: null,

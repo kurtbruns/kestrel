@@ -5,7 +5,7 @@ import { EMPTY_SUBJECT_SLUG, slugify } from "../../shared/slug";
 import { newId } from "../lib/ids";
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
 import { unwrap } from "../lib/unwrap";
-import { stampSendsOfPostStmt, tombstoneSendsStmt } from "./sends";
+import { publishedSendForPost, stampSendsOfPostStmt, tombstoneSendsStmt } from "./sends";
 
 // The row shapes live in shared/ so the editor reads the same definitions; the names here
 // are the Worker's own.
@@ -107,7 +107,7 @@ export type SlugResult = { slug: string; auto: boolean } | { refused: SlugRefusa
  * Work out a post's slug after a change, against every other post (`postId`, absent for a new
  * one). A slug set by hand must be well formed and no other post's, or it is refused. A slug
  * that follows the subject takes the subject's slug when it is free, and when another post
- * holds it, the first free number after it (`spring-update-2`, `slug_taken` says why). A post
+ * holds it, the first free number after it (`spring-update-2`, `subject_slug_held` says why). A post
  * already on a number of the subject's slug keeps it, so a save never moves it to another.
  */
 export async function resolveSlug(
@@ -116,6 +116,11 @@ export async function resolveSlug(
   change: SlugChange,
 ): Promise<SlugResult> {
   const auto = change.slugAuto ?? (change.slug === undefined && current.slugAuto);
+  if (!auto && change.slug === undefined && current.slug === undefined) {
+    // A new post kept off the subject but given no slug: it still needs one of its own, so it
+    // takes the subject's, numbered if another post holds it, and keeps it from then on.
+    return { slug: await uniqueSlug(db, slugOf(current.subject), current.postId), auto: false };
+  }
   if (!auto) {
     const slug = change.slug ?? current.slug ?? slugOf(current.subject);
     if (change.slug !== undefined) {
@@ -145,15 +150,19 @@ function isNumberOf(slug: string, base: string): boolean {
 
 /**
  * When a post's slug follows its subject but another post holds the subject's slug, that slug
- * (`SlugTaken`), so a client can say why the address didn't follow and ask for another. Null
- * when the slug is set by hand, follows freely, or the subject gives no slug of its own.
+ * (`SubjectSlugHeld`), so a client can say why the address didn't follow and offer another. Null
+ * when the slug is set by hand, follows freely, or the subject gives no slug of its own, and
+ * once the post is published, when its address is fixed and there is nothing to offer (SPEC §4).
  */
-export async function slugTakenFor(db: D1Database, post: PostRow): Promise<string | null> {
+export async function subjectSlugHeld(db: D1Database, post: PostRow): Promise<string | null> {
   const wanted = slugify(post.subject);
   if (!post.slug_auto || !wanted || wanted === post.slug) {
     return null;
   }
-  return (await slugTaken(db, wanted, post.id)) ? wanted : null;
+  if (!(await slugTaken(db, wanted, post.id))) {
+    return null;
+  }
+  return (await publishedSendForPost(db, post.id)) ? null : wanted;
 }
 
 /** Whether a failed write was refused by the unique index on slugs: another post took the slug
@@ -233,13 +242,14 @@ export function publishingChanges(post: PostRow, input: PublishingInput): boolea
  * choice writes nothing. Each of the post's sends carries the settings on its view, so the same
  * batch gives them a new `rev` and a client following sends sees the change (SPEC §8). The
  * caller has resolved the slug and refused a change to a published post's; `address_fixed`
- * means the post's send started after that check, and nothing was written, its listing included.
+ * means the post's send started after that check, and `missing` that the post was deleted after
+ * it. Either way nothing was written, its listing included.
  */
 export async function setPublishing(
   db: D1Database,
   post: PostRow,
   input: PublishingInput,
-): Promise<"changed" | "unchanged" | "address_fixed"> {
+): Promise<"changed" | "unchanged" | "address_fixed" | "missing"> {
   if (!publishingChanges(post, input)) {
     return "unchanged";
   }
@@ -247,7 +257,11 @@ export async function setPublishing(
     setPublishingStmt(db, post, input),
     stampSendsOfPostStmt(db, post.id),
   ]);
-  return unwrap(written, "settings write").meta.changes > 0 ? "changed" : "address_fixed";
+  if (unwrap(written, "settings write").meta.changes > 0) {
+    return "changed";
+  }
+  // The write's only guards are the post's id and, for a moving slug, a started send.
+  return (await getPost(db, post.id)) ? "address_fixed" : "missing";
 }
 
 export async function getPost(db: D1Database, id: string): Promise<PostRow | null> {

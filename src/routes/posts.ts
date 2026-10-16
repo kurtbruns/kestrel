@@ -126,10 +126,12 @@ export async function createPost(c: RequestContext): Promise<Response> {
   // A create with an empty body, which needs no content type, is the "new blank draft"
   // case; one that sends a body is held to the same JSON and field rules as an edit.
   const { input } = await readBody(c, { optional: true });
-  const { post, revision } = await slugGuarded(() => posts.createPost(c.env.DB, input, author(c)));
+  const { post, revision } = await slugGuarded(input, () =>
+    posts.createPost(c.env.DB, input, author(c)),
+  );
   const body: PostSavedResponse = {
     post: withAddresses(c.config, post, UNPUBLISHED),
-    slug_taken: await posts.slugTakenFor(c.env.DB, post),
+    subject_slug_held: await posts.subjectSlugHeld(c.env.DB, post),
     revision_id: revision.id,
   };
   return json(body, 201, revisionHeaders(post));
@@ -195,7 +197,7 @@ export async function getPost(c: RequestContext): Promise<Response> {
   const sent = post.status === "sent" ? await latestSentSendForPost(c.env.DB, post.id) : null;
   const body: PostResponse = {
     post: await answered(c, post),
-    slug_taken: await posts.slugTakenFor(c.env.DB, post),
+    subject_slug_held: await posts.subjectSlugHeld(c.env.DB, post),
     markdown: revision?.markdown ?? "",
     author: revision?.author ?? null, // who wrote the current revision — the freshness poll names them
     // `remade_at`: when a template or identity change last re-made the frozen email
@@ -243,12 +245,12 @@ export async function updatePost(c: RequestContext): Promise<Response> {
     };
     return json(stale, 409, revisionHeaders(post));
   }
-  const { post: updated, revision } = await slugGuarded(() =>
+  const { post: updated, revision } = await slugGuarded(body.input, () =>
     posts.updatePost(c.env.DB, post, body.input, author(c)),
   );
   const saved: PostSavedResponse = {
     post: withAddresses(c.config, updated, UNPUBLISHED),
-    slug_taken: await posts.slugTakenFor(c.env.DB, updated),
+    subject_slug_held: await posts.subjectSlugHeld(c.env.DB, updated),
     revision_id: revision.id,
   };
   return json(saved, 200, revisionHeaders(updated));
@@ -303,19 +305,32 @@ export async function getRevision(c: RequestContext): Promise<Response> {
   });
 }
 
-/** Run a write that sets a slug, answering a slug it refused, or one another post took between
- *  its check and the write (the unique index refused it), as the API's refusal. */
-async function slugGuarded<T>(write: () => Promise<T>): Promise<T> {
-  try {
-    return await write();
-  } catch (err) {
-    if (err instanceof posts.SlugRefused) {
-      throw slugRefusal(err.code);
+/** How many times a write whose slug the server chose runs before a collision is refused. */
+const SLUG_ATTEMPTS = 3;
+
+/**
+ * Run a write that sets a slug, answering a slug it refused as the API's refusal. Another post
+ * can take the slug between the write's check and the write itself (the unique index refuses
+ * it). A slug the request set by hand is then refused as taken; one the server chose (SPEC §4)
+ * is chosen again, since the request never named it: each run resolves the slug afresh, and
+ * a refused batch wrote nothing.
+ */
+async function slugGuarded<T>(input: posts.PostInput, write: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await write();
+    } catch (err) {
+      if (err instanceof posts.SlugRefused) {
+        throw slugRefusal(err.code);
+      }
+      if (posts.isSlugCollision(err)) {
+        if (input.slug === undefined && attempt < SLUG_ATTEMPTS) {
+          continue;
+        }
+        throw slugRefusal("slug_taken");
+      }
+      throw err;
     }
-    if (posts.isSlugCollision(err)) {
-      throw slugRefusal("slug_taken");
-    }
-    throw err;
   }
 }
 
@@ -346,7 +361,7 @@ export async function setSettings(c: RequestContext): Promise<Response> {
   const now = changed ? unwrap(await posts.getPost(c.env.DB, post.id), "post") : post;
   const answer: PostSettingsResponse = {
     post: await answered(c, now),
-    slug_taken: await posts.slugTakenFor(c.env.DB, now),
+    subject_slug_held: await posts.subjectSlugHeld(c.env.DB, now),
     changed,
   };
   return json(answer);

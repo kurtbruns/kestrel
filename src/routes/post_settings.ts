@@ -9,7 +9,12 @@ import type { PostRow, PublishingInput } from "../db/posts";
 import { isSlugCollision, resolveSlug, setPublishing } from "../db/posts";
 import { getActiveSendForPost, publishedSendForPost } from "../db/sends";
 import { fieldError, type JsonObject, optBoolean, optString } from "../lib/body";
+import { notFound } from "../lib/errors";
 import { slugPermanent, slugRefusal } from "../lib/slug_refusals";
+
+/** How many times a settings write whose slug the server chose runs before a collision is
+ *  refused. */
+const SLUG_ATTEMPTS = 3;
 
 /** The settings fields of a request body, each absent when the request leaves it as it is. */
 export interface SettingsBody {
@@ -68,24 +73,35 @@ export async function resolveSettings(
 
 /**
  * Write a resolved settings change, answering whether anything changed. The checks in
- * `resolveSettings` ran before the write, so the write holds two of them itself: a slug another
- * post took in between is a 409 `slug_taken`, and a send that started in between is a 409
- * `slug_permanent`. Either way nothing is written, the listing included.
+ * `resolveSettings` ran before the write, so the write holds two of them itself. A slug another
+ * post took in between is a 409 `slug_taken` when the request set it by hand; one that follows
+ * the subject is resolved again, since the request never named it. A send that started in
+ * between is a 409 `slug_permanent`. Either way nothing is written, the listing included.
  */
 export async function applySettings(
   db: D1Database,
   post: PostRow,
   body: SettingsBody,
-  input: PublishingInput,
+  resolved: PublishingInput,
 ): Promise<boolean> {
+  let input = resolved;
   let outcome: Awaited<ReturnType<typeof setPublishing>>;
-  try {
-    outcome = await setPublishing(db, post, input);
-  } catch (err) {
-    if (isSlugCollision(err)) {
-      throw slugRefusal("slug_taken");
+  for (let attempt = 1; ; attempt++) {
+    try {
+      outcome = await setPublishing(db, post, input);
+      break;
+    } catch (err) {
+      if (!isSlugCollision(err)) {
+        throw err;
+      }
+      if (body.slug !== undefined || attempt >= SLUG_ATTEMPTS) {
+        throw slugRefusal("slug_taken");
+      }
+      input = await resolveSettings(db, post, body);
     }
-    throw err;
+  }
+  if (outcome === "missing") {
+    throw notFound("post");
   }
   if (outcome === "address_fixed") {
     throw slugPermanent(body.slug !== undefined ? "slug" : "slug_auto", "sent");

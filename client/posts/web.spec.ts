@@ -33,7 +33,7 @@ const postReply =
         email_only: emailOnly,
         status: stage === "sending" ? "scheduled" : stage,
       },
-      slug_taken: null,
+      subject_slug_held: null,
       scheduled: stage === "scheduled" ? { id: "s1", fire_at: FIRE_AT, remade_at: null } : null,
       sending: stage === "sending" ? { id: "s1" } : null,
       sent: stage === "sent" ? { id: "s1" } : null,

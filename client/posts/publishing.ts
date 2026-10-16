@@ -23,8 +23,8 @@ export function archiveBase(): string {
 }
 
 /**
- * A post's settings, as stored or as a dialog's working copy. `fixed` once the post's send has
- * started, when its address can no longer change. `slugTaken`, from the server: the slug the
+ * A post's settings, as stored or as a dialog's working copy. `fixed` once the post is
+ * published (its send has started), when its address can no longer change. `slugTaken`, from the server: the slug the
  * subject gives when another post holds it, so the address didn't follow the subject.
  */
 export interface Publishing {
@@ -44,7 +44,8 @@ export function publishingOf(post: Post, slugTaken: string | null): Publishing {
     slugAuto: post.slug_auto,
     subject: post.subject,
     slugTaken,
-    fixed: post.status === "sent",
+    // Fixed once the send starts, while `status` still reads scheduled (SPEC §4).
+    fixed: post.published_at !== null,
   };
 }
 

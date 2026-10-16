@@ -25,7 +25,7 @@ A variable is replaced with its value in each email. Type it exactly as shown, o
 | `{{ .Publication.Address }}` | Your mailing address, or empty. |
 | `{{ .Email.SentTo }}` | The address this email was sent to. |
 | `{{ .Email.UnsubscribeURL }}` | This reader's one-click unsubscribe link. Required. |
-| `{{ .Email.ViewInBrowserURL }}` | The post's public page. |
+| `{{ .Email.ViewInBrowserURL }}` | The post's own web link, which opens its page once it's sent, in your archive or not. |
 
 ## Test it
 

@@ -142,4 +142,6 @@ export async function seedCommand(argv) {
   for (const a of summary.urls.archive) {
     console.log(`    archived post: ${a}`);
   }
+  // An open editor tab holds the settings it read when it loaded (the old name and logo).
+  console.log("  reload any dashboard tab already open, so it reads the new publication.");
 }

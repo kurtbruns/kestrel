@@ -15,7 +15,7 @@ export interface Post {
   slug: string;
   /**
    * Whether the slug follows the subject: derived from it again on every draft save, unless
-   * another post holds that slug (`slug_taken`). False once a slug is set by hand.
+   * another post holds that slug (`subject_slug_held`). False once a slug is set by hand.
    */
   slug_auto: boolean;
   /**
@@ -85,16 +85,17 @@ export interface PostListResponse {
 }
 
 /**
- * When the post's slug follows its subject but another post holds the subject's slug, that
- * slug: the post takes the first free number after it, and a client says why. Null
- * otherwise (SPEC §4).
+ * `subject_slug_held` on a post's answers: when the post's slug follows its subject but another
+ * post holds the subject's slug, that slug. The post took the first free number after it, and a
+ * client says why. Not a refusal (that is the 409 `slug_taken` error). Null otherwise, and once
+ * the post is published, since its address is fixed (SPEC §4).
  */
-export type SlugTaken = string | null;
+export type SubjectSlugHeld = string | null;
 
 /** GET /api/posts/:id: the post, its current text, and where its send stands. */
 export interface PostResponse {
   post: Post;
-  slug_taken: SlugTaken;
+  subject_slug_held: SubjectSlugHeld;
   markdown: string;
   /** Who wrote the current revision; the freshness poll names them. */
   author: string | null;
@@ -127,7 +128,7 @@ export interface PostEditBody {
 /** POST /api/posts and PUT /api/posts/:id: the post as saved, and the revision the save wrote. */
 export interface PostSavedResponse {
   post: Post;
-  slug_taken: SlugTaken;
+  subject_slug_held: SubjectSlugHeld;
   revision_id: string;
 }
 
@@ -170,8 +171,8 @@ export interface StaleRevisionError {
 /**
  * What PUT /api/posts/:id/settings takes: the post's settings (SPEC §4, §5), any subset of them.
  * None is part of the frozen email, so they can change while the post is scheduled, and the
- * listing once it is sent too; the slug only until the post's send starts. Schedule, Send now,
- * and a reschedule take the same three fields, applied with the act.
+ * listing once it is sent too; the slug only until the post's send starts. Schedule and Send now
+ * take the same three fields, applied with the act; a reschedule takes none.
  */
 export interface PostSettingsBody {
   email_only?: boolean;
@@ -185,7 +186,7 @@ export interface PostSettingsBody {
 /** PUT /api/posts/:id/settings: the post as it now stands, and whether the act changed it. */
 export interface PostSettingsResponse {
   post: Post;
-  slug_taken: SlugTaken;
-  /** False when the post was already listed as asked: nothing was written. */
+  subject_slug_held: SubjectSlugHeld;
+  /** False when the post already had every setting asked for: nothing was written. */
   changed: boolean;
 }

@@ -191,7 +191,7 @@ export async function renderEditor(
   // archive, and its archive address. Neither is part of the email, so both change while the
   // post is scheduled too, through Post settings, and a dialog's edits reach them only on Save,
   // Schedule, or Send now.
-  let pub = publishingOf(post, data.slug_taken);
+  let pub = publishingOf(post, data.subject_slug_held);
 
   // The editor now only ever mounts a draft or a scheduled (frozen) post, so `locked`
   // means scheduled — signaled by the scheduled banner, not a status pill.
@@ -348,14 +348,14 @@ export async function renderEditor(
       setHtml(dest, destinationHtml(pub));
     }
   };
-  /** Save a change to the post's settings (the listing route), and show what the server made
+  /** Save a change to the post's settings (`PUT /api/posts/:id/settings`), and show what the server made
    *  of it. Throws the refusal, for the dialog that asked to say it. */
   const saveListing = async (body: PostSettingsBody): Promise<void> => {
     const res = await api<PostSettingsResponse>(`/api/posts/${id}/settings`, {
       method: "PUT",
       json: body,
     });
-    pub = publishingOf(res.post, res.slug_taken);
+    pub = publishingOf(res.post, res.subject_slug_held);
     paintPublishing();
     if (res.changed) {
       readSendsNow(); // the post's sends carry the listing: let every view see it
@@ -366,7 +366,7 @@ export async function renderEditor(
   const rereadPublishing = async () => {
     try {
       const fresh = await api<PostResponse>(`/api/posts/${id}`, { signal });
-      pub = publishingOf(fresh.post, fresh.slug_taken);
+      pub = publishingOf(fresh.post, fresh.subject_slug_held);
       paintPublishing();
     } catch {}
   };
@@ -678,12 +678,12 @@ export async function renderEditor(
     const sent = JSON.stringify(fields);
     try {
       const body: PostEditBody = { ...fields, base_revision: revisions.base };
-      const { post: u, slug_taken } = await api<PostSavedResponse>(`/api/posts/${id}`, {
+      const { post: u, subject_slug_held } = await api<PostSavedResponse>(`/api/posts/${id}`, {
         method: "PUT",
         json: body,
       });
       // The server derives a following slug from the subject on each save (SPEC §4).
-      pub = publishingOf(u, slug_taken);
+      pub = publishingOf(u, subject_slug_held);
       paintPublishing();
       revisions.saved(u.current_revision); // our save is now the newest; poll against it
       dirty.markSaved(sent);

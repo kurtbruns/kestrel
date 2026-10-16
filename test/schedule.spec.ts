@@ -453,6 +453,11 @@ describe("schedule / send / cancel + soft-lock", () => {
       error: "active_send_exists",
       send: { id: first.send.id, email_only: false },
     });
+    for (const other of [{ slug: "another-address" }, { slug_auto: false }]) {
+      const res = await sendNow(other);
+      expect(res.status, JSON.stringify(other)).toBe(409);
+      expect((await readJson(res)).error).toBe("active_send_exists");
+    }
     // A repeat naming what the post has is still the idempotent answer.
     const repeat = await sendNow({ email_only: false });
     expect(repeat.status).toBe(200);

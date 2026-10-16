@@ -256,6 +256,13 @@ describe("the archive address (SPEC §4, §5)", () => {
     expect((await read(id)).post).toMatchObject({ slug: "spring-update", email_only: false });
   });
 
+  it("answers a post deleted after the check as missing, not as a fixed address", async () => {
+    const id = await makeDraft("Gone Soon");
+    const checked = await getPost(env.DB, id);
+    await call("DELETE", `/api/posts/${id}`); // another tab, between the check and the write
+    expect(await setPublishing(env.DB, checked!, { emailOnly: true })).toBe("missing");
+  });
+
   it("lets a listing change land after the send starts when it names the address the post has (SPEC §5)", async () => {
     const id = await makeDraft("Spring Update");
     const sendId = await schedule(id);
@@ -271,6 +278,37 @@ describe("the archive address (SPEC §4, §5)", () => {
     const res = await setListing(id, { email_only: false, slug: "spring-update" });
     expect(res.status).toBe(200);
     expect((await readJson(res)).changed).toBe(true);
+  });
+
+  it("is chosen again, not refused, when two posts with one subject are made at once (SPEC §4)", async () => {
+    // Each resolves the same free slug before either writes; the one the index refuses never
+    // named a slug, so it takes the next number rather than a 409.
+    const made = await Promise.all(
+      [1, 2, 3].map(() => call("POST", "/api/posts", { subject: "Weekly Update" })),
+    );
+    expect(made.map((r) => r.status)).toEqual([201, 201, 201]);
+    const slugs = await Promise.all(made.map(async (r) => (await readJson(r)).post.slug));
+    expect([...slugs].sort()).toEqual(["weekly-update", "weekly-update-2", "weekly-update-3"]);
+  });
+
+  it("says the subject's address was taken until the post is published, then not, since its address is fixed (SPEC §4)", async () => {
+    await makeDraft("Spring Update");
+    const id = await makeDraft("Spring Update");
+    expect(await read(id)).toMatchObject({
+      post: { slug: "spring-update-2" },
+      subject_slug_held: "spring-update",
+    });
+    const sendId = await schedule(id);
+    expect((await read(id)).subject_slug_held).toBe("spring-update"); // scheduled: still movable
+    await fire(sendId);
+    expect((await read(id)).subject_slug_held).toBeNull();
+  });
+
+  it("is numbered for a new post kept off its subject with no slug of its own (SPEC §4)", async () => {
+    await makeDraft("Weekly Update");
+    const res = await call("POST", "/api/posts", { subject: "Weekly Update", slug_auto: false });
+    expect(res.status).toBe(201);
+    expect((await readJson(res)).post).toMatchObject({ slug: "weekly-update-2", slug_auto: false });
   });
 
   it("is refused, not renamed, when malformed or another post's, wherever it is set", async () => {
