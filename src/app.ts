@@ -26,8 +26,8 @@ import {
   DAILY_WRITES_SEND_RECIPIENTS,
   formatLead,
   MIN_LEAD_FLOOR_MS,
-  SELF_THROTTLE_HALTS,
   NO_RECEIPTS_AFTER_MS,
+  SELF_THROTTLE_HALTS,
   STUCK_THRESHOLD_MS,
 } from "../shared/sends";
 import {

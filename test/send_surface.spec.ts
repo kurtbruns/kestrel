@@ -5,9 +5,9 @@ import { writesDay } from "../shared/daily_writes";
 import {
   BOUNCE_SPIKE_RECENT_MS,
   DAILY_WRITES_SEND_RECIPIENTS,
+  NO_RECEIPTS_AFTER_MS,
   refusalAdvice,
   SELF_THROTTLE_HALTS,
-  NO_RECEIPTS_AFTER_MS,
   type SendFeedResponse,
   type SendListResponse,
   type SendSummary,

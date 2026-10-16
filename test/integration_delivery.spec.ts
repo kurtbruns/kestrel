@@ -29,6 +29,7 @@ import { runSend } from "../src/send/loop";
 import { SES_DEPLOY, SNS_TOPIC_ARN } from "./support/deploy";
 import { dueSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { base } from "./support/http";
+import { allowErrorLogs } from "./support/log";
 import { answerSes, SES_BULK_ENDPOINT } from "./support/ses";
 import { makeSigner, type Signer, signEnvelope } from "./support/sns";
 
