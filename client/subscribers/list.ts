@@ -32,6 +32,7 @@ import { badge, busy, type MenuItem, openMenu, renderError, toast } from "../ui/
 import {
   addSubscriberModal,
   confirmBlock,
+  confirmClear,
   confirmErase,
   confirmUnblock,
   confirmUnsubscribe,
@@ -291,9 +292,8 @@ function renderSubTable(
       }
       // Anyone can be viewed and anyone can be erased (SPEC §7); only a confirmed
       // subscriber has anything to unsubscribe from. An address with no suppression can be
-      // blocked, and only the publisher's own block can be undone here: clearing a bounce
-      // or complaint is rarer and stays with the API, and an erasure's marker is never
-      // cleared by hand.
+      // blocked; a block is undone by Unblock, and a bounce or complaint by Clear, the
+      // weightier act. An erasure's marker is never cleared by hand.
       const items: MenuItem[] = [
         {
           label: "View subscriber",
@@ -322,6 +322,15 @@ function renderSubTable(
         });
       } else if (row.suppression_reason === "manual") {
         items.push({ label: "Unblock", onClick: () => confirmUnblock(row, reload, signal) });
+      } else {
+        const flag = row.suppression_reason ? SUPPRESSION_FLAG[row.suppression_reason] : null;
+        if (flag === "bounced" || flag === "complaint") {
+          items.push({
+            label: "Clear",
+            danger: true,
+            onClick: () => confirmClear(row, flag, reload, signal),
+          });
+        }
       }
       items.push({
         label: SUBSCRIBER_ACTIONS.erase.label,

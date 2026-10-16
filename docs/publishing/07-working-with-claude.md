@@ -10,7 +10,6 @@ To set Claude up, follow [Connect Claude to the API](../guides/01-connect-claude
 - **Test and schedule a post.** Name the post and when it should go out, and say so if it should be email only. Claude tells you whether the post will be in your archive, and at which address, before it schedules. Then it sends a test of exactly what will go out and tells you how to cancel. It can also cancel a send or move it.
 - **Take a sent post out of your archive, or put it back.** Claude asks first, as the dashboard does, since taking a post out breaks links people shared.
 - **Check how a send did.** Claude reads the send's record and reports what was delivered, unsent, bounced, or complained.
-- **Lift a bounce or a complaint.** The dashboard can't, so ask Claude when you know an address works again. [Lifting a suppression](06-troubleshooting.md#lifting-a-suppression) says when that's wise.
 - **Recover an earlier version.** Every save keeps a whole version of a post, and Claude can read them back.
 - **Import a list.** Its `/migrate-list` skill asks what anything ambiguous in your old service's export means, and converts a few rows for you to check. It imports once you attest, and if a scheduled post would grow, you finish the import in the dashboard.
 

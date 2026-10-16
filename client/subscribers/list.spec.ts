@@ -112,8 +112,8 @@ describe("subscribers view", () => {
       return items;
     };
     expect(menuOf("s1")).toEqual(["View subscriber", "Unsubscribe", "Block", "Erase"]);
-    // Bounced: already suppressed, so nothing to block, and a bounce isn't unblocked here.
-    expect(menuOf("s2")).toEqual(["View subscriber", "Unsubscribe", "Erase"]);
+    // Bounced: already suppressed, so nothing to block; a bounce is cleared, not unblocked.
+    expect(menuOf("s2")).toEqual(["View subscriber", "Unsubscribe", "Clear", "Erase"]);
     expect(menuOf("s3")).toEqual(["View subscriber", "Block", "Erase"]); // pending: nothing to unsubscribe
     expect(fake.unhandled).toEqual([]);
   });
@@ -361,6 +361,54 @@ describe("subscribers view", () => {
     await settle();
     expect(fake.calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
     expect($("#toasts").textContent).toMatch(/Unblocked a@b\.c/);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("clears a bounce or complaint only after a Danger confirmation, and never offers it on an erasure's marker (SPEC §7)", async () => {
+    fake = fakeApi([
+      {
+        path: "/api/subscribers",
+        reply: () => ({
+          counts,
+          subscribers: [
+            subs[1],
+            { ...subs[2], suppressed: true, suppression_reason: "import_complaint" },
+            { ...subs[0], suppressed: true, suppression_reason: "erased" },
+          ],
+          page,
+        }),
+      },
+      {
+        method: "DELETE",
+        path: /^\/api\/suppressions\/bad%40b\.c$/,
+        reply: () => ({ email: "bad@b.c", cleared: true }),
+      },
+    ]);
+    await mount((r, s) => renderSubscribers(undefined, r, s));
+    await settle();
+    const menuOf = (id: string) => {
+      $(`tr[data-id='${id}'] [data-menu]`).click();
+      const items = $$(".menu .menu-item").map((b) => b.textContent);
+      document.querySelector<HTMLElement>(".menu-overlay")?.click();
+      return items;
+    };
+    expect(menuOf("s1")).toEqual(["View subscriber", "Unsubscribe", "Erase"]);
+    pick("s3", "Clear");
+    expect($(".modal h3").textContent).toBe("Clear this complaint?");
+    expect($(".modal .hint").textContent).toBe(
+      "Lets mail go again to <script>@b.c, an address that reported your mail as spam. Clear it only when you know the reason is gone. They’ll receive posts again only once they’re confirmed.",
+    );
+    $("#cCancel").click();
+    pick("s2", "Clear");
+    expect($(".modal h3").textContent).toBe("Clear this bounce?");
+    expect($(".modal .hint").textContent).toBe(
+      "Lets mail go again to bad@b.c, an address where mail failed. Clear it only when you know the reason is gone. They’re confirmed, so they’ll receive your posts again.",
+    );
+    expect($("#cGo").classList.contains("danger")).toBe(true);
+    $("#cGo").click();
+    await settle();
+    expect(fake.calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
+    expect($("#toasts").textContent).toMatch(/Cleared the bounce on bad@b\.c/);
     expect(fake.unhandled).toEqual([]);
   });
 
