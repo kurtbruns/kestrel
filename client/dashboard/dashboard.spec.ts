@@ -451,7 +451,7 @@ describe("dashboard", () => {
         "Name your publication",
         "Connect Amazon SES",
         "Bring your existing list",
-        "Send your first post to the archive",
+        "Publish your first post",
         "Share your subscribe link",
       ]);
       expect($(".setup-connect button").dataset.nav).toBe("#/docs/ses");
@@ -556,7 +556,7 @@ describe("dashboard", () => {
           "Name your publication",
           "Check your setup",
           "Bring your existing list",
-          "Send your first post to the archive",
+          "Publish your first post",
           "Share your subscribe link",
         ]);
         expect($(".setup-url").textContent, provider).toBe("https://app.birds.example/subscribe");
@@ -591,7 +591,7 @@ describe("dashboard", () => {
         "Name your publication",
         "Check your setup",
         "Bring your existing list",
-        "Send your first post to the archive",
+        "Publish your first post",
         "Share your subscribe link",
       ]);
       expect($("#dashSetup").previousElementSibling?.id).toBe("dashHealth");

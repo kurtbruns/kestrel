@@ -581,7 +581,7 @@ function setupStepsHtml(
           ? html`<li class="setup-done setup-list"><div class="setup-step-main"><strong>Bring your existing list</strong><span class="muted">${onList.toLocaleString()} ${onList === 1 ? "subscriber" : "subscribers"} on your list.</span></div><button data-nav="#/subscribers">Subscribers</button></li>`
           : html`<li class="setup-list"><div class="setup-step-main"><strong>Bring your existing list</strong><span class="muted">Import the subscribers you have on another service, with the consent they gave there. Skip this if you’re starting fresh.</span></div><button data-nav="#/subscribers/import">Import</button></li>`
       }
-      <li class="setup-write${done(progress.archived)}"><div class="setup-step-main"><strong>Send your first post to the archive</strong><span class="muted">Write a post, test it, and send it. Setup is done once a post in your archive goes out.</span></div>${layout === "card" ? html`<button data-act="new-post">New post</button>` : html`<button class="primary" data-act="new-post">New post</button>`}</li>
+      <li class="setup-write${done(progress.archived)}"><div class="setup-step-main"><strong>Publish your first post</strong><span class="muted">Write a post, test it, and send it. It goes to your subscribers and onto your site.</span></div>${layout === "card" ? html`<button data-act="new-post">New post</button>` : html`<button class="primary" data-act="new-post">New post</button>`}</li>
       ${
         notConnected
           ? html`<li class="setup-subscribe"><div class="setup-step-main"><strong>Share your subscribe link</strong><span class="muted">Signups open once an email provider is connected; until then the page says they aren’t open yet.</span></div></li>`
