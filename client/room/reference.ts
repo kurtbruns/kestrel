@@ -7,6 +7,7 @@ import type {
   ReferenceGroup,
   ReferenceResource,
   ReferenceResponse,
+  RouteError,
 } from "../../shared/reference";
 import { api, describeError } from "../api";
 import { mount } from "../lifecycle";
@@ -58,6 +59,17 @@ function apiBodyHtml(body: BodyField[] | undefined): Html | null {
   );
   return html`<div class="block"><div class="block-head"><span class="block-label">Body</span></div><table class="api-query api-body"><tbody>${rows}</tbody></table></div>`;
 }
+// The refusals the route gives of its own, each with its status and the fields it carries.
+function apiErrorsHtml(errors: RouteError[] | undefined): Html | null {
+  if (!errors?.length) {
+    return null;
+  }
+  const rows = errors.map(
+    (e) =>
+      html`<tr><td><span class="api-status">${e.status}</span> <code>${e.code}</code></td><td class="muted">${e.when}${e.details?.length ? html` With ${e.details.map((d, i) => html`${i ? ", " : ""}<code>${d}</code>`)}.` : null}</td></tr>`,
+  );
+  return html`<div class="block"><div class="block-head"><span class="block-label">Refusals</span></div><table class="api-query api-errors"><tbody>${rows}</tbody></table></div>`;
+}
 // The body types a write accepts, from the registration the router enforces them by. A
 // route that takes no body lists none.
 function apiAcceptsHtml(accepts: readonly string[] | undefined): Html | null {
@@ -91,6 +103,7 @@ function apiRouteHtml(r: ReferenceEntry): Html {
         ${apiQueryHtml(r.query)}
         ${apiAcceptsHtml(r.accepts)}
         ${apiBodyHtml(r.body)}
+        ${apiErrorsHtml(r.errors)}
         ${apiExample("Request", r.example?.request)}
         ${apiExample("Response", r.example?.response)}
         ${apiCurl(r)}

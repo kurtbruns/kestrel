@@ -48,7 +48,7 @@ import { RASTER_IMAGE_TYPES } from "./lib/image_types";
 import { HALT_BACKOFF_MS, MISSED_THRESHOLD_MS } from "./lib/time";
 import { unwrap } from "./lib/unwrap";
 import { buildReference, referenceMarkdown } from "./reference";
-import { type BodyField, type RouteDef, Router } from "./router";
+import { type BodyField, type RouteDef, type RouteRefusal, Router } from "./router";
 import * as archiveRoutes from "./routes/archive";
 import * as devRoutes from "./routes/dev";
 import * as docsRoutes from "./routes/docs";
@@ -190,6 +190,20 @@ export function createRouter({
         "For a plain list, what its addresses are (default `subscribed`). A 400 on a CSV, whose rows say.",
     },
   ];
+  // What an import's plan refuses, naming what was wrong and what was expected; a commit too.
+  const importRefusals: RouteRefusal[] = [
+    { code: "unrecognized_format", when: "Not a file in the format at all.", details: ["row"] },
+    {
+      code: "invalid_field",
+      when: "A column or value the format doesn't take.",
+      details: ["row", "column", "allowed"],
+    },
+    { code: "too_many_rows", when: "Over this deployment's row limit.", details: ["limit"] },
+    {
+      code: "body_too_large",
+      when: `Over ${IMPORT_LIMITS.maxBodyBytes / (1024 * 1024)} MB.`,
+    },
+  ];
   // A fire time, as Schedule and Reschedule take it.
   const fireAtField: BodyField = {
     name: "fire_at",
@@ -198,9 +212,51 @@ export function createRouter({
     description:
       "When to send: epoch milliseconds, or an ISO-8601 timestamp with a `Z` or `±hh:mm` offset (one without is a 400). At least the minimum lead out, then rounded up to the next whole minute.",
   };
-  // What every route that would send says while the deployment has no provider: one code.
-  const notConnected =
-    "Refused with 409 `provider_not_connected` while no email provider is connected (SPEC §9), since nothing can be sent.";
+  // The refusals several routes share, each in one wording.
+  const notConnected: RouteRefusal = {
+    code: "provider_not_connected",
+    when: "No email provider is connected (SPEC §9), so nothing can be sent.",
+  };
+  const remakeRefusals: RouteRefusal[] = [
+    {
+      code: "remake_required",
+      when: "The change would re-make scheduled sends that `remake` doesn't name.",
+      details: ["sends"],
+    },
+    {
+      code: "remake_too_close",
+      when: "A send it would re-make is inside the minimum lead.",
+      details: ["retry_after"],
+    },
+    { code: "conflict", when: "Another settings save landed at the same moment: try again." },
+  ];
+  const slugRefusals: RouteRefusal[] = [
+    {
+      code: "slug_invalid",
+      when: "A slug set by hand isn't lowercase letters and numbers joined by single hyphens.",
+    },
+    { code: "slug_taken", when: "Another post holds the slug set by hand." },
+  ];
+  const activeSendExists: RouteRefusal = {
+    code: "active_send_exists",
+    when: "The post already has its one active send.",
+    details: ["send"],
+  };
+  // What a freeze refuses, beside its one active send.
+  const freezeRefusals: RouteRefusal[] = [
+    { code: "post_not_draft", when: "The post is scheduled or sent." },
+    { code: "subject_required", when: "The post's subject is empty." },
+    {
+      code: "settings_changed",
+      when: "A template or identity save kept landing while it froze: try again.",
+    },
+    notConnected,
+    ...slugRefusals,
+  ];
+  const notDraft: RouteRefusal = {
+    code: "post_not_draft",
+    when: "The post is scheduled or sent; its message says whether canceling would unlock it.",
+  };
   const actionText =
     "An act carries no precondition on the send you read: it applies to the send as it stands, within the rules above, and the answer shows the result. An `If-Match` header is ignored. Every refusal carries the send as it stands in `send`, in the `GET /api/sends` row shape.";
   // One send as every send route carries it, for the examples.
@@ -284,7 +340,19 @@ export function createRouter({
       summary:
         "Health check: ok once the configuration is accepted and the database has run every migration this release ships.",
       description:
-        "Answered before any route while either is not so (SPEC §9): `500` `invalid_config` naming the setting, or `500` `schema_behind` with the `missing` migrations and a `message` saying what to run.",
+        "Answered before any route while either is not so (SPEC §9), on every API path alike.",
+      errors: [
+        {
+          code: "invalid_config",
+          when: "The deployment's configuration is refused.",
+          details: ["variable"],
+        },
+        {
+          code: "schema_behind",
+          when: "The database hasn't run every migration this release ships.",
+          details: ["missing"],
+        },
+      ],
       handler: () => json({ status: "ok", service: "kestrel" }),
     },
     {
@@ -446,7 +514,7 @@ export function createRouter({
       summary:
         "Update runtime preferences: test recipients, the publication identity, the email template, the confirmation email wording.",
       description:
-        "Every field is optional: send only what changes. Saving a changed template, or an identity field the template renders, re-makes every scheduled send's email at once (SPEC §6, §9), and is refused until the client acknowledges those sends by id in `remake` (409 `remake_required`, listing them) or while any of them is inside the minimum lead (409 `remake_too_close`, with `retry_after`); a save that leaves the email's inputs unchanged asks nothing. `GET /api/settings` lists them under `inUse` beforehand; the response's `remade` says what was re-made, and each of those sends then needs a fresh test. `warnings` is advice that never blocks the save: likely template mistakes, and a mailing address the template leaves out.",
+        "Every field is optional: send only what changes. Saving a changed template, or an identity field the template renders, re-makes every scheduled send's email at once (SPEC §6, §9), once the client acknowledges those sends by id in `remake`; a save that leaves the email's inputs unchanged asks nothing. `GET /api/settings` lists them under `inUse` beforehand; the response's `remade` says what was re-made, and each of those sends then needs a fresh test. `warnings` is advice that never blocks the save: likely template mistakes, and a mailing address the template leaves out.",
       example: {
         request: { emailTemplate: "<style>…</style>…", remake: ["s_xyz789"] },
         response: {
@@ -514,6 +582,7 @@ export function createRouter({
             "The id of every scheduled send this save would re-make, acknowledging it (`inUse.sends` in `GET /api/settings`).",
         },
       ],
+      errors: remakeRefusals,
       handler: settingsRoutes.update,
     },
     {
@@ -542,6 +611,7 @@ export function createRouter({
             "The logo: a PNG, JPEG, WebP, or GIF, square and at least 256 × 256 px, since every surface shows it as a square and an email stretches one that isn't.",
         },
       ],
+      errors: remakeRefusals,
       handler: settingsRoutes.uploadLogo,
     },
     {
@@ -552,7 +622,7 @@ export function createRouter({
       title: "Remove the logo",
       summary: "Remove the publication logo.",
       description:
-        "Under the same re-make rule as `PUT /api/settings` when the template renders the logo and sends are scheduled: acknowledged in `remake`, refused inside the minimum lead. The image itself stays served, since emails already sent still show it (I3); only what renders from then on loses it.",
+        "Under the same re-make rule as `PUT /api/settings` when the template renders the logo and sends are scheduled: acknowledged in `remake`. The image itself stays served, since emails already sent still show it (I3); only what renders from then on loses it.",
       query: [
         {
           name: "remake",
@@ -560,6 +630,7 @@ export function createRouter({
             "The ids of the scheduled sends this would re-make, comma-separated, as for the upload.",
         },
       ],
+      errors: remakeRefusals,
       handler: settingsRoutes.deleteLogo,
     },
     {
@@ -573,7 +644,7 @@ export function createRouter({
       resource: "settings",
       title: "Test the email template",
       summary: "Send a sample post through the saved email template (I5).",
-      description: `Renders the stored template, never unsaved editor content; saving first is the client's job, and that save may need the re-make acknowledgement (see \`PUT /api/settings\`). The answer names the recipients the provider didn't accept in \`failed\`, so a client can offer exactly those again and no one gets a second copy, and says why for each in \`not_sent\`, in the same order (see \`POST /api/posts/:id/test\`). ${notConnected}`,
+      description: `Renders the stored template, never unsaved editor content; saving first is the client's job, and that save may need the re-make acknowledgement (see \`PUT /api/settings\`). The answer names the recipients the provider didn't accept in \`failed\`, so a client can offer exactly those again and no one gets a second copy, and says why for each in \`not_sent\`, in the same order (see \`POST /api/posts/:id/test\`).`,
       example: {
         request: { to: "you@example.com" },
         response: {
@@ -592,6 +663,7 @@ export function createRouter({
           description: `Where to send it, at most ${renderRoutes.MAX_TEMPLATE_TEST_RECIPIENTS} addresses. Omitted, the saved \`testRecipients\`.`,
         },
       ],
+      errors: [notConnected],
       handler: renderRoutes.templateTest,
     },
     {
@@ -602,8 +674,20 @@ export function createRouter({
       title: "Test notifications",
       summary:
         "Send a sample notification to the saved notifications address, through the live channel (SPEC §8).",
-      description: `Takes no body and goes only to \`settings.notifications.to\`, so it cannot mail an arbitrary address; 400 when none is set. A channel that refuses (an unverified Cloudflare destination, say) is a 502 \`notify_failed\` carrying its words. Through the newsletter's provider, ${notConnected.charAt(0).toLowerCase()}${notConnected.slice(1)}`,
+      description:
+        "Takes no body and goes only to `settings.notifications.to`, so it cannot mail an arbitrary address.",
       example: { response: { to: "you@example.com", channel: "cloudflare" } },
+      errors: [
+        { code: "bad_request", when: "No notifications address is saved." },
+        {
+          code: "notify_failed",
+          when: "The channel refused it, in its own words (an unverified Cloudflare destination, say).",
+        },
+        {
+          ...notConnected,
+          when: "Notifications go through the newsletter's provider, and none is connected.",
+        },
+      ],
       handler: settingsRoutes.notificationTest,
     },
     {
@@ -615,7 +699,8 @@ export function createRouter({
       summary:
         "A page a reader can land on, as a standalone HTML page: Settings' preview of it (SPEC §5).",
       description:
-        "`journey` is `subscribe` (`form`, `check-inbox`, `not-an-email`), `confirm` (`ready`, `confirmed`, `expired`, `invalid`), `unsubscribe` (`ask`, `done`, `invalid`), or `reading` (`landing`, `archive`, `post`, `landing-empty`, `archive-empty`, `not-found`), naming the `state`. Rendered by the code that serves the real page, with the saved publication identity and a sample address and sample posts in place of a reader's own (the `-empty` pages show the landing page and archive before any post is sent), and nothing marking it as a preview, since Settings frames it as one; the post page renders the sample post through the saved template. Always 200, whatever status the real page carries; an unknown pair is a 404. A preview changes nothing: its forms submit nowhere (`form-action 'none'`).",
+        "`journey` is `subscribe` (`form`, `check-inbox`, `not-an-email`), `confirm` (`ready`, `confirmed`, `expired`, `invalid`), `unsubscribe` (`ask`, `done`, `invalid`), or `reading` (`landing`, `archive`, `post`, `landing-empty`, `archive-empty`, `not-found`), naming the `state`. Rendered by the code that serves the real page, with the saved publication identity and a sample address and sample posts in place of a reader's own (the `-empty` pages show the landing page and archive before any post is sent), and nothing marking it as a preview, since Settings frames it as one; the post page renders the sample post through the saved template. Always 200, whatever status the real page carries. A preview changes nothing: its forms submit nowhere (`form-action 'none'`).",
+      errors: [{ code: "not_found", when: "The journey and state are not a pair listed here." }],
       handler: readerPageRoutes.readerPagePreview,
     },
 
@@ -630,7 +715,7 @@ export function createRouter({
       summary:
         "Create a draft post. Its slug follows the subject (`slug_auto: true`) unless you send a `slug`. Every field is optional; an empty body makes a blank draft.",
       description:
-        "The post is made with its unlisted link, `unlisted_url` (`<app origin>/email/<unlisted_token>`), which every test and send of it carries as view-in-browser and which never changes (SPEC §5). Every post a route answers carries both its addresses, absolute: `unlisted_url`, and `archive_url`, where a listed post is published once its send starts, whether or not it shows anything yet. Beside them, `published_at` is when the post's send started (null before), and `archive_live` whether `archive_url` shows the post now. A reader can see the post at `archive_url` when `archive_live`, otherwise at `unlisted_url` once `published_at` is set; which to share is the publisher's call. `status` stays `scheduled` while the send is going out, so read `published_at`, not `status`, for whether a post is public. The slug is the post's archive address, unique among all posts, drafts included (SPEC §4): a malformed one is a 400 `slug_invalid`, another post's a 409 `slug_taken`. A slug that follows the subject takes the subject's slug, or the first free number (`-2`) when another post holds it, and `subject_slug_held` in the answer names the slug it couldn't take. That field is not a refusal: the save succeeded, with the numbered slug.",
+        "The post is made with its unlisted link, `unlisted_url` (`<app origin>/email/<unlisted_token>`), which every test and send of it carries as view-in-browser and which never changes (SPEC §5). Every post a route answers carries both its addresses, absolute: `unlisted_url`, and `archive_url`, where a listed post is published once its send starts, whether or not it shows anything yet. Beside them, `published_at` is when the post's send started (null before), and `archive_live` whether `archive_url` shows the post now. A reader can see the post at `archive_url` when `archive_live`, otherwise at `unlisted_url` once `published_at` is set; which to share is the publisher's call. `status` stays `scheduled` while the send is going out, so read `published_at`, not `status`, for whether a post is public. The slug is the post's archive address, unique among all posts, drafts included (SPEC §4). A slug that follows the subject takes the subject's slug, or the first free number (`-2`) when another post holds it, and `subject_slug_held` in the answer names the slug it couldn't take. That field is not a refusal: the save succeeded, with the numbered slug.",
       example: {
         request: { subject: "Hello, world", markdown: "# Hello\n\nWelcome." },
         response: {
@@ -651,6 +736,7 @@ export function createRouter({
         },
       },
       body: postEditFields,
+      errors: slugRefusals,
       handler: postRoutes.createPost,
     },
     {
@@ -706,9 +792,9 @@ export function createRouter({
       resource: "posts",
       title: "Update a post",
       summary:
-        "Update a draft. Send the revision you read as `base_revision` (or If-Match): a save without one is a 428 `base_required` carrying the post as it stands, and one whose base is no longer current is a 409 `stale_revision`.",
+        "Update a draft, against the revision you read as `base_revision` (or If-Match), so no one's edit is overwritten unseen.",
       description:
-        "Only a draft is editable; a scheduled post is soft-locked until its schedule is canceled, and a save to a post that is not a draft is a 409 `post_not_draft` (its message says whether canceling the schedule would unlock it). While the post's slug follows the subject (`slug_auto: true`), every save derives it from the subject again, taking the first free number after the subject's slug (`-2`) when another post holds it, and `subject_slug_held` names the one it couldn't take. Take the slug from the answer. A slug set by hand that is malformed is a 400 `slug_invalid`, and one another post holds a 409 `slug_taken`; neither saves anything.",
+        "Only a draft is editable; a scheduled post is soft-locked until its schedule is canceled. While the post's slug follows the subject (`slug_auto: true`), every save derives it from the subject again, taking the first free number after the subject's slug (`-2`) when another post holds it, and `subject_slug_held` names the one it couldn't take. Take the slug from the answer. A refused save saves nothing.",
       example: {
         request: {
           subject: "Hello again, world",
@@ -735,6 +821,16 @@ export function createRouter({
             "The revision this edit is based on, the post's `current_revision` as you read it. An `If-Match` header may carry it instead, and wins.",
         },
       ],
+      errors: [
+        { code: "base_required", when: "The save names no base revision.", details: ["post"] },
+        {
+          code: "stale_revision",
+          when: "Another save landed since the base revision.",
+          details: ["current_revision", "updated_at", "author"],
+        },
+        notDraft,
+        ...slugRefusals,
+      ],
       handler: postRoutes.updatePost,
     },
     {
@@ -743,8 +839,8 @@ export function createRouter({
       access: "admin",
       resource: "posts",
       title: "Delete a post",
-      summary:
-        "Delete a draft and its revisions (drafts only; any other post is a 409 `post_not_draft`).",
+      summary: "Delete a draft and its revisions.",
+      errors: [notDraft],
       handler: postRoutes.deletePost,
     },
     {
@@ -757,7 +853,7 @@ export function createRouter({
       summary:
         "Set a post's publishing options: where it is listed (`email_only`) and its archive address (`slug`, `slug_auto`) (SPEC §4, §5).",
       description:
-        "Any subset of the three. Allowed in any state, a scheduled or sent post's included: none is part of the frozen email, which carries the post's unlisted link, so a change never re-makes a scheduled send or alters a sent one (I3). An email-only post's archive address stays the post's, and its unlisted link opens the page. Schedule and Send now take the same three fields; a reschedule takes none, since it moves only the time. A malformed slug is a 400 `slug_invalid` and another post's a 409 `slug_taken`. Once the post's send has started, or while its scheduled email (frozen before unlisted links) links its archive address, its address is fixed: a change to it is a 409 `slug_permanent`, while naming the address it has is fine. Each of the post's sends carries the listing and the address in its view, so they take a new `rev` and the send feed reports them. Answers with the post as it now stands (its `archive_live` says at once whether its archive address shows it), its `subject_slug_held`, and `changed: false` when nothing changed. A body naming none of the three, or a field of the wrong type, is a 400 naming it.",
+        "Any subset of the three. Allowed in any state, a scheduled or sent post's included: none is part of the frozen email, which carries the post's unlisted link, so a change never re-makes a scheduled send or alters a sent one (I3). An email-only post's archive address stays the post's, and its unlisted link opens the page. Schedule and Send now take the same three fields; a reschedule takes none, since it moves only the time. Once the post's send has started its address is fixed. Each of the post's sends carries the listing and the address in its view, so they take a new `rev` and the send feed reports them. Answers with the post as it now stands (its `archive_live` says at once whether its archive address shows it), its `subject_slug_held`, and `changed: false` when nothing changed. A body naming none of the three is a 400.",
       example: {
         request: { email_only: false, slug: "hello-world" },
         response: {
@@ -777,6 +873,13 @@ export function createRouter({
         },
       },
       body: postSettingsFields,
+      errors: [
+        ...slugRefusals,
+        {
+          code: "slug_permanent",
+          when: "A change to the address once the post's send has started, or while its scheduled email (frozen before unlisted links) links it. Naming the address it has is fine.",
+        },
+      ],
       handler: postRoutes.setSettings,
     },
     {
@@ -806,8 +909,7 @@ export function createRouter({
       accepts: [...FORM_UPLOAD, ...RASTER_IMAGE_TYPES],
       resource: "posts",
       title: "Upload an image",
-      summary:
-        "Upload an image to a draft, as a form or the raw bytes; a post that is not a draft is a 409 `post_not_draft`.",
+      summary: "Upload an image to a draft, as a form or the raw bytes.",
       description:
         "The post's Markdown references the image by the `filename` the response gives, `![a short description](cover.jpg)`, and the render resolves that name to the stored image.",
       query: [
@@ -830,6 +932,7 @@ export function createRouter({
           description: "The name to store it under, in place of the file's own.",
         },
       ],
+      errors: [notDraft],
       handler: imageRoutes.uploadImage,
     },
     {
@@ -847,8 +950,8 @@ export function createRouter({
       access: "admin",
       resource: "posts",
       title: "Delete an image",
-      summary:
-        "Delete one image from a draft; a post that is not a draft is a 409 `post_not_draft`.",
+      summary: "Delete one image from a draft.",
+      errors: [notDraft],
       handler: imageRoutes.deleteImage,
     },
 
@@ -898,8 +1001,7 @@ export function createRouter({
       summary:
         "Send a test to one address through the same per-recipient path as a real send (I5).",
       description:
-        "Once the post is scheduled this sends its frozen copy, exactly as it will fire, and once sent the record's; a draft's test is a live render (SPEC §5). The response's `frozen` says which, and its `warnings` are that copy's: a frozen copy's are the ones its render gave when it was frozen or last re-made. A test of a scheduled send's frozen copy is recorded as its `tested_at`, which clears the send's `remade` or `untested` condition. `sent` is true only when the provider took the test. When it didn't, `not_sent` says why: the provider's own words as `error` (never a credential), a `message` to show or relay as it stands, with the fix where it is known (the same advice as a send's `refused` condition, so a test refused for the account or the address isn't simply tried again), and `may_have_arrived`, true when the provider never answered: then the test may be in the inbox, and the answer is still a 200, never a server error. " +
-        notConnected,
+        "Once the post is scheduled this sends its frozen copy, exactly as it will fire, and once sent the record's; a draft's test is a live render (SPEC §5). The response's `frozen` says which, and its `warnings` are that copy's: a frozen copy's are the ones its render gave when it was frozen or last re-made. A test of a scheduled send's frozen copy is recorded as its `tested_at`, which clears the send's `remade` or `untested` condition. `sent` is true only when the provider took the test. When it didn't, `not_sent` says why: the provider's own words as `error` (never a credential), a `message` to show or relay as it stands, with the fix where it is known (the same advice as a send's `refused` condition, so a test refused for the account or the address isn't simply tried again), and `may_have_arrived`, true when the provider never answered: then the test may be in the inbox, and the answer is still a 200, never a server error.",
       example: {
         request: { to: "you@example.com" },
         response: {
@@ -920,6 +1022,7 @@ export function createRouter({
           description: "The one address to send it to.",
         },
       ],
+      errors: [notConnected],
       handler: renderRoutes.test,
     },
     ...devOnly(
@@ -982,14 +1085,22 @@ export function createRouter({
       title: "Schedule a post",
       summary: `Freeze the render and schedule the send for a future time (at least ${formatLead(minLeadMs)} out).`,
       description:
-        "Freezes the current draft, with the template and identity as they stand, onto a send row and soft-locks the post; cancelable until its fire time. A later template or identity change re-makes that frozen email after the publisher confirms it (SPEC §6); there is no per-send template to name, and a `template_revision` field is a 400. A timestamp without an offset is a 400, since the Worker cannot know which local time was meant. `fire_at` must be at least the minimum lead out, a 400 `fire_at_too_soon` otherwise (for the soonest send, use Send now, `POST /api/posts/:id/send`): " +
+        "Freezes the current draft, with the template and identity as they stand, onto a send row and soft-locks the post; cancelable until its fire time. A later template or identity change re-makes that frozen email after the publisher confirms it (SPEC §6); there is no per-send template to name, and a `template_revision` field is a 400. The minimum lead is " +
         lead +
-        ". The time is then rounded up to the next whole minute (one already on the minute stays), since the sweep fires sends on the minute; the lead is checked on the time as requested, so rounding only lengthens the window. `email_only`, `slug`, and `slug_auto` set the post's listing and address as it is scheduled (SPEC §5), as `PUT /api/posts/:id/settings` does, checked before anything is frozen, so a 400 `slug_invalid` or 409 `slug_taken` schedules nothing, and a refused schedule changes neither. None is part of the frozen email. Answers with the new send's view (as `GET /api/sends/:id` describes it), a `cursor` to follow it from, and `warnings`, what the render found wrong with the frozen copy (an image the post never uploaded, say), which preview and test of the copy report too (SPEC §5). Refusals: 409 `active_send_exists` when the post already has its one active send (carried as `send`), 409 `post_not_draft`, 400 `subject_required` for an empty subject, 409 `settings_changed` when a template or identity save kept landing while it froze (try again), and 409 `provider_not_connected` while no email provider is connected (SPEC §9).",
+        ". The time is then rounded up to the next whole minute (one already on the minute stays), since the sweep fires sends on the minute; the lead is checked on the time as requested, so rounding only lengthens the window. `email_only`, `slug`, and `slug_auto` set the post's listing and address as it is scheduled (SPEC §5), as `PUT /api/posts/:id/settings` does, checked before anything is frozen, so a refused schedule changes neither. None is part of the frozen email. Answers with the new send's view (as `GET /api/sends/:id` describes it), a `cursor` to follow it from, and `warnings`, what the render found wrong with the frozen copy (an image the post never uploaded, say), which preview and test of the copy report too (SPEC §5).",
       example: {
         request: { fire_at: "2026-01-16T09:00:00Z" },
         response: { send: scheduledExample, cursor: "57.1768467610000", warnings: [] },
       },
       body: [fireAtField, ...postSettingsFields],
+      errors: [
+        {
+          code: "fire_at_too_soon",
+          when: "`fire_at` is inside the minimum lead; Send now is the soonest send.",
+        },
+        activeSendExists,
+        ...freezeRefusals,
+      ],
       handler: scheduleRoutes.schedule,
     },
     {
@@ -1004,12 +1115,19 @@ export function createRouter({
       description:
         "The same freeze as scheduling, with the template and identity as they stand, and `fire_at` set to now plus the minimum lead, rounded up to the next whole minute as every fire time is: " +
         lead +
-        ". For nearly all of that window the send is inside the minimum lead, so a template or identity save that would re-make it is refused until it has fired. The body is optional. A second call for a post already in its window answers with that send and `idempotent: true`, and changes nothing, its listing included; one that names settings the post doesn't have is a 409 `active_send_exists` carrying the send, so a caller that asked for email only never reads success for a post going out listed (change them with `PUT /api/posts/:id/settings`). Its answer carries `warnings` as scheduling's does, a repeat's included. The other refusals are as for scheduling.",
+        ". For nearly all of that window the send is inside the minimum lead, so a template or identity save that would re-make it is refused until it has fired. The body is optional. A second call for a post already in its window answers with that send and `idempotent: true`, and changes nothing, its listing included; change its settings with `PUT /api/posts/:id/settings`. Its answer carries `warnings` as scheduling's does, a repeat's included.",
       example: {
         request: { email_only: true },
         response: { send: scheduledExample, cursor: "57.1768467610000", warnings: [] },
       },
       body: postSettingsFields,
+      errors: [
+        {
+          ...activeSendExists,
+          when: "The post already has its one active send and the body names settings it doesn't have, so a caller that asked for email only never reads success for a post going out listed.",
+        },
+        ...freezeRefusals,
+      ],
       handler: scheduleRoutes.sendNow,
     },
     {
@@ -1066,12 +1184,12 @@ export function createRouter({
       title: "Follow changes to sends",
       summary:
         "What changed among sends since a cursor, each send with its phase, counters, conditions, and actions, every open condition across the sends, and when to read again: what a client follows to keep up with sends, whichever client changed them, without polling each one.",
-      description: `With \`since\` (the \`cursor\` from \`GET /api/sends\`, \`GET /api/sends/:id\`, or this route's last read), \`sends\` is every send that changed after that read, whatever its state: a cancel, a move, a re-make, a new schedule, dispatch progress, a receipt, a completion. It also holds each send the clock changed with no write since then: one whose fire time passed (\`due\`), one past the ${MISSED_THRESHOLD_MS / 60_000}-minute missed tolerance (the \`missed\` condition), and one idle past the ${STUCK_THRESHOLD_MS / 60_000}-minute stuck threshold (\`stuck\`). A send turns wedged (\`wedged\`) by a write, when the run that left recipients with an unknown fate hands it back, so it is reported like any other change. \`removed\` is every send removed after the cursor (a canceled send deleted with its post), each \`{id, rev}\`, so a client drops it rather than keeping a row for a send that is gone. Without \`since\`, \`sends\` is every send that can change on its own: due, \`sending\`, or settling (\`sent\` within the last ${SETTLE_FOLLOW_MS / 60_000} minutes with a recipient still awaiting a receipt), and \`removed\` is empty. Either way each send is its view, the shape \`GET /api/sends/:id\` describes, read off the send's counters, never its delivery rows, so a send reads the same here as on its page; soonest fire first. \`cursor\` is where this read stood, to pass as \`since\` next time: \`<seq>.<at>\`, the change sequence at the read and the server's time of it (\`now\`), both decimal. The format is part of this contract, so a client holding cursors from several reads (a list, and one send's page) may compare them and follow everything from one read: the cursor with the smaller of each number answers for both. A read reports at most \`limit\` changes after the cursor, in the order they were made, and never splits the changes one write made; the sends the clock changed are always all reported. When more are waiting, \`more\` is true, \`cursor\` stands where the read stopped, and \`read_again_at\` is \`now\`: read again at once from it. A cursor ahead of this database (a sequence above the current one, or a read time more than a minute after \`now\`, as after a reset or a restore of the database) is a 409 \`cursor_ahead\` naming \`since\`: nothing after it would ever be reported, so read the sends again (\`GET /api/sends\` or \`GET /api/sends/:id\`) and follow from that read's cursor. \`read_again_at\` is when to read again, by the server's clock (\`now\`), from each unfinished send's \`next_change_at\`, the earliest it can change with no one acting: about 3 seconds while any send can move now (due, short of the missed tolerance, or sending with a run in hand or work queued for the next tick); while sends are only settling, 3 seconds, then 15, then 60, by how long ago the youngest finished dispatch; otherwise about once a minute (one sweep tick); and never later than just past the next change the clock or the sweep will make (a fire time, a halted send's next retry). A send waiting on a person (the provider refusing the account, a wedged send awaiting Resolve, a missed fire time) does not quicken it. A client that reads again then is never more than a few seconds behind a send that is moving, behind a settling send's receipts by at most that pace, and behind any other change (the other client's cancel or move, a Resolve, a late receipt) by about a minute. \`read_again_at\` is advisory: reading sooner, such as right after acting on a send, is always fine, and reading late or skipping a read loses nothing, since the next read from the last cursor reports every send that changed in between. \`GET /api/sends\` and \`GET /api/sends/:id\` carry no pace of their own: a client following from one of them reads this route at once, then keeps to its \`read_again_at\`. \`conditions\` repeats every open condition across the sends that can have one (scheduled, sending, and sent within the bounce-spike window), each with its \`send_id\` and \`subject\`, whether or not the send changed, so one read shows every open problem; most severe first. ${conditionsText} Reading it changes nothing.`,
+      description: `With \`since\` (the \`cursor\` from \`GET /api/sends\`, \`GET /api/sends/:id\`, or this route's last read), \`sends\` is every send that changed after that read, whatever its state: a cancel, a move, a re-make, a new schedule, dispatch progress, a receipt, a completion. It also holds each send the clock changed with no write since then: one whose fire time passed (\`due\`), one past the ${MISSED_THRESHOLD_MS / 60_000}-minute missed tolerance (the \`missed\` condition), and one idle past the ${STUCK_THRESHOLD_MS / 60_000}-minute stuck threshold (\`stuck\`). A send turns wedged (\`wedged\`) by a write, when the run that left recipients with an unknown fate hands it back, so it is reported like any other change. \`removed\` is every send removed after the cursor (a canceled send deleted with its post), each \`{id, rev}\`, so a client drops it rather than keeping a row for a send that is gone. Without \`since\`, \`sends\` is every send that can change on its own: due, \`sending\`, or settling (\`sent\` within the last ${SETTLE_FOLLOW_MS / 60_000} minutes with a recipient still awaiting a receipt), and \`removed\` is empty. Either way each send is its view, the shape \`GET /api/sends/:id\` describes, read off the send's counters, never its delivery rows, so a send reads the same here as on its page; soonest fire first. \`cursor\` is where this read stood, to pass as \`since\` next time: \`<seq>.<at>\`, the change sequence at the read and the server's time of it (\`now\`), both decimal. The format is part of this contract, so a client holding cursors from several reads (a list, and one send's page) may compare them and follow everything from one read: the cursor with the smaller of each number answers for both. A read reports at most \`limit\` changes after the cursor, in the order they were made, and never splits the changes one write made; the sends the clock changed are always all reported. When more are waiting, \`more\` is true, \`cursor\` stands where the read stopped, and \`read_again_at\` is \`now\`: read again at once from it. A cursor is ahead of this database when its sequence is above the current one or its read time more than a minute after \`now\`: nothing after it would ever be reported. \`read_again_at\` is when to read again, by the server's clock (\`now\`), from each unfinished send's \`next_change_at\`, the earliest it can change with no one acting: about 3 seconds while any send can move now (due, short of the missed tolerance, or sending with a run in hand or work queued for the next tick); while sends are only settling, 3 seconds, then 15, then 60, by how long ago the youngest finished dispatch; otherwise about once a minute (one sweep tick); and never later than just past the next change the clock or the sweep will make (a fire time, a halted send's next retry). A send waiting on a person (the provider refusing the account, a wedged send awaiting Resolve, a missed fire time) does not quicken it. A client that reads again then is never more than a few seconds behind a send that is moving, behind a settling send's receipts by at most that pace, and behind any other change (the other client's cancel or move, a Resolve, a late receipt) by about a minute. \`read_again_at\` is advisory: reading sooner, such as right after acting on a send, is always fine, and reading late or skipping a read loses nothing, since the next read from the last cursor reports every send that changed in between. \`GET /api/sends\` and \`GET /api/sends/:id\` carry no pace of their own: a client following from one of them reads this route at once, then keeps to its \`read_again_at\`. \`conditions\` repeats every open condition across the sends that can have one (scheduled, sending, and sent within the bounce-spike window), each with its \`send_id\` and \`subject\`, whether or not the send changed, so one read shows every open problem; most severe first. ${conditionsText} Reading it changes nothing.`,
       query: [
         {
           name: "since",
           description:
-            "The `cursor` of an earlier read of sends. Omit it for the sends that can change on their own. A value this API did not issue is a 400 naming the field; one ahead of this database is a 409 `cursor_ahead`.",
+            "The `cursor` of an earlier read of sends. Omit it for the sends that can change on their own. A value this API did not issue is a 400 naming the field.",
         },
         {
           name: "limit",
@@ -1120,6 +1238,12 @@ export function createRouter({
           read_again_at: 1768467613000,
         },
       },
+      errors: [
+        {
+          code: "cursor_ahead",
+          when: "`since` is ahead of this database, as after a reset or a restore: read the sends again and follow from that read's cursor.",
+        },
+      ],
       handler: sendRoutes.feed,
     },
     {
@@ -1234,7 +1358,7 @@ export function createRouter({
       title: "Cancel a send",
       summary: "Cancel a scheduled send during its review window; unlocks the post.",
       description:
-        "Answers with the send's view and a `cursor`. The review window closes at the fire time (SPEC §6), whether or not the sweep has started the send: from then this is a 409 `window_closed`. A send canceled already answers 200 with `changed: false`, so a retried cancel is safe; otherwise `changed` is true. " +
+        "Answers with the send's view and a `cursor`. The review window closes at the fire time (SPEC §6). A send canceled already answers 200 with `changed: false`, so a retried cancel is safe; otherwise `changed` is true. " +
         actionText,
       example: {
         response: {
@@ -1243,6 +1367,13 @@ export function createRouter({
           changed: true,
         },
       },
+      errors: [
+        {
+          code: "window_closed",
+          when: "The fire time has passed, whether or not the sweep has started the send.",
+          details: ["send"],
+        },
+      ],
       handler: sendRoutes.cancel,
     },
     {
@@ -1254,15 +1385,28 @@ export function createRouter({
       title: "Reschedule a send",
       summary: "Move a scheduled send's fire time without re-freezing the render (I3, I6).",
       description:
-        "Updates only `fire_at` on a send still in its review window: the frozen render is untouched (the audience is resolved when the send fires) and the review window is preserved; a re-made send keeps its `remade_at`. Distinct from cancel → edit → schedule again, which is for content changes. The same minimum lead as scheduling, a 400 `fire_at_too_soon` otherwise: " +
+        "Updates only `fire_at` on a send still in its review window: the frozen render is untouched (the audience is resolved when the send fires) and the review window is preserved; a re-made send keeps its `remade_at`. Distinct from cancel → edit → schedule again, which is for content changes. The same minimum lead as scheduling: " +
         lead +
-        ". As when scheduling, the new time is rounded up to the next whole minute, after the lead is checked on the time as requested. A move to the time the send already has (after that rounding) answers 200 with `changed: false` before the lead is checked, so a retried move is safe. Once the fire time has passed it is a 409 `window_closed`, and a canceled send is a 409 `send_canceled` (schedule the post again instead). The post's settings are not a reschedule's: `email_only`, `slug`, or `slug_auto` is a 400 naming the field, which moves nothing; change them with `PUT /api/posts/:id/settings`. " +
+        ". As when scheduling, the new time is rounded up to the next whole minute, after the lead is checked on the time as requested. A move to the time the send already has (after that rounding) answers 200 with `changed: false` before the lead is checked, so a retried move is safe. The post's settings are not a reschedule's: `email_only`, `slug`, or `slug_auto` is a 400 naming the field, which moves nothing; change them with `PUT /api/posts/:id/settings`. " +
         actionText,
       example: {
         request: { fire_at: "2026-01-16T09:00:00Z" },
         response: { send: scheduledExample, cursor: "58.1768467620000", changed: true },
       },
       body: [fireAtField],
+      errors: [
+        {
+          code: "fire_at_too_soon",
+          when: "`fire_at` is inside the minimum lead.",
+          details: ["send"],
+        },
+        { code: "window_closed", when: "The fire time has passed.", details: ["send"] },
+        {
+          code: "send_canceled",
+          when: "The send is canceled: schedule the post again instead.",
+          details: ["send"],
+        },
+      ],
       handler: sendRoutes.reschedule,
     },
     {
@@ -1274,7 +1418,7 @@ export function createRouter({
       title: "Resolve a wedged send",
       summary: "Resolve a send wedged on ambiguous (dispatched) deliveries.",
       description:
-        "A request that got no answer leaves its recipients `dispatched` — the loop never re-sends it (I4), so the send can't reach its completion gate. This adjudicates those rows as `resolution` says, then completes the send. Never re-mails an already-accepted recipient. Offered in `actions` exactly while the send is wedged. Refusals: 409 `run_in_progress` while a run holds the send (its in-flight rows may still get the provider's answer, so try again a moment later), 409 `not_wedged` when the send is not wedged (nothing ambiguous, recipients still to hand off, or a run yet to look at them) and when another Resolve has settled it. Once a send is wedged no run touches it, so the recipients Resolve settles are the ones the send showed; an `expected_count` in the body is ignored. " +
+        "A request that got no answer leaves its recipients `dispatched` — the loop never re-sends it (I4), so the send can't reach its completion gate. This adjudicates those rows as `resolution` says, then completes the send. Never re-mails an already-accepted recipient. Offered in `actions` exactly while the send is wedged. Once a send is wedged no run touches it, so the recipients Resolve settles are the ones the send showed; an `expected_count` in the body is ignored. " +
         actionText,
       example: {
         request: { resolution: "unsent" },
@@ -1294,6 +1438,18 @@ export function createRouter({
             "`unsent`: assume they were not sent, so the address is picked up by the next post. `accepted`: assume they were sent, on the publisher's word.",
         },
       ],
+      errors: [
+        {
+          code: "run_in_progress",
+          when: "A run holds the send, and its in-flight rows may still get the provider's answer: try again a moment later.",
+          details: ["send"],
+        },
+        {
+          code: "not_wedged",
+          when: "The send is not wedged (nothing ambiguous, recipients still to hand off, or a run yet to look at them), as when another Resolve has settled it.",
+          details: ["send"],
+        },
+      ],
       handler: sendRoutes.resolve,
     },
 
@@ -1306,7 +1462,8 @@ export function createRouter({
       resource: "subscribers",
       title: "Add a subscriber",
       summary: "Add a subscriber via the normal double opt-in (never an auto-confirm).",
-      description: `An address that was erased (SPEC §7) is refused 409 \`erasure_acknowledgement_required\`, with \`erased_at\`, until the request carries \`acknowledge_erasure: true\`: the publisher confirms the person asked to join again. The confirmation then goes as usual, and the person's own confirming lifts the marker. The public form never asks. ${notConnected} Nothing is stored then, since the confirmation could not go.`,
+      description:
+        "An address that was erased (SPEC §7) is added only once the publisher confirms the person asked to join again. The confirmation then goes as usual, and the person's own confirming lifts the marker. The public form never asks.",
       example: { request: { email: "reader@example.com" } },
       body: [
         { name: "email", type: "string", required: true, description: "The address to add." },
@@ -1315,6 +1472,21 @@ export function createRouter({
           type: "boolean",
           description:
             "`true` once the publisher confirms that a person whose address was erased asked to join again.",
+        },
+      ],
+      errors: [
+        {
+          code: "erasure_acknowledgement_required",
+          when: "The address was erased, and `acknowledge_erasure` is not `true`.",
+          details: ["erased_at"],
+        },
+        {
+          ...notConnected,
+          when: "No email provider is connected, so the confirmation could not go; nothing is stored.",
+        },
+        {
+          code: "confirmation_not_sent",
+          when: "The provider refused the confirmation, or never answered, in its own words.",
         },
       ],
       handler: subscriberRoutes.create,
@@ -1427,12 +1599,18 @@ export function createRouter({
         "Erase a subscriber (SPEC §7): remove their data and keep only a do-not-contact marker. Can't be undone.",
       description:
         `${SUBSCRIBER_ACTIONS.erase.when} Unsubscribing stops the mail and keeps everything; erasing removes what the list knows about them. ` +
-        "One batch: deletes the subscriber's row, with how they joined and its evidence; replaces their address on every past delivery row with one placeholder, `erased:` and random hex, so each send's record still sums to its audience; and suppresses the address with reason `erased`, holding only the address and the time. A bounce, complaint, or manual suppression the address already has is kept as it is. Answers `erased`: the `email`, how many `deliveries` now show the placeholder, and the `suppression` the address is left with. The person can come back by subscribing again: their own confirmation lifts the marker, an import never does (while the address carries the `erased` marker, a row for it, `subscribed` or `unsubscribed`, is `blocked_by_suppression` and creates no subscriber; an address left with its earlier suppression is treated as that suppression), and `POST /api/subscribers` asks for `acknowledge_erasure: true` first. Nothing about the id is kept, so erasing it again answers 404 `not_found`. While a send run is handing the subscriber to the provider (their row pending or dispatched under the run's lease) it refuses 409 `run_in_progress` and changes nothing: try again a moment later. A receipt that later lands on an erased row records its outcome without the provider's words, and a bounce or complaint suppresses the address the receipt names, replacing the marker.",
+        "One batch: deletes the subscriber's row, with how they joined and its evidence; replaces their address on every past delivery row with one placeholder, `erased:` and random hex, so each send's record still sums to its audience; and suppresses the address with reason `erased`, holding only the address and the time. A bounce, complaint, or manual suppression the address already has is kept as it is. Answers `erased`: the `email`, how many `deliveries` now show the placeholder, and the `suppression` the address is left with. The person can come back by subscribing again: their own confirmation lifts the marker, an import never does (while the address carries the `erased` marker, a row for it, `subscribed` or `unsubscribed`, is `blocked_by_suppression` and creates no subscriber; an address left with its earlier suppression is treated as that suppression), and `POST /api/subscribers` asks for `acknowledge_erasure: true` first. Nothing about the id is kept, so erasing it again answers 404 `not_found`. A receipt that later lands on an erased row records its outcome without the provider's words, and a bounce or complaint suppresses the address the receipt names, replacing the marker.",
       example: {
         response: {
           erased: { email: "reader@example.com", deliveries: 12, suppression: "erased" },
         },
       },
+      errors: [
+        {
+          code: "run_in_progress",
+          when: "A send run is handing the subscriber to the provider: nothing changes, try again a moment later.",
+        },
+      ],
       handler: subscriberRoutes.erase,
     },
 
@@ -1477,7 +1655,7 @@ export function createRouter({
       title: "Plan an import",
       summary:
         "Plan an import: what it would do to every row against the list as it stands. Writes nothing, so call it as often as a file needs.",
-      description: `Answers \`counts\` (every row once, by outcome, summing to \`file.rows\`), \`suppressions_added\`, \`confirmed\` (the rows to be confirmed, by \`opt_in\` and \`origin\`), \`rows\` (each row that won't be confirmed, with its outcome), \`sends_growing\` (each send whose audience would grow, with \`gains\`: a scheduled one, or one that fired but hasn't fixed its audience yet), \`attestation\` (\`{ version, text, publication }\` when anyone would be confirmed, else null: \`publication\` is the name \`text\` calls the publication by, its name or else the sender's display name, as every surface names it, or \`this newsletter\` with neither), \`plan_hash\`, and \`daily_writes_warning\` (on the Workers Free plan's limits, the server's words when this import and the imports already committed that UTC day would write more of D1's daily allowance of written rows than it leaves room for, advising importing the file the next day; else null; never a refusal, and outside the hash; a send's share of the day is its own \`daily_writes\` condition). The outcomes and when each applies are in \`GET /api/imports/format\`. Refusals name what was wrong and what was expected: 400 \`unrecognized_format\` (not a file in the format at all, with \`row\` where it shows), 400 \`invalid_field\` (a column or value the format doesn't take, with \`row\`, \`column\`, and \`allowed\` where the values are a set), 400 \`too_many_rows\` (over this deployment's \`limit\`), and 413 \`body_too_large\` (over ${IMPORT_LIMITS.maxBodyBytes / (1024 * 1024)} MB).`,
+      description: `Answers \`counts\` (every row once, by outcome, summing to \`file.rows\`), \`suppressions_added\`, \`confirmed\` (the rows to be confirmed, by \`opt_in\` and \`origin\`), \`rows\` (each row that won't be confirmed, with its outcome), \`sends_growing\` (each send whose audience would grow, with \`gains\`: a scheduled one, or one that fired but hasn't fixed its audience yet), \`attestation\` (\`{ version, text, publication }\` when anyone would be confirmed, else null: \`publication\` is the name \`text\` calls the publication by, its name or else the sender's display name, as every surface names it, or \`this newsletter\` with neither), \`plan_hash\`, and \`daily_writes_warning\` (on the Workers Free plan's limits, the server's words when this import and the imports already committed that UTC day would write more of D1's daily allowance of written rows than it leaves room for, advising importing the file the next day; else null; never a refusal, and outside the hash; a send's share of the day is its own \`daily_writes\` condition). The outcomes and when each applies are in \`GET /api/imports/format\`.`,
       example: {
         request: {
           file: {
@@ -1529,6 +1707,7 @@ export function createRouter({
         },
       },
       body: importFileFields,
+      errors: importRefusals,
       handler: importRoutes.planRoute,
     },
     {
@@ -1541,7 +1720,7 @@ export function createRouter({
       summary:
         "Commit a plan: apply it all, or nothing, in one batch, and keep the import's record. Never sends an email.",
       description:
-        "Send the plan's body with what it asked for. It plans again and refuses 409 `plan_stale` when the hash differs (the file, its declared meaning, whether an attestation is needed, or the growing sends changed, or another import was committed since; plan again). The list moving in between is not refused: every write re-checks the list as it stands, so a reader who unsubscribed meanwhile stays unsubscribed, and `differed` lists each row whose result differs from the commit's own plan. 409 `attestation_required` (with the `attestation` to show) when the plan confirms anyone and none was given. 409 `sends_acknowledgement_required` (with the `sends`) when a send that would grow isn't acknowledged, and always for a service token, which can't acknowledge one: the publisher finishes that import in the dashboard. A service token may attest; the record says so, and the publisher is emailed the counts. Answers 201 with the `import` record (never an address), `counts` and `suppressions_added` as applied, `rows` (those not confirmed, as applied), `differed`, and `replayed: false`. A commit repeated with the same plan and file answers 200 with the stored record and `replayed: true`, applying nothing twice. The plan route's refusals apply too.",
+        "Send the plan's body with what it asked for. It plans again, and applies only the plan whose hash it names. The list moving in between is not refused: every write re-checks the list as it stands, so a reader who unsubscribed meanwhile stays unsubscribed, and `differed` lists each row whose result differs from the commit's own plan. A service token may attest; the record says so, and the publisher is emailed the counts. Answers 201 with the `import` record (never an address), `counts` and `suppressions_added` as applied, `rows` (those not confirmed, as applied), `differed`, and `replayed: false`. A commit repeated with the same plan and file answers 200 with the stored record and `replayed: true`, applying nothing twice.",
       example: {
         request: {
           file: { name: "subscribers.csv", text: "email,status,opt_in,origin\r\n…" },
@@ -1573,6 +1752,23 @@ export function createRouter({
           type: "string[]",
           description: "The id of every send in the plan's `sends_growing`.",
         },
+      ],
+      errors: [
+        {
+          code: "plan_stale",
+          when: "The plan differs from `plan_hash`: the file, its declared meaning, whether an attestation is needed, or the growing sends changed, or another import was committed since. Plan again.",
+        },
+        {
+          code: "attestation_required",
+          when: "The plan confirms anyone and no attestation was given.",
+          details: ["attestation"],
+        },
+        {
+          code: "sends_acknowledgement_required",
+          when: "A send that would grow isn't acknowledged, and always for a service token, which can't acknowledge one: the publisher finishes that import in the dashboard.",
+          details: ["sends"],
+        },
+        ...importRefusals,
       ],
       handler: importRoutes.commit,
     },
@@ -1628,8 +1824,14 @@ export function createRouter({
       resource: "suppressions",
       title: "Clear a suppression",
       summary: "Clear an address's suppression, so it may be mailed again (SPEC §7).",
-      description: `${SUBSCRIBER_ACTIONS.clear.when} A deliberate, rare act. Unblocking a block (\`manual\`) undoes a block by hand, the publisher's or one an import brought; clear one only on the publisher's word. An erasure's marker (\`erased\`) is never cleared here: only the person's own confirmation lifts it, so it refuses 409 \`erasure_marker\` and leaves it. An erasure that found a block already on the address keeps the block instead of a marker, and clearing that block clears the address. Answers \`cleared: false\` when the address had no suppression.`,
+      description: `${SUBSCRIBER_ACTIONS.clear.when} A deliberate, rare act. Unblocking a block (\`manual\`) undoes a block by hand, the publisher's or one an import brought; clear one only on the publisher's word. An erasure's marker (\`erased\`) is never cleared here. An erasure that found a block already on the address keeps the block instead of a marker, and clearing that block clears the address. Answers \`cleared: false\` when the address had no suppression.`,
       example: { response: { email: "reader@example.com", cleared: true } },
+      errors: [
+        {
+          code: "erasure_marker",
+          when: "The suppression is an erasure's marker, which only the person's own confirmation lifts.",
+        },
+      ],
       handler: suppressionRoutes.clear,
     },
 
@@ -1676,11 +1878,17 @@ export function createRouter({
       title: "Request a subscription",
       summary: "Request a subscription; starts the double opt-in (confirmation email).",
       description:
-        "Answers the same way whatever the address's state (new, pending, confirmed, unsubscribed, or suppressed), and before any confirmation is sent, so neither the reply nor its timing reveals list membership. A confirmation goes out only if one is due: never to a confirmed or suppressed address, and at most one per address per cooldown. A confirmation the email provider refuses is logged and changes nothing, so submitting again is safe; the authed `POST /api/subscribers` reports the refusal. While no email provider is connected every request is refused alike, 409 `provider_not_connected` (as JSON, or the page saying signups aren't open yet), and nothing is stored (SPEC §9).",
+        "Answers the same way whatever the address's state (new, pending, confirmed, unsubscribed, or suppressed), and before any confirmation is sent, so neither the reply nor its timing reveals list membership. A confirmation goes out only if one is due: never to a confirmed or suppressed address, and at most one per address per cooldown. A confirmation the email provider refuses is logged and changes nothing, so submitting again is safe; the authed `POST /api/subscribers` reports the refusal.",
       example: {
         request: { email: "you@example.com" },
         response: { status: "check_inbox" },
       },
+      errors: [
+        {
+          ...notConnected,
+          when: "No email provider is connected: every request alike, as JSON or the page saying signups aren't open yet, and nothing is stored.",
+        },
+      ],
       handler: publicRoutes.subscribe,
     },
     {

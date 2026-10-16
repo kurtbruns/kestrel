@@ -24,6 +24,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Added
 
+- The API reference lists each route's own refusals, one line each with its status, code, and the fields it carries (`409 not_wedged`, with `send`), and states once the ones every route shares, so Claude can expect a refusal such as `window_closed` rather than read it as a failure; `GET /api/reference` carries them as each route's `errors`.
 - The API reference lists the fields each route's request body takes, with each one's type, whether it's required, and its allowed values, so Claude no longer learns them from an example or by guessing; `GET /api/reference` carries them as each route's `body`. The curl command for an upload sends its file as a form.
 
 ## [1.12.0] - 2026-10-16

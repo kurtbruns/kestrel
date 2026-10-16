@@ -19,6 +19,7 @@ import type {
   Resource,
 } from "../../shared/reference";
 import type { RouteDef } from "../router";
+import { REFUSAL_STATUS } from "./refusals";
 
 // The entry and group shapes live in shared/ so the editor reads the same definitions;
 // re-exported here as the reference's own.
@@ -81,6 +82,7 @@ function entry(r: RouteDef): ReferenceEntry {
     query: r.query,
     accepts: r.accepts,
     body: r.body,
+    errors: r.errors?.map((e) => ({ status: REFUSAL_STATUS[e.code], ...e })),
     example: r.example,
   };
 }
@@ -104,6 +106,10 @@ export function buildReference(routes: readonly RouteDef[]): ReferenceGroup[] {
   }).filter((g) => g.routes.length > 0);
 }
 
+/** The refusals every route of a tier shares, stated once rather than on each route. */
+const SHARED_REFUSALS =
+  "A refusal is `{ error, message }` with its status, plus `field` when it is about the request. Each route lists only the refusals of its own. Every admin route also answers 401 `unauthorized` without a credential, and every admin write 403 `cross_site_request` when another site's page sent it and 415 `unsupported_media_type` for a body type it doesn't take. Any route answers 400 `bad_request` naming the `field` for a body or query value it can't take, and 404 `not_found` when a path's id names nothing.";
+
 /** A JSON value as a fenced block, for an example. */
 function jsonBlock(label: string, value: unknown): string {
   return `${label}:\n\n\`\`\`json\n${JSON.stringify(value, null, 2)}\n\`\`\``;
@@ -115,7 +121,8 @@ function cell(text: string): string {
 }
 
 /** One route as a Markdown section: its title as the heading, its method and path beneath,
- *  then the summary, description, body types, query parameters, body fields, and example. */
+ *  then the summary, description, body types, query parameters, body fields, its own
+ *  refusals, and example. */
 function routeMarkdown(r: ReferenceEntry): string {
   const parts = [`#### ${r.title}`, `\`${r.method} ${r.path}\``, r.summary];
   if (r.description) {
@@ -137,6 +144,13 @@ function routeMarkdown(r: ReferenceEntry): string {
     );
     parts.push(["| Body field | Type | Description |", "| --- | --- | --- |", ...rows].join("\n"));
   }
+  if (r.errors?.length) {
+    const rows = r.errors.map(
+      (e) =>
+        `| ${e.status} \`${e.code}\` | ${cell(e.when)}${e.details?.length ? ` With ${e.details.map((d) => `\`${d}\``).join(", ")}.` : ""} |`,
+    );
+    parts.push(["| Refusal | When |", "| --- | --- |", ...rows].join("\n"));
+  }
   if (r.example?.request !== undefined) {
     parts.push(jsonBlock("Example request", r.example.request));
   }
@@ -153,7 +167,7 @@ function routeMarkdown(r: ReferenceEntry): string {
  * the paths hang off.
  */
 export function referenceMarkdown(groups: readonly ReferenceGroup[], origin: string): string {
-  const head = `# API reference\n\nEvery route this instance serves, generated from its registration, so every endpoint the editor and Claude can call is listed here. Base URL \`${origin}\`. Admin routes take the same authentication as the editor: Claude sends its service token.`;
+  const head = `# API reference\n\nEvery route this instance serves, generated from its registration, so every endpoint the editor and Claude can call is listed here. Base URL \`${origin}\`. Admin routes take the same authentication as the editor: Claude sends its service token.\n\n${SHARED_REFUSALS}`;
   const tiers = groups.map((g) => {
     const resources = g.resources.map((res) =>
       [

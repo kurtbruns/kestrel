@@ -221,7 +221,7 @@ describe("reference room", () => {
     expect(glyph()).toBe(resting);
   });
 
-  it("lists the body types and fields a write accepts, and none for a route that takes no body", async () => {
+  it("lists the body types and fields a write accepts and the refusals a route gives, and none where it has none", async () => {
     const withBodies: ReferenceGroup[] = [
       {
         ...groups[0]!,
@@ -247,6 +247,14 @@ describe("reference room", () => {
             resource: "posts",
             title: "Delete a draft",
             summary: "Delete a draft.",
+            errors: [
+              {
+                status: 409,
+                code: "post_not_draft",
+                when: "The post is <scheduled>.",
+                details: ["send", "field"],
+              },
+            ],
           },
         ],
       },
@@ -267,6 +275,11 @@ describe("reference room", () => {
     ]);
     expect(upload!.querySelector(".api-body name")).toBeNull();
     expect(del!.querySelector(".api-body")).toBeNull();
+    // The route's own refusals: status and code, then when, with the fields the body carries.
+    expect($$(".api-errors tr", del!).map((tr) => tr.textContent)).toEqual([
+      "409 post_not_draftThe post is <scheduled>. With send, field.",
+    ]);
+    expect(upload!.querySelector(".api-errors")).toBeNull();
   });
 
   it("marks a query parameter the route can't do without", async () => {

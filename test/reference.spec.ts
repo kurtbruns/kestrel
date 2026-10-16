@@ -1,6 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import apiDoc from "../docs/API.md";
 import {
   ERASED_MARKER_MEANING,
   FLAG_MEANING,
@@ -12,6 +13,7 @@ import { createRouter } from "../src/app";
 import { requireAuth } from "../src/auth/middleware";
 import { type AppEnv, getConfig } from "../src/env";
 import { buildReference, referenceMarkdown } from "../src/reference";
+import { REFUSAL_STATUS } from "../src/reference/refusals";
 import { type RouteDef, Router } from "../src/router";
 import { AUTH, base } from "./support/http";
 
@@ -102,7 +104,9 @@ describe("API reference is generated from the route registration", () => {
     expect(describe("POST /api/suppressions")).toContain(SUBSCRIBER_ACTIONS.block.when);
     expect(describe("POST /api/subscribers/:id/erase")).toContain(SUBSCRIBER_ACTIONS.erase.when);
     expect(describe("DELETE /api/suppressions/:email")).toContain(SUBSCRIBER_ACTIONS.clear.when);
-    expect(describe("DELETE /api/suppressions/:email")).toContain("erasure_marker");
+    expect(byKey.get("DELETE /api/suppressions/:email")?.errors?.map((e) => e.code)).toEqual([
+      "erasure_marker",
+    ]);
   });
 
   it("groups admin, public, and webhook tiers (mirroring app.ts)", () => {
@@ -207,6 +211,123 @@ describe("API reference is generated from the route registration", () => {
     ]);
   });
 
+  it("lists the refusals each route gives of its own, with the status its code carries", () => {
+    // Each route that refuses with a state of its own declares it, so a client can expect the
+    // refusal rather than read it as a failure.
+    const expected: Record<string, string[]> = {
+      "PUT /api/settings": ["remake_required", "remake_too_close", "conflict"],
+      "POST /api/settings/logo": ["remake_required", "remake_too_close", "conflict"],
+      "DELETE /api/settings/logo": ["remake_required", "remake_too_close", "conflict"],
+      "POST /api/posts": ["slug_invalid", "slug_taken"],
+      "PUT /api/posts/:id": [
+        "base_required",
+        "stale_revision",
+        "post_not_draft",
+        "slug_invalid",
+        "slug_taken",
+      ],
+      "DELETE /api/posts/:id": ["post_not_draft"],
+      "PUT /api/posts/:id/settings": ["slug_invalid", "slug_taken", "slug_permanent"],
+      "POST /api/posts/:id/images": ["post_not_draft"],
+      "DELETE /api/posts/:id/images/:filename": ["post_not_draft"],
+      "POST /api/posts/:id/schedule": [
+        "fire_at_too_soon",
+        "active_send_exists",
+        "post_not_draft",
+        "subject_required",
+        "settings_changed",
+        "provider_not_connected",
+        "slug_invalid",
+        "slug_taken",
+      ],
+      "GET /api/sends/feed": ["cursor_ahead"],
+      "POST /api/sends/:id/cancel": ["window_closed"],
+      "POST /api/sends/:id/reschedule": ["fire_at_too_soon", "window_closed", "send_canceled"],
+      "POST /api/sends/:id/resolve": ["run_in_progress", "not_wedged"],
+      "POST /api/subscribers": [
+        "erasure_acknowledgement_required",
+        "provider_not_connected",
+        "confirmation_not_sent",
+      ],
+      "POST /api/subscribers/:id/erase": ["run_in_progress"],
+      "POST /api/imports": [
+        "plan_stale",
+        "attestation_required",
+        "sends_acknowledgement_required",
+        "unrecognized_format",
+        "invalid_field",
+        "too_many_rows",
+        "body_too_large",
+      ],
+      "DELETE /api/suppressions/:email": ["erasure_marker"],
+      "POST /subscribe": ["provider_not_connected"],
+    };
+    const listed = new Map(
+      buildReference(defs)
+        .flatMap((g) => g.routes)
+        .map((r) => [`${r.method} ${r.path}`, r.errors ?? []]),
+    );
+    for (const [key, codes] of Object.entries(expected)) {
+      expect(
+        listed.get(key)?.map((e) => e.code),
+        key,
+      ).toEqual(codes);
+    }
+    // Every route that would send says it is refused while no provider is connected.
+    for (const key of [
+      "POST /api/posts/:id/send",
+      "POST /api/posts/:id/test",
+      "POST /api/settings/template/test",
+    ]) {
+      expect(
+        listed.get(key)?.map((e) => e.code),
+        key,
+      ).toContain("provider_not_connected");
+    }
+    for (const errors of listed.values()) {
+      for (const e of errors) {
+        expect(e.status).toBe(REFUSAL_STATUS[e.code as keyof typeof REFUSAL_STATUS]);
+      }
+      // A code once per route: two lines for one code would leave the client to choose.
+      expect(new Set(errors.map((e) => e.code)).size).toBe(errors.length);
+    }
+    expect(listed.get("POST /api/sends/:id/resolve")?.[1]).toEqual(
+      expect.objectContaining({ status: 409, code: "not_wedged", details: ["send"] }),
+    );
+  });
+
+  it("knows the same refusal codes as docs/API.md's Refusing section, so neither drifts from the other", () => {
+    const section = apiDoc.slice(
+      apiDoc.indexOf("## Refusing"),
+      apiDoc.indexOf("## Adding to the API"),
+    );
+    // Every backticked code in the section, less the fields and values it names beside them.
+    const notCodes = new Set([
+      "error",
+      "message",
+      "field",
+      "retry_after",
+      "send",
+      "sends",
+      "attestation",
+      "row",
+      "column",
+      "allowed",
+      "limit",
+      "variable",
+      "missing",
+      "reason",
+      "erased_at",
+      "acknowledge_erasure",
+    ]);
+    const named = new Set(
+      [...section.matchAll(/`([a-z][a-z_]+)`/g)]
+        .map(([, code]) => code as string)
+        .filter((code) => !notCodes.has(code)),
+    );
+    expect([...named].sort()).toEqual(Object.keys(REFUSAL_STATUS).sort());
+  });
+
   it("a newly registered route appears in the reference with no separate doc to touch", () => {
     const r = new Router();
     const added: RouteDef = {
@@ -283,6 +404,11 @@ describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
     expect(md).toContain(
       '| Body field | Type | Description |\n| --- | --- | --- |\n| `resolution` (required) | "unsent" \\| "accepted" |',
     );
+    expect(md).toContain(
+      "| 409 `not_wedged` | The send is not wedged (nothing ambiguous, recipients still to hand off, or a run yet to look at them), as when another Resolve has settled it. With `send`. |",
+    );
+    // The refusals every route shares are said once, at the top.
+    expect(md.match(/401 `unauthorized`/g)).toHaveLength(1);
     expect(md).toContain("Example response:");
   });
 

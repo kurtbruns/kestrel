@@ -31,6 +31,7 @@ import {
   unsupportedMediaType,
 } from "./lib/errors";
 import { serverErrorPage } from "./lib/page";
+import type { RefusalCode } from "./reference/refusals";
 
 export interface Principal {
   /** `human` = a person, with an email (an Access login, or the editor's local dev token);
@@ -102,6 +103,13 @@ type Method = "GET" | "POST" | "PUT" | "DELETE";
 // same definitions; re-exported here under the manifest's names.
 export type { Access, BodyField, QueryParam, RouteExample };
 
+/** A refusal as a route declares it: the code, from the codes the API refuses with. */
+export interface RouteRefusal {
+  code: RefusalCode;
+  when: string;
+  details?: string[];
+}
+
 /**
  * A route declared as data. `method` / `path` / `access` are accurate by
  * construction — they are what registers the route — and the same record drives
@@ -132,6 +140,13 @@ export interface RouteDef {
    * body to carrying one.
    */
   body?: BodyField[];
+  /**
+   * The refusals this route gives of its own, each one line, its status read from the code.
+   * Leave out the ones every route of the tier shares (no credential, a cross-site write, a
+   * body type it doesn't take, a malformed field, a path id that names nothing), which the
+   * reference states once.
+   */
+  errors?: RouteRefusal[];
   example?: RouteExample;
   handler: Handler;
   /** Extra middleware beyond the access-derived gate. Rare; composed after the gate. */

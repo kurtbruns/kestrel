@@ -56,6 +56,17 @@ export interface BodyField {
   description: string;
 }
 
+/** A refusal a route gives of its own, beyond the ones every route of its tier shares. */
+export interface RouteError {
+  status: number;
+  /** The `error` the refusal's body carries. */
+  code: string;
+  /** One line on the condition. */
+  when: string;
+  /** The fields the body carries beside `error` and `message` (`send`, `retry_after`). */
+  details?: string[];
+}
+
 /** One route as the reference shows it: the manifest metadata, without handler or middleware. */
 export interface ReferenceEntry {
   method: string;
@@ -71,6 +82,8 @@ export interface ReferenceEntry {
   accepts?: readonly string[];
   /** The body's fields, a multipart form's included; absent when the route takes no body. */
   body?: BodyField[];
+  /** The refusals the route gives of its own; the ones its tier shares are stated once. */
+  errors?: RouteError[];
   example?: RouteExample;
 }
 
