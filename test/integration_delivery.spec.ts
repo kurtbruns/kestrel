@@ -304,6 +304,7 @@ describe("webhook routes are wired through the real router", () => {
   });
 
   it("the webhook route is public (reaches the adapter, never a 401/404)", async () => {
+    allowErrorLogs("webhook.refused");
     // An unsigned body gets the adapter's own refusal, status and words, which only the
     // adapter can produce: a 404 would mean the route is gone, and a 401 that requireAuth
     // stopped it before the adapter ever parsed it.

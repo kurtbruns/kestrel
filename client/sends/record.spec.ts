@@ -177,6 +177,26 @@ describe("sent record", () => {
     expect(fake.unhandled).toHaveLength(0);
   });
 
+  it("says, amber, when no receipt has come long after dispatch, and clears it in place when one lands (SPEC §8)", async () => {
+    const server = sendServer();
+    server.put(send({ c_delivered: 0, c_bounced: 0, c_unsent: 0, c_accepted: 10 }), {
+      conditions: [condition.noReceipts(10)],
+    });
+    fake = fakeApi([...server.routes, noRows]);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#recPill").textContent).toBe("Settling");
+    expect($("#recAlert .health.amber").textContent).toMatch(
+      /^⚠️No delivery receipt has arrived for any of the 10 recipients/,
+    );
+    const card = $(".rec-card");
+    server.edit("x1", { c_delivered: 1, c_accepted: 9 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect($(".rec-card")).toBe(card);
+    expect(document.querySelector("#recAlert .health")).toBeNull();
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
   it("saves the deliveries CSV as the server sends it, under the server's name or deliveries.csv", async () => {
     const csv = "email,outcome\r\nada@example.com,delivered\r\n";
     let disposition: string | null = 'attachment; filename="owls-deliveries.csv"';

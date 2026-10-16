@@ -7,6 +7,7 @@ import {
   DAILY_WRITES_SEND_RECIPIENTS,
   refusalAdvice,
   SELF_THROTTLE_HALTS,
+  NO_RECEIPTS_AFTER_MS,
   type SendFeedResponse,
   type SendListResponse,
   type SendSummary,
@@ -295,6 +296,32 @@ describe("conditions: one server rule for each kind", () => {
       bounced: 5,
       rate: 0.05,
     });
+  });
+
+  it("says a recently sent send with no receipt at all, long after dispatch, may not be hearing from the provider (SPEC §8)", () => {
+    const sent = {
+      status: "sent" as const,
+      completed_at: NOW - NO_RECEIPTS_AFTER_MS - 60_000,
+      c_accepted: 40,
+    };
+    const silent = sendConditions(row(sent), NOW, null);
+    expect(silent.map((c) => [c.kind, c.severity])).toEqual([["no_receipts", "warn"]]);
+    expect(silent[0]).toMatchObject({
+      since: NOW - 60_000,
+      action: null,
+      accepted: 40,
+    });
+    expect(silent[0]?.message).toMatch(
+      /^No delivery receipt has arrived for any of the 40 recipients the provider took, 1 hour after/,
+    );
+    // Settling as usual: too soon to say, or any receipt at all has come.
+    expect(kinds(row({ ...sent, completed_at: NOW - NO_RECEIPTS_AFTER_MS + 60_000 }))).toEqual([]);
+    expect(kinds(row({ ...sent, c_accepted: 39, c_delivered: 1 }))).toEqual([]);
+    expect(kinds(row({ ...sent, c_accepted: 39, c_bounced: 1 }))).toEqual([]);
+    expect(kinds(row({ ...sent, c_accepted: 39, c_complained: 1 }))).toEqual([]);
+    // Nothing waits on a receipt, or the send is history past the recent window.
+    expect(kinds(row({ ...sent, c_accepted: 0, c_unsent: 40 }))).toEqual([]);
+    expect(kinds(row({ ...sent, completed_at: NOW - BOUNCE_SPIKE_RECENT_MS - 1 }))).toEqual([]);
   });
 
   it("reports no halt on a wedged send, which nothing will retry", () => {

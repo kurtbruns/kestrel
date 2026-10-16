@@ -33,7 +33,9 @@ A send's page becomes its permanent record once it finishes. Its counts cover ev
 | **Complained** | The reader marked the email as spam. |
 | **Unsent** | Kestrel couldn't hand the email to your provider. |
 
-Delivered always means confirmed, not just accepted by your provider. Confirmations can lag by days, so counts keep rising after a send finishes. Some emails are never confirmed at all, so a send can read **Settling** for good, which is normal.
+Delivered always means confirmed, not just accepted by your provider. Confirmations can lag by days, so counts keep rising after a send finishes. Some emails are never confirmed at all, so a send can read **Settling** for good, which is normal, as long as some receipts have come.
+
+**"No delivery receipt has arrived for any of …".** An hour after a send went out, Kestrel has heard back about none of its readers. Your provider's reports probably aren't reaching Kestrel, so its bounces and complaints suppress no one, and your next post mails those addresses again. Look for `webhook.refused` errors in the app's logs, as [Read the logs](../get-started/05-verify.md#7-read-the-logs) describes. It names the SNS topic that reached Kestrel and the one it expects. Then check the subscription in [Connect Amazon SES](../get-started/04-ses.md#9-subscribe-the-app-to-the-topic). The line goes as soon as a receipt arrives.
 
 **Unsent recipients** are still on your list, and get your next post. A recipient is unsent when their own email kept failing, or their address isn't one SES accepts, with the provider's words on the row, or when you chose **Assume not sent**.
 

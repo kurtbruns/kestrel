@@ -358,6 +358,7 @@ The **health block** on the dashboard, the **attention cards** on Sent, and an *
 | In flight too long | amber | Health line, a note on its active-send and In progress cards, and a line at the top of its watch. |
 | Rate limit the deployment causes | amber | Health line and a line at the top of its watch, in the server's words, which name `SES_MAX_SEND_RATE`. An ordinary outage or rate limit raises nothing (below). |
 | Bounce spike | amber | Health line linking to the send's record. |
+| No receipts | amber | Health line linking to the send's record (one line for several sends, linking to Sent), and a line above the record's tiles that goes when a receipt lands. |
 | No provider connected | amber, or red once it holds a send | Below. |
 
 A send that needs the operator leaves the active-send cards and In progress, so it is reported once. A provider that is only unavailable is not an attention item: the send reads as in progress, its phase gloss says the provider is unavailable and when the next retry is, and the in-flight-too-long flag raises it if it lasts.
@@ -477,7 +478,7 @@ A color means one thing, and a token names one color. A second token for a color
 | **Violet** | Scheduled, in its review window | The scheduled badge, cards, banner, and the in-use chip. Off the accent so a scheduled send never reads as the thing to click. |
 | **Sending blue** | In flight | The sending badge, the dispatch bar, active-send cards, the Sending and Settling pills. Its own shade, not the accent. |
 | **Green** | Done and fine | Sent, confirmed, delivered, Complete, Saved. |
-| **Amber** | Worth a look | In flight too long, a bounce spike, not connected, Unsaved, a pending subscriber, retrying, render warnings, the conflict banner. |
+| **Amber** | Worth a look | In flight too long, a bounce spike, no receipts, not connected, Unsaved, a pending subscriber, retrying, render warnings, the conflict banner. |
 | **Red** | Went wrong, or needs a decision | A missed fire time, a wedged send, a refusing provider, complaints, suppression, destructive acts, a refused save. |
 | **Grey** | Inert, or a fact about where something lives | Draft, unsubscribed, unsent, skipped, canceled; Read-only · set at deploy. |
 | **Ink** | Strong text | Headings and strong labels. Never a button fill, except the inert reader mockups (§7). |

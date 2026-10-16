@@ -260,10 +260,26 @@ SNS delivers events only to a subscriber that has confirmed. The app confirms on
 
 1. Reload the subscription. Its status changes to **Confirmed**, with nothing for you to click.
 
+1. Give SNS longer to retry. By default it retries a failed delivery 3 times over about a minute, then discards the event, so a bounce that arrives while the app is briefly down or mid-deploy is lost, and the address gets your next post. Open the topic, choose **Edit**, and expand **Delivery policy (HTTP/S)**. Clear **Use the default delivery policy**, set these, and choose **Save changes**:
+
+    | Field | Value |
+    | --- | --- |
+    | Number of retries | `13` |
+    | Retries without delay | `0` |
+    | Minimum delay | `20` |
+    | Minimum delay retries | `2` |
+    | Maximum delay | `300` |
+    | Maximum delay retries | `6` |
+    | Retry-backoff function | Exponential |
+
+    SNS then keeps trying for about 40 minutes. It can't retry for longer than an hour, and it never retries an event the app refused. The app refuses only an event that isn't from your topic, and logs each refusal as an error.
+
+1. **(Optional)** Keep what SNS still can't deliver. On the subscription, choose **Edit**, and set a **Redrive policy (dead-letter queue)** to an SQS queue of your own. SNS then moves an event there instead of discarding it, where you can read it later. [Amazon SNS dead-letter queues](https://docs.aws.amazon.com/sns/latest/dg/sns-dead-letter-queues.html) covers the queue and its permissions.
+
 If it stays **Pending confirmation**, the request never reached the app, or the app refused it. Check, in this order:
 
 - **Access covers `/webhooks/ses`.** If your Access application covers more than `/dashboard` and `/api`, SNS gets the login page instead of the app. Remove that path from your Access application, so only `dashboard` and `api` remain.
-- **`SNS_TOPIC_ARN` matches the topic's ARN.**
+- **`SNS_TOPIC_ARN` matches the topic's ARN.** If it doesn't, the app's logs show a `webhook.refused` error naming both.
 - **The deploy in section 8 finished.**
 
 Once you've fixed the cause, select the subscription, and choose **Request confirmation**. SNS sends the request again, and the app confirms it. SNS doesn't let you delete a subscription while it's pending, and removes it on its own after 48 hours.

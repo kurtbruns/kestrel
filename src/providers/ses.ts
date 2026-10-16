@@ -742,17 +742,35 @@ export class SesProvider implements EmailProvider {
     } catch {
       return { events: [], response: textResponse("invalid json", 400) };
     }
+    if (typeof msg !== "object" || msg === null) {
+      return { events: [], response: textResponse("invalid json", 400) };
+    }
+
+    // SNS discards for good a message answered 4xx and retries one answered 5xx, so a
+    // refusal here is the last anyone hears of a bounce or complaint SNS really sent: it is
+    // logged at error, naming the topic the message claims and the one expected, and a
+    // failure that says nothing about the message asks SNS to try again instead.
+    const topic = typeof msg.TopicArn === "string" ? msg.TopicArn.slice(0, 256) : null;
+    const refuse = (reason: "signature" | "topic", body: string): WebhookResult => {
+      log.error("webhook.refused", { provider: "ses", reason, topic, expected: expectedTopic });
+      return { events: [], response: textResponse(body, 403) };
+    };
 
     // Signature first: the route is public, so nothing acts on an unverified msg.
-    if (!(await verifySnsSignature(msg))) {
-      return { events: [], response: textResponse("invalid signature", 403) };
+    const signature = await verifySnsSignature(msg);
+    if (signature === "unavailable") {
+      log.warn("webhook.cert_unavailable", { provider: "ses", topic });
+      return { events: [], response: textResponse("signing certificate unavailable", 503) };
+    }
+    if (signature !== "valid") {
+      return refuse("signature", "invalid signature");
     }
     // SNS signs for every topic in every account, so a valid signature proves only that
     // SNS sent it. The topic proves it is ours, and is checked before any handling, a
     // subscription confirmation included, so a foreign topic can neither subscribe this
     // endpoint nor suppress the list with forged bounces (I1).
     if (msg.TopicArn !== expectedTopic) {
-      return { events: [], response: textResponse("unexpected topic", 403) };
+      return refuse("topic", "unexpected topic");
     }
 
     switch (msg.Type) {

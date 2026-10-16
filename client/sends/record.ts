@@ -544,6 +544,7 @@ function renderFrozenRecord(
         <div class="watch-title"><h1>${send.subject || html`<em>untitled</em>`}</h1><span id="recPill">${phasePill(send.phase)}</span></div>
         <div class="rec-meta">Sent ${fmt(sentAt)} · ${total.toLocaleString()} recipients</div>
       </div>
+      <div id="recAlert">${recAlertHtml(send)}</div>
       <p class="rec-tiles-cap muted">Delivery outcomes keep updating as receipts arrive; the audience at fire and the published post are fixed.</p>
       <div class="rec-tiles">${outcomeTilesHtml(outcomes)}</div>
       <p class="rec-recon muted">${outcomeReconHtml(outcomes)}</p>
@@ -716,6 +717,7 @@ function renderFrozenRecord(
           return;
         }
         setHtml($("#recPill", root), phasePill(fresh.phase));
+        setHtml($("#recAlert", root), recAlertHtml(fresh));
         const now = outcomesOf(fresh);
         if (sameOutcomes(shown, now)) {
           return;
@@ -730,6 +732,15 @@ function renderFrozenRecord(
     },
     signal,
   );
+}
+
+/** No receipts long after dispatch (SPEC §8), in the server's words: amber above the tiles,
+ *  so a send whose provider's events aren't arriving never reads as ordinary settling. */
+function recAlertHtml(send: SendView): Html {
+  const c = conditionOf(send, "no_receipts");
+  return c
+    ? html`<div class="health amber" role="status"><span class="health-dot">⚠️</span><div>${c.message}</div></div>`
+    : html``;
 }
 
 /** A sent send's outcomes from its counters: the same buckets as the record's own read,

@@ -1239,6 +1239,7 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     expect(result.events).toMatchObject([{ type: "bounced", email: "v1@example.com", hard: true }]);
 
     // The version names the hash: the same SHA-1 signature claimed as version 2 fails.
+    allowErrorLogs("webhook.refused");
     _clearKeyCache();
     const misnamed = await newProvider().parseWebhook(
       webhookRequest({ ...envelope, SignatureVersion: "2" }),
@@ -1354,6 +1355,7 @@ describe("SesProvider.parseWebhook (SNS)", () => {
   // A valid SNS signature proves only that SNS sent the message; any AWS account's topic
   // could have. The configured topic is what makes it this deployment's.
   it("refuses a correctly signed subscription from another topic, never fetching its SubscribeURL", async () => {
+    allowErrorLogs("webhook.refused");
     const signer = await makeSigner();
     const subscribeUrl = newSubscribeUrl();
     const { fetched } = mockSubscribe(signer, subscribeUrl);
@@ -1369,7 +1371,9 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     expect(fetched.subscribe).toBe(false);
   });
 
-  it("refuses a correctly signed bounce from another topic and suppresses no one", async () => {
+  it("refuses a correctly signed bounce from another topic, suppresses no one, and logs both topics at error (SPEC §12)", async () => {
+    allowErrorLogs("webhook.refused");
+    const errors = vi.spyOn(console, "error");
     const signer = await makeSigner();
     mockCert(signer);
     await seedDelivery("listed@example.com", "msg-foreign-1");
@@ -1389,6 +1393,18 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     // Applied as the route applies them: had the bounce slipped through, this suppresses.
     await applyDeliveryEvents(env.DB, result.events);
     expect(await subscribers.isSuppressed(env.DB, "listed@example.com")).toBe(false);
+    // SNS discards a 4xx for good, so the refusal is the only trace: loud, and naming the
+    // topic that came and the one this deployment expects, so a recreated topic is plain.
+    expect(logged(errors).filter((l) => l.event === "webhook.refused")).toEqual([
+      {
+        event: "webhook.refused",
+        level: "error",
+        provider: "ses",
+        reason: "topic",
+        topic: FOREIGN_TOPIC_ARN,
+        expected: SNS_TOPIC_ARN,
+      },
+    ]);
   });
 
   it("refuses everything when SNS_TOPIC_ARN is unset (fails closed)", async () => {
@@ -1410,7 +1426,9 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     expect(fetched.subscribe).toBe(false);
   });
 
-  it("rejects a forged signature and mutates nothing", async () => {
+  it("rejects a forged signature, mutates nothing, and logs it at error", async () => {
+    allowErrorLogs("webhook.refused");
+    const errors = vi.spyOn(console, "error");
     const signer = await makeSigner();
     mockCert(signer);
     await seedDelivery("victim@example.com", "msg-forged-1");
@@ -1430,9 +1448,67 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     await applyDeliveryEvents(env.DB, result.events);
     expect(await subscribers.isSuppressed(env.DB, "victim@example.com")).toBe(false);
     expect(await deliveryEvent("msg-forged-1")).toBeNull();
+    expect(logged(errors).filter((l) => l.event === "webhook.refused")).toMatchObject([
+      { level: "error", reason: "signature", topic: SNS_TOPIC_ARN, expected: SNS_TOPIC_ARN },
+    ]);
+  });
+
+  // SNS retries a 5xx and discards a 4xx for good, so not reaching SNS's own certificate
+  // host must never read as a forgery: the message may be a real bounce (SPEC §10).
+  it.each([
+    ["the network fails", () => Promise.reject(new TypeError("Network connection lost."))],
+    ["the host answers 503", async () => new Response("unavailable", { status: 503 })],
+    ["the host answers 500", async () => new Response("error", { status: 500 })],
+    ["the host answers 429", async () => new Response("slow down", { status: 429 })],
+  ])(
+    "answers 503 when the signing cert can't be fetched because %s, so SNS retries, and acts on nothing",
+    async (_why, answer) => {
+      const warns = vi.spyOn(console, "warn");
+      const signer = await makeSigner();
+      await seedDelivery("held@example.com", "msg-cert-1");
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+        reqUrl(input) === signer.certUrl ? answer() : new Response("not found", { status: 404 }),
+      );
+      const envelope = await signEnvelope(
+        notification(signer, bounceMessage("held@example.com", "msg-cert-1", "Permanent")),
+        signer,
+      );
+
+      const result = await newProvider().parseWebhook(webhookRequest(envelope), sesEnv);
+
+      expect(result.response.status).toBe(503);
+      expect(result.events).toHaveLength(0);
+      await applyDeliveryEvents(env.DB, result.events);
+      expect(await subscribers.isSuppressed(env.DB, "held@example.com")).toBe(false);
+      expect(logged(warns).filter((l) => l.event === "webhook.cert_unavailable")).toMatchObject([
+        { level: "warn", provider: "ses", topic: SNS_TOPIC_ARN },
+      ]);
+
+      // SNS's retry, once the host answers, is verified and applied as any message is.
+      mockCert(signer);
+      const retried = await newProvider().parseWebhook(webhookRequest(envelope), sesEnv);
+      expect(retried.response.status).toBe(200);
+      expect(retried.events).toHaveLength(1);
+    },
+  );
+
+  it("still refuses with 403 when SNS's host has no cert at the URL, since that is the message's fault", async () => {
+    allowErrorLogs("webhook.refused");
+    const signer = await makeSigner();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("not found", { status: 404 }));
+    const envelope = await signEnvelope(
+      notification(signer, bounceMessage("x@example.com", "msg-404", "Permanent")),
+      signer,
+    );
+
+    const result = await newProvider().parseWebhook(webhookRequest(envelope), sesEnv);
+
+    expect(result.response.status).toBe(403);
+    expect(result.events).toHaveLength(0);
   });
 
   it("rejects a signing cert served from an untrusted host", async () => {
+    allowErrorLogs("webhook.refused");
     const signer = await makeSigner();
     // The message points its SigningCertURL at a non-SNS host.
     signer.certUrl = "https://evil.example.com/cert.pem";

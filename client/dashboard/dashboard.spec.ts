@@ -384,6 +384,31 @@ describe("dashboard", () => {
     expect($("a", health).getAttribute("href")).toBe("#/sent/x1");
   });
 
+  it("says, amber, when a recent send has heard no receipt long after it went out", async () => {
+    // The server reads the silence off the send (SPEC §8); the dashboard only shows it, one
+    // line however many sends it touches, since one broken event destination silences all.
+    const srv = sendServer();
+    srv.put(send({ c_delivered: 0, c_bounced: 0, c_accepted: 40 }), {
+      conditions: [condition.noReceipts(40)],
+    });
+    fake = world([post()], srv);
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(0);
+    const health = $(".health");
+    expect(health.classList.contains("amber")).toBe(true);
+    expect(health.textContent).toMatch(/No delivery receipt has arrived for any of the 40/);
+    expect($("a", health).getAttribute("href")).toBe("#/sent/x1");
+
+    srv.put(send({ id: "x2", c_delivered: 0, c_bounced: 0, c_accepted: 9 }), {
+      conditions: [condition.noReceipts(9)],
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect($$(":scope > div > div", $(".health")).map((d) => d.textContent)).toEqual([
+      "2 sends have had no delivery receipt long after they went out. The provider's events may not be reaching this app, so its bounces and complaints suppress no one.",
+    ]);
+    expect($("a", $(".health")).getAttribute("href")).toBe("#/sent");
+  });
+
   it("shows the first-run checklist when nothing is written yet, and its New post creates one", async () => {
     fake = world([], sendServer(), none, [
       {

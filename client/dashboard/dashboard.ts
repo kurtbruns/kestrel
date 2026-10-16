@@ -154,6 +154,24 @@ function computeHealth(live: SendView[]): HealthAlert[] {
       text: html`<a href="#/sent/${firstSpike.s.id}">${firstSpike.s.subject}</a>: ${firstSpike.c.message}`,
     });
   }
+  // No receipts (SPEC §8): a recent send that has heard nothing back for anyone the
+  // provider took, long after dispatch, so its events may not be reaching the app and its
+  // bounces and complaints suppress no one. One line, since one broken destination silences
+  // every send alike.
+  const silent = live.flatMap((s) => {
+    const c = conditionOf(s, "no_receipts");
+    return c ? [{ s, c }] : [];
+  });
+  const [firstSilent] = silent;
+  if (firstSilent) {
+    alerts.push({
+      level: "amber",
+      text:
+        silent.length === 1
+          ? html`<a href="#/sent/${firstSilent.s.id}">${firstSilent.s.subject}</a>: ${firstSilent.c.message}`
+          : html`<a href="#/sent">${silent.length} sends</a> have had no delivery receipt long after they went out. The provider's events may not be reaching this app, so its bounces and complaints suppress no one.`,
+    });
+  }
   if (notConnected && !held.length) {
     alerts.push({
       level: "amber",

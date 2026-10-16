@@ -455,6 +455,9 @@ interface ConditionBase {
  *   action: the send resumes on its own.
  * - `provider_unavailable`: the provider is down or rate-limiting; retried at `retry_at`.
  * - `bounce_spike`: a recently sent send's confirmed bounces reached the danger zone.
+ * - `no_receipts`: a recently sent send has heard no receipt for any recipient the provider
+ *   took, long after its dispatch finished: the provider's events may not be reaching the
+ *   app; `accepted` is how many wait on one.
  * - `remade`: a template or identity change re-made the scheduled email after its last test.
  * - `daily_writes`: on Workers Free's limits, a scheduled send to more recipients than D1's
  *   daily writes comfortably cover, after what imports already wrote on the UTC day it
@@ -473,6 +476,7 @@ export type SendCondition =
     })
   | (ConditionBase & { kind: "provider_unavailable"; error: string; retry_at: number | null })
   | (ConditionBase & { kind: "bounce_spike"; bounced: number; rate: number })
+  | (ConditionBase & { kind: "no_receipts"; accepted: number })
   | (ConditionBase & { kind: "remade"; tested_at: number | null })
   | (ConditionBase & { kind: "daily_writes"; recipients: number });
 
@@ -492,6 +496,15 @@ export type FeedCondition = SendCondition & { send_id: string; subject: string }
 export const BOUNCE_SPIKE_RATE = 0.05;
 export const BOUNCE_SPIKE_MIN = 3;
 export const BOUNCE_SPIKE_RECENT_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * No receipts (SPEC §8): a send that finished dispatch this long ago with not one receipt
+ * for anyone the provider took. A provider reports a delivery within seconds to minutes, so
+ * an hour of silence over a whole send is not settling but receipts that are not arriving.
+ * Read over the same recent window as the bounce spike, since a long-past send's silence
+ * is history the publisher can no longer act on.
+ */
+export const NO_RECEIPTS_AFTER_MS = 60 * 60 * 1000;
 
 /**
  * On the Workers Free plan's limits, a scheduled send to more than this many recipients may

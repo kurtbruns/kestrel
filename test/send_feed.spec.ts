@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { decodeSendCursor, encodeSendCursor } from "../shared/cursor";
 import type { PostListResponse } from "../shared/posts";
 import {
+  NO_RECEIPTS_AFTER_MS,
   type SendFeedResponse,
   type SendListResponse,
   type SendResponse,
@@ -189,6 +190,21 @@ describe("GET /api/sends/feed after a cursor", () => {
     });
     const body = await feed(await cursorReadAt(now - 20_000));
     expect(body.sends.map((s) => [s.id, has(s, "stuck")])).toEqual([[send.id, true]]);
+    expect((await feed(await cursorReadAt(now - 5_000))).sends).toEqual([]);
+  });
+
+  it("reports a sent send the clock made silent, with no receipt long after dispatch", async () => {
+    const now = Date.now();
+    const send = await frozenSend(now - NO_RECEIPTS_AFTER_MS - 120_000, { subject: "Quiet" });
+    await setRow(send.id, {
+      status: "sent",
+      started_at: now - NO_RECEIPTS_AFTER_MS - 60_000,
+      audience_resolved_at: now - NO_RECEIPTS_AFTER_MS - 60_000,
+      completed_at: now - NO_RECEIPTS_AFTER_MS - 10_000,
+      c_accepted: 5,
+    });
+    const body = await feed(await cursorReadAt(now - 20_000));
+    expect(body.sends.map((s) => [s.id, has(s, "no_receipts")])).toEqual([[send.id, true]]);
     expect((await feed(await cursorReadAt(now - 5_000))).sends).toEqual([]);
   });
 

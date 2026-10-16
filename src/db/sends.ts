@@ -478,6 +478,7 @@ export function stuckSendSql(cutoff: string): string {
 export interface FeedThresholds {
   missedMs: number;
   stuckMs: number;
+  noReceiptsMs: number;
 }
 
 // The sends that can change on their own, over `?1` (now) and `?2` (the oldest completion
@@ -499,19 +500,22 @@ const CUT = `(SELECT rev FROM (${CHANGES}) ORDER BY rev LIMIT 1 OFFSET ?6 - 1)`;
 const IN_PAGE = `rev > ?2 AND rev <= COALESCE(${CUT}, 9007199254740991)`;
 
 // The sends that changed after a cursor, over `?1` (now), `?2` (the cursor's sequence), `?3`
-// (its read time), `?4` (the missed threshold), `?5` (the stuck threshold) and `?6` (the
-// limit): every send whose `rev` is in the page, and every send a clock threshold changed
-// between the read time and now with no write, whatever the limit. Each crossing is the same
-// comparison `buildSendProgress` makes, at the read time (not yet) and at now (crossed): a
-// fire time passing (due), the missed tolerance passing, and the stuck threshold passing
-// since the send went idle (`SEND_IDLE_SINCE`). A send turns wedged only by a write
-// (`WEDGED_SEND`), so no crossing is needed for it.
+// (its read time), `?4` (the missed threshold), `?5` (the stuck threshold), `?6` (the
+// limit) and `?7` (the no-receipts threshold): every send whose `rev` is in the page, and
+// every send a clock threshold changed between the read time and now with no write, whatever
+// the limit. Each crossing is the same comparison `buildSendProgress` makes, at the read time
+// (not yet) and at now (crossed): a fire time passing (due), the missed tolerance passing,
+// the stuck threshold passing since the send went idle (`SEND_IDLE_SINCE`), and a sent send
+// still without a receipt passing the no-receipts threshold. A send turns wedged only by a
+// write (`WEDGED_SEND`), so no crossing is needed for it.
 const CHANGED_SINCE = `(${IN_PAGE})
   OR (status = 'scheduled' AND (
        (fire_at > ?3 AND fire_at <= ?1)
     OR (fire_at + ?4 >= ?3 AND fire_at + ?4 < ?1)))
   OR (status = 'sending' AND started_at IS NOT NULL AND NOT ${WEDGED_SEND}
-      AND ${SEND_IDLE_SINCE} + ?5 >= ?3 AND ${SEND_IDLE_SINCE} + ?5 < ?1)`;
+      AND ${SEND_IDLE_SINCE} + ?5 >= ?3 AND ${SEND_IDLE_SINCE} + ?5 < ?1)
+  OR (status = 'sent' AND c_accepted > 0 AND c_delivered + c_bounced + c_complained = 0
+      AND completed_at + ?7 >= ?3 AND completed_at + ?7 < ?1)`;
 
 /**
  * One read of the send feed (SPEC §8), over send rows only, never the delivery record: with
@@ -549,7 +553,15 @@ export async function sendFeed(
     since
       ? db
           .prepare(`${select} WHERE ${CHANGED_SINCE} ORDER BY fire_at ASC, id ASC`)
-          .bind(now, since.seq, since.at, thresholds.missedMs, thresholds.stuckMs, limit)
+          .bind(
+            now,
+            since.seq,
+            since.at,
+            thresholds.missedMs,
+            thresholds.stuckMs,
+            limit,
+            thresholds.noReceiptsMs,
+          )
       : db
           .prepare(`${select} WHERE ${LIVE_SEND} ORDER BY fire_at ASC, id ASC`)
           .bind(now, settledSince),

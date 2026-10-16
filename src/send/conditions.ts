@@ -7,7 +7,7 @@
  * against the fire time; stuck by `stuckAt`, the clock against the send's last progress;
  * wedged by `isWedged`; refused and provider_unavailable
  * by the halt the send carries; bounce_spike by its confirmed bounces over its audience at
- * fire; remade by its last re-make against its last test; daily_writes by its audience as
+ * fire; no_receipts by its counters long after dispatch finished; remade by its last re-make against its last test; daily_writes by its audience as
  * scheduled and what imports wrote on the UTC day it fires, on Workers Free's limits only.
  * Each carries its severity, since when (null when the record does not say), the server's
  * words for it, and the action that settles it, if the API has one. The actions are exactly what the server would accept on
@@ -22,6 +22,7 @@ import {
   type ConditionSeverity,
   dailyWritesSendMessage,
   isSelfThrottled,
+  NO_RECEIPTS_AFTER_MS,
   refusalAdvice,
   refusedMessage,
   type SendAction,
@@ -191,6 +192,28 @@ export function sendConditions(
       action: null,
       bounced: send.c_bounced,
       rate,
+    });
+  }
+
+  // Not one receipt for anyone the provider took, an hour after the last was handed off:
+  // the provider's events may not be reaching the app, so its bounces and complaints are
+  // suppressing no one. Said as a possibility, since a send can be this quiet on its own.
+  const heard = send.c_delivered + send.c_bounced + send.c_complained;
+  if (
+    send.status === "sent" &&
+    send.completed_at !== null &&
+    now - send.completed_at > NO_RECEIPTS_AFTER_MS &&
+    now - send.completed_at <= BOUNCE_SPIKE_RECENT_MS &&
+    send.c_accepted > 0 &&
+    heard === 0
+  ) {
+    out.push({
+      kind: "no_receipts",
+      severity: "warn",
+      since: send.completed_at + NO_RECEIPTS_AFTER_MS,
+      message: `No delivery receipt has arrived for any of the ${plural(send.c_accepted, "recipient")} the provider took, ${plural(Math.round((now - send.completed_at) / 3_600_000) || 1, "hour")} after the send went out. The provider's events may not be reaching this app, so its bounces and complaints suppress no one. Check the webhook and the app's error log.`,
+      action: null,
+      accepted: send.c_accepted,
     });
   }
 
