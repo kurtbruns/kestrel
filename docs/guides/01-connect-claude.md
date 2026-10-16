@@ -27,6 +27,8 @@ A service token is a Client ID and a Client Secret that a program sends with eac
 
 Your application lets in only the people its `Publishers` policy names. A token needs a policy of its own, on the same application, because the app accepts only logins issued for that application.
 
+Create the token in section 1 first. The **Service Token** selector lists only tokens that exist, and with none chosen, Cloudflare refuses the policy with "include field should not be empty".
+
 1. Under **Access controls → Applications**, select **Configure** on the application from [Lock the dashboard with Access](../get-started/03-access.md#2-create-the-access-application).
 
 1. Add a policy:
