@@ -972,6 +972,32 @@ describe("SesProvider.sendBatch", () => {
     expect(JSON.stringify(r)).not.toMatch(LEAKED);
   });
 
+  // A refusal of the key or its signature is the same for every recipient, so it holds the
+  // send whatever status carries it; AWS answers several of these with a 400.
+  it.each([
+    [400, "IncompleteSignatureException"],
+    [400, "IncompleteSignature"],
+    [400, "InvalidSignatureException"],
+    [403, "SignatureDoesNotMatch"],
+    [403, "MissingAuthenticationTokenException"],
+    [403, "MissingAuthenticationToken"],
+    [403, "InvalidClientTokenId"],
+    [400, "RequestExpired"],
+    [403, "ExpiredTokenException"],
+    [400, "AccessDeniedException"],
+    [400, "NotAuthorized"],
+  ])("halts a %i %s on the credentials, failing no recipient", async (status, type) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ __type: type, message: "refused" }), { status }),
+    );
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
+      { purpose: "list", tag: "send-1" },
+    );
+    expect(r).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "credentials" } });
+  });
+
   it.each(["test", "confirmation"] as const)(
     "holds a %s SES answers with a configuration set it can't find, rather than failing the address (SPEC §12)",
     async (purpose) => {

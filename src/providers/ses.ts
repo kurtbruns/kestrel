@@ -129,12 +129,20 @@ const ACCOUNT_ERROR_TYPES = new Map<string, HaltCause>([
   ["MalformedHttpRequestException", "unsupported"],
   // The AWS account isn't signed up for SES, which the key can't change.
   ["OptInRequired", "opt_in"],
-  // The credentials themselves: unknown, wrongly signed, expired, or not permitted (a key
-  // whose policy lacks `ses:SendBulkEmail` among them).
+  // The credentials themselves: unknown, missing, wrongly or incompletely signed, expired, or
+  // not permitted (a key whose policy lacks `ses:SendBulkEmail` among them). AWS's common
+  // errors carry some of these with a 400, which is why the type, not the status, decides; it
+  // names some both with and without the `Exception` suffix, depending on the front end that
+  // answered, so both spellings are here.
   ["UnrecognizedClientException", "credentials"],
   ["InvalidClientTokenId", "credentials"],
+  ["MissingAuthenticationToken", "credentials"],
+  ["MissingAuthenticationTokenException", "credentials"],
   ["SignatureDoesNotMatch", "credentials"],
   ["IncompleteSignature", "credentials"],
+  ["IncompleteSignatureException", "credentials"],
+  ["InvalidSignatureException", "credentials"],
+  ["RequestExpired", "credentials"],
   ["ExpiredTokenException", "credentials"],
   ["AccessDeniedException", "credentials"],
   ["NotAuthorized", "credentials"],
