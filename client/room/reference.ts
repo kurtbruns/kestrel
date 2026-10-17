@@ -323,21 +323,15 @@ function apiSectionHtml(g: ReferenceGroup, look: Lookups): Html {
       ${g.resources.map((res) => apiResourceHtml(g, res, look))}
     </section>`;
 }
-// The refusals any route can give, which no route lists as its own: each with what it means
-// and the client's next move, as a route's own refusals say theirs.
+// The refusals any route can give, which no route lists as its own, each with what it means.
 function apiSharedRefusalsHtml(ref: ReferenceResponse): Html | null {
   const shared = sharedRefusals(ref);
   if (!shared.length) {
     return null;
   }
-  const rows = shared.map((c) =>
-    ledgerRow(
-      c.status,
-      breakable(c.code),
-      null,
-      html`${inline(c.meaning)}<span class="api-move-next">${c.move}</span>`,
-    ),
-  );
+  // No next move here, unlike a route's refusals: for these the status and the line already say
+  // it (sign in, fix the request, fix the deployment). The Markdown keeps it, for Claude to act on.
+  const rows = shared.map((c) => ledgerRow(c.status, breakable(c.code), null, inline(c.meaning)));
   return section(
     "Refusals any route can give",
     html`<div class="api-ledger api-refusals">${rows}</div>`,

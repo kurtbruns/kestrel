@@ -393,12 +393,14 @@ describe("reference room", () => {
     expect($(".api-method", object).textContent).toBe("Object");
     expect($(".api-op-head h4", object).textContent?.trim()).toBe("The send view");
     expect($(".api-path", object).textContent).toBe("1 field");
-    // Errors lists only the refusals no route lists as its own, each with its next move; there
+    // Errors lists only the refusals no route lists as its own; there
     // is no table of every code.
     expect(document.querySelector(".api-fold")).toBeNull();
     expect($$(".api-refusals .api-lrow").map((r) => r.textContent)).toEqual([
-      "409window_closedThe fire time has passed.Nothing: the act no longer applies",
+      "409window_closedThe fire time has passed.",
     ]);
+    // Unlike a route's own refusals, these carry no next move: the status and line say it.
+    expect(document.querySelector(".api-refusals .api-move-next")).toBeNull();
     // A code breaks only where its words join.
     expect($(".api-refusals code.api-row-name").innerHTML).toBe("window_<wbr>closed");
     // An object's fields, an enum's values under its line, and its example.
