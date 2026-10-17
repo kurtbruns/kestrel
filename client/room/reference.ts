@@ -205,11 +205,8 @@ function apiRouteHtml(r: ReferenceEntry, look: Lookups): Html {
   return html`<li data-hay="${routeHay(r, look)}" data-path="${concretePath(r.path).toLowerCase()}" id="route-${routeAnchor(r)}" data-route="${routeAnchor(r)}"><article class="api-op">
       <div class="api-op-head">
         <h4 tabindex="-1">${selfLink(r.title, { route: routeAnchor(r) })}</h4>
-        <span class="api-route-tools">
-          <button type="button" class="copy-btn" data-copy="${`${r.method} ${concretePath(r.path)}`}" data-copy-word="Copy path" aria-label="Copy method and path">${copyFace(false, "Copy path")}</button>
-        </span>
       </div>
-      <p class="api-op-call"><span class="api-method m-${r.method}">${r.method}</span><code class="api-path">${apiPathHtml(r.path)}</code></p>
+      <p class="api-op-call"><span class="api-method m-${r.method}">${r.method}</span><code class="api-path">${apiPathHtml(r.path)}</code><button type="button" class="copy-btn api-copy-path" data-copy="${concretePath(r.path)}" data-copy-word="" aria-label="Copy path" title="Copy path">${copyFace(false, "")}</button></p>
       <div class="api-op-body">
         <div class="api-op-text">
           <p class="api-summary">${inline(r.summary)}</p>

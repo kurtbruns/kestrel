@@ -542,15 +542,21 @@ describe("reference room", () => {
     );
   });
 
-  it("copies a route's method and path, and makes its heading a link to its own address", async () => {
+  it("copies a route's path from beside it, and makes its heading a link to its own address", async () => {
     const writeText = stubClipboard();
     fake = fakeApi([{ path: "/api/reference", reply: () => reference(groups) }]);
     await mount(renderReference);
     await settle();
     const route = $("#route-retrieve-post");
-    $<HTMLButtonElement>(".api-route-tools [aria-label='Copy method and path']", route).click();
+    // Copy sits right after the path and copies the path alone; the method is the client's
+    // own argument, and the curl block carries the whole call.
+    const copy = $<HTMLButtonElement>(
+      ".api-op-call .api-path + button[aria-label='Copy path']",
+      route,
+    );
+    copy.click();
     await settle();
-    expect(writeText.mock.calls.map(([text]) => text)).toEqual(["GET /api/posts/:id"]);
+    expect(writeText.mock.calls.map(([text]) => text)).toEqual(["/api/posts/:id"]);
     // No separate Copy link: the heading is the link, its icon shown on hover.
     expect(route.querySelector("[aria-label='Copy a link to this route']")).toBeNull();
     const self = $<HTMLAnchorElement>("h4 a.api-self", route);

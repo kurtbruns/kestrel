@@ -4224,11 +4224,6 @@ button.api-filter-clear svg {
   border-radius: 3px;
   padding: 0 2px;
 }
-.api-route-tools {
-  display: flex;
-  gap: 6px;
-  flex: none;
-}
 .api-summary {
   flex: 1 1 320px;
   margin: 0;
@@ -4304,6 +4299,13 @@ a.api-self:focus-visible svg {
 }
 .api-op-call .api-method {
   padding: 0 6px;
+}
+/* Copy sits right after the path it copies, an icon alone, so the two read as one. */
+button.copy-btn.api-copy-path {
+  padding: 3px 5px;
+}
+button.copy-btn.api-copy-path span:empty {
+  display: none;
 }
 .api-op-body {
   display: grid;
