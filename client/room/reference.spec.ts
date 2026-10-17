@@ -150,7 +150,7 @@ describe("reference room", () => {
       "api-admin-sends",
       "api-public-subscriptions",
     ]);
-    expect($("#api-admin-posts .api-res-head").textContent).toBe("Posts");
+    expect($("#api-admin-posts .api-res-head").textContent?.trim()).toBe("Posts");
     // The rail lists a tier's resources only when it has more than one.
     const nav = $$("#apiNav a.api-nav-tier, #apiNav a.api-nav-res");
     expect(nav.map((a) => a.dataset.sec)).toEqual([
@@ -194,7 +194,7 @@ describe("reference room", () => {
     expect(document.querySelector("details.api-route")).toBeNull();
     expect($(".api-method", rows[0]).className).toBe("api-method m-GET");
     expect($(".api-path", rows[0]).textContent).toBe("/api/posts");
-    expect($(".api-op-head h4", rows[0]).textContent).toBe("List posts");
+    expect($(".api-op-head h4", rows[0]).textContent?.trim()).toBe("List posts");
     expect($(".api-op-head", rows[0]).textContent).not.toContain("List posts.");
     expect(document.querySelector(".api-tier")).toBeNull(); // the tier heads the section, not each row
     // A path parameter is marked; the rest of the path is text.
@@ -204,8 +204,10 @@ describe("reference room", () => {
     expect($(".api-desc", rows[0]).textContent).toBe("Offset-paged.");
     expect($(".api-table td code", rows[0]).textContent).toBe("status");
     expect($(".api-summary", rows[1]).textContent).toBe("Create <a post>."); // text, not markup
-    expect($(".api-op-head h4", rows[1]).textContent).toBe("Create <a post>");
-    expect(document.querySelector(".api-summary a, .api-op-head h4 a")).toBeNull();
+    expect($(".api-op-head h4", rows[1]).textContent?.trim()).toBe("Create <a post>");
+    expect(
+      document.querySelector(".api-summary a, .api-op-head h4 a:not(.api-self), .api-self a"),
+    ).toBeNull();
     expect($$(".block-label", rows[1]).map((l) => l.textContent)).toEqual([
       "Request",
       "Response",
@@ -386,7 +388,7 @@ describe("reference room", () => {
     const object = $("#api-admin-sends > article.api-object");
     expect(object.id).toBe("api-objects-send");
     expect($(".api-method", object).textContent).toBe("Object");
-    expect($(".api-op-head h4", object).textContent).toBe("The send view");
+    expect($(".api-op-head h4", object).textContent?.trim()).toBe("The send view");
     expect($(".api-path", object).textContent).toBe("1 field");
     // Errors lists only the refusals no route lists as its own, each with its next move; there
     // is no table of every code.
@@ -520,22 +522,34 @@ describe("reference room", () => {
     );
   });
 
-  it("copies a route's method and path, and a link that opens the reference at it", async () => {
+  it("copies a route's method and path, and makes its heading a link to its own address", async () => {
     const writeText = stubClipboard();
     fake = fakeApi([{ path: "/api/reference", reply: () => reference(groups) }]);
     await mount(renderReference);
     await settle();
     const route = $("#route-retrieve-post");
     $<HTMLButtonElement>(".api-route-tools [aria-label='Copy method and path']", route).click();
-    $<HTMLButtonElement>(
-      ".api-route-tools [aria-label='Copy a link to this route']",
-      route,
-    ).click();
     await settle();
-    expect(writeText.mock.calls.map(([text]) => text)).toEqual([
-      "GET /api/posts/:id",
-      `${location.origin}${location.pathname}#/api-reference/retrieve-post`,
+    expect(writeText.mock.calls.map(([text]) => text)).toEqual(["GET /api/posts/:id"]);
+    // No separate Copy link: the heading is the link, its icon shown on hover.
+    expect(route.querySelector("[aria-label='Copy a link to this route']")).toBeNull();
+    const self = $<HTMLAnchorElement>("h4 a.api-self", route);
+    expect(self.getAttribute("href")).toBe("#/api-reference/retrieve-post");
+    expect(self.querySelector("svg")).not.toBeNull();
+    // Every heading with an address links to it: a tier, a resource, an object, a topic.
+    expect($$("a.api-self[data-sec]").map((a) => a.getAttribute("href"))).toEqual([
+      "#/api-reference/overview-errors",
+      "#/api-reference/admin",
+      "#/api-reference/admin-posts",
+      "#/api-reference/admin-sends",
+      "#/api-reference/objects-send",
+      "#/api-reference/public",
+      "#/api-reference/public-subscriptions",
     ]);
+    const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
+    self.click();
+    expect(scroll.mock.instances).toEqual([route]);
+    expect(location.hash).toBe("#/api-reference/retrieve-post");
     // Each row has its own address, named for what it does.
     expect($$("li[data-hay]").map((li) => li.id)).toEqual([
       "route-list-posts",
@@ -654,8 +668,11 @@ describe("reference room", () => {
     expect(document.activeElement).toBe($("#api-admin-sends .api-res-head h3"));
     expect(location.hash).toBe("#/api-reference/admin-sends");
     expect(fake.calls).toHaveLength(1); // the room isn't rendered again
-    // The Introduction goes back to the top of the page, focus on its title.
+    // The Introduction goes back to the very top of the page, not to its title under the bar,
+    // focus on its title.
+    const top = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
     $("#apiNav a[data-sec='overview']").click();
+    expect(top).toHaveBeenCalledWith(0, 0);
     expect(document.activeElement).toBe($("#api-intro > h1"));
     expect(location.hash).toBe("#/api-reference");
     // A route's link in the rail goes to the route, focus on its heading.
@@ -666,7 +683,7 @@ describe("reference room", () => {
     const cmd = new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true });
     $("#apiNav a[data-sec='admin-posts']").dispatchEvent(cmd);
     expect(cmd.defaultPrevented).toBe(false);
-    expect(scroll).toHaveBeenCalledTimes(4);
+    expect(scroll).toHaveBeenCalledTimes(3);
   });
 
   it("opens at the part of the page its address names, with focus there", async () => {

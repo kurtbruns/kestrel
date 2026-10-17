@@ -145,9 +145,15 @@ function apiPathHtml(path: string): Html {
     .split(/(:[A-Za-z_]+)/)
     .map((part, i) => (i % 2 ? html`<span class="api-param">${part}</span>` : part))}`;
 }
-/** The link that opens the reference at a route, to share in an issue or hand to Claude. */
-function routeLink(r: ReferenceEntry): string {
-  return `${location.origin}${location.pathname}#/api-reference/${routeAnchor(r)}`;
+/**
+ * A heading's text as a link to its own address, as GitHub's and Stripe's headings are: a click
+ * jumps there in place and puts the address in the bar to copy or share, and a link icon shows
+ * beside it on hover. `to` is a route's anchor (`route`) or a part of the page's (`sec`).
+ */
+function selfLink(text: string, to: { route: string } | { sec: string }): Html {
+  return "route" in to
+    ? html`<a class="api-self" href="#/api-reference/${to.route}" data-route="${to.route}">${icon("link")}${text}</a>`
+    : html`<a class="api-self" href="#/api-reference/${to.sec}" data-sec="${to.sec}">${icon("link")}${text}</a>`;
 }
 /** What a route's detail looks up in the rest of the reference. */
 interface Lookups {
@@ -192,10 +198,9 @@ function routeHay(r: ReferenceEntry, look: Lookups): string {
 function apiRouteHtml(r: ReferenceEntry, look: Lookups): Html {
   return html`<li data-hay="${routeHay(r, look)}" data-path="${concretePath(r.path).toLowerCase()}" id="route-${routeAnchor(r)}" data-route="${routeAnchor(r)}"><article class="api-op">
       <div class="api-op-head">
-        <h4 tabindex="-1">${r.title}</h4>
+        <h4 tabindex="-1">${selfLink(r.title, { route: routeAnchor(r) })}</h4>
         <span class="api-route-tools">
           <button type="button" class="copy-btn" data-copy="${`${r.method} ${concretePath(r.path)}`}" data-copy-word="Copy path" aria-label="Copy method and path">${copyFace(false, "Copy path")}</button>
-          <button type="button" class="copy-btn" data-copy="${routeLink(r)}" data-copy-word="Copy link" aria-label="Copy a link to this route">${copyFace(false, "Copy link")}</button>
         </span>
       </div>
       <p class="api-op-call"><span class="api-method m-${r.method}">${r.method}</span><code class="api-path">${apiPathHtml(r.path)}</code></p>
@@ -238,7 +243,7 @@ function apiTableHtml(t: ReferenceTable): Html {
 // out like a route: its fields on the left, its example beside them.
 function apiObjectHtml(o: ReferenceObject): Html {
   return html`<article class="api-op api-object" id="api-objects-${o.key}" data-sec="objects-${o.key}">
-      <div class="api-op-head"><h4 tabindex="-1">${o.title}</h4></div>
+      <div class="api-op-head"><h4 tabindex="-1">${selfLink(o.title, { sec: `objects-${o.key}` })}</h4></div>
       <p class="api-op-call"><span class="api-method m-OBJECT">Object</span><span class="api-path">${o.fields.length} ${o.fields.length === 1 ? "field" : "fields"}</span></p>
       <div class="api-op-body">
         <div class="api-op-text">
@@ -255,14 +260,14 @@ function apiResourceHtml(g: ReferenceGroup, res: ReferenceResource, look: Lookup
   const routes = routesIn(g, res);
   const objects = look.heads.get(sec) ?? [];
   return html`<div class="api-res" id="api-${sec}" data-sec="${sec}">
-      <div class="api-res-head"><h3 tabindex="-1">${res.title}</h3></div>
+      <div class="api-res-head"><h3 tabindex="-1">${selfLink(res.title, { sec })}</h3></div>
       ${objects.map(apiObjectHtml)}
       <ul class="api-rows">${routes.map((r) => apiRouteHtml(r, look))}</ul>
     </div>`;
 }
 function apiSectionHtml(g: ReferenceGroup, look: Lookups): Html {
   return html`<section class="api-section" id="api-${g.access}" data-tier="${g.access}">
-      <h2 tabindex="-1">${g.title}</h2>
+      <h2 tabindex="-1">${selfLink(g.title, { sec: g.access })}</h2>
       <p class="api-blurb muted">${inline(g.blurb)}</p>
       ${g.resources.map((res) => apiResourceHtml(g, res, look))}
     </section>`;
@@ -287,7 +292,7 @@ function apiOverviewHtml(ref: ReferenceResponse): Html {
   const codes = sharedRefusals(ref).map((c) => c.code);
   const concept = (c: ReferenceConcept) =>
     html`<div class="api-res" id="api-overview-${c.key}" data-sec="overview-${c.key}" data-hay="${[c.title, ...(c.key === "errors" ? codes : [])].join(" ").toLowerCase()}">
-      <div class="api-res-head"><h3 tabindex="-1">${c.title}</h3></div>
+      <div class="api-res-head"><h3 tabindex="-1">${selfLink(c.title, { sec: `overview-${c.key}` })}</h3></div>
       ${prose(c.text, "api-prose")}
       ${c.key === "errors" ? apiStatusesHtml(ref.statuses) : null}
       ${c.fields?.length ? html`<div class="block"><div class="block-head"><span class="block-label">${c.key === "errors" ? "The error body" : "Fields"}</span></div>${apiFieldsTable(c.fields)}</div>` : null}
@@ -485,7 +490,13 @@ function part(sec: string): HTMLElement | null {
  * focus on its line, a tier or a resource with focus on its heading.
  */
 function reveal(target: HTMLElement): void {
-  target.scrollIntoView({ block: "start" });
+  // The Introduction is the page's own top, above the sticky bar's line, so it scrolls to 0
+  // rather than putting the title under the bar.
+  if (target.id === "api-intro") {
+    window.scrollTo(0, 0);
+  } else {
+    target.scrollIntoView({ block: "start" });
+  }
   const focus = target.querySelector<HTMLElement>(
     ":scope > h1, :scope > h2, :scope > .api-res-head h3, :scope > .api-op-head h4, :scope > article > .api-op-head h4",
   );

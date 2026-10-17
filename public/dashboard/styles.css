@@ -4271,6 +4271,27 @@ button.api-filter-clear svg {
 .api-op-head h4:focus {
   outline: none;
 }
+/* A heading is a link to its own address, in the heading's own ink, with a link icon in the
+   margin to its left while it is hovered or focused, as GitHub's headings show theirs. */
+a.api-self {
+  position: relative;
+  color: inherit;
+  text-decoration: none;
+}
+a.api-self svg {
+  position: absolute;
+  left: -20px;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translateY(-50%);
+  color: var(--muted);
+  opacity: 0;
+}
+a.api-self:hover svg,
+a.api-self:focus-visible svg {
+  opacity: 1;
+}
 .api-op-call {
   display: flex;
   align-items: center;
