@@ -202,7 +202,7 @@ describe("reference room", () => {
     expect($$(".api-param", rows[2]).map((p) => p.textContent)).toEqual([":id"]);
     // The detail: summary, description, query, then the examples that exist.
     expect($(".api-desc", rows[0]).textContent).toBe("Offset-paged.");
-    expect($(".api-table td code", rows[0]).textContent).toBe("status");
+    expect($(".api-query code.api-row-name", rows[0]).textContent).toBe("status");
     expect($(".api-summary", rows[1]).textContent).toBe("Create <a post>."); // text, not markup
     expect($(".api-op-head h4", rows[1]).textContent?.trim()).toBe("Create <a post>");
     expect(
@@ -341,18 +341,21 @@ describe("reference room", () => {
     expect(
       $(".api-body", upload!).closest(".block")?.querySelector(".block-label")?.textContent,
     ).toBe("Body · multipart/form-data, image/png");
-    // Each body field with its type, the required one marked; the text stays text.
-    expect($$(".api-body tr", upload!).map((tr) => tr.textContent)).toEqual([
-      "file requiredfileThe image.",
+    // Each body field a row: its name, type, and Required on one line, then what it means;
+    // the text stays text.
+    expect($$(".api-body .api-row", upload!).map((r) => r.textContent)).toEqual([
+      "filefileRequiredThe image.",
       "filenamestringA <name> to store it under.",
     ]);
+    expect($(".api-body .api-row-head .api-req", upload!).textContent).toBe("Required");
     expect(upload!.querySelector(".api-body name")).toBeNull();
     expect(del!.querySelector(".api-body")).toBeNull();
-    // The route's own refusals: status and code with the fields the body carries under them,
-    // then when, then what to do next.
-    expect($$(".api-errors tr", del!).map((tr) => tr.textContent)).toEqual([
-      "409 post_not_draftwith send, fieldThe post is <scheduled>.Nothing: the act no longer applies",
+    // The route's own refusals, a ledger: the status in a column of its own, tinted by its
+    // class, then the code, the fields the body carries, when, and what to do next.
+    expect($$(".api-errors .api-lrow", del!).map((r) => r.textContent)).toEqual([
+      "409post_not_draftwith send, fieldThe post is <scheduled>.Nothing: the act no longer applies",
     ]);
+    expect($(".api-errors .api-st", del!).className).toBe("api-st api-st-4xx");
     expect($(".api-errors .api-move-next", del!).textContent).toBe(
       "Nothing: the act no longer applies",
     );
@@ -376,10 +379,10 @@ describe("reference room", () => {
       "The error body",
       "Refusals any route can give",
     ]);
-    expect($$(".api-statuses tr").map((tr) => tr.textContent)).toEqual([
+    expect($$(".api-statuses .api-lrow").map((r) => r.textContent)).toEqual([
       "409ConflictIts state refuses it.",
     ]);
-    expect($$("#api-overview-errors .api-fields tr").map((tr) => tr.textContent)).toEqual([
+    expect($$("#api-overview-errors .api-fields .api-row").map((r) => r.textContent)).toEqual([
       "errorstringIts code.",
     ]);
     expect(document.querySelector("#api-overview-errors .api-prose field")).toBeNull();
@@ -393,16 +396,13 @@ describe("reference room", () => {
     // Errors lists only the refusals no route lists as its own, each with its next move; there
     // is no table of every code.
     expect(document.querySelector(".api-fold")).toBeNull();
-    expect($$(".api-refusals tr").map((tr) => tr.textContent)).toEqual([
-      "409 window_closedThe fire time has passed.Nothing: the act no longer applies",
+    expect($$(".api-refusals .api-lrow").map((r) => r.textContent)).toEqual([
+      "409window_closedThe fire time has passed.Nothing: the act no longer applies",
     ]);
-    // A code breaks only where its words join, and its meaning reads in ink like any table's.
-    expect($(".api-refusals td.api-name code").innerHTML).toBe(
-      '<span class="api-status">409</span> window_<wbr>closed',
-    );
-    expect($(".api-refusals td.api-name + td").classList.contains("muted")).toBe(false);
+    // A code breaks only where its words join.
+    expect($(".api-refusals code.api-row-name").innerHTML).toBe("window_<wbr>closed");
     // An object's fields, an enum's values under its line, and its example.
-    expect($$("#api-objects-send .api-fields tr").map((tr) => tr.textContent)).toEqual([
+    expect($$("#api-objects-send .api-fields .api-row").map((r) => r.textContent)).toEqual([
       "statusstringIts state.scheduled Cancelable.",
     ]);
     expect($$("#api-objects-send .block-label").map((l) => l.textContent)).toEqual(["Example"]);
@@ -423,7 +423,9 @@ describe("reference room", () => {
     ]);
     await mount(renderReference);
     await settle();
-    const link = $<HTMLAnchorElement>("#api-objects-send .api-fields tr:last-child .api-under a");
+    const link = $<HTMLAnchorElement>(
+      "#api-objects-send .api-fields .api-row:last-child .api-row-type a",
+    );
     expect(link.textContent).toBe("send[]");
     expect(link.getAttribute("href")).toBe("#/api-reference/objects-send");
     expect(fake.unhandled).toEqual([]);
@@ -492,11 +494,11 @@ describe("reference room", () => {
     await settle();
     const route = $("li[data-route]");
     expect($(".api-returns", route).textContent).toBe("send: The send view, and:");
-    expect($$(".api-fields tr", route).map((tr) => tr.textContent)).toEqual([
+    expect($$(".api-fields .api-row", route).map((r) => r.textContent)).toEqual([
       "changedbooleanFalse when nothing changed.",
     ]);
-    expect($$(".api-errors tr", route).map((tr) => tr.textContent)).toEqual([
-      "409 window_closedwith sendThe fire time has passed.Nothing: the act no longer applies",
+    expect($$(".api-errors .api-lrow", route).map((r) => r.textContent)).toEqual([
+      "409window_closedwith sendThe fire time has passed.Nothing: the act no longer applies",
     ]);
     // The object's link is a real link to its address, and jumps there in place, with focus on
     // its heading, the address in the bar, and the room not rendered again.
@@ -663,7 +665,7 @@ describe("reference room", () => {
     fake = fakeApi([{ path: "/api/reference", reply: () => reference(withToken) }]);
     await mount(renderReference);
     await settle();
-    expect($("li[data-route] .api-table td").textContent).toBe("token required");
+    expect($("li[data-route] .api-query .api-row-head").textContent).toBe("tokenRequired");
     expect($$("code", $$(".block").at(-1)!).at(-1)?.textContent).toBe(
       `curl "${location.origin}/confirm?token=:token"`,
     );

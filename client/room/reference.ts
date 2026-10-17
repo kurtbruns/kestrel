@@ -54,25 +54,40 @@ function breakable(name: string): Html {
   return html`${name.split(/(?<=[_./])/).map((part, i) => html`${i ? html`<wbr>` : null}${part}`)}`;
 }
 /**
- * A table's first cell: the name, then what sits under it (its type, or the fields a refusal
- * carries), so the second cell, the line on what it means, keeps the width.
+ * One section of a route or an object (its query, body, returns, refusals, fields): a heading
+ * over a rule, then its rows unboxed, as Stripe's and Mux's references set theirs. `meta` sits
+ * beside the heading, quieter (a body's media types).
  */
-function nameCell(name: Html | string, under?: Html | string | null, required?: boolean): Html {
-  return html`<td class="api-name"><code>${typeof name === "string" ? breakable(name) : name}</code>${required ? html` <span class="api-req">required</span>` : null}${under ? html`<span class="api-under">${under}</span>` : null}</td>`;
+function section(label: string, rows: Html | null, meta?: Html | null, lead?: Html | null): Html {
+  return html`<div class="block api-sec"><div class="block-head"><span class="block-label">${label}${meta ? html`<span class="api-sec-meta">${meta}</span>` : null}</span></div>${lead ?? null}${rows}</div>`;
 }
-// Query params for a list route, rendered as a name→description table so the
-// generated reference documents filter/sort/pagination from the registration.
+/** A field's row: its name, type, and whether the request needs it on one line, then what it means. */
+function fieldRow(
+  name: string,
+  type: Html | string | null | undefined,
+  required: boolean | undefined,
+  desc: Html,
+): Html {
+  return html`<div class="api-row"><div class="api-row-head"><code class="api-row-name">${breakable(name)}</code>${type ? html`<span class="api-row-type">${type}</span>` : null}${required ? html`<span class="api-req">Required</span>` : null}</div><div class="api-row-desc">${desc}</div></div>`;
+}
+/**
+ * A refusal's or a status's row in a ledger: the status in a column of its own, tinted by its
+ * class, so a reader scans by status, then the code, the fields it carries, and what it means.
+ */
+function ledgerRow(status: number, name: Html, carries: Html | null, desc: Html): Html {
+  return html`<div class="api-lrow"><span class="api-st api-st-${String(status)[0]}xx">${status}</span><div><div class="api-row-head"><code class="api-row-name">${name}</code></div>${carries ? html`<div class="api-with">${carries}</div>` : null}<div class="api-row-desc">${desc}</div></div></div>`;
+}
+// Query params for a list route, so the generated reference documents filter, sort, and
+// paging from the registration.
 function apiQueryHtml(query: QueryParam[] | undefined): Html | null {
   if (!query?.length) {
     return null;
   }
-  const rows = query.map(
-    (q) => html`<tr>${nameCell(q.name, null, q.required)}<td>${inline(q.description)}</td></tr>`,
-  );
-  return html`<div class="block"><div class="block-head"><span class="block-label">Query</span></div><table class="api-table"><tbody>${rows}</tbody></table></div>`;
+  const rows = query.map((q) => fieldRow(q.name, null, q.required, inline(q.description)));
+  return section("Query", html`<div class="api-list api-query">${rows}</div>`);
 }
 // A route's body: the media types it takes, from the registration the router enforces them
-// by, in the label, then its fields, each with its type and whether the request needs it.
+// by, beside the heading, then its fields, each with its type and whether the request needs it.
 function apiBodyHtml(
   body: BodyField[] | undefined,
   accepts: readonly string[] | undefined,
@@ -80,13 +95,11 @@ function apiBodyHtml(
   if (!body?.length) {
     return null;
   }
-  const rows = body.map(
-    (f) => html`<tr>${nameCell(f.name, f.type, f.required)}<td>${inline(f.description)}</td></tr>`,
-  );
+  const rows = body.map((f) => fieldRow(f.name, f.type, f.required, inline(f.description)));
   const types = accepts?.length
     ? html` · ${accepts.map((t, i) => html`${i ? ", " : ""}<code>${t}</code>`)}`
     : null;
-  return html`<div class="block"><div class="block-head"><span class="block-label">Body${types}</span></div><table class="api-table api-body"><tbody>${rows}</tbody></table></div>`;
+  return section("Body", html`<div class="api-list api-body">${rows}</div>`, types);
 }
 // The refusals the route gives of its own, each with its status and the fields it carries,
 // and when: the route's own words, or the code's meaning from the refusal registry, then the
@@ -95,34 +108,36 @@ function apiErrorsHtml(errors: RouteError[] | undefined, meanings: Meanings): Ht
   if (!errors?.length) {
     return null;
   }
-  const rows = errors.map(
-    (e) =>
-      html`<tr>${nameCell(
-        html`<span class="api-status">${e.status}</span> ${breakable(e.code)}`,
-        e.details?.length
-          ? html`with ${e.details.map((d, i) => html`${i ? ", " : ""}<code>${d}</code>`)}`
-          : null,
-      )}<td>${inline(e.when ?? meanings.get(e.code) ?? "")}<span class="api-move-next">${e.move}</span></td></tr>`,
+  const rows = errors.map((e) =>
+    ledgerRow(
+      e.status,
+      breakable(e.code),
+      e.details?.length
+        ? html`with ${e.details.map((d, i) => html`${i ? ", " : ""}<code>${d}</code>`)}`
+        : null,
+      html`${inline(e.when ?? meanings.get(e.code) ?? "")}<span class="api-move-next">${e.move}</span>`,
+    ),
   );
-  return html`<div class="block"><div class="block-head"><span class="block-label">Refusals</span></div><table class="api-table api-errors"><tbody>${rows}</tbody></table></div>`;
+  return section("Refusals", html`<div class="api-ledger api-errors">${rows}</div>`);
 }
 // Fields with their types and one line each, an enum's values listed under its line, and a field
 // that holds an object linked to that object's section by its type.
 function apiFieldsTable(fields: readonly ReferenceField[]): Html {
-  const rows = fields.map(
-    (f) =>
-      html`<tr>${nameCell(
-        f.name,
-        f.object
-          ? html`<a href="#/api-reference/objects-${f.object}" class="api-obj-link" data-sec="objects-${f.object}">${f.type}</a>`
-          : f.type,
-      )}<td>${inline(f.description)}${
+  const rows = fields.map((f) =>
+    fieldRow(
+      f.name,
+      f.object
+        ? html`<a href="#/api-reference/objects-${f.object}" class="api-obj-link" data-sec="objects-${f.object}">${f.type}</a>`
+        : f.type,
+      false,
+      html`${inline(f.description)}${
         f.values?.length
           ? html`<ul class="api-values">${f.values.map((v) => html`<li><code>${v.value}</code> ${inline(v.description)}</li>`)}</ul>`
           : null
-      }</td></tr>`,
+      }`,
+    ),
   );
-  return html`<table class="api-table api-fields"><tbody>${rows}</tbody></table>`;
+  return html`<div class="api-list api-fields">${rows}</div>`;
 }
 // What a route answers: the object it returns, linked to its section, and its own fields.
 function apiReturnsHtml(
@@ -140,7 +155,7 @@ function apiReturnsHtml(
       ? html`<p class="api-returns"><code>${r.as}</code>: ${r.list ? html`a list of ${link}` : link}${r.fields?.length ? ", and:" : null}</p>`
       : html`<p class="api-returns">${link}${r.fields?.length ? ", and:" : null}</p>`
     : null;
-  return html`<div class="block"><div class="block-head"><span class="block-label">Returns</span></div>${what}${r.fields?.length ? apiFieldsTable(r.fields) : null}</div>`;
+  return section("Returns", r.fields?.length ? apiFieldsTable(r.fields) : null, null, what);
 }
 /**
  * The path as a URL path to type (the curl command's own, without the router's pattern
@@ -282,11 +297,18 @@ function apiSharedRefusalsHtml(ref: ReferenceResponse): Html | null {
   if (!shared.length) {
     return null;
   }
-  const rows = shared.map(
-    (c) =>
-      html`<tr>${nameCell(html`<span class="api-status">${c.status}</span> ${breakable(c.code)}`)}<td>${inline(c.meaning)}<span class="api-move-next">${c.move}</span></td></tr>`,
+  const rows = shared.map((c) =>
+    ledgerRow(
+      c.status,
+      breakable(c.code),
+      null,
+      html`${inline(c.meaning)}<span class="api-move-next">${c.move}</span>`,
+    ),
   );
-  return html`<div class="block"><div class="block-head"><span class="block-label">Refusals any route can give</span></div><table class="api-table api-refusals"><tbody>${rows}</tbody></table></div>`;
+  return section(
+    "Refusals any route can give",
+    html`<div class="api-ledger api-refusals">${rows}</div>`,
+  );
 }
 // The topics every route shares, before the routes. The filter matches a topic as a whole, by
 // its title, and Errors by the refusals any route can give too, so a pasted code no route
@@ -298,7 +320,7 @@ function apiOverviewHtml(ref: ReferenceResponse): Html {
       <div class="api-res-head"><h3 tabindex="-1">${selfLink(c.title, { sec: `overview-${c.key}` })}</h3></div>
       ${prose(c.text, "api-prose")}
       ${c.key === "errors" ? apiStatusesHtml(ref.statuses) : null}
-      ${c.fields?.length ? html`<div class="block"><div class="block-head"><span class="block-label">${c.key === "errors" ? "The error body" : "Fields"}</span></div>${apiFieldsTable(c.fields)}</div>` : null}
+      ${c.fields?.length ? section(c.key === "errors" ? "The error body" : "Fields", apiFieldsTable(c.fields)) : null}
       ${c.key === "errors" ? apiSharedRefusalsHtml(ref) : null}
     </div>`;
   // The topics follow the page's own introduction, which the rail's Introduction names.
@@ -306,13 +328,11 @@ function apiOverviewHtml(ref: ReferenceResponse): Html {
       ${ref.concepts.map(concept)}
     </section>`;
 }
-// Every status the API answers, its name under it, and what it means here.
+// Every status the API answers, in the same ledger as the refusals: the status, its name, and
+// what it means here.
 function apiStatusesHtml(statuses: readonly ReferenceStatus[]): Html {
-  const rows = statuses.map(
-    (s) =>
-      html`<tr><td class="api-name"><span class="api-status-code">${s.status}</span><span class="api-under">${s.name}</span></td><td>${inline(s.meaning)}</td></tr>`,
-  );
-  return html`<div class="block"><div class="block-head"><span class="block-label">Status codes</span></div><table class="api-table api-statuses"><tbody>${rows}</tbody></table></div>`;
+  const rows = statuses.map((s) => ledgerRow(s.status, html`${s.name}`, null, inline(s.meaning)));
+  return section("Status codes", html`<div class="api-ledger api-statuses">${rows}</div>`);
 }
 // The rail: the topics, then each tier, each with its resources and, under each resource, its
 // objects and routes by name, so the rail is the whole page's contents as Stripe's is. Only the

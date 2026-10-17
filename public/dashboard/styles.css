@@ -1934,10 +1934,89 @@ th.num .th-sort {
   cursor: default;
 }
 
-/* API reference tables, one shape for all of them: a name column (a field, a parameter, or a
-   refusal code, with its type or what a refusal carries under it), then the line on what it
-   means, which keeps most of the width. A name breaks only where its words join (the <wbr>
-   the page puts after each _ . /), and mid-word only when nothing else fits. */
+/* A route's or an object's sections (query, body, returns, refusals, fields) as Stripe's and
+   Mux's references set theirs: a heading over a rule, then unboxed rows, each with the name,
+   its type, and Required on one line and what it means under it, so a long name never
+   squeezes its description. A name breaks only where its words join (the <wbr> the page puts
+   after each _ . /). */
+.api-sec {
+  margin-top: 22px;
+}
+.api-sec > .block-head {
+  margin: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.api-sec > .block-head .block-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.api-sec-meta {
+  margin-left: 2px;
+  font: 400 12px var(--mono);
+  color: var(--muted);
+}
+.api-row,
+.api-lrow {
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+.api-row-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+code.api-row-name {
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: break-word;
+}
+.api-row-type {
+  font: 12px var(--mono);
+  color: var(--muted);
+}
+/* A type that names an object links to it, and reads as a link. */
+.api-row-type a {
+  color: var(--fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.api-row-desc {
+  margin-top: 3px;
+  font-size: 13.5px;
+}
+/* The refusals and the statuses are a ledger: the status in a column of its own, tinted by
+   its class, so a reader scans by status. */
+.api-lrow {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 6px;
+}
+.api-st {
+  font: 600 12.5px / 20px var(--mono);
+  color: var(--muted);
+}
+.api-st-4xx {
+  color: var(--warn-fg);
+}
+.api-st-5xx {
+  color: var(--danger-fg);
+}
+.api-st-2xx {
+  color: var(--ok-fg);
+}
+.api-with {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+/* A status's name is words, not a code. */
+.api-statuses code.api-row-name {
+  font-family: inherit;
+}
+/* A grid of a field's values (the condition kinds): a table with a header row. */
 .api-table {
   margin: 0;
 }
@@ -1947,30 +2026,10 @@ th.num .th-sort {
   font-size: 13px;
   vertical-align: top;
 }
-.api-table thead th,
-.api-table tr.api-move th {
+.api-table thead th {
   font-size: 12.5px;
   font-weight: 600;
   background: var(--hover);
-}
-.api-table tr.api-move th {
-  padding: 10px 10px 4px;
-}
-.api-table td.api-name {
-  width: 32%;
-  overflow-wrap: break-word;
-}
-.api-under {
-  display: block;
-  margin-top: 2px;
-  font: 12px var(--mono);
-  color: var(--muted);
-}
-/* A type that names an object links to it, and reads as a link. */
-.api-under a {
-  color: var(--fg);
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
 /* What every route shares, described once ahead of the routes: concept prose, an object's
    description, an enum's values under a field's line, and the refusal table's next moves. */
@@ -1985,13 +2044,6 @@ th.num .th-sort {
 }
 .prose-list li {
   margin: 6px 0;
-}
-/* A status in the summary under Errors, its name beneath it. */
-.api-status-code {
-  font: 600 13px var(--mono);
-}
-.api-statuses .api-under {
-  font-family: inherit;
 }
 .api-values {
   margin: 4px 0 0;
@@ -2024,11 +2076,6 @@ th.num .th-sort {
 }
 .api-grid td {
   min-width: 10ch;
-}
-/* A refusal's status, beside its code. */
-.api-status {
-  font: 600 12px var(--mono);
-  color: var(--muted);
 }
 
 /* editor header */
@@ -4233,14 +4280,11 @@ button.api-filter-clear svg {
   margin: 0 0 10px;
   font-size: 14px;
 }
-/* A query parameter the route can't be called without. */
+/* A field or parameter the request can't do without. */
 .api-req {
-  margin-left: 4px;
-  font-size: 11px;
-  color: var(--muted);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 0 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--warn-fg);
 }
 
 .api-empty {
@@ -4477,18 +4521,6 @@ button.copy-btn.api-copy-path span:empty {
   }
   .api-nav a.api-nav-tier ~ a.api-nav-tier {
     margin-top: 0;
-  }
-  /* A table's row stacks on a phone: the name and its type, then the line under them. */
-  .api-table td.api-name,
-  .api-table td.api-name ~ td {
-    display: block;
-    width: auto;
-  }
-  .api-table td.api-name {
-    border-bottom: none;
-  }
-  .api-table td.api-name ~ td {
-    padding-top: 0;
   }
   /* inline-flex centres the chip's text in its 32px; the gap stands in for the space
      between the label and its ↗ that flex drops. */
