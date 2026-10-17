@@ -15,7 +15,10 @@ type Refusal = readonly [status: number, meaning: string];
 const FIX_REQUEST = {
   bad_request: [400, "A body or query value it can't take, naming `field`."],
   subject_required: [400, "Scheduling a post with an empty subject."],
-  fire_at_too_soon: [400, "A fire time inside the minimum lead; Send now is the soonest send."],
+  fire_at_too_soon: [
+    400,
+    "A fire time inside the minimum lead; Send a post now is the soonest send.",
+  ],
   slug_invalid: [
     400,
     "A slug set by hand that isn't lowercase letters and numbers joined by single hyphens.",

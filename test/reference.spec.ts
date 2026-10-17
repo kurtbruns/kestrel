@@ -413,7 +413,8 @@ describe("API reference is generated from the route registration", () => {
     expect(all.match(/retried after 1, 2, 5, 15, and 30 minutes/g)).toHaveLength(1);
     expect(all.match(/"deliveries_csv":/g)).toHaveLength(1);
     // The index leads with the topics, in plain sentences, the refusal table under Errors.
-    expect([...index.matchAll(/^## (.+)$/gm)].map(([, t]) => t).slice(0, 5)).toEqual([
+    expect([...index.matchAll(/^## (.+)$/gm)].map(([, t]) => t).slice(0, 6)).toEqual([
+      "Requests",
       "Authentication",
       "Errors",
       "Lists and paging",

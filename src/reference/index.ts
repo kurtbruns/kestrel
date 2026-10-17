@@ -47,7 +47,7 @@ const TIERS: { access: Access; title: string; blurb: string }[] = [
     access: "admin",
     title: "Admin",
     blurb:
-      "The editor and authoring API. Authentication gates it: Cloudflare Access when deployed, a dev token locally. Claude calls these with its service token.",
+      "The authoring API, which the web editor and Claude both call, each with its own credential (Authentication, above).",
   },
   {
     access: "public",
@@ -59,7 +59,7 @@ const TIERS: { access: Access; title: string; blurb: string }[] = [
     access: "webhook",
     title: "Webhooks",
     blurb:
-      "Delivery callbacks from the email provider. They carry no auth middleware; each request is signature-verified inside its adapter.",
+      "Delivery reports from the email provider, each verified by its signature rather than a credential.",
   },
 ];
 
