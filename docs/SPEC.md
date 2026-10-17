@@ -18,21 +18,7 @@ Three roles appear in this document. The **publisher** writes posts and sends th
 
 The foundation that makes all of this work is a single HTTP API. Everything the publisher does reaches Kestrel through it, and it has exactly two clients: a **web editor** the publisher drives by hand, and **Claude**, working the same API on their behalf. Both do the same work through it, so Claude does nothing the publisher couldn't do in the editor, and neither reaches past what the API exposes. One API over one copy of the data keeps the two from ever drifting apart. Two other parties reach the app without touching that authoring surface: readers, through a small set of public pages (subscribe, confirm, unsubscribe, and the archive), and the email provider, which reports delivery outcomes back through signature-verified webhooks.
 
-```mermaid
-flowchart LR
-    subgraph app[Kestrel]
-        api[Authoring API]
-        public[Public pages]
-        store[(Database + object storage)]
-    end
-    publisher([Publisher]) --> editor[Web editor] --> api
-    publisher --> claude[Claude] --> api
-    api --> store
-    public --> store
-    api --> provider[Email provider] --> reader([Reader])
-    reader --> public
-    provider -. bounces, complaints .-> api
-```
+![The publisher drives the web editor and asks Claude, and both reach Kestrel only through its authoring API, which reads and writes the database and object storage and hands email to the email provider. The provider delivers it to readers, who come back through the public pages (subscribe, confirm, unsubscribe, and the archive), which read the same store. The provider reports deliveries, bounces, and complaints through signed webhooks, which record them in the store without passing through the authoring API.](spec-overview.svg)
 
 Content lives in the app's own database, with every version of a post kept as a revision. Images are uploaded to a post and referenced by name; the publisher never touches an upload URL. Every send freezes the rendered email, and that frozen copy *is* both the reader's post page, where an email's "view in browser" link leads, and the permanent record of what went out.
 
