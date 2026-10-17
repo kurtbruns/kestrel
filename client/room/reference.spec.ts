@@ -383,6 +383,32 @@ describe("reference room", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("lays out an object's value table as a grid, a lone code breaking where its words join", async () => {
+    const [send] = shared.objects;
+    const tables = [
+      {
+        title: "Condition kinds",
+        description: "Each `kind`.",
+        columns: ["Kind", "Meaning"],
+        rows: [["`provider_unavailable`", "An outage, retried at `retry_at`."]],
+      },
+    ];
+    fake = fakeApi([
+      {
+        path: "/api/reference",
+        reply: () => ({ ...reference(groups), objects: [{ ...send!, tables }] }),
+      },
+    ]);
+    await mount(renderReference);
+    await settle();
+    const grid = $("#api-objects-send table.api-grid");
+    expect($$("thead th", grid).map((th) => th.textContent)).toEqual(["Kind", "Meaning"]);
+    const [kind, meaning] = $$("tbody td", grid);
+    expect(kind!.innerHTML).toBe("<code>provider_<wbr>unavailable</code>");
+    expect(meaning!.innerHTML).toBe("An outage, retried at <code>retry_at</code>.");
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("links what a route returns to its object, and fills a refusal's line from the refusal table", async () => {
     const withReturns: ReferenceGroup[] = [
       {

@@ -213,12 +213,18 @@ function apiRouteHtml(r: ReferenceEntry, look: Lookups): Html {
 /** A resource's routes within a tier, in the order the tier lists them. */
 const routesIn = (g: ReferenceGroup, res: ReferenceResource) =>
   g.routes.filter((r) => r.resource === res.key);
+// A grid cell: a lone code (a kind, a cause) breaks where its words join, like a name;
+// anything else is inline Markdown.
+function gridCell(text: string): Html {
+  const code = /^`([^`]+)`$/.exec(text)?.[1];
+  return html`<td>${code === undefined ? inline(text) : html`<code>${breakable(code)}</code>`}</td>`;
+}
 // A table of a field's values, under its object's fields: a head row, then a row per value.
 function apiTableHtml(t: ReferenceTable): Html {
   return html`<div class="block"><div class="block-head"><span class="block-label">${t.title}</span></div>
       ${prose(t.description, "api-prose")}
-      <div class="api-table-wrap"><table class="api-query api-table"><thead><tr>${t.columns.map((c) => html`<th>${c}</th>`)}</tr></thead><tbody>${t.rows.map(
-        (r) => html`<tr>${r.map((c) => html`<td>${inline(c)}</td>`)}</tr>`,
+      <div class="api-table-wrap"><table class="api-table api-grid"><thead><tr>${t.columns.map((c) => html`<th>${c}</th>`)}</tr></thead><tbody>${t.rows.map(
+        (r) => html`<tr>${r.map(gridCell)}</tr>`,
       )}</tbody></table></div>
     </div>`;
 }

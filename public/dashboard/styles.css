@@ -2008,21 +2008,19 @@ th.num .th-sort {
   border: 0;
   border-radius: 0 0 8px 8px;
 }
-/* A table of a field's values under an object (the send's condition kinds): wider than a
-   phone, so it scrolls on its own rather than widening the page. */
+/* A grid: the same table with a column per thing a value says (the send's condition kinds,
+   its halt causes). Its name column takes only what its longest word needs, so the prose
+   columns keep the width; wider than a phone, it scrolls on its own rather than stacking. */
 .api-table-wrap {
   overflow-x: auto;
   margin-top: 8px;
 }
-.api-table th {
-  padding: 5px 10px;
-  font-size: 12.5px;
-  font-weight: 600;
-  text-align: left;
-  background: var(--hover);
+.api-grid th:first-child,
+.api-grid td:first-child {
+  width: 1%;
 }
-.api-table td {
-  min-width: 8ch;
+.api-grid td {
+  min-width: 10ch;
 }
 /* A refusal's status, beside its code. */
 .api-status {
