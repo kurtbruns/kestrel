@@ -41,7 +41,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("a send's cost in D1 rows", () => {
+// The receipts are most of the time: a thousand of them through the real ingest, one D1
+// round trip each, so the cost measured is the one a deployed send pays. That is under a
+// second locally and has taken nearly nine on a shared CI runner, past the default. Real
+// work, not waiting, so the test gets the time it needs rather than a smaller list.
+describe("a send's cost in D1 rows", { timeout: 30_000 }, () => {
   it("stays within its per-recipient ceilings, receipts included", async () => {
     await seedConfirmed(addresses(RECIPIENTS));
     const send = await dueSend();
