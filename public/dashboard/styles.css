@@ -4105,6 +4105,11 @@ button.api-filter-clear svg {
 }
 .api-content {
   min-width: 0;
+  max-width: 1180px;
+}
+/* Prose keeps a reading measure while the page widens for a route's examples beside it. */
+.api-head,
+.api-section[data-tier="overview"] {
   max-width: 820px;
 }
 .api-head {
@@ -4182,50 +4187,8 @@ button.api-filter-clear svg {
 }
 .api-rows > li {
   border-bottom: 1px solid var(--line);
-  /* A route opened from its address lands below the bar and its resource's pinned heading. */
+  /* A route reached from its address lands below the bar and its resource's pinned heading. */
   scroll-margin-top: calc(var(--bar-h) + 44px);
-}
-/* One route per row: badge, then the route's name over its path, a native disclosure that
-   opens in place to the full documentation. The name leads, since a reader looks for an act. */
-.api-route-sum {
-  display: grid;
-  grid-template-columns: 62px minmax(0, 1fr) 20px;
-  gap: 14px;
-  align-items: start;
-  padding: 9px 6px;
-  border-radius: 6px;
-  list-style: none;
-  cursor: pointer;
-}
-.api-route-sum::-webkit-details-marker {
-  display: none;
-}
-.api-route-sum:hover {
-  background: var(--hover);
-}
-.api-route-name {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.api-route-title {
-  font-size: 14px;
-  font-weight: 600;
-}
-.api-chev {
-  margin-top: 6px;
-  width: 6px;
-  height: 6px;
-  border-right: 1.6px solid var(--muted);
-  border-bottom: 1.6px solid var(--muted);
-  justify-self: center;
-  transform: rotate(-45deg);
-  transition: transform 0.15s;
-}
-.api-route[open] .api-chev,
-.api-object[open] .api-chev {
-  transform: rotate(45deg);
 }
 /* The verb as a tinted label: its own --method-* color as text over a wash of itself. */
 .api-method {
@@ -4260,31 +4223,11 @@ button.api-filter-clear svg {
   font: 13.5px var(--mono);
   overflow-wrap: anywhere;
 }
-/* Beneath the route's name in a row, the path is how to call it, so it reads quieter. */
-.api-route-name .api-path {
-  color: var(--muted);
-  font-size: 12.5px;
-}
 .api-param {
   color: var(--syntax-variable);
   background: var(--syntax-variable-bg);
   border-radius: 3px;
   padding: 0 2px;
-}
-/* An opened route or object: a rule down its left keeps it with its row, the full width
-   left for its tables. */
-.api-route-detail {
-  margin: 2px 0 0 6px;
-  padding: 10px 6px 22px 18px;
-  border-left: 2px solid var(--line);
-}
-/* Its summary, with the call to copy, as it is or as a link that opens the reference at it. */
-.api-route-lead {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px 16px;
 }
 .api-route-tools {
   display: flex;
@@ -4316,9 +4259,76 @@ button.api-filter-clear svg {
 }
 /* An object, first under the resource whose routes return it: a row like a route's, that
    opens to its fields and example. */
+/* A route or an object, laid out in full as Stripe and Mux lay theirs: its name and tools,
+   its method and path, then what it does beside its examples on a wide screen, under them
+   on a narrow one. The examples stay in view while their route's prose scrolls by. */
+.api-op {
+  padding: 22px 0 26px;
+}
+.api-op-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.api-op-head h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+}
+.api-op-head h4:focus {
+  outline: none;
+}
+.api-op-call {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 10px;
+}
+.api-op-call .api-method {
+  padding: 0 6px;
+}
+.api-op-body {
+  display: grid;
+  gap: 4px 28px;
+}
+.api-op-text,
+.api-op-code {
+  min-width: 0;
+}
+@media (min-width: 1280px) {
+  .api-op-body {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
+  }
+  .api-op-code {
+    position: sticky;
+    top: calc(var(--bar-h) + 44px);
+    align-self: start;
+  }
+  .api-op-code > .block:first-child {
+    margin-top: 0;
+  }
+}
+/* The rail lists every route by name under its resource, so it reads as the page's contents. */
+.api-nav-ops {
+  display: none;
+}
+.api-nav-ops.open,
+.api-nav.filtering .api-nav-ops {
+  display: flex;
+  flex-direction: column;
+}
+.api-nav a.api-nav-op {
+  padding-left: 30px;
+  font-size: 13px;
+}
+.api-nav-tier + .api-nav-ops a.api-nav-op {
+  padding-left: 20px;
+}
 .api-object {
   border-bottom: 1px solid var(--line);
-  /* Opened from a route's Returns, it lands below the bar and its resource's pinned heading. */
+  /* Reached from a route's Returns, it lands below the bar and its resource's pinned heading. */
   scroll-margin-top: calc(var(--bar-h) + 44px);
 }
 /* Reference room on mobile. The bar stays ONE row at --bar-h, the same as on desktop, so
@@ -4435,11 +4445,13 @@ button.api-filter-clear svg {
     font-size: 13px;
   }
   /* The API rail is the tier chips alone on a phone: its resources need the column the
-     rail no longer has. A route row stacks its summary under its path. */
+     rail no longer has. */
   .api-filter {
     max-width: none;
   }
-  .api-nav a.api-nav-res {
+  .api-nav a.api-nav-res,
+  .api-nav .api-nav-ops,
+  .api-nav.filtering .api-nav-ops {
     display: none;
   }
   .api-nav a.api-nav-tier {
@@ -4447,13 +4459,6 @@ button.api-filter-clear svg {
   }
   .api-nav a.api-nav-tier ~ a.api-nav-tier {
     margin-top: 0;
-  }
-  .api-route-sum {
-    gap: 10px;
-  }
-  .api-route-detail {
-    margin-left: 0;
-    padding: 6px 0 16px 12px;
   }
   /* A table's row stacks on a phone: the name and its type, then the line under them. */
   .api-table td.api-name,

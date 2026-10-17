@@ -184,31 +184,35 @@ function routeHay(r: ReferenceEntry, look: Lookups): string {
     .join(" ")
     .toLowerCase();
 }
+// A route, laid out in full as Stripe and Mux lay theirs: its name, method, and path over
+// what it does on the left, and its examples and curl command beside them on a wide screen
+// (under them on a narrow one).
 function apiRouteHtml(r: ReferenceEntry, look: Lookups): Html {
-  return html`<li data-hay="${routeHay(r, look)}" data-path="${concretePath(r.path).toLowerCase()}" id="route-${routeAnchor(r)}"><details class="api-route">
-      <summary class="api-route-sum">
-        <span class="api-method m-${r.method}">${r.method}</span>
-        <span class="api-route-name"><span class="api-route-title">${r.title}</span><code class="api-path">${apiPathHtml(r.path)}</code></span>
-        <span class="api-chev" aria-hidden="true"></span>
-      </summary>
-      <div class="api-route-detail">
-        <div class="api-route-lead">
-          <p class="api-summary">${inline(r.summary)}</p>
-          <span class="api-route-tools">
-            <button type="button" class="copy-btn" data-copy="${`${r.method} ${concretePath(r.path)}`}" data-copy-word="Copy path" aria-label="Copy method and path">${copyFace(false, "Copy path")}</button>
-            <button type="button" class="copy-btn" data-copy="${routeLink(r)}" data-copy-word="Copy link" aria-label="Copy a link to this route">${copyFace(false, "Copy link")}</button>
-          </span>
-        </div>
-        ${r.description ? prose(r.description, "api-desc") : null}
-        ${apiQueryHtml(r.query)}
-        ${apiBodyHtml(r.body, r.accepts)}
-        ${apiReturnsHtml(r.returns, look.objects)}
-        ${apiErrorsHtml(r.errors, look.meanings)}
-        ${apiExample("Request", r.example?.request)}
-        ${apiExample("Response", r.example?.response)}
-        ${apiCurl(r)}
+  return html`<li data-hay="${routeHay(r, look)}" data-path="${concretePath(r.path).toLowerCase()}" id="route-${routeAnchor(r)}" data-route="${routeAnchor(r)}"><article class="api-op">
+      <div class="api-op-head">
+        <h4 tabindex="-1">${r.title}</h4>
+        <span class="api-route-tools">
+          <button type="button" class="copy-btn" data-copy="${`${r.method} ${concretePath(r.path)}`}" data-copy-word="Copy path" aria-label="Copy method and path">${copyFace(false, "Copy path")}</button>
+          <button type="button" class="copy-btn" data-copy="${routeLink(r)}" data-copy-word="Copy link" aria-label="Copy a link to this route">${copyFace(false, "Copy link")}</button>
+        </span>
       </div>
-    </details></li>`;
+      <p class="api-op-call"><span class="api-method m-${r.method}">${r.method}</span><code class="api-path">${apiPathHtml(r.path)}</code></p>
+      <div class="api-op-body">
+        <div class="api-op-text">
+          <p class="api-summary">${inline(r.summary)}</p>
+          ${r.description ? prose(r.description, "api-desc") : null}
+          ${apiQueryHtml(r.query)}
+          ${apiBodyHtml(r.body, r.accepts)}
+          ${apiReturnsHtml(r.returns, look.objects)}
+          ${apiErrorsHtml(r.errors, look.meanings)}
+        </div>
+        <div class="api-op-code">
+          ${apiExample("Request", r.example?.request)}
+          ${apiExample("Response", r.example?.response)}
+          ${apiCurl(r)}
+        </div>
+      </div>
+    </article></li>`;
 }
 /** A resource's routes within a tier, in the order the tier lists them. */
 const routesIn = (g: ReferenceGroup, res: ReferenceResource) =>
@@ -228,22 +232,21 @@ function apiTableHtml(t: ReferenceTable): Html {
       )}</tbody></table></div>
     </div>`;
 }
-// An object its resource's routes return, first under the resource as Stripe puts it: one
-// collapsed line that opens to its fields and example.
+// An object its resource's routes return, first under the resource as Stripe puts it, laid
+// out like a route: its fields on the left, its example beside them.
 function apiObjectHtml(o: ReferenceObject): Html {
-  return html`<details class="api-object" id="api-objects-${o.key}">
-      <summary class="api-route-sum">
-        <span class="api-method m-OBJECT">Object</span>
-        <span class="api-route-name"><span class="api-route-title">${o.title}</span><span class="api-path">${o.fields.length} ${o.fields.length === 1 ? "field" : "fields"}</span></span>
-        <span class="api-chev" aria-hidden="true"></span>
-      </summary>
-      <div class="api-route-detail">
-        ${prose(o.description, "api-prose")}
-        ${apiFieldsTable(o.fields)}
-        ${(o.tables ?? []).map(apiTableHtml)}
-        ${apiExample("Example", o.example)}
+  return html`<article class="api-op api-object" id="api-objects-${o.key}" data-sec="objects-${o.key}">
+      <div class="api-op-head"><h4 tabindex="-1">${o.title}</h4></div>
+      <p class="api-op-call"><span class="api-method m-OBJECT">Object</span><span class="api-path">${o.fields.length} ${o.fields.length === 1 ? "field" : "fields"}</span></p>
+      <div class="api-op-body">
+        <div class="api-op-text">
+          ${prose(o.description, "api-prose")}
+          ${apiFieldsTable(o.fields)}
+          ${(o.tables ?? []).map(apiTableHtml)}
+        </div>
+        <div class="api-op-code">${apiExample("Example", o.example)}</div>
       </div>
-    </details>`;
+    </article>`;
 }
 function apiResourceHtml(g: ReferenceGroup, res: ReferenceResource, look: Lookups): Html {
   const sec = `${g.access}-${res.key}`;
@@ -292,21 +295,35 @@ function apiOverviewHtml(ref: ReferenceResponse): Html {
       ${ref.concepts.map(concept)}
     </section>`;
 }
-// The rail: the topics, then each tier, each with its parts beneath it. A tier with one
-// resource lists only the tier, since the resource would repeat it. No counts: the rail is
-// for moving.
-function apiNavHtml(ref: ReferenceResponse): Html {
+// The rail: the topics, then each tier, each with its resources and, under each resource, its
+// objects and routes by name, so the rail is the whole page's contents as Stripe's is. Only the
+// resource the reader is in shows its routes (spyRail opens it), and a filter shows every match,
+// so the rail stays short enough to move by. A tier with one resource lists its routes under the
+// tier itself.
+function apiNavHtml(ref: ReferenceResponse, look: Lookups): Html {
   const part = (sec: string, title: string) =>
     html`<a href="#/api-reference/${sec}" class="api-nav-res" data-sec="${sec}">${title}</a>`;
+  const ops = (g: ReferenceGroup, res: ReferenceResource) =>
+    html`<div class="api-nav-ops" data-of="${g.access}-${res.key}">${[
+      ...(look.heads.get(`${g.access}-${res.key}`) ?? []).map(
+        (o) =>
+          html`<a href="#/api-reference/objects-${o.key}" class="api-nav-op" data-sec="objects-${o.key}">${o.title}</a>`,
+      ),
+      ...routesIn(g, res).map(
+        (r) =>
+          html`<a href="#/api-reference/${routeAnchor(r)}" class="api-nav-op" data-route="${routeAnchor(r)}">${r.title}</a>`,
+      ),
+    ]}</div>`;
   return html`<a href="#/api-reference/overview" class="api-nav-tier" data-sec="overview" data-tier="overview">Getting started</a>${ref.concepts.map(
     (c) => part(`overview-${c.key}`, c.title),
   )}${ref.groups.map(
     (g) =>
-      html`<a href="#/api-reference/${g.access}" class="api-nav-tier" data-sec="${g.access}" data-tier="${g.access}">${g.title}</a>${
-        g.resources.length > 1
-          ? g.resources.map((res) => part(`${g.access}-${res.key}`, res.title))
-          : null
-      }`,
+      html`<a href="#/api-reference/${g.access}" class="api-nav-tier" data-sec="${g.access}" data-tier="${g.access}">${g.title}</a>${g.resources.map(
+        (res) => [
+          g.resources.length > 1 ? part(`${g.access}-${res.key}`, res.title) : null,
+          ops(g, res),
+        ],
+      )}`,
   )}`;
 }
 
@@ -340,6 +357,7 @@ function holds(el: HTMLElement, word: string): boolean {
  */
 function applyFilter(query: string, navEl: HTMLElement, contentEl: HTMLElement): void {
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  navEl.classList.toggle("filtering", terms.length > 0);
   let shown = 0;
   for (const sec of $$<HTMLElement>(".api-section", contentEl)) {
     let inTier = 0;
@@ -356,6 +374,12 @@ function applyFilter(query: string, navEl: HTMLElement, contentEl: HTMLElement):
           fold.open = terms.length > 0 && hit;
         }
         inRes += hit ? 1 : 0;
+        const opLink = item.dataset.route
+          ? navEl.querySelector<HTMLElement>(`a[data-route="${item.dataset.route}"]`)
+          : null;
+        if (opLink) {
+          opLink.hidden = !hit;
+        }
       }
       res.hidden = inRes === 0;
       const link = navEl.querySelector<HTMLElement>(`a[data-sec="${res.dataset.sec}"]`);
@@ -380,20 +404,24 @@ function applyFilter(query: string, navEl: HTMLElement, contentEl: HTMLElement):
 }
 
 /**
- * Highlight the rail link for what the reader is in: the last tier or resource heading
- * scrolled above a line just under the sticky room bar (so an instant jump lands right,
- * not only a scroll that passes each heading), or the last one once the page is at its
- * bottom. A resource the rail doesn't list lights its tier; a filtered-out one is skipped.
+ * Highlight the rail link for what the reader is in, and put its address in the bar: the last
+ * heading (a tier, a resource, an object, or a route) scrolled above a line just under the
+ * sticky resource heading, or the last one once the page is at its bottom, the reference's own
+ * address at its top. Only the reader's scrolling moves the address (`follow`), never a render
+ * or a filter, so a link the page was opened with stays in the bar; it changes with no history
+ * entry, so Back still leaves the reference. A part the rail doesn't show (a phone's rail is the tier chips alone) hands the
+ * highlight to what holds it.
  */
-function spyRail(navEl: HTMLElement, contentEl: HTMLElement): void {
+function spyRail(navEl: HTMLElement, contentEl: HTMLElement, follow: boolean): void {
   // Measured, not assumed, as the docs' spy does: large-text zoom can push the bar taller.
-  const line = ($(".room-bar").getBoundingClientRect().height || 54) + 26;
-  const marks = $$(".api-section, .api-res", contentEl).filter((el) => !el.closest("[hidden]"));
-  // At the bottom, the last heading wins; a page that hasn't scrolled is at its top.
+  const line = ($(".room-bar").getBoundingClientRect().height || 54) + 48;
+  const marks = $$(".api-section, .api-res, .api-object, li[data-route]", contentEl).filter(
+    (el) => !el.closest("[hidden]"),
+  );
   const atBottom =
     window.scrollY > 0 &&
     Math.ceil(window.innerHeight + window.scrollY) >= document.documentElement.scrollHeight;
-  let current = marks[0];
+  let current: HTMLElement | undefined;
   for (const el of marks) {
     if (atBottom || el.getBoundingClientRect().top <= line) {
       current = el;
@@ -401,16 +429,41 @@ function spyRail(navEl: HTMLElement, contentEl: HTMLElement): void {
       break;
     }
   }
-  const sec = current?.dataset.sec ?? current?.dataset.tier;
-  const tier = current?.closest<HTMLElement>(".api-section")?.dataset.tier;
-  // A resource link the rail isn't showing (a phone's rail is the tier chips alone) hands
-  // the highlight to its tier.
-  const links = $$("a[data-sec]", navEl).filter((a) => getComputedStyle(a).display !== "none");
-  const target =
-    links.find((a) => a.dataset.sec === sec) ??
-    (tier === undefined ? undefined : links.find((a) => a.dataset.tier === tier));
-  for (const a of $$("a[data-sec]", navEl)) {
+  const shown = $$("a[data-sec], a[data-route]", navEl).filter(
+    (a) => !a.hidden && getComputedStyle(a).display !== "none",
+  );
+  const linkFor = (el: HTMLElement | undefined | null): HTMLElement | undefined => {
+    if (!el) {
+      return undefined;
+    }
+    const own = el.dataset.route
+      ? shown.find((a) => a.dataset.route === el.dataset.route)
+      : shown.find((a) => a.dataset.sec === (el.dataset.sec ?? el.dataset.tier));
+    return own ?? linkFor(el.parentElement?.closest<HTMLElement>(".api-res, .api-section"));
+  };
+  // Only the resource the reader is in lists its routes in the rail.
+  const inRes = current?.closest<HTMLElement>(".api-res")?.dataset.sec;
+  for (const ops of $$(".api-nav-ops", navEl)) {
+    ops.classList.toggle("open", ops.dataset.of === inRes);
+  }
+  // Above the first heading, the rail lights its first link, as it always has.
+  const target = linkFor(current ?? marks[0]);
+  for (const a of $$("a[data-sec], a[data-route]", navEl)) {
     a.classList.toggle("active", a === target);
+  }
+  // Keep the lit link in the rail's view as the page moves under it.
+  const rail = navEl.closest<HTMLElement>(".rail-inner");
+  if (target && rail && rail.scrollHeight > rail.clientHeight) {
+    const t = target.getBoundingClientRect();
+    const r = rail.getBoundingClientRect();
+    if (t.top < r.top + 40 || t.bottom > r.bottom - 40) {
+      rail.scrollTop += t.top - r.top - r.height / 3;
+    }
+  }
+  const at = current?.dataset.route ?? current?.dataset.sec ?? current?.dataset.tier;
+  const address = at && window.scrollY > 0 ? `#/api-reference/${at}` : "#/api-reference";
+  if (follow && location.hash !== address) {
+    history.replaceState(history.state, "", address);
   }
 }
 
@@ -420,19 +473,10 @@ function spyRail(navEl: HTMLElement, contentEl: HTMLElement): void {
  * focus on its line, a tier or a resource with focus on its heading.
  */
 function reveal(target: HTMLElement): void {
-  const into =
-    target instanceof HTMLDetailsElement
-      ? target
-      : target.matches("li")
-        ? target.querySelector("details")
-        : null;
-  if (into) {
-    into.open = true;
-  }
   target.scrollIntoView({ block: "start" });
-  const focus = into
-    ? into.querySelector<HTMLElement>(":scope > summary")
-    : target.querySelector<HTMLElement>(":scope > h2, :scope > .api-res-head h3");
+  const focus = target.querySelector<HTMLElement>(
+    ":scope > h2, :scope > .api-res-head h3, :scope > .api-op-head h4, :scope > article > .api-op-head h4",
+  );
   focus?.focus({ preventScroll: true });
 }
 
@@ -463,8 +507,15 @@ export async function renderReference(
   // browser's, and the address bar follows the jump without a hashchange that would render
   // the room again.
   const jump = (ev: MouseEvent) => {
-    const a = ev.target instanceof Element ? ev.target.closest<HTMLElement>("a[data-sec]") : null;
-    const target = a?.dataset.sec ? document.getElementById(`api-${a.dataset.sec}`) : null;
+    const a =
+      ev.target instanceof Element
+        ? ev.target.closest<HTMLElement>("a[data-sec], a[data-route]")
+        : null;
+    const target = a?.dataset.route
+      ? document.getElementById(`route-${a.dataset.route}`)
+      : a?.dataset.sec
+        ? document.getElementById(`api-${a.dataset.sec}`)
+        : null;
     if (!target || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) {
       return;
     }
@@ -494,14 +545,14 @@ export async function renderReference(
     heads: objectHeads(ref),
   };
 
-  setHtml(navEl, apiNavHtml(ref));
+  setHtml(navEl, apiNavHtml(ref, look));
   setHtml(
     contentEl,
     html`<header class="api-head"><h1>API reference</h1><p class="muted">Every endpoint this instance serves, the one API the web editor and Claude both call. It's read from the running code, so it always matches this version. Base URL <code>${location.origin}</code>.</p><div class="api-filter">${icon("search")}<input type="search" id="apiFilter" placeholder="Filter by name, path, URL, or error code" autocomplete="off" aria-label="Filter routes" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd><button type="button" class="icon api-filter-clear" id="apiFilterClear" aria-label="Clear filter" hidden>${icon("x")}</button></div></header>${apiOverviewHtml(ref)}${ref.groups.map((g) => apiSectionHtml(g, look))}<p class="api-empty muted" id="apiEmpty" hidden>Nothing matches. Try a path segment like <code>sends</code>, a method like <code>DELETE</code>, or a code like <code>stale_revision</code>, or start from <a href="#/api-reference/overview" data-sec="overview">Getting started</a>.</p>`,
   );
   const filterEl = $<HTMLInputElement>("#apiFilter");
   const clearEl = $("#apiFilterClear");
-  const spy = () => spyRail(navEl, contentEl);
+  const spy = () => spyRail(navEl, contentEl, false);
   const filterTo = (query: string) => {
     filterEl.value = query;
     clearEl.hidden = query === "";
@@ -537,9 +588,12 @@ export async function renderReference(
   // Mark the last tier (the filter keeps it current from here).
   applyFilter("", navEl, contentEl);
   // The rail follows the reading position, and the filter, which moves every heading.
-  window.addEventListener("scroll", spy, { passive: true, signal });
+  window.addEventListener("scroll", () => spyRail(navEl, contentEl, true), {
+    passive: true,
+    signal,
+  });
   // Its own page: start at the top, not wherever the last doc was scrolled to, or at the
-  // route the address names, opened.
+  // route the address names.
   window.scrollTo(0, 0);
   const target = anchor
     ? (document.getElementById(`route-${anchor}`) ?? document.getElementById(`api-${anchor}`))
