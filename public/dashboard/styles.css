@@ -1934,25 +1934,31 @@ th.num .th-sort {
   cursor: default;
 }
 
-/* API reference: query-param table inside a route card */
-.api-query {
+/* API reference tables, one shape for all of them: a name column (a field, a parameter, or a
+   refusal code, with its type or what a refusal carries under it), then the line on what it
+   means, which keeps most of the width. A name breaks only where its words join (the <wbr>
+   the page puts after each _ . /), and mid-word only when nothing else fits. */
+.api-table {
   margin: 0;
 }
-.api-query td {
-  padding: 5px 10px;
+.api-table th,
+.api-table td {
+  padding: 6px 10px;
   font-size: 13px;
   vertical-align: top;
 }
-.api-query td:first-child {
-  white-space: nowrap;
-  width: 1%;
+.api-table thead th,
+.api-table tr.api-move th {
+  font-size: 12.5px;
+  font-weight: 600;
+  background: var(--hover);
 }
-/* A reference table's name cell: the name, and under it its type or what a refusal carries,
-   so the line on what it means, the part people read, keeps most of the width. */
-.api-query td.api-name {
-  width: 34%;
-  white-space: normal;
-  overflow-wrap: anywhere;
+.api-table tr.api-move th {
+  padding: 10px 10px 4px;
+}
+.api-table td.api-name {
+  width: 32%;
+  overflow-wrap: break-word;
 }
 .api-under {
   display: block;
@@ -1978,9 +1984,6 @@ th.num .th-sort {
   margin: 4px 0 6px;
   font-size: 13.5px;
 }
-.api-refusals {
-  margin: 8px 0 0;
-}
 /* The refusal table, folded under Errors so the topics read as a page. */
 .api-fold {
   margin-top: 10px;
@@ -2000,15 +2003,10 @@ th.num .th-sort {
 .api-fold[open] > summary {
   border-bottom: 1px solid var(--line);
 }
-.api-fold .api-refusals {
-  margin: 0;
-}
-.api-refusals tr.api-move th {
-  padding: 10px 10px 4px;
-  font-size: 12.5px;
-  font-weight: 600;
-  text-align: left;
-  background: var(--hover);
+/* The fold is the frame; its table draws no second one. */
+.api-fold .api-table {
+  border: 0;
+  border-radius: 0 0 8px 8px;
 }
 /* A refusal's status, beside its code. */
 .api-status {
@@ -4437,15 +4435,15 @@ button.api-filter-clear svg {
     padding: 6px 0 16px 12px;
   }
   /* A table's row stacks on a phone: the name and its type, then the line under them. */
-  .api-query td.api-name,
-  .api-query td.api-name ~ td {
+  .api-table td.api-name,
+  .api-table td.api-name ~ td {
     display: block;
     width: auto;
   }
-  .api-query td.api-name {
+  .api-table td.api-name {
     border-bottom: none;
   }
-  .api-query td.api-name ~ td {
+  .api-table td.api-name ~ td {
     padding-top: 0;
   }
   /* inline-flex centres the chip's text in its 32px; the gap stands in for the space

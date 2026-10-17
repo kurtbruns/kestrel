@@ -182,7 +182,7 @@ describe("reference room", () => {
     expect($$(".api-param", rows[2]).map((p) => p.textContent)).toEqual([":id"]);
     // The detail: summary, description, query, then the examples that exist.
     expect($(".api-desc", rows[0]).textContent).toBe("Offset-paged.");
-    expect($(".api-query td code", rows[0]).textContent).toBe("status");
+    expect($(".api-table td code", rows[0]).textContent).toBe("status");
     expect($(".api-summary", rows[1]).textContent).toBe("Create <a post>."); // text, not markup
     expect($(".api-route-title", rows[1]).textContent).toBe("Create <a post>");
     expect(document.querySelector(".api-summary a, .api-route-title a")).toBeNull();
@@ -370,6 +370,11 @@ describe("reference room", () => {
       "409 window_closedThe fire time has passed.",
     ]);
     expect($(".api-refusals tr.api-move th").getAttribute("colspan")).toBe("2");
+    // A code breaks only where its words join, and its meaning reads in ink like any table's.
+    expect($(".api-refusals td.api-name code").innerHTML).toBe(
+      '<span class="api-status">409</span> window_<wbr>closed',
+    );
+    expect($(".api-refusals td.api-name + td").classList.contains("muted")).toBe(false);
     // An object's fields, an enum's values under its line, and its example.
     expect($$("#api-objects-send .api-fields tr").map((tr) => tr.textContent)).toEqual([
       "statusstringIts state.scheduled Cancelable.",
@@ -565,7 +570,7 @@ describe("reference room", () => {
     fake = fakeApi([{ path: "/api/reference", reply: () => reference(withToken) }]);
     await mount(renderReference);
     await settle();
-    expect($(".api-route .api-query td").textContent).toBe("token required");
+    expect($(".api-route .api-table td").textContent).toBe("token required");
     expect($$("code", $$(".block").at(-1)!).at(-1)?.textContent).toBe(
       `curl "${location.origin}/confirm?token=:token"`,
     );
