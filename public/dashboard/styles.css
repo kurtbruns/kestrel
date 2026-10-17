@@ -1947,6 +1947,19 @@ th.num .th-sort {
   white-space: nowrap;
   width: 1%;
 }
+/* A reference table's name cell: the name, and under it its type or what a refusal carries,
+   so the line on what it means, the part people read, keeps most of the width. */
+.api-query td.api-name {
+  width: 34%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.api-under {
+  display: block;
+  margin-top: 2px;
+  font: 12px var(--mono);
+  color: var(--muted);
+}
 /* What every route shares, described once ahead of the routes: concept prose, an object's
    description, an enum's values under a field's line, and the refusal table's next moves. */
 .api-prose {
@@ -1966,7 +1979,29 @@ th.num .th-sort {
   font-size: 13.5px;
 }
 .api-refusals {
+  margin: 8px 0 0;
+}
+/* The refusal table, folded under Errors so the topics read as a page. */
+.api-fold {
   margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+}
+.api-fold > summary {
+  padding: 9px 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.api-fold > summary .muted {
+  font-weight: 400;
+}
+.api-fold[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+.api-fold .api-refusals {
+  margin: 0;
 }
 .api-refusals tr.api-move th {
   padding: 10px 10px 4px;
@@ -1979,11 +2014,6 @@ th.num .th-sort {
 .api-status {
   font: 600 12px var(--mono);
   color: var(--muted);
-}
-/* A body field's type: short, so it sits between the name and the line on what it is. */
-.api-type {
-  color: var(--muted);
-  font-size: 12px;
 }
 
 /* editor header */
@@ -4074,9 +4104,14 @@ button.api-filter-clear svg {
 .api-section.api-last {
   min-height: calc(100vh - var(--bar-h));
 }
+/* A tier is a page heading here, not the app's small-caps section label that h2 is elsewhere. */
 .api-section h2 {
-  font-size: 18px;
-  margin: 24px 0 4px;
+  font-size: 20px;
+  font-weight: 650;
+  color: var(--fg);
+  text-transform: none;
+  letter-spacing: normal;
+  margin: 28px 0 4px;
 }
 /* Where a jump from the rail or an address moves focus: a place to read from, not a control,
    so it takes no ring. */
@@ -4103,14 +4138,23 @@ button.api-filter-clear svg {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 4px;
+  margin: 0;
   padding: 6px 0;
+  border-bottom: 1px solid var(--line-soft);
   background: var(--bg);
 }
 
 .api-res-head h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 16px;
+  font-weight: 650;
+}
+/* A Getting started topic is a heading over prose, not a list's head: no rule, a step smaller. */
+.api-section[data-tier="overview"] .api-res-head {
+  border-bottom: none;
+}
+.api-section[data-tier="overview"] .api-res-head h3 {
+  font-size: 15px;
 }
 .api-rows {
   list-style: none;
@@ -4128,7 +4172,7 @@ button.api-filter-clear svg {
   display: grid;
   grid-template-columns: 62px minmax(0, 1fr) 20px;
   gap: 14px;
-  align-items: center;
+  align-items: start;
   padding: 9px 6px;
   border-radius: 6px;
   list-style: none;
@@ -4142,16 +4186,16 @@ button.api-filter-clear svg {
 }
 .api-route-name {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 12px;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
 .api-route-title {
-  font-size: 14.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 .api-chev {
+  margin-top: 6px;
   width: 6px;
   height: 6px;
   border-right: 1.6px solid var(--muted);
@@ -4160,7 +4204,8 @@ button.api-filter-clear svg {
   transform: rotate(-45deg);
   transition: transform 0.15s;
 }
-.api-route[open] .api-chev {
+.api-route[open] .api-chev,
+.api-object[open] .api-chev {
   transform: rotate(45deg);
 }
 /* The verb as a tinted label: its own --method-* color as text over a wash of itself. */
@@ -4185,6 +4230,13 @@ button.api-filter-clear svg {
 .api-method.m-DELETE {
   --m: var(--method-delete);
 }
+/* An object heads its resource as a row of its own, marked in the verb's column. */
+.api-method.m-OBJECT {
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
 .api-path {
   font: 13.5px var(--mono);
   overflow-wrap: anywhere;
@@ -4200,28 +4252,35 @@ button.api-filter-clear svg {
   border-radius: 3px;
   padding: 0 2px;
 }
+/* An opened route or object: a rule down its left keeps it with its row, the full width
+   left for its tables. */
 .api-route-detail {
-  padding: 2px 6px 18px 82px;
+  margin: 2px 0 0 6px;
+  padding: 10px 6px 22px 18px;
+  border-left: 2px solid var(--line);
 }
-/* An opened route's call, to copy as it is or as a link that opens the reference at it. */
-.api-route-tools {
+/* Its summary, with the call to copy, as it is or as a link that opens the reference at it. */
+.api-route-lead {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
-  margin: 2px 0 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 16px;
 }
-.api-call {
-  font: 13px var(--mono);
-  overflow-wrap: anywhere;
+.api-route-tools {
+  display: flex;
+  gap: 6px;
+  flex: none;
 }
 .api-summary {
-  margin: 2px 0 0;
-  font-size: 14.5px;
+  flex: 1 1 320px;
+  margin: 0;
+  font-size: 15px;
 }
 .api-desc {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   font-size: 14px;
+  max-width: 72ch;
 }
 /* A query parameter the route can't be called without. */
 .api-req {
@@ -4236,42 +4295,12 @@ button.api-filter-clear svg {
 .api-empty {
   margin: 20px 0;
 }
-/* An object, first under the resource whose routes return it: one collapsed line that opens
-   to its fields and example. */
+/* An object, first under the resource whose routes return it: a row like a route's, that
+   opens to its fields and example. */
 .api-object {
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  margin: 4px 0 10px;
+  border-bottom: 1px solid var(--line);
   /* Opened from a route's Returns, it lands below the bar and its resource's pinned heading. */
   scroll-margin-top: calc(var(--bar-h) + 44px);
-}
-.api-object-sum {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 8px 10px;
-  list-style: none;
-  cursor: pointer;
-}
-.api-object-sum::-webkit-details-marker {
-  display: none;
-}
-.api-object-sum:hover {
-  background: var(--hover);
-}
-.api-object-name {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 12px;
-  font-size: 13px;
-}
-.api-object[open] .api-chev {
-  transform: rotate(45deg);
-}
-.api-object-detail {
-  padding: 0 10px 12px;
 }
 /* Reference room on mobile. The bar stays ONE row at --bar-h, the same as on desktop, so
    the in-page anchors (scroll-margin-top) and the scroll-spy line keep clearing it: the back
@@ -4403,11 +4432,21 @@ button.api-filter-clear svg {
   .api-route-sum {
     gap: 10px;
   }
-  .api-route-name {
-    flex-direction: column;
-  }
   .api-route-detail {
-    padding: 0 4px 14px;
+    margin-left: 0;
+    padding: 6px 0 16px 12px;
+  }
+  /* A table's row stacks on a phone: the name and its type, then the line under them. */
+  .api-query td.api-name,
+  .api-query td.api-name ~ td {
+    display: block;
+    width: auto;
+  }
+  .api-query td.api-name {
+    border-bottom: none;
+  }
+  .api-query td.api-name ~ td {
+    padding-top: 0;
   }
   /* inline-flex centres the chip's text in its 32px; the gap stands in for the space
      between the label and its ↗ that flex drops. */

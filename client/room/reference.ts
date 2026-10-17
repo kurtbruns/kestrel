@@ -47,6 +47,13 @@ function apiCurl(r: ReferenceEntry): Html | null {
   const cmd = curlCommand(r, location.origin, appState.session?.auth.mode ?? "dev");
   return cmd === null ? null : codeBlock("curl", highlightCurl(cmd), cmd);
 }
+/**
+ * A table's first cell: the name, then what sits under it (its type, or the fields a refusal
+ * carries), so the second cell, the line on what it means, keeps the width.
+ */
+function nameCell(name: Html | string, under?: Html | string | null, required?: boolean): Html {
+  return html`<td class="api-name"><code>${name}</code>${required ? html` <span class="api-req">required</span>` : null}${under ? html`<span class="api-under">${under}</span>` : null}</td>`;
+}
 // Query params for a list route, rendered as a name→description table so the
 // generated reference documents filter/sort/pagination from the registration.
 function apiQueryHtml(query: QueryParam[] | undefined): Html | null {
@@ -54,21 +61,26 @@ function apiQueryHtml(query: QueryParam[] | undefined): Html | null {
     return null;
   }
   const rows = query.map(
-    (q) =>
-      html`<tr><td><code>${q.name}</code>${q.required ? html` <span class="api-req">required</span>` : null}</td><td class="muted">${inline(q.description)}</td></tr>`,
+    (q) => html`<tr>${nameCell(q.name, null, q.required)}<td>${inline(q.description)}</td></tr>`,
   );
   return html`<div class="block"><div class="block-head"><span class="block-label">Query</span></div><table class="api-query"><tbody>${rows}</tbody></table></div>`;
 }
-// A route's body fields, with each one's type and whether the request is refused without it.
-function apiBodyHtml(body: BodyField[] | undefined): Html | null {
+// A route's body: the media types it takes, from the registration the router enforces them
+// by, in the label, then its fields, each with its type and whether the request needs it.
+function apiBodyHtml(
+  body: BodyField[] | undefined,
+  accepts: readonly string[] | undefined,
+): Html | null {
   if (!body?.length) {
     return null;
   }
   const rows = body.map(
-    (f) =>
-      html`<tr><td><code>${f.name}</code>${f.required ? html` <span class="api-req">required</span>` : null}</td><td><code class="api-type">${f.type}</code></td><td class="muted">${inline(f.description)}</td></tr>`,
+    (f) => html`<tr>${nameCell(f.name, f.type, f.required)}<td>${inline(f.description)}</td></tr>`,
   );
-  return html`<div class="block"><div class="block-head"><span class="block-label">Body</span></div><table class="api-query api-body"><tbody>${rows}</tbody></table></div>`;
+  const types = accepts?.length
+    ? html` · ${accepts.map((t, i) => html`${i ? ", " : ""}<code>${t}</code>`)}`
+    : null;
+  return html`<div class="block"><div class="block-head"><span class="block-label">Body${types}</span></div><table class="api-query api-body"><tbody>${rows}</tbody></table></div>`;
 }
 // The refusals the route gives of its own, each with its status and the fields it carries,
 // and when: the route's own words, or the code's meaning from the refusal table.
@@ -78,7 +90,12 @@ function apiErrorsHtml(errors: RouteError[] | undefined, meanings: Meanings): Ht
   }
   const rows = errors.map(
     (e) =>
-      html`<tr><td><span class="api-status">${e.status}</span> <code>${e.code}</code></td><td class="muted">${inline(e.when ?? meanings.get(e.code) ?? "")}${e.details?.length ? html` With ${e.details.map((d, i) => html`${i ? ", " : ""}<code>${d}</code>`)}.` : null}</td></tr>`,
+      html`<tr>${nameCell(
+        html`<span class="api-status">${e.status}</span> ${e.code}`,
+        e.details?.length
+          ? html`with ${e.details.map((d, i) => html`${i ? ", " : ""}<code>${d}</code>`)}`
+          : null,
+      )}<td>${inline(e.when ?? meanings.get(e.code) ?? "")}</td></tr>`,
   );
   return html`<div class="block"><div class="block-head"><span class="block-label">Refusals</span></div><table class="api-query api-errors"><tbody>${rows}</tbody></table></div>`;
 }
@@ -86,7 +103,7 @@ function apiErrorsHtml(errors: RouteError[] | undefined, meanings: Meanings): Ht
 function apiFieldsTable(fields: readonly ReferenceField[]): Html {
   const rows = fields.map(
     (f) =>
-      html`<tr><td><code>${f.name}</code></td><td><code class="api-type">${f.type}</code></td><td class="muted">${inline(f.description)}${
+      html`<tr>${nameCell(f.name, f.type)}<td>${inline(f.description)}${
         f.values?.length
           ? html`<ul class="api-values">${f.values.map((v) => html`<li><code>${v.value}</code> ${inline(v.description)}</li>`)}</ul>`
           : null
@@ -111,15 +128,6 @@ function apiReturnsHtml(
       : html`<p class="api-returns">${link}${r.fields?.length ? ", and:" : null}</p>`
     : null;
   return html`<div class="block"><div class="block-head"><span class="block-label">Returns</span></div>${what}${r.fields?.length ? apiFieldsTable(r.fields) : null}</div>`;
-}
-// The body types a write accepts, from the registration the router enforces them by. A
-// route that takes no body lists none.
-function apiAcceptsHtml(accepts: readonly string[] | undefined): Html | null {
-  if (!accepts?.length) {
-    return null;
-  }
-  const rows = accepts.map((t) => html`<tr><td><code>${t}</code></td></tr>`);
-  return html`<div class="block"><div class="block-head"><span class="block-label">Content-Type</span></div><table class="api-query api-accepts"><tbody>${rows}</tbody></table></div>`;
 }
 /**
  * The path as a URL path to type (the curl command's own, without the router's pattern
@@ -179,16 +187,16 @@ function apiRouteHtml(r: ReferenceEntry, look: Lookups): Html {
         <span class="api-chev" aria-hidden="true"></span>
       </summary>
       <div class="api-route-detail">
-        <div class="api-route-tools">
-          <code class="api-call">${r.method} ${concretePath(r.path)}</code>
-          <button type="button" class="copy-btn" data-copy="${`${r.method} ${concretePath(r.path)}`}" data-copy-word="Copy path" aria-label="Copy method and path">${copyFace(false, "Copy path")}</button>
-          <button type="button" class="copy-btn" data-copy="${routeLink(r)}" data-copy-word="Copy link" aria-label="Copy a link to this route">${copyFace(false, "Copy link")}</button>
+        <div class="api-route-lead">
+          <p class="api-summary">${inline(r.summary)}</p>
+          <span class="api-route-tools">
+            <button type="button" class="copy-btn" data-copy="${`${r.method} ${concretePath(r.path)}`}" data-copy-word="Copy path" aria-label="Copy method and path">${copyFace(false, "Copy path")}</button>
+            <button type="button" class="copy-btn" data-copy="${routeLink(r)}" data-copy-word="Copy link" aria-label="Copy a link to this route">${copyFace(false, "Copy link")}</button>
+          </span>
         </div>
-        <p class="api-summary">${inline(r.summary)}</p>
-        ${r.description ? prose(r.description, "api-desc muted") : null}
+        ${r.description ? prose(r.description, "api-desc") : null}
         ${apiQueryHtml(r.query)}
-        ${apiAcceptsHtml(r.accepts)}
-        ${apiBodyHtml(r.body)}
+        ${apiBodyHtml(r.body, r.accepts)}
         ${apiReturnsHtml(r.returns, look.objects)}
         ${apiErrorsHtml(r.errors, look.meanings)}
         ${apiExample("Request", r.example?.request)}
@@ -204,11 +212,12 @@ const routesIn = (g: ReferenceGroup, res: ReferenceResource) =>
 // collapsed line that opens to its fields and example.
 function apiObjectHtml(o: ReferenceObject): Html {
   return html`<details class="api-object" id="api-objects-${o.key}">
-      <summary class="api-object-sum">
-        <span class="api-object-name"><span class="api-route-title">${o.title}</span><span class="muted">${o.fields.length} ${o.fields.length === 1 ? "field" : "fields"}</span></span>
+      <summary class="api-route-sum">
+        <span class="api-method m-OBJECT">Object</span>
+        <span class="api-route-name"><span class="api-route-title">${o.title}</span><span class="api-path">${o.fields.length} ${o.fields.length === 1 ? "field" : "fields"}</span></span>
         <span class="api-chev" aria-hidden="true"></span>
       </summary>
-      <div class="api-object-detail">
+      <div class="api-route-detail">
         ${prose(o.description, "api-prose")}
         ${apiFieldsTable(o.fields)}
         ${apiExample("Example", o.example)}
@@ -242,7 +251,9 @@ function apiRefusalsHtml(groups: readonly ReferenceRefusalGroup[]): Html {
         html`<tr><td><span class="api-status">${c.status}</span> <code>${c.code}</code></td><td class="muted">${inline(c.meaning)}</td></tr>`,
     ),
   ]);
-  return html`<table class="api-query api-refusals"><tbody>${rows}</tbody></table>`;
+  const count = groups.reduce((n, g) => n + g.codes.length, 0);
+  // Folded, so the topics read as a page; the filter opens it on a code it holds.
+  return html`<details class="api-fold"><summary>Every refusal code <span class="muted">${count} ${count === 1 ? "code" : "codes"}, by what to do next</span></summary><table class="api-query api-refusals"><tbody>${rows}</tbody></table></details>`;
 }
 // The topics every route shares, before the routes. The filter matches a topic as a whole, by
 // its title, and Errors by every refusal code too, so a pasted code no route gives of its own
@@ -318,6 +329,11 @@ function applyFilter(query: string, navEl: HTMLElement, contentEl: HTMLElement):
       for (const item of topic ? [res] : $$<HTMLElement>("li[data-hay]", res)) {
         const hit = terms.every((w) => holds(item, w));
         item.hidden = !hit;
+        // A topic with a folded table (Errors' codes) opens it while a filter matches it.
+        const fold = topic ? item.querySelector<HTMLDetailsElement>(".api-fold") : null;
+        if (fold) {
+          fold.open = terms.length > 0 && hit;
+        }
         inRes += hit ? 1 : 0;
       }
       res.hidden = inRes === 0;

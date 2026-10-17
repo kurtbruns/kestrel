@@ -8,7 +8,8 @@
 
 import type { ReferenceRefusalGroup } from "../../shared/reference";
 
-/** One code: its status, and one line on it. */
+/** One code: its status, and one line on it. The fields a refusal carries are each route's
+ *  (`details`), so the line never names them, or a route would say them twice. */
 type Refusal = readonly [status: number, meaning: string];
 
 const FIX_REQUEST = {
@@ -20,16 +21,16 @@ const FIX_REQUEST = {
     "A slug set by hand that isn't lowercase letters and numbers joined by single hyphens.",
   ],
   unrecognized_format: [400, "A file that isn't in the import format at all: convert it."],
-  invalid_field: [400, "A column or value the format doesn't take, with `row` and `column`."],
+  invalid_field: [400, "A column or value the format doesn't take."],
   too_many_rows: [400, "Over this deployment's import `limit`: split the file."],
   body_too_large: [413, "Over a fixed size: split the file."],
   unsupported_media_type: [415, "A body type the route doesn't take."],
-  base_required: [428, "A post save without the revision it was based on, with the post."],
+  base_required: [428, "A post save without the revision it was based on."],
 } as const satisfies Record<string, Refusal>;
 
 const READ_AGAIN = {
   stale_revision: [409, "Another save landed since the revision a post save named."],
-  active_send_exists: [409, "The post already has its one active send, with `send`."],
+  active_send_exists: [409, "The post already has its one active send."],
   cursor_ahead: [409, "A cursor ahead of this database: read again, follow from that cursor."],
   plan_stale: [409, "The import's plan changed: plan again."],
   slug_taken: [409, "Another post holds the slug: choose another."],
