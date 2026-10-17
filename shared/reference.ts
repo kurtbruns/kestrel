@@ -192,7 +192,7 @@ export function concretePath(path: string): string {
 }
 
 /**
- * A route's own address in the editor's reference, `#/reference/<anchor>`: its method and its
+ * A route's own address in the editor's reference, `#/api-reference/<anchor>`: its method and its
  * path to type, lowercased, every run of other characters a hyphen (`post-api-sends-id-cancel`).
  * Here rather than in the editor so a spec can hold every route's anchor unique.
  */

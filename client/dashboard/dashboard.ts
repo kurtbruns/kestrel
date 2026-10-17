@@ -559,12 +559,12 @@ function apiConnectCard(connected: boolean): Html {
   if (connected) {
     return html`<div class="card pub-card">
     <p class="conn-status"><span class="conn-dot" aria-hidden="true"></span>Claude is connected.</p>
-    <div class="pub-foot pub-links"><a href="#/reference">${icon("code")}API reference →</a><a href="#/docs/connect-claude">${icon("article")}Connection guide →</a></div>
+    <div class="pub-foot pub-links"><a href="#/api-reference">${icon("code")}API reference →</a><a href="#/docs/connect-claude">${icon("article")}Connection guide →</a></div>
   </div>`;
   }
   return html`<div class="card pub-card">
     <p class="pub-note">Let Claude draft, proofread, and schedule your posts.</p>
-    <div class="pub-foot pub-links"><a href="#/docs/connect-claude">${icon("article")}Connect Claude →</a><a href="#/reference">${icon("code")}API reference →</a></div>
+    <div class="pub-foot pub-links"><a href="#/docs/connect-claude">${icon("article")}Connect Claude →</a><a href="#/api-reference">${icon("code")}API reference →</a></div>
   </div>`;
 }
 

@@ -26,7 +26,13 @@ let mountedHash = "";
 
 /** Mount the view the hash names; the mount tears the previous one down. */
 export function route(): Promise<void> {
-  const hash = location.hash || "#/dashboard";
+  let hash = location.hash || "#/dashboard";
+  // The API reference's address was `#/reference`. An old link, a route's included, opens the
+  // same place under its new name, the address bar corrected with no history entry added.
+  if (hash === "#/reference" || hash.startsWith("#/reference/")) {
+    hash = `#/api-reference${hash.slice("#/reference".length)}`;
+    history.replaceState(history.state, "", hash);
+  }
   mountedHash = hash;
   // Views put a route's segments into API paths as they are, so a hash a link from an email
   // could not name (a `..` segment, say) opens the dashboard home, as a mangled link does.
@@ -41,7 +47,7 @@ export function route(): Promise<void> {
   document.body.classList.toggle("web-mode", webPost !== null);
   // The reference room (Docs, API) is about Kestrel itself, not the publication, so it
   // drops the publication sidebar for a slim tool bar.
-  const toolMode = view === "docs" || view === "reference";
+  const toolMode = view === "docs" || view === "api-reference";
   document.body.classList.toggle("tool-mode", toolMode);
   // Mark the active nav item across both sidebar navs (primary + tools) so the
   // reader can see where they are (aria-current also styles it).
@@ -79,7 +85,7 @@ export function route(): Promise<void> {
   if (view === "settings") {
     return mount(renderSettings);
   }
-  if (view === "reference") {
+  if (view === "api-reference") {
     return mount((root, signal) => renderReference(root, signal, arg));
   }
   if (view === "docs") {

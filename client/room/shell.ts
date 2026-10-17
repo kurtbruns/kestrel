@@ -8,7 +8,7 @@ import { type Html, html } from "../ui/html";
 import { icon } from "../ui/icons";
 
 /** The two surfaces the room switches between. */
-export type RoomSurface = "docs" | "reference";
+export type RoomSurface = "docs" | "api-reference";
 
 /**
  * The reference room shell shared by Docs / API: a top bar (a rail-width "← Dashboard",
@@ -60,7 +60,7 @@ export function roomShell(active: RoomSurface, rail: Html | null, main: Html): H
       <a class="room-back" href="#/dashboard" aria-label="Back to dashboard"><span aria-hidden="true">←</span><span class="room-back-label">Dashboard</span></a>
       <div class="room-nav">
         <a class="room-brand" href="#/docs">${icon("kestrel")}<span>Kestrel</span></a>
-        <nav class="room-switch" aria-label="Reference">${tab("docs", "Docs")}${tab("reference", "API")}</nav>
+        <nav class="room-switch" aria-label="Reference">${tab("docs", "Docs")}${tab("api-reference", "API")}</nav>
         <a class="room-close" href="#/dashboard" title="Back to publication" aria-label="Back to publication"><span aria-hidden="true">✕</span></a>
       </div>
     </header>

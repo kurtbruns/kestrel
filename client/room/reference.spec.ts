@@ -122,7 +122,7 @@ describe("reference room", () => {
   let fake: FakeApi;
   beforeEach(() => {
     resetShell();
-    location.hash = "#/reference";
+    location.hash = "#/api-reference";
   });
   afterEach(() => {
     fake?.restore();
@@ -448,13 +448,13 @@ describe("reference room", () => {
     // The object's link is a real link to its address, and jumps there in place: opened, with
     // focus on its line, the address in the bar, and the room not rendered again.
     const link = $<HTMLAnchorElement>(".api-obj-link", route);
-    expect(link.getAttribute("href")).toBe("#/reference/objects-send");
+    expect(link.getAttribute("href")).toBe("#/api-reference/objects-send");
     const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
     link.click();
     expect(scroll.mock.instances).toEqual([$("#api-objects-send")]);
     expect($<HTMLDetailsElement>("#api-objects-send").open).toBe(true);
     expect(document.activeElement).toBe($("#api-objects-send > summary"));
-    expect(location.hash).toBe("#/reference/objects-send");
+    expect(location.hash).toBe("#/api-reference/objects-send");
     expect(fake.calls).toHaveLength(1);
   });
 
@@ -504,7 +504,7 @@ describe("reference room", () => {
     await settle();
     expect(writeText.mock.calls.map(([text]) => text)).toEqual([
       "GET /api/posts/:id",
-      `${location.origin}${location.pathname}#/reference/get-api-posts-id`,
+      `${location.origin}${location.pathname}#/api-reference/get-api-posts-id`,
     ]);
     // Each row has its own address, from its method and the path to type.
     expect($$("li[data-hay]").map((li) => li.id)).toEqual([
@@ -608,12 +608,12 @@ describe("reference room", () => {
     await settle();
     // Each rail link is a real link to the part it names, so it opens in a new tab as well.
     expect($$<HTMLAnchorElement>("#apiNav a").map((a) => a.getAttribute("href"))).toEqual([
-      "#/reference/overview",
-      "#/reference/overview-errors",
-      "#/reference/admin",
-      "#/reference/admin-posts",
-      "#/reference/admin-sends",
-      "#/reference/public",
+      "#/api-reference/overview",
+      "#/api-reference/overview-errors",
+      "#/api-reference/admin",
+      "#/api-reference/admin-posts",
+      "#/api-reference/admin-sends",
+      "#/api-reference/public",
     ]);
     const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
     $("#apiNav a[data-sec='public']").click();
@@ -621,7 +621,7 @@ describe("reference room", () => {
     $("#apiNav a[data-sec='admin-sends']").click();
     expect(scroll.mock.instances).toEqual([$("#api-public"), $("#api-admin-sends")]);
     expect(document.activeElement).toBe($("#api-admin-sends .api-res-head h3"));
-    expect(location.hash).toBe("#/reference/admin-sends");
+    expect(location.hash).toBe("#/api-reference/admin-sends");
     expect(fake.calls).toHaveLength(1); // the room isn't rendered again
     // A modified click (a new tab) is left to the browser.
     const cmd = new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true });

@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { describeFormat } from "../shared/imports";
+import type { ReferenceResponse } from "../shared/reference";
 import type { ViewHandle } from "./lifecycle";
 import { adoptLinkedRoute, installRouter, route } from "./router";
 import { sendServer } from "./test/send_server";
@@ -169,6 +170,22 @@ describe("router", () => {
       const current = document.querySelector<HTMLElement>('.sidebar a[aria-current="page"]');
       expect(current?.dataset.view, hash).toBe("dashboard");
     }
+  });
+
+  it("opens an old #/reference link at the same place under #/api-reference, adding no history entry", async () => {
+    fake.restore();
+    const empty: ReferenceResponse = { concepts: [], refusals: [], objects: [], groups: [] };
+    fake = fakeApi([{ path: "/api/reference", reply: () => empty }]);
+    history.replaceState(null, "", "/dashboard/#/reference/post-api-sends-id-cancel");
+    const entries = history.length;
+    await route();
+    await settle();
+    expect(location.hash).toBe("#/api-reference/post-api-sends-id-cancel");
+    expect(history.length).toBe(entries);
+    expect($("#app .room-switch a[aria-current='page']").getAttribute("href")).toBe(
+      "#/api-reference",
+    );
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("adopts the route a link from an email names in its query, adding no history entry", async () => {
