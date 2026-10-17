@@ -29,7 +29,8 @@ const ERROR_BODY: ReferenceField[] = [
   {
     name: "error",
     type: "string",
-    description: "The refusal's code, from the table of refusal codes.",
+    description:
+      "The refusal's code: a route lists the ones it gives, and those any route can give are below.",
   },
   {
     name: "message",

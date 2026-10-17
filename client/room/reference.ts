@@ -31,11 +31,11 @@ import { curlCommand } from "./curl";
 import { roomShell } from "./shell";
 
 // Every route the app and Claude can call, generated from the route manifest
-// (src/app.ts) and served as JSON by the authed /api/reference route. The SPA renders
-// it natively: a rail beside the page, which opens with what every route shares (the
-// rules, the refusal codes, lists, following changes, and the objects routes return) and
-// then lists each tier's routes, each one scannable row led by its name, a native
-// <details>, that opens in place to its full documentation.
+// (src/app.ts) and served as JSON by the authed /api/reference route. The SPA renders it
+// natively as one document, as Stripe's and Mux's references are: the Introduction and the
+// topics every route shares, then each tier's resources, each opening with the objects its
+// routes return and then every route laid out in full, its examples beside its prose. The
+// rail lists the resource the reader is in, and the address follows the reading position.
 
 /** What a refusal code means, from the refusal registry, for a route line that adds nothing. */
 type Meanings = ReadonlyMap<string, string>;
@@ -443,6 +443,14 @@ function applyFilter(query: string, navEl: HTMLElement, contentEl: HTMLElement):
         }
       }
       res.hidden = inRes === 0;
+      // An object's rail link follows its resource: the filter matches routes, not objects, so
+      // an object is listed only while its resource still holds a match.
+      for (const obj of $$<HTMLElement>(
+        `.api-nav-ops[data-of="${res.dataset.sec}"] a[data-sec]`,
+        navEl,
+      )) {
+        obj.hidden = terms.length > 0 && inRes === 0;
+      }
       const link = navEl.querySelector<HTMLElement>(`a[data-sec="${res.dataset.sec}"]`);
       if (link) {
         link.hidden = inRes === 0;
@@ -475,7 +483,9 @@ function applyFilter(query: string, navEl: HTMLElement, contentEl: HTMLElement):
  */
 function spyRail(navEl: HTMLElement, contentEl: HTMLElement, follow: boolean): void {
   // Measured, not assumed, as the docs' spy does: large-text zoom can push the bar taller.
-  const line = ($(".room-bar").getBoundingClientRect().height || 54) + 48;
+  // Just under the bar, so a jump to a resource keeps it current: its heading is shorter than
+  // a looser line, which would hand the address to the object or route beneath it.
+  const line = ($(".room-bar").getBoundingClientRect().height || 54) + 8;
   const marks = $$(".api-section, .api-res, .api-object, li[data-route]", contentEl).filter(
     (el) => !el.closest("[hidden]"),
   );
@@ -601,6 +611,9 @@ export async function renderReference(
     }
     history.replaceState(history.state, "", a?.getAttribute("href") ?? location.hash);
     reveal(target);
+    // Light the rail now, not only on the scroll the jump causes, which a page that isn't in
+    // view may never get.
+    spyRail(navEl, contentEl, false);
   };
   navEl.addEventListener("click", jump);
   contentEl.addEventListener("click", jump);

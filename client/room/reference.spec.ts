@@ -881,6 +881,28 @@ describe("reference room", () => {
     expect(active()).toEqual(["admin-posts"]); // the detached rail no longer moves
   });
 
+  it("keeps a resource's address after a jump to it, though its first object sits just below its heading", async () => {
+    fake = fakeApi([{ path: "/api/reference", reply: () => reference(groups) }]);
+    await mount(renderReference);
+    await settle();
+    // Laid out as just after a jump to Sends: its heading at the bar's foot (54px when the bar
+    // measures nothing here), the send view one heading's height below it.
+    const at: Record<string, number> = { "api-admin-sends": 54, "api-objects-send": 97 };
+    for (const el of $$(".api-section, .api-res, .api-object, li[data-route]")) {
+      vi.spyOn(el, "getBoundingClientRect").mockImplementation(
+        () =>
+          ({
+            top: at[el.id] ?? (el.compareDocumentPosition($("#api-admin-sends")) & 2 ? 2000 : 0),
+          }) as DOMRect,
+      );
+    }
+    vi.spyOn(window, "scrollY", "get").mockReturnValue(4000);
+    vi.spyOn(document.documentElement, "scrollHeight", "get").mockReturnValue(99999);
+    window.dispatchEvent(new Event("scroll"));
+    expect(location.hash).toBe("#/api-reference/admin-sends");
+    expect($("#apiNav a.active").dataset.sec).toBe("admin-sends");
+  });
+
   it("filters rows by name, method, path, or summary, with the headings and rail links that still hold one", async () => {
     fake = fakeApi([{ path: "/api/reference", reply: () => reference(groups) }]);
     await mount(renderReference);
@@ -910,8 +932,10 @@ describe("reference room", () => {
         a.hidden ? "hidden" : a.dataset.sec,
       ),
     ).toEqual(["hidden", "hidden", "admin", "admin-posts", "hidden", "hidden"]);
-    // The rail lists every route that matches, in whatever resource, and only those.
+    // The rail lists every route that matches, in whatever resource, and only those; an
+    // object is listed only while its resource still holds a match.
     expect(nav.classList.contains("filtering")).toBe(true);
+    expect($("#apiNav a[data-sec='objects-send']").hidden).toBe(true);
     expect(
       $$("#apiNav a[data-route]")
         .filter((a) => !a.hidden)
