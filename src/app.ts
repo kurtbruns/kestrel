@@ -6,8 +6,9 @@
  * `requireAuth`, `public`/`webhook` are open (a webhook is signature-verified in
  * its adapter). `createRouter` registers each def AND the same manifest drives the
  * generated `/api/reference` (see src/reference/), so the documented tier and the
- * enforced gate come from one field and cannot drift. No public entry point may
- * redirect or link into an admin path (SPEC §11).
+ * enforced gate come from one field and cannot drift. No public page may redirect or
+ * link a reader into an admin path (SPEC §11); `/llms.txt` names the gated Markdown for
+ * agents in plain text, which is neither.
  *
  * Order is significant: the router returns the first matching pattern, so the
  * archive `${archiveBasePath}/:slug`, `/media/:key(.*)`, and `/` routes keep their
@@ -36,6 +37,7 @@ import * as devRoutes from "./routes/dev";
 import * as docsRoutes from "./routes/docs";
 import * as imageRoutes from "./routes/images";
 import * as importRoutes from "./routes/imports";
+import * as llmsRoutes from "./routes/llms";
 import * as postRoutes from "./routes/posts";
 import * as publicRoutes from "./routes/public";
 import * as readerPageRoutes from "./routes/reader_pages";
@@ -1987,6 +1989,25 @@ export function createRouter({
       summary:
         "The newsletter's public landing page: identity, the latest post, and a subscribe call to action.",
       handler: archiveRoutes.landing,
+    },
+    {
+      // What an agent arriving at the instance reads first: the publication, the public
+      // pages, and the Markdown behind Access, generated from these routes. Plain text, so
+      // naming a gated path for an agent never links a reader into the login.
+      method: "GET",
+      path: "/llms.txt",
+      access: "public",
+      resource: "system",
+      title: "Describe the instance to agents",
+      summary:
+        "The instance described for an agent in the llms.txt convention (text/plain): the publication's name, its public archive and subscribe page, and the API reference and docs behind Access.",
+      description:
+        "Public, so an agent with no credential learns where to start. Every path it names is generated from the registered routes, each listed under the access its route has.",
+      handler: (c) =>
+        llmsRoutes.llmsTxt(
+          c,
+          r.routes.map((route) => route.def),
+        ),
     },
     {
       method: "GET",
