@@ -176,10 +176,10 @@ export async function subscribe(c: RequestContext): Promise<Response> {
           error: "provider_not_connected",
           message: "This newsletter isn't taking subscribers yet.",
         },
-        409,
+        503,
       );
     }
-    return subscribeNotOpenPage(c, await readerIdentity(c, c.config), 409);
+    return subscribeNotOpenPage(c, await readerIdentity(c, c.config), 503);
   }
   const raw = await readEmail(c);
   const email = raw ? normalizeEmail(raw) : "";

@@ -72,7 +72,7 @@ const NO_LONGER_APPLIES = {
 } as const satisfies Record<string, Refusal>;
 
 const FIX_DEPLOYMENT = {
-  provider_not_connected: [409, "No email provider is connected, so nothing can be sent."],
+  provider_not_connected: [503, "No email provider is connected, so nothing can be sent."],
   confirmation_not_sent: [502, "The provider refused a confirmation, or never answered."],
   notify_failed: [502, "The notifications channel refused a test, in its own words."],
   invalid_config: [500, "The configuration is refused, naming the `variable`."],

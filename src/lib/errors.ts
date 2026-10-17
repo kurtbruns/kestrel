@@ -34,7 +34,7 @@ export const conflict = (message?: string) => new HttpError(409, "conflict", mes
  * stands.
  */
 export const refusal = (
-  status: 400 | 409 | 412,
+  status: 400 | 409 | 412 | 503,
   code: string,
   message: string,
   details?: Record<string, unknown>,

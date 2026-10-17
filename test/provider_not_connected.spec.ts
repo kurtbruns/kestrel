@@ -70,7 +70,7 @@ async function sendCount(): Promise<number> {
   return row?.n ?? 0;
 }
 
-const REFUSED = { status: 409, code: "provider_not_connected" };
+const REFUSED = { status: 503, code: "provider_not_connected" };
 
 /** What the `not_connected` cause advises, said once wherever the held send is described. */
 const ADVICE = "Connect Amazon SES (the setup guide walks through it), then deploy.";
@@ -216,7 +216,7 @@ describe("the public subscribe page while signups aren't open (SPEC §7, §9)", 
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ email }).toString(),
       });
-      expect(res.status).toBe(409);
+      expect(res.status).toBe(503);
       pages.push(await res.text());
     }
     expect(pages[0]).toContain("Signups aren’t open yet");
@@ -232,7 +232,7 @@ describe("the public subscribe page while signups aren't open (SPEC §7, §9)", 
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ email: "not an address" }).toString(),
     });
-    expect(res.status).toBe(409); // a read address would be a 400 first
+    expect(res.status).toBe(503); // a read address would be a 400 first
     expect(await res.text()).toContain("Signups aren’t open yet");
   });
 
@@ -242,7 +242,7 @@ describe("the public subscribe page while signups aren't open (SPEC §7, §9)", 
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email: "new@birds.example" }),
     });
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(503);
     expect((await readJson(res)).error).toBe("provider_not_connected");
     expect(await subscriberCount()).toBe(0);
   });
@@ -411,7 +411,7 @@ describe("local dev's not-connected preview, SIMULATE_SENDS=not-connected (SPEC 
       headers: JSON_AUTH,
       body: JSON.stringify({ fire_at: Date.now() + 86_400_000 }),
     });
-    expect(scheduled.status).toBe(409);
+    expect(scheduled.status).toBe(503);
     expect((await readJson(scheduled)).error).toBe("provider_not_connected");
     expect(await sendCount()).toBe(0);
 
@@ -420,7 +420,7 @@ describe("local dev's not-connected preview, SIMULATE_SENDS=not-connected (SPEC 
       method: "POST",
       headers: AUTH,
     });
-    expect(notified.status).toBe(409);
+    expect(notified.status).toBe(503);
     expect(fakeNotifications()).toHaveLength(0);
 
     const page = await (await fetchWith(PREVIEW, "/subscribe")).text();
