@@ -377,7 +377,7 @@ const SEND_FIELDS: ReferenceField[] = [
     name: "status",
     type: "string",
     description:
-      "The stored lifecycle (SPEC §2), changed only by a write: what to filter on (`?status=`) and route on. `phase` refines it for display.",
+      "The stored lifecycle, changed only by a write: what to filter on (`?status=`) and route on. `phase` refines it for display.",
     values: [
       { value: "scheduled", description: "Cancelable until `fire_at`." },
       { value: "sending", description: "Fired, handing recipients to the provider." },
@@ -388,7 +388,7 @@ const SEND_FIELDS: ReferenceField[] = [
   {
     name: "email_only",
     type: "boolean",
-    description: "The post's listing (SPEC §5): true when left out of the archive.",
+    description: "The post's listing: true when left out of the archive.",
   },
   {
     name: "web_link",
@@ -453,7 +453,7 @@ const SEND_FIELDS: ReferenceField[] = [
     type: "halt | null",
     object: "halt",
     description:
-      "While the provider refuses the send's batches as a whole (SPEC §12), else null; it retries on its own.",
+      "While the provider refuses the send's batches as a whole, else null; it retries on its own.",
   },
   {
     name: "phase",
@@ -490,8 +490,7 @@ const SEND_FIELDS: ReferenceField[] = [
     name: "conditions",
     type: "condition[]",
     object: "condition",
-    description:
-      "What is wrong with the send, or worth knowing, now (SPEC §8, §12), most severe first.",
+    description: "What is wrong with the send, or worth knowing, now, most severe first.",
   },
   {
     name: "actions",
@@ -548,7 +547,7 @@ const POST_FIELDS: ReferenceField[] = [
     name: "slug",
     type: "string",
     description:
-      "The last part of its archive address (SPEC §4): unique among all posts, drafts included, and fixed once its send starts.",
+      "The last part of its archive address: unique among all posts, drafts included, and fixed once its send starts.",
   },
   {
     name: "slug_auto",
@@ -560,7 +559,7 @@ const POST_FIELDS: ReferenceField[] = [
     name: "email_only",
     type: "boolean",
     description:
-      "The listing (SPEC §5): true when mailed but left out of the archive index and landing page, its archive address answering nothing. Changes in any state.",
+      "The listing: true when mailed but left out of the archive index and landing page, its archive address answering nothing. Changes in any state.",
   },
   {
     name: "unlisted_token",
@@ -657,7 +656,7 @@ const SUBSCRIBER_FIELDS: ReferenceField[] = [
     name: "status",
     type: "string",
     description:
-      "Consent (SPEC §7), separate from suppression: a suppressed address is never mailed, whatever its status.",
+      "Consent, separate from suppression: a suppressed address is never mailed, whatever its status.",
     values: STATUS_VALUES,
   },
   {
@@ -706,7 +705,7 @@ const SUBSCRIBER_FIELDS: ReferenceField[] = [
     name: "confirm_token, unsub_token",
     type: "string",
     description:
-      "The confirmation link's one-shot token (null once spent) and the unsubscribe link's, never rotated (I2).",
+      "The confirmation link's one-shot token (null once spent) and the unsubscribe link's, never rotated.",
   },
   {
     name: "confirm_sent_at, confirm_attempt_at",
@@ -786,7 +785,7 @@ const SETTINGS_FIELDS: ReferenceField[] = [
     name: "deployment",
     type: "object",
     description:
-      "Deploy configuration, read-only (SPEC §9): `provider`, the origins and addresses, `minLeadMs`, `authMode`, the `build`, and the fields below.",
+      "Deploy configuration, read-only: `provider`, the origins and addresses, `minLeadMs`, `authMode`, the `build`, and the fields below.",
   },
   {
     name: "deployment.provider",
@@ -798,7 +797,7 @@ const SETTINGS_FIELDS: ReferenceField[] = [
     name: "deployment.notConnectedPreview",
     type: "boolean",
     description:
-      "True when `none` is local development previewing the state (SPEC §10), whose way out is a restart, not a deploy.",
+      "True when `none` is local development previewing the state, whose way out is a restart, not a deploy.",
   },
   {
     name: "deployment.freePlanLimits",
@@ -815,7 +814,7 @@ const SETTINGS_FIELDS: ReferenceField[] = [
   {
     name: "notificationStatus",
     type: "object",
-    description: "The last notification delivered and the last failure, if newer (SPEC §8).",
+    description: "The last notification delivered and the last failure, if newer.",
   },
 ];
 
@@ -828,7 +827,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
     resource: "sends",
     title: "The send view",
     description:
-      "One send, the one shape every send route carries: the list, one send, the feed, and every act's answer and refusal (SPEC §8). A client keeps one copy current from any of them and tells two apart by `rev`. The stored facts, with what the server derives from them as of `as_of`. Its email and its recipient rows have routes of their own.",
+      "One send, the one shape every send route carries: the list, one send, the feed, and every act's answer and refusal. A client keeps one copy current from any of them and tells two apart by `rev`. The stored facts, with what the server derives from them as of `as_of`. Its email and its recipient rows have routes of their own.",
     fields: SEND_FIELDS,
     example: SEND_EXAMPLE,
   },
@@ -836,7 +835,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
     resource: "sends",
     title: "The condition object",
     description:
-      "One entry of a send's `conditions`: something wrong with the send, or worth knowing, now (SPEC §8, §12). The server derives it from the send's record, the same on every route.",
+      "One entry of a send's `conditions`: something wrong with the send, or worth knowing, now. The server derives it from the send's record, the same on every route.",
     fields: CONDITION_FIELDS,
     tables: CONDITION_TABLES,
     example: {
@@ -853,7 +852,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
     resource: "sends",
     title: "The halt object",
     description:
-      "A send's `provider.halt`: the provider refusing the send's batches as a whole (SPEC §12). The send retries on its own, consuming no recipient; a send that fires during another's halt joins it, unless the cause is its own (`content`, `invalid_request`).",
+      "A send's `provider.halt`: the provider refusing the send's batches as a whole. The send retries on its own, consuming no recipient; a send that fires during another's halt joins it, unless the cause is its own (`content`, `invalid_request`).",
     fields: HALT_FIELDS,
     example: {
       reason: "account",
@@ -868,7 +867,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
     resource: "posts",
     title: "The post object",
     description:
-      "A subject and a Markdown body, with its archive address and its unlisted link (SPEC §4, §5). Editable only as a draft; its settings (listing and address) change in any state.",
+      "A subject and a Markdown body, with its archive address and its unlisted link. Editable only as a draft; its settings (listing and address) change in any state.",
     fields: POST_FIELDS,
     example: POST_EXAMPLE,
   },
@@ -890,7 +889,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
     resource: "subscribers",
     title: "The subscriber object",
     description:
-      "An address, its consent, its suppression, and how it joined (SPEC §7). Consent status and suppression are separate axes.",
+      "An address, its consent, its suppression, and how it joined. Consent status and suppression are separate axes.",
     fields: SUBSCRIBER_FIELDS,
     example: {
       id: "sub_1",
@@ -915,7 +914,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
   suppression: {
     resource: "suppressions",
     title: "The suppression object",
-    description: `An address that isn't mailed, and why (SPEC §7). ${SUPPRESSED_MEANING}`,
+    description: `An address that isn't mailed, and why. ${SUPPRESSED_MEANING}`,
     fields: SUPPRESSION_FIELDS,
     example: {
       email: "reader@example.com",
@@ -928,7 +927,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
     resource: "imports",
     title: "The import plan",
     description:
-      "What an import would do to every row against the list as it stands (SPEC §7). A plan writes nothing; a commit applies it whole or not at all.",
+      "What an import would do to every row against the list as it stands. A plan writes nothing; a commit applies it whole or not at all.",
     fields: IMPORT_PLAN_FIELDS,
     example: {
       file: {
@@ -978,7 +977,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
     resource: "settings",
     title: "The settings object",
     description:
-      "The runtime preferences, one resource that never holds a secret, with deploy configuration reflected read-only (SPEC §9).",
+      "The runtime preferences, one resource that never holds a secret, with deploy configuration reflected read-only.",
     fields: SETTINGS_FIELDS,
     example: {
       settings: { emailTemplate: "…", publication: { name: "Marsh Lane" } },
