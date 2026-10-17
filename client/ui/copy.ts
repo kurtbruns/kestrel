@@ -25,7 +25,7 @@ export function copyButton(text: string, label: string): Html {
 /** A labelled code block with a Copy of its plain text on the label line. `code` is the
  *  block's markup (highlighted, say); `raw` is what the clipboard gets. */
 export function codeBlock(label: string, code: Html, raw: string): Html {
-  return html`<div class="block"><div class="block-head"><span class="block-label">${label}</span>${copyButton(raw, `Copy ${label}`)}</div><pre><code>${code}</code></pre></div>`;
+  return html`<div class="block code-block"><div class="block-head"><span class="block-label">${label}</span>${copyButton(raw, `Copy ${label}`)}</div><pre><code>${code}</code></pre></div>`;
 }
 
 const pending = new WeakMap<HTMLElement, { label: string; timer: number }>();

@@ -4882,12 +4882,22 @@ button.copied svg {
   font-weight: 600;
   color: var(--muted);
 }
-.block pre {
+/* A code block (an example, a curl command, a template): a raised card with its label and Copy
+   in a header inside it, so the code stands apart from the page in both themes. */
+.code-block {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.code-block > .block-head {
+  margin: 0;
+  padding: 4px 6px 4px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.code-block pre {
   margin: 0;
   overflow-x: auto;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 6px;
   padding: 10px 12px;
   font: 12.5px / 1.5 var(--mono);
 }

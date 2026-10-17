@@ -21,7 +21,9 @@ describe("copy (DESIGN §7)", () => {
     const writeText = stubClipboard();
     setHtml(root, codeBlock("curl", html`<b>curl</b> x`, "curl x"));
     wireCopy(root);
-    const b = $<HTMLButtonElement>(".block .copy-btn", root);
+    // A code block is its own card: the label and Copy in a header over the code.
+    expect($(".code-block > .block-head + pre", root).textContent).toBe("curl x");
+    const b = $<HTMLButtonElement>(".code-block .copy-btn", root);
     expect(b.getAttribute("aria-label")).toBe("Copy curl");
     b.click();
     await vi.advanceTimersByTimeAsync(0);
