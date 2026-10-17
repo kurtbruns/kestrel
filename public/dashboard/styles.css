@@ -4100,7 +4100,7 @@ button.api-filter-clear svg {
 }
 .api-content {
   min-width: 0;
-  max-width: 1180px;
+  max-width: 1440px;
 }
 /* One reading measure for the page, a doc page's (720px): the intro, the topics, and each
    route's and object's prose and tables keep it, and only a route's examples, beside its
@@ -4316,7 +4316,8 @@ a.api-self:focus-visible svg {
 @media (min-width: 1280px) {
   .api-op-body {
     max-width: none;
-    grid-template-columns: minmax(0, 720px) minmax(0, 420px);
+    /* The examples take what the window has beyond the prose's measure, never under 360px. */
+    grid-template-columns: minmax(0, 720px) minmax(360px, 1fr);
   }
   .api-op-code {
     align-self: start;
