@@ -1939,7 +1939,7 @@ th.num .th-sort {
    its type, and Required on one line and what it means under it, so a long name never
    squeezes its description. A name breaks only where its words join (the <wbr> the page puts
    after each _ . /). */
-.api-sec {
+.block.api-sec {
   margin-top: 22px;
 }
 .api-sec > .block-head {
@@ -1957,10 +1957,15 @@ th.num .th-sort {
   font: 400 12px var(--mono);
   color: var(--muted);
 }
+/* Rules divide rows; the last row in a section has none under it. */
 .api-row,
 .api-lrow {
   padding: 11px 0;
   border-bottom: 1px solid var(--line);
+}
+.api-row:last-child,
+.api-lrow:last-child {
+  border-bottom: 0;
 }
 .api-row-head {
   display: flex;
@@ -2016,20 +2021,16 @@ code.api-row-name {
 .api-statuses code.api-row-name {
   font-family: inherit;
 }
-/* A grid of a field's values (the condition kinds): a table with a header row. */
-.api-table {
-  margin: 0;
-}
-.api-table th,
-.api-table td {
-  padding: 6px 10px;
-  font-size: 13px;
-  vertical-align: top;
-}
-.api-table thead th {
+/* A value's short cells beside its name (a condition kind's severity and fields), each led by
+   its column's name, and the label of a later long line ("Remedy:"). */
+.api-row-meta {
   font-size: 12.5px;
+  color: var(--muted);
+}
+.api-row-key {
+  font-size: 12px;
   font-weight: 600;
-  background: var(--hover);
+  color: var(--muted);
 }
 /* What every route shares, described once ahead of the routes: concept prose, an object's
    description, an enum's values under a field's line, and the refusal table's next moves. */
@@ -2063,21 +2064,6 @@ code.api-row-name {
   font-size: 12.5px;
   color: var(--muted);
 }
-/* A grid: the same table with a column per thing a value says (the send's condition kinds,
-   its halt causes). Its name column takes only what its longest word needs, so the prose
-   columns keep the width; wider than a phone, it scrolls on its own rather than stacking. */
-.api-table-wrap {
-  overflow-x: auto;
-  margin-top: 8px;
-}
-.api-grid th:first-child,
-.api-grid td:first-child {
-  width: 1%;
-}
-.api-grid td {
-  min-width: 10ch;
-}
-
 /* editor header */
 .editor-head {
   display: flex;
@@ -4146,9 +4132,11 @@ button.api-filter-clear svg {
   color: var(--fg);
   background: var(--hover);
 }
+/* The reference reads as a document: a doc page's line height, not the browser's default. */
 .api-content {
   min-width: 0;
   max-width: 1440px;
+  line-height: 1.5;
 }
 /* One reading measure for the page, a doc page's (720px): the intro, the topics, and each
    route's and object's prose and tables keep it, and only a route's examples, beside its
@@ -4296,8 +4284,9 @@ button.api-filter-clear svg {
    its method and path, then what it does beside its examples on a wide screen, under them
    on a narrow one. The examples scroll with the page: pinned, one taller than the window
    (the send view's) would never show its end. */
+/* Each route and object its own block, with room around it so the page reads as one at a time. */
 .api-op {
-  padding: 22px 0 26px;
+  padding: 36px 0 40px;
 }
 .api-op-head {
   display: flex;

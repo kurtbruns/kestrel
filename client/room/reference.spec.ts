@@ -431,14 +431,21 @@ describe("reference room", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("lays out an object's value table as a grid, a lone code breaking where its words join", async () => {
+  it("sets an object's value table as rows: short cells beside the name, long ones beneath, the later labelled", async () => {
     const [send] = shared.objects;
     const tables = [
       {
         title: "Condition kinds",
         description: "Each `kind`.",
-        columns: ["Kind", "Meaning"],
-        rows: [["`provider_unavailable`", "An outage, retried at `retry_at`."]],
+        columns: ["Kind", "Severity", "Meaning", "Remedy"],
+        rows: [
+          [
+            "`provider_unavailable`",
+            "`info`",
+            "An outage, retried at `retry_at`. ".repeat(3).trim(),
+            "Nothing: it retries on its own, so no one has to act while it waits.".repeat(2),
+          ],
+        ],
       },
     ];
     fake = fakeApi([
@@ -449,11 +456,19 @@ describe("reference room", () => {
     ]);
     await mount(renderReference);
     await settle();
-    const grid = $("#api-objects-send table.api-grid");
-    expect($$("thead th", grid).map((th) => th.textContent)).toEqual(["Kind", "Meaning"]);
-    const [kind, meaning] = $$("tbody td", grid);
-    expect(kind!.innerHTML).toBe("<code>provider_<wbr>unavailable</code>");
-    expect(meaning!.innerHTML).toBe("An outage, retried at <code>retry_at</code>.");
+    const sec = $(".api-value-rows", $("#api-objects-send")).closest(".api-sec")!;
+    expect($(".block-label", sec).textContent).toBe("Condition kinds");
+    expect($(".api-prose", sec).textContent).toBe("Each kind.");
+    expect(sec.querySelector("table")).toBeNull();
+    const row = $(".api-value-rows .api-row", sec);
+    expect($("code.api-row-name", row).innerHTML).toBe("provider_<wbr>unavailable");
+    expect($(".api-row-meta", row).innerHTML).toBe(
+      '<span class="api-row-key">Severity</span> <code>info</code>',
+    );
+    const lines = $$(".api-row-desc", row);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]!.querySelector(".api-row-key")).toBeNull();
+    expect($(".api-row-key", lines[1]!).textContent).toBe("Remedy:");
     expect(fake.unhandled).toEqual([]);
   });
 

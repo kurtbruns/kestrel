@@ -242,20 +242,43 @@ function apiRouteHtml(r: ReferenceEntry, look: Lookups): Html {
 /** A resource's routes within a tier, in the order the tier lists them. */
 const routesIn = (g: ReferenceGroup, res: ReferenceResource) =>
   g.routes.filter((r) => r.resource === res.key);
-// A grid cell: a lone code (a kind, a cause) breaks where its words join, like a name;
-// anything else is inline Markdown.
-function gridCell(text: string): Html {
-  const code = /^`([^`]+)`$/.exec(text)?.[1];
-  return html`<td>${code === undefined ? inline(text) : html`<code>${breakable(code)}</code>`}</td>`;
-}
-// A table of a field's values, under its object's fields: a head row, then a row per value.
+/** A cell short enough for a value's own line (a severity, the fields it carries). */
+const SHORT_CELL = 80;
+/**
+ * A table of a field's values (the condition kinds), set as the sections' rows rather than a
+ * grid: each value's name with its short cells beside it, each under its column's name, and its
+ * long ones (what it means, what settles it) as lines beneath, the second and later labelled,
+ * so no column squeezes another and nothing scrolls sideways.
+ */
 function apiTableHtml(t: ReferenceTable): Html {
-  return html`<div class="block"><div class="block-head"><span class="block-label">${t.title}</span></div>
-      ${prose(t.description, "api-prose")}
-      <div class="api-table-wrap"><table class="api-table api-grid"><thead><tr>${t.columns.map((c) => html`<th>${c}</th>`)}</tr></thead><tbody>${t.rows.map(
-        (r) => html`<tr>${r.map(gridCell)}</tr>`,
-      )}</tbody></table></div>
-    </div>`;
+  const short = t.columns.map(
+    (_, i) => i > 0 && t.rows.every((r) => (r[i] ?? "").length <= SHORT_CELL),
+  );
+  const firstLong = t.columns.findIndex((_, i) => i > 0 && !short[i]);
+  const rows = t.rows.map((r) => {
+    const code = /^`([^`]+)`$/.exec(r[0] ?? "")?.[1];
+    const meta = t.columns.flatMap((c, i) =>
+      short[i]
+        ? [
+            html`<span class="api-row-meta"><span class="api-row-key">${c}</span> ${inline(r[i] ?? "")}</span>`,
+          ]
+        : [],
+    );
+    const lines = t.columns.flatMap((c, i) =>
+      i > 0 && !short[i]
+        ? [
+            html`<div class="api-row-desc">${i === firstLong ? null : html`<span class="api-row-key">${c}:</span> `}${inline(r[i] ?? "")}</div>`,
+          ]
+        : [],
+    );
+    return html`<div class="api-row"><div class="api-row-head"><code class="api-row-name">${code === undefined ? inline(r[0] ?? "") : breakable(code)}</code>${meta}</div>${lines}</div>`;
+  });
+  return section(
+    t.title,
+    html`<div class="api-list api-value-rows">${rows}</div>`,
+    null,
+    prose(t.description, "api-prose"),
+  );
 }
 // An object its resource's routes return, first under the resource as Stripe puts it, laid
 // out like a route: its fields on the left, its example beside them.
