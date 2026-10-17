@@ -144,19 +144,21 @@ export function buildReferenceResponse(routes: readonly RouteDef[]): ReferenceRe
 }
 
 /** A link to an object's section: in this resource's own document, or in its resource's. */
-function objectLink(key: ObjectKey, from: Resource): string {
+function objectLink(key: ObjectKey, from: Resource, text?: string): string {
   const { title, resource } = OBJECTS[key];
   const file = resource === from ? "" : `${resource}.md`;
-  return `[${title}](${file}#${headingAnchor(title)})`;
+  return `[${text ?? title}](${file}#${headingAnchor(title)})`;
 }
 
 /** Fields as a Markdown table, an enum's values listed in its line. */
-function fieldTable(fields: readonly ReferenceField[]): string {
+function fieldTable(fields: readonly ReferenceField[], from?: Resource): string {
   const rows = fields.map((f) => {
     const values = f.values?.length
       ? ` ${f.values.map((v) => `\`${v.value}\`: ${v.description}`).join(" ")}`
       : "";
-    return `| \`${f.name}\` | ${cell(f.type)} | ${cell(f.description + values)} |`;
+    // A field that holds an object links its type to that object's section.
+    const type = f.object && from ? objectLink(f.object, from, cell(f.type)) : cell(f.type);
+    return `| \`${f.name}\` | ${type} | ${cell(f.description + values)} |`;
   });
   return ["| Field | Type | Description |", "| --- | --- | --- |", ...rows].join("\n");
 }
@@ -173,7 +175,7 @@ function returnsMarkdown(r: RouteReturns, from: Resource): string {
       ? `Returns ${what}, and:`
       : "Returns:"
     : `Returns ${what}.`;
-  return r.fields?.length ? `${lead}\n\n${fieldTable(r.fields)}` : lead;
+  return r.fields?.length ? `${lead}\n\n${fieldTable(r.fields, from)}` : lead;
 }
 
 /** A table of a field's values as a `###` under its object, its cells' pipes escaped. */
@@ -192,7 +194,7 @@ function objectMarkdown(o: ReferenceObject): string {
   return [
     `## ${o.title}`,
     o.description,
-    fieldTable(o.fields),
+    fieldTable(o.fields, o.resource),
     ...(o.tables ?? []).map(tableMarkdown),
     jsonBlock("Example", o.example),
   ].join("\n\n");

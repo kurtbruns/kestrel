@@ -341,11 +341,12 @@ export interface SendListResponse {
 }
 
 /**
- * The live reporting phase, derived from the counters, never stored: waiting in the
- * review window; due (the fire time has passed and the next sweep starts it); handing
- * recipients to the provider (with or without retries); paused between sweep ticks;
- * wedged and awaiting Resolve; dispatched with receipts still arriving; every accepted
- * recipient confirmed; or canceled.
+ * The live reporting phase, derived as of the read and never stored, so it is for showing,
+ * not filtering: each value refines one `SendStatus` (scheduled: `scheduled`, `due`;
+ * sending: `progressing`, `retrying`, `backing-off`, `needs-attention`; sent: `settling`,
+ * `complete`; canceled: `canceled`). `backing-off` waits out an unavailable halt, or a
+ * transient retry with nothing in flight; `needs-attention` is wedged or refused, while a
+ * missed send stays `due` and a stuck one `progressing`, their conditions saying so.
  */
 export type SendPhase =
   | "scheduled"
@@ -369,7 +370,7 @@ export interface SendView {
   id: string;
   post_id: string;
   subject: string;
-  /** The stored lifecycle state (SPEC §2); `phase` is the finer reading of it. */
+  /** The stored lifecycle (SPEC §2), changed only by a write: what to filter and route on; `phase` refines it for display. */
   status: SendStatus;
   /**
    * The post's listing (SPEC §5): true when it is email only, mailed as usual but left out

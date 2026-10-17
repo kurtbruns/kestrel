@@ -23,8 +23,9 @@ import {
   type HaltCause,
   type HaltReason,
   NO_RECEIPTS_AFTER_MS,
-  refusalAdvice,
   SELF_THROTTLE_HALTS,
+  type SendCondition,
+  type SendHalt,
   type SendView,
   STUCK_THRESHOLD_MS,
 } from "../../shared/sends";
@@ -174,7 +175,7 @@ const CONDITION_KINDS: Record<ConditionKind, ConditionKindDoc> = {
     meaning:
       "The provider refuses the account, or this send's own email (`cause` `content` or `invalid_request`); `error` is its words. No one is marked unsent.",
     remedy:
-      "`advice` names the fix and who makes it, by `cause` (the halt causes below); almost always outside this API. The send retries on its own at `retry_at` and resumes once the fix lands.",
+      "`advice` names the fix and who makes it, by `cause` (the halt object's causes); almost always outside this API. The send retries on its own at `retry_at` and resumes once the fix lands.",
   },
   provider_unavailable: {
     severity: `\`info\`, or \`warn\` after ${SELF_THROTTLE_HALTS} rate-limit halts in a row`,
@@ -221,58 +222,149 @@ const CONDITION_KINDS: Record<ConditionKind, ConditionKindDoc> = {
 };
 
 /**
- * Which halt each cause is, so the halt causes' table reads every cause off one Record: a new
- * `HaltCause` fails to compile until it is placed.
+ * Every halt cause: which halt it is, and what it means in one line. A Record over
+ * `HaltCause`, so a new cause fails to compile until it is described. Its fix is not here: the
+ * provider's adapter words it (`refusalAdvice`), and the send's `refused` condition carries
+ * those words as `advice`, to relay as they stand.
  */
-const HALT_CAUSE_REASON: Record<HaltCause, HaltReason> = {
-  outage: "unavailable",
-  rate_limit: "unavailable",
-  credentials: "account",
-  opt_in: "account",
-  configuration: "account",
-  sending_pool: "account",
-  unsupported: "account",
-  sender: "account",
-  mail_from: "account",
-  sandbox: "account",
-  quota: "account",
-  suspended: "account",
-  paused: "account",
-  set_paused: "account",
-  not_connected: "account",
-  content: "account",
-  invalid_request: "account",
+const HALT_CAUSES: Record<HaltCause, { reason: HaltReason; meaning: string }> = {
+  outage: { reason: "unavailable", meaning: "The provider is down." },
+  rate_limit: {
+    reason: "unavailable",
+    meaning:
+      "The provider refused for its sending rate; once it keeps happening, `SES_MAX_SEND_RATE` is set above the account's maximum.",
+  },
+  credentials: {
+    reason: "account",
+    meaning: "The provider refused the deployment's key, or its permissions.",
+  },
+  opt_in: {
+    reason: "account",
+    meaning: "The provider account isn't signed up or activated for sending.",
+  },
+  configuration: {
+    reason: "account",
+    meaning: "The configuration set the deployment names doesn't exist.",
+  },
+  sending_pool: {
+    reason: "account",
+    meaning: "The configuration set sends through an IP pool the provider can't find.",
+  },
+  unsupported: {
+    reason: "account",
+    meaning: "The provider read the request as asking for something Kestrel never sends.",
+  },
+  sender: { reason: "account", meaning: "The From address, or its domain, isn't verified." },
+  mail_from: {
+    reason: "account",
+    meaning: "The sending domain isn't verified, or its MAIL FROM domain can't be read.",
+  },
+  sandbox: {
+    reason: "account",
+    meaning: "The account is in the provider's sandbox, which mails only verified addresses.",
+  },
+  quota: { reason: "account", meaning: "The account's sending quota for the day is used up." },
+  suspended: { reason: "account", meaning: "The provider has shut down the account's sending." },
+  paused: { reason: "account", meaning: "Sending is paused for the account." },
+  set_paused: { reason: "account", meaning: "Sending is turned off on the configuration set." },
+  not_connected: { reason: "account", meaning: "No email provider is connected." },
+  content: {
+    reason: "account",
+    meaning: "The provider refuses this email itself; no other send waits on it.",
+  },
+  invalid_request: {
+    reason: "account",
+    meaning: "The provider refused a batch of this send as invalid; no other send waits on it.",
+  },
 };
 
-/** The fix for an `unavailable` halt's cause; an `account` one's is `refusalAdvice`, the words its condition carries. */
-const UNAVAILABLE_FIX: Partial<Record<HaltCause, string>> = {
-  outage: "The provider is down. Nothing to do: the send retries on its own.",
-  rate_limit:
-    "The provider refused for its sending rate. Nothing to do, unless it keeps happening (the condition turns `warn`): then `SES_MAX_SEND_RATE` is set above the account's maximum send rate.",
-};
-
-/** The send view's tables: each condition kind, and each halt cause with its fix. */
-const SEND_TABLES: ReferenceTable[] = [
+/** The condition object's table: each kind, with its severity, fields, meaning, and remedy. */
+const CONDITION_TABLES: ReferenceTable[] = [
   {
     title: "Condition kinds",
     description:
-      "Each `conditions` entry's `kind`. Show its `message` as it stands; this says what it means and what settles it.",
+      "Each `kind`. Show its `message` as it stands; this says what it means and what settles it.",
     columns: ["Kind", "Severity", "Fields", "Meaning", "Remedy"],
     rows: (Object.keys(CONDITION_KINDS) as ConditionKind[]).map((kind) => {
       const k = CONDITION_KINDS[kind];
       return [`\`${kind}\``, k.severity, k.fields || "none", k.meaning, k.remedy];
     }),
   },
+];
+
+const CONDITION_FIELDS: ReferenceField[] = [
   {
-    title: "Halt causes",
+    name: "kind",
+    type: "string",
+    description: "Which condition: the table below says what each means and what settles it.",
+  },
+  {
+    name: "severity",
+    type: "string",
+    description: "How much it asks of a person.",
+    values: [
+      { value: "action", description: "A person must act." },
+      { value: "warn", description: "Worth a look." },
+      { value: "info", description: "Worth knowing." },
+    ],
+  },
+  {
+    name: "since",
+    type: "number | null",
+    description: "When it began, or null when the record doesn't say.",
+  },
+  {
+    name: "message",
+    type: "string",
+    description: "The server's words for it, to show as they stand, the same wherever it is shown.",
+  },
+  {
+    name: "action",
+    type: "{ name, method, path } | null",
     description:
-      "A halt's `cause`, the `cause` a `refused` condition carries. An `account` cause's fix is the `advice` its condition carries, word for word; a send's own (`content`, `invalid_request`) holds no other send.",
-    columns: ["Cause", "Halt", "Fix"],
-    rows: (Object.keys(HALT_CAUSE_REASON) as HaltCause[]).map((cause) => [
-      `\`${cause}\``,
-      `\`${HALT_CAUSE_REASON[cause]}\``,
-      UNAVAILABLE_FIX[cause] ?? refusalAdvice(cause),
-    ]),
+      "The act on the send that settles it (Resolve, for `wedged`), or null when none does.",
+  },
+  {
+    name: "…",
+    type: "",
+    description:
+      "The fields its kind carries, as the table's Fields column names (`count` on `wedged`).",
+  },
+];
+
+const HALT_FIELDS: ReferenceField[] = [
+  {
+    name: "reason",
+    type: "string",
+    description: "Which halt, and how often it retries.",
+    values: [
+      {
+        value: "unavailable",
+        description: `An outage or a rate limit, retried ${retrySchedule(HALT_BACKOFF_MS.unavailable)}.`,
+      },
+      {
+        value: "account",
+        description: `The provider refusing the account, or this send's own email, retried ${retrySchedule(HALT_BACKOFF_MS.account)}. The fix is outside this API; the send resumes once it lands.`,
+      },
+    ],
+  },
+  {
+    name: "cause",
+    type: "string | null",
+    description:
+      "What the provider refused for. Its fix, in words to relay, is the `advice` on the send's `refused` condition.",
+    values: (Object.keys(HALT_CAUSES) as HaltCause[]).map((cause) => ({
+      value: cause,
+      description: `(\`${HALT_CAUSES[cause].reason}\`) ${HALT_CAUSES[cause].meaning}`,
+    })),
+  },
+  { name: "error", type: "string", description: "The provider's own words." },
+  { name: "retries", type: "number", description: "How many runs in a row it has halted." },
+  { name: "since", type: "number | null", description: "When the refusals began." },
+  {
+    name: "retry_at",
+    type: "number | null",
+    description: "When the next retry is due; nothing retries it sooner.",
   },
 ];
 
@@ -283,7 +375,8 @@ const SEND_FIELDS: ReferenceField[] = [
   {
     name: "status",
     type: "string",
-    description: "The stored lifecycle state (SPEC §2); `phase` is the finer reading of it.",
+    description:
+      "The stored lifecycle (SPEC §2), changed only by a write: what to filter on (`?status=`) and route on. `phase` refines it for display.",
     values: [
       { value: "scheduled", description: "Cancelable until `fire_at`." },
       { value: "sending", description: "Fired, handing recipients to the provider." },
@@ -356,32 +449,36 @@ const SEND_FIELDS: ReferenceField[] = [
   },
   {
     name: "provider.halt",
-    type: "object | null",
-    description: `While the provider refuses the send's batches as a whole (SPEC §12): \`reason\`, \`cause\`, its words as \`error\`, \`since\`, \`retries\` in a row, and \`retry_at\`. It retries on its own, up to an hour apart, consuming no recipient; nothing retries it sooner. A send that fires during another's halt joins it, unless the cause is its own.`,
-    values: [
-      {
-        value: "unavailable",
-        description: `An outage or a rate limit (\`cause\` \`outage\` or \`rate_limit\`), retried ${retrySchedule(HALT_BACKOFF_MS.unavailable)}.`,
-      },
-      {
-        value: "account",
-        description: `The provider refusing the account, or this send's own email, retried ${retrySchedule(HALT_BACKOFF_MS.account)}. \`cause\` names what (the halt causes below, each with its fix). The fix is outside this API; the send resumes once it lands.`,
-      },
-    ],
+    type: "halt | null",
+    object: "halt",
+    description:
+      "While the provider refuses the send's batches as a whole (SPEC §12), else null; it retries on its own.",
   },
   {
     name: "phase",
     type: "string",
-    description: "The live reading of the send, derived by the server.",
+    description:
+      "The live reading of `status`, derived as of `as_of` and never stored, so it is for showing, not filtering. Each value belongs to one `status`: `scheduled` is `scheduled` or `due`; `sending` is `progressing`, `retrying`, `backing-off`, or `needs-attention`; `sent` is `settling` or `complete`; `canceled` is `canceled`. What needs a person is in `conditions`.",
     values: [
       { value: "scheduled", description: "In its review window." },
-      { value: "due", description: "Its fire time has passed; the next sweep starts it." },
-      { value: "progressing", description: "Handing recipients to the provider." },
+      {
+        value: "due",
+        description:
+          "Its fire time has passed; the next sweep starts it. A missed send stays here.",
+      },
+      {
+        value: "progressing",
+        description: "Handing recipients to the provider. A stuck send stays here.",
+      },
       { value: "retrying", description: "Handing off, with recipients being retried." },
-      { value: "backing-off", description: "Waiting out an `unavailable` halt." },
+      {
+        value: "backing-off",
+        description:
+          "Waiting out an `unavailable` halt, or recipients waiting on a transient retry with nothing in flight.",
+      },
       {
         value: "needs-attention",
-        description: "Waiting on a person: refused, wedged, missed, or stuck.",
+        description: "Waiting on a person: wedged, or refused by the provider.",
       },
       { value: "settling", description: "Dispatched, with receipts still arriving." },
       { value: "complete", description: "Every accepted recipient confirmed." },
@@ -390,9 +487,10 @@ const SEND_FIELDS: ReferenceField[] = [
   },
   {
     name: "conditions",
-    type: "object[]",
+    type: "condition[]",
+    object: "condition",
     description:
-      "What is wrong with the send, or worth knowing, now (SPEC §8, §12), most severe first. Each has `kind` (the condition kinds below), `severity` (`action`: a person must act; `warn`: worth a look; `info`: worth knowing), `since` (or null), a `message` to show as it stands, the `action` that settles it or null, and the fields its kind names.",
+      "What is wrong with the send, or worth knowing, now (SPEC §8, §12), most severe first.",
   },
   {
     name: "actions",
@@ -731,8 +829,39 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
     description:
       "One send, the one shape every send route carries: the list, one send, the feed, and every act's answer and refusal (SPEC §8). A client keeps one copy current from any of them and tells two apart by `rev`. The stored facts, with what the server derives from them as of `as_of`. Its email and its recipient rows have routes of their own.",
     fields: SEND_FIELDS,
-    tables: SEND_TABLES,
     example: SEND_EXAMPLE,
+  },
+  condition: {
+    resource: "sends",
+    title: "The condition object",
+    description:
+      "One entry of a send's `conditions`: something wrong with the send, or worth knowing, now (SPEC §8, §12). The server derives it from the send's record, the same on every route.",
+    fields: CONDITION_FIELDS,
+    tables: CONDITION_TABLES,
+    example: {
+      kind: "wedged",
+      severity: "action",
+      since: 1768467600000,
+      message:
+        "The provider never answered for 3 recipients, so whether they were mailed is unknown, and sending again could mail them twice. The send cannot finish until they are resolved.",
+      action: { name: "resolve", method: "POST", path: "/api/sends/s_xyz789/resolve" },
+      count: 3,
+    } satisfies SendCondition,
+  },
+  halt: {
+    resource: "sends",
+    title: "The halt object",
+    description:
+      "A send's `provider.halt`: the provider refusing the send's batches as a whole (SPEC §12). The send retries on its own, consuming no recipient; a send that fires during another's halt joins it, unless the cause is its own (`content`, `invalid_request`).",
+    fields: HALT_FIELDS,
+    example: {
+      reason: "account",
+      cause: "sandbox",
+      error: "Email address is not verified.",
+      retries: 2,
+      since: 1768467600000,
+      retry_at: 1768471200000,
+    } satisfies SendHalt,
   },
   post: {
     resource: "posts",

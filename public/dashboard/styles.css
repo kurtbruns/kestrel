@@ -1966,6 +1966,12 @@ th.num .th-sort {
   font: 12px var(--mono);
   color: var(--muted);
 }
+/* A type that names an object links to it, and reads as a link. */
+.api-under a {
+  color: var(--fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 /* What every route shares, described once ahead of the routes: concept prose, an object's
    description, an enum's values under a field's line, and the refusal table's next moves. */
 .api-prose {

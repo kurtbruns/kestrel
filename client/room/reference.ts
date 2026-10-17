@@ -106,11 +106,17 @@ function apiErrorsHtml(errors: RouteError[] | undefined, meanings: Meanings): Ht
   );
   return html`<div class="block"><div class="block-head"><span class="block-label">Refusals</span></div><table class="api-table api-errors"><tbody>${rows}</tbody></table></div>`;
 }
-// Fields with their types and one line each, an enum's values listed under its line.
+// Fields with their types and one line each, an enum's values listed under its line, and a field
+// that holds an object linked to that object's section by its type.
 function apiFieldsTable(fields: readonly ReferenceField[]): Html {
   const rows = fields.map(
     (f) =>
-      html`<tr>${nameCell(f.name, f.type)}<td>${inline(f.description)}${
+      html`<tr>${nameCell(
+        f.name,
+        f.object
+          ? html`<a href="#/api-reference/objects-${f.object}" class="api-obj-link" data-sec="objects-${f.object}">${f.type}</a>`
+          : f.type,
+      )}<td>${inline(f.description)}${
         f.values?.length
           ? html`<ul class="api-values">${f.values.map((v) => html`<li><code>${v.value}</code> ${inline(v.description)}</li>`)}</ul>`
           : null

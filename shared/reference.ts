@@ -52,6 +52,8 @@ export interface ReferenceField {
   description: string;
   /** An enum's values, each with one line of meaning. */
   values?: { value: string; description: string }[];
+  /** The object the field holds (or a list of), described once in its own section and linked. */
+  object?: ObjectKey;
 }
 
 /** A documented field of a request body. */
@@ -63,6 +65,8 @@ export interface BodyField extends ReferenceField {
 /** An object the reference describes once, which routes say they return. */
 export type ObjectKey =
   | "send"
+  | "condition"
+  | "halt"
   | "post"
   | "revision"
   | "subscriber"

@@ -409,6 +409,26 @@ describe("reference room", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("links a field that holds an object to that object's section, by its type", async () => {
+    const [send] = shared.objects;
+    const fields = [
+      ...send!.fields,
+      { name: "conditions", type: "send[]", object: "send" as const, description: "Its kin." },
+    ];
+    fake = fakeApi([
+      {
+        path: "/api/reference",
+        reply: () => ({ ...reference(groups), objects: [{ ...send!, fields }] }),
+      },
+    ]);
+    await mount(renderReference);
+    await settle();
+    const link = $<HTMLAnchorElement>("#api-objects-send .api-fields tr:last-child .api-under a");
+    expect(link.textContent).toBe("send[]");
+    expect(link.getAttribute("href")).toBe("#/api-reference/objects-send");
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("lays out an object's value table as a grid, a lone code breaking where its words join", async () => {
     const [send] = shared.objects;
     const tables = [

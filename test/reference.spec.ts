@@ -78,10 +78,16 @@ describe("API reference is generated from the route registration", () => {
       // `is_current` in its place.
       revision: ["is_current"],
     };
+    // A condition's kind-specific fields are one row ("…"), the kinds table naming them, so its
+    // example's `count` (a `wedged` condition's) is described there.
+    const inTable: Partial<Record<keyof typeof OBJECTS, string[]>> = { condition: ["count"] };
     for (const [key, o] of Object.entries(OBJECTS)) {
-      const described = new Set(
-        o.fields.flatMap((f) => f.name.split(", ").map((name) => name.split(".")[0])),
-      );
+      const described = new Set([
+        ...o.fields
+          .filter((f) => f.name !== "…")
+          .flatMap((f) => f.name.split(", ").map((name) => name.split(".")[0])),
+        ...(inTable[key as keyof typeof OBJECTS] ?? []),
+      ]);
       const shown = [
         ...Object.keys(o.example as object),
         ...(notInExample[key as keyof typeof OBJECTS] ?? []),
@@ -91,8 +97,7 @@ describe("API reference is generated from the route registration", () => {
   });
 
   it("states a halted send's retry schedule as the sweep keeps it (SPEC §12)", () => {
-    const halt = OBJECTS.send.fields.find((f) => f.name === "provider.halt")!;
-    const said = JSON.stringify(halt);
+    const said = JSON.stringify(OBJECTS.halt.fields);
     expect(said).toContain("retried after 1, 2, 5, 15, and 30 minutes and then every 60 minutes");
     expect(said).toContain("retried after 5, 15, and 30 minutes and then every 60 minutes");
     expect(said).toContain("retry_at");
@@ -396,8 +401,12 @@ describe("API reference is generated from the route registration", () => {
     const ref = buildReferenceResponse(defs);
     const docs = resourceDocs(ref);
     const all = [...docs.values()].join("\n");
+    // Every object is one a route returns, or one another object's field holds (a send's
+    // conditions, its halt), so none is described that nothing carries.
     const returned = ref.groups.flatMap((g) => g.routes).flatMap((r) => r.returns?.object ?? []);
-    expect(new Set(returned)).toEqual(new Set(ref.objects.map((o) => o.key)));
+    const held = ref.objects.flatMap((o) => o.fields.flatMap((f) => f.object ?? []));
+    expect(new Set([...returned, ...held])).toEqual(new Set(ref.objects.map((o) => o.key)));
+    expect(new Set(held)).toEqual(new Set(["condition", "halt"]));
     for (const o of ref.objects) {
       expect(all.match(new RegExp(`^## ${o.title}$`, "gm")), o.key).toHaveLength(1);
       expect(docs.get(o.resource), o.key).toMatch(new RegExp(`^## ${o.title}$`, "m"));
@@ -579,7 +588,7 @@ describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
     expect(resourceMarkdown(ref, "nothing")).toBeNull();
   });
 
-  it("tables each condition kind and halt cause under the send view, with its remedy (SPEC §8, §12)", () => {
+  it("describes a send's conditions and its halt as objects of their own, each kind with its remedy (SPEC §8, §12)", () => {
     const sends = resourceMarkdown(buildReferenceResponse(defs), "sends") ?? "";
     const table = (title: string) =>
       sends.split(`\n### ${title}\n`)[1]?.split("\n\n")[1]?.split("\n").slice(2) ?? [];
@@ -600,11 +609,20 @@ describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
     );
     expect(sends).toContain("| `missed` | `action` | none |");
     expect(sends).toContain("checks the Worker's Cron Trigger (`triggers.crons`)");
-    // An account cause's fix is the advice its condition carries, word for word.
-    expect(table("Halt causes")).toContain(
-      `| \`sandbox\` | \`account\` | ${refusalAdvice("sandbox")} |`,
-    );
-    expect(table("Halt causes")).toHaveLength(17);
+    // The kinds sit under the condition object, which the send view links; the halt object
+    // lists every cause with its halt and one line, and leaves its fix to the `advice` the
+    // send's `refused` condition carries, so no provider's fixes are restated here.
+    expect(sends).toMatch(/^## The condition object$[\s\S]*?^### Condition kinds$/m);
+    expect(sends).toContain("| `conditions` | [condition[]](#the-condition-object) |");
+    expect(sends).toContain("| `provider.halt` | [halt \\| null](#the-halt-object) |");
+    const cause = OBJECTS.halt.fields.find((f) => f.name === "cause")!;
+    expect(cause.values).toHaveLength(17);
+    expect(cause.values).toContainEqual({
+      value: "sandbox",
+      description:
+        "(`account`) The account is in the provider's sandbox, which mails only verified addresses.",
+    });
+    expect(sends).not.toContain(refusalAdvice("sandbox"));
   });
 
   it("is served as text/markdown when authed: the index, and each resource's reference", async () => {
