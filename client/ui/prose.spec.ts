@@ -44,6 +44,14 @@ describe("inline Markdown in the API reference's prose", () => {
     ]);
   });
 
+  it("joins a list line that doesn't start `- ` to the item above it", () => {
+    const el = render(prose("Lead:\n- One\n  wraps here.\n- Two.", "p"));
+    expect([...el.querySelectorAll("li")].map((li) => li.textContent)).toEqual([
+      "One wraps here.",
+      "Two.",
+    ]);
+  });
+
   it("sets a paragraph's lines that start `- ` as a list under its lead-in, items as inline Markdown", () => {
     const el = render(prose("The status:\n- 2xx: `ok`.\n- 4xx: <refused>.\n\nAfter.", "p"));
     expect(el.innerHTML).toBe(

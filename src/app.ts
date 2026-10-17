@@ -1439,7 +1439,7 @@ export function createRouter({
       resource: "sends",
       title: "Reschedule a send",
       summary: "Move a scheduled send's fire time without re-freezing the render (I3, I6).",
-      description: `Moves only \`fire_at\`, within the review window: the frozen email is untouched and a re-made send keeps its \`remade_at\` (I3, I6). For a content change, cancel, edit, and schedule again. The same minimum lead as scheduling (${formatLead(minLeadMs)}, as \`POST /api/posts/:id/schedule\` describes), and the time is rounded up to the next whole minute as when scheduling. A move to the time it already has answers \`changed: false\` before the lead is checked. \`email_only\`, \`slug\`, or \`slug_auto\` is a 400: those are the post's, at \`PUT /api/posts/:id/settings\`.`,
+      description: `Moves only \`fire_at\`, within the review window: the frozen email is untouched and a re-made send keeps its \`remade_at\` (I3, I6). For a content change, cancel, edit, and schedule again. The same minimum lead as scheduling (${formatLead(minLeadMs)}, as Schedule a post describes), and the time is rounded up to the next whole minute as when scheduling. A move to the time it already has answers \`changed: false\` before the lead is checked. \`email_only\`, \`slug\`, or \`slug_auto\` is a 400: those are the post's, at \`PUT /api/posts/:id/settings\`.`,
       example: {
         request: { fire_at: "2026-01-16T09:00:00Z" },
         response: {

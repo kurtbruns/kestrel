@@ -352,7 +352,7 @@ const HALT_FIELDS: ReferenceField[] = [
     name: "cause",
     type: "string | null",
     description:
-      "What the provider refused for. Its fix, in words to relay, is the `advice` on the send's `refused` condition.",
+      "What the provider refused for. An `unavailable` halt's cause clears on its own; an `account` halt's fix, in words to relay, is the `advice` on the send's `refused` condition.",
     values: (Object.keys(HALT_CAUSES) as HaltCause[]).map((cause) => ({
       value: cause,
       description: HALT_CAUSES[cause].meaning,

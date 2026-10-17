@@ -53,8 +53,15 @@ export function prose(text: string, cls: string): Html {
         return html`<p class="${cls}">${inline(p.trim())}</p>`;
       }
       const lead = lines.slice(0, first).join(" ").trim();
-      return html`${lead ? html`<p class="${cls}">${inline(lead)}</p>` : null}<ul class="${cls} prose-list">${lines
-        .slice(first)
-        .map((l) => html`<li>${inline(l.replace(/^- /, ""))}</li>`)}</ul>`;
+      // A line that doesn't start `- ` continues the item above it, so a wrapped item stays one.
+      const items = lines.slice(first).reduce<string[]>((acc, l) => {
+        if (l.startsWith("- ") || acc.length === 0) {
+          acc.push(l.replace(/^- /, ""));
+        } else {
+          acc[acc.length - 1] = `${acc[acc.length - 1]} ${l.trim()}`;
+        }
+        return acc;
+      }, []);
+      return html`${lead ? html`<p class="${cls}">${inline(lead)}</p>` : null}<ul class="${cls} prose-list">${items.map((i) => html`<li>${inline(i)}</li>`)}</ul>`;
     })}`;
 }
