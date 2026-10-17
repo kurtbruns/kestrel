@@ -31,10 +31,18 @@ import type {
   Resource,
   RouteReturns,
 } from "../../shared/reference";
+import { sharedRefusals } from "../../shared/reference";
 import type { RouteDef } from "../router";
 import { referenceConcepts } from "./concepts";
 import { OBJECTS, referenceObjects } from "./objects";
-import { REFUSAL_STATUS, refusalGroups } from "./refusals";
+import {
+  REFUSAL_MEANING,
+  REFUSAL_MOVE,
+  REFUSAL_STATUS,
+  type RefusalCode,
+  refusalGroups,
+  STATUSES,
+} from "./refusals";
 
 // The entry and group shapes live in shared/ so the editor reads the same definitions;
 // re-exported here as the reference's own.
@@ -96,7 +104,11 @@ function entry(r: RouteDef): ReferenceEntry {
     accepts: r.accepts,
     body: r.body,
     returns: r.returns,
-    errors: r.errors?.map((e) => ({ status: REFUSAL_STATUS[e.code], ...e })),
+    errors: r.errors?.map((e) => ({
+      status: REFUSAL_STATUS[e.code],
+      ...e,
+      move: REFUSAL_MOVE[e.code],
+    })),
     example: r.example,
   };
 }
@@ -124,6 +136,7 @@ export function buildReference(routes: readonly RouteDef[]): ReferenceGroup[] {
 export function buildReferenceResponse(routes: readonly RouteDef[]): ReferenceResponse {
   return {
     concepts: referenceConcepts(),
+    statuses: STATUSES,
     refusals: refusalGroups(),
     objects: referenceObjects(),
     groups: buildReference(routes),
@@ -185,14 +198,22 @@ function objectMarkdown(o: ReferenceObject): string {
   ].join("\n\n");
 }
 
-/** The refusal codes as one table, each group led by the client's next move. */
-function refusalsMarkdown(groups: ReferenceResponse["refusals"]): string {
-  const rows = groups.flatMap((g) =>
-    g.codes.map(
-      (c, i) => `| ${i === 0 ? g.move : ""} | ${c.status} \`${c.code}\` | ${cell(c.meaning)} |`,
-    ),
+/** Every status the API answers, with its name and what it means. */
+function statusesMarkdown(statuses: ReferenceResponse["statuses"]): string {
+  const rows = statuses.map((s) => `| ${s.status} | ${s.name} | ${cell(s.meaning)} |`);
+  return ["| Status | Name | Meaning |", "| --- | --- | --- |", ...rows].join("\n");
+}
+
+/** The refusals any route can give, each with what it means and the client's next move; every
+ *  other code is on the routes that give it. */
+function sharedMarkdown(ref: ReferenceResponse): string {
+  const rows = sharedRefusals(ref).map(
+    (c) => `| ${c.status} \`${c.code}\` | ${cell(c.meaning)} | ${c.move} |`,
   );
-  return ["| Next move | Refusal | Meaning |", "| --- | --- | --- |", ...rows].join("\n");
+  return [
+    "Refusals any route can give (a route lists the rest of its own, each with what to do next):",
+    ["| Refusal | Meaning | Next move |", "| --- | --- | --- |", ...rows].join("\n"),
+  ].join("\n\n");
 }
 
 /** The width a JSON example keeps an object or array on one line within. */
@@ -283,10 +304,10 @@ function routeMarkdown(r: ReferenceEntry): string {
     parts.push(returnsMarkdown(r.returns, r.resource));
   }
   if (r.errors?.length) {
-    // One line each; a code's meaning is in the refusal table, so a line adds only its own.
+    // One line each: when the route gives it (or the code's own meaning), then what to do next.
     const lines = r.errors.map(
       (e) =>
-        `- ${e.status} \`${e.code}\`${e.details?.length ? `, with ${e.details.map((d) => `\`${d}\``).join(", ")}` : ""}${e.when ? `: ${e.when}` : ""}`,
+        `- ${e.status} \`${e.code}\`${e.details?.length ? `, with ${e.details.map((d) => `\`${d}\``).join(", ")}` : ""}: ${e.when ?? REFUSAL_MEANING[e.code as RefusalCode]} Next move: ${e.move}.`,
     );
     parts.push(["Refusals:", ...lines].join("\n"));
   }
@@ -306,7 +327,8 @@ export function resourcePath(key: Resource): string {
 
 /**
  * The reference's index as Markdown, what an agent reads first (SPEC §11): the topics every
- * route shares (authentication, errors with the refusal table, paging, acting safely,
+ * route shares (authentication, requests, errors with the statuses and the refusals any route
+ * can give, paging, acting safely,
  * following changes), a `##` each, then a `##` per tier and a `###` per resource, listing
  * each route on one line with the resource's own document to read before calling one. A
  * resource with routes in two tiers is listed once, under the first. A
@@ -316,9 +338,12 @@ export function resourcePath(key: Resource): string {
 export function referenceIndexMarkdown(ref: ReferenceResponse, origin: string): string {
   const head = `# API reference\n\nEvery route this instance serves, read from its running code, so it is complete and matches this version. Base URL \`${origin}\`. Read the topics below first; they hold what every route shares. Each resource's routes are listed on one line each: before calling one, read the resource's own reference, which describes the object its routes return and, for each route, its parameters, body, answer, refusals, and an example.`;
   const concepts = ref.concepts.map((c) =>
-    [`## ${c.title}`, c.text, ...(c.key === "errors" ? [refusalsMarkdown(ref.refusals)] : [])].join(
-      "\n\n",
-    ),
+    [
+      `## ${c.title}`,
+      c.text,
+      ...(c.fields?.length ? [fieldTable(c.fields)] : []),
+      ...(c.key === "errors" ? [statusesMarkdown(ref.statuses), sharedMarkdown(ref)] : []),
+    ].join("\n\n"),
   );
   // A resource is listed once, under the first tier that has it, with every route that acts
   // on it: one off that tier says so on its line, as its own document's call line does.
@@ -355,7 +380,8 @@ export function referenceIndexMarkdown(ref: ReferenceResponse, origin: string): 
 /**
  * One resource's reference as Markdown, or null when no route acts on it: the object its routes
  * return first, as Stripe puts "The Customer object" first under Customers, then each route in
- * full, a `##` each. A refusal's code is explained in the index's refusal table, and an object
+ * full, a `##` each, each refusal with what it means and the next move; one any route can
+ * give is in the index, under Errors, and an object
  * another resource heads is linked in that resource's document.
  */
 export function resourceMarkdown(ref: ReferenceResponse, key: string): string | null {
@@ -365,6 +391,6 @@ export function resourceMarkdown(ref: ReferenceResponse, key: string): string | 
     return null;
   }
   const objects = ref.objects.filter((o) => o.resource === key);
-  const head = `# ${title}\n\nPart of the API reference; [the index](../reference.md) holds what every route shares, the refusal codes among it.`;
+  const head = `# ${title}\n\nPart of the API reference; [the index](../reference.md) holds what every route shares, the refusals any route can give among it.`;
   return `${[head, ...objects.map(objectMarkdown), ...routes.map(routeMarkdown)].join("\n\n")}\n`;
 }

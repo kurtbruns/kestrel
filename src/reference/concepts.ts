@@ -6,14 +6,13 @@
  * must know about the whole API lives here.
  */
 
-import type { ReferenceConcept } from "../../shared/reference";
+import type { ReferenceConcept, ReferenceField } from "../../shared/reference";
 import { STUCK_THRESHOLD_MS } from "../../shared/sends";
 import { MISSED_THRESHOLD_MS } from "../lib/time";
 import { SETTLE_FOLLOW_MS } from "../send/feed";
 
 const REQUESTS = [
-  "A body is JSON (`Content-Type: application/json`) unless the route names another type, and times are epoch milliseconds.",
-  "The status says how it went:\n- 2xx: it worked.\n- 4xx: a refusal about the request or the state of what it acts on; Errors says what to do about each.\n- 5xx: the instance itself needs fixing where it is deployed, which nothing sent through this API can do.",
+  "A body is JSON (`Content-Type: application/json`) unless the route names another type, and so is an answer unless the route says it answers a file or a page (a CSV export, an email preview). Times are epoch milliseconds.",
 ];
 
 const AUTHENTICATION = [
@@ -21,8 +20,39 @@ const AUTHENTICATION = [
 ];
 
 const ERRORS = [
-  "A refusal is `{ error, message }` with its HTTP status, and `message` is written to show or relay as it stands. One about the request names the `field` (a dotted path for a nested one). One about a resource's state carries the resource as it now stands, as an act on a send carries `send`, and `retry_after` when waiting is the remedy.",
-  "Each route lists the refusals of its own. Any admin route can also refuse a missing credential (401 `unauthorized`), a write another site's page sent (403 `cross_site_request`), a body type it doesn't take (415), a value it can't read (400 `bad_request`, naming the `field`), and an id that names nothing (404 `not_found`).",
+  "Kestrel answers with the usual HTTP statuses:\n- Codes in the `2xx` range mean it worked.\n- Codes in the `4xx` range are a refusal about the request or the state of what it acts on. Its code says what to do next.\n- Codes in the `5xx` range mean the instance itself needs fixing where it is deployed, which nothing sent through this API can do.",
+  "A refusal's body names its code and says why, in words to show or relay as they stand. Each route lists the refusals it gives, each with what to do next; the few any route can give are listed here.",
+];
+
+/** A refusal's body, field by field. */
+const ERROR_BODY: ReferenceField[] = [
+  {
+    name: "error",
+    type: "string",
+    description: "The refusal's code, from the table of refusal codes.",
+  },
+  {
+    name: "message",
+    type: "string",
+    description: "Why, written to show the publisher or relay as it stands.",
+  },
+  {
+    name: "field",
+    type: "string",
+    description:
+      "For a refusal about the request: the field it names, a dotted path for a nested one (`notifications.to`).",
+  },
+  {
+    name: "retry_after",
+    type: "epoch ms",
+    description: "When waiting is the remedy: when to try again.",
+  },
+  {
+    name: "send, post, …",
+    type: "object",
+    description:
+      "For a refusal about a resource's state: the resource as it now stands, as an act on a send carries `send`.",
+  },
 ];
 
 const ACTING = [
@@ -45,7 +75,7 @@ export function referenceConcepts(): ReferenceConcept[] {
   return [
     { key: "authentication", title: "Authentication", text: AUTHENTICATION.join("\n\n") },
     { key: "requests", title: "Requests", text: REQUESTS.join("\n\n") },
-    { key: "errors", title: "Errors", text: ERRORS.join("\n\n") },
+    { key: "errors", title: "Errors", text: ERRORS.join("\n\n"), fields: ERROR_BODY },
     { key: "lists", title: "Lists and paging", text: LISTS },
     { key: "acting", title: "Acting safely", text: ACTING.join("\n\n") },
     { key: "following", title: "Following changes", text: FOLLOWING.join("\n\n") },

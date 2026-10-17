@@ -174,7 +174,13 @@ describe("router", () => {
 
   it("opens an old #/reference link at the same place under #/api-reference, adding no history entry", async () => {
     fake.restore();
-    const empty: ReferenceResponse = { concepts: [], refusals: [], objects: [], groups: [] };
+    const empty: ReferenceResponse = {
+      concepts: [],
+      statuses: [],
+      refusals: [],
+      objects: [],
+      groups: [],
+    };
     fake = fakeApi([{ path: "/api/reference", reply: () => empty }]);
     history.replaceState(null, "", "/dashboard/#/reference/cancel-send");
     const entries = history.length;

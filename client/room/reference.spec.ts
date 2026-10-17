@@ -89,9 +89,11 @@ const shared: Omit<ReferenceResponse, "groups"> = {
     {
       key: "errors",
       title: "Errors",
-      text: "A refusal names its <field>.\n\nEvery code, by what to do next:",
+      text: "A refusal names its <field>.\n\nThe status:\n- `4xx`: refused.",
+      fields: [{ name: "error", type: "string", description: "Its code." }],
     },
   ],
+  statuses: [{ status: 409, name: "Conflict", meaning: "Its `state` refuses it." }],
   refusals: [
     {
       move: "Nothing: the act no longer applies",
@@ -160,7 +162,7 @@ describe("reference room", () => {
       "public",
     ]);
     expect(nav.map((a) => a.textContent)).toEqual([
-      "Getting started",
+      "Introduction",
       "Errors",
       "Admin",
       "Posts",
@@ -322,6 +324,7 @@ describe("reference room", () => {
                 code: "post_not_draft",
                 when: "The post is <scheduled>.",
                 details: ["send", "field"],
+                move: "Nothing: the act no longer applies",
               },
             ],
           },
@@ -343,23 +346,39 @@ describe("reference room", () => {
     ]);
     expect(upload!.querySelector(".api-body name")).toBeNull();
     expect(del!.querySelector(".api-body")).toBeNull();
-    // The route's own refusals: status and code, then when, with the fields the body carries.
     // The route's own refusals: status and code with the fields the body carries under them,
-    // then when.
+    // then when, then what to do next.
     expect($$(".api-errors tr", del!).map((tr) => tr.textContent)).toEqual([
-      "409 post_not_draftwith send, fieldThe post is <scheduled>.",
+      "409 post_not_draftwith send, fieldThe post is <scheduled>.Nothing: the act no longer applies",
     ]);
+    expect($(".api-errors .api-move-next", del!).textContent).toBe(
+      "Nothing: the act no longer applies",
+    );
     expect(upload!.querySelector(".api-errors")).toBeNull();
   });
 
-  it("describes what every route shares once: the topics, the refusal codes, and each object first under its resource", async () => {
+  it("describes what every route shares once: the topics, the statuses, the refusals any route can give, and each object first under its resource", async () => {
     fake = fakeApi([{ path: "/api/reference", reply: () => reference(groups) }]);
     await mount(renderReference);
     await settle();
-    // A topic's paragraphs, as text, the refusal table under Errors.
+    // A topic's paragraphs, as text, a paragraph's `- ` lines as a list; under Errors, the
+    // status summary, then the error body's fields, then the refusal table.
     expect($$("#api-overview-errors .api-prose").map((p) => p.textContent)).toEqual([
       "A refusal names its <field>.",
-      "Every code, by what to do next:",
+      "The status:",
+      "4xx: refused.",
+    ]);
+    expect($("#api-overview-errors ul.prose-list li").innerHTML).toBe("<code>4xx</code>: refused.");
+    expect($$("#api-overview-errors .block-label").map((l) => l.textContent)).toEqual([
+      "Status codes",
+      "The error body",
+      "Refusals any route can give",
+    ]);
+    expect($$(".api-statuses tr").map((tr) => tr.textContent)).toEqual([
+      "409ConflictIts state refuses it.",
+    ]);
+    expect($$("#api-overview-errors .api-fields tr").map((tr) => tr.textContent)).toEqual([
+      "errorstringIts code.",
     ]);
     expect(document.querySelector("#api-overview-errors .api-prose field")).toBeNull();
     // The object is laid out like a route, first under the resource whose routes return it,
@@ -369,24 +388,12 @@ describe("reference room", () => {
     expect($(".api-method", object).textContent).toBe("Object");
     expect($(".api-op-head h4", object).textContent).toBe("The send view");
     expect($(".api-path", object).textContent).toBe("1 field");
-    // The refusal table, folded under Errors, each group led by its next move.
-    expect($<HTMLDetailsElement>("#api-overview-errors details.api-fold").open).toBe(false);
-    expect($("#api-overview-errors .api-fold > summary").textContent).toBe(
-      "Every refusal code 1 code, by what to do next",
-    );
-    // A filter that matches a code opens the fold, so the code is in view; clearing it folds again.
-    const filter = $<HTMLInputElement>("#apiFilter");
-    filter.value = "window_closed";
-    filter.dispatchEvent(new Event("input"));
-    expect($<HTMLDetailsElement>("#api-overview-errors details.api-fold").open).toBe(true);
-    filter.value = "";
-    filter.dispatchEvent(new Event("input"));
-    expect($<HTMLDetailsElement>("#api-overview-errors details.api-fold").open).toBe(false);
+    // Errors lists only the refusals no route lists as its own, each with its next move; there
+    // is no table of every code.
+    expect(document.querySelector(".api-fold")).toBeNull();
     expect($$(".api-refusals tr").map((tr) => tr.textContent)).toEqual([
-      "Nothing: the act no longer applies",
-      "409 window_closedThe fire time has passed.",
+      "409 window_closedThe fire time has passed.Nothing: the act no longer applies",
     ]);
-    expect($(".api-refusals tr.api-move th").getAttribute("colspan")).toBe("2");
     // A code breaks only where its words join, and its meaning reads in ink like any table's.
     expect($(".api-refusals td.api-name code").innerHTML).toBe(
       '<span class="api-status">409</span> window_<wbr>closed',
@@ -446,7 +453,14 @@ describe("reference room", () => {
                 { name: "changed", type: "boolean", description: "False when nothing changed." },
               ],
             },
-            errors: [{ status: 409, code: "window_closed", details: ["send"] }],
+            errors: [
+              {
+                status: 409,
+                code: "window_closed",
+                details: ["send"],
+                move: "Nothing: the act no longer applies",
+              },
+            ],
           },
         ],
       },
@@ -460,7 +474,7 @@ describe("reference room", () => {
       "changedbooleanFalse when nothing changed.",
     ]);
     expect($$(".api-errors tr", route).map((tr) => tr.textContent)).toEqual([
-      "409 window_closedwith sendThe fire time has passed.",
+      "409 window_closedwith sendThe fire time has passed.Nothing: the act no longer applies",
     ]);
     // The object's link is a real link to its address, and jumps there in place, with focus on
     // its heading, the address in the bar, and the room not rendered again.
@@ -625,7 +639,7 @@ describe("reference room", () => {
         a.getAttribute("href"),
       ),
     ).toEqual([
-      "#/api-reference/overview",
+      "#/api-reference",
       "#/api-reference/overview-errors",
       "#/api-reference/admin",
       "#/api-reference/admin-posts",
@@ -640,6 +654,10 @@ describe("reference room", () => {
     expect(document.activeElement).toBe($("#api-admin-sends .api-res-head h3"));
     expect(location.hash).toBe("#/api-reference/admin-sends");
     expect(fake.calls).toHaveLength(1); // the room isn't rendered again
+    // The Introduction goes back to the top of the page, focus on its title.
+    $("#apiNav a[data-sec='overview']").click();
+    expect(document.activeElement).toBe($("#api-intro > h1"));
+    expect(location.hash).toBe("#/api-reference");
     // A route's link in the rail goes to the route, focus on its heading.
     $("#apiNav a[data-route='cancel-send']").click();
     expect(document.activeElement).toBe($("#route-cancel-send h4"));
@@ -648,7 +666,7 @@ describe("reference room", () => {
     const cmd = new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true });
     $("#apiNav a[data-sec='admin-posts']").dispatchEvent(cmd);
     expect(cmd.defaultPrevented).toBe(false);
-    expect(scroll).toHaveBeenCalledTimes(3);
+    expect(scroll).toHaveBeenCalledTimes(4);
   });
 
   it("opens at the part of the page its address names, with focus there", async () => {
@@ -854,7 +872,7 @@ describe("reference room", () => {
             title: "Schedule a post",
             summary: "Schedule it.",
             returns: { object: "send", as: "send" },
-            errors: [{ status: 409, code: "stale_revision" }],
+            errors: [{ status: 409, code: "stale_revision", move: "Read again, then decide" }],
           },
           {
             method: "GET",
@@ -910,14 +928,14 @@ describe("reference room", () => {
     expect($("#apiNav a[data-sec='overview-errors']").hidden).toBe(false);
     type("window_closed");
     expect(topics()).toEqual(["api-overview-errors"]);
-    // Nothing found points to Getting started, whose link clears the filter to reach it.
+    // Nothing found points to the Introduction, whose link clears the filter and goes to the top.
     type("nothing-matches");
     expect($("#apiEmpty").hidden).toBe(false);
     vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
     $("#apiEmpty a[data-sec='overview']").click();
     expect(filter.value).toBe("");
     expect($("#api-overview").hidden).toBe(false);
-    expect(document.activeElement).toBe($("#api-overview > h2"));
+    expect(document.activeElement).toBe($("#api-intro > h1"));
   });
 
   it("focuses the filter on / unless the reader is typing elsewhere, and stops listening once the room is left", async () => {

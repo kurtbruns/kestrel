@@ -111,6 +111,15 @@ export interface ReferenceConcept {
   key: string;
   title: string;
   text: string;
+  /** Fields the topic describes, as an object's are (the error body, under Errors). */
+  fields?: ReferenceField[];
+}
+
+/** One HTTP status the API answers, with its name and what it means here. */
+export interface ReferenceStatus {
+  status: number;
+  name: string;
+  meaning: string;
 }
 
 /** The refusal codes for one next move, each with its status and one line. */
@@ -128,6 +137,8 @@ export interface RouteError {
   when?: string;
   /** The fields the body carries beside `error` and `message` (`send`, `retry_after`). */
   details?: string[];
+  /** The client's next move on it, from the refusal registry ("Read again, then decide"). */
+  move: string;
 }
 
 /** One route as the reference shows it: the manifest metadata, without handler or middleware. */
@@ -177,9 +188,27 @@ export interface ReferenceGroup {
  */
 export interface ReferenceResponse {
   concepts: ReferenceConcept[];
+  /** Every status the API answers, in order: a summary beside the refusal codes. */
+  statuses: ReferenceStatus[];
   refusals: ReferenceRefusalGroup[];
   objects: ReferenceObject[];
   groups: ReferenceGroup[];
+}
+
+/**
+ * The refusals any route can give, which no route lists as its own (a missing credential, a
+ * body type it doesn't take, a fault of the deployment's): the ones Errors states once, each
+ * with its next move. Every other code is on the routes that give it.
+ */
+export function sharedRefusals(
+  ref: Pick<ReferenceResponse, "refusals" | "groups">,
+): (ReferenceRefusalGroup["codes"][number] & { move: string })[] {
+  const onRoutes = new Set(
+    ref.groups.flatMap((g) => g.routes.flatMap((r) => (r.errors ?? []).map((e) => e.code))),
+  );
+  return ref.refusals.flatMap((g) =>
+    g.codes.filter((c) => !onRoutes.has(c.code)).map((c) => ({ ...c, move: g.move })),
+  );
 }
 
 /**

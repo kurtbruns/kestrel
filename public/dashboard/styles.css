@@ -1971,14 +1971,20 @@ th.num .th-sort {
 .api-prose {
   margin: 8px 0 0;
   font-size: 14px;
-  max-width: 72ch;
 }
 /* A list in the reference's prose (the status ranges under Requests), set like its paragraphs. */
 .prose-list {
   padding-left: 20px;
 }
 .prose-list li {
-  margin: 2px 0;
+  margin: 6px 0;
+}
+/* A status in the summary under Errors, its name beneath it. */
+.api-status-code {
+  font: 600 13px var(--mono);
+}
+.api-statuses .api-under {
+  font-family: inherit;
 }
 .api-values {
   margin: 4px 0 0;
@@ -1991,29 +1997,12 @@ th.num .th-sort {
   margin: 4px 0 6px;
   font-size: 13.5px;
 }
-/* The refusal table, folded under Errors so the topics read as a page. */
-.api-fold {
-  margin-top: 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--card);
-}
-.api-fold > summary {
-  padding: 9px 12px;
-  font-size: 13.5px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.api-fold > summary .muted {
-  font-weight: 400;
-}
-.api-fold[open] > summary {
-  border-bottom: 1px solid var(--line);
-}
-/* The fold is the frame; its table draws no second one. */
-.api-fold .api-table {
-  border: 0;
-  border-radius: 0 0 8px 8px;
+/* A refusal's next move, under what it means: quieter, the step a client takes from it. */
+.api-move-next {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--muted);
 }
 /* A grid: the same table with a column per thing a value says (the send's condition kinds,
    its halt causes). Its name column takes only what its longest word needs, so the prose
@@ -4107,10 +4096,14 @@ button.api-filter-clear svg {
   min-width: 0;
   max-width: 1180px;
 }
-/* Prose keeps a reading measure while the page widens for a route's examples beside it. */
+/* One reading measure for the page, a doc page's (720px): the intro, the topics, and each
+   route's and object's prose and tables keep it, and only a route's examples, beside its
+   prose on a wide screen, reach past it. */
 .api-head,
-.api-section[data-tier="overview"] {
-  max-width: 820px;
+.api-blurb,
+.api-section[data-tier="overview"] .api-res,
+.api-op-body {
+  max-width: 720px;
 }
 .api-head {
   margin: 0 0 12px;
@@ -4146,7 +4139,6 @@ button.api-filter-clear svg {
 .api-blurb {
   margin: 0;
   font-size: 14px;
-  max-width: 62ch;
 }
 /* A resource: its heading stays pinned under the room bar while its rows scroll by. */
 .api-res {
@@ -4242,7 +4234,6 @@ button.api-filter-clear svg {
 .api-desc {
   margin: 8px 0 0;
   font-size: 14px;
-  max-width: 72ch;
 }
 /* A query parameter the route can't be called without. */
 .api-req {
@@ -4299,7 +4290,8 @@ button.api-filter-clear svg {
 }
 @media (min-width: 1280px) {
   .api-op-body {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
+    max-width: none;
+    grid-template-columns: minmax(0, 720px) minmax(0, 420px);
   }
   .api-op-code {
     position: sticky;

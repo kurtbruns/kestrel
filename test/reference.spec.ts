@@ -21,7 +21,7 @@ import {
   resourceMarkdown,
 } from "../src/reference";
 import { OBJECTS } from "../src/reference/objects";
-import { REFUSAL_STATUS, refusalGroups } from "../src/reference/refusals";
+import { REFUSAL_STATUS, refusalGroups, STATUSES } from "../src/reference/refusals";
 import { type RouteDef, Router } from "../src/router";
 import { AUTH, base } from "./support/http";
 
@@ -378,6 +378,20 @@ describe("API reference is generated from the route registration", () => {
     expect(grouped.length).toBe(Object.keys(REFUSAL_STATUS).length);
   });
 
+  it("summarizes every status the API answers, in order, each refusal's status among them", () => {
+    const listed = STATUSES.map((st) => st.status);
+    expect(listed).toEqual([...listed].sort((x, y) => x - y));
+    // A refusal can't answer a status the summary leaves out, nor the summary list one no
+    // refusal gives beyond success.
+    const refused = new Set(Object.values(REFUSAL_STATUS));
+    expect(listed.filter((st) => st >= 400)).toEqual([...refused].sort((x, y) => x - y));
+    expect(buildReferenceResponse(defs).statuses).toEqual(STATUSES);
+    // Claude reads it under Errors, before the refusals any route can give.
+    expect(referenceIndexMarkdown(buildReferenceResponse(defs), "https://x.example")).toMatch(
+      /^## Errors\n[\s\S]*?\| Status \| Name \| Meaning \|[\s\S]*?\| 503 \| Service Unavailable \|[\s\S]*?\| Refusal \| Meaning \| Next move \|/m,
+    );
+  });
+
   it("describes every object a route returns, once, first under its resource, and links each route to it", () => {
     const ref = buildReferenceResponse(defs);
     const docs = resourceDocs(ref);
@@ -426,10 +440,14 @@ describe("API reference is generated from the route registration", () => {
       "Following changes",
     ]);
     expect(all).not.toContain("**");
+    // Errors lists only the refusals any route can give; a route lists the rest as its own.
     expect(index).toMatch(
-      /^## Errors\n[\s\S]*?\| Next move \| Refusal \| Meaning \|[\s\S]*?^## Lists and paging$/m,
+      /^## Errors\n[\s\S]*?\| Refusal \| Meaning \| Next move \|[\s\S]*?^## Lists and paging$/m,
     );
-    expect(index).toContain("| Read again, then decide | 409 `stale_revision` |");
+    expect(index).toContain(
+      "| 401 `unauthorized` | No credential, or one the deployment can't verify. | Sign in, or stop |",
+    );
+    expect(index).not.toContain("`stale_revision`");
   });
 
   it("shows each answer's send at the change its cursor stands at, as the server answers", () => {
@@ -548,7 +566,7 @@ describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
       '| Body field | Type | Description |\n| --- | --- | --- |\n| `resolution` (required) | "unsent" \\| "accepted" |',
     );
     expect(sends).toContain(
-      "Refusals:\n- 409 `run_in_progress`, with `send`: A run holds the send, and its in-flight rows may still get the provider's answer: try again a moment later.\n- 409 `not_wedged`, with `send`: ",
+      "Refusals:\n- 409 `run_in_progress`, with `send`: A run holds the send, and its in-flight rows may still get the provider's answer: try again a moment later. Next move: Try again shortly, unchanged.\n- 409 `not_wedged`, with `send`: ",
     );
     expect(sends).toContain("Example response:");
     // A route off the admin tier says so on its call line.

@@ -11,11 +11,12 @@ import type {
   ReferenceRefusalGroup,
   ReferenceResource,
   ReferenceResponse,
+  ReferenceStatus,
   ReferenceTable,
   RouteError,
   RouteReturns,
 } from "../../shared/reference";
-import { concretePath, routeAnchor } from "../../shared/reference";
+import { concretePath, routeAnchor, sharedRefusals } from "../../shared/reference";
 import { api, describeError } from "../api";
 import { mount } from "../lifecycle";
 import { appState } from "../state";
@@ -36,7 +37,7 @@ import { roomShell } from "./shell";
 // then lists each tier's routes, each one scannable row led by its name, a native
 // <details>, that opens in place to its full documentation.
 
-/** What a refusal code means, from the refusal table, for a route line that adds nothing. */
+/** What a refusal code means, from the refusal registry, for a route line that adds nothing. */
 type Meanings = ReadonlyMap<string, string>;
 function apiExample(label: string, value: unknown): Html | null {
   return value === undefined
@@ -88,7 +89,8 @@ function apiBodyHtml(
   return html`<div class="block"><div class="block-head"><span class="block-label">Body${types}</span></div><table class="api-table api-body"><tbody>${rows}</tbody></table></div>`;
 }
 // The refusals the route gives of its own, each with its status and the fields it carries,
-// and when: the route's own words, or the code's meaning from the refusal table.
+// and when: the route's own words, or the code's meaning from the refusal registry, then the
+// client's next move.
 function apiErrorsHtml(errors: RouteError[] | undefined, meanings: Meanings): Html | null {
   if (!errors?.length) {
     return null;
@@ -100,7 +102,7 @@ function apiErrorsHtml(errors: RouteError[] | undefined, meanings: Meanings): Ht
         e.details?.length
           ? html`with ${e.details.map((d, i) => html`${i ? ", " : ""}<code>${d}</code>`)}`
           : null,
-      )}<td>${inline(e.when ?? meanings.get(e.code) ?? "")}</td></tr>`,
+      )}<td>${inline(e.when ?? meanings.get(e.code) ?? "")}<span class="api-move-next">${e.move}</span></td></tr>`,
   );
   return html`<div class="block"><div class="block-head"><span class="block-label">Refusals</span></div><table class="api-table api-errors"><tbody>${rows}</tbody></table></div>`;
 }
@@ -265,35 +267,44 @@ function apiSectionHtml(g: ReferenceGroup, look: Lookups): Html {
       ${g.resources.map((res) => apiResourceHtml(g, res, look))}
     </section>`;
 }
-// The refusal codes, grouped by the client's next move: each move a heading row across the
-// table, so a code and its meaning keep the width.
-function apiRefusalsHtml(groups: readonly ReferenceRefusalGroup[]): Html {
-  const rows = groups.flatMap((g) => [
-    html`<tr class="api-move"><th colspan="2">${g.move}</th></tr>`,
-    ...g.codes.map(
-      (c) =>
-        html`<tr>${nameCell(html`<span class="api-status">${c.status}</span> ${breakable(c.code)}`)}<td>${inline(c.meaning)}</td></tr>`,
-    ),
-  ]);
-  const count = groups.reduce((n, g) => n + g.codes.length, 0);
-  // Folded, so the topics read as a page; the filter opens it on a code it holds.
-  return html`<details class="api-fold"><summary>Every refusal code <span class="muted">${count} ${count === 1 ? "code" : "codes"}, by what to do next</span></summary><table class="api-table api-refusals"><tbody>${rows}</tbody></table></details>`;
+// The refusals any route can give, which no route lists as its own: each with what it means
+// and the client's next move, as a route's own refusals say theirs.
+function apiSharedRefusalsHtml(ref: ReferenceResponse): Html | null {
+  const shared = sharedRefusals(ref);
+  if (!shared.length) {
+    return null;
+  }
+  const rows = shared.map(
+    (c) =>
+      html`<tr>${nameCell(html`<span class="api-status">${c.status}</span> ${breakable(c.code)}`)}<td>${inline(c.meaning)}<span class="api-move-next">${c.move}</span></td></tr>`,
+  );
+  return html`<div class="block"><div class="block-head"><span class="block-label">Refusals any route can give</span></div><table class="api-table api-refusals"><tbody>${rows}</tbody></table></div>`;
 }
 // The topics every route shares, before the routes. The filter matches a topic as a whole, by
-// its title, and Errors by every refusal code too, so a pasted code no route gives of its own
-// still finds what it means.
+// its title, and Errors by the refusals any route can give too, so a pasted code no route
+// lists still finds what it means; every other code finds the routes that give it.
 function apiOverviewHtml(ref: ReferenceResponse): Html {
-  const codes = ref.refusals.flatMap((g) => g.codes.map((c) => c.code));
+  const codes = sharedRefusals(ref).map((c) => c.code);
   const concept = (c: ReferenceConcept) =>
     html`<div class="api-res" id="api-overview-${c.key}" data-sec="overview-${c.key}" data-hay="${[c.title, ...(c.key === "errors" ? codes : [])].join(" ").toLowerCase()}">
       <div class="api-res-head"><h3 tabindex="-1">${c.title}</h3></div>
       ${prose(c.text, "api-prose")}
-      ${c.key === "errors" ? apiRefusalsHtml(ref.refusals) : null}
+      ${c.key === "errors" ? apiStatusesHtml(ref.statuses) : null}
+      ${c.fields?.length ? html`<div class="block"><div class="block-head"><span class="block-label">${c.key === "errors" ? "The error body" : "Fields"}</span></div>${apiFieldsTable(c.fields)}</div>` : null}
+      ${c.key === "errors" ? apiSharedRefusalsHtml(ref) : null}
     </div>`;
+  // The topics follow the page's own introduction, which the rail's Introduction names.
   return html`<section class="api-section" id="api-overview" data-tier="overview">
-      <h2 tabindex="-1">Getting started</h2>
       ${ref.concepts.map(concept)}
     </section>`;
+}
+// Every status the API answers, its name under it, and what it means here.
+function apiStatusesHtml(statuses: readonly ReferenceStatus[]): Html {
+  const rows = statuses.map(
+    (s) =>
+      html`<tr><td class="api-name"><span class="api-status-code">${s.status}</span><span class="api-under">${s.name}</span></td><td>${inline(s.meaning)}</td></tr>`,
+  );
+  return html`<div class="block"><div class="block-head"><span class="block-label">Status codes</span></div><table class="api-table api-statuses"><tbody>${rows}</tbody></table></div>`;
 }
 // The rail: the topics, then each tier, each with its resources and, under each resource, its
 // objects and routes by name, so the rail is the whole page's contents as Stripe's is. Only the
@@ -314,7 +325,7 @@ function apiNavHtml(ref: ReferenceResponse, look: Lookups): Html {
           html`<a href="#/api-reference/${routeAnchor(r)}" class="api-nav-op" data-route="${routeAnchor(r)}">${r.title}</a>`,
       ),
     ]}</div>`;
-  return html`<a href="#/api-reference/overview" class="api-nav-tier" data-sec="overview" data-tier="overview">Getting started</a>${ref.concepts.map(
+  return html`<a href="#/api-reference" class="api-nav-tier" data-sec="overview" data-tier="overview">Introduction</a>${ref.concepts.map(
     (c) => part(`overview-${c.key}`, c.title),
   )}${ref.groups.map(
     (g) =>
@@ -368,11 +379,6 @@ function applyFilter(query: string, navEl: HTMLElement, contentEl: HTMLElement):
       for (const item of topic ? [res] : $$<HTMLElement>("li[data-hay]", res)) {
         const hit = terms.every((w) => holds(item, w));
         item.hidden = !hit;
-        // A topic with a folded table (Errors' codes) opens it while a filter matches it.
-        const fold = topic ? item.querySelector<HTMLDetailsElement>(".api-fold") : null;
-        if (fold) {
-          fold.open = terms.length > 0 && hit;
-        }
         inRes += hit ? 1 : 0;
         const opLink = item.dataset.route
           ? navEl.querySelector<HTMLElement>(`a[data-route="${item.dataset.route}"]`)
@@ -461,10 +467,16 @@ function spyRail(navEl: HTMLElement, contentEl: HTMLElement, follow: boolean): v
     }
   }
   const at = current?.dataset.route ?? current?.dataset.sec ?? current?.dataset.tier;
-  const address = at && window.scrollY > 0 ? `#/api-reference/${at}` : "#/api-reference";
+  const address =
+    at && at !== "overview" && window.scrollY > 0 ? `#/api-reference/${at}` : "#/api-reference";
   if (follow && location.hash !== address) {
     history.replaceState(history.state, "", address);
   }
+}
+
+/** The part of the page a section address names; the Introduction is the page's own head. */
+function part(sec: string): HTMLElement | null {
+  return document.getElementById(sec === "overview" ? "api-intro" : `api-${sec}`);
 }
 
 /**
@@ -475,7 +487,7 @@ function spyRail(navEl: HTMLElement, contentEl: HTMLElement, follow: boolean): v
 function reveal(target: HTMLElement): void {
   target.scrollIntoView({ block: "start" });
   const focus = target.querySelector<HTMLElement>(
-    ":scope > h2, :scope > .api-res-head h3, :scope > .api-op-head h4, :scope > article > .api-op-head h4",
+    ":scope > h1, :scope > h2, :scope > .api-res-head h3, :scope > .api-op-head h4, :scope > article > .api-op-head h4",
   );
   focus?.focus({ preventScroll: true });
 }
@@ -514,15 +526,16 @@ export async function renderReference(
     const target = a?.dataset.route
       ? document.getElementById(`route-${a.dataset.route}`)
       : a?.dataset.sec
-        ? document.getElementById(`api-${a.dataset.sec}`)
+        ? part(a.dataset.sec)
         : null;
     if (!target || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) {
       return;
     }
     ev.preventDefault();
     // A filter may have hidden what the link points at (a route's object, under another
-    // resource): clear it, rather than leave the click to do nothing.
-    if (target.closest("[hidden]")) {
+    // resource): clear it, rather than leave the click to do nothing. Nothing found starts
+    // over from the Introduction, so its link clears the filter too.
+    if (target.closest("[hidden]") || a?.closest("#apiEmpty")) {
       filterTo("");
     }
     history.replaceState(history.state, "", a?.getAttribute("href") ?? location.hash);
@@ -548,7 +561,7 @@ export async function renderReference(
   setHtml(navEl, apiNavHtml(ref, look));
   setHtml(
     contentEl,
-    html`<header class="api-head"><h1>API reference</h1><p class="muted">Every endpoint this instance serves, the one API the web editor and Claude both call. It's read from the running code, so it always matches this version. Base URL <code>${location.origin}</code>.</p><div class="api-filter">${icon("search")}<input type="search" id="apiFilter" placeholder="Filter by name, path, URL, or error code" autocomplete="off" aria-label="Filter routes" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd><button type="button" class="icon api-filter-clear" id="apiFilterClear" aria-label="Clear filter" hidden>${icon("x")}</button></div></header>${apiOverviewHtml(ref)}${ref.groups.map((g) => apiSectionHtml(g, look))}<p class="api-empty muted" id="apiEmpty" hidden>Nothing matches. Try a path segment like <code>sends</code>, a method like <code>DELETE</code>, or a code like <code>stale_revision</code>, or start from <a href="#/api-reference/overview" data-sec="overview">Getting started</a>.</p>`,
+    html`<header class="api-head" id="api-intro"><h1 tabindex="-1">API reference</h1><p class="muted">Every endpoint this instance serves, the one API the web editor and Claude both call. It's read from the running code, so it always matches this version. Base URL <code>${location.origin}</code>.</p><div class="api-filter">${icon("search")}<input type="search" id="apiFilter" placeholder="Filter by name, path, URL, or error code" autocomplete="off" aria-label="Filter routes" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd><button type="button" class="icon api-filter-clear" id="apiFilterClear" aria-label="Clear filter" hidden>${icon("x")}</button></div></header>${apiOverviewHtml(ref)}${ref.groups.map((g) => apiSectionHtml(g, look))}<p class="api-empty muted" id="apiEmpty" hidden>Nothing matches. Try a path segment like <code>sends</code>, a method like <code>DELETE</code>, or a code like <code>stale_revision</code>, or start from the <a href="#/api-reference" data-sec="overview">Introduction</a>.</p>`,
   );
   const filterEl = $<HTMLInputElement>("#apiFilter");
   const clearEl = $("#apiFilterClear");
@@ -595,9 +608,7 @@ export async function renderReference(
   // Its own page: start at the top, not wherever the last doc was scrolled to, or at the
   // route the address names.
   window.scrollTo(0, 0);
-  const target = anchor
-    ? (document.getElementById(`route-${anchor}`) ?? document.getElementById(`api-${anchor}`))
-    : null;
+  const target = anchor ? (document.getElementById(`route-${anchor}`) ?? part(anchor)) : null;
   if (target) {
     reveal(target);
   }
