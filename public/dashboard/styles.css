@@ -4110,7 +4110,7 @@ button.api-filter-clear svg {
 }
 .api-head h1 {
   margin: 0 0 4px;
-  font-size: 22px;
+  font-size: 28px;
 }
 .api-section {
   scroll-margin-top: calc(var(--bar-h) + 2px);
@@ -4123,7 +4123,7 @@ button.api-filter-clear svg {
 }
 /* A tier is a page heading here, not the app's small-caps section label that h2 is elsewhere. */
 .api-section h2 {
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 650;
   color: var(--fg);
   text-transform: none;
@@ -4162,7 +4162,7 @@ button.api-filter-clear svg {
 
 .api-res-head h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: 20px;
   font-weight: 650;
 }
 /* A Getting started topic is a heading over prose, not a list's head: no rule, a step smaller. */
@@ -4170,7 +4170,7 @@ button.api-filter-clear svg {
   border-bottom: none;
 }
 .api-section[data-tier="overview"] .api-res-head h3 {
-  font-size: 15px;
+  font-size: 18px;
 }
 .api-rows {
   list-style: none;
@@ -4265,7 +4265,7 @@ button.api-filter-clear svg {
 }
 .api-op-head h4 {
   margin: 0;
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 650;
 }
 .api-op-head h4:focus {

@@ -568,6 +568,23 @@ describe("reference room", () => {
     const target = $("#route-cancel-send");
     expect(scroll.mock.instances).toEqual([target]);
     expect(document.activeElement).toBe($("h4", target));
+    // It lands flush under its resource's pinned heading: the gap the scroll left is taken up.
+    unmount();
+    scroll.mockClear();
+    const by = vi.spyOn(window, "scrollBy").mockImplementation(() => {});
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      return {
+        top: this.matches("li") ? 98 : 0,
+        bottom: this.matches(".api-res-head") ? 86 : 0,
+      } as DOMRect;
+    });
+    await mount((root, signal) => renderReference(root, signal, "cancel-send"));
+    await settle();
+    expect(by).toHaveBeenCalledWith(0, 12);
+    vi.restoreAllMocks();
+    vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
     const filter = $<HTMLInputElement>("#apiFilter");
     filter.value = "post create";
     filter.dispatchEvent(new Event("input"));
