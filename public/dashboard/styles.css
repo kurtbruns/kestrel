@@ -1974,8 +1974,9 @@ th.num .th-sort {
 }
 /* What every route shares, described once ahead of the routes: concept prose, an object's
    description, an enum's values under a field's line, and the refusal table's next moves. */
+/* The reference's paragraphs, each with space below it, as a doc page's are. */
 .api-prose {
-  margin: 8px 0 0;
+  margin: 0 0 10px;
   font-size: 14px;
 }
 /* A list in the reference's prose (the status ranges under Requests), set like its paragraphs. */
@@ -4143,7 +4144,7 @@ button.api-filter-clear svg {
   outline: none;
 }
 .api-blurb {
-  margin: 0;
+  margin: 0 0 10px;
   font-size: 14px;
 }
 /* A resource: its heading over a rule, scrolling with its routes. */
@@ -4225,12 +4226,11 @@ button.api-filter-clear svg {
   padding: 0 2px;
 }
 .api-summary {
-  flex: 1 1 320px;
-  margin: 0;
+  margin: 0 0 10px;
   font-size: 15px;
 }
 .api-desc {
-  margin: 8px 0 0;
+  margin: 0 0 10px;
   font-size: 14px;
 }
 /* A query parameter the route can't be called without. */
