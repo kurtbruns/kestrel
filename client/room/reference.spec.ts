@@ -495,7 +495,7 @@ describe("reference room", () => {
     fake = fakeApi([{ path: "/api/reference", reply: () => reference(groups) }]);
     await mount(renderReference);
     await settle();
-    const route = $("#route-get-api-posts-id");
+    const route = $("#route-retrieve-post");
     $<HTMLButtonElement>(".api-route-tools [aria-label='Copy method and path']", route).click();
     $<HTMLButtonElement>(
       ".api-route-tools [aria-label='Copy a link to this route']",
@@ -504,24 +504,24 @@ describe("reference room", () => {
     await settle();
     expect(writeText.mock.calls.map(([text]) => text)).toEqual([
       "GET /api/posts/:id",
-      `${location.origin}${location.pathname}#/api-reference/get-api-posts-id`,
+      `${location.origin}${location.pathname}#/api-reference/retrieve-post`,
     ]);
-    // Each row has its own address, from its method and the path to type.
+    // Each row has its own address, named for what it does.
     expect($$("li[data-hay]").map((li) => li.id)).toEqual([
-      "route-get-api-posts",
-      "route-post-api-posts",
-      "route-get-api-posts-id",
-      "route-post-api-sends-id-cancel",
-      "route-get-subscribe",
+      "route-list-posts",
+      "route-create-post",
+      "route-retrieve-post",
+      "route-cancel-send",
+      "route-subscribe",
     ]);
   });
 
   it("opens and scrolls to the route its address names, and the filter still narrows from there", async () => {
     const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
     fake = fakeApi([{ path: "/api/reference", reply: () => reference(groups) }]);
-    await mount((root, signal) => renderReference(root, signal, "post-api-sends-id-cancel"));
+    await mount((root, signal) => renderReference(root, signal, "cancel-send"));
     await settle();
-    const target = $("#route-post-api-sends-id-cancel");
+    const target = $("#route-cancel-send");
     expect($<HTMLDetailsElement>("details", target).open).toBe(true);
     expect(scroll.mock.instances).toEqual([target]);
     expect($$<HTMLDetailsElement>("details.api-route").filter((d) => d.open)).toHaveLength(1);
@@ -532,7 +532,7 @@ describe("reference room", () => {
       $$("li[data-hay]")
         .filter((li) => !li.hidden)
         .map((li) => li.id),
-    ).toEqual(["route-post-api-posts"]);
+    ).toEqual(["route-create-post"]);
     // An address that names no route opens the reference at its top, nothing opened.
     unmount();
     scroll.mockClear();
@@ -569,7 +569,7 @@ describe("reference room", () => {
     filter.dispatchEvent(new Event("input"));
     // The send view heads Sends, which the filter hid.
     expect($("#api-admin-sends").hidden).toBe(true);
-    $<HTMLElement>("#route-post-api-posts-id-schedule .api-obj-link").click();
+    $<HTMLElement>("#route-schedule-post .api-obj-link").click();
     expect(filter.value).toBe("");
     expect($("#api-admin-sends").hidden).toBe(false);
     expect($<HTMLDetailsElement>("#api-objects-send").open).toBe(true);
@@ -648,9 +648,9 @@ describe("reference room", () => {
     expect(document.activeElement).toBe($("#api-objects-send > summary"));
     // A route's address focuses its line.
     unmount();
-    await mount((root, signal) => renderReference(root, signal, "get-api-posts-id"));
+    await mount((root, signal) => renderReference(root, signal, "retrieve-post"));
     await settle();
-    expect(document.activeElement).toBe($("#route-get-api-posts-id summary"));
+    expect(document.activeElement).toBe($("#route-retrieve-post summary"));
   });
 
   it("lights the rail for the last tier or resource heading scrolled under the bar, and stops following once the room is left", async () => {
@@ -830,19 +830,19 @@ describe("reference room", () => {
 
     // A refusal code pasted from a response, though neither path nor summary says it.
     type("stale_revision");
-    expect(shown()).toEqual(["route-post-api-posts-id-schedule"]);
+    expect(shown()).toEqual(["route-schedule-post"]);
     // The object a route returns, by its title.
     type("send view");
-    expect(shown()).toEqual(["route-post-api-posts-id-schedule"]);
+    expect(shown()).toEqual(["route-schedule-post"]);
     // A real URL, the path parameters filled in: only the route it calls, its query dropped.
     type(`${location.origin}/api/posts/abc123/schedule?x=1`);
-    expect(shown()).toEqual(["route-post-api-posts-id-schedule"]);
+    expect(shown()).toEqual(["route-schedule-post"]);
     type("delete /api/posts/abc123");
     expect(shown()).toEqual([]);
     type("get /api/posts/abc123");
-    expect(shown()).toEqual(["route-get-api-posts-id"]);
+    expect(shown()).toEqual(["route-retrieve-post"]);
     type("/api/posts/abc123/revisions/r7/");
-    expect(shown()).toEqual(["route-get-api-posts-id-revisions-rev"]);
+    expect(shown()).toEqual(["route-read-revision"]);
     expect(topics()).toEqual([]);
     expect($("#api-overview").hidden).toBe(true);
     // A topic is found by its title, and Errors by any code in its table.

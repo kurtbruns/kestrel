@@ -200,12 +200,16 @@ describe("API reference is generated from the route registration", () => {
   });
 
   it("gives every route its own address in the editor's reference", () => {
-    // The anchor is a page's element id and a link someone shares, so two routes can't share one.
+    // The anchor is a page's element id and a link someone shares, so two routes can't share
+    // one, and none can take the address of a part of the page (a topic, a tier, a resource,
+    // an object), which the page would otherwise open instead.
     const anchors = defs.map((d) => routeAnchor(d));
     expect(new Set(anchors).size).toBe(defs.length);
-    expect(routeAnchor({ method: "POST", path: "/api/sends/:id/cancel" })).toBe(
-      "post-api-sends-id-cancel",
-    );
+    const parts = /^(overview|objects|admin|public|webhook)(-|$)/;
+    expect(anchors.filter((a) => parts.test(a))).toEqual([]);
+    expect(routeAnchor({ title: "Cancel a send" })).toBe("cancel-send");
+    expect(routeAnchor({ title: "List a post's revisions" })).toBe("list-post-revisions");
+    expect(routeAnchor({ title: "Get the API reference's index" })).toBe("get-api-reference-index");
   });
 
   it("names every route by what it does, each name its own (the reference leads with it)", () => {

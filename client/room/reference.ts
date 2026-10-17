@@ -438,7 +438,7 @@ function reveal(target: HTMLElement): void {
 
 /**
  * The API reference room. `anchor` (from `#/api-reference/<anchor>`) names what to bring into view
- * once the reference is in: a route (`post-api-sends-id-cancel`), opened, or a part of the page
+ * once the reference is in: a route (`cancel-send`), opened, or a part of the page
  * the rail and Returns links name (`admin-sends`, `objects-send`, `overview-errors`). One that
  * names nothing opens the reference at its top.
  */

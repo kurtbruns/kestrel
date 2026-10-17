@@ -192,13 +192,17 @@ export function concretePath(path: string): string {
 }
 
 /**
- * A route's own address in the editor's reference, `#/api-reference/<anchor>`: its method and its
- * path to type, lowercased, every run of other characters a hyphen (`post-api-sends-id-cancel`).
+ * A route's own address in the editor's reference, `#/api-reference/<anchor>`: what it does,
+ * the words of its title without the articles or a possessive, joined by hyphens ("Schedule a
+ * post" is `schedule-post`, "List a post's revisions" `list-post-revisions`), as Stripe's and
+ * Mux's references name theirs. Rewording a title moves its link, so a reword is a choice.
  * Here rather than in the editor so a spec can hold every route's anchor unique.
  */
-export function routeAnchor(r: { method: string; path: string }): string {
-  return `${r.method}${concretePath(r.path)}`
+export function routeAnchor(r: { title: string }): string {
+  return r.title
     .toLowerCase()
-    .replace(/[^a-z0-9.]+/g, "-")
-    .replace(/-+$/, "");
+    .replace(/'s\b/g, "")
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w !== "" && w !== "a" && w !== "an" && w !== "the")
+    .join("-");
 }

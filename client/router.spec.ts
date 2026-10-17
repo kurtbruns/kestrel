@@ -176,11 +176,11 @@ describe("router", () => {
     fake.restore();
     const empty: ReferenceResponse = { concepts: [], refusals: [], objects: [], groups: [] };
     fake = fakeApi([{ path: "/api/reference", reply: () => empty }]);
-    history.replaceState(null, "", "/dashboard/#/reference/post-api-sends-id-cancel");
+    history.replaceState(null, "", "/dashboard/#/reference/cancel-send");
     const entries = history.length;
     await route();
     await settle();
-    expect(location.hash).toBe("#/api-reference/post-api-sends-id-cancel");
+    expect(location.hash).toBe("#/api-reference/cancel-send");
     expect(history.length).toBe(entries);
     expect($("#app .room-switch a[aria-current='page']").getAttribute("href")).toBe(
       "#/api-reference",
