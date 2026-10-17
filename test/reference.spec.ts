@@ -619,9 +619,13 @@ describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
     expect(cause.values).toHaveLength(17);
     expect(cause.values).toContainEqual({
       value: "sandbox",
-      description:
-        "(`account`) The account is in the provider's sandbox, which mails only verified addresses.",
+      description: "The account is in the provider's sandbox, which mails only verified addresses.",
+      group: "An `account` halt",
     });
+    // Which halt each cause is, as the group it is listed under rather than on every value.
+    expect(new Set(cause.values!.map((v) => v.group))).toEqual(
+      new Set(["An `unavailable` halt", "An `account` halt"]),
+    );
     expect(sends).not.toContain(refusalAdvice("sandbox"));
   });
 

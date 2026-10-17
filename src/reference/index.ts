@@ -151,11 +151,26 @@ function objectLink(key: ObjectKey, from: Resource, text?: string): string {
 }
 
 /** Fields as a Markdown table, an enum's values listed in its line. */
+/** An enum's values in one cell: each `value: meaning`, under its group's name when they fall into groups. */
+function valuesMarkdown(values: NonNullable<ReferenceField["values"]>): string {
+  const one = (v: (typeof values)[number]) => `\`${v.value}\`: ${v.description}`;
+  const groups = [...new Set(values.map((v) => v.group).filter((g) => g !== undefined))];
+  return groups.length
+    ? groups
+        .map(
+          (g) =>
+            `${g}: ${values
+              .filter((v) => v.group === g)
+              .map(one)
+              .join(" ")}`,
+        )
+        .join(" ")
+    : values.map(one).join(" ");
+}
+
 function fieldTable(fields: readonly ReferenceField[], from?: Resource): string {
   const rows = fields.map((f) => {
-    const values = f.values?.length
-      ? ` ${f.values.map((v) => `\`${v.value}\`: ${v.description}`).join(" ")}`
-      : "";
+    const values = f.values?.length ? ` ${valuesMarkdown(f.values)}` : "";
     // A field that holds an object links its type to that object's section.
     const type = f.object && from ? objectLink(f.object, from, cell(f.type)) : cell(f.type);
     return `| \`${f.name}\` | ${type} | ${cell(f.description + values)} |`;

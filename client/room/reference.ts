@@ -120,6 +120,20 @@ function apiErrorsHtml(errors: RouteError[] | undefined, meanings: Meanings): Ht
   );
   return section("Refusals", html`<div class="api-ledger api-errors">${rows}</div>`);
 }
+// An enum's values as bullets under its field's line; values that fall into groups (a halt
+// cause's halt) are listed under each group's name, so no line repeats it.
+function valuesHtml(values: NonNullable<ReferenceField["values"]>): Html {
+  const list = (vs: typeof values) =>
+    html`<ul class="api-values">${vs.map((v) => html`<li><code>${v.value}</code> ${inline(v.description)}</li>`)}</ul>`;
+  const groups = [...new Set(values.map((v) => v.group).filter((g) => g !== undefined))];
+  if (!groups.length) {
+    return list(values);
+  }
+  return html`${groups.map(
+    (g) =>
+      html`<div class="api-values-group">${inline(g)}</div>${list(values.filter((v) => v.group === g))}`,
+  )}`;
+}
 // Fields with their types and one line each, an enum's values listed under its line, and a field
 // that holds an object linked to that object's section by its type.
 function apiFieldsTable(fields: readonly ReferenceField[]): Html {
@@ -130,11 +144,7 @@ function apiFieldsTable(fields: readonly ReferenceField[]): Html {
         ? html`<a href="#/api-reference/objects-${f.object}" class="api-obj-link" data-sec="objects-${f.object}">${f.type}</a>`
         : f.type,
       false,
-      html`${inline(f.description)}${
-        f.values?.length
-          ? html`<ul class="api-values">${f.values.map((v) => html`<li><code>${v.value}</code> ${inline(v.description)}</li>`)}</ul>`
-          : null
-      }`,
+      html`${inline(f.description)}${f.values?.length ? valuesHtml(f.values) : null}`,
     ),
   );
   return html`<div class="api-list api-fields">${rows}</div>`;

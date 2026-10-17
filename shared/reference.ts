@@ -50,8 +50,9 @@ export interface ReferenceField {
   name: string;
   type: string;
   description: string;
-  /** An enum's values, each with one line of meaning. */
-  values?: { value: string; description: string }[];
+  /** An enum's values, each with one line of meaning, and the group it is listed under when the
+   *  values fall into kinds (a halt cause's halt). */
+  values?: { value: string; description: string; group?: string }[];
   /** The object the field holds (or a list of), described once in its own section and linked. */
   object?: ObjectKey;
 }

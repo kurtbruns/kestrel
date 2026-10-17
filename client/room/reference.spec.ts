@@ -409,6 +409,33 @@ describe("reference room", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("lists an enum's values that fall into groups under each group's name", async () => {
+    const [send] = shared.objects;
+    const values = [
+      { value: "outage", description: "Down.", group: "An `unavailable` halt" },
+      { value: "sandbox", description: "In the sandbox.", group: "An `account` halt" },
+      { value: "quota", description: "Over quota.", group: "An `account` halt" },
+    ];
+    const fields = [{ name: "cause", type: "string", description: "Why.", values }];
+    fake = fakeApi([
+      {
+        path: "/api/reference",
+        reply: () => ({ ...reference(groups), objects: [{ ...send!, fields }] }),
+      },
+    ]);
+    await mount(renderReference);
+    await settle();
+    const desc = $("#api-objects-send .api-fields .api-row-desc");
+    expect($$(".api-values-group", desc).map((g) => g.innerHTML)).toEqual([
+      "An <code>unavailable</code> halt",
+      "An <code>account</code> halt",
+    ]);
+    expect($$("ul.api-values", desc).map((ul) => $$("li", ul).map((li) => li.textContent))).toEqual(
+      [["outage Down."], ["sandbox In the sandbox.", "quota Over quota."]],
+    );
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("links a field that holds an object to that object's section, by its type", async () => {
     const [send] = shared.objects;
     const fields = [

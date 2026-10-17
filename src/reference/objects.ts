@@ -355,7 +355,8 @@ const HALT_FIELDS: ReferenceField[] = [
       "What the provider refused for. Its fix, in words to relay, is the `advice` on the send's `refused` condition.",
     values: (Object.keys(HALT_CAUSES) as HaltCause[]).map((cause) => ({
       value: cause,
-      description: `(\`${HALT_CAUSES[cause].reason}\`) ${HALT_CAUSES[cause].meaning}`,
+      description: HALT_CAUSES[cause].meaning,
+      group: `An \`${HALT_CAUSES[cause].reason}\` halt`,
     })),
   },
   { name: "error", type: "string", description: "The provider's own words." },
