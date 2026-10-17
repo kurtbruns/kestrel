@@ -496,12 +496,6 @@ function reveal(target: HTMLElement): void {
     window.scrollTo(0, 0);
   } else {
     target.scrollIntoView({ block: "start" });
-    // A route or an object lands flush under its resource's pinned heading, measured so a
-    // larger text size still lines up: no gap, and the rule above it hidden under the heading.
-    const head = target.closest(".api-res")?.querySelector(".api-res-head");
-    if (head && !target.matches(".api-res")) {
-      window.scrollBy(0, target.getBoundingClientRect().top - head.getBoundingClientRect().bottom);
-    }
   }
   const focus = target.querySelector<HTMLElement>(
     ":scope > h1, :scope > h2, :scope > .api-res-head h3, :scope > .api-op-head h4, :scope > article > .api-op-head h4",

@@ -4140,7 +4140,7 @@ button.api-filter-clear svg {
   margin: 0;
   font-size: 14px;
 }
-/* A resource: its heading stays pinned under the room bar while its rows scroll by. */
+/* A resource: its heading over a rule, scrolling with its routes. */
 .api-res {
   margin-top: 16px;
   scroll-margin-top: var(--bar-h);
@@ -4148,9 +4148,6 @@ button.api-filter-clear svg {
 /* A resource's heading, set like the page's other headings, flush with the text: it only
    pins under the bar, its vertical padding the band the rows scroll beneath. */
 .api-res-head {
-  position: sticky;
-  top: var(--bar-h);
-  z-index: var(--z-content);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -4179,8 +4176,8 @@ button.api-filter-clear svg {
 }
 .api-rows > li {
   border-bottom: 1px solid var(--line);
-  /* A route reached from its address lands below the bar and its resource's pinned heading. */
-  scroll-margin-top: calc(var(--bar-h) + 44px);
+  /* A route reached from its address lands just under the bar, the rule above it hidden. */
+  scroll-margin-top: calc(var(--bar-h) - 1px);
 }
 /* The verb as a tinted label: its own --method-* color as text over a wash of itself. */
 .api-method {
@@ -4341,8 +4338,8 @@ a.api-self:focus-visible svg {
 }
 .api-object {
   border-bottom: 1px solid var(--line);
-  /* Reached from a route's Returns, it lands below the bar and its resource's pinned heading. */
-  scroll-margin-top: calc(var(--bar-h) + 44px);
+  /* Reached from a route's Returns, it lands just under the bar. */
+  scroll-margin-top: calc(var(--bar-h) - 1px);
 }
 /* Reference room on mobile. The bar stays ONE row at --bar-h, the same as on desktop, so
    the in-page anchors (scroll-margin-top) and the scroll-spy line keep clearing it: the back
