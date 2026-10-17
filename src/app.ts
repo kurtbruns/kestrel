@@ -208,7 +208,7 @@ export function createRouter({
     name: "warnings",
     type: "string[]",
     description:
-      "What the render found wrong with the frozen copy (an image the post never uploaded, say), which preview and test of the copy report too (SPEC §5).",
+      "What the render found wrong with the frozen copy (an image the post never uploaded, say), which preview and test of the copy report too.",
   };
   const changedField: ReferenceField = {
     name: "changed",
@@ -232,8 +232,7 @@ export function createRouter({
       title: "Check health",
       summary:
         "Health check: ok once the configuration is accepted and the database has run every migration this release ships.",
-      description:
-        "Answered before any route while either is not so (SPEC §9), on every API path alike.",
+      description: "Answered before any route while either is not so, on every API path alike.",
       errors: [
         { code: "invalid_config", details: ["variable"] },
         { code: "schema_behind", details: ["missing"] },
@@ -419,7 +418,7 @@ export function createRouter({
       summary:
         "Update runtime preferences: test recipients, the publication identity, the email template, the confirmation email wording.",
       description:
-        "Every field is optional: send only what changes. Saving a changed template, or an identity field the template renders, re-makes every scheduled send's email at once (SPEC §6, §9), once the client acknowledges those sends by id in `remake`; a save that leaves the email's inputs unchanged asks nothing. `GET /api/settings` lists them under `inUse` beforehand.",
+        "Every field is optional: send only what changes. Saving a changed template, or an identity field the template renders, re-makes every scheduled send's email at once, once the client acknowledges those sends by id in `remake`; a save that leaves the email's inputs unchanged asks nothing. `GET /api/settings` lists them under `inUse` beforehand.",
       example: {
         request: { emailTemplate: "<style>…</style>…", remake: ["s_xyz789"] },
         response: {
@@ -453,7 +452,7 @@ export function createRouter({
           name: "emailTemplate",
           type: "string",
           description:
-            "The email template's HTML. One missing the unsubscribe link or the body is a 400 (I2).",
+            "The email template's HTML. One missing the unsubscribe link or the body is a 400.",
         },
         {
           name: "confirmationEmail.subject",
@@ -478,7 +477,7 @@ export function createRouter({
         {
           name: "notifications.to",
           type: "string",
-          description: "The address the publisher's notifications go to (SPEC §8).",
+          description: "The address the publisher's notifications go to.",
         },
         {
           name: "remake",
@@ -547,7 +546,7 @@ export function createRouter({
       title: "Remove the logo",
       summary: "Remove the publication logo.",
       description:
-        "Under the same re-make rule as `PUT /api/settings` when the template renders the logo and sends are scheduled: acknowledged in `remake`. The image itself stays served, since emails already sent still show it (I3); only what renders from then on loses it.",
+        "Under the same re-make rule as `PUT /api/settings` when the template renders the logo and sends are scheduled: acknowledged in `remake`. The image itself stays served, since emails already sent still show it; only what renders from then on loses it.",
       query: [
         {
           name: "remake",
@@ -568,7 +567,7 @@ export function createRouter({
       accepts: JSON_BODY,
       resource: "settings",
       title: "Test the email template",
-      summary: "Send a sample post through the saved email template (I5).",
+      summary: "Send a sample post through the saved email template.",
       description: `Renders the stored template, never unsaved editor content; saving first is the client's job, and that save may need the re-make acknowledgement (see \`PUT /api/settings\`). The answer names the recipients the provider didn't accept in \`failed\`, so a client can offer exactly those again and no one gets a second copy, and says why for each in \`not_sent\`, in the same order (see \`POST /api/posts/:id/test\`).`,
       example: {
         request: { to: "you@example.com" },
@@ -598,7 +597,7 @@ export function createRouter({
       resource: "settings",
       title: "Test notifications",
       summary:
-        "Send a sample notification to the saved notifications address, through the live channel (SPEC §8).",
+        "Send a sample notification to the saved notifications address, through the live channel.",
       description:
         "Takes no body and goes only to `settings.notifications.to`, so it cannot mail an arbitrary address.",
       example: { response: { to: "you@example.com", channel: "cloudflare" } },
@@ -621,8 +620,7 @@ export function createRouter({
       access: "admin",
       resource: "settings",
       title: "Preview a reader page",
-      summary:
-        "A page a reader can land on, as a standalone HTML page: Settings' preview of it (SPEC §5).",
+      summary: "A page a reader can land on, as a standalone HTML page: Settings' preview of it.",
       description:
         "`journey` and its `state`: `subscribe` (`form`, `check-inbox`, `not-an-email`), `confirm` (`ready`, `confirmed`, `expired`, `invalid`), `unsubscribe` (`ask`, `done`, `invalid`), or `reading` (`landing`, `archive`, `post`, `landing-empty`, `archive-empty`, `not-found`). Rendered by the real page's code with the saved identity and sample posts and address, unmarked, since Settings frames it. Always 200; its forms submit nowhere.",
       errors: [{ code: "not_found", when: "The journey and state are not a pair listed here." }],
@@ -640,7 +638,7 @@ export function createRouter({
       summary:
         "Create a draft post. Its slug follows the subject (`slug_auto: true`) unless you send a `slug`. Every field is optional; an empty body makes a blank draft.",
       description:
-        "The post is made with its unlisted link, which every test and send of it carries as view-in-browser and which never changes (SPEC §5). A slug that follows the subject takes the subject's slug, or the first free number (`-2`) when another post holds it, and `subject_slug_held` names the slug it couldn't take: not a refusal, since the save succeeded.",
+        "The post is made with its unlisted link, which every test and send of it carries as view-in-browser and which never changes. A slug that follows the subject takes the subject's slug, or the first free number (`-2`) when another post holds it, and `subject_slug_held` names the slug it couldn't take: not a refusal, since the save succeeded.",
       example: {
         request: { subject: "Hello, world", markdown: "# Hello\n\nWelcome." },
         response: {
@@ -830,9 +828,9 @@ export function createRouter({
       resource: "posts",
       title: "Set a post's publishing options",
       summary:
-        "Set a post's publishing options: where it is listed (`email_only`) and its archive address (`slug`, `slug_auto`) (SPEC §4, §5).",
+        "Set a post's publishing options: where it is listed (`email_only`) and its archive address (`slug`, `slug_auto`).",
       description:
-        "Any subset of the three, in any state, a sent post's included: none is part of the frozen email, so a change never re-makes or alters a send (I3), though each of the post's sends takes a new `rev` and the feed reports it. Once the post's send has started its address is fixed. A body naming none of the three is a 400.",
+        "Any subset of the three, in any state, a sent post's included: none is part of the frozen email, so a change never re-makes or alters a send, though each of the post's sends takes a new `rev` and the feed reports it. Once the post's send has started its address is fixed. A body naming none of the three is a 400.",
       example: {
         request: { email_only: false, slug: "hello-world" },
         response: {
@@ -976,7 +974,7 @@ export function createRouter({
       summary:
         "Render the post to its email (returns the hosted URL, subject, warnings, and `frozen`).",
       description:
-        "Once the post is scheduled this is its frozen copy, exactly as it will fire, and once sent the record's; a draft renders live (SPEC §5). A frozen copy's `warnings` are the ones its render gave when it was frozen or last re-made.",
+        "Once the post is scheduled this is its frozen copy, exactly as it will fire, and once sent the record's; a draft renders live. A frozen copy's `warnings` are the ones its render gave when it was frozen or last re-made.",
       returns: {
         fields: [
           {
@@ -1008,7 +1006,7 @@ export function createRouter({
       title: "Preview a post's email",
       summary: "The rendered email as a standalone HTML page (the editor's preview).",
       description:
-        "Once the post is scheduled this is its frozen copy, exactly as it will fire, and once sent the record's; a draft renders live (SPEC §5).",
+        "Once the post is scheduled this is its frozen copy, exactly as it will fire, and once sent the record's; a draft renders live.",
       handler: renderRoutes.previewPage,
     },
     {
@@ -1020,7 +1018,7 @@ export function createRouter({
       summary:
         "The post's web version as a standalone HTML page: what its public post page will show.",
       description:
-        "Built from the same copy as the preview (a draft's live render, the frozen copy once scheduled, the record once sent) by the post page's own code: the email-only regions left out, the masthead and display font added (SPEC §5). Once the send starts it matches the public post page, less the local-dev dashboard link.",
+        "Built from the same copy as the preview (a draft's live render, the frozen copy once scheduled, the record once sent) by the post page's own code: the email-only regions left out, the masthead and display font added. Once the send starts it matches the public post page, less the local-dev dashboard link.",
       handler: renderRoutes.webPage,
     },
     {
@@ -1030,10 +1028,9 @@ export function createRouter({
       accepts: JSON_BODY,
       resource: "posts",
       title: "Send a test",
-      summary:
-        "Send a test to one address through the same per-recipient path as a real send (I5).",
+      summary: "Send a test to one address through the same per-recipient path as a real send.",
       description:
-        "Once scheduled, it sends the frozen copy exactly as it will fire, and once sent the record's; a draft's is a live render (SPEC §5), as `frozen` says, and `warnings` are that copy's (a frozen copy's from when it was frozen or last re-made). A test of the frozen copy is recorded as the send's `tested_at`, clearing `remade` and `untested`. `sent` is true only when the provider took it; otherwise `not_sent` gives its words as `error`, a `message` with the fix where known, and `may_have_arrived` when the provider never answered. Always a 200.",
+        "Once scheduled, it sends the frozen copy exactly as it will fire, and once sent the record's; a draft's is a live render, as `frozen` says, and `warnings` are that copy's (a frozen copy's from when it was frozen or last re-made). A test of the frozen copy is recorded as the send's `tested_at`, clearing `remade` and `untested`. `sent` is true only when the provider took it; otherwise `not_sent` gives its words as `error`, a `message` with the fix where known, and `may_have_arrived` when the provider never answered. Always a 200.",
       example: {
         request: { to: "you@example.com" },
         response: {
@@ -1123,7 +1120,7 @@ export function createRouter({
       title: "Schedule a post",
       summary: `Freeze the render and schedule the send for a future time (at least ${formatLead(minLeadMs)} out).`,
       description:
-        "Freezes the current draft, with the template and identity as they stand, and soft-locks the post until the send is canceled or fires; a later template or identity change re-makes the frozen email once the publisher confirms it (SPEC §6). The minimum lead is " +
+        "Freezes the current draft, with the template and identity as they stand, and soft-locks the post until the send is canceled or fires; a later template or identity change re-makes the frozen email once the publisher confirms it. The minimum lead is " +
         lead +
         "; it is checked on the time as requested, which is then rounded up to the next whole minute. `email_only`, `slug`, and `slug_auto` set the post's settings as it is scheduled, checked before anything is frozen; none is part of the email.",
       example: {
@@ -1330,7 +1327,7 @@ export function createRouter({
       resource: "sends",
       title: "Get a send's email",
       summary:
-        "The send's frozen email (I3), exactly as it will fire or went out, with the per-recipient placeholders unfilled: HTML, or its plain-text part.",
+        "The send's frozen email, exactly as it will fire or went out, with the per-recipient placeholders unfilled: HTML, or its plain-text part.",
       description:
         "Its own route so the send's view never carries the bodies. The HTML is served under the same no-script, no-framing headers as a post page.",
       query: [
@@ -1413,7 +1410,7 @@ export function createRouter({
       title: "Cancel a send",
       summary: "Cancel a scheduled send during its review window; unlocks the post.",
       description:
-        "The review window closes at the fire time (SPEC §6). A send canceled already answers `changed: false`, so a retried cancel is safe.",
+        "The review window closes at the fire time. A send canceled already answers `changed: false`, so a retried cancel is safe.",
       example: {
         response: {
           send: sendBrief({ status: "canceled", phase: "canceled", rev: 58 }),
@@ -1438,8 +1435,8 @@ export function createRouter({
       accepts: JSON_BODY,
       resource: "sends",
       title: "Reschedule a send",
-      summary: "Move a scheduled send's fire time without re-freezing the render (I3, I6).",
-      description: `Moves only \`fire_at\`, within the review window: the frozen email is untouched and a re-made send keeps its \`remade_at\` (I3, I6). For a content change, cancel, edit, and schedule again. The same minimum lead as scheduling (${formatLead(minLeadMs)}, as Schedule a post describes), and the time is rounded up to the next whole minute as when scheduling. A move to the time it already has answers \`changed: false\` before the lead is checked. \`email_only\`, \`slug\`, or \`slug_auto\` is a 400: those are the post's, at \`PUT /api/posts/:id/settings\`.`,
+      summary: "Move a scheduled send's fire time without re-freezing the render.",
+      description: `Moves only \`fire_at\`, within the review window: the frozen email is untouched and a re-made send keeps its \`remade_at\`. For a content change, cancel, edit, and schedule again. The same minimum lead as scheduling (${formatLead(minLeadMs)}, as Schedule a post describes), and the time is rounded up to the next whole minute as when scheduling. A move to the time it already has answers \`changed: false\` before the lead is checked. \`email_only\`, \`slug\`, or \`slug_auto\` is a 400: those are the post's, at \`PUT /api/posts/:id/settings\`.`,
       example: {
         request: { fire_at: "2026-01-16T09:00:00Z" },
         response: {
@@ -1466,7 +1463,7 @@ export function createRouter({
       title: "Resolve a wedged send",
       summary: "Resolve a send wedged on ambiguous (dispatched) deliveries.",
       description:
-        "A request that got no answer leaves its recipients `dispatched`, which the loop never re-sends (I4), so the send can't finish. This settles them as `resolution` says and completes the send, never re-mailing an accepted recipient. Offered in `actions` while the send is wedged; no run touches a wedged send, so it settles the recipients the send showed.",
+        "A request that got no answer leaves its recipients `dispatched`, which the loop never re-sends, so the send can't finish. This settles them as `resolution` says and completes the send, never re-mailing an accepted recipient. Offered in `actions` while the send is wedged; no run touches a wedged send, so it settles the recipients the send showed.",
       example: {
         request: { resolution: "unsent" },
         response: {
@@ -1519,7 +1516,7 @@ export function createRouter({
       title: "Add a subscriber",
       summary: "Add a subscriber via the normal double opt-in (never an auto-confirm).",
       description:
-        "An address that was erased (SPEC §7) is added only once the publisher confirms the person asked to join again. The confirmation then goes as usual, and the person's own confirming lifts the marker. The public form never asks.",
+        "An address that was erased is added only once the publisher confirms the person asked to join again. The confirmation then goes as usual, and the person's own confirming lifts the marker. The public form never asks.",
       example: { request: { email: "reader@example.com" } },
       body: [
         { name: "email", type: "string", required: true, description: "The address to add." },
@@ -1608,8 +1605,7 @@ export function createRouter({
       access: "admin",
       resource: "subscribers",
       title: "Export the list",
-      summary:
-        "The whole list in the import format (`kestrel-subscribers/1`, SPEC §7), a page at a time.",
+      summary: "The whole list in the import format (`kestrel-subscribers/1`), a page at a time.",
       description:
         "Every subscriber (`confirmed` written as `subscribed`) with how they joined, their evidence, and their suppression, plus every address suppressed with no subscriber (`status: none`). Importing it into another instance carries the list over. Pages run in address order: following `next` until `null` reads every address once, the server setting the page size (1,000 on the Workers Free plan's limits, 10,000 otherwise). For a CSV, write the rows under the format's header once, a value starting `=`, `+`, `-`, or `@` led by a `'` so a spreadsheet won't run it.",
       query: [
@@ -1669,8 +1665,8 @@ export function createRouter({
       access: "admin",
       resource: "subscribers",
       title: "Unsubscribe a subscriber",
-      summary: "Unsubscribe a subscriber at their request (SPEC §7).",
-      description: `${SUBSCRIBER_ACTIONS.unsubscribe.when} Immediate and idempotent, as their own unsubscribe link is (I2): it removes consent and never confirms anyone. To stop mailing an address on your own judgment, block it instead (\`POST /api/suppressions\`), which records that the decision was yours.`,
+      summary: "Unsubscribe a subscriber at their request.",
+      description: `${SUBSCRIBER_ACTIONS.unsubscribe.when} Immediate and idempotent, as their own unsubscribe link is: it removes consent and never confirms anyone. To stop mailing an address on your own judgment, block it instead (\`POST /api/suppressions\`), which records that the decision was yours.`,
       returns: {
         object: "subscriber",
         as: "subscriber",
@@ -1691,7 +1687,7 @@ export function createRouter({
       resource: "subscribers",
       title: "Erase a subscriber",
       summary:
-        "Erase a subscriber (SPEC §7): remove their data and keep only a do-not-contact marker. Can't be undone.",
+        "Erase a subscriber: remove their data and keep only a do-not-contact marker. Can't be undone.",
       description:
         `${SUBSCRIBER_ACTIONS.erase.when} Unsubscribing stops the mail and keeps everything; erasing removes what the list knows about them. ` +
         "One batch: deletes the subscriber's row and evidence, replaces their address on every past delivery row with one placeholder (`erased:` and random hex, so each record still sums to its audience), and suppresses the address as `erased`, unless it already has a bounce, complaint, or block, which it keeps. Answers `erased`: the `email`, how many `deliveries` show the placeholder, and the `suppression` left. Only their own confirmation lifts the marker, never an import, and `POST /api/subscribers` asks for `acknowledge_erasure` first. Nothing of the id is kept, so a repeat answers 404. A later receipt on an erased row keeps its outcome without the provider's words; a bounce or complaint suppresses its address, replacing the marker.",
@@ -1717,7 +1713,7 @@ export function createRouter({
       resource: "imports",
       title: "Get the import format",
       summary:
-        "Everything about the import format (SPEC §7), from the definition the importer reads with: the files it takes, the columns, the rules, this deployment's limits, the outcomes, and the attestation.",
+        "Everything about the import format, from the definition the importer reads with: the files it takes, the columns, the rules, this deployment's limits, the outcomes, and the attestation.",
       description:
         "Read it before converting a list. The full CSV (`kestrel-subscribers/1`, what the export writes) is preferred, since it carries unsubscribes, bounces, and how each person joined; a plain `.txt` of addresses is the fallback. Another service's export is converted first; nothing is guessed. Split a list larger than `limits` into several imports, each its own plan and commit.",
       returns: {
@@ -1909,7 +1905,7 @@ export function createRouter({
       accepts: JSON_BODY,
       resource: "suppressions",
       title: "Block an address",
-      summary: "Block an address: the publisher's own decision to stop mailing it (SPEC §7).",
+      summary: "Block an address: the publisher's own decision to stop mailing it.",
       description: `${SUBSCRIBER_ACTIONS.block.when} Stores a suppression with \`reason\` \`manual\`, and changes no consent status. If they asked to leave, unsubscribe them instead (\`POST /api/subscribers/:id/unsubscribe\`). An address already suppressed keeps what it has, its \`detail\` included.`,
       example: {
         request: { email: "reader@example.com", detail: "Our own test address" },
@@ -1953,7 +1949,7 @@ export function createRouter({
       access: "admin",
       resource: "suppressions",
       title: "Clear a suppression",
-      summary: "Clear an address's suppression, so it may be mailed again (SPEC §7).",
+      summary: "Clear an address's suppression, so it may be mailed again.",
       description: `${SUBSCRIBER_ACTIONS.clear.when} A deliberate, rare act, on the publisher's word. An erasure's marker is never cleared here; an erasure that found a block keeps the block, and clearing it clears the address. Answers \`cleared: false\` when there was no suppression.`,
       example: { response: { email: "reader@example.com", cleared: true } },
       errors: [{ code: "erasure_marker" }],
@@ -1995,7 +1991,7 @@ export function createRouter({
       resource: "subscriptions",
       title: "Show the subscribe form",
       summary:
-        "The public subscribe form (HTML); while no email provider is connected, a page saying signups aren't open yet (SPEC §9).",
+        "The public subscribe form (HTML); while no email provider is connected, a page saying signups aren't open yet.",
       handler: publicRoutes.subscribeForm,
     },
     {
@@ -2099,8 +2095,7 @@ export function createRouter({
       access: "public",
       resource: "archive",
       title: "Open an unlisted link",
-      summary:
-        "A post's unlisted link, the view-in-browser link every test and send carries (SPEC §5).",
+      summary: "A post's unlisted link, the view-in-browser link every test and send carries.",
       description:
         "Before the post's send starts, the `Nothing here yet` page (404). Then, while the post is listed, a 302 to its archive address (`no-store`, `noindex`), and while it is email only, the post's page itself (`noindex`). Never listed or linked from any page, and a GET only reads, so a link scanner changes nothing.",
       handler: archiveRoutes.unlistedPage,
@@ -2130,7 +2125,7 @@ export function createRouter({
       resource: "archive",
       title: "Show an archived post",
       summary:
-        "A published post's archive page (I3), from the moment a listed post's send starts, while it stays listed.",
+        "A published post's archive page, from the moment a listed post's send starts, while it stays listed.",
       description:
         "An email-only post's address answers `Nothing here yet` (404) but stays the post's. A post whose email links this address (one sent before unlisted links) answers whatever its listing, `noindex` while email only. Sent `no-cache`, so a listing change shows at once.",
       handler: archiveRoutes.archivePage,

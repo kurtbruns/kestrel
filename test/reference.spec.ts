@@ -646,6 +646,21 @@ describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
     expect((await SELF.fetch(`${base}/api/reference/sends.md`)).status).toBe(401);
   });
 
+  it("cites no SPEC section or invariant number to its readers, which only a maintainer can follow", () => {
+    // The reference is read by a publisher, an operator, and Claude, none of whom has SPEC.md
+    // open; each rule is said in its own words where it applies. Code comments keep the tags.
+    const ref = buildReferenceResponse(defs);
+    const said = [
+      JSON.stringify(ref),
+      referenceIndexMarkdown(ref, "https://x.example"),
+      ...resourceDocs(ref).values(),
+    ].join("\n");
+    const tags = [...said.matchAll(/[^\n.]{0,40}(SPEC §\d+|\bI[1-9]\b)[^\n.]{0,20}/g)].map(
+      ([m]) => m,
+    );
+    expect(tags).toEqual([]);
+  });
+
   it("keeps the index, what an agent reads first, a fraction of the whole reference", () => {
     // Every conversation reads the index up front; a resource's reference is read when the work
     // reaches it. If the index grows toward the whole, route detail has leaked into it.
