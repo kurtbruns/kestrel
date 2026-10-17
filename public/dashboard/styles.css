@@ -4255,7 +4255,8 @@ button.api-filter-clear svg {
    opens to its fields and example. */
 /* A route or an object, laid out in full as Stripe and Mux lay theirs: its name and tools,
    its method and path, then what it does beside its examples on a wide screen, under them
-   on a narrow one. The examples stay in view while their route's prose scrolls by. */
+   on a narrow one. The examples scroll with the page: pinned, one taller than the window
+   (the send view's) would never show its end. */
 .api-op {
   padding: 22px 0 26px;
 }
@@ -4318,8 +4319,6 @@ a.api-self:focus-visible svg {
     grid-template-columns: minmax(0, 720px) minmax(0, 420px);
   }
   .api-op-code {
-    position: sticky;
-    top: calc(var(--bar-h) + 44px);
     align-self: start;
   }
   .api-op-code > .block:first-child {
