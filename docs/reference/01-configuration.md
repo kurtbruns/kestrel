@@ -80,7 +80,7 @@ The floor is 60, since sends go out from a once-a-minute schedule. The ceiling i
 
 Leave them unset to keep everything on the app's own hostname.
 
-`ARCHIVE_ORIGIN` points archive links at another origin, such as your website, `https://example.com`. The app doesn't answer there on its own. A Worker route on that domain, such as `example.com/archive*` in the environment's `routes`, sends the archive path to the app. Links already mailed keep working, since the app still answers on its own hostname.
+`ARCHIVE_ORIGIN` points archive links at another origin, such as your website, `https://example.com`. The app doesn't answer there on its own. A Worker route on that domain, such as `example.com/archive*` in the environment's `routes`, sends the archive path to the app. Links already mailed keep working, since the app still answers on its own hostname. Crawlers read your website's own `robots.txt` for the archive pages there. The app's `/llms.txt` stays on the app's hostname, and its archive link points at your website.
 
 `MEDIA_PUBLIC_BASE` serves images from another base URL, such as a custom domain on the image bucket. The app's own `/media` path sends `Content-Security-Policy: sandbox` and `X-Content-Type-Options: nosniff` with every file, so a file in the bucket never runs as a page. A bucket's custom domain sends neither, so add both with a Response Header Transform Rule on that hostname.
 
