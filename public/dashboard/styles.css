@@ -1973,6 +1973,13 @@ th.num .th-sort {
   font-size: 14px;
   max-width: 72ch;
 }
+/* A list in the reference's prose (the status ranges under Requests), set like its paragraphs. */
+.prose-list {
+  padding-left: 20px;
+}
+.prose-list li {
+  margin: 2px 0;
+}
 .api-values {
   margin: 4px 0 0;
   padding-left: 16px;

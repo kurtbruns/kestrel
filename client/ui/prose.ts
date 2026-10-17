@@ -37,10 +37,24 @@ export function inline(text: string): Html {
   return html`${parts}`;
 }
 
-/** Paragraphs of inline Markdown, split at blank lines, each a `<p>` with `cls`. */
+/**
+ * Paragraphs of inline Markdown, split at blank lines, each a `<p>` with `cls`. A paragraph's
+ * lines that start `- ` are a list under it (the status ranges under Requests), so a lead-in
+ * line and its items read as one block.
+ */
 export function prose(text: string, cls: string): Html {
   return html`${text
     .split(/\n\s*\n/)
     .filter((p) => p.trim())
-    .map((p) => html`<p class="${cls}">${inline(p.trim())}</p>`)}`;
+    .map((p) => {
+      const lines = p.trim().split("\n");
+      const first = lines.findIndex((l) => l.startsWith("- "));
+      if (first === -1) {
+        return html`<p class="${cls}">${inline(p.trim())}</p>`;
+      }
+      const lead = lines.slice(0, first).join(" ").trim();
+      return html`${lead ? html`<p class="${cls}">${inline(lead)}</p>` : null}<ul class="${cls} prose-list">${lines
+        .slice(first)
+        .map((l) => html`<li>${inline(l.replace(/^- /, ""))}</li>`)}</ul>`;
+    })}`;
 }

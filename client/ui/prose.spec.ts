@@ -43,4 +43,11 @@ describe("inline Markdown in the API reference's prose", () => {
       "Two.",
     ]);
   });
+
+  it("sets a paragraph's lines that start `- ` as a list under its lead-in, items as inline Markdown", () => {
+    const el = render(prose("The status:\n- 2xx: `ok`.\n- 4xx: <refused>.\n\nAfter.", "p"));
+    expect(el.innerHTML).toBe(
+      '<p class="p">The status:</p><ul class="p prose-list"><li>2xx: <code>ok</code>.</li><li>4xx: &lt;refused&gt;.</li></ul><p class="p">After.</p>',
+    );
+  });
 });

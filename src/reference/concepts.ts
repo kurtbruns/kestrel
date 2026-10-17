@@ -1,6 +1,6 @@
 /**
- * The topics the API reference states once, ahead of the routes (SPEC §11): requests,
- * authentication, errors, paging, acting safely, and following changes, each a few plain sentences carrying
+ * The topics the API reference states once, ahead of the routes (SPEC §11): authentication,
+ * requests, errors, paging, acting safely, and following changes, each a few plain sentences carrying
  * docs/API.md's principles in the words a client needs. A route then says only what is its own. Claude reads
  * the reference at the start of every conversation and never docs/API.md, so what a client
  * must know about the whole API lives here.
@@ -13,7 +13,7 @@ import { SETTLE_FOLLOW_MS } from "../send/feed";
 
 const REQUESTS = [
   "A body is JSON (`Content-Type: application/json`) unless the route names another type, and times are epoch milliseconds.",
-  "A 2xx answer is success. A 4xx is a refusal about the request or the state of what it acts on, and Errors says what to do about each. A 5xx means the instance itself needs fixing where it is deployed, which nothing sent through this API can do.",
+  "The status says how it went:\n- 2xx: it worked.\n- 4xx: a refusal about the request or the state of what it acts on; Errors says what to do about each.\n- 5xx: the instance itself needs fixing where it is deployed, which nothing sent through this API can do.",
 ];
 
 const AUTHENTICATION = [
@@ -43,8 +43,8 @@ const FOLLOWING = [
 /** The topics, in the order the reference lists them. */
 export function referenceConcepts(): ReferenceConcept[] {
   return [
-    { key: "requests", title: "Requests", text: REQUESTS.join("\n\n") },
     { key: "authentication", title: "Authentication", text: AUTHENTICATION.join("\n\n") },
+    { key: "requests", title: "Requests", text: REQUESTS.join("\n\n") },
     { key: "errors", title: "Errors", text: ERRORS.join("\n\n") },
     { key: "lists", title: "Lists and paging", text: LISTS },
     { key: "acting", title: "Acting safely", text: ACTING.join("\n\n") },
