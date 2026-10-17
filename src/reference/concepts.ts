@@ -13,7 +13,7 @@ import { SETTLE_FOLLOW_MS } from "../send/feed";
 
 const REQUESTS = [
   "A body is JSON (`Content-Type: application/json`) unless the route names another type, and times are epoch milliseconds.",
-  "A 2xx answer is success. A 4xx is a refusal about the request or the state of what it acts on, and Errors says what to do about each. A 5xx means the instance itself needs fixing where it is deployed, which nothing sent through this API can do; so does one 4xx, `provider_not_connected` (409).",
+  "A 2xx answer is success. A 4xx is a refusal about the request or the state of what it acts on, and Errors says what to do about each. A 5xx means the instance itself needs fixing where it is deployed, which nothing sent through this API can do.",
 ];
 
 const AUTHENTICATION = [
