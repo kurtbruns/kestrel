@@ -218,8 +218,7 @@ function apiTableHtml(t: ReferenceTable): Html {
   return html`<div class="block"><div class="block-head"><span class="block-label">${t.title}</span></div>
       ${prose(t.description, "api-prose")}
       <div class="api-table-wrap"><table class="api-query api-table"><thead><tr>${t.columns.map((c) => html`<th>${c}</th>`)}</tr></thead><tbody>${t.rows.map(
-        (r) =>
-          html`<tr>${r.map((c, i) => html`<td class="${i ? "muted" : ""}">${inline(c)}</td>`)}</tr>`,
+        (r) => html`<tr>${r.map((c) => html`<td>${inline(c)}</td>`)}</tr>`,
       )}</tbody></table></div>
     </div>`;
 }
