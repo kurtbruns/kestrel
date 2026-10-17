@@ -10,10 +10,11 @@
  * follows (./concepts.ts), the refusal codes (./refusals.ts), and the objects routes return
  * (./objects.ts), so a route's own entry says only what is its own.
  *
- * This is a Markdown-free, structured render — distinct from both the operator
- * docs (src/docs/, Markdown→web-page) and the single email render path (I5).
- * Served read-only through the authed `/api/reference` route (see routes/docs.ts
- * for the sibling docs surface it mirrors).
+ * It is projected two ways: the structured response the editor renders, and Markdown for an
+ * agent (an index, and a document per resource). Both are distinct from the operator docs
+ * (src/docs/, Markdown→web-page) and the single email render path (I5).
+ * Served read-only through the authed `/api/reference`, `/api/reference.md`, and
+ * `/api/reference/<resource>.md` routes (see routes/docs.ts for the sibling docs surface).
  */
 
 import { headingAnchor } from "../../shared/docs";
@@ -130,10 +131,11 @@ export function buildReferenceResponse(routes: readonly RouteDef[]): ReferenceRe
   };
 }
 
-/** A link to an object's section. */
-function objectLink(key: ObjectKey): string {
-  const { title } = OBJECTS[key];
-  return `[${title}](#${headingAnchor(title)})`;
+/** A link to an object's section: in this resource's own document, or in its resource's. */
+function objectLink(key: ObjectKey, from: Resource): string {
+  const { title, resource } = OBJECTS[key];
+  const file = resource === from ? "" : `${resource}.md`;
+  return `[${title}](${file}#${headingAnchor(title)})`;
 }
 
 /** Fields as a Markdown table, an enum's values listed in its line. */
@@ -148,11 +150,11 @@ function fieldTable(fields: readonly ReferenceField[]): string {
 }
 
 /** What a route answers: the object it returns, linked, and the fields of its own. */
-function returnsMarkdown(r: RouteReturns): string {
+function returnsMarkdown(r: RouteReturns, from: Resource): string {
   const what = r.object
     ? r.as
-      ? `\`${r.as}\`, ${r.list ? `a list of ${objectLink(r.object)}` : objectLink(r.object)}`
-      : objectLink(r.object)
+      ? `\`${r.as}\`, ${r.list ? `a list of ${objectLink(r.object, from)}` : objectLink(r.object, from)}`
+      : objectLink(r.object, from)
     : "";
   const lead = r.fields?.length
     ? what
@@ -165,7 +167,7 @@ function returnsMarkdown(r: RouteReturns): string {
 /** One object as a Markdown section, first under its resource: its description, fields, and example. */
 function objectMarkdown(o: ReferenceObject): string {
   return [
-    `#### ${o.title}`,
+    `## ${o.title}`,
     o.description,
     fieldTable(o.fields),
     jsonBlock("Example", o.example),
@@ -231,11 +233,21 @@ function cell(text: string): string {
   return text.replace(/\|/g, "\\|");
 }
 
+/** What a route's call line says of its tier: nothing for the admin tier, whose authentication
+ *  the index describes, and how the others differ. */
+const TIER_NOTE: Record<Access, string> = {
+  admin: "",
+  public: " (public: no authentication)",
+  webhook: " (webhook: the provider signs it; not for clients to call)",
+};
+
 /** One route as a Markdown section: its title as the heading, its method and path beneath,
  *  then the summary, description, body types, query parameters, body fields, what it
  *  returns, its own refusals, and example. */
 function routeMarkdown(r: ReferenceEntry): string {
-  const parts = [`#### ${r.title}`, `\`${r.method} ${r.path}\``, r.summary];
+  // A route off the admin tier says so on its call line, since its authentication differs.
+  const tier = TIER_NOTE[r.access];
+  const parts = [`## ${r.title}`, `\`${r.method} ${r.path}\`${tier}`, r.summary];
   if (r.description) {
     parts.push(r.description);
   }
@@ -257,7 +269,7 @@ function routeMarkdown(r: ReferenceEntry): string {
     parts.push(["| Body field | Type | Description |", "| --- | --- | --- |", ...rows].join("\n"));
   }
   if (r.returns) {
-    parts.push(returnsMarkdown(r.returns));
+    parts.push(returnsMarkdown(r.returns, r.resource));
   }
   if (r.errors?.length) {
     // One line each; a code's meaning is in the refusal table, so a line adds only its own.
@@ -276,34 +288,55 @@ function routeMarkdown(r: ReferenceEntry): string {
   return parts.join("\n\n");
 }
 
+/** The route an agent reads one resource's reference at. */
+export function resourcePath(key: Resource): string {
+  return `/api/reference/${key}.md`;
+}
+
 /**
- * The reference as one Markdown document, for an agent to read (SPEC §11): the topics every
- * route shares (authentication, errors with the refusal table, paging, acting safely, following
- * changes), a `##` each, then a `##` per tier, a `###` per resource within it, and under each
- * resource its object, if it heads one, then a `####` per route, named by its title. A
- * projection of the same response `buildReferenceResponse` returns, so it can't drift from the
- * JSON. `origin` is the base URL the paths hang off.
+ * The reference's index as Markdown, what an agent reads first (SPEC §11): the topics every
+ * route shares (authentication, errors with the refusal table, paging, acting safely,
+ * following changes), a `##` each, then a `##` per tier and a `###` per resource, listing
+ * each route on one line with the resource's own document to read before calling one. A
+ * projection of the same response `buildReferenceResponse` returns, so it can't drift from
+ * the JSON. `origin` is the base URL the paths hang off.
  */
-export function referenceMarkdown(ref: ReferenceResponse, origin: string): string {
-  const head = `# API reference\n\nEvery route this instance serves, generated from its registration. Base URL \`${origin}\`. The topics below hold what every route shares; each resource then opens with the object its routes return, and each route says only what is its own.`;
+export function referenceIndexMarkdown(ref: ReferenceResponse, origin: string): string {
+  const head = `# API reference\n\nEvery route this instance serves, generated from its registration. Base URL \`${origin}\`. Read the topics below first; they hold what every route shares. Each resource's routes are listed on one line each: before calling one, read the resource's own reference, which describes the object its routes return and, for each route, its parameters, body, answer, refusals, and an example.`;
   const concepts = ref.concepts.map((c) =>
     [`## ${c.title}`, c.text, ...(c.key === "errors" ? [refusalsMarkdown(ref.refusals)] : [])].join(
       "\n\n",
     ),
   );
-  // An object heads its resource once, in the first tier that lists the resource.
-  const placed = new Set<string>();
   const tiers = ref.groups.map((g) => {
     const resources = g.resources.map((res) => {
-      const objects = placed.has(res.key) ? [] : ref.objects.filter((o) => o.resource === res.key);
-      placed.add(res.key);
+      const lines = g.routes
+        .filter((r) => r.resource === res.key)
+        .map((r) => `- ${r.title}: \`${r.method} ${r.path}\``);
       return [
         `### ${res.title}`,
-        ...objects.map(objectMarkdown),
-        ...g.routes.filter((r) => r.resource === res.key).map(routeMarkdown),
+        `Reference: \`GET ${resourcePath(res.key)}\``,
+        lines.join("\n"),
       ].join("\n\n");
     });
     return [`## ${g.title}`, g.blurb, ...resources].join("\n\n");
   });
   return `${[head, ...concepts, ...tiers].join("\n\n")}\n`;
+}
+
+/**
+ * One resource's reference as Markdown, or null when no route acts on it: the object its routes
+ * return first, as Stripe puts "The Customer object" first under Customers, then each route in
+ * full, a `##` each. A refusal's code is explained in the index's refusal table, and an object
+ * another resource heads is linked in that resource's document.
+ */
+export function resourceMarkdown(ref: ReferenceResponse, key: string): string | null {
+  const routes = ref.groups.flatMap((g) => g.routes).filter((r) => r.resource === key);
+  const title = ref.groups.flatMap((g) => g.resources).find((res) => res.key === key)?.title;
+  if (!routes.length || title === undefined) {
+    return null;
+  }
+  const objects = ref.objects.filter((o) => o.resource === key);
+  const head = `# ${title}\n\nPart of the API reference; [the index](../reference.md) holds what every route shares, the refusal codes among it.`;
+  return `${[head, ...objects.map(objectMarkdown), ...routes.map(routeMarkdown)].join("\n\n")}\n`;
 }

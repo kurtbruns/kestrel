@@ -2,7 +2,7 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import apiDoc from "../docs/API.md";
-import { routeAnchor } from "../shared/reference";
+import { type ReferenceResponse, routeAnchor } from "../shared/reference";
 import {
   ERASED_MARKER_MEANING,
   FLAG_MEANING,
@@ -13,7 +13,12 @@ import {
 import { createRouter } from "../src/app";
 import { requireAuth } from "../src/auth/middleware";
 import { type AppEnv, getConfig } from "../src/env";
-import { buildReference, buildReferenceResponse, referenceMarkdown } from "../src/reference";
+import {
+  buildReference,
+  buildReferenceResponse,
+  referenceIndexMarkdown,
+  resourceMarkdown,
+} from "../src/reference";
 import { OBJECTS } from "../src/reference/objects";
 import { REFUSAL_STATUS, refusalGroups } from "../src/reference/refusals";
 import { type RouteDef, Router } from "../src/router";
@@ -22,6 +27,12 @@ import { AUTH, base } from "./support/http";
 // The point of the manifest: the reference IS the registration. These tests pin
 // that it can't drift — every live route is listed, its documented tier is the
 // tier that actually gates it, and a newly registered route shows up for free.
+
+/** Every resource's own reference, by its key, as `/api/reference/<key>.md` serves it. */
+function resourceDocs(ref: ReferenceResponse): Map<string, string> {
+  const keys = new Set(ref.groups.flatMap((g) => g.resources.map((res) => res.key)));
+  return new Map([...keys].map((key) => [key, resourceMarkdown(ref, key) ?? ""]));
+}
 
 describe("API reference is generated from the route registration", () => {
   const router = createRouter(getConfig(env as AppEnv));
@@ -344,16 +355,20 @@ describe("API reference is generated from the route registration", () => {
 
   it("describes every object a route returns, once, first under its resource, and links each route to it", () => {
     const ref = buildReferenceResponse(defs);
-    const md = referenceMarkdown(ref, "https://newsletter.example.com");
+    const docs = resourceDocs(ref);
+    const all = [...docs.values()].join("\n");
     const returned = ref.groups.flatMap((g) => g.routes).flatMap((r) => r.returns?.object ?? []);
     expect(new Set(returned)).toEqual(new Set(ref.objects.map((o) => o.key)));
     for (const o of ref.objects) {
-      expect(md.match(new RegExp(`^#### ${o.title}$`, "gm")), o.key).toHaveLength(1);
-      expect(md).toContain(`](#${o.title.toLowerCase().replaceAll(" ", "-")})`);
+      expect(all.match(new RegExp(`^## ${o.title}$`, "gm")), o.key).toHaveLength(1);
+      expect(docs.get(o.resource), o.key).toMatch(new RegExp(`^## ${o.title}$`, "m"));
     }
     // Stripe's order: the object heads its resource, before the routes that return it.
-    expect(md).toMatch(/^### Sends\n\n#### The send view\n/m);
-    expect(md).toMatch(/^### Posts\n\n#### The post object\n[\s\S]*?^#### The revision object$/m);
+    expect(docs.get("sends")).toMatch(/^# Sends\n\n[^\n]+\n\n## The send view\n/);
+    expect(docs.get("posts")).toMatch(/^## The post object$[\s\S]*?^## The revision object$/m);
+    // A link to an object is to its own section, in another resource's document when it heads one.
+    expect(docs.get("sends")).toContain("[The send view](#the-send-view)");
+    expect(docs.get("posts")).toContain("[The send view](sends.md#the-send-view)");
     const byKey = new Map(
       ref.groups.flatMap((g) => g.routes).map((r) => [`${r.method} ${r.path}`, r]),
     );
@@ -368,26 +383,27 @@ describe("API reference is generated from the route registration", () => {
   });
 
   it("states what every send shares once: the conditions, the halts, and the whole send view's example", () => {
-    const md = referenceMarkdown(buildReferenceResponse(defs), "https://newsletter.example.com");
+    const ref = buildReferenceResponse(defs);
+    const index = referenceIndexMarkdown(ref, "https://newsletter.example.com");
+    const all = [index, ...resourceDocs(ref).values()].join("\n");
     // A line from the conditions glossary, a line from the halts, and a field only the full
     // example carries: each once, in the send view, where route prose used to repeat them.
-    expect(md.match(/recipient handed off for 30 minutes/g)).toHaveLength(1);
-    expect(md.match(/retried after 1, 2, 5, 15, and 30 minutes/g)).toHaveLength(1);
-    expect(md.match(/"deliveries_csv":/g)).toHaveLength(1);
-    // And the topics lead, in plain sentences, the refusal table under Errors.
-    expect([...md.matchAll(/^## (.+)$/gm)].map(([, t]) => t).slice(0, 5)).toEqual([
+    expect(all.match(/recipient handed off for 30 minutes/g)).toHaveLength(1);
+    expect(all.match(/retried after 1, 2, 5, 15, and 30 minutes/g)).toHaveLength(1);
+    expect(all.match(/"deliveries_csv":/g)).toHaveLength(1);
+    // The index leads with the topics, in plain sentences, the refusal table under Errors.
+    expect([...index.matchAll(/^## (.+)$/gm)].map(([, t]) => t).slice(0, 5)).toEqual([
       "Authentication",
       "Errors",
       "Lists and paging",
       "Acting safely",
       "Following changes",
     ]);
-    expect(md).not.toContain("**");
-    expect(md).toMatch(
+    expect(all).not.toContain("**");
+    expect(index).toMatch(
       /^## Errors\n[\s\S]*?\| Next move \| Refusal \| Meaning \|[\s\S]*?^## Lists and paging$/m,
     );
-    expect(md).toContain("| Read again, then decide | 409 `stale_revision` |");
-    expect(md.indexOf("## Following changes")).toBeLessThan(md.indexOf("## Admin"));
+    expect(index).toContain("| Read again, then decide | 409 `stale_revision` |");
   });
 
   it("shows each answer's send at the change its cursor stands at, as the server answers", () => {
@@ -465,39 +481,74 @@ describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
   const router = createRouter(getConfig(env as AppEnv));
   const defs = router.routes.map((r) => r.def);
 
-  it("gives every registered route its own heading, its title over its method and path, under its tier and resource", () => {
-    const md = referenceMarkdown(buildReferenceResponse(defs), "https://newsletter.example.com");
-    const headings = [...md.matchAll(/^#### (.+)\n\n`(\S+) (\S+)`$/gm)].map(
+  it("lists every route on one line in the index, under its tier and resource, with the resource's own reference", () => {
+    const md = referenceIndexMarkdown(
+      buildReferenceResponse(defs),
+      "https://newsletter.example.com",
+    );
+    const lines = [...md.matchAll(/^- (.+): `(\S+) (\S+)`$/gm)].map(
       ([, t, m, p]) => `${t}: ${m} ${p}`,
     );
-    expect(headings.sort()).toEqual(defs.map((d) => `${d.title}: ${d.method} ${d.path}`).sort());
+    expect(lines.sort()).toEqual(defs.map((d) => `${d.title}: ${d.method} ${d.path}`).sort());
     expect(md).toContain("Base URL `https://newsletter.example.com`");
-    // Tiers, then their resources, then routes, each a level down.
     expect(md).toMatch(
-      /^## Admin\n\n[^#][\s\S]*?^### Posts\n\n[\s\S]*?^#### .+\n\n`\S+ \/api\/posts\S*`$/m,
+      /^## Admin\n\n[^#][\s\S]*?^### Posts\n\nReference: `GET \/api\/reference\/posts\.md`\n\n- /m,
     );
-    expect(md).not.toMatch(/^## \S+: /m);
-    // A route's query table, body table, and example come through.
-    expect(md).toMatch(/\| Query parameter \| Description \|/);
-    expect(md).toContain(
-      '| Body field | Type | Description |\n| --- | --- | --- |\n| `resolution` (required) | "unsent" \\| "accepted" |',
-    );
-    expect(md).toContain(
-      "Refusals:\n- 409 `run_in_progress`, with `send`: A run holds the send, and its in-flight rows may still get the provider's answer: try again a moment later.\n- 409 `not_wedged`, with `send`: ",
-    );
-    // The refusals every route shares are said once, at the top, never in a route's own.
-    expect(md.indexOf("401 `unauthorized`")).toBeLessThan(md.indexOf("## Admin"));
-    expect(md.slice(md.indexOf("## Admin"))).not.toContain("`unauthorized`");
-    expect(md).toContain("Example response:");
+    // The index carries no route's detail: that is the resource's own reference.
+    expect(md).not.toContain("| Body field |");
+    expect(md).not.toContain("Example response:");
   });
 
-  it("is served as text/markdown when authed, matching the JSON's routes", async () => {
+  it("gives every route its own section in its resource's reference: call, parameters, body, answer, refusals, example", () => {
+    const ref = buildReferenceResponse(defs);
+    const docs = resourceDocs(ref);
+    for (const d of defs) {
+      expect(docs.get(d.resource), `${d.method} ${d.path}`).toContain(
+        `\n## ${d.title}\n\n\`${d.method} ${d.path}\``,
+      );
+    }
+    const sends = docs.get("sends") ?? "";
+    expect(docs.get("posts")).toMatch(/\| Query parameter \| Description \|/);
+    expect(sends).toContain(
+      '| Body field | Type | Description |\n| --- | --- | --- |\n| `resolution` (required) | "unsent" \\| "accepted" |',
+    );
+    expect(sends).toContain(
+      "Refusals:\n- 409 `run_in_progress`, with `send`: A run holds the send, and its in-flight rows may still get the provider's answer: try again a moment later.\n- 409 `not_wedged`, with `send`: ",
+    );
+    expect(sends).toContain("Example response:");
+    // A route off the admin tier says so on its call line.
+    expect(docs.get("subscriptions")).toContain("`POST /subscribe` (public: no authentication)");
+    expect(docs.get("delivery")).toContain("`POST /webhooks/ses` (webhook: the provider signs it");
+    // The refusals every route shares are said once, in the index, never in a route's own.
+    for (const doc of docs.values()) {
+      expect(doc).not.toContain("`unauthorized`");
+    }
+    expect(resourceMarkdown(ref, "nothing")).toBeNull();
+  });
+
+  it("is served as text/markdown when authed: the index, and each resource's reference", async () => {
     const res = await SELF.fetch(`${base}/api/reference.md`, { headers: AUTH });
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
-    const md = await res.text();
-    expect(md).toMatch(/^# API reference/);
-    expect(md).toContain("\n#### Get a doc as Markdown\n\n`GET /api/docs/:name.md`\n");
-    expect(md).toContain(`Base URL \`${base}\``);
+    const index = await res.text();
+    expect(index).toMatch(/^# API reference/);
+    expect(index).toContain("- Get a doc as Markdown: `GET /api/docs/:name.md`\n");
+    expect(index).toContain(`Base URL \`${base}\``);
+    const sends = await SELF.fetch(`${base}/api/reference/sends.md`, { headers: AUTH });
+    expect(sends.status).toBe(200);
+    expect(sends.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
+    expect(await sends.text()).toMatch(/^# Sends\n/);
+    const unknown = await SELF.fetch(`${base}/api/reference/nothing.md`, { headers: AUTH });
+    expect(unknown.status).toBe(404);
+    expect((await SELF.fetch(`${base}/api/reference/sends.md`)).status).toBe(401);
+  });
+
+  it("keeps the index, what an agent reads first, a fraction of the whole reference", () => {
+    // Every conversation reads the index up front; a resource's reference is read when the work
+    // reaches it. If the index grows toward the whole, route detail has leaked into it.
+    const ref = buildReferenceResponse(defs);
+    const index = referenceIndexMarkdown(ref, "https://newsletter.example.com").length;
+    const whole = index + [...resourceDocs(ref).values()].join("").length;
+    expect(index / whole).toBeLessThan(0.3);
   });
 });
