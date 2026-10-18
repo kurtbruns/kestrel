@@ -10,7 +10,28 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading from 1.12.0.** Run `npm run check-context` in your instance's repository: this release changes the operator's Claude context, and a copy you've edited is merged by hand. Several API changes can break a script of yours, listed under Breaking. One that reads an import plan's `daily_writes_warning` reads `workers_plan_advice` instead. One that reads or writes the settings, the version, who is signed in, a send's phase, or a list's sort uses the snake_case names: in `GET` and `PUT /api/settings`, `testRecipients`, `emailTemplate`, `confirmationEmail` (its `buttonLabel` is `button_label`), `confirmationEmailDefault`, and `publication.logoUrl` are `test_recipients`, `email_template`, `confirmation_email`, `confirmation_email_default`, and `publication.logo_url`; `deployment`'s `fromAddress`, `sendingDomain`, `appOrigin`, `archiveOrigin`, `archiveBasePath`, `mediaPublicBase`, `awsRegion`, `accessConfigured`, `authMode`, `notifyChannel`, `notifyFrom`, `minLeadMs`, `notConnectedPreview`, and `freePlanLimits` are `from_address`, `sending_domain`, `app_origin`, `archive_origin`, `archive_base_path`, `media_public_base`, `aws_region`, `access_configured`, `auth_mode`, `notify_channel`, `notify_from`, `min_lead_ms`, `not_connected_preview`, and `free_plan_limits`; `inUse` (with its `identityFields`, whose `logoUrl` is `logo_url`) is `in_use` (`identity_fields`); `notificationStatus` (with `lastSent` and `lastFailure`) is `notification_status` (`last_sent`, `last_failure`); a field error's `field` names the new path, such as `confirmation_email.button_label`. The build, on `GET /api/version` and `deployment.build`, has `build_time`, `repo_url`, `commit_url`, and `tag_url`; `GET /api/whoami`'s `principal.tokenId` is `principal.token_id`. A send's `phase` reads `backing_off` and `needs_attention`. The sort keys are the fields they sort by: posts `updated_at`, `subject`, `status`, and `fire_at` (were `updated`, `title`, and `scheduled`); sends `fire_at` and `audience.count` (were `fire` and `recipients`); subscribers `created_at` and `confirmed_at` (were `joined` and `confirmed`); and a send's deliveries `event_at` (was `updated`). A request that still sends an old name is refused with a 400 naming it, never answered as if it had been read: `PUT /api/settings` now refuses any field it doesn't take.
+**Upgrading from 1.12.0.** Run `npm run check-context` in your instance's repository: this release changes the operator's Claude context, and a copy you've edited is merged by hand. Several API changes can break a script of yours, each listed under Breaking; the table gives every renamed field, value, and sort key, old to new. A request that still sends an old name is refused with a 400 naming it, never answered as if it had been read: `PUT /api/settings` now refuses any field it doesn't take.
+
+| Where | Was | Now |
+| --- | --- | --- |
+| `GET`, `PUT /api/settings` | `settings.testRecipients` | `settings.test_recipients` |
+|  | `settings.emailTemplate` | `settings.email_template` |
+|  | `settings.confirmationEmail`, `.confirmationEmailDefault` | `settings.confirmation_email`, `.confirmation_email_default` |
+|  | `settings.confirmationEmail.buttonLabel` | `settings.confirmation_email.button_label` |
+|  | `settings.publication.logoUrl` | `settings.publication.logo_url` |
+|  | `deployment.fromAddress`, `sendingDomain`, `appOrigin`, `archiveOrigin`, `archiveBasePath`, `mediaPublicBase`, `awsRegion` | `deployment.from_address`, `sending_domain`, `app_origin`, `archive_origin`, `archive_base_path`, `media_public_base`, `aws_region` |
+|  | `deployment.accessConfigured`, `authMode`, `notifyChannel`, `notifyFrom`, `minLeadMs`, `notConnectedPreview`, `freePlanLimits` | `deployment.access_configured`, `auth_mode`, `notify_channel`, `notify_from`, `min_lead_ms`, `not_connected_preview`, `free_plan_limits` |
+|  | `inUse`, `inUse.identityFields` (value `logoUrl`) | `in_use`, `in_use.identity_fields` (value `logo_url`) |
+|  | `notificationStatus.lastSent`, `.lastFailure` | `notification_status.last_sent`, `.last_failure` |
+|  | a 400's `field`, such as `confirmationEmail.buttonLabel` | the new path, such as `confirmation_email.button_label` |
+| `GET /api/version`, `deployment.build` | `buildTime`, `repoUrl`, `commitUrl`, `tagUrl` | `build_time`, `repo_url`, `commit_url`, `tag_url` |
+| `GET /api/whoami` | `principal.tokenId` | `principal.token_id` |
+| A send's `phase` | `backing-off`, `needs-attention` | `backing_off`, `needs_attention` |
+| `GET /api/posts` `sort` | `updated`, `title`, `scheduled` | `updated_at`, `subject`, `fire_at` |
+| `GET /api/sends` `sort` | `fire`, `recipients` | `fire_at`, `audience.count` |
+| `GET /api/subscribers` `sort` | `joined`, `confirmed` | `created_at`, `confirmed_at` |
+| `GET /api/sends/:id/deliveries` `sort` | `updated` | `event_at` |
+| An import plan | `daily_writes_warning` | `workers_plan_advice` (a different meaning: see Breaking) |
 
 ### Breaking
 
