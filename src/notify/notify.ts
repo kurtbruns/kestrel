@@ -56,8 +56,13 @@ export function stillHolds(n: notifications.DueAny, now: number): boolean {
     case "finished":
       return true;
     case "refused":
+      // A wedged send is no longer retried, whatever halt it last carried, so it waits on
+      // Resolve, not on the refusal (as its conditions say).
       return (
-        n.send_status === "sending" && n.halt_reason === "account" && n.halted_at === n.episode
+        n.send_status === "sending" &&
+        n.halt_reason === "account" &&
+        n.halted_at === n.episode &&
+        !isWedged({ ...n, status: n.send_status })
       );
     case "stuck":
       return idleSince({ ...n, status: n.send_status }) === n.episode;

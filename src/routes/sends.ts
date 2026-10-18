@@ -74,17 +74,23 @@ export async function list(c: RequestContext): Promise<Response> {
 
 /**
  * The entity tag of a send's view: its `rev`, and what the clock derives from it (the
- * phase, each condition and its words, the actions, the next change), so a 304 means
- * nothing about the send has changed since, written or derived: a fire time passing turns
- * a `scheduled` view `due` with no write, and a missed or stuck send's words count its
- * minutes. Only `as_of` is left out.
+ * phase, each condition and its words, the actions, the next change, the dispatch rate and
+ * time to finish), so a 304 means nothing about the send has changed since, written or
+ * derived: a fire time passing turns a `scheduled` view `due` with no write, a missed or
+ * stuck send's words count its minutes, and a tick boundary moves the estimate. The time
+ * to finish counts as the moment it lands (`as_of` plus `eta_ms`), since `eta_ms` itself
+ * shrinks with every read toward the same finish. Only `as_of` is left out.
  */
 function sendEtag(view: SendView): string {
+  const { eta_ms, rate_per_min } = view.dispatch;
   const derived = [
     view.phase,
     view.conditions.map((cond) => `${cond.kind}:${cond.message}`).join(","),
     view.actions.map((act) => act.name).join(","),
     String(view.next_change_at),
+    String(rate_per_min),
+    // A finish already due reads as `now` on every read, so it counts as one token.
+    eta_ms === null ? "null" : eta_ms === 0 ? "due" : String(view.as_of + eta_ms),
   ].join(";");
   let h = 0;
   for (let i = 0; i < derived.length; i++) {

@@ -67,6 +67,8 @@ A cursor from a database that has since gone back in time, such as after a resto
 
 **Documents come two ways.** The instance's own documentation, the docs and the API reference, is read as data the editor renders, and as Markdown an agent reads: the reference as an index at its own path plus `.md` (the topics every route shares, and every route on one line) and each resource's full reference at `/api/reference/<resource>.md`, so an agent reads the index up front and a resource's reference when its work reaches it, each doc at `/api/docs/<slug>.md`, and each set's index at `/api/docs/<set>.md`. Each is a projection of one source, the docs' Markdown files or the route registration, so the two can't disagree. In a doc's Markdown, a link to another doc points at that doc's Markdown, so an agent can follow it without knowing where the source files live. A page merged into another still answers at its old slug, with the page that now holds its content.
 
+**An agent finds the API from the instance itself.** `/llms.txt` is public, in the llms.txt convention: the publication's name, its public archive and subscribe page, and the Markdown to read first, the reference's index and each set's index of the docs, which take a service token like every route under `/api`. An agent pointed at nothing but the instance's address reads it there. It is generated from the route registration, each path listed under the access its route has.
+
 ## Acting
 
 The client takes an act from the resource's `actions`, so it offers only what the server would accept now. The answer carries the resource as it stands after the act, `changed`, and a new `cursor`, so the client updates its copy without another read. A refused act carries the resource too.

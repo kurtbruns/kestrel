@@ -18,6 +18,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Added
 
+- Each instance serves a public `/llms.txt`, so an agent given only its address learns what it is and where to start: the publication's name, its archive and subscribe page, and the API reference and docs behind Access, with a link to Connect Claude to the API for a service token. It is generated from the routes the instance registers, so it always matches the release (SPEC §11).
 - A scheduled post that no test has been sent for says so on the editor's scheduled banner until the first test lands, and the API carries it as an `untested` condition (`info`) on the send and in the feed, so Claude can tell whether the email was tested (SPEC §8).
 - **Clear** in a subscriber's ⋯ menu lifts a bounce or a complaint, after a dialog that says the address failed or reported spam, and to clear a bounce only when you know its cause is gone and a complaint only when the reader asks for your posts again, which before only the API could do (SPEC §7). It is never offered on an erasure's marker. The list's legend, under What you can do, and the API reference say when to use it, in the same words.
 - The operator's Claude context tells Claude to clear a complaint only when the publisher says the reader asked for their mail again, not merely that the problem is gone, since a complaint was the reader's own act.
@@ -38,6 +39,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
+- A send stuck awaiting Resolve that still carried an earlier refusal of the account is no longer emailed to the publisher as the provider refusing the account. Nothing retries such a send, so the editor and the API showed only that it waits for Resolve, and the email now agrees (SPEC §8).
+- A send's cached answer (`If-None-Match` on `GET /api/sends/:id`) no longer keeps a client on a stale time to finish: the tag now changes when the dispatch rate or the expected finish does.
 - The API reference's description of a send's `phase` said `needs-attention` covers a missed or stuck send, which stay `due` and `progressing` (their conditions say so), and that `backing-off` is only an outage or rate limit, when it also covers recipients waiting on a retry. It now also says which phases each `status` has, and that `status` is the one to filter and route on.
 
 ## [1.12.0] - 2026-10-16

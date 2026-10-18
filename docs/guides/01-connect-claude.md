@@ -78,6 +78,8 @@ you're working with, such as GET /api/reference/sends.md, before calling it.
 
 For Claude the reference is Markdown in two levels: `GET /api/reference.md` is the index, with what every route shares and each route on one line, and `GET /api/reference/<resource>.md` holds one resource's routes in full, so Claude reads only what its work needs. The JSON at `GET /api/reference` is the whole reference in one answer, as the editor reads it. The docs are served as Markdown too: `GET /api/docs/publishing.md` lists the publisher's pages, `GET /api/docs/self-hosting.md` this guide's, and each page is at `GET /api/docs/<slug>.md`.
 
+An agent given only your app's address finds these routes too. `GET /llms.txt` is public. It names the publication, its archive and subscribe page, and the reference and docs indexes, and links this guide for the token.
+
 Claude reads the reference, and from there can list the posts, write a draft, and schedule it. The reference lists the body types each route takes. Most take JSON, sent with `Content-Type: application/json`. An image upload takes a multipart form, or the image file itself.
 
 To bring subscribers over from another service, ask Claude to import the list, as [Bring your existing list](../publishing/01-your-list.md) describes. Its [file format](../publishing/01-your-list.md#the-file-format) section describes every column.

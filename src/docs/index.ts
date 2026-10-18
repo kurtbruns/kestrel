@@ -168,6 +168,11 @@ function readIndex(
 
 const INDEXES = SET_SOURCES.map((s) => ({ ...s, ...readIndex(s.index, s.path) }));
 
+/** Each set's id, the name its index is served under, and its index's title, in order. */
+export function docSets(): { id: string; title: string }[] {
+  return INDEXES.map((s) => ({ id: s.id, title: s.title }));
+}
+
 /** The path of every bundled page, for a spec to hold against what the indexes list. */
 export function bundledPages(): string[] {
   return Object.keys(PAGES);

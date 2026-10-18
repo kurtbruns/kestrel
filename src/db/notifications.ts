@@ -123,7 +123,9 @@ export async function sandboxNotice(db: D1Database, now: number): Promise<void> 
  * counts only within the horizon, so turning notifications on does not mail the history.
  * A refusal is the account's, so it is one event however many sends it holds: a send that
  * joined another's refusal (`joinHalt`) shares when it began, and only one of the sends
- * sharing that start is told of it.
+ * sharing that start is told of it. A wedged send waits on Resolve, not on the refusal it
+ * last carried, so it is neither told of the refusal nor the one the others defer to, and a
+ * refusal's notice closed as cleared before it went out holds back no other send's.
  * A send in flight too long (`stuckSendSql`) is one event for each stretch it sits idle,
  * keyed by when that stretch began (`SEND_IDLE_SINCE`), so a send that moves again and later
  * stops is told again. A wedged or halted send is not stuck: its own notification says why
@@ -138,12 +140,14 @@ export async function recordNotifications(db: D1Database, now: number): Promise<
          UNION ALL
          SELECT id, 'refused', halted_at, ?1, ?1 FROM sends s
           WHERE status = 'sending' AND halt_reason = 'account' AND halted_at IS NOT NULL
+            AND NOT (${WEDGED_SEND})
             AND NOT EXISTS (SELECT 1 FROM sends o
                              WHERE o.status = 'sending' AND o.halt_reason = 'account'
-                               AND o.halted_at = s.halted_at AND o.id < s.id)
+                               AND o.halted_at = s.halted_at AND o.id < s.id
+                               AND NOT ${WEDGED_SEND})
             AND NOT EXISTS (SELECT 1 FROM notifications r
                              WHERE r.kind = 'refused' AND r.episode = s.halted_at
-                               AND r.send_id <> s.id)
+                               AND r.send_id <> s.id AND r.status <> 'cleared')
          UNION ALL
          SELECT id, 'missed', 0, ?1, ?1 FROM sends
           WHERE (status = 'scheduled' AND fire_at < ?1 - ?3)
