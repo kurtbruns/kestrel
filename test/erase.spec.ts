@@ -240,8 +240,8 @@ describe("erasing a subscriber (SPEC §7)", () => {
 
     const result = await importCsv([`${email},subscribed,double,sendy,,,,,,`]);
 
-    expect(result.counts.blocked_by_suppression).toBe(1);
-    expect(result.counts.create_confirmed).toBe(0);
+    expect(result.counts.kept_suppressed).toBe(1);
+    expect(result.counts.added_confirmed).toBe(0);
     expect(await subs.getByEmail(env.DB, email)).toBeNull();
     expect((await suppressionOf(email))?.reason).toBe("erased");
   });
@@ -315,12 +315,10 @@ describe("an import after an erasure, whatever status the file gives the address
     it(`is blocked for ${what}, creating no subscriber and keeping the marker`, async () => {
       const { plan, result } = await planAndCommit(file, status);
 
-      const blocked = [
-        { row: 1, email, outcome: "blocked_by_suppression", suppression_added: false },
-      ];
-      expect(plan.counts).toEqual(counts({ blocked_by_suppression: 1 }));
+      const blocked = [{ row: 1, email, outcome: "kept_suppressed", suppression_added: false }];
+      expect(plan.counts).toEqual(counts({ kept_suppressed: 1 }));
       expect(plan.rows).toEqual(blocked);
-      expect(result.counts).toEqual(counts({ blocked_by_suppression: 1 }));
+      expect(result.counts).toEqual(counts({ kept_suppressed: 1 }));
       expect(result.rows).toEqual(blocked);
       expect(result.differed).toEqual([]);
       expect(await subs.getByEmail(env.DB, email)).toBeNull();
@@ -335,8 +333,8 @@ describe("an import after an erasure, whatever status the file gives the address
       csvFile([`${email},unsubscribed,unknown,sendy,bounce,,,,,`]),
     );
 
-    const blocked = [{ row: 1, email, outcome: "blocked_by_suppression", suppression_added: true }];
-    expect(plan.counts).toEqual(counts({ blocked_by_suppression: 1 }));
+    const blocked = [{ row: 1, email, outcome: "kept_suppressed", suppression_added: true }];
+    expect(plan.counts).toEqual(counts({ kept_suppressed: 1 }));
     expect(plan.rows).toEqual(blocked);
     expect(result.rows).toEqual(blocked);
     expect(result.suppressions_added).toBe(1);
@@ -352,7 +350,7 @@ describe("an import after an erasure, whatever status the file gives the address
       { ...csvFile([`${other},unsubscribed,unknown,sendy,,,,,,`]), plainListStatus: null },
       { maxRows: IMPORT_LIMITS.maxRows, maxRowsReason: null, publication: "Field Notes" },
     );
-    expect(plan.counts).toEqual(counts({ create_unsubscribed: 1 }));
+    expect(plan.counts).toEqual(counts({ added_unsubscribed: 1 }));
     // They subscribe and are erased between the plan and the commit.
     await seedConfirmed(other);
     await eraseOk(other);
@@ -365,9 +363,9 @@ describe("an import after an erasure, whatever status the file gives the address
     );
 
     expect(result.differed).toEqual([
-      { row: 1, email: other, planned: "create_unsubscribed", applied: "blocked_by_suppression" },
+      { row: 1, email: other, planned: "added_unsubscribed", applied: "kept_suppressed" },
     ]);
-    expect(result.counts).toEqual(counts({ blocked_by_suppression: 1 }));
+    expect(result.counts).toEqual(counts({ kept_suppressed: 1 }));
     expect(await subs.getByEmail(env.DB, other)).toBeNull();
     expect((await suppressionOf(other))?.reason).toBe("erased");
     expect(await tablesNaming(other)).toEqual(["suppressions"]);
@@ -380,7 +378,7 @@ describe("an import after an erasure, whatever status the file gives the address
       { ...csvFile([`${other},unsubscribed,unknown,sendy,bounce,,,,,`]), plainListStatus: null },
       { maxRows: IMPORT_LIMITS.maxRows, maxRowsReason: null, publication: "Field Notes" },
     );
-    expect(plan.counts).toEqual(counts({ create_unsubscribed: 1 }));
+    expect(plan.counts).toEqual(counts({ added_unsubscribed: 1 }));
     await seedConfirmed(other);
     await eraseOk(other);
 
@@ -392,9 +390,9 @@ describe("an import after an erasure, whatever status the file gives the address
     );
 
     expect(result.differed).toEqual([
-      { row: 1, email: other, planned: "create_unsubscribed", applied: "blocked_by_suppression" },
+      { row: 1, email: other, planned: "added_unsubscribed", applied: "kept_suppressed" },
     ]);
-    expect(result.counts).toEqual(counts({ blocked_by_suppression: 1 }));
+    expect(result.counts).toEqual(counts({ kept_suppressed: 1 }));
     expect(result.suppressions_added).toBe(1);
     expect(await subs.getByEmail(env.DB, other)).toBeNull();
     expect((await suppressionOf(other))?.reason).toBe("import_bounce");
@@ -406,9 +404,9 @@ describe("an import row that itself says the address was erased (SPEC §7)", () 
   const email = "ada@example.com";
 
   for (const [status, outcome] of [
-    ["subscribed", "blocked_by_suppression"],
-    ["unsubscribed", "blocked_by_suppression"],
-    ["pending", "suppression_added"],
+    ["subscribed", "kept_suppressed"],
+    ["unsubscribed", "kept_suppressed"],
+    ["pending", "suppressed"],
   ] as const) {
     it(`adds only the marker for a ${status} row, creating no subscriber`, async () => {
       const { plan, result } = await planAndCommit(
@@ -439,9 +437,7 @@ describe("an import row that itself says the address was erased (SPEC §7)", () 
       csvFile([`${email},unsubscribed,unknown,sendy,erased,,,,,`]),
     );
 
-    const blocked = [
-      { row: 1, email, outcome: "blocked_by_suppression", suppression_added: false },
-    ];
+    const blocked = [{ row: 1, email, outcome: "kept_suppressed", suppression_added: false }];
     expect(plan.rows).toEqual(blocked);
     expect(result.rows).toEqual(blocked);
     expect(await subs.getByEmail(env.DB, email)).toBeNull();
@@ -473,7 +469,7 @@ describe("an import row that says an address on the list was erased (SPEC §7)",
       ]),
     );
 
-    const rows = [{ row: 1, email, outcome: "blocked_by_suppression", suppression_added: true }];
+    const rows = [{ row: 1, email, outcome: "kept_suppressed", suppression_added: true }];
     expect(plan.rows).toEqual(rows);
     expect(plan.attestation).toBeNull();
     expect(result.rows).toEqual(rows);
@@ -492,7 +488,7 @@ describe("an import row that says an address on the list was erased (SPEC §7)",
     await importCsv([`${email},subscribed,double,sendy,,,,,,`]);
     const result = await importCsv([`${email},subscribed,double,sendy,erased,,,,,`]);
     expect(result.rows).toEqual([
-      { row: 1, email, outcome: "suppression_added", suppression_added: true },
+      { row: 1, email, outcome: "suppressed", suppression_added: true },
     ]);
     expect((await subs.getByEmail(env.DB, email))!.status).toBe("confirmed");
     expect((await suppressionOf(email))?.reason).toBe("erased");

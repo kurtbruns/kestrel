@@ -10,10 +10,11 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading from 1.12.0.** Run `npm run check-context` in your instance's repository: this release changes the operator's Claude context, and a copy you've edited is merged by hand. One API change can break a script of yours, listed under Breaking: one that reads an import plan's `daily_writes_warning` reads `workers_plan_advice` instead.
+**Upgrading from 1.12.0.** Run `npm run check-context` in your instance's repository: this release changes the operator's Claude context, and a copy you've edited is merged by hand. Two API changes can break a script of yours, listed under Breaking: one that reads an import plan's `daily_writes_warning` reads `workers_plan_advice` instead, and one that matches an import outcome by name matches its new name.
 
 ### Breaking
 
+- An import's outcomes are renamed into one form, the past tense of what the import does to the address, and none says "blocked" any more, which in the editor and the API means only your own block: `create_confirmed` is now `added_confirmed`, `confirm_pending` is `confirmed_pending`, `mark_unsubscribed` is `unsubscribed`, `create_unsubscribed` is `added_unsubscribed`, `blocked_by_suppression` is `kept_suppressed`, and `suppression_added` (as an outcome, not the row's field of that name) is `suppressed`. They change in an import plan's and a commit's `counts`, `rows`, and `differed`, the format route's `outcomes`, and an import's record, where one committed before this release reads under the new names too. A script that matched an old name matches the new one (SPEC §7).
 - An import plan's `daily_writes_warning` is now `workers_plan_advice`, and means something else: on the Workers Free plan's limits, the advice to move to Workers Paid when the import would leave more than 1,000 confirmed subscribers, rather than a count of the day's database writes. A script that read the old field reads the new one (SPEC §7).
 
 ### Added
@@ -35,6 +36,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 - The API reference and the operator's Claude context name the editor's words where the API's differ, so Claude and the publisher talk about the same thing: `email_only` is the editor's **Include in archive**, unchecked; **Edit schedule** is a reschedule and the post's settings together, so a publisher asking to edit the schedule may mean either or both; and Resolve's `unsent` and `accepted` are **Assume not sent** and **Assume sent**, which Claude now uses when it asks the publisher to choose. `npm run check-context` offers the context's change to an existing instance.
 - Three API reference routes are retitled to match the editor: `DELETE /api/suppressions/:email` is "Unblock or clear an address", since it is both the editor's **Unblock** and its **Clear**, and its description now covers both; `PUT /api/posts/:id/settings` is "Change a post's settings"; and `GET /` is "Show the home page", the name the editor and the docs already give the page at `/`, which SPEC, DESIGN, the reference, and the setup guide now use too.
+- The operator's Claude context: the migrate-list skill relays each import outcome by the name the plan gives it, now that the names read as they stand, and says a `kept_…` outcome is the list's own record winning, so those addresses aren't imported as the file says. `npm run check-context` offers the change to an existing instance.
 - A send that needs your decision on deliveries no one can confirm now says so on its page ("Some deliveries can’t be confirmed either way, and wait on your decision.") instead of calling them stuck, which the API uses for something else. An import plan says an address is already suppressed here, rather than blocked, since in the editor blocked means only your own block.
 
 ### Fixed

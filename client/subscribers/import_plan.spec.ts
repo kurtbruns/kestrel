@@ -19,18 +19,18 @@ describe("outcomeLines", () => {
       counts({
         kept_confirmed_newer: 1,
         merged: 3,
-        create_confirmed: 25,
-        blocked_by_suppression: 2,
-        create_unsubscribed: 5,
+        added_confirmed: 25,
+        kept_suppressed: 2,
+        added_unsubscribed: 5,
         invalid: 1,
       }),
     );
     expect(lines.map((l) => [l.outcome, l.count, l.kept])).toEqual([
-      ["create_confirmed", 25, false],
-      ["create_unsubscribed", 5, false],
+      ["added_confirmed", 25, false],
+      ["added_unsubscribed", 5, false],
       ["invalid", 1, false],
       ["merged", 3, false],
-      ["blocked_by_suppression", 2, true],
+      ["kept_suppressed", 2, true],
       ["kept_confirmed_newer", 1, true],
     ]);
     expect(lines[0]?.text).toBe("25 addresses added as confirmed subscribers");
@@ -52,8 +52,8 @@ describe("outcomeLines", () => {
 
 describe("extraSuppressionsLine", () => {
   it("says once how many rows of other outcomes also gain a suppression", () => {
-    expect(extraSuppressionsLine(counts({ suppression_added: 2 }), 2)).toBeNull();
-    expect(extraSuppressionsLine(counts({ suppression_added: 2 }), 3)).toBe(
+    expect(extraSuppressionsLine(counts({ suppressed: 2 }), 2)).toBeNull();
+    expect(extraSuppressionsLine(counts({ suppressed: 2 }), 3)).toBe(
       "1 of the addresses above also gains a suppression, so it’s never mailed.",
     );
   });
@@ -77,19 +77,19 @@ describe("notImportedCsv", () => {
         {
           row: 3,
           email: "left@example.com",
-          outcome: "create_unsubscribed",
+          outcome: "added_unsubscribed",
           suppression_added: false,
         },
         { row: 7, email: "=1+1", outcome: "invalid", suppression_added: false },
         {
           row: 9,
           email: "gone@example.com",
-          outcome: "suppression_added",
+          outcome: "suppressed",
           suppression_added: true,
         },
       ]),
     ).toBe(
-      "row,email,outcome,suppression_added\r\n3,left@example.com,create_unsubscribed,no\r\n7,'=1+1,invalid,no\r\n9,gone@example.com,suppression_added,yes\r\n",
+      "row,email,outcome,suppression_added\r\n3,left@example.com,added_unsubscribed,no\r\n7,'=1+1,invalid,no\r\n9,gone@example.com,suppressed,yes\r\n",
     );
   });
 });
@@ -103,7 +103,7 @@ describe("rowDifferences", () => {
   });
 
   it("finds a row the plan on screen confirmed that was kept back, and the reverse (SPEC §7)", () => {
-    const planned = [row(2, "a@x.com", "invalid"), row(5, "b@x.com", "blocked_by_suppression")];
+    const planned = [row(2, "a@x.com", "invalid"), row(5, "b@x.com", "kept_suppressed")];
     const applied = [row(2, "a@x.com", "invalid"), row(4, "c@x.com", "kept_unsubscribed")];
     expect(rowDifferences(planned, applied, [])).toEqual([
       { row: 4, email: "c@x.com", planned: "Imported as subscribed", applied: "Kept unsubscribed" },
@@ -120,8 +120,8 @@ describe("rowDifferences", () => {
     const applied = [row(3, "d@x.com", "unchanged")];
     expect(
       rowDifferences([], applied, [
-        { row: 3, email: "d@x.com", planned: "create_confirmed", applied: "unchanged" },
-        { row: 6, email: "e@x.com", planned: "create_confirmed", applied: "confirm_pending" },
+        { row: 3, email: "d@x.com", planned: "added_confirmed", applied: "unchanged" },
+        { row: 6, email: "e@x.com", planned: "added_confirmed", applied: "confirmed_pending" },
       ]),
     ).toEqual([
       { row: 3, email: "d@x.com", planned: "Imported as subscribed", applied: "Unchanged" },
@@ -129,7 +129,7 @@ describe("rowDifferences", () => {
   });
 
   it("is empty when the result is the plan", () => {
-    const rows = [row(2, "a@x.com", "create_unsubscribed")];
+    const rows = [row(2, "a@x.com", "added_unsubscribed")];
     expect(rowDifferences(rows, rows, [])).toEqual([]);
   });
 });

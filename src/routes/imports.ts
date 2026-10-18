@@ -175,7 +175,7 @@ export async function commit(c: RequestContext): Promise<Response> {
   ) {
     throw refusal(
       "attestation_required",
-      `This import confirms ${p.counts.create_confirmed + p.counts.confirm_pending} subscribers, so it needs the publisher’s attestation: "${p.attestation.text}" Send attestation: { version: ${ATTESTATION.version}, accepted: true } once they have given it.`,
+      `This import confirms ${p.counts.added_confirmed + p.counts.confirmed_pending} subscribers, so it needs the publisher’s attestation: "${p.attestation.text}" Send attestation: { version: ${ATTESTATION.version}, accepted: true } once they have given it.`,
       { attestation: p.attestation },
     );
   }
@@ -205,8 +205,8 @@ export async function commit(c: RequestContext): Promise<Response> {
     importId: result.import.id,
     principal: principal.kind,
     rows: p.rowCount,
-    confirmed: result.counts.create_confirmed + result.counts.confirm_pending,
-    unsubscribed: result.counts.mark_unsubscribed + result.counts.create_unsubscribed,
+    confirmed: result.counts.added_confirmed + result.counts.confirmed_pending,
+    unsubscribed: result.counts.unsubscribed + result.counts.added_unsubscribed,
     suppressed: result.suppressions_added,
     differed: result.differed.length,
   });

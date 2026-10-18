@@ -526,7 +526,7 @@ function outcomeList(
   const kept = lines.filter((l) => l.kept);
   // The breakdown rides the first line that confirms anyone, and covers every one confirmed.
   const breakdownOn = main.find(
-    (l) => l.outcome === "create_confirmed" || l.outcome === "confirm_pending",
+    (l) => l.outcome === "added_confirmed" || l.outcome === "confirmed_pending",
   )?.outcome;
   return html`<ul class="imp-outcomes">${main.map(
     (l) =>

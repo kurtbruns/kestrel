@@ -174,7 +174,7 @@ describe("the format, as the API serves it (SPEC §7)", () => {
       file: { name: "kestrel-import-example.csv", text: await csv.text() },
     });
     expect(fromCsv.counts).toEqual(
-      counts({ create_confirmed: 2, create_unsubscribed: 1, suppression_added: 1 }),
+      counts({ added_confirmed: 2, added_unsubscribed: 1, suppressed: 1 }),
     );
     const txt = await SELF.fetch(`${base}/api/imports/template.txt`, { headers: AUTH });
     expect(txt.headers.get("content-disposition")).toBe(
@@ -183,7 +183,7 @@ describe("the format, as the API serves it (SPEC §7)", () => {
     const fromTxt = await planOk({
       file: { name: "kestrel-import-example.txt", text: await txt.text() },
     });
-    expect(fromTxt.counts).toEqual(counts({ create_confirmed: 3 }));
+    expect(fromTxt.counts).toEqual(counts({ added_confirmed: 3 }));
   });
 
   it("is documented on the reference page column by column and outcome by outcome, with an example that plans cleanly", async () => {
@@ -211,16 +211,14 @@ describe("the format, as the API serves it (SPEC §7)", () => {
         .split("only the columns they use, since an optional column may be left out:\n\n```\n")[1]
         ?.split("```")[0] ?? "";
     const p = await planOk({ file: { name: "example.csv", text: example } });
-    expect(p.counts).toEqual(
-      counts({ create_confirmed: 2, create_unsubscribed: 1, suppression_added: 1 }),
-    );
+    expect(p.counts).toEqual(counts({ added_confirmed: 2, added_unsubscribed: 1, suppressed: 1 }));
     // The short sample the page shows first, in its convert step, plans cleanly too.
     const sample =
       referencePage
         .split("the five columns that decide what happens to each row:\n\n```\n")[1]
         ?.split("```")[0] ?? "";
     const q = await planOk({ file: { name: "sample.csv", text: sample } });
-    expect(q.counts).toEqual(counts({ create_confirmed: 2, create_unsubscribed: 1 }));
+    expect(q.counts).toEqual(counts({ added_confirmed: 2, added_unsubscribed: 1 }));
   });
 
   it("is the publisher's: every import route is behind sign-in", async () => {
@@ -394,14 +392,14 @@ describe("the plain list (SPEC §7)", () => {
   it("counts an invalid line among the rows left out, and needs no attestation to unsubscribe or bounce", async () => {
     const file = { name: "l.txt", text: "﻿a@x.io\r\n\r\nAda <b@x.io>\r\n" };
     const subscribed = await planOk({ file });
-    expect(subscribed.counts).toEqual(counts({ create_confirmed: 1, invalid: 1 }));
+    expect(subscribed.counts).toEqual(counts({ added_confirmed: 1, invalid: 1 }));
     expect(subscribed.rows).toEqual([
       { row: 3, email: "Ada <b@x.io>", outcome: "invalid", suppression_added: false },
     ]);
     expect((await planOk({ file, plain_list_status: "unsubscribed" })).attestation).toBeNull();
     const bounced = await planOk({ file, plain_list_status: "bounced" });
     expect(bounced.attestation).toBeNull();
-    expect(bounced.counts.suppression_added).toBe(1);
+    expect(bounced.counts.suppressed).toBe(1);
   });
 
   it("imports its rows as origin unknown, opt-in unknown", async () => {
@@ -437,15 +435,15 @@ describe("what an import does to each address (SPEC §7)", () => {
     ]);
     const p = await planOk({ file });
     const expected = counts({
-      create_confirmed: 1,
-      confirm_pending: 1,
+      added_confirmed: 1,
+      confirmed_pending: 1,
       unchanged: 1,
-      mark_unsubscribed: 1,
-      create_unsubscribed: 1,
+      unsubscribed: 1,
+      added_unsubscribed: 1,
       kept_confirmed_newer: 1,
       kept_unsubscribed: 1,
-      blocked_by_suppression: 1,
-      suppression_added: 1,
+      kept_suppressed: 1,
+      suppressed: 1,
       left_out: 1,
       invalid: 1,
       merged: 1,
@@ -507,10 +505,10 @@ describe("what an import does to each address (SPEC §7)", () => {
     await seedConfirmed("a@x.io");
     const file = csvFile(["a@x.io,unsubscribed,unknown,sendy,complaint,,,,,"]);
     const p = await planOk({ file });
-    expect(p.counts).toEqual(counts({ mark_unsubscribed: 1 }));
+    expect(p.counts).toEqual(counts({ unsubscribed: 1 }));
     expect(p.suppressions_added).toBe(1);
     expect(p.rows).toEqual([
-      { row: 1, email: "a@x.io", outcome: "mark_unsubscribed", suppression_added: true },
+      { row: 1, email: "a@x.io", outcome: "unsubscribed", suppression_added: true },
     ]);
     await importFile(file);
     expect(await subscriberRow("a@x.io")).toMatchObject({ status: "unsubscribed" });
@@ -533,7 +531,7 @@ describe("what an import does to each address (SPEC §7)", () => {
       "b@x.io,subscribed,double,sendy,erased,,,,,",
     ]);
     const p = await planOk({ file });
-    expect(p.counts).toEqual(counts({ suppression_added: 1, blocked_by_suppression: 1 }));
+    expect(p.counts).toEqual(counts({ suppressed: 1, kept_suppressed: 1 }));
     await importFile(file);
     expect(await suppressionOf("a@x.io")).toBe("import_complaint");
     expect(await subscribers.blocksConfirmation(env.DB, "a@x.io")).toBe(true);
@@ -567,13 +565,13 @@ describe("what an import does to each address (SPEC §7)", () => {
     await seedConfirmed("a@x.io");
     const p = await planOk({ file: csvFile(["a@x.io,unsubscribed,unknown,sendy,,,,,,"]) });
     // With no time to compare, leaving wins: no mail to someone the source says left.
-    expect(p.counts).toEqual(counts({ mark_unsubscribed: 1 }));
+    expect(p.counts).toEqual(counts({ unsubscribed: 1 }));
   });
 
   it("confirms a subscribed row that brings its own bounce, suppressed, so it never joins an audience", async () => {
     await frozenSend(Date.now() + 3_600_000);
     const p = await planOk({ file: csvFile(["a@x.io,subscribed,double,sendy,bounce,,,,,"]) });
-    expect(p.counts.create_confirmed).toBe(1);
+    expect(p.counts.added_confirmed).toBe(1);
     expect(p.sends_growing).toEqual([]);
     await importFile(csvFile(["a@x.io,subscribed,double,sendy,bounce,,,,,"]));
     expect(await subscriberRow("a@x.io")).toMatchObject({ status: "confirmed" });
@@ -589,10 +587,10 @@ describe("what an import does to each address (SPEC §7)", () => {
         "a@x.io,pending,single,other,manual,,,,,",
       ]),
     });
-    expect(p.counts).toEqual(counts({ create_unsubscribed: 1, merged: 2 }));
+    expect(p.counts).toEqual(counts({ added_unsubscribed: 1, merged: 2 }));
     expect(p.suppressions_added).toBe(1);
     expect(p.rows.map((r) => [r.row, r.outcome])).toEqual([
-      [1, "create_unsubscribed"],
+      [1, "added_unsubscribed"],
       [2, "merged"],
       [3, "merged"],
     ]);
@@ -645,7 +643,7 @@ describe("the record and the notice (SPEC §8)", () => {
       plan_hash: result.import.plan_hash,
       suppressions_added: 0,
     });
-    expect(JSON.parse(row?.counts as string)).toEqual(counts({ create_confirmed: 1 }));
+    expect(JSON.parse(row?.counts as string)).toEqual(counts({ added_confirmed: 1 }));
     expect(JSON.stringify(row)).not.toContain("a@x.io");
     // A person's import needs no notice: they saw it happen.
     expect(await count("SELECT COUNT(*) AS n FROM notifications")).toBe(0);
@@ -679,6 +677,49 @@ describe("the record and the notice (SPEC §8)", () => {
     // Told once.
     await notifyPublisher(env, new Budget(50));
     expect(fakeNotifications()).toHaveLength(1);
+  });
+
+  it("reads a record whose counts an earlier release wrote under the outcomes' former names, in the record and the notice", async () => {
+    await updateSettings(env.DB, { notifications: { to: "publisher@example.com" } });
+    const service = { ...(await adminAuth({})), "content-type": "application/json" };
+    const file = csvFile(["a@x.io,subscribed,double,sendy,,,,,,"]);
+    const p = await planOk({ file });
+    const res = await commit({ file, plan_hash: p.plan_hash, attestation: ATTEST }, service);
+    expect(res.status).toBe(201);
+    // As the previous release's Worker stores them, which it may still do after an upgrade's
+    // migrations run and before its deploy.
+    const former = {
+      create_confirmed: 2,
+      confirm_pending: 1,
+      unchanged: 0,
+      mark_unsubscribed: 3,
+      create_unsubscribed: 4,
+      kept_confirmed_newer: 0,
+      kept_unsubscribed: 0,
+      blocked_by_suppression: 5,
+      suppression_added: 6,
+      left_out: 0,
+      invalid: 0,
+      merged: 0,
+    };
+    await env.DB.prepare("UPDATE imports SET counts = ?").bind(JSON.stringify(former)).run();
+
+    const record = await importsDb.getImportByPlanHash(env.DB, p.plan_hash);
+    expect(record?.counts).toEqual(
+      counts({
+        added_confirmed: 2,
+        confirmed_pending: 1,
+        unsubscribed: 3,
+        added_unsubscribed: 4,
+        kept_suppressed: 5,
+        suppressed: 6,
+      }),
+    );
+    await notifyPublisher(env, new Budget(50));
+    expect(fakeNotifications()[0]?.text).toContain("Confirmed as subscribers: 3. Unsubscribed: 7.");
+    expect(fakeNotifications()[0]?.text).toContain(
+      "Not imported as subscribers (suppressed here, unsubscribed here, invalid, or with no consent claim): 5.",
+    );
   });
 });
 
@@ -772,11 +813,11 @@ describe("a commit is idempotent and atomic (SPEC §7)", () => {
       "b@x.io,subscribed,double,sendy,,,,,,",
     ]);
     const first = await importFile(file);
-    expect(first.counts.blocked_by_suppression).toBe(1);
+    expect(first.counts.kept_suppressed).toBe(1);
     await subscribers.clearSuppression(env.DB, "b@x.io");
     const again = await importFile(file);
     expect(again.replayed).toBe(false);
-    expect(again.counts).toEqual(counts({ unchanged: 1, create_confirmed: 1 }));
+    expect(again.counts).toEqual(counts({ unchanged: 1, added_confirmed: 1 }));
     expect(await subscriberRow("b@x.io")).toMatchObject({ status: "confirmed" });
   });
 
@@ -817,7 +858,7 @@ describe("a commit is idempotent and atomic (SPEC §7)", () => {
     const error = vi.spyOn(console, "error");
     const result = await commitImport(env.DB, p, HUMAN, Date.now());
     expect(result.replayed).toBe(false);
-    expect(result.counts).toEqual(counts({ create_confirmed: 1, kept_unsubscribed: 1 }));
+    expect(result.counts).toEqual(counts({ added_confirmed: 1, kept_unsubscribed: 1 }));
     expect(logged(error).map((l) => [l.event, l.step])).toEqual([["import.incomplete", "counts"]]);
   });
 
@@ -861,7 +902,7 @@ describe("the list moving between the plan and the commit (SPEC §7)", () => {
       },
       planOptions,
     );
-    expect(p.counts.confirm_pending).toBe(1);
+    expect(p.counts.confirmed_pending).toBe(1);
     await env.DB.prepare(
       "UPDATE subscribers SET status = 'unsubscribed' WHERE email = 'reader@x.io'",
     ).run();
@@ -871,10 +912,10 @@ describe("the list moving between the plan and the commit (SPEC §7)", () => {
     expect(await subscriberRow("reader@x.io")).toMatchObject({ status: "unsubscribed" });
     expect(await subscriberRow("new@x.io")).toBeNull();
     expect(result.differed).toEqual([
-      { row: 1, email: "reader@x.io", planned: "confirm_pending", applied: "kept_unsubscribed" },
-      { row: 2, email: "new@x.io", planned: "create_confirmed", applied: "blocked_by_suppression" },
+      { row: 1, email: "reader@x.io", planned: "confirmed_pending", applied: "kept_unsubscribed" },
+      { row: 2, email: "new@x.io", planned: "added_confirmed", applied: "kept_suppressed" },
     ]);
-    expect(result.counts).toEqual(counts({ kept_unsubscribed: 1, blocked_by_suppression: 1 }));
+    expect(result.counts).toEqual(counts({ kept_unsubscribed: 1, kept_suppressed: 1 }));
     // The record keeps the counts as applied.
     const row = await env.DB.prepare("SELECT counts FROM imports").first<{ counts: string }>();
     expect(JSON.parse(row?.counts ?? "{}")).toEqual(result.counts);
@@ -887,14 +928,14 @@ describe("the list moving between the plan and the commit (SPEC §7)", () => {
       "new@x.io,subscribed,double,sendy,,,,,,",
     ]);
     const p = await planOk({ file });
-    expect(p.counts.confirm_pending).toBe(1);
+    expect(p.counts.confirmed_pending).toBe(1);
     await env.DB.prepare(
       "UPDATE subscribers SET status = 'unsubscribed' WHERE email = 'reader@x.io'",
     ).run();
     const res = await commit({ file, plan_hash: p.plan_hash, attestation: ATTEST });
     expect(res.status).toBe(201);
     const result: ImportCommitResponse = await res.json();
-    expect(result.counts).toEqual(counts({ create_confirmed: 1, kept_unsubscribed: 1 }));
+    expect(result.counts).toEqual(counts({ added_confirmed: 1, kept_unsubscribed: 1 }));
     expect(result.rows).toEqual([
       { row: 1, email: "reader@x.io", outcome: "kept_unsubscribed", suppression_added: false },
     ]);
@@ -908,7 +949,7 @@ describe("the list moving between the plan and the commit (SPEC §7)", () => {
       { ...csvFile(["reader@x.io,subscribed,double,sendy,,,,,,"]), plainListStatus: null },
       planOptions,
     );
-    expect(p.counts.confirm_pending).toBe(1);
+    expect(p.counts.confirmed_pending).toBe(1);
     // The reader unsubscribes, and the form puts them back to pending, before the commit.
     await env.DB.prepare(
       "UPDATE subscribers SET status = 'pending', unsubscribed_at = ? WHERE email = 'reader@x.io'",
@@ -918,7 +959,7 @@ describe("the list moving between the plan and the commit (SPEC §7)", () => {
     const result = await commitImport(env.DB, p, HUMAN, Date.now());
     expect(await subscriberRow("reader@x.io")).toMatchObject({ status: "pending" });
     expect(result.differed).toEqual([
-      { row: 1, email: "reader@x.io", planned: "confirm_pending", applied: "kept_unsubscribed" },
+      { row: 1, email: "reader@x.io", planned: "confirmed_pending", applied: "kept_unsubscribed" },
     ]);
   });
 
@@ -928,12 +969,12 @@ describe("the list moving between the plan and the commit (SPEC §7)", () => {
       { ...csvFile(["a@x.io,none,unknown,sendy,bounce,,,,,"]), plainListStatus: null },
       planOptions,
     );
-    expect(p.counts.suppression_added).toBe(1);
+    expect(p.counts.suppressed).toBe(1);
     await subscribers.addSuppression(env.DB, "a@x.io", "manual");
     const result = await commitImport(env.DB, p, HUMAN, Date.now());
     expect(await suppressionOf("a@x.io")).toBe("manual");
     expect(result.differed).toEqual([
-      { row: 1, email: "a@x.io", planned: "suppression_added", applied: "left_out" },
+      { row: 1, email: "a@x.io", planned: "suppressed", applied: "left_out" },
     ]);
     expect(result.suppressions_added).toBe(0);
   });
@@ -947,7 +988,7 @@ describe("the list moving between the plan and the commit (SPEC §7)", () => {
     await seedPending("a@x.io");
     const result = await commitImport(env.DB, p, HUMAN, Date.now());
     expect(result.differed).toEqual([
-      { row: 1, email: "a@x.io", planned: "create_confirmed", applied: "confirm_pending" },
+      { row: 1, email: "a@x.io", planned: "added_confirmed", applied: "confirmed_pending" },
     ]);
     expect(await subscriberRow("a@x.io")).toMatchObject({
       status: "confirmed",
@@ -1051,7 +1092,7 @@ describe("the export, and the round trip (SPEC §7)", () => {
 
     const result = await importFile({ name: "export.csv", text });
     expect(result.counts).toEqual(
-      counts({ create_confirmed: 2, create_unsubscribed: 1, suppression_added: 2, left_out: 1 }),
+      counts({ added_confirmed: 2, added_unsubscribed: 1, suppressed: 2, left_out: 1 }),
     );
     const { results: states } = await env.DB.prepare(
       "SELECT email, status FROM subscribers ORDER BY email",
@@ -1178,7 +1219,7 @@ describe("an import that leaves the list past what Workers Free suits (SPEC §7)
     await seedConfirmed(addresses(600));
     expect((await planOf(adding(400))).workers_plan_advice).toBe(null); // 1,000: within
     const over = await planOf(adding(401));
-    expect(over.counts.create_confirmed).toBe(401);
+    expect(over.counts.added_confirmed).toBe(401);
     expect(over.workers_plan_advice).toBe(
       "On the Workers Free plan’s limits, this import leaves 1,001 confirmed subscribers. Workers Free suits a list of up to about 1,000 subscribers. Past about 5,000, one send can use up the day’s database writes and stop this newsletter until midnight UTC. Move to Workers Paid, or, if the account is on it already, set SUBREQUEST_BUDGET to 10000.",
     );
@@ -1191,7 +1232,7 @@ describe("an import that leaves the list past what Workers Free suits (SPEC §7)
       { name: "left.txt", text: `${emails[0]}\n` },
       { plain_list_status: "unsubscribed" },
     );
-    expect(leaving.counts.mark_unsubscribed).toBe(1);
+    expect(leaving.counts.unsubscribed).toBe(1);
     expect(leaving.workers_plan_advice).toBe(null); // 1,000 left confirmed
   });
 
@@ -1199,7 +1240,7 @@ describe("an import that leaves the list past what Workers Free suits (SPEC §7)
     await seedConfirmed(addresses(1_000));
     await seedPending("waiting@x.io");
     const confirming = await planOf({ name: "list.txt", text: "waiting@x.io\n" });
-    expect(confirming.counts.confirm_pending).toBe(1);
+    expect(confirming.counts.confirmed_pending).toBe(1);
     expect(confirming.workers_plan_advice).toMatch(
       /this import leaves 1,001 confirmed subscribers/,
     );
@@ -1212,7 +1253,7 @@ describe("an import that leaves the list past what Workers Free suits (SPEC §7)
       { name: "left.txt", text: "waiting@x.io\n" },
       { plain_list_status: "unsubscribed" },
     );
-    expect(leaving.counts.mark_unsubscribed).toBe(1);
+    expect(leaving.counts.unsubscribed).toBe(1);
     // Still 1,001 confirmed: the one who left was never on the confirmed list.
     expect(leaving.workers_plan_advice).toMatch(/this import leaves 1,001 confirmed subscribers/);
   });
@@ -1240,11 +1281,11 @@ describe("a 10,000-row import (SPEC §7)", () => {
 
     const guarded = guardD1(env.DB);
     const p = await planImport(guarded.db, input, planOptions);
-    expect(p.counts.create_confirmed).toBe(9_000);
+    expect(p.counts.added_confirmed).toBe(9_000);
     const planStatements = guarded.statements;
     const result = await commitImport(guarded.db, p, HUMAN, Date.now());
     const commitStatements = guarded.statements - planStatements;
-    expect(result.counts).toMatchObject({ create_confirmed: 9_000, create_unsubscribed: 1_000 });
+    expect(result.counts).toMatchObject({ added_confirmed: 9_000, added_unsubscribed: 1_000 });
     expect(result.suppressions_added).toBe(200);
     // A few dozen statements at most: inside Workers Free's 50 queries per invocation.
     expect(planStatements + commitStatements).toBeLessThanOrEqual(50);

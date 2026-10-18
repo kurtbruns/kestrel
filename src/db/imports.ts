@@ -12,6 +12,7 @@
 
 import type { ImportRecord, OptIn, OutcomeCounts } from "../../shared/imports";
 import type { SubscriberStatus } from "../../shared/subscribers";
+import { readOutcomeCounts } from "./import_counts";
 import { importNotice } from "./notifications";
 import { ERASED } from "./subscribers";
 
@@ -138,7 +139,7 @@ function toRecord(row: ImportRow): ImportRecord {
     file_name: row.file_name,
     file_sha256: row.file_sha256,
     plan_hash: row.plan_hash,
-    counts: JSON.parse(row.counts) as OutcomeCounts,
+    counts: readOutcomeCounts(row.counts),
     suppressions_added: row.suppressions_added,
   };
 }

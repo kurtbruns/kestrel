@@ -108,10 +108,10 @@ function emptyCounts(): OutcomeCounts {
 }
 
 const WRITE_OUTCOMES: ReadonlySet<ImportOutcome> = new Set([
-  "create_confirmed",
-  "confirm_pending",
-  "mark_unsubscribed",
-  "create_unsubscribed",
+  "added_confirmed",
+  "confirmed_pending",
+  "unsubscribed",
+  "added_unsubscribed",
 ]);
 
 /**
@@ -144,13 +144,13 @@ export function classify(
   if (row.status === "subscribed") {
     outcome =
       suppressionHere !== undefined
-        ? "blocked_by_suppression"
+        ? "kept_suppressed"
         : here === undefined
-          ? "create_confirmed"
+          ? "added_confirmed"
           : leftHere
             ? "kept_unsubscribed"
             : here.status === "pending"
-              ? "confirm_pending"
+              ? "confirmed_pending"
               : "unchanged";
   } else if (row.status === "unsubscribed") {
     // Only a confirmation recorded here can be newer than the source's unsubscribe: an
@@ -163,26 +163,26 @@ export function classify(
     outcome =
       here === undefined
         ? suppressionHere === ERASED
-          ? "blocked_by_suppression"
-          : "create_unsubscribed"
+          ? "kept_suppressed"
+          : "added_unsubscribed"
         : here.status === "unsubscribed"
           ? "unchanged"
           : confirmedHereSince
             ? "kept_confirmed_newer"
-            : "mark_unsubscribed";
+            : "unsubscribed";
   } else {
     outcome = "left_out";
   }
   if (
     row.suppression === ERASED &&
-    (outcome === "create_confirmed" ||
-      outcome === "confirm_pending" ||
-      outcome === "create_unsubscribed")
+    (outcome === "added_confirmed" ||
+      outcome === "confirmed_pending" ||
+      outcome === "added_unsubscribed")
   ) {
-    outcome = "blocked_by_suppression";
+    outcome = "kept_suppressed";
   }
   if (suppressionAdded && (outcome === "unchanged" || outcome === "left_out")) {
-    outcome = "suppression_added";
+    outcome = "suppressed";
   }
   return { outcome, suppressionAdded };
 }
@@ -279,7 +279,7 @@ export async function planImport(
   for (const p of planned) {
     counts[p.outcome] += 1;
     if (
-      p.outcome === "mark_unsubscribed" &&
+      p.outcome === "unsubscribed" &&
       state.subscribers.get(p.row.email)?.status === "confirmed"
     ) {
       leaving += 1;
@@ -301,14 +301,14 @@ export async function planImport(
   // committed after it, and the same file planned again against a list that has moved since
   // its first import is a new plan rather than a replay of that one.
   const after = await imports.latestImportId(db);
-  const needsAttestation = counts.create_confirmed + counts.confirm_pending > 0;
+  const needsAttestation = counts.added_confirmed + counts.confirmed_pending > 0;
   const sha = await fileSha256(input.text);
   // Read only on Free, where it can advise; advice never changes what the commit applies,
   // so it stays out of the hash.
   const confirmedAfter = freePlan
     ? (await countSubscribers(db, { status: "confirmed" })) +
-      counts.create_confirmed +
-      counts.confirm_pending -
+      counts.added_confirmed +
+      counts.confirmed_pending -
       leaving
     : 0;
   const planHash = await sha256Hex(
@@ -442,7 +442,7 @@ export async function commitImport(
     suppress: [],
     notice: principal.kind === "service",
   };
-  const tokens = newTokens(plan.counts.create_confirmed + plan.counts.create_unsubscribed);
+  const tokens = newTokens(plan.counts.added_confirmed + plan.counts.added_unsubscribed);
   const token = (): string => tokens.pop() ?? "";
   for (const { row, outcome, suppressionAdded } of plan.planned) {
     const consent = {
@@ -452,13 +452,13 @@ export async function commitImport(
       ev: row.evidence,
       cat: row.confirmed_at ?? row.subscribed_at,
     };
-    if (outcome === "create_confirmed") {
+    if (outcome === "added_confirmed") {
       writes.addConfirmed.push({ ...consent, id: newId(), tok: token(), uat: null });
-    } else if (outcome === "confirm_pending") {
+    } else if (outcome === "confirmed_pending") {
       writes.confirm.push(consent);
-    } else if (outcome === "mark_unsubscribed") {
+    } else if (outcome === "unsubscribed") {
       writes.unsubscribe.push({ e: row.email, uat: row.unsubscribed_at });
-    } else if (outcome === "create_unsubscribed") {
+    } else if (outcome === "added_unsubscribed") {
       // In the unsubscribe too, so an address that subscribed here since the plan still leaves.
       writes.unsubscribe.push({ e: row.email, uat: row.unsubscribed_at });
       writes.addUnsubscribed.push({
@@ -499,18 +499,18 @@ export async function commitImport(
   for (const p of plan.planned) {
     const e = p.row.email;
     const outcome: ImportOutcome | undefined = applied.confirmed.has(e)
-      ? "confirm_pending"
+      ? "confirmed_pending"
       : applied.addedConfirmed.has(e)
-        ? "create_confirmed"
+        ? "added_confirmed"
         : applied.unsubscribed.has(e)
-          ? "mark_unsubscribed"
+          ? "unsubscribed"
           : applied.addedUnsubscribed.has(e)
-            ? "create_unsubscribed"
+            ? "added_unsubscribed"
             : WRITE_OUTCOMES.has(p.outcome)
               ? undefined
               : p.outcome;
     const suppressionAdded = applied.suppressed.has(e);
-    if (outcome === undefined || (p.outcome === "suppression_added" && !suppressionAdded)) {
+    if (outcome === undefined || (p.outcome === "suppressed" && !suppressionAdded)) {
       unsettled.push({ ...p, suppressionAdded });
       continue;
     }

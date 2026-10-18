@@ -30,27 +30,27 @@ const plural = (n: number, one: string, many: string): string =>
 // who leaves, what else the file does, what it leaves out, then what this list keeps.
 const OUTCOME_WORDS: { outcome: ImportOutcome; one: string; many: string; kept?: true }[] = [
   {
-    outcome: "create_confirmed",
+    outcome: "added_confirmed",
     one: "address added as a confirmed subscriber",
     many: "addresses added as confirmed subscribers",
   },
   {
-    outcome: "confirm_pending",
+    outcome: "confirmed_pending",
     one: "pending subscriber here confirmed",
     many: "pending subscribers here confirmed",
   },
   {
-    outcome: "mark_unsubscribed",
+    outcome: "unsubscribed",
     one: "subscriber here unsubscribed",
     many: "subscribers here unsubscribed",
   },
   {
-    outcome: "create_unsubscribed",
+    outcome: "added_unsubscribed",
     one: "address recorded as having left (unsubscribed), so the list remembers them",
     many: "addresses recorded as having left (unsubscribed), so the list remembers them",
   },
   {
-    outcome: "suppression_added",
+    outcome: "suppressed",
     one: "address suppressed as the file says (bounced, complained, or blocked), so it’s never mailed",
     many: "addresses suppressed as the file says (bounced, complained, or blocked), so they’re never mailed",
   },
@@ -71,7 +71,7 @@ const OUTCOME_WORDS: { outcome: ImportOutcome; one: string; many: string; kept?:
     many: "rows repeat an address earlier in the file, and are folded into it",
   },
   {
-    outcome: "blocked_by_suppression",
+    outcome: "kept_suppressed",
     one: "address is suppressed here, so it isn’t imported",
     many: "addresses are suppressed here, so they aren’t imported",
     kept: true,
@@ -102,7 +102,7 @@ export function outcomeLines(counts: OutcomeCounts): OutcomeLine[] {
 
 /** How many an import confirms. */
 export function confirmedCount(counts: OutcomeCounts): number {
-  return counts.create_confirmed + counts.confirm_pending;
+  return counts.added_confirmed + counts.confirmed_pending;
 }
 
 /**
@@ -110,7 +110,7 @@ export function confirmedCount(counts: OutcomeCounts): number {
  * that both unsubscribes and suppresses isn't counted twice. Null when there are none.
  */
 export function extraSuppressionsLine(counts: OutcomeCounts, added: number): string | null {
-  const extra = added - counts.suppression_added;
+  const extra = added - counts.suppressed;
   return extra > 0
     ? `${plural(extra, "of the addresses above also gains", "of the addresses above also gain")} a suppression, so ${extra === 1 ? "it’s" : "they’re"} never mailed.`
     : null;
@@ -135,16 +135,16 @@ export function confirmedBreakdown(b: ConfirmedBreakdown): { optIn: string; orig
 // What happened to one row, as the "turned out differently" table says it. A confirming row
 // is named by its effect alone, since the plan's rows leave confirming rows out.
 const OUTCOME_SHORT: Record<ImportOutcome, string> = {
-  create_confirmed: "Imported as subscribed",
-  confirm_pending: "Imported as subscribed",
-  mark_unsubscribed: "Unsubscribed",
-  create_unsubscribed: "Recorded as having left",
-  suppression_added: "Suppressed",
+  added_confirmed: "Imported as subscribed",
+  confirmed_pending: "Imported as subscribed",
+  unsubscribed: "Unsubscribed",
+  added_unsubscribed: "Recorded as having left",
+  suppressed: "Suppressed",
   unchanged: "Unchanged",
   left_out: "Left out",
   invalid: "Invalid",
   merged: "Folded into an earlier row",
-  blocked_by_suppression: "Already suppressed here",
+  kept_suppressed: "Already suppressed here",
   kept_unsubscribed: "Kept unsubscribed",
   kept_confirmed_newer: "Kept confirmed",
 };
@@ -175,8 +175,8 @@ export function rowDifferences(
   for (const row of new Set([...before.keys(), ...after.keys()])) {
     const was = before.get(row);
     const now = after.get(row);
-    const wasText = was ? OUTCOME_SHORT[was.outcome] : OUTCOME_SHORT.create_confirmed;
-    const nowText = now ? OUTCOME_SHORT[now.outcome] : OUTCOME_SHORT.create_confirmed;
+    const wasText = was ? OUTCOME_SHORT[was.outcome] : OUTCOME_SHORT.added_confirmed;
+    const nowText = now ? OUTCOME_SHORT[now.outcome] : OUTCOME_SHORT.added_confirmed;
     if (wasText !== nowText) {
       out.set(row, { row, email: (now ?? was)?.email ?? "", planned: wasText, applied: nowText });
     }

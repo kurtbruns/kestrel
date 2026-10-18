@@ -118,15 +118,15 @@ Each row gets exactly one outcome. A row that both changes its status and adds a
 
 | Outcome | When |
 | --- | --- |
-| `create_confirmed` | `subscribed`, with no subscriber and no suppression in Kestrel, and not erased in the file: added as confirmed. |
-| `confirm_pending` | `subscribed`, pending in Kestrel (never confirmed), and not erased in the file: confirmed, and its confirmation link no longer works. |
+| `added_confirmed` | `subscribed`, with no subscriber and no suppression in Kestrel, and not erased in the file: added as confirmed. |
+| `confirmed_pending` | `subscribed`, pending in Kestrel (never confirmed), and not erased in the file: confirmed, and its confirmation link no longer works. |
 | `unchanged` | Already confirmed in Kestrel, or already in the state the row claims. A subscriber who joined through Kestrel keeps their own record. |
-| `mark_unsubscribed` | `unsubscribed`, and confirmed or pending in Kestrel, with no confirmation in Kestrel newer than the row's `unsubscribed_at`: unsubscribed. |
-| `create_unsubscribed` | `unsubscribed`, with no subscriber in Kestrel, and not erased in Kestrel or in the file: recorded as unsubscribed, so the list remembers they left. |
+| `unsubscribed` | `unsubscribed`, and confirmed or pending in Kestrel, with no confirmation in Kestrel newer than the row's `unsubscribed_at`: unsubscribed. |
+| `added_unsubscribed` | `unsubscribed`, with no subscriber in Kestrel, and not erased in Kestrel or in the file: recorded as unsubscribed, so the list remembers they left. |
 | `kept_confirmed_newer` | `unsubscribed`, but the reader confirmed in Kestrel after the source's `unsubscribed_at`: their newer action stands. |
 | `kept_unsubscribed` | `subscribed`, but unsubscribed in Kestrel, or pending again after leaving until they confirm in Kestrel themselves. An unsubscribe is never reversed. |
-| `blocked_by_suppression` | `subscribed`, but the address carries a suppression in Kestrel, a do-not-contact marker included: never added or confirmed. Also `unsubscribed`, when the address's suppression in Kestrel is the do-not-contact marker an erasure left. An address erased in the file gets this outcome too, when its row is `subscribed` or `unsubscribed` with no subscriber in Kestrel. So does one that's `subscribed` and pending in Kestrel, which stays pending. The file's `erased` suppression is still added. In each case no subscriber is recorded or confirmed, so an import never brings back an erased person's data. |
-| `suppression_added` | The row carries a suppression and the address has none in Kestrel, or only a do-not-contact marker, and nothing else changes. Applied whatever the row's `status`. |
+| `kept_suppressed` | `subscribed`, but the address carries a suppression in Kestrel, a do-not-contact marker included: never added or confirmed. Also `unsubscribed`, when the address's suppression in Kestrel is the do-not-contact marker an erasure left. An address erased in the file gets this outcome too, when its row is `subscribed` or `unsubscribed` with no subscriber in Kestrel. So does one that's `subscribed` and pending in Kestrel, which stays pending. The file's `erased` suppression is still added. In each case no subscriber is recorded or confirmed, so an import never brings back an erased person's data. |
+| `suppressed` | The row carries a suppression and the address has none in Kestrel, or only a do-not-contact marker, and nothing else changes. Applied whatever the row's `status`. |
 | `left_out` | `pending` or `none` with nothing to apply: counted, never confirmed. An import sends no email, so it can't start a confirmation either. |
 | `invalid` | The address isn't valid. |
 | `merged` | A repeat of an address earlier in the file, folded into it. |
