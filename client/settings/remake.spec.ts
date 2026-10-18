@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { ScheduledSendRef } from "../../shared/settings";
+import type { SendView } from "../../shared/sends";
 import { ApiError } from "../api";
-import { $, $$, mount, resetShell, settle } from "../test/support";
+import { sendView } from "../test/send_server";
+import { $, $$, mount, resetShell, sendSummary, settle } from "../test/support";
 import { fmt } from "../ui/format";
 import {
   inUseChip,
@@ -15,14 +16,9 @@ import {
 // The signal of a page that stays mounted throughout.
 const live = new AbortController().signal;
 
-const ref = (id: string, subject: string): ScheduledSendRef => ({
-  id,
-  post_id: `p-${id}`,
-  subject,
-  fire_at: 1_800_000_000_000,
-  remade_at: null,
-});
-const required = (sends: ScheduledSendRef[]) =>
+const ref = (id: string, subject: string): SendView =>
+  sendView(sendSummary({ id, post_id: `p-${id}`, subject, fire_at: 1_800_000_000_000 }));
+const required = (sends: SendView[]) =>
   new ApiError("ack", 409, { error: "remake_required", message: "ack", sends });
 const tooClose = () =>
   new ApiError("sends in 3 minutes", 409, { error: "remake_too_close", retry_after: 1, sends: [] });

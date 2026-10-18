@@ -50,7 +50,7 @@ import {
   type SettingsPatch,
   withPublicationLogo,
 } from "../db/settings";
-import { type Config, onFreePlanLimits } from "../env";
+import { type AppEnv, type Config, onFreePlanLimits } from "../env";
 import {
   fieldError,
   type JsonObject,
@@ -74,6 +74,7 @@ import {
   validateEmailTemplate,
 } from "../render/template_engine";
 import type { Principal, RequestContext } from "../router";
+import { viewSendsInOrder } from "../send/describe";
 import { insideLead, saveSettingsRemaking } from "../send/remake";
 
 /** Logos are small brand assets; keep them well under any provider's object limits. */
@@ -153,13 +154,36 @@ function renderedIdentityFields(settings: AppSettings, cfg: Config): IdentityFie
 /** The scheduled sends a template or identity change would re-make (SPEC §9), the
  *  moment after which a save stops being refused for the lead, and the identity fields
  *  the current template renders: what a client reads before it saves. */
-async function inUseView(db: D1Database, settings: AppSettings, cfg: Config): Promise<InUseView> {
-  const sends = await listScheduledSends(db);
+async function inUseView(env: AppEnv, settings: AppSettings, cfg: Config): Promise<InUseView> {
+  const scheduled = await listScheduledSends(env.DB);
   return {
-    sends,
-    retry_after: insideLead(sends, cfg.minLeadMs, Date.now()).retryAfter,
+    sends: await viewSendsInOrder(
+      env,
+      scheduled.map((s) => s.id),
+    ),
+    retry_after: insideLead(scheduled, cfg.minLeadMs, Date.now()).retryAfter,
     identity_fields: renderedIdentityFields(settings, cfg),
   };
+}
+
+/**
+ * Run an act that writes the settings, or reads them to freeze a send. A refusal about the
+ * settings' state, written at the same moment by another writer (`conflict`) or changed
+ * under a freeze (`settings_changed`), carries the settings as they now stand
+ * (docs/API.md, principle 5), so a client redraws them before it tries again.
+ */
+export async function carryingSettings<T>(c: RequestContext, act: () => Promise<T>): Promise<T> {
+  try {
+    return await act();
+  } catch (err) {
+    if (err instanceof HttpError && (err.code === "conflict" || err.code === "settings_changed")) {
+      throw new HttpError(err.code, err.message, {
+        ...err.details,
+        settings: settingsView(await getSettings(c.env.DB), c.config),
+      });
+    }
+    throw err;
+  }
 }
 
 export async function get(c: RequestContext): Promise<Response> {
@@ -167,7 +191,7 @@ export async function get(c: RequestContext): Promise<Response> {
   const body: SettingsResponse = {
     settings: settingsView(settings, c.config),
     deployment: deploymentView(c.config, unwrap(c.principal, "principal")),
-    in_use: await inUseView(c.env.DB, settings, c.config),
+    in_use: await inUseView(c.env, settings, c.config),
     notification_status: await notificationStatus(c.env.DB),
   };
   return json(body);
@@ -255,11 +279,8 @@ export async function update(c: RequestContext): Promise<Response> {
     }
     throw badRequest(e instanceof Error ? e.message : "invalid settings");
   }
-  const { settings, remade } = await saveSettingsRemaking(
-    c.env,
-    c.config,
-    (current) => applyPatch(current, patch),
-    ack,
+  const { settings, remade } = await carryingSettings(c, () =>
+    saveSettingsRemaking(c.env, c.config, (current) => applyPatch(current, patch), ack),
   );
   // A template or identity save that leaves an address the template doesn't print says
   // so, whichever half of that pair the save changed.
@@ -310,14 +331,16 @@ export async function uploadLogo(c: RequestContext): Promise<Response> {
   // bytes are written only once the refusals are ruled out, so a refused upload never
   // leaves a new logo behind the old version.
   const ack = readAckQuery(c);
-  const { settings, remade } = await saveSettingsRemaking(
-    c.env,
-    c.config,
-    (current) => withPublicationLogo(current, { version, contentType: type, key }),
-    ack,
-    async () => {
-      await c.env.MEDIA.put(key, bytes, { httpMetadata: { contentType: type } });
-    },
+  const { settings, remade } = await carryingSettings(c, () =>
+    saveSettingsRemaking(
+      c.env,
+      c.config,
+      (current) => withPublicationLogo(current, { version, contentType: type, key }),
+      ack,
+      async () => {
+        await c.env.MEDIA.put(key, bytes, { httpMetadata: { contentType: type } });
+      },
+    ),
   );
   const body: LogoResponse = { settings: settingsView(settings, c.config), remade };
   return json(body);
@@ -325,14 +348,16 @@ export async function uploadLogo(c: RequestContext): Promise<Response> {
 
 export async function deleteLogo(c: RequestContext): Promise<Response> {
   const ack = readAckQuery(c);
-  const { settings, remade } = await saveSettingsRemaking(
-    c.env,
-    c.config,
-    (current) => withPublicationLogo(current, null),
-    ack,
-    // The bytes stay: emails already sent, and their archive pages, still show them (I3).
-    // Removing the logo takes it out of what renders from now on, nothing more.
-    async () => {},
+  const { settings, remade } = await carryingSettings(c, () =>
+    saveSettingsRemaking(
+      c.env,
+      c.config,
+      (current) => withPublicationLogo(current, null),
+      ack,
+      // The bytes stay: emails already sent, and their archive pages, still show them (I3).
+      // Removing the logo takes it out of what renders from now on, nothing more.
+      async () => {},
+    ),
   );
   const body: LogoResponse = { settings: settingsView(settings, c.config), remade };
   return json(body);

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { feedReads, listReads, sendServer } from "../test/send_server";
+import { feedReads, listReads, sendServer, sendView } from "../test/send_server";
 import {
   $,
   $$,
@@ -23,15 +23,19 @@ const posts = [
     status: "draft",
     email_only: true,
     updated_at: "2026-09-20T10:00:00Z",
+    send: null,
+    actions: [
+      { name: "edit", method: "PUT", path: "/api/posts/p1" },
+      { name: "delete", method: "DELETE", path: "/api/posts/p1" },
+    ],
   },
   {
     id: "p2",
     subject: "Waxwings",
     status: "scheduled",
-    scheduled_for: "2026-09-25T15:00:00Z",
     updated_at: "2026-09-21T10:00:00Z",
-    active_send_status: "sending",
-    active_send_id: "s9",
+    send: sendView(sendSummary({ id: "s9", post_id: "p2", status: "sending" })),
+    actions: [],
   },
 ];
 
@@ -154,19 +158,10 @@ describe("drafts view", () => {
     // The listed post p2's send, an hour out.
     const row = sendSummary({ id: "s2", post_id: "p2", subject: "Waxwings" });
     const sends = sendServer([row]);
-    let sending = false;
     let failing = false;
-    let fireAt = row.fire_at;
     const cursors: string[] = [];
-    const listed = () => [
-      posts[0],
-      {
-        ...posts[1],
-        fire_at: fireAt,
-        active_send_status: sending ? "sending" : "scheduled",
-        active_send_id: "s2",
-      },
-    ];
+    // The listed post carries its send as the send routes hold it, as the server's list does.
+    const listed = () => [posts[0], { ...posts[1], send: sends.view("s2") }];
     return {
       routes: [
         ...sends.routes,
@@ -184,7 +179,6 @@ describe("drafts view", () => {
       /** The cursor each list read was handed, in order. */
       cursors,
       start() {
-        sending = true;
         sends.edit("s2", { status: "sending", started_at: Date.now() });
       },
       /** A batch lands while it sends: its counters move, nothing Drafts shows. */
@@ -193,7 +187,6 @@ describe("drafts view", () => {
       },
       /** Claude moves it. */
       move(at: number) {
-        fireAt = at;
         sends.edit("s2", { fire_at: at });
       },
       fail() {

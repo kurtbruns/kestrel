@@ -15,7 +15,6 @@ import type {
   SendSummary,
 } from "../../shared/sends";
 import { SEND_OWN_HALT_CAUSES } from "../../shared/sends";
-import type { ScheduledSendRef } from "../../shared/settings";
 import { isErasedPlaceholder } from "../../shared/subscribers";
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
 import { log } from "../lib/log";
@@ -361,6 +360,52 @@ export async function getSendViewRow(
     )
     .bind(id)
     .first();
+}
+
+/** Sends by id as views read them, with the retry probe each one's phase needs, in one
+ *  statement; a send that is gone is left out. */
+export async function getSendViewRows(
+  db: D1Database,
+  ids: string[],
+): Promise<(SendViewSource & { has_retries: number })[]> {
+  if (ids.length === 0) {
+    return [];
+  }
+  const { results } = await db
+    .prepare(
+      `SELECT ${VIEW_COLS},
+              CASE WHEN status = 'sending' THEN ${activeRetriesSql("sends.id")} ELSE 0 END AS has_retries
+         FROM sends WHERE id IN (SELECT value FROM json_each(?))`,
+    )
+    .bind(JSON.stringify(ids))
+    .all<SendViewSource & { has_retries: number }>();
+  return results;
+}
+
+/**
+ * The send a post carries as `send` (SPEC §6, §8), as SQL over a post `p`: its active send
+ * (scheduled or sending; a post has at most one), else the latest one that sent it. A
+ * canceled send is never a post's send, so a draft canceled back from its schedule has none.
+ */
+export const POST_SEND_ID_SQL = `COALESCE(
+  (SELECT a.id FROM sends a WHERE a.post_id = p.id AND a.status IN ('scheduled', 'sending') ORDER BY a.scheduled_at DESC LIMIT 1),
+  (SELECT l.id FROM sends l WHERE l.post_id = p.id AND l.status = 'sent' ORDER BY l.completed_at DESC LIMIT 1))`;
+
+/** Each post's send id (`POST_SEND_ID_SQL`), by post id; a post with none is left out. */
+export async function postSendIds(db: D1Database, postIds: string[]): Promise<Map<string, string>> {
+  if (postIds.length === 0) {
+    return new Map();
+  }
+  const { results } = await db
+    .prepare(
+      `SELECT p.id AS post_id, ${POST_SEND_ID_SQL} AS send_id
+         FROM posts p WHERE p.id IN (SELECT value FROM json_each(?))`,
+    )
+    .bind(JSON.stringify(postIds))
+    .all<{ post_id: string; send_id: string | null }>();
+  return new Map(
+    results.flatMap((r) => (r.send_id ? [[r.post_id, r.send_id] as [string, string]] : [])),
+  );
 }
 
 function sendWhere(filter: SendFilter): { clause: string; binds: unknown[] } {
@@ -975,17 +1020,25 @@ export function noActiveSendFor(postId: string): { sql: string; binds: unknown[]
 
 /** A scheduled send as the settings surface lists it: what a template or identity
  *  change would re-make, and what the client acknowledges by id. */
-export type { ScheduledSendRef };
+/** A scheduled send as the re-make weighs it (SPEC §6, §9): which it is, and when it fires. The
+ *  API answers each as its view (`viewSendsInOrder`). */
+export interface ScheduledSendRow {
+  id: string;
+  post_id: string;
+  subject: string;
+  fire_at: number;
+  remade_at: number | null;
+}
 
 /** Every `scheduled` send, soonest first: the set "in use" by the template and the
  *  identity. A `sending` send is past the window and a `sent` one is the record;
  *  neither is listed, counted, or ever re-made. */
-export async function listScheduledSends(db: D1Database): Promise<ScheduledSendRef[]> {
+export async function listScheduledSends(db: D1Database): Promise<ScheduledSendRow[]> {
   const { results } = await db
     .prepare(
       "SELECT id, post_id, subject, fire_at, remade_at FROM sends WHERE status = 'scheduled' ORDER BY fire_at ASC, id ASC",
     )
-    .all<ScheduledSendRef>();
+    .all<ScheduledSendRow>();
   return results;
 }
 

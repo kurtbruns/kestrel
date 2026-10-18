@@ -53,12 +53,12 @@ const ERROR_BODY: ReferenceField[] = [
     name: "send, post, …",
     type: "object",
     description:
-      "For a refusal about a resource's state: the resource as it now stands, as an act on a send carries `send`.",
+      "For a refusal about a resource's state: the resource as it now stands, whole, as an answer carries it: a `post`, the `settings`, a `subscriber`, a `suppression`, or a `send` with the `cursor` to follow it from. An import's `plan_stale` carries no plan: plan again.",
   },
 ];
 
 const ACTING = [
-  "A send says what can be done with it now: `actions` lists exactly the acts the server would accept, each with its method and path, and `conditions` says what is wrong, in words to show. Offer those rather than working them out from other fields.",
+  "A send and a post say what can be done with them now: `actions` lists exactly the acts the server would accept, each with its method and path, and a send's `conditions` say what is wrong, in words to show. Offer those rather than working them out from other fields: a post offers `schedule` and `send_now` only while an email provider is connected.",
   "Repeating an act is safe, so after a lost answer, send it again: one that already took effect answers success, and each route says how its repeat reads (`changed: false` on Cancel a send and Reschedule a send, `idempotent` on Send a post now, `replayed` on Commit an import). An act on a send applies to the send as it stands, whatever you last read of it. Saving a post is the exception: a save names the revision it was based on (`base_revision` or `If-Match`) and is refused once someone else has saved, so no edit is overwritten unseen.",
 ];
 

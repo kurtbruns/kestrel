@@ -47,7 +47,7 @@ import { slugRefusal } from "../lib/slug_refusals";
 import { unwrap } from "../lib/unwrap";
 import { render } from "../render/render";
 import { type EmailBranding, resolveBranding } from "../render/template_engine";
-import { viewSend } from "./describe";
+import { sendAsItStands } from "./describe";
 
 /** The one render a freeze performs: the post's current content and images through
  *  the single render path (I5), inside `branding` (the template plus the identity).
@@ -59,6 +59,9 @@ export async function renderPost(
   branding: EmailBranding,
 ): Promise<FrozenRender> {
   const revision = await getCurrentRevision(env.DB, post);
+  // Not a refusal a client meets: every post is created with its first revision, so only a
+  // row written outside the API has none. An empty body has a revision and is rendered,
+  // warned about rather than blocked (SPEC §6), so a post's `actions` need not predict this.
   if (!revision) {
     throw badRequest("This post has no content yet. Write something, then schedule it.");
   }
@@ -218,7 +221,7 @@ export async function freeze(
 /** The refusal for a post that already has its one active send, carrying that send. */
 export async function activeSendExists(env: AppEnv, send: Pick<SendRow, "id">) {
   return refusal("active_send_exists", ACTIVE_SEND_EXISTS, {
-    send: await viewSend(env, send.id),
+    ...(await sendAsItStands(env, send.id)),
   });
 }
 
@@ -250,7 +253,7 @@ async function windowClosed(env: AppEnv, send: SendRow, what: string) {
       ? "its fire time has passed and it’s about to send"
       : `it’s ${send.status}`;
   return refusal("window_closed", `This send can no longer be ${what}: ${why}.`, {
-    send: await viewSend(env, send.id),
+    ...(await sendAsItStands(env, send.id)),
   });
 }
 
@@ -279,7 +282,7 @@ export async function reschedule(
   const now = Date.now();
   if (send.status === "canceled") {
     throw refusal("send_canceled", "This send was canceled. Schedule the post again instead.", {
-      send: await viewSend(env, send.id),
+      ...(await sendAsItStands(env, send.id)),
     });
   }
   if (send.status !== "scheduled" || send.fire_at <= now) {

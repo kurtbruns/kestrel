@@ -1,19 +1,32 @@
 /** Post + revision queries. Every save writes a full-text revision (spec §4). */
 
-import type { Post, PostListItem, PostStatus } from "../../shared/posts";
+import type { Post, PostStatus } from "../../shared/posts";
 import { EMPTY_SUBJECT_SLUG, slugify } from "../../shared/slug";
 import { newId } from "../lib/ids";
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
 import { unwrap } from "../lib/unwrap";
-import { publishedSendForPost, stampSendsOfPostStmt, tombstoneSendsStmt } from "./sends";
+import {
+  POST_SEND_ID_SQL,
+  publishedSendForPost,
+  stampSendsOfPostStmt,
+  tombstoneSendsStmt,
+} from "./sends";
 
 // The row shapes live in shared/ so the editor reads the same definitions; the names here
 // are the Worker's own.
 export type { PostStatus };
 
-/** What a route adds to a stored post: its addresses, built from config, and where it stands
- *  for readers, read from its published send (`withAddresses`). */
-type Answered = "archive_url" | "unlisted_url" | "published_at" | "archive_live";
+/** What a route adds to a stored post (`viewPosts`): its addresses, built from config; where it
+ *  stands for readers, read from its published send; who wrote its current revision; its send,
+ *  as the send's view; and what can be done to it. */
+type Answered =
+  | "archive_url"
+  | "unlisted_url"
+  | "published_at"
+  | "archive_live"
+  | "author"
+  | "send"
+  | "actions";
 
 /** A post as stored: the wire `Post` without what a route adds. */
 export type PostRow = Omit<Post, Answered>;
@@ -290,9 +303,6 @@ export async function getByUnlistedToken(db: D1Database, token: string): Promise
   return row && fromStored(row);
 }
 
-/** A list row as stored: the wire `PostListItem` without the addresses a route builds. */
-export type PostListRow = Omit<PostListItem, Answered>;
-
 /** Narrow the post list by `status` (one status, or a set — the Drafts view passes
  *  `['draft','scheduled']`) and a subject contains-search. */
 export interface PostFilter {
@@ -300,13 +310,14 @@ export interface PostFilter {
   search?: string;
 }
 
-/** The sortable columns exposed by `GET /api/posts` (see `parseListParams`). */
+/** The sortable columns exposed by `GET /api/posts` (see `parseListParams`): each named for the
+ *  field it sorts by, `send.fire_at` the fire time of the post's send (`POST_SEND_ID_SQL`). */
 export const POST_LIST_SPEC: ListSpec = {
   columns: {
     updated_at: "p.updated_at",
     subject: "p.subject",
     status: "p.status",
-    fire_at: "s.fire_at",
+    "send.fire_at": `(SELECT ps.fire_at FROM sends ps WHERE ps.id = ${POST_SEND_ID_SQL})`,
   },
   defaultSort: "updated_at",
   defaultDir: "desc",
@@ -339,7 +350,7 @@ export async function listPosts(
   db: D1Database,
   filter: PostFilter = {},
   page?: ListParams,
-): Promise<PostListRow[]> {
+): Promise<PostRow[]> {
   const { clause, binds } = postWhere(filter);
   const order =
     page?.sortExplicit === true
@@ -347,21 +358,24 @@ export async function listPosts(
       : "ORDER BY (s.fire_at IS NULL) ASC, s.fire_at ASC, p.updated_at DESC, p.id DESC";
   const limit = page ? page.limit : -1; // -1 = SQLite "no limit"
   const offset = page ? page.offset : 0;
-  // Join the post's ACTIVE send — scheduled OR sending — so an in-flight post carries its
-  // send id and status (a post has at most one active send, enforced by `idx_sends_one_active_per_post`, so the join
-  // is 1:1). The scheduled-first default sort keys on that fire time.
+  // Join the post's ACTIVE send (scheduled or sending; a post has at most one, enforced by
+  // `idx_sends_one_active_per_post`, so the join is 1:1) for the scheduled-first default order.
+  // Deliberately not `POST_SEND_ID_SQL`, which `send.fire_at` sorts by: that one falls back to
+  // the send that sent a post, as the post's `send` does, while the default order groups only
+  // the posts still waiting on a send first, so a sent post's old fire time never ranks it
+  // among them.
+  // The row carries only the post: its send is read as a view beside it (`viewPosts`).
   const { results } = await db
     .prepare(
-      `SELECT p.*, s.fire_at AS fire_at, s.id AS active_send_id, s.status AS active_send_status, cr.author AS author
+      `SELECT p.*
          FROM posts p
          LEFT JOIN sends s ON s.post_id = p.id AND s.status IN ('scheduled', 'sending')
-         LEFT JOIN post_revisions cr ON cr.id = p.current_revision
          ${clause}
          ${order}
          LIMIT ? OFFSET ?`,
     )
     .bind(...binds, limit, offset)
-    .all<Stored<PostListRow>>();
+    .all<Stored<PostRow>>();
   return results.map(fromStored);
 }
 
@@ -409,6 +423,24 @@ export function getCurrentRevision(db: D1Database, post: PostRow): Promise<Revis
     .prepare("SELECT * FROM post_revisions WHERE id = ?")
     .bind(post.current_revision)
     .first<RevisionRow>();
+}
+
+/** Who wrote each post's current revision, by post id; a post with no revision is left out. */
+export async function currentAuthors(
+  db: D1Database,
+  posts: Pick<PostRow, "id" | "current_revision">[],
+): Promise<Map<string, string | null>> {
+  const ids = posts.flatMap((p) => (p.current_revision ? [p.current_revision] : []));
+  if (ids.length === 0) {
+    return new Map();
+  }
+  const { results } = await db
+    .prepare(
+      "SELECT post_id, author FROM post_revisions WHERE id IN (SELECT value FROM json_each(?))",
+    )
+    .bind(JSON.stringify(ids))
+    .all<{ post_id: string; author: string | null }>();
+  return new Map(results.map((r) => [r.post_id, r.author]));
 }
 
 export async function listRevisions(db: D1Database, postId: string): Promise<RevisionRow[]> {

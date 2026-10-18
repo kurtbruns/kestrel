@@ -419,6 +419,8 @@ describe("the review window closes at the fire time", () => {
       expect(res.status).toBe(409);
       const err = await readJson(res);
       expect(err).toMatchObject({ error: "window_closed", send: { id: send.id, phase: "due" } });
+      // And the cursor to follow it from, as every answer about a send carries.
+      expect(err.cursor).toMatch(/^\d+\.\d+$/);
       expect(err.send.actions).toEqual([]);
       expect(err.send.rendered_html).toBeUndefined();
     }
@@ -457,7 +459,11 @@ describe("actions safe to retry, with no precondition", () => {
     expect(await rev()).toBe(canceled);
     // A canceled send is not moved: it is scheduled again instead.
     const moved = await post(`/api/sends/${send.id}/reschedule`, { fire_at: fireAt + 60_000 });
-    expect(await readJson(moved)).toMatchObject({ error: "send_canceled" });
+    expect(await readJson(moved)).toMatchObject({
+      error: "send_canceled",
+      send: { id: send.id, status: "canceled" },
+      cursor: expect.stringMatching(/^\d+\.\d+$/),
+    });
   });
 
   it("applies an action to the send as it stands, ignoring an If-Match", async () => {

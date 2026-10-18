@@ -1,7 +1,7 @@
 // The dashboard (home): counts, the active send widget, drafts and sent tables, the
 // setup steps (the first-run checklist, then the Finish setting up card), and quick actions.
 
-import type { PostListItem, PostListResponse } from "../../shared/posts";
+import type { Post, PostListResponse } from "../../shared/posts";
 import type { SendListResponse, SendView } from "../../shared/sends";
 import type { DeploymentView } from "../../shared/settings";
 import type { SubscriberCounts, SubscriberListResponse } from "../../shared/subscribers";
@@ -218,7 +218,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   };
   setHtml(view, html`<div class="dash" id="dash"><p class="muted">Loading…</p></div>`);
   const root = $("#dash", view);
-  let posts: PostListItem[];
+  let posts: Post[];
   let first: SendListResponse;
   let counts: SubscriberCounts;
   let workersPlanAdvice: string | null;

@@ -39,7 +39,7 @@ import {
   type SuppressionFlag,
 } from "../../shared/subscriber_meanings";
 import type {
-  SubscriberListItem,
+  Subscriber,
   SubscriberStatus,
   Suppression,
   SuppressionReason,
@@ -526,8 +526,16 @@ const POST_EXAMPLE = {
   status: "draft",
   email_only: false,
   current_revision: "r_1",
+  author: "you@example.com",
   created_at: 1768381200000,
   updated_at: 1768381200000,
+  send: null,
+  actions: [
+    { name: "edit", method: "PUT", path: "/api/posts/p_abc123" },
+    { name: "delete", method: "DELETE", path: "/api/posts/p_abc123" },
+    { name: "schedule", method: "POST", path: "/api/posts/p_abc123/schedule" },
+    { name: "send_now", method: "POST", path: "/api/posts/p_abc123/send" },
+  ],
 } satisfies Post;
 
 const POST_FIELDS: ReferenceField[] = [
@@ -595,8 +603,41 @@ const POST_FIELDS: ReferenceField[] = [
     type: "string | null",
     description: "The current revision's id, which a save names as `base_revision`.",
   },
+  {
+    name: "author",
+    type: "string | null",
+    description:
+      "Who wrote the current revision: a person's email, or `service` for a service token such as Claude's.",
+  },
   { name: "created_at", type: "number", description: "When it was made." },
   { name: "updated_at", type: "number", description: "When it last changed." },
+  {
+    name: "send",
+    type: "object | null",
+    object: "send",
+    description:
+      "Where its send stands, as the send's own view: its active send, the one scheduled or going out, else the one that sent it; null for a post with neither, such as a draft whose schedule was canceled. Its `status` and `phase` say whether a `scheduled` post is still waiting or already going out.",
+  },
+  {
+    name: "actions",
+    type: "object[]",
+    description:
+      "What the server would accept for the post now, each `{ name, method, path }`, as a send's are. A post's settings change in any state, so they are no action of their own.",
+    values: [
+      { value: "edit", description: "Save its text: a draft only." },
+      { value: "delete", description: "Delete it: a draft only." },
+      {
+        value: "schedule",
+        description:
+          "Schedule it: a draft, while an email provider is connected. A blank subject is still refused, naming `subject`.",
+      },
+      {
+        value: "send_now",
+        description:
+          "Send it now: a draft, while an email provider is connected. A blank subject is still refused, naming `subject`.",
+      },
+    ],
+  },
 ];
 
 const REVISION_FIELDS: ReferenceField[] = [
@@ -661,19 +702,9 @@ const SUBSCRIBER_FIELDS: ReferenceField[] = [
     values: STATUS_VALUES,
   },
   {
-    name: "suppressed",
-    type: "boolean",
-    description: `Whether the address is suppressed; in a list row, and beside \`subscriber\` in one subscriber's answer. ${SUPPRESSED_MEANING}`,
-  },
-  {
-    name: "suppression_reason",
-    type: "string | null",
-    description: `Why, and whose decision it was, as a suppression's \`reason\` (Suppressions); in a list row. On the roster \`erased\` means: ${FLAG_MEANING.erased}`,
-  },
-  {
-    name: "suppression_detail",
-    type: "string | null",
-    description: "The provider's words, or the publisher's; in a list row.",
+    name: "suppression",
+    type: "{ reason, detail } | null",
+    description: `Whether the address is suppressed, null when it isn't: \`reason\`, why and whose decision it was, as a suppression's (Suppressions), and \`detail\`, the provider's words or the publisher's. ${SUPPRESSED_MEANING} On the roster \`erased\` means: ${FLAG_MEANING.erased}`,
   },
   {
     name: "origin",
@@ -810,7 +841,7 @@ const SETTINGS_FIELDS: ReferenceField[] = [
     name: "in_use",
     type: "object",
     description:
-      "What a template or identity save would re-make: `sends`, every scheduled send, soonest first; `retry_after`, when a save stops being refused for the minimum lead (null when none is inside it); and `identity_fields`, the identity fields the template renders, the only ones whose change reaches the email.",
+      "What a template or identity save would re-make: `sends`, every scheduled send as its send view, soonest first; `retry_after`, when a save stops being refused for the minimum lead (null when none is inside it); and `identity_fields`, the identity fields the template renders, the only ones whose change reaches the email.",
   },
   {
     name: "notification_status",
@@ -907,10 +938,8 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
       created_at: 1768381200000,
       confirmed_at: 1768381500000,
       unsubscribed_at: null,
-      suppressed: false,
-      suppression_reason: null,
-      suppression_detail: null,
-    } satisfies SubscriberListItem,
+      suppression: null,
+    } satisfies Subscriber,
   },
   suppression: {
     resource: "suppressions",
@@ -984,15 +1013,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
       settings: { email_template: "…", publication: { name: "Marsh Lane" } },
       deployment: { provider: "ses", min_lead_ms: 300000, free_plan_limits: false },
       in_use: {
-        sends: [
-          {
-            id: "s_xyz789",
-            post_id: "p_abc123",
-            subject: "Hello, world",
-            fire_at: 1768467600000,
-            remade_at: null,
-          },
-        ],
+        sends: [sendBrief({ fire_at: 1768467600000 })],
         retry_after: null,
         identity_fields: ["name", "tagline", "logo_url", "address"],
       },

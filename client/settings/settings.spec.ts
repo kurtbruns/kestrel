@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SettingsResponse, SettingsView } from "../../shared/settings";
 import { appState } from "../state";
+import { sendView } from "../test/send_server";
 import {
   $,
   $$,
@@ -10,6 +11,7 @@ import {
   jsonResponse,
   mount,
   resetShell,
+  sendSummary,
   settingsResponse,
   stubClipboard,
   typeInto,
@@ -484,7 +486,9 @@ describe("settings view", () => {
 
   it("asks before a save that re-makes scheduled emails, then retries with the acknowledgement", async () => {
     const sends = [
-      { id: "x1", post_id: "p1", subject: "Gulls", fire_at: 1_800_000_000_000, remade_at: null },
+      sendView(
+        sendSummary({ id: "x1", post_id: "p1", subject: "Gulls", fire_at: 1_800_000_000_000 }),
+      ),
     ];
     await open([
       {
@@ -524,7 +528,9 @@ describe("settings view", () => {
 
   it("says in words, never on the in-use chip, that saving has to wait for a post about to send, until it no longer does (DESIGN §11)", async () => {
     const at = Date.now() + 120_000;
-    const sends = [{ id: "x1", post_id: "p1", subject: "Gulls", fire_at: at, remade_at: null }];
+    const sends = [
+      sendView(sendSummary({ id: "x1", post_id: "p1", subject: "Gulls", fire_at: at })),
+    ];
     await open([
       {
         path: "/api/settings",

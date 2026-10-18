@@ -51,6 +51,7 @@ import { highlightMarkdown } from "../ui/highlight";
 import { type Html, html, setHtml } from "../ui/html";
 import { type IconName, icon } from "../ui/icons";
 import { busy, fieldError, modal, renderError, toast } from "../ui/widgets";
+import { activeSend, postAction } from "./actions";
 import { createAutosave } from "./autosave";
 import { DirtyTracker } from "./dirty";
 import { trackSaves } from "./pending_save";
@@ -162,9 +163,11 @@ export async function renderEditor(
     renderError(root, message(e), remount);
     return;
   }
-  if (data.scheduled) {
+  // The post's send while it is scheduled (a post going out was handed off above).
+  const scheduled = activeSend(data.post);
+  if (scheduled) {
     try {
-      sendRead = await api<SendResponse>(`/api/sends/${data.scheduled.id}`, { signal });
+      sendRead = await api<SendResponse>(`/api/sends/${scheduled.id}`, { signal });
     } catch (e) {
       if (signal.aborted) {
         return;
@@ -181,7 +184,7 @@ export async function renderEditor(
       return;
     }
   }
-  const { post, markdown, scheduled } = data;
+  const { post, markdown } = data;
   // The post's publishing settings as stored (SPEC §4, §5): whether it is included in the
   // archive, and its archive address. Neither is part of the email, so both change while the
   // post is scheduled too, through Post settings, and a dialog's edits reach them only on Save,
@@ -189,8 +192,12 @@ export async function renderEditor(
   let pub = publishingOf(post, data.subject_slug_held);
 
   // The editor now only ever mounts a draft or a scheduled (frozen) post, so `locked`
-  // means scheduled — signaled by the scheduled banner, not a status pill.
-  const locked = post.status !== "draft";
+  // means scheduled, signaled by the scheduled banner, not a status pill. Whether its text
+  // can be saved is the server's to say, in the post's `actions`.
+  const locked = !postAction(post, "edit");
+  // Whether the server would take a schedule or a send now: a draft, while a provider is
+  // connected. The dialog offers both views only then (DESIGN §4).
+  const canSend = postAction(post, "schedule") !== undefined;
   // The revision this editor is based on, for optimistic concurrency (SPEC §4).
   // Advanced on each successful save; carried on every save so the server rejects
   // (409) rather than clobbers a newer save from another tab or from Claude.
@@ -935,7 +942,7 @@ export async function renderEditor(
           {
             status: fresh.post.status,
             revision: fresh.post.current_revision,
-            author: fresh.author,
+            author: fresh.post.author,
           },
           { saving, baseAtRequest },
         );
@@ -971,11 +978,7 @@ export async function renderEditor(
     // The send as last reported: this page's read of it (or, until that succeeds, what the
     // post's read says of it), then each read of the send-state layer that found it
     // changed, whichever client changed it (DESIGN §4).
-    let current: BannerSend = sendRead?.send ?? {
-      ...scheduled,
-      phase: "scheduled",
-      conditions: [],
-    };
+    let current: BannerSend = sendRead?.send ?? scheduled;
     const whenEl = $("#schedWhen");
     const controls = $("#schedControls");
     // --- the banner: the cards' countdown, and the review window closing at the fire time ---
@@ -1361,9 +1364,9 @@ export async function renderEditor(
       }
       const minStr = toLocalInput(earliestFireAt());
       const def = toLocalInput(new Date(Date.now() + 24 * 3600 * 1000));
-      // While no provider is connected the server would refuse both views, so the dialog
-      // drops the picker and the Send now row and leaves only the standing line (DESIGN §4).
-      const notConnected = providerNotConnected();
+      // While the server would refuse both views (no provider connected), the dialog drops the
+      // picker and the Send now row and leaves only the standing line (DESIGN §4).
+      const notConnected = !canSend;
       // The dialog's own copy of the post's settings (SPEC §4, §5): it opens as stored, the form
       // under the time edits it, and it reaches the post only when Schedule or Send now is
       // pressed, so Cancel leaves the post as it was. A following address shows the subject in
@@ -1537,7 +1540,7 @@ export async function renderEditor(
         $("#snCancel", box).onclick = m.close;
         $("#snGo", box).onclick = doSendNow;
         showForm();
-        $<HTMLButtonElement>("#snGo", box).disabled = providerNotConnected();
+        $<HTMLButtonElement>("#snGo", box).disabled = !postAction(post, "send_now");
         $("#toSchedule", box).onclick = () => {
           setHtml(box, scheduleView());
           wireSchedule();
@@ -1604,11 +1607,12 @@ function isNotFound(e: unknown): boolean {
 /** Where a post's send now lives, when that is no longer the editor: the watch while it
  *  sends, the record once it has sent. */
 function sendHome(data: PostResponse): string | null {
-  if (data.sending) {
-    return `#/sent/${data.sending.id}`;
+  const send = data.post.send;
+  if (send?.status === "sending") {
+    return `#/sent/${send.id}`;
   }
   if (data.post.status === "sent") {
-    return data.sent ? `#/sent/${data.sent.id}` : "#/sent";
+    return send ? `#/sent/${send.id}` : "#/sent";
   }
   return null;
 }

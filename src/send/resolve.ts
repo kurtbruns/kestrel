@@ -33,7 +33,7 @@ import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
 import { notFound, refusal } from "../lib/errors";
 import { LEASE_TTL_MS } from "../lib/time";
-import { viewSend } from "./describe";
+import { sendAsItStands } from "./describe";
 import { isWedged } from "./wedged";
 
 // The resolution lives in shared/ so the editor reads the same definition.
@@ -72,7 +72,7 @@ export async function resolveStuckSend(
     throw notFound("send");
   }
   const refuse = async (code: "run_in_progress" | "not_wedged", message: string) =>
-    refusal(code, message, { send: await viewSend(env, send.id) });
+    refusal(code, message, await sendAsItStands(env, send.id));
   const now = Date.now();
   if (send.status === "sending" && send.locked_until !== null && send.locked_until > now) {
     throw await refuse(

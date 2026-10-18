@@ -11,7 +11,9 @@ import type { RequestContext } from "../router";
 import { param } from "../router";
 import { viewWithCursor } from "../send/describe";
 import { acceptFireAt, activeSendExists, freeze } from "../send/schedule";
+import { carryingPost } from "../services/post_view";
 import { readSettingsBody, resolveSettings, type SettingsBody } from "./post_settings";
+import { carryingSettings } from "./settings";
 
 /** An ISO-8601 timestamp that names its instant: a time part ending in `Z` or `±hh:mm`. */
 const ISO_WITH_OFFSET = /T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/i;
@@ -71,7 +73,20 @@ function rejectStrayTemplateChoice(body: unknown): void {
   }
 }
 
-export async function schedule(c: RequestContext): Promise<Response> {
+/** A refusal about the post or the settings a freeze read carries that resource as it stands. */
+function carryingResources(c: RequestContext, act: () => Promise<Response>): Promise<Response> {
+  return carryingPost(c.env, c.config, param(c, "id"), () => carryingSettings(c, act));
+}
+
+export function schedule(c: RequestContext): Promise<Response> {
+  return carryingResources(c, () => scheduleOnce(c));
+}
+
+export function sendNow(c: RequestContext): Promise<Response> {
+  return carryingResources(c, () => sendNowOnce(c));
+}
+
+async function scheduleOnce(c: RequestContext): Promise<Response> {
   const post = await getPost(c.env.DB, param(c, "id"));
   if (!post) {
     throw notFound("post");
@@ -88,7 +103,7 @@ export async function schedule(c: RequestContext): Promise<Response> {
   return json(await frozenAnswer(c, send), 201);
 }
 
-export async function sendNow(c: RequestContext): Promise<Response> {
+async function sendNowOnce(c: RequestContext): Promise<Response> {
   const post = await getPost(c.env.DB, param(c, "id"));
   if (!post) {
     throw notFound("post");

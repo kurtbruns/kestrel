@@ -18,6 +18,7 @@ import {
   wireToolbar,
 } from "../ui/list_controls";
 import { badge, busy, type MenuItem, modal, openMenu, renderError, toast } from "../ui/widgets";
+import { activeSend, postAction } from "./actions";
 
 // The writing side: draft + scheduled only — a sent post is a frozen record and lives in
 // Sent. "All statuses" is scoped to those two, so it never reaches sent.
@@ -84,8 +85,8 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
         return null;
       }
       const posts = data.posts;
-      shownFire = new Map(posts.map((p) => [p.id, p.fire_at]));
-      shownSends = new Set(posts.flatMap((p) => (p.active_send_id ? [p.active_send_id] : [])));
+      shownFire = new Map(posts.map((p) => [p.id, activeSend(p)?.fire_at ?? null]));
+      shownSends = new Set(posts.flatMap((p) => activeSend(p)?.id ?? []));
       if (!posts.length) {
         // "Filtered" = a real narrowing beyond the default drafts scope (a search, or a
         // single-status pick) — so a fresh, empty list still reads as an invitation.
@@ -101,13 +102,17 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
       // ≤720px layout can stack a row and label its dates from CSS alone.
       setHtml(
         listEl,
-        html`<div class="table-wrap"><table class="list-table posts-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Title", "subject", state)}${th("Status", null, state)}${th("Scheduled", "fire_at", state)}${th("Updated", "updated_at", state)}<th></th></tr></thead><tbody>${posts.map(
+        html`<div class="table-wrap"><table class="list-table posts-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Title", "subject", state)}${th("Status", null, state)}${th("Scheduled", "send.fire_at", state)}${th("Updated", "updated_at", state)}<th></th></tr></thead><tbody>${posts.map(
           (p) => {
             // A post whose send is in flight is no longer an editable/cancelable draft —
             // show it as `sending` and route it to the live watch, not the editor.
-            const sending = p.active_send_status === "sending";
-            const href = sending ? `#/sent/${p.active_send_id}` : `#/edit/${p.id}`;
-            return html`<tr class="clickable" data-id="${p.id}" data-target="${href}"><td>${titleWithLabel(html`<a href="${href}">${p.subject || html`<em>untitled</em>`}</a>`, p)}</td><td>${sending ? badge("sending") : badge(p.status)}</td><td class="muted when${p.fire_at ? "" : " empty"}">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted updated">${fmt(p.updated_at)}</td><td class="act"><button class="icon" data-menu="${p.id}" data-status="${sending ? "sending" : p.status}" data-target="${href}" aria-label="Post actions" aria-haspopup="menu">⋯</button></td></tr>`;
+            const send = activeSend(p);
+            const sending = send?.status === "sending";
+            const href = send && sending ? `#/sent/${send.id}` : `#/edit/${p.id}`;
+            const fireAt = send?.fire_at ?? null;
+            // Delete is offered only as the post's own `actions` say the server would take it.
+            const del = postAction(p, "delete") ? "1" : "";
+            return html`<tr class="clickable" data-id="${p.id}" data-target="${href}"><td>${titleWithLabel(html`<a href="${href}">${p.subject || html`<em>untitled</em>`}</a>`, p)}</td><td>${sending ? badge("sending") : badge(p.status)}</td><td class="muted when${fireAt ? "" : " empty"}">${fireAt ? fmt(fireAt) : "—"}</td><td class="muted updated">${fmt(p.updated_at)}</td><td class="act"><button class="icon" data-menu="${p.id}" data-status="${sending ? "sending" : p.status}" data-delete="${del}" data-target="${href}" aria-label="Post actions" aria-haspopup="menu">⋯</button></td></tr>`;
           },
         )}</tbody></table></div>`,
       );
@@ -138,7 +143,7 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
               },
             },
           ];
-          if (st === "draft" && b.dataset.menu) {
+          if (b.dataset.delete && b.dataset.menu) {
             const id = b.dataset.menu;
             items.push({
               label: "Delete draft",
@@ -169,17 +174,7 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
     followSends(
       {
         cursor: first.cursor,
-        sends: first.posts.flatMap((p) =>
-          p.active_send_id && p.active_send_status
-            ? [
-                {
-                  id: p.active_send_id,
-                  status: p.active_send_status,
-                  phase: p.active_send_status === "sending" ? "progressing" : "scheduled",
-                },
-              ]
-            : [],
-        ),
+        sends: first.posts.flatMap((p) => activeSend(p) ?? []),
       },
       {
         update({ sends, changes, removed }) {

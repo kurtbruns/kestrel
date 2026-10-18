@@ -194,7 +194,10 @@ describe("what the unlisted link opens follows the post (SPEC §5)", () => {
       `/email/${post.unlisted_token}?next=https://evil.example/&url=https://evil.example/`,
     );
     expect(res.headers.get("location")).toBe(`${ORIGIN}/archive/listed-owls`);
-    expect((await read(id)).post).toEqual(before);
+    // The post and its send are as they were: the send's `rev` names its last change, and only
+    // the clock its view is read at (`as_of`) moves.
+    const after = (await read(id)).post;
+    expect({ ...after, send: after.send.rev }).toEqual({ ...before, send: before.send.rev });
   });
 
   it("is an email-only post's page, unindexed", async () => {
@@ -227,7 +230,12 @@ describe("the archive address (SPEC §4, §5)", () => {
     await setRow(sendId, { web_link: "archive" }); // as 0008 marks a send frozen before it
     const res = await setListing(id, { slug: "the-spring-letter" });
     expect(res.status).toBe(409);
-    expect(await readJson(res)).toMatchObject({ error: "slug_permanent", field: "slug" });
+    // It carries the post as it stands, its address unmoved.
+    expect(await readJson(res)).toMatchObject({
+      error: "slug_permanent",
+      field: "slug",
+      post: { id, slug: "spring-update", send: { id: sendId, status: "scheduled" } },
+    });
     expect((await read(id)).post.slug).toBe("spring-update");
     // Naming the address it has, or changing only the listing, is still fine.
     expect((await setListing(id, { slug: "spring-update", email_only: true })).status).toBe(200);

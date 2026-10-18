@@ -172,19 +172,22 @@ export function createRouter({
       when: "A send it would re-make is inside the minimum lead; that send fires unchanged, so tell the publisher it goes out as it stands.",
       details: ["retry_after", "sends"],
     },
-    { code: "conflict" },
+    { code: "conflict", details: ["settings"] },
   ];
   const slugRefusals: RouteRefusal[] = [{ code: "slug_invalid" }, { code: "slug_taken" }];
-  const activeSendExists: RouteRefusal = { code: "active_send_exists", details: ["send"] };
+  const activeSendExists: RouteRefusal = {
+    code: "active_send_exists",
+    details: ["send", "cursor"],
+  };
   // What a freeze refuses, beside its one active send.
   const freezeRefusals: RouteRefusal[] = [
-    { code: "post_not_draft" },
+    { code: "post_not_draft", details: ["post"] },
     { code: "subject_required" },
-    { code: "settings_changed" },
+    { code: "settings_changed", details: ["settings"] },
     notConnected,
     ...slugRefusals,
   ];
-  const notDraft: RouteRefusal = { code: "post_not_draft" };
+  const notDraft: RouteRefusal = { code: "post_not_draft", details: ["post"] };
   // A send in a route's example: its state, since the whole view is described once.
   const scheduledBrief = sendBrief({
     status: "scheduled",
@@ -426,15 +429,7 @@ export function createRouter({
         response: {
           settings: { email_template: "…" },
           warnings: [],
-          remade: [
-            {
-              id: "s_xyz789",
-              post_id: "p_abc123",
-              subject: "Hello, world",
-              fire_at: 1768467600000,
-              remade_at: 1768460000000,
-            },
-          ],
+          remade: [sendBrief({ fire_at: 1768467600000, remade_at: 1768460000000 })],
         },
       },
       body: [
@@ -506,7 +501,7 @@ export function createRouter({
             name: "remade",
             type: "object[]",
             description:
-              "The scheduled sends the save re-made, as `in_use.sends` lists them; each then needs a fresh test.",
+              "The scheduled sends the save re-made, each as its send view, as `in_use.sends` lists them; each then needs a fresh test.",
           },
         ],
       },
@@ -677,7 +672,7 @@ export function createRouter({
         {
           name: "sort",
           description:
-            "`updated_at` (default: scheduled-first, then newest edit), `subject`, `status`, or `fire_at`.",
+            "`updated_at` (default: scheduled-first, then newest edit), `subject`, `status`, or `send.fire_at`, the fire time of the post's send.",
         },
         { name: "dir", description: "`asc` or `desc` (default `desc`)." },
         ...pageParams,
@@ -687,26 +682,6 @@ export function createRouter({
         as: "posts",
         list: true,
         fields: [
-          {
-            name: "posts[].fire_at",
-            type: "number | null",
-            description: "Its active send's fire time.",
-          },
-          {
-            name: "posts[].active_send_id",
-            type: "string | null",
-            description: "Its active send.",
-          },
-          {
-            name: "posts[].active_send_status",
-            type: '"scheduled" | "sending" | null',
-            description: "That send's status, which the post's own `scheduled` doesn't tell apart.",
-          },
-          {
-            name: "posts[].author",
-            type: "string | null",
-            description: "Who wrote the current revision.",
-          },
           pageField,
           {
             ...cursorField,
@@ -723,22 +698,13 @@ export function createRouter({
       access: "admin",
       resource: "posts",
       title: "Get a post",
-      summary: "One post with its current markdown and where its send stands.",
+      summary: "One post, with where its send stands, and its current markdown.",
       returns: {
         object: "post",
         as: "post",
         fields: [
           subjectSlugHeld,
           { name: "markdown", type: "string", description: "The current revision's body." },
-          { name: "author", type: "string | null", description: "Who wrote the current revision." },
-          {
-            name: "scheduled",
-            type: "object | null",
-            description:
-              "The scheduled send that soft-locks it: `{ id, fire_at, remade_at }`, `remade_at` when a template or identity change last re-made its email.",
-          },
-          { name: "sending", type: "object | null", description: "The send in flight, `{ id }`." },
-          { name: "sent", type: "object | null", description: "The send that sent it, `{ id }`." },
         ],
       },
       example: {
@@ -748,13 +714,11 @@ export function createRouter({
             status: "draft",
             subject: "Hello, world",
             current_revision: "r_1",
+            author: "you@example.com",
+            send: null,
           },
           subject_slug_held: null,
           markdown: "# Hello\n\nWelcome.",
-          author: "you@example.com",
-          scheduled: null,
-          sending: null,
-          sent: null,
         },
       },
       description:
@@ -857,6 +821,7 @@ export function createRouter({
         {
           code: "slug_permanent",
           when: "A change to the address once the post's send has started, or while its scheduled email (frozen before unlisted links) links it. Naming the address it has is fine.",
+          details: ["post"],
         },
       ],
       returns: {
@@ -1424,7 +1389,7 @@ export function createRouter({
         {
           code: "window_closed",
           when: "The fire time has passed, whether or not the sweep has started the send.",
-          details: ["send"],
+          details: ["send", "cursor"],
         },
       ],
       returns: { object: "send", as: "send", fields: [cursorField, changedField] },
@@ -1449,9 +1414,9 @@ export function createRouter({
       },
       body: [fireAtField],
       errors: [
-        { code: "fire_at_too_soon", details: ["send"] },
-        { code: "window_closed", details: ["send"] },
-        { code: "send_canceled", details: ["send"] },
+        { code: "fire_at_too_soon" },
+        { code: "window_closed", details: ["send", "cursor"] },
+        { code: "send_canceled", details: ["send", "cursor"] },
       ],
       returns: { object: "send", as: "send", fields: [cursorField, changedField] },
       handler: sendRoutes.reschedule,
@@ -1488,12 +1453,12 @@ export function createRouter({
         {
           code: "run_in_progress",
           when: "A run holds the send, and its in-flight rows may still get the provider's answer: try again a moment later.",
-          details: ["send"],
+          details: ["send", "cursor"],
         },
         {
           code: "not_wedged",
           when: "The send is not wedged (nothing ambiguous, recipients still to hand off, or a run yet to look at them), as when another Resolve has settled it.",
-          details: ["send"],
+          details: ["send", "cursor"],
         },
       ],
       returns: {
@@ -1579,7 +1544,7 @@ export function createRouter({
         {
           name: "email",
           description:
-            "An exact address: answers `{ subscriber, suppressed }`, as `GET /api/subscribers/:id` does, in place of the list, or 404 when no one has it.",
+            "An exact address: answers `{ subscriber }`, as `GET /api/subscribers/:id` does, in place of the list, or 404 when no one has it.",
         },
       ],
       returns: {
@@ -1651,17 +1616,7 @@ export function createRouter({
       resource: "subscribers",
       title: "Get a subscriber",
       summary: "One subscriber.",
-      returns: {
-        object: "subscriber",
-        as: "subscriber",
-        fields: [
-          {
-            name: "suppressed",
-            type: "boolean",
-            description: "Whether its address is suppressed.",
-          },
-        ],
-      },
+      returns: { object: "subscriber", as: "subscriber" },
       handler: subscriberRoutes.get,
     },
     {
@@ -1672,17 +1627,7 @@ export function createRouter({
       title: "Unsubscribe a subscriber",
       summary: "Unsubscribe a subscriber at their request.",
       description: `${SUBSCRIBER_ACTIONS.unsubscribe.when} Immediate and idempotent, as their own unsubscribe link is: it removes consent and never confirms anyone. To stop mailing an address on your own judgment, block it instead (\`POST /api/suppressions\`), which records that the decision was yours.`,
-      returns: {
-        object: "subscriber",
-        as: "subscriber",
-        fields: [
-          {
-            name: "suppressed",
-            type: "boolean",
-            description: "Whether its address is suppressed.",
-          },
-        ],
-      },
+      returns: { object: "subscriber", as: "subscriber" },
       handler: subscriberRoutes.unsubscribe,
     },
     {
@@ -1705,6 +1650,7 @@ export function createRouter({
         {
           code: "run_in_progress",
           when: "A send run is handing the subscriber to the provider: nothing changes, try again a moment later.",
+          details: ["subscriber"],
         },
       ],
       handler: subscriberRoutes.erase,
@@ -1957,7 +1903,7 @@ export function createRouter({
       summary: "Lift an address's suppression, so it may be mailed again.",
       description: `Both of the editor's acts that lift a suppression: "Unblock" for the publisher's own block, when they decide to mail the address again, and "Clear" for a bounce or a complaint. ${SUBSCRIBER_ACTIONS.clear.when} Either is a deliberate, rare act, on the publisher's word. An erasure's marker is never cleared here; an erasure that found a block keeps the block, and clearing it clears the address. Answers \`cleared: false\` when there was no suppression.`,
       example: { response: { email: "reader@example.com", cleared: true } },
-      errors: [{ code: "erasure_marker" }],
+      errors: [{ code: "erasure_marker", details: ["suppression"] }],
       handler: suppressionRoutes.clear,
     },
 

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type ExportRow, toImportCsv } from "../../shared/imports";
-import type { SubscriberListItem } from "../../shared/subscribers";
+import type { Subscriber } from "../../shared/subscribers";
 import {
   $,
   $$,
@@ -18,7 +18,7 @@ import { renderSubscribers } from "./list";
 const page = { total: 3, limit: 50, offset: 0, sort: "created_at", dir: "desc" };
 const counts = { pending: 1, confirmed: 2, unsubscribed: 0, suppressed: 1 };
 /** A row of the list as the API answers it: someone who confirmed here, unless `over` says otherwise. */
-const subscriber = (over: Partial<SubscriberListItem>): SubscriberListItem => ({
+const subscriber = (over: Partial<Subscriber>): Subscriber => ({
   id: "s0",
   email: "reader@b.c",
   status: "confirmed",
@@ -33,9 +33,7 @@ const subscriber = (over: Partial<SubscriberListItem>): SubscriberListItem => ({
   opt_in: "double",
   consent_evidence: null,
   import_id: null,
-  suppressed: false,
-  suppression_reason: null,
-  suppression_detail: null,
+  suppression: null,
   ...over,
 });
 const subs = [
@@ -51,9 +49,7 @@ const subs = [
     id: "s2",
     email: "bad@b.c",
     created_at: 2,
-    suppressed: true,
-    suppression_reason: "bounce",
-    suppression_detail: "550 no such user",
+    suppression: { reason: "bounce", detail: "550 no such user" },
   }),
   subscriber({
     id: "s3",
@@ -288,7 +284,7 @@ describe("subscribers view", () => {
         reply: () => ({
           counts,
           subscribers: blocked
-            ? [{ ...subs[0], suppressed: true, suppression_reason: "manual" }, subs[1], subs[2]]
+            ? [{ ...subs[0], suppression: { reason: "manual", detail: null } }, subs[1], subs[2]]
             : subs,
           page,
         }),
@@ -353,8 +349,8 @@ describe("subscribers view", () => {
         reply: () => ({
           counts,
           subscribers: [
-            { ...subs[0], suppressed: true, suppression_reason: "manual" },
-            { ...subs[2], suppressed: true, suppression_reason: "manual" },
+            { ...subs[0], suppression: { reason: "manual", detail: null } },
+            { ...subs[2], suppression: { reason: "manual", detail: null } },
           ],
           page,
         }),
@@ -391,8 +387,8 @@ describe("subscribers view", () => {
           counts,
           subscribers: [
             subs[1],
-            { ...subs[2], suppressed: true, suppression_reason: "import_complaint" },
-            { ...subs[0], suppressed: true, suppression_reason: "erased" },
+            { ...subs[2], suppression: { reason: "import_complaint", detail: null } },
+            { ...subs[0], suppression: { reason: "erased", detail: null } },
           ],
           page,
         }),
@@ -574,7 +570,7 @@ describe("subscribers view", () => {
         reply: () => ({
           counts,
           subscribers: [
-            { ...subs[2], suppressed: true, suppression_reason: "erased", status: "pending" },
+            { ...subs[2], suppression: { reason: "erased", detail: null }, status: "pending" },
           ],
           page,
         }),
@@ -596,8 +592,8 @@ describe("subscribers view", () => {
         reply: () => ({
           counts,
           subscribers: [
-            { ...subs[0], suppressed: true, suppression_reason: "import_bounce" },
-            { ...subs[1], suppressed: true, suppression_reason: "import_complaint" },
+            { ...subs[0], suppression: { reason: "import_bounce", detail: null } },
+            { ...subs[1], suppression: { reason: "import_complaint", detail: null } },
           ],
           page,
         }),
@@ -616,7 +612,7 @@ describe("subscribers view", () => {
         path: "/api/subscribers",
         reply: () => ({
           counts,
-          subscribers: [{ ...subs[0], suppressed: true, suppression_reason: "erased" }],
+          subscribers: [{ ...subs[0], suppression: { reason: "erased", detail: null } }],
           page,
         }),
       },

@@ -127,9 +127,10 @@ describe("images", () => {
     await env.DB.prepare("UPDATE posts SET status = 'scheduled' WHERE id = ?").bind(id).run();
     const up = await upload(id, "x.png", AUTH);
     expect(up.status).toBe(409);
-    expect(await readJson(up)).toEqual({
+    expect(await readJson(up)).toMatchObject({
       error: "post_not_draft",
       message: "This post is scheduled, so it’s locked. Cancel the schedule to edit it.",
+      post: { id, status: "scheduled" },
     });
   });
 

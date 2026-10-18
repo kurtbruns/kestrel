@@ -317,7 +317,7 @@ describe("API reference is generated from the route registration", () => {
       expect(new Set(errors.map((e) => e.code)).size).toBe(errors.length);
     }
     expect(listed.get("POST /api/sends/:id/resolve")?.[1]).toEqual(
-      expect.objectContaining({ status: 409, code: "not_wedged", details: ["send"] }),
+      expect.objectContaining({ status: 409, code: "not_wedged", details: ["send", "cursor"] }),
     );
   });
 
@@ -440,7 +440,7 @@ describe("API reference is generated from the route registration", () => {
     const returned = ref.groups.flatMap((g) => g.routes).flatMap((r) => r.returns?.object ?? []);
     const held = ref.objects.flatMap((o) => o.fields.flatMap((f) => f.object ?? []));
     expect(new Set([...returned, ...held])).toEqual(new Set(ref.objects.map((o) => o.key)));
-    expect(new Set(held)).toEqual(new Set(["condition", "halt"]));
+    expect(new Set(held)).toEqual(new Set(["condition", "halt", "send"]));
     for (const o of ref.objects) {
       expect(all.match(new RegExp(`^## ${o.title}$`, "gm")), o.key).toHaveLength(1);
       expect(docs.get(o.resource), o.key).toMatch(new RegExp(`^## ${o.title}$`, "m"));
@@ -609,7 +609,7 @@ describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
       '| Body field | Type | Description |\n| --- | --- | --- |\n| `resolution` (required) | "unsent" \\| "accepted" |',
     );
     expect(sends).toContain(
-      "Refusals:\n- 409 `run_in_progress`, with `send`: A run holds the send, and its in-flight rows may still get the provider's answer: try again a moment later. Next move: Try again shortly, unchanged.\n- 409 `not_wedged`, with `send`: ",
+      "Refusals:\n- 409 `run_in_progress`, with `send`, `cursor`: A run holds the send, and its in-flight rows may still get the provider's answer: try again a moment later. Next move: Try again shortly, unchanged.\n- 409 `not_wedged`, with `send`, `cursor`: ",
     );
     expect(sends).toContain("Example response:");
     // A route off the admin tier says so on its call line.

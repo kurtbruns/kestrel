@@ -1,10 +1,19 @@
-// Posts as the API carries them (SPEC §4): the row both clients read, the list row with its
-// active send, and the bodies of the post routes. The Worker's routes produce these shapes
+// Posts as the API carries them (SPEC §4): the one shape every route answers, its send and
+// what can be done to it included, and the bodies of the post routes. The Worker's routes produce these shapes
 // and the editor consumes them; one definition, so neither can drift.
 
 import type { PageMeta } from "./list";
+import type { SendView } from "./sends";
 
 export type PostStatus = "draft" | "scheduled" | "sent";
+
+/** Something a person can do to a post through the API, exactly as the server would take it now. */
+export interface PostAction {
+  name: "edit" | "delete" | "schedule" | "send_now";
+  method: "PUT" | "DELETE" | "POST";
+  /** The route, with the post's id filled in. */
+  path: string;
+}
 
 export interface Post {
   id: string;
@@ -55,27 +64,24 @@ export interface Post {
   email_only: boolean;
   /** The current revision's id; the editor carries it on every save (optimistic concurrency). */
   current_revision: string | null;
+  /** Who wrote the current revision ("Claude" surfaces as `service`; SPEC §4). */
+  author: string | null;
   created_at: number;
   updated_at: number;
-}
-
-/**
- * A post plus its active send, if any. `fire_at` is the send's fire time; `active_send_*`
- * identify it and carry its status, so a post whose send is in flight (`sending`) can be
- * told apart from one still merely `scheduled` even though the post's own status is
- * `scheduled` for both until the send completes (SPEC §6).
- */
-export interface PostListItem extends Post {
-  fire_at: number | null;
-  active_send_id: string | null;
-  active_send_status: "scheduled" | "sending" | null;
-  /** The current revision's author ("Claude" surfaces as `service`; SPEC §4). */
-  author: string | null;
+  /**
+   * Where the post's send stands, as the send's own view (SPEC §6, §8): its active send, the
+   * one scheduled or going out, else the one that sent it; null for a post with neither. A
+   * post stays `scheduled` while its send goes out, so the send's `status` and `phase` say
+   * which it is.
+   */
+  send: SendView | null;
+  /** Exactly what the server would take for this post now, each with its method and path. */
+  actions: PostAction[];
 }
 
 /** GET /api/posts */
 export interface PostListResponse {
-  posts: PostListItem[];
+  posts: Post[];
   page: PageMeta;
   /**
    * Where this read stood among the changes to sends (`<seq>.<at>`, as on `GET /api/sends`), to
@@ -92,19 +98,11 @@ export interface PostListResponse {
  */
 export type SubjectSlugHeld = string | null;
 
-/** GET /api/posts/:id: the post, its current text, and where its send stands. */
+/** GET /api/posts/:id: the post, with where its send stands, and its current text. */
 export interface PostResponse {
   post: Post;
   subject_slug_held: SubjectSlugHeld;
   markdown: string;
-  /** Who wrote the current revision; the freshness poll names them. */
-  author: string | null;
-  /** The scheduled send that soft-locks this post, and when a template or identity change last re-made it. */
-  scheduled: { id: string; fire_at: number; remade_at: number | null } | null;
-  /** The send in flight: the editor redirects to the live watch. */
-  sending: { id: string } | null;
-  /** The send that sent it: the editor redirects to the record. */
-  sent: { id: string } | null;
 }
 
 /**

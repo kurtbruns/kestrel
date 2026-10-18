@@ -590,7 +590,12 @@ describe("erasing someone a send run is handing off (SPEC §7)", () => {
     const res = await erase("id-ada@example.com");
 
     expect(res.status).toBe(409);
-    expect((await readJson(res)).error).toBe("run_in_progress");
+    // It carries the subscriber as it still stands, since nothing was erased (docs/API.md,
+    // principle 5).
+    expect(await readJson(res)).toMatchObject({
+      error: "run_in_progress",
+      subscriber: { id: "id-ada@example.com", email, suppression: null },
+    });
     expect(await everyRow()).toEqual(before);
   });
 

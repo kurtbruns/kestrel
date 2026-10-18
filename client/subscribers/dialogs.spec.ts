@@ -177,6 +177,7 @@ describe("confirmUnsubscribe", () => {
     opt_in: "double" as const,
     consent_evidence: null,
     import_id: null,
+    suppression: null,
   };
 
   it("names the address, unsubscribes on confirm, and tells the caller", async () => {
@@ -247,6 +248,7 @@ describe("viewSubscriberModal", () => {
     opt_in: "double" as const,
     consent_evidence: null,
     import_id: null,
+    suppression: null,
   };
 
   /** The subscriber's rows, label to value, as the dialog shows them. */

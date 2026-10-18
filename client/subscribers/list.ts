@@ -9,8 +9,8 @@ import {
   type SuppressionFlag,
 } from "../../shared/subscriber_meanings";
 import type {
+  Subscriber,
   SubscriberCounts,
-  SubscriberListItem,
   SubscriberListResponse,
   SubscriberStatus,
 } from "../../shared/subscribers";
@@ -203,11 +203,11 @@ function wireCountFilters(root: HTMLElement, state: ListState, reload: () => voi
 // generic label. The pills carry no hover tooltip, which keyboard, screen-reader, and touch
 // users can't reach: the legend under the counts defines each label once, and a
 // subscriber's own detail belongs on their page.
-function flagLabel(s: SubscriberListItem): string {
-  return (s.suppression_reason && SUPPRESSION_FLAG[s.suppression_reason]) || "suppressed";
+function flagLabel(s: Subscriber): string {
+  return (s.suppression && SUPPRESSION_FLAG[s.suppression.reason]) || "suppressed";
 }
-function suppressionFlag(s: SubscriberListItem): Html | null {
-  if (!s.suppressed) {
+function suppressionFlag(s: Subscriber): Html | null {
+  if (!s.suppression) {
     return null;
   }
   return html` <span class="badge suppressed row-flag">${flagLabel(s)}</span>`;
@@ -243,8 +243,8 @@ function legend(): Html {
 // marker on a pending sign-up is the one exception: the person's own confirmation lifts
 // it, so that pending status is still live. On a confirmed row (an import can put one
 // there) nothing lifts it, so it greys like any other suppression.
-function statusBadge(s: SubscriberListItem): Html {
-  if (!s.suppressed || (s.suppression_reason === "erased" && s.status === "pending")) {
+function statusBadge(s: Subscriber): Html {
+  if (!s.suppression || (s.suppression.reason === "erased" && s.status === "pending")) {
     return badge(s.status);
   }
   return html`<span class="badge ${s.status} held">${s.status}</span>`;
@@ -259,7 +259,7 @@ function breakableEmail(email: string): Html {
 
 function renderSubTable(
   listEl: Element,
-  rows: SubscriberListItem[],
+  rows: Subscriber[],
   state: ListState,
   reload: () => void,
   signal: AbortSignal,
@@ -305,8 +305,8 @@ function renderSubTable(
             viewSubscriberModal(
               row,
               signal,
-              row.suppressed
-                ? { label: flagLabel(row), detail: row.suppression_detail }
+              row.suppression
+                ? { label: flagLabel(row), detail: row.suppression.detail }
                 : undefined,
             ),
         },
@@ -318,16 +318,16 @@ function renderSubTable(
           onClick: () => confirmUnsubscribe(row, reload, signal),
         });
       }
-      if (!row.suppressed) {
+      if (!row.suppression) {
         items.push({
           label: SUBSCRIBER_ACTIONS.block.label,
           danger: true,
           onClick: () => confirmBlock(row, reload, signal),
         });
-      } else if (row.suppression_reason === "manual") {
+      } else if (row.suppression.reason === "manual") {
         items.push({ label: "Unblock", onClick: () => confirmUnblock(row, reload, signal) });
       } else {
-        const flag = row.suppression_reason ? SUPPRESSION_FLAG[row.suppression_reason] : null;
+        const flag = SUPPRESSION_FLAG[row.suppression.reason];
         if (flag === "bounced" || flag === "complaint") {
           items.push({
             label: SUBSCRIBER_ACTIONS.clear.label,

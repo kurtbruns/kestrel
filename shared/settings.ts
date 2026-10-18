@@ -5,6 +5,7 @@
 
 import type { BuildInfo } from "./build";
 import type { TestNotSent } from "./posts";
+import type { SendView } from "./sends";
 
 /** One address a template test missed, and why. */
 export interface TemplateTestMiss extends TestNotSent {
@@ -136,18 +137,10 @@ export interface NotificationStatusView {
   } | null;
 }
 
-/** A scheduled send a template or identity change would re-make (SPEC §6, §9). */
-export interface ScheduledSendRef {
-  id: string;
-  post_id: string;
-  subject: string;
-  fire_at: number;
-  remade_at: number | null;
-}
-
 /** What a save of the template or identity would touch, read before saving. */
 export interface InUseView {
-  sends: ScheduledSendRef[];
+  /** Every scheduled send, soonest first, each as its own view: what the save would re-make (SPEC §9). */
+  sends: SendView[];
   /** When a save stops being refused for the lead (ms since epoch), or null when it isn't. */
   retry_after: number | null;
   identity_fields: IdentityField[];
@@ -177,13 +170,13 @@ export interface SettingsPatchBody {
 export interface SettingsSavedResponse {
   settings: SettingsView;
   warnings: string[];
-  remade: ScheduledSendRef[];
+  remade: SendView[];
 }
 
 /** POST and DELETE /api/settings/logo: the settings as stored and the scheduled sends the change re-made. */
 export interface LogoResponse {
   settings: SettingsView;
-  remade: ScheduledSendRef[];
+  remade: SendView[];
 }
 
 /** POST /api/settings/template/test: a sample post through the saved template, to each recipient. */
@@ -210,7 +203,7 @@ export interface NotificationTestResponse {
 export interface RemakeRequiredError {
   error: "remake_required";
   message: string;
-  sends: ScheduledSendRef[];
+  sends: SendView[];
 }
 
 /** The 409 a template or identity save gets while a scheduled send is about to fire (SPEC §9). */
@@ -219,5 +212,5 @@ export interface RemakeTooCloseError {
   message: string;
   /** When a save stops being refused (ms since epoch). */
   retry_after: number;
-  sends: ScheduledSendRef[];
+  sends: SendView[];
 }

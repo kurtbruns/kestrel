@@ -53,7 +53,11 @@ export async function create(c: RequestContext): Promise<Response> {
         : `The email provider refused the confirmation to ${email}: ${outcome.error}`,
     );
   }
-  const response: SubscribeResponse = { subscriber: outcome.subscriber, action: outcome.action };
+  const response: SubscribeResponse = {
+    subscriber:
+      outcome.subscriber && (await subscribers.withSuppression(c.env.DB, outcome.subscriber)),
+    action: outcome.action,
+  };
   return json(response, outcome.action === "created" ? 201 : 200);
 }
 
@@ -64,10 +68,10 @@ export async function list(c: RequestContext): Promise<Response> {
     if (!subscriber) {
       throw notFound("subscriber");
     }
-    return json({
-      subscriber,
-      suppressed: await subscribers.isSuppressed(c.env.DB, subscriber.email),
-    });
+    const body: SubscriberResponse = {
+      subscriber: await subscribers.withSuppression(c.env.DB, subscriber),
+    };
+    return json(body);
   }
   const statusParam = c.url.searchParams.get("status") ?? undefined;
   const status =
@@ -87,26 +91,11 @@ export async function list(c: RequestContext): Promise<Response> {
     subscribers.countSubscribers(c.env.DB, filter),
     subscribers.listSubscribers(c.env.DB, filter, page),
   ]);
-  // Annotate each row with its suppression reason (if any), so the list can show WHY
-  // an address is suppressed — bounced / complaint / manual — with one lookup for the
-  // page's own addresses.
-  const suppressions = await subscribers.suppressionsFor(
-    c.env.DB,
-    rows.map((r) => r.email),
-  );
-  const suppressedBy = new Map(suppressions.map((s) => [s.email, s]));
-  const annotated = rows.map((r) => {
-    const sup = suppressedBy.get(r.email);
-    return {
-      ...r,
-      suppressed: sup !== undefined,
-      suppression_reason: sup?.reason ?? null,
-      suppression_detail: sup?.detail ?? null,
-    };
-  });
   const body: SubscriberListResponse = {
     counts,
-    subscribers: annotated,
+    // Each with its suppression, so the list says why an address isn't mailed: one lookup for
+    // the page's own addresses.
+    subscribers: await subscribers.withSuppressions(c.env.DB, rows),
     page: listPage(total, page),
     workers_plan_advice:
       onFreePlanLimits(c.config) && pastFreePlanList(counts.confirmed)
@@ -122,8 +111,7 @@ export async function get(c: RequestContext): Promise<Response> {
     throw notFound("subscriber");
   }
   const body: SubscriberResponse = {
-    subscriber,
-    suppressed: await subscribers.isSuppressed(c.env.DB, subscriber.email),
+    subscriber: await subscribers.withSuppression(c.env.DB, subscriber),
   };
   return json(body);
 }
@@ -135,8 +123,7 @@ export async function unsubscribe(c: RequestContext): Promise<Response> {
     throw notFound("subscriber");
   }
   const body: SubscriberResponse = {
-    subscriber,
-    suppressed: await subscribers.isSuppressed(c.env.DB, subscriber.email),
+    subscriber: await subscribers.withSuppression(c.env.DB, subscriber),
   };
   return json(body);
 }
@@ -147,14 +134,18 @@ export async function unsubscribe(c: RequestContext): Promise<Response> {
  * undoable, and a repeat finds no subscriber (404), since nothing is kept to know the id by.
  */
 export async function erase(c: RequestContext): Promise<Response> {
-  const outcome = await subscribers.erase(c.env.DB, param(c, "id"));
+  const id = param(c, "id");
+  const outcome = await subscribers.erase(c.env.DB, id);
   if (outcome.kind === "not_found") {
     throw notFound("subscriber");
   }
   if (outcome.kind === "in_flight") {
+    // Nothing was erased, so the subscriber is still there to carry, as it now stands.
+    const subscriber = await subscribers.getById(c.env.DB, id);
     throw refusal(
       "run_in_progress",
       "A send is handing this subscriber to the email provider right now, so they can’t be erased this moment. Try again in a minute.",
+      { subscriber: subscriber && (await subscribers.withSuppression(c.env.DB, subscriber)) },
     );
   }
   log.info("subscriber.erased", { deliveries: outcome.erased.deliveries });

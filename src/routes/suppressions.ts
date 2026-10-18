@@ -52,9 +52,11 @@ export async function clear(c: RequestContext): Promise<Response> {
   const email = normalizeEmail(param(c, "email"));
   const outcome = await subscribers.clearSuppression(c.env.DB, email);
   if (outcome === "erased") {
+    // Clearing wrote nothing, so the marker is there to carry, as it stands.
     throw refusal(
       "erasure_marker",
       "This address was erased. Only the person’s own confirmation lifts its do-not-contact marker.",
+      { suppression: await subscribers.suppressionRow(c.env.DB, email) },
     );
   }
   const body: ClearSuppressionResponse = { email, cleared: outcome === "cleared" };

@@ -138,22 +138,27 @@ describe("in-flight post routing", () => {
     // Flip the send in flight, as the sweep would (the post stays `scheduled`).
     await env.DB.prepare("UPDATE sends SET status = 'sending' WHERE id = ?").bind(sendId).run();
 
-    // GET /api/posts/:id reports `sending` (not `scheduled`) so the editor redirects to the watch.
+    // GET /api/posts/:id carries the send as it stands, `sending`, so the editor redirects to
+    // the watch; the post's own status stays `scheduled`, and nothing can be done to it.
     const detail = await readJson(
       await SELF.fetch(`${base}/api/posts/${postId}`, { headers: AUTH }),
     );
-    expect(detail.sending).toEqual({ id: sendId });
-    expect(detail.scheduled).toBeNull();
+    expect([detail.post.status, detail.post.send?.id, detail.post.send?.status]).toEqual([
+      "scheduled",
+      sendId,
+      "sending",
+    ]);
+    expect(detail.post.actions).toEqual([]);
 
-    // The list row carries the active send's id + status for the Drafts relabel/route.
+    // The list row is the same post: one shape on every route (docs/API.md, principle 2).
     const list = await readJson(
       await SELF.fetch(`${base}/api/posts?search=${marker}&status=draft,scheduled`, {
         headers: AUTH,
       }),
     );
     const row = list.posts.find((p: any) => p.id === postId);
-    expect(row.active_send_status).toBe("sending");
-    expect(row.active_send_id).toBe(sendId);
+    expect(Object.keys(row).sort()).toEqual(Object.keys(detail.post).sort());
+    expect([row.send.id, row.send.status, row.actions]).toEqual([sendId, "sending", []]);
   });
 });
 

@@ -445,6 +445,11 @@ export function sendServer(rows: SendSummary[] = []) {
       }
       put({ ...s.row, ...over }, extras);
     },
+    /** One send as the server would answer it now, or null once it is gone. */
+    view(id: string): SendView | null {
+      const s = sends.get(id);
+      return s ? view(s, Date.now()) : null;
+    },
     /** Delete a send with its post: gone, and reported as removed after any earlier cursor. */
     remove(id: string) {
       seq += 1;

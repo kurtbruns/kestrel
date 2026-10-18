@@ -1,7 +1,8 @@
 // The re-make confirmation (SPEC §6, §9; DESIGN §4): the in-use chip and the
 // confirm-then-save flow the Template and Settings pages share.
 
-import type { InUseView, RemakeRequiredError, ScheduledSendRef } from "../../shared/settings";
+import type { SendView } from "../../shared/sends";
+import type { InUseView, RemakeRequiredError } from "../../shared/settings";
 import { ApiError } from "../api";
 import { at } from "../lifecycle";
 import { fmt } from "../ui/format";
@@ -92,7 +93,7 @@ export async function withRemakeConfirm<T>(
 // stays, what's next), and the alternative (a second template, which Kestrel does not
 // offer yet).
 function confirmRemake(
-  sends: ScheduledSendRef[],
+  sends: Pick<SendView, "subject" | "fire_at">[],
   verb: RemakeVerb,
   signal: AbortSignal,
 ): Promise<boolean> {

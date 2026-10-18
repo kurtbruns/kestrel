@@ -714,7 +714,11 @@ describe("suppressions: a client records only its own block (SPEC §7)", () => {
     await subs.addSuppression(env.DB, email, "erased");
     const res = await clear(email);
     expect(res.status).toBe(409);
-    expect(await readJson(res)).toMatchObject({ error: "erasure_marker" });
+    // It carries the marker as it stands, which clearing left in place.
+    expect(await readJson(res)).toMatchObject({
+      error: "erasure_marker",
+      suppression: { email, reason: "erased", detail: null },
+    });
     expect((await subs.suppressionOf(env.DB, email))?.reason).toBe("erased");
   });
 
@@ -788,9 +792,8 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     expect(res.status).toBe(200);
     const body = await readJson(res);
     expect(body.subscribers.map((s: any) => s.email)).toEqual([suppressed]);
-    expect(body.subscribers.every((s: any) => s.suppressed)).toBe(true);
-    // The suppression reason is surfaced on each row (for the inline flag).
-    expect(body.subscribers[0].suppression_reason).toBe("complaint");
+    // Each row carries its suppression inside it (for the inline flag): why, and the words.
+    expect(body.subscribers[0].suppression).toEqual({ reason: "complaint", detail: null });
     // The page envelope reflects the filtered total, not the whole table.
     expect(body.page).toMatchObject({ total: 1, offset: 0 });
   });
@@ -818,9 +821,7 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     expect(body.subscribers).toHaveLength(1);
     expect(body.subscribers[0]).toMatchObject({
       email: "old@example.com",
-      suppressed: true,
-      suppression_reason: "bounce",
-      suppression_detail: "mailbox gone",
+      suppression: { reason: "bounce", detail: "mailbox gone" },
     });
   });
 

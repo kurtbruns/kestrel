@@ -217,10 +217,16 @@ describe("posts + revisions", () => {
     expect(put.status).toBe(409);
     // In words the editor shows as they stand, naming the way to edit again (DESIGN §10),
     // under the code for an act that no longer applies, not one to try again.
-    expect(await readJson(put)).toEqual({
-      error: "post_not_draft",
-      message: "This post is scheduled, so it’s locked. Cancel the schedule to edit it.",
-    });
+    // It carries the post as it stands, so a client redraws it without a second read
+    // (docs/API.md, principle 5): still scheduled, with nothing to offer.
+    const refused = await readJson(put);
+    expect([refused.error, refused.message, refused.post.id, refused.post.status]).toEqual([
+      "post_not_draft",
+      "This post is scheduled, so it’s locked. Cancel the schedule to edit it.",
+      id,
+      "scheduled",
+    ]);
+    expect(refused.post.actions).toEqual([]);
 
     const del = await SELF.fetch(`${base}/api/posts/${id}`, { method: "DELETE", headers: AUTH });
     expect(del.status).toBe(409);
@@ -238,9 +244,10 @@ describe("posts + revisions", () => {
       body: JSON.stringify({ markdown: "nope" }),
     });
     expect(put.status).toBe(409);
-    expect(await readJson(put)).toEqual({
+    expect(await readJson(put)).toMatchObject({
       error: "post_not_draft",
       message: "This post is being sent, so it can’t be changed.",
+      post: { status: expect.any(String), actions: [] },
     });
   });
 
@@ -255,9 +262,10 @@ describe("posts + revisions", () => {
       body: JSON.stringify({ markdown: "nope" }),
     });
     expect(put.status).toBe(409);
-    expect(await readJson(put)).toEqual({
+    expect(await readJson(put)).toMatchObject({
       error: "post_not_draft",
       message: "This post has been sent, so it can’t be changed.",
+      post: { status: expect.any(String), actions: [] },
     });
   });
 
@@ -373,7 +381,7 @@ describe("posts + revisions", () => {
     const res = await SELF.fetch(`${base}/api/posts/${created.post.id}`, { headers: AUTH });
     expect(res.headers.get("ETag")).toBe(`"${created.post.current_revision}"`);
     const data = await readJson(res);
-    expect(data.author).toBe("tester@example.com"); // the human principal (default AUTH) that created it
+    expect(data.post.author).toBe("tester@example.com"); // the human principal (default AUTH) that created it
   });
 
   // A draft that was scheduled then canceled still has the canceled send (and any

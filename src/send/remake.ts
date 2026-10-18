@@ -17,13 +17,14 @@
  * half. The settings routes are its only caller.
  */
 
-import type { RemakeRequiredError } from "../../shared/settings";
+import type { SendView } from "../../shared/sends";
+import type { RemakeRequiredError, RemakeTooCloseError } from "../../shared/settings";
 import { getPost } from "../db/posts";
 import {
   listScheduledSends,
   remakeGuard,
   remakeSendStmt,
-  type ScheduledSendRef,
+  type ScheduledSendRow,
 } from "../db/sends";
 import {
   type AppSettings,
@@ -37,31 +38,38 @@ import type { AppEnv, Config } from "../env";
 import { HttpError } from "../lib/errors";
 import { unwrap } from "../lib/unwrap";
 import { brandingDiffers, resolveBranding } from "../render/template_engine";
+import { viewSendsInOrder } from "./describe";
 import { renderPost } from "./schedule";
 
-/** What a settings save reports: the settings as saved, and the sends it re-made
- *  (empty when the change reached no email, or nothing was scheduled). */
+/** What a settings save reports: the settings as saved, and the sends it re-made, each as its
+ *  view (empty when the change reached no email, or nothing was scheduled). */
 export interface SaveOutcome {
   settings: AppSettings;
-  remade: ScheduledSendRef[];
+  remade: SendView[];
 }
 
 /** The scheduled sends inside the deployment's minimum lead as of `now`: the ones that
  *  block a re-make, and the moment after which it is no longer blocked. */
 export function insideLead(
-  scheduled: ScheduledSendRef[],
+  scheduled: ScheduledSendRow[],
   minLeadMs: number,
   now: number,
-): { sends: ScheduledSendRef[]; retryAfter: number | null } {
+): { sends: ScheduledSendRow[]; retryAfter: number | null } {
   const sends = scheduled.filter((s) => s.fire_at < now + minLeadMs);
   const retryAfter = sends.length ? Math.max(...sends.map((s) => s.fire_at)) : null;
   return { sends, retryAfter };
 }
 
-function remakeRequired(sends: ScheduledSendRef[]): HttpError {
+async function remakeRequired(env: AppEnv, sends: ScheduledSendRow[]): Promise<HttpError> {
   const n = sends.length;
-  // The body the editor reads (shared/settings.ts); the error and message fields are HttpError's.
-  const details: Omit<RemakeRequiredError, "error" | "message"> = { sends };
+  // The body the editor reads (shared/settings.ts), each send as its view; the error and
+  // message fields are HttpError's.
+  const details: Omit<RemakeRequiredError, "error" | "message"> = {
+    sends: await viewSendsInOrder(
+      env,
+      sends.map((s) => s.id),
+    ),
+  };
   return new HttpError(
     "remake_required",
     `Saving this change re-makes ${n} scheduled email${n === 1 ? "" : "s"}. Pass their ids in \`remake\` to confirm.`,
@@ -69,13 +77,25 @@ function remakeRequired(sends: ScheduledSendRef[]): HttpError {
   );
 }
 
-function remakeTooClose(sends: ScheduledSendRef[], retryAfter: number, now: number): HttpError {
+async function remakeTooClose(
+  env: AppEnv,
+  sends: ScheduledSendRow[],
+  retryAfter: number,
+  now: number,
+): Promise<HttpError> {
   const first = unwrap(sends[0], "send inside the lead");
   const minutes = Math.max(1, Math.ceil((first.fire_at - now) / 60_000));
+  const details: Omit<RemakeTooCloseError, "error" | "message"> = {
+    retry_after: retryAfter,
+    sends: await viewSendsInOrder(
+      env,
+      sends.map((s) => s.id),
+    ),
+  };
   return new HttpError(
     "remake_too_close",
     `“${first.subject}” sends in ${minutes} minute${minutes === 1 ? "" : "s"}. Try again once it has sent.`,
-    { retry_after: retryAfter, sends },
+    details,
   );
 }
 
@@ -85,18 +105,18 @@ function remakeTooClose(sends: ScheduledSendRef[], retryAfter: number, now: numb
  * same refusals the write would, against the scheduled sends as of now.
  */
 export async function checkRemake(
-  db: D1Database,
+  env: AppEnv,
   ack: string[] | null,
   minLeadMs: number,
   now = Date.now(),
-): Promise<ScheduledSendRef[]> {
-  const scheduled = await listScheduledSends(db);
+): Promise<ScheduledSendRow[]> {
+  const scheduled = await listScheduledSends(env.DB);
   const lead = insideLead(scheduled, minLeadMs, now);
   if (lead.retryAfter !== null) {
-    throw remakeTooClose(lead.sends, lead.retryAfter, now);
+    throw await remakeTooClose(env, lead.sends, lead.retryAfter, now);
   }
   if (scheduled.some((s) => ack === null || !ack.includes(s.id))) {
-    throw remakeRequired(scheduled);
+    throw await remakeRequired(env, scheduled);
   }
   return scheduled;
 }
@@ -141,7 +161,7 @@ export async function saveSettingsRemaking(
     }
 
     const now = Date.now();
-    const scheduled = await checkRemake(env.DB, ack, config.minLeadMs, now);
+    const scheduled = await checkRemake(env, ack, config.minLeadMs, now);
     await runBeforeWrite();
 
     // Render every scheduled send in memory first, from its locked content (the
@@ -177,16 +197,17 @@ export async function saveSettingsRemaking(
       if ((nowVersion ?? 0) !== version) {
         continue;
       }
-      await checkRemake(env.DB, ack, config.minLeadMs);
+      await checkRemake(env, ack, config.minLeadMs);
       continue;
     }
-    const remade: ScheduledSendRef[] = [];
-    scheduled.forEach((s, i) => {
-      if ((results[i]?.meta.changes ?? 0) > 0) {
-        remade.push({ ...s, remade_at: now });
-      }
-    });
-    return { settings: next, remade };
+    const remade = scheduled.filter((_, i) => (results[i]?.meta.changes ?? 0) > 0);
+    return {
+      settings: next,
+      remade: await viewSendsInOrder(
+        env,
+        remade.map((s) => s.id),
+      ),
+    };
   }
   throw new SettingsContention();
 }

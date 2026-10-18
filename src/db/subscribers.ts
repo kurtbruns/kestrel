@@ -17,7 +17,29 @@ import { unwrap } from "../lib/unwrap";
 // The row shapes live in shared/ so the editor reads the same definitions; the names
 // here are the Worker's own.
 export type { SubscribeAction, SubscriberStatus };
-export type SubscriberRow = Subscriber;
+export type SubscriberRow = Omit<Subscriber, "suppression">;
+
+/** Subscribers as the API answers them, in the order given: each with its suppression, or
+ *  null (docs/API.md, principle 2: one shape on every route), in one read for them all. */
+export async function withSuppressions(
+  db: D1Database,
+  rows: readonly SubscriberRow[],
+): Promise<Subscriber[]> {
+  const found = await suppressionsFor(
+    db,
+    rows.map((r) => r.email),
+  );
+  const by = new Map(found.map((s) => [s.email, s]));
+  return rows.map((row) => {
+    const sup = by.get(row.email);
+    return { ...row, suppression: sup ? { reason: sup.reason, detail: sup.detail } : null };
+  });
+}
+
+/** One subscriber as the API answers it (`withSuppressions`). */
+export async function withSuppression(db: D1Database, row: SubscriberRow): Promise<Subscriber> {
+  return unwrap((await withSuppressions(db, [row]))[0], "subscriber view");
+}
 export type Counts = SubscriberCounts;
 export type SuppressionRow = Suppression;
 
@@ -389,6 +411,14 @@ export function suppressionOf(
     .prepare("SELECT reason, created_at FROM suppressions WHERE email = ?")
     .bind(email)
     .first<Pick<SuppressionRow, "reason" | "created_at">>();
+}
+
+/** The address's suppression whole, as the API answers it, or null when it has none. */
+export async function suppressionRow(
+  db: D1Database,
+  email: string,
+): Promise<SuppressionRow | null> {
+  return (await suppressionsFor(db, [email]))[0] ?? null;
 }
 
 /** What an erasure did, as `EraseResponse` carries it. */

@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DAILY_WRITES_SEND_RECIPIENTS, dailyWritesSendWarning } from "../../shared/free_plan";
-import type { SendSummary } from "../../shared/sends";
+import type { PostAction } from "../../shared/posts";
+import type { SendSummary, SendView } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import { slugify } from "../../shared/slug";
 import type { ViewHandle } from "../lifecycle";
 import { readSendsNow } from "../send_state";
 import { appState } from "../state";
-import { feedReads, sendServer } from "../test/send_server";
+import { feedReads, sendServer, sendView } from "../test/send_server";
 import {
   $,
   type FakeApi,
@@ -32,12 +33,33 @@ type Draft = {
   /** The subject's slug, when another post holds it and so the address didn't follow. */
   subject_slug_held: string | null;
   markdown: string;
-  author: string | null;
-  scheduled?: { id: string; fire_at: number; remade_at: number | null } | null;
 };
 
+/** What the server offers for a post, as it works it out (src/services/post_view.ts): a
+ *  draft's text, and its schedule and send now while a provider is connected. */
+function actionsFor(post: Record<string, unknown>): PostAction[] {
+  if (post.status !== "draft") {
+    return [];
+  }
+  const path = `/api/posts/${String(post.id)}`;
+  const actions: PostAction[] = [
+    { name: "edit", method: "PUT", path },
+    { name: "delete", method: "DELETE", path },
+  ];
+  if (appState.appConfig?.deployment.provider !== "none") {
+    actions.push(
+      { name: "schedule", method: "POST", path: `${path}/schedule` },
+      { name: "send_now", method: "POST", path: `${path}/send` },
+    );
+  }
+  return actions;
+}
+
+/** A post as the server answers it: its actions worked out from its state, as the server does. */
+const served = (post: Record<string, unknown>) => ({ ...post, actions: actionsFor(post) });
+
 const draft = (over: Record<string, unknown> = {}): Draft => ({
-  post: {
+  post: served({
     id: "p1",
     subject: "Owls",
     slug: "owls",
@@ -48,11 +70,12 @@ const draft = (over: Record<string, unknown> = {}): Draft => ({
     status: "draft",
     email_only: false,
     current_revision: "r1",
+    author: "a@b.c",
     updated_at: "2026-09-20T10:00:00Z",
+    send: null,
     ...over,
-  },
+  }),
   markdown: "# Owls\n\nHoot.",
-  author: "a@b.c",
   subject_slug_held: null,
 });
 
@@ -61,11 +84,14 @@ const draft = (over: Record<string, unknown> = {}): Draft => ({
  * and advances the revision. Consistent the way the real server is, which matters because
  * the editor's freshness poll compares what GET says against what its own saves produced.
  */
-function draftServer(initial = draft()) {
+function draftServer(initial = draft(), sendOf?: () => SendView | null) {
   let state = initial;
   let n = 1;
+  // The post as the server answers it now: its actions, and its send as the send routes hold it.
+  const answer = (post: Record<string, unknown>) =>
+    served(sendOf ? { ...post, send: sendOf() } : post);
   const server = {
-    get: () => state,
+    get: () => ({ ...state, post: answer(state.post) }),
     /** Apply a save, unless `intercept` answers instead (a 409, or a promise to answer later). */
     put(
       req: FakeRequest,
@@ -124,19 +150,19 @@ function draftServer(initial = draft()) {
         }
       }
       state = { ...state, post, subject_slug_held };
-      return { post: state.post, subject_slug_held };
+      return { post: answer(state.post), subject_slug_held };
     },
     /** Slugs other posts hold. */
     taken: new Set<string>(),
     /** Another writer saved: the server moves on to a new revision. */
     elsewhere(author: string): string {
       n += 1;
-      state = { ...state, post: { ...state.post, current_revision: `r${n}` }, author };
+      state = { ...state, post: { ...state.post, current_revision: `r${n}`, author } };
       return `r${n}`;
     },
-    /** The send that soft-locks the post, or null once canceled. */
-    scheduled(send: Draft["scheduled"]) {
-      state = { ...state, scheduled: send };
+    /** The post's send, or null once canceled. */
+    scheduled(send: SendView | null) {
+      state = { ...state, post: { ...state.post, send } };
     },
   };
   return server;
@@ -152,12 +178,14 @@ const sendRow = (over: Partial<SendSummary> = {}): SendSummary =>
  * way the real server does.
  */
 function scheduledPost(fireAt = Date.now() + 3_600_000, remadeAt: number | null = null) {
-  const post = draftServer(draft({ status: "scheduled" }));
   const sends = sendServer([sendRow({ fire_at: fireAt, remade_at: remadeAt })]);
-  let send = { id: "s1", fire_at: fireAt, remade_at: remadeAt };
-  post.scheduled(send);
-  let sending: { id: string } | null = null;
-  const postRoute: FakeRoute = { path: "/api/posts/p1", reply: () => ({ ...post.get(), sending }) };
+  // The post's send is the send routes' own, so the two reads always agree; a canceled one is
+  // no post's send.
+  const post = draftServer(draft({ status: "scheduled" }), () => {
+    const v = sends.view("s1");
+    return v && v.status !== "canceled" ? v : null;
+  });
+  const postRoute: FakeRoute = { path: "/api/posts/p1", reply: () => post.get() };
   return {
     server: post,
     sends,
@@ -170,26 +198,19 @@ function scheduledPost(fireAt = Date.now() + 3_600_000, remadeAt: number | null 
     ],
     /** The sweep starts it. */
     start() {
-      sending = { id: "s1" };
-      post.scheduled(null);
       sends.edit("s1", { status: "sending", started_at: Date.now(), c_pending: 40 });
     },
     /** Canceled, here or elsewhere: the post is a draft again. */
     cancel() {
       post.apply({ json: () => ({ status: "draft" }) } as FakeRequest);
-      post.scheduled(null);
       sends.edit("s1", { status: "canceled", completed_at: Date.now() });
     },
     /** Moved elsewhere. */
     move(at: number) {
-      send = { ...send, fire_at: at };
-      post.scheduled(send);
       sends.edit("s1", { fire_at: at });
     },
     /** Re-made by a template or identity change. */
     remake(at: number) {
-      send = { ...send, remade_at: at };
-      post.scheduled(send);
       sends.edit("s1", { remade_at: at });
     },
   };
@@ -445,14 +466,21 @@ describe("editor view", () => {
     await open([
       {
         path: "/api/posts/p1",
-        reply: () => ({ ...draft({ status: "sent" }), sent: { id: "x9" } }),
+        reply: () =>
+          draft({ status: "sent", send: sendView(sendRow({ id: "x9", status: "sent" })) }),
       },
     ]);
     expect(location.hash).toBe("#/sent/x9");
     expect(replace).toHaveBeenLastCalledWith("#/sent/x9"); // so Back skips the editor URL
     location.hash = "#/edit/p1";
     fake.restore();
-    await open([{ path: "/api/posts/p1", reply: () => ({ ...draft(), sending: { id: "x8" } }) }]);
+    await open([
+      {
+        path: "/api/posts/p1",
+        reply: () =>
+          draft({ status: "scheduled", send: sendView(sendRow({ id: "x8", status: "sending" })) }),
+      },
+    ]);
     expect(location.hash).toBe("#/sent/x8");
     expect(replace).toHaveBeenLastCalledWith("#/sent/x8");
     expect(document.querySelector("#f-markdown")).toBeNull(); // never mounted
@@ -662,11 +690,10 @@ describe("editor view", () => {
           // The first read still says scheduled; the send was canceled right after it.
           if (++postReads === 1) {
             linked.cancel();
-            return {
-              ...draft({ status: "scheduled" }),
-              scheduled: { id: "s1", fire_at: Date.now() + 3_600_000, remade_at: null },
-              sending: null,
-            };
+            return draft({
+              status: "scheduled",
+              send: sendView(sendRow({ fire_at: Date.now() + 3_600_000 })),
+            });
           }
           return linked.postRoute.reply(req);
         },
@@ -680,8 +707,9 @@ describe("editor view", () => {
 
   it("goes to Drafts when the send is gone by the time the editor reads it", async () => {
     const linked = scheduledPost();
+    const read = linked.server.get(); // the post's read, which still carries its send
     linked.sends.remove("s1");
-    await open(linked.routes);
+    await open([{ path: "/api/posts/p1", reply: () => read }, ...linked.routes.slice(1)]);
     expect(location.hash).toBe("#/drafts");
     expect($("#toasts").textContent).toMatch(/deleted elsewhere/);
   });
@@ -1650,7 +1678,7 @@ describe("editor view", () => {
         reply: (req) => {
           const fireAt = (req.json() as { fire_at: string }).fire_at;
           server.apply({ json: () => ({ status: "scheduled" }) } as FakeRequest);
-          server.scheduled({ id: "s1", fire_at: new Date(fireAt).getTime(), remade_at: null });
+          server.scheduled(sendView(sendRow({ fire_at: new Date(fireAt).getTime() })));
           sends.put(sendRow({ fire_at: new Date(fireAt).getTime() }));
           return { send: { id: "s1" } };
         },

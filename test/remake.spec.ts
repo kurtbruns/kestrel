@@ -99,7 +99,18 @@ describe("a template or identity change re-makes the scheduled emails", () => {
     const body = await readJson(res);
     expect(body.error).toBe("remake_required");
     expect(body.sends.map((s: any) => s.id)).toEqual([a.id, b.id]); // soonest first
-    expect(body.sends[0]).toMatchObject({ post_id: a.post_id, subject: "Post A", remade_at: null });
+    // Each as its full send view, the one shape a send has (docs/API.md, principle 2).
+    expect(body.sends[0]).toMatchObject({
+      post_id: a.post_id,
+      subject: "Post A",
+      remade_at: null,
+      status: "scheduled",
+      phase: "scheduled",
+    });
+    const { send: view } = await readJson(
+      await SELF.fetch(`${base}/api/sends/${a.id}`, { headers: AUTH }),
+    );
+    expect(Object.keys(body.sends[0]).sort()).toEqual(Object.keys(view).sort());
 
     expect((await getSettings()).settings.email_template).toBe(tpl("v1"));
     for (const id of [a.id, b.id]) {
@@ -134,7 +145,7 @@ describe("a template or identity change re-makes the scheduled emails", () => {
     const post = await readJson(
       await SELF.fetch(`${base}/api/posts/${a.post_id}`, { headers: AUTH }),
     );
-    expect(post.scheduled).toMatchObject({ id: a.id, remade_at: body.remade[0].remade_at });
+    expect(post.post.send).toMatchObject({ id: a.id, remade_at: body.remade[0].remade_at });
     const list = await readJson(
       await SELF.fetch(`${base}/api/sends?status=scheduled`, { headers: AUTH }),
     );

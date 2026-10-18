@@ -1,5 +1,5 @@
-// Subscribers as the API carries them (SPEC §7): the row, the suppression annotation the
-// list adds, and the bodies of the subscriber and suppression routes. The Worker's routes produce these
+// Subscribers as the API carries them (SPEC §7): the one shape every route answers, its
+// suppression included, and the bodies of the subscriber and suppression routes. The Worker's routes produce these
 // shapes and the editor consumes them; one definition, so neither can drift.
 
 import type { OptIn } from "./imports";
@@ -31,6 +31,13 @@ export interface Suppression {
   created_at: number;
 }
 
+/** Why a subscriber's address is suppressed, as a subscriber carries it. */
+export interface SubscriberSuppression {
+  reason: SuppressionReason;
+  /** The provider's or the publisher's words, if any. */
+  detail: string | null;
+}
+
 export interface Subscriber {
   id: string;
   email: string;
@@ -55,13 +62,8 @@ export interface Subscriber {
   consent_evidence: string | null;
   /** The import that confirmed or added this subscriber, or null when they joined here. What makes a subscriber read as imported. */
   import_id: string | null;
-}
-
-/** The list row: the subscriber plus why it is suppressed, if it is, so the list can say so without a lookup. */
-export interface SubscriberListItem extends Subscriber {
-  suppressed: boolean;
-  suppression_reason: SuppressionReason | null;
-  suppression_detail: string | null;
+  /** Whether the address is suppressed, and why; null when it is mailed as its status says. */
+  suppression: SubscriberSuppression | null;
 }
 
 /** The list's composition: subscribers by consent state, and how many of them are suppressed. */
@@ -76,7 +78,7 @@ export interface SubscriberCounts {
 /** GET /api/subscribers */
 export interface SubscriberListResponse {
   counts: SubscriberCounts;
-  subscribers: SubscriberListItem[];
+  subscribers: Subscriber[];
   page: PageMeta;
   /** On the Workers Free plan's limits, once the confirmed list is past what Free suits (`FREE_PLAN_LIST`): the server's advice to move to Workers Paid, to show as it stands. Null otherwise. */
   workers_plan_advice: string | null;
@@ -111,10 +113,9 @@ export interface PublicSubscribeResponse {
   status: "check_inbox";
 }
 
-/** GET /api/subscribers/:id */
+/** GET /api/subscribers/:id, and an unsubscribe by id */
 export interface SubscriberResponse {
   subscriber: Subscriber;
-  suppressed: boolean;
 }
 
 /** What an erasure puts in place of the address on a person's past delivery rows (SPEC §7),

@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PostListItem } from "../../shared/posts";
+import type { Post } from "../../shared/posts";
 import type { SendSummary } from "../../shared/sends";
 import type { SubscriberCounts } from "../../shared/subscribers";
 import { appState } from "../state";
-import { condition, feedReads, listReads, sendServer } from "../test/send_server";
+import { condition, feedReads, listReads, sendServer, sendView } from "../test/send_server";
 import {
   $,
   $$,
@@ -22,7 +22,7 @@ import { renderDashboard } from "./dashboard";
 const NOW = 1_700_000_000_000;
 const page = { total: 0, limit: 200, offset: 0, sort: "", dir: "desc" };
 
-const post = (over: Partial<PostListItem> = {}): PostListItem => ({
+const post = (over: Partial<Post> = {}): Post => ({
   id: "p1",
   slug: "owls",
   slug_auto: true,
@@ -37,10 +37,9 @@ const post = (over: Partial<PostListItem> = {}): PostListItem => ({
   current_revision: "r1",
   created_at: NOW - 100_000,
   updated_at: NOW - 50_000,
-  fire_at: null,
-  active_send_id: null,
-  active_send_status: null,
   author: "human",
+  send: null,
+  actions: [],
   ...over,
 });
 // A send that went out an hour ago: 98 delivered, 2 bounced.
@@ -75,7 +74,7 @@ const config = () =>
 // that answers the sends list and the layer's feed over one change sequence, so every read
 // sees the same world and a spec's write is what any client's would be.
 function world(
-  posts: PostListItem[],
+  posts: Post[],
   srv: ReturnType<typeof sendServer>,
   subs = counts,
   extra: FakeRoute[] = [],
@@ -146,7 +145,7 @@ describe("dashboard", () => {
         slug: "gulls",
         subject: "Gulls",
         status: "scheduled",
-        fire_at: NOW + 60_000,
+        send: sendView(sendSummary({ id: "s2", post_id: "p2", fire_at: NOW + 60_000 })),
       }),
       post({ id: "p3", slug: "waxwings", subject: "Waxwings", status: "sent" }),
     ];

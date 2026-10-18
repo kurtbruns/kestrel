@@ -13,13 +13,7 @@ import type {
 } from "../../shared/posts";
 import * as images from "../db/images";
 import * as posts from "../db/posts";
-import {
-  currentSendSeq,
-  getActiveSendForPost,
-  latestSentSendForPost,
-  publicationsFor,
-} from "../db/sends";
-import { withAddresses } from "../lib/archive_address";
+import { currentSendSeq, getActiveSendForPost } from "../db/sends";
 import { fieldError, optBoolean, optString, optStringOrNull, readJsonObject } from "../lib/body";
 import { badRequest, json, notFound, refusal } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
@@ -27,6 +21,7 @@ import { slugRefusal } from "../lib/slug_refusals";
 import { unwrap } from "../lib/unwrap";
 import type { RequestContext } from "../router";
 import { param } from "../router";
+import { carryingPost, viewPost, viewPosts } from "../services/post_view";
 import { applySettings, readSettingsBody, resolveSettings } from "./post_settings";
 
 function author(c: RequestContext): string | null {
@@ -81,14 +76,9 @@ function baseRevision(c: RequestContext, body: EditBody): string | null {
   return body.base_revision;
 }
 
-/** What a draft's answer carries as its publication: a draft has never been published, since a
- *  published post never goes back to being one (SPEC §2). Saves answer only drafts. */
-const UNPUBLISHED = null;
-
-/** A post as the API answers it, any state: its addresses and where it stands for readers. */
-async function answered(c: RequestContext, post: posts.PostRow) {
-  const published = await publicationsFor(c.env.DB, [post.id]);
-  return withAddresses(c.config, post, published.get(post.id) ?? null);
+/** A post as the API answers it, in any state, on every route (`viewPost`). */
+function answered(c: RequestContext, post: posts.PostRow) {
+  return viewPost(c.env, c.config, post);
 }
 
 /** Expose a post's current revision as an ETag so a client can send it back as `If-Match`. */
@@ -100,8 +90,8 @@ function revisionHeaders(post: posts.PostRow): HeadersInit | undefined {
  * The post the request names, refused unless it is a draft: a scheduled post's content is
  * frozen until its schedule is canceled (I3), and a sent one's for good. A post stays
  * `scheduled` until its send completes, so one whose send has started can't be canceled
- * back to a draft either, and the refusal says which it is. Saving a post, deleting it,
- * and changing its images all pass through here.
+ * back to a draft either, and the refusal says which it is, carrying the post as it stands.
+ * Saving a post, deleting it, and changing its images all pass through here.
  */
 export async function requireDraft(c: RequestContext): Promise<posts.PostRow> {
   const post = await posts.getPost(c.env.DB, param(c, "id"));
@@ -109,7 +99,9 @@ export async function requireDraft(c: RequestContext): Promise<posts.PostRow> {
     throw notFound("post");
   }
   if (post.status === "sent") {
-    throw refusal("post_not_draft", "This post has been sent, so it can’t be changed.");
+    throw refusal("post_not_draft", "This post has been sent, so it can’t be changed.", {
+      post: await answered(c, post),
+    });
   }
   if (post.status !== "draft") {
     const active = await getActiveSendForPost(c.env.DB, post.id);
@@ -118,6 +110,7 @@ export async function requireDraft(c: RequestContext): Promise<posts.PostRow> {
       active?.status === "sending"
         ? "This post is being sent, so it can’t be changed."
         : "This post is scheduled, so it’s locked. Cancel the schedule to edit it.",
+      { post: await answered(c, post) },
     );
   }
   return post;
@@ -131,7 +124,7 @@ export async function createPost(c: RequestContext): Promise<Response> {
     posts.createPost(c.env.DB, input, author(c)),
   );
   const body: PostSavedResponse = {
-    post: withAddresses(c.config, post, UNPUBLISHED),
+    post: await answered(c, post),
     subject_slug_held: await posts.subjectSlugHeld(c.env.DB, post),
     revision_id: revision.id,
   };
@@ -170,12 +163,8 @@ export async function listPosts(c: RequestContext): Promise<Response> {
     posts.countPosts(c.env.DB, filter),
     posts.listPosts(c.env.DB, filter, page),
   ]);
-  const published = await publicationsFor(
-    c.env.DB,
-    rows.map((row) => row.id),
-  );
   const body: PostListResponse = {
-    posts: rows.map((row) => withAddresses(c.config, row, published.get(row.id) ?? null)),
+    posts: await viewPosts(c.env, c.config, rows),
     page: listPage(total, page),
     cursor: encodeSendCursor({ seq, at: now }),
   };
@@ -188,27 +177,12 @@ export async function getPost(c: RequestContext): Promise<Response> {
     throw notFound("post");
   }
   const revision = await posts.getCurrentRevision(c.env.DB, post);
-  // A post stays `scheduled` while its send is in flight (the post only flips to `sent`
-  // on completion), so the active send may be `scheduled` OR `sending`. Split them: a
-  // truly-scheduled send drives the editor's soft-lock banner; a `sending` one means the
-  // editor should redirect to the live watch instead of opening a locked draft.
-  const active = post.status === "scheduled" ? await getActiveSendForPost(c.env.DB, post.id) : null;
-  // A sent post no longer opens the editor: the editor uses this send id to
-  // redirect to the sent record view (#/sent/:id).
-  const sent = post.status === "sent" ? await latestSentSendForPost(c.env.DB, post.id) : null;
+  // Where its send stands rides on the post (`send`): a scheduled one locks the editor, one
+  // going out or sent sends the editor to its watch or record instead.
   const body: PostResponse = {
     post: await answered(c, post),
     subject_slug_held: await posts.subjectSlugHeld(c.env.DB, post),
     markdown: revision?.markdown ?? "",
-    author: revision?.author ?? null, // who wrote the current revision — the freshness poll names them
-    // `remade_at`: when a template or identity change last re-made the frozen email
-    // (SPEC §8), so the editor can say the earlier test no longer stands.
-    scheduled:
-      active && active.status === "scheduled"
-        ? { id: active.id, fire_at: active.fire_at, remade_at: active.remade_at }
-        : null,
-    sending: active && active.status === "sending" ? { id: active.id } : null,
-    sent: sent ? { id: sent.id } : null,
   };
   return json(body, 200, revisionHeaders(post));
 }
@@ -231,7 +205,7 @@ export async function updatePost(c: RequestContext): Promise<Response> {
       message:
         "A save must name the revision it was based on. Read the post, then save with its current_revision as base_revision or If-Match.",
       field: "base_revision",
-      post: withAddresses(c.config, post, UNPUBLISHED),
+      post: await answered(c, post),
     };
     return json(required, 428, revisionHeaders(post));
   }
@@ -243,7 +217,7 @@ export async function updatePost(c: RequestContext): Promise<Response> {
       current_revision: post.current_revision,
       updated_at: post.updated_at,
       author: current?.author ?? null,
-      post: withAddresses(c.config, post, UNPUBLISHED),
+      post: await answered(c, post),
       markdown: current?.markdown ?? "",
     };
     return json(stale, 409, revisionHeaders(post));
@@ -252,7 +226,7 @@ export async function updatePost(c: RequestContext): Promise<Response> {
     posts.updatePost(c.env.DB, post, body.input, author(c)),
   );
   const saved: PostSavedResponse = {
-    post: withAddresses(c.config, updated, UNPUBLISHED),
+    post: await answered(c, updated),
     subject_slug_held: await posts.subjectSlugHeld(c.env.DB, updated),
     revision_id: revision.id,
   };
@@ -361,8 +335,9 @@ export async function setSettings(c: RequestContext): Promise<Response> {
   if (!post) {
     throw notFound("post");
   }
-  const input = await resolveSettings(c.env.DB, post, fields);
-  const changed = await applySettings(c.env.DB, post, fields, input);
+  const changed = await carryingPost(c.env, c.config, post.id, async () =>
+    applySettings(c.env.DB, post, fields, await resolveSettings(c.env.DB, post, fields)),
+  );
   const now = changed ? unwrap(await posts.getPost(c.env.DB, post.id), "post") : post;
   const answer: PostSettingsResponse = {
     post: await answered(c, now),
