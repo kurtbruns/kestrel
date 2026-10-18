@@ -6,8 +6,10 @@ import { createRouter } from "../src/app";
 import { updateSettings } from "../src/db/settings";
 import { docMarkdown } from "../src/docs";
 import { CONNECT_CLAUDE_URL, llmsText } from "../src/routes/llms";
+import { NOT_CONNECTED_DEPLOY } from "./support/deploy";
 import { resetDatabase } from "./support/fixtures";
 import { AUTH, base } from "./support/http";
+import { fetchWith } from "./support/worker_env";
 
 // `/llms.txt` tells an agent with no credential what the instance is and where to start
 // (SPEC §11). It's generated from the registered routes, so these hold every path it names
@@ -120,9 +122,9 @@ describe("GET /llms.txt", () => {
   });
 
   it("falls back to the sender's display name, as every reader page does", async () => {
-    const res = await SELF.fetch(`${base}/llms.txt`);
-    // The suite's FROM_ADDRESS is `Newsletter <newsletter@send.example.com>`.
-    expect((await res.text()).split("\n")[0]).toBe("# Newsletter");
+    // A sender named unlike the no-name heading ("Newsletter"), so the fallback is what's read.
+    const res = await fetchWith(NOT_CONNECTED_DEPLOY, "/llms.txt");
+    expect((await res.text()).split("\n")[0]).toBe("# Birds");
   });
 
   it("names paths that answer: public ones openly, gated ones only signed in", async () => {

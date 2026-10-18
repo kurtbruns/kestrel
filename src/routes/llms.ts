@@ -68,7 +68,7 @@ export function llmsText({
       title: "Subscribe",
       origin: appOrigin,
       path: "/subscribe",
-      about: "the form to join the list, which emails a link to confirm.",
+      about: "the page to join the list.",
     },
     {
       title: "API reference",
@@ -100,7 +100,7 @@ export function llmsText({
     "",
     "## Behind Cloudflare Access",
     "",
-    "Send a Cloudflare Access service token with every request, as the `CF-Access-Client-Id` and `CF-Access-Client-Secret` headers. Without one, Access answers with its login page.",
+    "Send a Cloudflare Access service token with every request, as the `CF-Access-Client-Id` and `CF-Access-Client-Secret` headers. Without one, the request is refused: Access answers with its login page.",
     "",
     ...tier("admin"),
     "",
