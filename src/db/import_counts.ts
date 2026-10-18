@@ -4,9 +4,10 @@
  *
  * Releases before 1.13.0 stored six outcomes under older names. The record is permanent and
  * its counts are a JSON blob, so they're renamed as they're read rather than by a migration:
- * the previous release's Worker keeps serving between a migration and the deploy, and again
- * after a rollback, and any import it commits then writes the old names, which a one-time
- * rewrite would never see. Reading both is right for every row, whatever order they came in.
+ * the previous release's Worker keeps serving between a migration and the deploy, and any
+ * import it commits then writes the old names, which a one-time rewrite would never see.
+ * Reading both names here is right for every record an older release wrote. The reverse is
+ * not covered: an older release reads a record this one wrote with the renamed counts blank.
  */
 
 import { IMPORT_OUTCOMES, type ImportOutcome, type OutcomeCounts } from "../../shared/imports";

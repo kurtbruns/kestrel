@@ -747,8 +747,9 @@ export const EXAMPLE_TXT_NAME = "kestrel-import-example.txt";
 /**
  * What an import does to one address (SPEC §7), after its repeats are folded together. Each
  * is named in one form, the past tense of its effect, so the editor and Claude can relay it
- * as it stands: `added_…` for a new subscriber, `kept_…` where this list's own record wins,
- * and no "blocked", which means only the publisher's own block. A row that changes its
+ * as it stands: `added_…` for a new subscriber, `kept_…` where the row's status isn't
+ * applied because this list's own record or a suppression wins (for `kept_suppressed`, possibly
+ * the file's own erasure), and no "blocked", which means only the publisher's own block. A row that changes its
  * status and adds a suppression reports its status outcome and `suppression_added: true`;
  * `suppressed` as the outcome is a row whose only effect is the suppression.
  */
