@@ -77,6 +77,12 @@ export function llmsText({
       about:
         "read it first: what every route shares, and every route on one line, each resource's full reference linked from it.",
     },
+    {
+      title: "OpenAPI",
+      origin: appOrigin,
+      path: "/api/openapi.json",
+      about: "the same API as an OpenAPI 3.1 document, for tooling that reads one.",
+    },
     ...docSets().map((s) => ({
       title: s.title,
       origin: appOrigin,

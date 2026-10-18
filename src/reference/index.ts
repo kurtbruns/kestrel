@@ -353,7 +353,7 @@ export function resourcePath(key: Resource): string {
  * the JSON. `origin` is the base URL the paths hang off.
  */
 export function referenceIndexMarkdown(ref: ReferenceResponse, origin: string): string {
-  const head = `# API reference\n\nEvery route this instance serves, read from its running code, so it is complete and matches this version. Base URL \`${origin}\`. Read the topics below first; they hold what every route shares. Each resource's routes are listed on one line each: before calling one, read the resource's own reference, which describes the object its routes return and, for each route, its parameters, body, answer, refusals, and an example.`;
+  const head = `# API reference\n\nEvery route this instance serves, read from its running code, so it is complete and matches this version. Base URL \`${origin}\`. Read the topics below first; they hold what every route shares. Each resource's routes are listed on one line each: before calling one, read the resource's own reference, which describes the object its routes return and, for each route, its parameters, body, answer, refusals, and an example. The same reference as an OpenAPI 3.1 document, for tooling to import, is at \`GET /api/openapi.json\`.`;
   const concepts = ref.concepts.map((c) =>
     [
       `## ${c.title}`,
