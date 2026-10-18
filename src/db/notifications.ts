@@ -138,6 +138,7 @@ export async function recordNotifications(db: D1Database, now: number): Promise<
          UNION ALL
          SELECT id, 'refused', halted_at, ?1, ?1 FROM sends s
           WHERE status = 'sending' AND halt_reason = 'account' AND halted_at IS NOT NULL
+            AND NOT (${WEDGED_SEND})
             AND NOT EXISTS (SELECT 1 FROM sends o
                              WHERE o.status = 'sending' AND o.halt_reason = 'account'
                                AND o.halted_at = s.halted_at AND o.id < s.id)

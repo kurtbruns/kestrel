@@ -34,6 +34,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
+- A send stuck awaiting Resolve that still carried an earlier refusal of the account is no longer emailed to the publisher as the provider refusing the account. Nothing retries such a send, so the editor and the API showed only that it waits for Resolve, and the email now agrees (SPEC §8).
+- A send's cached answer (`If-None-Match` on `GET /api/sends/:id`) no longer keeps a client on a stale time to finish: the tag now changes when the dispatch rate or the expected finish does.
 - The API reference's description of a send's `phase` said `needs-attention` covers a missed or stuck send, which stay `due` and `progressing` (their conditions say so), and that `backing-off` is only an outage or rate limit, when it also covers recipients waiting on a retry. It now also says which phases each `status` has, and that `status` is the one to filter and route on.
 
 ## [1.12.0] - 2026-10-16

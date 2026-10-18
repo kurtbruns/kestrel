@@ -392,6 +392,44 @@ describe("the ETag follows the words the clock changes", () => {
     expect(later.status).toBe(200);
     expect(later.headers.get("etag")).not.toBe(etag);
   });
+
+  it("changes as the time to finish does, so a 304 never keeps a stale ETA (SPEC §8)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // Mid-minute, clear of a tick boundary's grace, so the estimate counts whole ticks.
+    vi.setSystemTime(Math.floor(Date.now() / 60_000) * 60_000 + 30_000);
+    const now = Date.now();
+    const send = await frozenSend(now - 10 * 60_000);
+    // Sending between ticks, three ticks in, with its next retry ahead: the next change is
+    // that retry, which no read moves, so the phase, words, actions, and next change all
+    // stay put while the work left changes.
+    await env.DB.prepare(
+      `UPDATE sends SET status = 'sending', started_at = ?, progress_at = ?, audience_resolved_at = ?,
+         c_pending = 30, c_in_flight = 0, c_accepted = 30, locked_until = NULL, halt_retry_at = ?
+       WHERE id = ?`,
+    )
+      .bind(now - 3 * 60_000, now, now - 3 * 60_000, now + 5 * 60_000, send.id)
+      .run();
+    const first = await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH });
+    const etag = first.headers.get("etag") ?? "";
+    const before = ((await first.json()) as SendResponse).send;
+    expect(before.dispatch.eta_ms).not.toBeNull();
+    // The clock alone moves the estimate toward the same finish, which keeps the tag.
+    vi.setSystemTime(now + 10_000);
+    const same = await SELF.fetch(`${base}/api/sends/${send.id}`, {
+      headers: { ...AUTH, "if-none-match": etag },
+    });
+    expect(same.status).toBe(304);
+    // More left to send at the same rate, with no rev: only the time to finish moves.
+    await env.DB.prepare("UPDATE sends SET c_pending = 90 WHERE id = ?").bind(send.id).run();
+    const later = await SELF.fetch(`${base}/api/sends/${send.id}`, {
+      headers: { ...AUTH, "if-none-match": etag },
+    });
+    expect(later.status).toBe(200);
+    const after = ((await later.json()) as SendResponse).send;
+    expect(after.dispatch.rate_per_min).toBe(before.dispatch.rate_per_min);
+    expect(after.dispatch.eta_ms).not.toBe(before.dispatch.eta_ms);
+    expect(later.headers.get("etag")).not.toBe(etag);
+  });
 });
 
 describe("the frozen email at its own route", () => {

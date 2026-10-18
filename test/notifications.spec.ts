@@ -15,6 +15,7 @@ import * as channel from "../src/notify/channel";
 import { CloudflareNotifier, ProviderNotifier } from "../src/notify/channel";
 import { composeNotification, sendLink } from "../src/notify/compose";
 import { clearFakeNotifications, failFakeNotify, fakeNotifications } from "../src/notify/fake";
+import { stillHolds } from "../src/notify/notify";
 import * as providers from "../src/providers";
 import { sweep } from "../src/send/sweep";
 import { BatchProvider } from "./support/batching";
@@ -729,6 +730,196 @@ describe("the link in a notification", () => {
       // The editor opens the page the link names, with the id's own encoding intact.
       expect(new URL(link).pathname, kind).toBe("/dashboard/");
       expect(dashboardRouteFromSearch(new URL(link).search), kind).toBe("#/sent/s%201");
+    }
+  });
+});
+
+describe("what the publisher is told agrees with what every surface shows (SPEC §8)", () => {
+  // The email words a problem for a reader opening it cold, and the editor and the API word
+  // it for a page beside the send, so the sentences differ by design. What can't differ is
+  // the rule (a problem is told exactly when the send shows its condition) and the facts
+  // (the provider's words, the fix, how many recipients). Each case is one send state.
+  const TOLD = ["refused", "stuck", "wedged", "missed"];
+  const MIN = 60_000;
+  const cases: { name: string; state: (now: number) => Record<string, number | string | null> }[] =
+    [
+      {
+        name: "refused: the account",
+        state: (now) => ({
+          status: "sending",
+          started_at: now - 5 * MIN,
+          progress_at: now - 5 * MIN,
+          c_pending: 4,
+          halt_reason: "account",
+          halt_cause: "credentials",
+          halt_error: "The security token included in the request is invalid",
+          halted_at: now - 4 * MIN,
+          halt_retries: 1,
+          halt_retry_at: now + 10 * MIN,
+        }),
+      },
+      {
+        name: "refused: the send's own email",
+        state: (now) => ({
+          status: "sending",
+          started_at: now - 5 * MIN,
+          progress_at: now - 5 * MIN,
+          c_pending: 4,
+          halt_reason: "account",
+          halt_cause: "content",
+          halt_error: "Message rejected",
+          halted_at: now - 4 * MIN,
+          halt_retries: 1,
+          halt_retry_at: now + 10 * MIN,
+        }),
+      },
+      {
+        name: "unavailable: shown, not told",
+        state: (now) => ({
+          status: "sending",
+          started_at: now - 5 * MIN,
+          progress_at: now - 5 * MIN,
+          c_pending: 4,
+          halt_reason: "unavailable",
+          halt_cause: "outage",
+          halt_error: "Service unavailable",
+          halted_at: now - 4 * MIN,
+          halt_retries: 1,
+          halt_retry_at: now + 1 * MIN,
+        }),
+      },
+      {
+        name: "stuck",
+        state: (now) => ({
+          status: "sending",
+          started_at: now - 60 * MIN,
+          progress_at: now - 40 * MIN,
+          c_pending: 4,
+        }),
+      },
+      {
+        name: "slow but moving",
+        state: (now) => ({
+          status: "sending",
+          started_at: now - 60 * MIN,
+          progress_at: now - 2 * MIN,
+          c_pending: 4,
+        }),
+      },
+      {
+        name: "wedged",
+        state: (now) => ({
+          status: "sending",
+          started_at: now - 20 * MIN,
+          progress_at: now - 15 * MIN,
+          c_pending: 0,
+          c_in_flight: 3,
+          locked_until: null,
+        }),
+      },
+      {
+        name: "wedged after a refusal",
+        state: (now) => ({
+          status: "sending",
+          started_at: now - 20 * MIN,
+          progress_at: now - 15 * MIN,
+          c_pending: 0,
+          c_in_flight: 3,
+          locked_until: null,
+          halt_reason: "account",
+          halt_cause: "quota",
+          halt_error: "Daily quota exceeded",
+          halted_at: now - 10 * MIN,
+          halt_retries: 2,
+          halt_retry_at: now + 20 * MIN,
+        }),
+      },
+      { name: "missed", state: (now) => ({ status: "scheduled", fire_at: now - 10 * MIN }) },
+      {
+        name: "due, inside the tolerance",
+        state: (now) => ({ status: "scheduled", fire_at: now - 2 * MIN }),
+      },
+    ];
+
+  async function setUp(state: Record<string, number | string | null>) {
+    const send = await frozenSend(Date.now() + 60 * MIN);
+    const cols = Object.keys(state);
+    await env.DB.prepare(`UPDATE sends SET ${cols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`)
+      .bind(...cols.map((c) => state[c] ?? null), send.id)
+      .run();
+    return send;
+  }
+
+  async function shown(id: string) {
+    const res = await SELF.fetch(`${base}/api/sends/${id}`, { headers: AUTH });
+    const { send } = (await res.json()) as {
+      send: {
+        conditions: {
+          kind: string;
+          message: string;
+          advice?: string;
+          error?: string;
+          count?: number;
+        }[];
+      };
+    };
+    return send.conditions;
+  }
+
+  for (const c of cases) {
+    it(`${c.name}: told exactly when the send shows the condition`, async () => {
+      const now = Date.now();
+      const send = await setUp(c.state(now));
+      await notifications.recordNotifications(env.DB, now);
+      const told = (await rows(send.id))
+        .map((r) => r.kind)
+        .filter((k) => TOLD.includes(k))
+        .sort();
+      const conditions = (await shown(send.id))
+        .map((cond) => cond.kind)
+        .filter((k) => TOLD.includes(k))
+        .sort();
+      expect(told).toEqual(conditions);
+      // And each told problem still holds by the notifier's own test, as it would before sending.
+      const due = (await notifications.dueNotifications(env.DB, 10)).filter(
+        (n): n is notifications.DueNotification => n.send_id === send.id && TOLD.includes(n.kind),
+      );
+      expect(
+        due
+          .filter((n) => stillHolds(n, now))
+          .map((n) => n.kind)
+          .sort(),
+      ).toEqual(conditions);
+    });
+  }
+
+  it("carries the same facts as the condition: the provider's words, the fix, and the count", async () => {
+    const now = Date.now();
+    const config = getConfig(env as unknown as AppEnv);
+    for (const c of cases) {
+      const send = await setUp(c.state(now));
+      await notifications.recordNotifications(env.DB, now);
+      const conditions = await shown(send.id);
+      const due = (await notifications.dueNotifications(env.DB, 50)).filter(
+        (n): n is notifications.DueNotification => n.send_id === send.id && TOLD.includes(n.kind),
+      );
+      for (const n of due) {
+        const email = composeNotification(n, config).text;
+        const cond = conditions.find((x) => x.kind === n.kind);
+        expect(cond, `${c.name}: ${n.kind}`).toBeDefined();
+        if (n.kind === "refused") {
+          expect(email, c.name).toContain(cond!.error!);
+          expect(cond!.message, c.name).toContain(cond!.advice!);
+          expect(email, c.name).toContain(cond!.advice!);
+          expect(cond!.message, c.name).toContain("No one has been marked unsent");
+          expect(email, c.name).toContain("No one has been marked unsent");
+        }
+        if (n.kind === "wedged") {
+          expect(cond!.count, c.name).toBe(3);
+          expect(email, c.name).toContain("never answered for 3 recipients");
+          expect(cond!.message, c.name).toContain("never answered for 3 recipients");
+        }
+      }
     }
   });
 });
