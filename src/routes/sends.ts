@@ -89,7 +89,8 @@ function sendEtag(view: SendView): string {
     view.actions.map((act) => act.name).join(","),
     String(view.next_change_at),
     String(rate_per_min),
-    eta_ms === null ? "null" : String(view.as_of + eta_ms),
+    // A finish already due reads as `now` on every read, so it counts as one token.
+    eta_ms === null ? "null" : eta_ms === 0 ? "due" : String(view.as_of + eta_ms),
   ].join(";");
   let h = 0;
   for (let i = 0; i < derived.length; i++) {

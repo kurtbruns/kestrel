@@ -867,59 +867,88 @@ describe("what the publisher is told agrees with what every surface shows (SPEC 
   }
 
   for (const c of cases) {
-    it(`${c.name}: told exactly when the send shows the condition`, async () => {
+    it(`${c.name}: told exactly when the send shows the condition, with its facts`, async () => {
       const now = Date.now();
       const send = await setUp(c.state(now));
       await notifications.recordNotifications(env.DB, now);
+      const conditions = await shown(send.id);
+      const showing = conditions
+        .map((cond) => cond.kind)
+        .filter((k) => TOLD.includes(k))
+        .sort();
       const told = (await rows(send.id))
         .map((r) => r.kind)
         .filter((k) => TOLD.includes(k))
         .sort();
-      const conditions = (await shown(send.id))
-        .map((cond) => cond.kind)
-        .filter((k) => TOLD.includes(k))
-        .sort();
-      expect(told).toEqual(conditions);
-      // And each told problem still holds by the notifier's own test, as it would before sending.
+      expect(told).toEqual(showing);
+      // And each told problem still holds by the notifier's own check, as it would before sending.
       const due = (await notifications.dueNotifications(env.DB, 10)).filter(
         (n): n is notifications.DueNotification => n.send_id === send.id && TOLD.includes(n.kind),
       );
+      expect(due.map((n) => n.kind).sort()).toEqual(showing);
       expect(
         due
           .filter((n) => stillHolds(n, now))
           .map((n) => n.kind)
           .sort(),
-      ).toEqual(conditions);
-    });
-  }
-
-  it("carries the same facts as the condition: the provider's words, the fix, and the count", async () => {
-    const now = Date.now();
-    const config = getConfig(env as unknown as AppEnv);
-    for (const c of cases) {
-      const send = await setUp(c.state(now));
-      await notifications.recordNotifications(env.DB, now);
-      const conditions = await shown(send.id);
-      const due = (await notifications.dueNotifications(env.DB, 50)).filter(
-        (n): n is notifications.DueNotification => n.send_id === send.id && TOLD.includes(n.kind),
-      );
+      ).toEqual(showing);
+      // The email carries what the condition does: the provider's words, the fix, the count.
+      const config = getConfig(env as unknown as AppEnv);
       for (const n of due) {
         const email = composeNotification(n, config).text;
         const cond = conditions.find((x) => x.kind === n.kind);
-        expect(cond, `${c.name}: ${n.kind}`).toBeDefined();
         if (n.kind === "refused") {
-          expect(email, c.name).toContain(cond!.error!);
-          expect(cond!.message, c.name).toContain(cond!.advice!);
-          expect(email, c.name).toContain(cond!.advice!);
-          expect(cond!.message, c.name).toContain("No one has been marked unsent");
-          expect(email, c.name).toContain("No one has been marked unsent");
+          expect(email).toContain(cond?.error);
+          expect(cond?.message).toContain(cond?.advice);
+          expect(email).toContain(cond?.advice);
+          expect(cond?.message).toContain("No one has been marked unsent");
+          expect(email).toContain("No one has been marked unsent");
         }
         if (n.kind === "wedged") {
-          expect(cond!.count, c.name).toBe(3);
-          expect(email, c.name).toContain("never answered for 3 recipients");
-          expect(cond!.message, c.name).toContain("never answered for 3 recipients");
+          expect(cond?.count).toBe(3);
+          expect(cond?.message).toContain("never answered for 3 recipients");
+          expect(email).toContain("never answered for 3 recipients");
         }
       }
-    }
+    });
+  }
+
+  it("a refusal two sends share is told for the one still held, when the other has wedged", async () => {
+    // One account refusal holds both sends (the second joined it, so they share when it
+    // began); the first then wedges on a request that got no answer. The refusal still
+    // holds the second, so it is told there, not lost behind the wedged one.
+    const now = Date.now();
+    const halt = {
+      halt_reason: "account",
+      halt_cause: "quota",
+      halt_error: "Daily quota exceeded",
+      halted_at: now - 10 * MIN,
+      halt_retries: 2,
+      halt_retry_at: now + 20 * MIN,
+    };
+    const a = await setUp({
+      status: "sending",
+      started_at: now - 20 * MIN,
+      progress_at: now - 15 * MIN,
+      c_pending: 4,
+      ...halt,
+    });
+    const b = await setUp({
+      status: "sending",
+      started_at: now - 20 * MIN,
+      progress_at: now - 15 * MIN,
+      c_pending: 4,
+      ...halt,
+    });
+    const [first, second] = a.id < b.id ? [a, b] : [b, a];
+    await env.DB.prepare(
+      "UPDATE sends SET c_pending = 0, c_in_flight = 3, locked_until = NULL WHERE id = ?",
+    )
+      .bind(first.id)
+      .run();
+    await notifications.recordNotifications(env.DB, now);
+    expect((await rows(first.id)).map((r) => r.kind)).toEqual(["wedged"]);
+    expect((await rows(second.id)).map((r) => r.kind)).toEqual(["refused"]);
+    expect((await shown(second.id)).map((cond) => cond.kind)).toContain("refused");
   });
 });
