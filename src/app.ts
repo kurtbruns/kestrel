@@ -22,12 +22,13 @@ import { UNLISTED_PATH } from "../shared/archive_url";
 import { FREE_PLAN_LIST } from "../shared/free_plan";
 import { IMPORT_LIMITS } from "../shared/imports";
 import type { ReferenceField, ReferenceResponse } from "../shared/reference";
-import { formatLead, MIN_LEAD_FLOOR_MS } from "../shared/sends";
+import { formatLead, MIN_LEAD_FLOOR_MS, STUCK_THRESHOLD_MS } from "../shared/sends";
 import { SUBSCRIBER_ACTIONS } from "../shared/subscriber_meanings";
 import { buildInfo } from "./build";
 import type { Config } from "./env";
 import { json, notFound } from "./lib/errors";
 import { RASTER_IMAGE_TYPES } from "./lib/image_types";
+import { MISSED_THRESHOLD_MS } from "./lib/time";
 import { unwrap } from "./lib/unwrap";
 import { buildReferenceResponse, referenceIndexMarkdown, resourceMarkdown } from "./reference";
 import { sendBrief } from "./reference/objects";
@@ -48,6 +49,7 @@ import * as settingsRoutes from "./routes/settings";
 import * as subscriberRoutes from "./routes/subscribers";
 import * as suppressionRoutes from "./routes/suppressions";
 import * as webhookRoutes from "./routes/webhooks";
+import { SETTLE_FOLLOW_MS } from "./send/feed";
 
 // The body types a route declares (`RouteDef.accepts`); a raw upload adds its own.
 const JSON_BODY = ["application/json"];
@@ -202,7 +204,8 @@ export function createRouter({
   const cursorField: ReferenceField = {
     name: "cursor",
     type: "string",
-    description: "Where this answer stands among changes to sends (Following changes).",
+    description:
+      "Where this answer stands among changes to sends: pass it to Follow changes to sends (`GET /api/sends/feed`) as `since`.",
   };
   const pageField: ReferenceField = {
     name: "page",
@@ -1177,8 +1180,12 @@ export function createRouter({
       title: "Follow changes to sends",
       summary:
         "What changed among sends since a cursor, every open condition, and when to read again: how a client keeps up with sends without polling each one.",
-      description:
-        "Following changes, above, says what it reports and how to pace it. Each send is its view, read off its counters, never its delivery rows, so a send reads the same here as on its page; soonest fire first. Reading it changes nothing.",
+      description: [
+        "Every read of sends answers a `cursor`, `<seq>.<at>`: where one sequence of changes across all sends stood, and the server's time. Pass it here as `since` to keep up.",
+        `This answers every send that changed after that cursor, including those the clock changed with no write (a fire time passing, the ${MISSED_THRESHOLD_MS / 60_000}-minute missed tolerance, the ${STUCK_THRESHOLD_MS / 60_000}-minute stuck threshold), the sends \`removed\`, every open condition, a new \`cursor\`, and \`read_again_at\`. Without \`since\`, it answers the sends that can change on their own: due, sending, or settling (sent within ${SETTLE_FOLLOW_MS / 60_000} minutes).`,
+        "`read_again_at` is the server's pace: about 3 seconds while a send can move, slowing to a minute while none can. It is advisory: reading sooner, as right after acting, is fine, and reading late loses nothing. When `more` is true, read again at once. A cursor ahead of the database, as after a restore, is refused with `cursor_ahead`: read the sends again and follow from that read.",
+        "Each send is its view, read off its counters, never its delivery rows, so a send reads the same here as on its page; soonest fire first. Reading it changes nothing.",
+      ].join("\n\n"),
       query: [
         {
           name: "since",

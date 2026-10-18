@@ -480,7 +480,7 @@ describe("API reference is generated from the route registration", () => {
       "Errors",
       "Lists and paging",
       "Acting safely",
-      "Following changes",
+      "Admin",
     ]);
     expect(all).not.toContain("**");
     // Errors lists only the refusals any route can give; a route lists the rest as its own.
