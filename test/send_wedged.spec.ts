@@ -93,6 +93,53 @@ describe("a wedged send", () => {
   });
 });
 
+describe("a wedged send's ambiguous recipients have one name (SPEC §12)", () => {
+  it("counts them, lists them, and conditions on them as `dispatched`, the set Resolve settles", async () => {
+    allowErrorLogs("send.ambiguous", "send.wedged");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const provider = new BatchProvider();
+    provider.loseAnswers = 1;
+    vi.spyOn(providers, "getProvider").mockReturnValue(provider);
+    await seedConfirmed(AUDIENCE);
+    const send = await frozenSend(Date.now() - 1000);
+    await sweep(env); // the one batch's answer is lost, so all three are dispatched, unanswered
+    const read = async () =>
+      (await (await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH })).json()) as {
+        send: SendView;
+        outcomes: { pending: number; dispatched: number };
+      };
+    const listed = async (view: string) => {
+      const res = await SELF.fetch(`${base}/api/sends/${send.id}/deliveries?view=${view}`, {
+        headers: AUTH,
+      });
+      return ((await res.json()) as { deliveries: { email: string }[] }).deliveries
+        .map((d) => d.email)
+        .sort();
+    };
+
+    const before = await read();
+    expect([
+      condition(before.send, "wedged")?.count,
+      before.send.counts.dispatched,
+      before.outcomes.dispatched,
+      before.send.counts.pending,
+    ]).toEqual([3, 3, 3, 0]);
+    expect(await listed("dispatched")).toEqual([...AUDIENCE].sort());
+
+    // Resolve settles exactly those: they move to `unsent`, and nothing is left dispatched.
+    const resolved = await SELF.fetch(`${base}/api/sends/${send.id}/resolve`, {
+      method: "POST",
+      headers: { ...AUTH, "content-type": "application/json" },
+      body: JSON.stringify({ resolution: "unsent" }),
+    });
+    expect(((await resolved.json()) as { resolved: number }).resolved).toBe(3);
+    const after = await read();
+    expect([after.send.counts.dispatched, after.outcomes.dispatched]).toEqual([0, 0]);
+    expect(await listed("dispatched")).toEqual([]);
+    expect(await listed("unsent")).toEqual([...AUDIENCE].sort());
+  });
+});
+
 describe("a batch an earlier release left queued under its key", () => {
   it("goes to Resolve once migrated, rather than holding the send open and silent (SPEC §12)", async () => {
     allowErrorLogs("send.wedged");

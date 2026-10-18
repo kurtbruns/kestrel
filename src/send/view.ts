@@ -84,7 +84,7 @@ function derivePhase(
       if (unavailable && (counts.pending > 0 || !audienceFixed)) {
         return "backing_off";
       }
-      if (counts.in_flight > 0) {
+      if (counts.dispatched > 0) {
         return hasRetries ? "retrying" : "progressing";
       }
       // Work remains and nothing is in flight: the run released the lease. Only an error
@@ -203,7 +203,7 @@ export function buildSendView(
   const published = send.status === "sending" || send.status === "sent";
   const summed =
     counts.pending +
-    counts.in_flight +
+    counts.dispatched +
     counts.accepted +
     counts.delivered +
     counts.bounced +
@@ -212,7 +212,7 @@ export function buildSendView(
     counts.unsent;
   const total = summed > 0 ? summed : send.recipient_count;
 
-  const done = Math.max(0, total - counts.pending - counts.in_flight);
+  const done = Math.max(0, total - counts.pending - counts.dispatched);
   const dispatchPercent = total > 0 ? round((100 * done) / total) : 0;
 
   // Throughput and time to finish, counted in sweep ticks (`tickEstimate`). Reported only

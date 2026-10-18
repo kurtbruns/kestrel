@@ -201,6 +201,42 @@ describe("Sent list — delivery-failures filter (/api/sends?failures=only)", ()
   });
 });
 
+describe("a send's per-recipient buckets: one vocabulary, the stored statuses (SPEC §12)", () => {
+  it("names a recipient waiting and one handed off apart, in the outcomes, the counts, and the deliveries' views", async () => {
+    const { sendId } = await seedSentSend("Buckets", `buckets-${uniq()}`, [
+      { email: "wait1@example.com", status: "pending" },
+      { email: "wait2@example.com", status: "pending" },
+      { email: "handed@example.com", status: "dispatched" },
+      { email: "ok@example.com", status: "accepted", event: "delivered" },
+    ]);
+    const body = await readJson(await SELF.fetch(`${base}/api/sends/${sendId}`, { headers: AUTH }));
+    expect([body.outcomes.pending, body.outcomes.dispatched]).toEqual([2, 1]);
+    // The counts carry the same keys: no bucket has two names, and none a name the rows don't store.
+    expect(Object.keys(body.send.counts).sort()).toEqual([
+      "accepted",
+      "bounced",
+      "complained",
+      "delivered",
+      "dispatched",
+      "pending",
+      "skipped",
+      "unsent",
+    ]);
+    expect(body.outcomes).not.toHaveProperty("in_flight");
+    const rows = async (view: string) => {
+      const res = await SELF.fetch(`${base}/api/sends/${sendId}/deliveries?view=${view}`, {
+        headers: AUTH,
+      });
+      return res.status === 200
+        ? (await readJson(res)).deliveries.map((d: { email: string }) => d.email)
+        : res.status;
+    };
+    expect(await rows("pending")).toEqual(["wait1@example.com", "wait2@example.com"]);
+    expect(await rows("dispatched")).toEqual(["handed@example.com"]);
+    expect(await rows("in_flight")).toBe(400);
+  });
+});
+
 describe("sent record view — GET /api/sends/:id", () => {
   it("returns outcome buckets that reconcile to the frozen audience, and the published post's link", async () => {
     const slug = `rec-${uniq()}`;
@@ -228,11 +264,19 @@ describe("sent record view — GET /api/sends/:id", () => {
       unsent: 1,
       skipped: 1,
       accepted: 1,
-      in_flight: 0,
+      pending: 0,
+      dispatched: 0,
     });
     // Every recipient lands in exactly one bucket — the buckets sum to the audience.
     const sum =
-      o.delivered + o.bounced + o.complained + o.unsent + o.skipped + o.accepted + o.in_flight;
+      o.delivered +
+      o.bounced +
+      o.complained +
+      o.unsent +
+      o.skipped +
+      o.accepted +
+      o.pending +
+      o.dispatched;
     expect(sum).toBe(o.recipients);
 
     // The send's view reads its counts off the c_* counters, not a per-row aggregate. They

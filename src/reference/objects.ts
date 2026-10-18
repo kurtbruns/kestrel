@@ -84,7 +84,7 @@ const SEND_EXAMPLE = {
   audience: { count: 1200, fixed: true, fixed_at: 1768467601000 },
   counts: {
     pending: 700,
-    in_flight: 40,
+    dispatched: 40,
     accepted: 455,
     delivered: 0,
     bounced: 3,
@@ -431,7 +431,7 @@ const SEND_FIELDS: ReferenceField[] = [
     name: "counts",
     type: "object",
     description:
-      "Every recipient in one bucket: `pending`, `in_flight`, `accepted`, `delivered`, `bounced`, `complained`, `skipped`, `unsent`.",
+      "Every recipient in one bucket, named as its delivery row stores it: `pending` (waiting to be handed to the provider), `dispatched` (handed over with no answer yet, the editor's in flight, which Resolve settles on a wedged send), `accepted`, `delivered`, `bounced`, `complained`, `skipped`, `unsent`. A reported event moves a recipient out of `accepted` into its own bucket. The same words as the outcomes and the deliveries' views.",
   },
   {
     name: "dispatch",

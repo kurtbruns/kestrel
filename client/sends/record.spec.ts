@@ -48,7 +48,8 @@ const outcomes = (over: Partial<DeliveryOutcomes> = {}): DeliveryOutcomes => ({
   unsent: 1,
   skipped: 0,
   accepted: 0,
-  in_flight: 0,
+  pending: 0,
+  dispatched: 0,
   ...over,
 });
 const page = { total: 2, limit: 50, offset: 0, sort: "email", dir: "asc" };
@@ -439,13 +440,14 @@ describe("sent record", () => {
     expect(recon()).toContain(
       "2 skipped (unsubscribed or suppressed before hand-off, never mailed)",
     );
-    expect(recon()).toContain("2 in flight"); // one not yet handed off counts as in flight
+    // One not yet handed off is pending, and only one handed over with no answer is in flight.
+    expect(recon()).toContain("1 pending, 1 in flight");
     expect(recon()).not.toMatch(/[2-9] accepted, awaiting/);
     // A report whose counters read the same buckets as the page's own read moves nothing.
     const lists = fake.calls.filter((c) => c.url.pathname.endsWith("/deliveries")).length;
     sent.receipt({});
     await vi.advanceTimersByTimeAsync(3000);
-    expect(recon()).toContain("2 in flight");
+    expect(recon()).toContain("1 pending, 1 in flight");
     expect(fake.calls.filter((c) => c.url.pathname.endsWith("/deliveries"))).toHaveLength(lists);
   });
 

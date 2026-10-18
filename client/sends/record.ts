@@ -128,7 +128,7 @@ function phaseBlurb(prog: SendView): string {
   }
   // A send too large for one tick waits for the next with nothing in flight. The server
   // reads that as progressing, since nothing failed; the line says why the bar is still.
-  if (prog.phase === "progressing" && prog.counts.in_flight === 0 && prog.counts.pending > 0) {
+  if (prog.phase === "progressing" && prog.counts.dispatched === 0 && prog.counts.pending > 0) {
     return "Paused between ticks. It resumes on the next sweep.";
   }
   return PHASE_BLURB[prog.phase] || "";
@@ -180,7 +180,7 @@ function deliveryBar(
 // tile palette so a bucket reads the same here and on the frozen record.
 const WATCH_COUNTS: { key: keyof SendCounts; label: string; sw: string }[] = [
   { key: "pending", label: "Pending", sw: "neutral" },
-  { key: "in_flight", label: "In flight", sw: "sending" },
+  { key: "dispatched", label: "In flight", sw: "sending" },
   { key: "accepted", label: "Accepted", sw: "sending" },
   { key: "delivered", label: "Delivered", sw: "ok" },
   { key: "bounced", label: "Bounced", sw: "warn" },
@@ -295,7 +295,7 @@ function wireWatchHeader(
 ): void {
   const rb = root.querySelector<HTMLButtonElement>("#resolveBtn");
   if (rb) {
-    const count = conditionOf(send, "wedged")?.count ?? send.counts.in_flight;
+    const count = conditionOf(send, "wedged")?.count ?? send.counts.dispatched;
     rb.onclick = () => openResolveModal({ id: send.id, c_in_flight: count }, remount, signal);
   }
 }
@@ -391,8 +391,11 @@ function outcomeReconHtml(outcomes: DeliveryOutcomes): string {
       `${outcomes.skipped.toLocaleString()} skipped (unsubscribed or suppressed before hand-off, never mailed)`,
     );
   }
-  if (outcomes.in_flight) {
-    parts.push(`${outcomes.in_flight.toLocaleString()} in flight`);
+  if (outcomes.pending) {
+    parts.push(`${outcomes.pending.toLocaleString()} pending`);
+  }
+  if (outcomes.dispatched) {
+    parts.push(`${outcomes.dispatched.toLocaleString()} in flight`);
   }
   const reconciled = `All ${total.toLocaleString()} accounted for: ${parts.join(", ")}.`;
   // The suppression note is scoped to what actually suppresses: hard bounces and complaints,
@@ -898,9 +901,8 @@ function recAlertHtml(send: SendView): Html {
     : html``;
 }
 
-/** A sent send's outcomes from its counters: the same buckets as the record's own read,
- *  one per recipient, over the audience fixed at fire. As there, a recipient not yet handed
- *  off (pending) counts as in flight. */
+/** A sent send's outcomes from its counters: the same buckets as the record's own read, in
+ *  the same words, one per recipient, over the audience fixed at fire. */
 function outcomesOf(send: SendView): DeliveryOutcomes {
   const c = send.counts;
   return {
@@ -911,7 +913,8 @@ function outcomesOf(send: SendView): DeliveryOutcomes {
     unsent: c.unsent,
     skipped: c.skipped,
     accepted: c.accepted,
-    in_flight: c.pending + c.in_flight,
+    pending: c.pending,
+    dispatched: c.dispatched,
   };
 }
 

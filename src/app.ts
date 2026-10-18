@@ -1267,7 +1267,8 @@ export function createRouter({
             unsent: 0,
             skipped: 1,
             accepted: 455,
-            in_flight: 740,
+            pending: 700,
+            dispatched: 40,
           },
           cursor: "57.1768467610000",
         },
@@ -1280,7 +1281,7 @@ export function createRouter({
             name: "outcomes",
             type: "object",
             description:
-              "The record's recipients by outcome, from its rows, summing to the audience at fire: `recipients`, `delivered`, `bounced`, `complained`, `unsent`, `skipped`, `accepted`, `in_flight`.",
+              "The record's recipients by outcome, from its rows, summing to the audience at fire: `recipients`, `delivered`, `bounced`, `complained`, `unsent`, `skipped`, `accepted`, `pending`, `dispatched`: the send's `counts`, in the same words, read from the rows rather than the counters.",
           },
           cursorField,
         ],
@@ -1317,7 +1318,7 @@ export function createRouter({
         {
           name: "view",
           description:
-            "`failures` (default: bounced/complained/unsent), `delivered`, `all`, or a single bucket (`bounced`, `complained`, `unsent`, `skipped`, `accepted`, `in_flight`). Anything else is a 400 naming the field.",
+            "`failures` (default: bounced/complained/unsent), `delivered`, `all`, or a single bucket, in the words of the send's `counts` (`bounced`, `complained`, `unsent`, `skipped`, `accepted`, `pending`, `dispatched`). Anything else is a 400 naming the field.",
         },
         { name: "search", description: "Email contains-search." },
         { name: "sort", description: "`email` (default), `status`, `event`, or `event_at`." },

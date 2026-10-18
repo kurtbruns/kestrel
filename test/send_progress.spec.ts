@@ -34,8 +34,8 @@ async function expectCountersMatchAggregate(sendId: string): Promise<SendRow> {
   expect(send.c_unsent).toBe(outcomes.unsent);
   expect(send.c_skipped).toBe(outcomes.skipped);
   expect(send.c_accepted).toBe(outcomes.accepted);
-  // deliveryOutcomes folds pending + dispatched into one `in_flight`; the counters split them.
-  expect(send.c_pending + send.c_in_flight).toBe(outcomes.in_flight);
+  // The outcomes and the counters split pending from dispatched alike: one vocabulary.
+  expect([send.c_pending, send.c_in_flight]).toEqual([outcomes.pending, outcomes.dispatched]);
   // Every recipient lands in exactly one bucket, summing to the materialized audience.
   const sum =
     send.c_pending +

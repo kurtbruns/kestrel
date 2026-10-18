@@ -3,7 +3,7 @@
 // scheduled card, the editor's banner).
 
 import type { PostResponse } from "../../shared/posts";
-import type { ResolveResponse, SendSummary, StuckResolution } from "../../shared/sends";
+import type { ResolveResponse, SendSummary, WedgedResolution } from "../../shared/sends";
 import { ApiError, api, describeError } from "../api";
 import { earliestFireAt, isTooSoon, notConnectedRescheduleLine, tooSoonText } from "../deployment";
 import {
@@ -43,7 +43,7 @@ export function openResolveModal(
     signal,
   );
   $("#rCancel", m.el).onclick = m.close;
-  const doResolve = (btn: HTMLButtonElement, resolution: StuckResolution, verb: string) =>
+  const doResolve = (btn: HTMLButtonElement, resolution: WedgedResolution, verb: string) =>
     busy(btn, "Resolving…", async () => {
       m.clearError();
       try {

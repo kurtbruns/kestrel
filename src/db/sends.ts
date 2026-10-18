@@ -4,6 +4,7 @@
 
 import { normalizeEmail } from "../../shared/email";
 import type {
+  DeliveryEvent,
   DeliveryOutcomes,
   DeliveryRecord,
   DeliveryView,
@@ -31,7 +32,7 @@ export type { SendCounts };
 export function countsOf(send: SendSummary): SendCounts {
   return {
     pending: send.c_pending,
-    in_flight: send.c_in_flight,
+    dispatched: send.c_in_flight,
     accepted: send.c_accepted,
     delivered: send.c_delivered,
     bounced: send.c_bounced,
@@ -721,7 +722,8 @@ export async function deliveryOutcomes(db: D1Database, sendId: string): Promise<
          COALESCE(SUM(event IS NULL AND status = 'unsent'), 0) AS unsent,
          COALESCE(SUM(event IS NULL AND status = 'skipped'), 0) AS skipped,
          COALESCE(SUM(event IS NULL AND status = 'accepted'), 0) AS accepted,
-         COALESCE(SUM(event IS NULL AND status IN ('pending', 'dispatched')), 0) AS in_flight
+         COALESCE(SUM(event IS NULL AND status = 'pending'), 0) AS pending,
+         COALESCE(SUM(event IS NULL AND status = 'dispatched'), 0) AS dispatched
        FROM deliveries WHERE send_id = ?`,
     )
     .bind(sendId)
@@ -735,7 +737,8 @@ export async function deliveryOutcomes(db: D1Database, sendId: string): Promise<
       unsent: 0,
       skipped: 0,
       accepted: 0,
-      in_flight: 0,
+      pending: 0,
+      dispatched: 0,
     }
   );
 }
@@ -784,7 +787,8 @@ export const DELIVERY_VIEWS = [
   "unsent",
   "skipped",
   "accepted",
-  "in_flight",
+  "pending",
+  "dispatched",
 ] as const satisfies readonly DeliveryView[];
 export type { DeliveryView };
 
@@ -824,8 +828,10 @@ function deliveryViewClause(view: DeliveryView): string {
       return "d.event IS NULL AND d.status = 'skipped'";
     case "accepted":
       return "d.event IS NULL AND d.status = 'accepted'";
-    case "in_flight":
-      return "d.event IS NULL AND d.status IN ('pending', 'dispatched')";
+    case "pending":
+      return "d.event IS NULL AND d.status = 'pending'";
+    case "dispatched":
+      return "d.event IS NULL AND d.status = 'dispatched'";
     case "failures":
       // Bounced / complained / unsent — the rows that went wrong, front-and-center.
       return "(d.event IN ('bounced', 'complained')) OR (d.event IS NULL AND d.status = 'unsent')";
@@ -1761,7 +1767,7 @@ export async function countDeliveries(
 
 // --- provider delivery events (M9: SES via SNS) -----------------------------
 
-export type DeliveryEventType = "delivered" | "bounced" | "complained";
+export type DeliveryEventType = DeliveryEvent;
 
 export interface DeliveryEventUpdate {
   /** The provider's message id stored on the delivery row: the match key whenever present. */

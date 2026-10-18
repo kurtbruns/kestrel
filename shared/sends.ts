@@ -198,10 +198,28 @@ export interface SendHalt {
   retry_at: number | null;
 }
 
-/** The eight denormalized progress counters on a send. */
+/**
+ * Where a recipient's hand-off stands, as its delivery row stores it (SPEC §12): waiting to be
+ * handed to the provider (`pending`), handed over with no answer yet (`dispatched`, what the
+ * editor and SPEC call in flight), taken (`accepted`), refused for good (`unsent`), or left out
+ * at send time (`skipped`).
+ */
+export type DeliveryStatus = "pending" | "dispatched" | "accepted" | "unsent" | "skipped";
+
+/** What the provider reported after taking a recipient, as the delivery row stores it. */
+export type DeliveryEvent = "delivered" | "bounced" | "complained";
+
+/**
+ * A send's per-recipient buckets, one vocabulary on every route (the counts, the outcomes,
+ * the deliveries' views): the stored statuses and events, a reported event taking a recipient
+ * out of its status's bucket, so each recipient is in exactly one.
+ */
+export type RecipientBucket = DeliveryStatus | DeliveryEvent;
+
+/** The eight denormalized progress counters on a send, one per bucket. */
 export interface SendCounts {
   pending: number;
-  in_flight: number;
+  dispatched: number;
   accepted: number;
   delivered: number;
   bounced: number;
@@ -582,7 +600,10 @@ export interface DeliveryOutcomes {
   skipped: number;
   /** Accepted by the provider, with no delivery event yet (a provider may emit none). */
   accepted: number;
-  in_flight: number;
+  /** Waiting to be handed to the provider. */
+  pending: number;
+  /** Handed to the provider with no answer yet: in flight. */
+  dispatched: number;
 }
 
 /** GET /api/sends/:id: the send, and its record's outcome breakdown. */
@@ -594,16 +615,7 @@ export interface SendResponse {
 }
 
 /** The buckets GET /api/sends/:id/deliveries filters by, exactly as the outcomes count them, plus "all" and "failures" (bounced, complained, or unsent). */
-export type DeliveryView =
-  | "all"
-  | "failures"
-  | "delivered"
-  | "bounced"
-  | "complained"
-  | "unsent"
-  | "skipped"
-  | "accepted"
-  | "in_flight";
+export type DeliveryView = RecipientBucket | "all" | "failures";
 
 /**
  * One recipient's row for the in-app record: the send-loop status and the later webhook
@@ -612,13 +624,13 @@ export type DeliveryView =
  */
 export interface DeliveryRecord {
   email: string;
-  status: string;
-  event: string | null;
+  status: DeliveryStatus;
+  event: DeliveryEvent | null;
   event_detail: string | null;
   event_at: number | null;
   error: string | null;
   attempts: number;
-  bounce_kind: string | null;
+  bounce_kind: "hard" | "soft" | null;
 }
 
 /** GET /api/sends/:id/deliveries */
@@ -628,8 +640,9 @@ export interface DeliveryListResponse {
   page: PageMeta;
 }
 
-/** The publisher's answer for a wedged send's ambiguous recipients (SPEC §12). */
-export type StuckResolution = "unsent" | "accepted";
+/** The publisher's answer for a wedged send's ambiguous recipients (SPEC §12). Named for the
+ *  `wedged` condition it answers, never the send-level `stuck`, which is another condition. */
+export type WedgedResolution = "unsent" | "accepted";
 
 /** POST /api/sends/:id/resolve */
 export interface ResolveResponse {

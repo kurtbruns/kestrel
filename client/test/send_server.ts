@@ -46,7 +46,7 @@ export interface SendExtras {
 export function sendView(row: SendSummary, over: Partial<SendView> = {}): SendView {
   const counts = {
     pending: row.c_pending,
-    in_flight: row.c_in_flight,
+    dispatched: row.c_in_flight,
     accepted: row.c_accepted,
     delivered: row.c_delivered,
     bounced: row.c_bounced,
@@ -409,7 +409,8 @@ export function sendServer(rows: SendSummary[] = []) {
             unsent: r.c_unsent,
             skipped: r.c_skipped,
             accepted: r.c_accepted,
-            in_flight: r.c_pending + r.c_in_flight,
+            pending: r.c_pending,
+            dispatched: r.c_in_flight,
           },
           cursor: cursor(),
         };

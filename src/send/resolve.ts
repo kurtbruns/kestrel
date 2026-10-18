@@ -28,7 +28,7 @@
  * the send, Resolve is refused and can be tried again a moment later.
  */
 
-import type { SendStatus, StuckResolution } from "../../shared/sends";
+import type { SendStatus, WedgedResolution } from "../../shared/sends";
 import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
 import { notFound, refusal } from "../lib/errors";
@@ -37,7 +37,7 @@ import { sendAsItStands } from "./describe";
 import { isWedged } from "./wedged";
 
 // The resolution lives in shared/ so the editor reads the same definition.
-export type { StuckResolution };
+export type { WedgedResolution };
 
 // Why a send that isn't sending has nothing to resolve, in words rather than its status name.
 const NOT_SENDING: Record<Exclude<SendStatus, "sending">, string> = {
@@ -64,7 +64,7 @@ export interface ResolveResult {
 export async function resolveStuckSend(
   env: AppEnv,
   sendId: string,
-  outcome: StuckResolution,
+  outcome: WedgedResolution,
   actor: string,
 ): Promise<ResolveResult> {
   const send = await sends.getSend(env.DB, sendId);
