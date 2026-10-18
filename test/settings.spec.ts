@@ -639,3 +639,61 @@ describe("a corrupt settings row", () => {
     });
   }
 });
+
+describe("the stored settings keep their own shape while the wire is snake_case (docs/API.md)", () => {
+  // A row as 1.12.0 wrote it, before the wire's names changed. Live instances hold rows like
+  // this, so a refactor that moved the blob's keys would lose their template and recipients.
+  const STORED_1_12 = {
+    testRecipients: ["me@example.com"],
+    publication: { name: "Field Notes", tagline: "Birding", address: "1 Marsh Lane", logo: null },
+    emailTemplate:
+      '<div>{{ .Post.Body }}<a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a> stored</div>',
+    confirmationEmail: {
+      subject: "Please confirm",
+      body: "Tap below.",
+      buttonLabel: "Go",
+      reassurance: "",
+    },
+    notifications: { to: "me@example.com" },
+  };
+
+  it("reads a row in the 1.12.0 shape back through GET /api/settings, every field intact", async () => {
+    await env.DB.prepare("INSERT INTO settings (id, data, updated_at) VALUES (1, ?, 1)")
+      .bind(JSON.stringify(STORED_1_12))
+      .run();
+    const { res, body } = await getSettings();
+    expect(res.status).toBe(200);
+    expect(body.settings).toMatchObject({
+      test_recipients: ["me@example.com"],
+      publication: { name: "Field Notes", tagline: "Birding", address: "1 Marsh Lane" },
+      email_template: STORED_1_12.emailTemplate,
+      confirmation_email: {
+        subject: "Please confirm",
+        body: "Tap below.",
+        button_label: "Go",
+        reassurance: "",
+      },
+    });
+  });
+
+  it("writes a save under the stored keys, so a release rolled back still reads it", async () => {
+    const put = await SELF.fetch(`${base}/api/settings`, {
+      method: "PUT",
+      headers: JSON_AUTH,
+      body: JSON.stringify({
+        test_recipients: ["you@example.com"],
+        confirmation_email: { button_label: "Yes" },
+      }),
+    });
+    expect(put.status).toBe(200);
+    const row = await env.DB.prepare("SELECT data FROM settings WHERE id = 1").first<{
+      data: string;
+    }>();
+    const stored = JSON.parse(row?.data ?? "{}");
+    expect([stored.testRecipients, stored.confirmationEmail?.buttonLabel]).toEqual([
+      ["you@example.com"],
+      "Yes",
+    ]);
+    expect(Object.keys(stored)).not.toContain("test_recipients");
+  });
+});

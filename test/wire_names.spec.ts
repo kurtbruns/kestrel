@@ -111,6 +111,24 @@ describe("names on the wire are snake_case", () => {
     expect(bad).toEqual([]);
   });
 
+  it("documents on each list route exactly the sort keys its list takes", () => {
+    const routes = ref.groups.flatMap((g) => g.routes);
+    const documented = (path: string) => {
+      const sort = routes
+        .find((r) => r.method === "GET" && r.path === path)
+        ?.query?.find((q) => q.name === "sort");
+      return new Set([...(sort?.description ?? "").matchAll(/`([^`]+)`/g)].map((m) => m[1]));
+    };
+    for (const [path, spec] of [
+      ["/api/posts", POST_LIST_SPEC],
+      ["/api/sends", SEND_LIST_SPEC],
+      ["/api/subscribers", SUBSCRIBER_LIST_SPEC],
+      ["/api/sends/:id/deliveries", DELIVERY_LIST_SPEC],
+    ] as const) {
+      expect(documented(path), path).toEqual(new Set(Object.keys(spec.columns)));
+    }
+  });
+
   it("names each sort key for the field it sorts by, a nested one by its dotted path", () => {
     const routes = ref.groups.flatMap((g) => g.routes);
     // What a list's rows carry: the object's fields, the fields the list route adds, and the

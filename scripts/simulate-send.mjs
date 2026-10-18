@@ -147,7 +147,14 @@ async function main() {
   // call that sets it: read before the scan below, the scan's round trips would eat the
   // slack, and a send asked for exactly one lead out would be refused as inside it.
   const fireAt = () => new Date(Date.now() + inMs + SLACK_MS).toISOString();
-  const scheduled = await api("/api/sends?status=scheduled&sort=fire&dir=asc&limit=100");
+  const scheduled = await api("/api/sends?status=scheduled&sort=fire_at&dir=asc&limit=100");
+  if (!scheduled.ok) {
+    // Never read a refusal as "no scheduled sends": that would schedule a new post every run.
+    fail(
+      TAG,
+      `the scheduled sends couldn't be read (${scheduled.status}): ${scheduled.body?.message ?? JSON.stringify(scheduled.body)}`,
+    );
+  }
   let demo = null;
   for (const send of scheduled.body?.sends ?? []) {
     const post = await api(`/api/posts/${send.post_id}`);
