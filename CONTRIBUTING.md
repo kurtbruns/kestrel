@@ -37,6 +37,6 @@ The editor's **API** tab lists every route.
 
 ## Going further
 
-- **What Kestrel guarantees:** [`docs/SPEC.md`](docs/SPEC.md). How the admin UI is built: [`docs/DESIGN.md`](docs/DESIGN.md).
+- **What Kestrel guarantees:** [`docs/SPEC.md`](docs/SPEC.md). The rules every API route follows: [`docs/API.md`](docs/API.md). How the admin UI is built: [`docs/DESIGN.md`](docs/DESIGN.md).
 - **Working on the code:** [`.claude/CLAUDE.md`](.claude/CLAUDE.md) has the commands, conventions, and module boundaries.
 - **Releases:** [`CHANGELOG.md`](CHANGELOG.md).

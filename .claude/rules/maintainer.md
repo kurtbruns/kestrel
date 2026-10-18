@@ -19,14 +19,33 @@ Kestrel is built in levels of abstraction, and is kept that way. Each level is p
 
 - **`docs/SPEC.md`, the idea.** What Kestrel guarantees: the features, the behavior, the invariants, and the publisher's experience. The system, not the code that implements it.
 - **`docs/API.md`, the shape of the API.** The rules every route follows: how a resource is read, followed, acted on, and refused, and the test a new wire concept must pass. It sits between the spec's guarantees and the generated API reference, which lists each route; it names concepts, never a route's every field.
+- **The API reference, the API as its clients read it.** Generated from the route registration in `src/app.ts` and from `src/reference/`: the topics every route shares (`concepts.ts`, API.md's rules in the words a client needs), each object field by field (`objects.ts`), and the refusal codes (`refusals.ts`). The editor shows it in its API tab and Claude reads it as Markdown at `/api/reference.md`. Claude never reads API.md, so for Claude as a client this is the contract, and a rule in API.md that a client must follow reaches Claude only once it is here.
 - **`docs/DESIGN.md`, the presentation.** How the admin UI presents that behavior: the principles behind it, a map of its screens, how a send reads across them, and the shared vocabulary (where messages go, saving, button roles, color, layout, copy, accessibility). What each means and which to reach for, one level above the exact CSS.
 - **`README.md`, getting started.** The package's front page on npm and GitHub, for someone deciding whether to run Kestrel: what it is in a paragraph, trying it locally, and the path to a running instance. Working on Kestrel's own source is `CONTRIBUTING.md`, which points onward to `.claude/CLAUDE.md` instead of repeating details the codebase keeps changing.
 - **`CHANGELOG.md`, the record.** What changed between releases, one line per change, for the person deciding whether to upgrade. It cuts across the levels instead of sitting at one. `.claude/rules/changelog.md` says what earns a line, how it is written, and when a release is cut.
 - **The code.** Everything beneath the documents, from the API route table down to the line. Every guarantee above has to land here. `.claude/CLAUDE.md` describes this level: how the code is organized, the rules that are not obvious from reading it, and how its comments are written.
+- **Claude's context, two sets.** `.claude/CLAUDE.md` and `.claude/rules/` are the maintainer's: how to work on Kestrel. `template/claude/` is the operator's: how Claude runs an instance and publishes through its API, written into each instance by `kestrel init` and the operator's own from then on, so a fix to it reaches an instance only when its operator merges it (`kestrel check-context` reports the change). It restates API rules by their wire names, so it is a copy of the reference that nothing checks. `.claude/rules/context.md` says how both are written.
 
 Beside these sit the docs in `docs/README.md` and its section folders, held by `.claude/rules/docs.md`. The publisher's pages (`docs/publishing/`) describe the app as the publisher meets it, so they sit below SPEC and DESIGN and restate neither: what the system does comes from SPEC, and the names of screens and buttons from DESIGN and the UI, worded for someone who has never read either. A change that alters what a publisher does or sees changes the page in the same commit. A publisher page may also carry what no other document holds, such as which law asks what of a newsletter, as long as it cites its source.
 
 This file holds the rules for keeping them at their height.
+
+## What else moves when one changes
+
+A change starts at the highest level it touches, and everything below that restates it moves in the same commit. Most of these links are kept by hand, so this table is the lookup: find the row, change what it names, and check the last column for what will catch a miss.
+
+| You change | Also change in the same commit | What catches a miss |
+| --- | --- | --- |
+| A guarantee or behavior | `docs/SPEC.md` first, then the code and a test whose title cites the section. API.md, DESIGN, and the docs pages wherever they describe it. | Tests, by convention: nothing lists a SPEC promise with no test. |
+| A rule of the API's shape | `docs/API.md`, and `src/reference/concepts.ts` where a client must follow it. | Nothing. |
+| A refusal code or its status | `src/reference/refusals.ts`, API.md's Refusing table, and each route that gives it. | `test/reference.spec.ts`: the codes, statuses, and next moves must match the table. |
+| A route, field, or object | Its entry in `src/app.ts`, its wire type in `shared/`, and its object in `src/reference/objects.ts`. API.md only for a new rule or kind of concept. | The generated reference, and the examples typed against the wire types. |
+| A wire name, renamed | Every copy made by hand: `template/claude/` (context and skills), `docs/publishing/` and the setup guide, API.md, DESIGN, and a Breaking line in the changelog. Grep those paths for the old name. | Nothing. A stale name in `template/claude/` ships into every new instance. |
+| How the editor presents something | `docs/DESIGN.md`, and the docs page that names that screen or label. | `test/docs.spec.ts`, only for links and the headings the editor links to. |
+| A docs page, or a docs index | The index that lists it, and any editor link to its headings. getkestrel.dev parses the indexes (`.claude/rules/docs.md`). | `test/docs.spec.ts`. |
+| `template/claude/` | A changelog line saying what changed and why. | `kestrel check-context`, on each instance at upgrade. |
+| Anything a publisher or operator would notice | A line under `[Unreleased]` (`.claude/rules/changelog.md`). | The Stop hook's reminder, which never blocks. |
+| The release itself | `.claude/rules/release.md`. | `publish.yml` re-runs the gate before npm. |
 
 ## The rules
 

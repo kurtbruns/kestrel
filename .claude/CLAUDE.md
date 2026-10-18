@@ -68,9 +68,9 @@ The mechanism behind each boundary is in its module's header comment; these are 
 
 ## Keep the docs in sync
 
-Changing what the system does, or how the admin UI presents it, means changing the governing document in the same commit: behavior and guarantees in `docs/SPEC.md`, the API's shape (a new wire field, header, error code, or way of reading) in `docs/API.md`, admin-UI presentation in `docs/DESIGN.md`, and `README.md` when the change is visible to whoever runs the app. Code and its docs drifting apart is a bug. `.claude/rules/maintainer.md` says how to write those changes and loads with those files.
+Changing what the system does, or how the admin UI presents it, means changing the governing document in the same commit: behavior and guarantees in `docs/SPEC.md`, the API's shape (a new wire field, header, error code, or way of reading) in `docs/API.md`, admin-UI presentation in `docs/DESIGN.md`, and `README.md` when the change is visible to whoever runs the app. Code and its docs drifting apart is a bug. `.claude/rules/maintainer.md` says how to write those changes and loads with those files; its table (What else moves when one changes) lists every copy a change has to reach, the API reference, `template/claude/`, and the docs pages among them, and what catches a miss.
 
-A user-facing or operator-visible change also earns a one-line `CHANGELOG.md` entry under `[Unreleased]` in the same commit; an internal-only change gets none. `.claude/rules/changelog.md` says which section and how to cut a release.
+A user-facing or operator-visible change also earns a one-line `CHANGELOG.md` entry under `[Unreleased]` in the same commit; an internal-only change gets none. `.claude/rules/changelog.md` says which section, and `.claude/rules/release.md` how to cut a release, through to the docs site and the demo.
 
 ## Conventions
 

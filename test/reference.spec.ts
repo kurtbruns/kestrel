@@ -383,6 +383,40 @@ describe("API reference is generated from the route registration", () => {
     expect(grouped.length).toBe(Object.keys(REFUSAL_STATUS).length);
   });
 
+  it("puts each code in docs/API.md's table under the next move and a status the registry gives it", () => {
+    const section = apiDoc.slice(
+      apiDoc.indexOf("## Refusing"),
+      apiDoc.indexOf("## Adding to the API"),
+    );
+    // Each body row of the table: the next move, its statuses, and the codes under it.
+    const rows = section
+      .split("\n")
+      .filter(
+        (line) =>
+          line.startsWith("| ") && !line.startsWith("| The client") && !line.startsWith("| ---"),
+      )
+      .map((line) => {
+        const [move, statuses, codes] = line.split(" | ").map((cell) => cell.replace(/^\| /, ""));
+        return {
+          move,
+          statuses: (statuses ?? "").split(", ").map(Number),
+          codes: [
+            ...new Set(
+              [...(codes ?? "").matchAll(/`([a-z][a-z_]+)`/g)]
+                .map(([, code]) => code as string)
+                .filter((code) => code in REFUSAL_STATUS),
+            ),
+          ].sort(),
+        };
+      });
+    const groups = refusalGroups().map((g) => ({
+      move: g.move,
+      statuses: [...new Set(g.codes.map((c) => c.status))].sort((x, y) => x - y),
+      codes: g.codes.map((c) => c.code).sort(),
+    }));
+    expect(rows).toEqual(groups);
+  });
+
   it("summarizes every status the API answers, in order, each refusal's status among them", () => {
     const listed = STATUSES.map((st) => st.status);
     expect(listed).toEqual([...listed].sort((x, y) => x - y));

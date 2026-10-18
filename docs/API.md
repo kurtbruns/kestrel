@@ -6,8 +6,6 @@ The shape of Kestrel's authoring API: the rules every route follows, so a client
 
 **Where it lives.** Every route of the API sits under `/api`, which is also the admin line: the editor at `/dashboard` and the API at `/api` are the publisher's, behind the access layer, and everything else is the public reader surface (SPEC §11). A new route goes under `/api` too, so it is gated with nothing for an instance to add. Before 1.3.0 the posts, sends, subscribers, and suppressions routes sat at the top level (`/posts`, and so on); those paths now answer `404`.
 
-**Status.** Draft. It describes the API as the principles below would have it. Where `main` differs today (the send's ETag, the feed's cursor, tombstones, and pace), the gap is tracked on GitHub as simplification deferred until real use shows which parts matter; this note goes once `main` matches.
-
 ---
 
 ## Design principles
@@ -30,7 +28,7 @@ When the two pull against each other, the smaller API wins, with the expectation
 
 7. **Strict at the door.** A body that is not the declared type, a field of the wrong shape, an unknown query value, or a cursor this server did not issue is refused with a 400 that names the field. Nothing is dropped or defaulted, so a request is never answered with a success that ignored part of it. A cross-site request from a browser never reaches a handler (SPEC §11).
 
-8. **Sized for one publication.** A publication has hundreds of sends and up to tens of thousands of subscribers (SPEC §1). Paging exists where a collection grows with the list: subscribers, and a send's per-recipient rows. The list of sends pages too, because it sorts and filters. Following changes does not page, because the sends that change between two reads are few. The export pages too, keyed on the address, so a list read across many pages while it changes still gives every address exactly once, and an import takes at most a set number of rows, which the API states for the deployment. Where the server sets a page's size, it sets it from the deployment's plan, never from the client.
+8. **Sized for one publication.** A publication has hundreds of sends and up to tens of thousands of subscribers (SPEC §1). Paging exists where a collection grows with the list: subscribers, and a send's per-recipient rows. The list of sends pages too, because it sorts and filters. Following changes does not page either: it reads every change since the cursor, in order, and only caps how many one read carries, answering `more` when it stopped short, so a client reads again at once and still sees each change once. The export pages too, keyed on the address, so a list read across many pages while it changes still gives every address exactly once, and an import takes at most a set number of rows, which the API states for the deployment. Where the server sets a page's size, it sets it from the deployment's plan, never from the client.
 
 9. **A concept earns its place.** A new field, header, parameter, or code must change what some client shows or does. Before adding one, ask these questions:
    - Which client reads it, and what does that client do differently because of it?
@@ -60,7 +58,7 @@ A client learns the state of things in two ways.
 - **Following** is one route, the send feed, read from a cursor. It answers with:
   - every send that changed after that cursor, plus every send the clock is setting right now;
   - every open condition across the sends, whether or not it changed, so one read shows every problem;
-  - a new cursor;
+  - a new cursor, and `more` when changes past it are waiting, to read again at once;
   - the server's `now`, and `read_again_at` by the server's clock.
 
   The server sets the pace for both clients alike. It is fast while a send can move without anyone acting, and about once a minute otherwise. Reading early is always fine. Reading late loses nothing, because the next read reports everything since the cursor.
@@ -95,7 +93,7 @@ The error body is `{ error, message }`, plus `field` for a refusal about the req
 | Read again, then decide | 409 | `stale_revision` (a post, with the post as it stands, its `markdown`, and who wrote the newer revision), `active_send_exists` (with the send), `cursor_ahead`, `plan_stale` (plan the import again), `slug_taken` (another post holds the slug, with `field`: choose another) |
 | Try again shortly, unchanged | 409 | `run_in_progress` (a send run holds the send, or, for an erasure, is handing that subscriber to the provider), `settings_changed`, `conflict` (settings written at the same moment), `remake_too_close` (with `retry_after`) |
 | Confirm, then send again | 409 | `remake_required` (naming the sends the change would re-make), `attestation_required` (with the `attestation` to show), `sends_acknowledgement_required` (with the `sends`; a service token can't give it), `erasure_acknowledgement_required` (adding an address that was erased, with `erased_at`: send again with `acknowledge_erasure: true` once the publisher says the person asked to join again; the public subscribe form never asks, SPEC §7) |
-| Fix the deployment, outside this API | 500, 502, 503 | `provider_not_connected` (503: no email provider connected, so nothing can be sent: scheduling, send now, a test, a confirmation; SPEC §9), `confirmation_not_sent` (502: the provider refused a subscriber's confirmation, or never answered, in its own words), `notify_failed` (502: the notifications channel refused a test notification, in its own words), `settings_corrupt` (500: the stored settings can't be read, and the server log says why), `invalid_config` (500: the deployment's configuration is refused, with the setting to fix as `variable`, below; SPEC §9), `schema_behind` (500: the database hasn't run every migration this release ships, with them as `missing` and what to run in `message`, below; SPEC §9) |
+| Fix the deployment, outside this API | 500, 502, 503 | `provider_not_connected` (503: no email provider connected, so nothing can be sent: scheduling, send now, a test, a confirmation; SPEC §9), `confirmation_not_sent` (502: the provider refused a subscriber's confirmation, or never answered, in its own words), `notify_failed` (502: the notifications channel refused a test notification, in its own words), `settings_corrupt` (500: the stored settings can't be read, and the server log says why), `invalid_config` (500: the deployment's configuration is refused, with the setting to fix as `variable`, below; SPEC §9), `schema_behind` (500: the database hasn't run every migration this release ships, with them as `missing` and what to run in `message`, below; SPEC §9), `internal_error` (500: an error nothing handled, below) |
 
 A deployment with no Access configured can authenticate no request at all (SPEC §11), so its admin 401 says so: `{ "error": "unauthorized", "reason": "access_not_configured" }`. Signing in again cannot help; setting up Access can. A 401 under a configured Access, and one in local development, carries no `reason`, and the field never says anything else about the request.
 
