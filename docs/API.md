@@ -10,13 +10,11 @@ The shape of Kestrel's authoring API: the rules every route follows, so a client
 
 ---
 
-## The bet
+## Design principles
 
-Kestrel has two clients, the web editor and Claude, and both act for one publisher (SPEC §1). They stay on the same page because they read and act through one API over one copy of the data, and neither keeps a rule of its own about what the data means. So the API carries the design weight. It has to be **robust**: a retry, a race, or a late read never leaves a client believing something false. And it has to be **small enough to learn from its reference**: Claude meets it cold in every conversation, and a concept that only the editor's author understands is one Claude will use wrongly.
+Kestrel has two clients, the web editor and Claude, and both act for one publisher (SPEC §1). They stay in step because they read and act through one API over one copy of the data, and neither keeps a rule of its own about what the data means. So the API carries the design, and it has two jobs. It never leaves a client believing something false: a retry, a race, or a late read still ends with the client holding the true state. And it can be learned from its reference alone, because Claude meets it cold in every conversation, and a concept only the editor's author understands is one Claude will use wrongly.
 
-When those two pull against each other, prefer the smaller API and a documented expectation, as long as no invariant (SPEC §3) rests on the difference.
-
-## Principles
+When the two pull against each other, the smaller API wins, with the expectation written down, as long as no invariant (SPEC §3) rests on the difference. Each principle below follows from these two jobs.
 
 1. **One API, no private door.** The editor uses no route that Claude cannot, and no route exists only to serve the editor's layout. The one exception is the development tooling under `/api/dev/`, which exists only on a local instance.
 
