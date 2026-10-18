@@ -374,7 +374,7 @@ export interface SendView {
   status: SendStatus;
   /**
    * The post's listing (SPEC §5): true when it is email only, mailed as usual but left out
-   * of the archive index and the landing page. The post's, not the send's, so every send of
+   * of the archive index and the home page. The post's, not the send's, so every send of
    * a post reads the same, and a change to it is a change to each of them (a new `rev`).
    */
   email_only: boolean;

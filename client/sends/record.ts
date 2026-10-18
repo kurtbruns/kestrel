@@ -96,7 +96,7 @@ const PHASE_BLURB: Partial<Record<SendPhase, string>> = {
   progressing: "Handing recipients to the provider.",
   retrying: "Some recipients hit a transient error and will be retried.",
   "backing-off": "Some recipients hit a transient error. They’re retried on the next sweep.",
-  "needs-attention": "Some deliveries are stuck and need a decision.",
+  "needs-attention": "Some deliveries can’t be confirmed either way, and wait on your decision.",
   settling: "Dispatch complete, waiting on delivery receipts.",
 };
 /** The phase's one-line gloss, said for the cause when the phase has more than one. */

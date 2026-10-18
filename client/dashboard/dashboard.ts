@@ -307,7 +307,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       )}</tbody></table></div>`
     : html`<p class="muted">No drafts in progress.</p>`;
 
-  // The publication's home is the landing page at the app's own origin (SPEC §11); the
+  // The publication's home page is at the app's own origin (SPEC §11); the
   // archive and every post are a click from it, so the card names the one address to share.
   const homeUrl = deployment?.appOrigin || location.origin;
   const pubCardHtml = html`<div class="card pub-card">

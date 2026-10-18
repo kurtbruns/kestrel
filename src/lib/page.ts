@@ -1,11 +1,11 @@
 /** HTML for the reader-facing routes: the branded reader shell (`readerPage`) behind
- *  the landing page, the archive index, the subscribe flow, and the message pages a
+ *  the home page, the archive index, the subscribe flow, and the message pages a
  *  reader lands on from an email (confirm, unsubscribe, not found), via `messagePage`.
  *  Automatic light/dark via prefers-color-scheme. */
 import { escapeHtml, escapeHtmlAttr } from "./html";
 import { PAGE_SECURITY_HEADERS } from "./page_headers";
 
-/* The reader surface (§5): the public landing page at `/`, the full archive index at
+/* The reader surface (§5): the public home page at `/`, the full archive index at
    the archive base path, the subscribe pages, and the message pages. All wear the
    publication's identity — a light masthead over an editorial serif — deliberately
    not the neutral zinc admin chrome, and link only to public pages, never into the
@@ -430,7 +430,7 @@ function postRow(i: ArchiveIndexPost): string {
   );
 }
 
-/** The public front door (§5): a landing page that features the latest post, lists
+/** The public front door (§5): a home page that features the latest post, lists
  *  a few recent ones, and links into the full archive — never into the admin. */
 export function landingPage(opts: {
   identity: ReaderIdentity;
@@ -471,7 +471,7 @@ export function landingPage(opts: {
 }
 
 /** The full public archive: every published post, newest first (§5). Reached from the
- *  landing page's "Browse the full archive" link; served at the archive base path. */
+ *  home page's "Browse the full archive" link; served at the archive base path. */
 export function archiveIndexPage(opts: {
   identity: ReaderIdentity;
   subscribeUrl: string;

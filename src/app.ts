@@ -826,9 +826,9 @@ export function createRouter({
       access: "admin",
       accepts: JSON_BODY,
       resource: "posts",
-      title: "Set a post's publishing options",
+      title: "Change a post's settings",
       summary:
-        "Set a post's publishing options: where it is listed (`email_only`) and its archive address (`slug`, `slug_auto`).",
+        "Change a post's settings, the editor's \"Post settings\": where it is listed (`email_only`) and its archive address (`slug`, `slug_auto`).",
       description:
         "Any subset of the three, in any state, a sent post's included: none is part of the frozen email, so a change never re-makes or alters a send, though each of the post's sends takes a new `rev` and the feed reports it. Once the post's send has started its address is fixed. A body naming none of the three is a 400.",
       example: {
@@ -1436,7 +1436,7 @@ export function createRouter({
       resource: "sends",
       title: "Reschedule a send",
       summary: "Move a scheduled send's fire time without re-freezing the render.",
-      description: `Moves only \`fire_at\`, within the review window: the frozen email is untouched and a re-made send keeps its \`remade_at\`. For a content change, cancel, edit, and schedule again. The same minimum lead as scheduling (${formatLead(minLeadMs)}, as Schedule a post describes), and the time is rounded up to the next whole minute as when scheduling. A move to the time it already has answers \`changed: false\` before the lead is checked. \`email_only\`, \`slug\`, or \`slug_auto\` is a 400: those are the post's, at \`PUT /api/posts/:id/settings\`.`,
+      description: `Moves only \`fire_at\`, within the review window: the frozen email is untouched and a re-made send keeps its \`remade_at\`. For a content change, cancel, edit, and schedule again. The same minimum lead as scheduling (${formatLead(minLeadMs)}, as Schedule a post describes), and the time is rounded up to the next whole minute as when scheduling. A move to the time it already has answers \`changed: false\` before the lead is checked. \`email_only\`, \`slug\`, or \`slug_auto\` is a 400: those are the post's, at \`PUT /api/posts/:id/settings\`. The editor's "Edit schedule" is this route and that one together, so a publisher who asks to edit the schedule may mean the time, the post's settings, or both.`,
       example: {
         request: { fire_at: "2026-01-16T09:00:00Z" },
         response: {
@@ -1479,7 +1479,7 @@ export function createRouter({
           type: '"unsent" | "accepted"',
           required: true,
           description:
-            "The publisher's choice, after you relay the `wedged` condition's message; never choose it yourself. `unsent`: assume they were not sent, so the address is picked up by the next post. `accepted`: assume they were sent.",
+            'The publisher\'s choice, after you relay the `wedged` condition\'s message; never choose it yourself. `unsent`, the editor\'s "Assume not sent": assume they were not sent, so the address is picked up by the next post. `accepted`, its "Assume sent": assume they were sent.',
         },
       ],
       errors: [
@@ -1948,9 +1948,9 @@ export function createRouter({
       path: "/api/suppressions/:email",
       access: "admin",
       resource: "suppressions",
-      title: "Clear a suppression",
-      summary: "Clear an address's suppression, so it may be mailed again.",
-      description: `${SUBSCRIBER_ACTIONS.clear.when} A deliberate, rare act, on the publisher's word. An erasure's marker is never cleared here; an erasure that found a block keeps the block, and clearing it clears the address. Answers \`cleared: false\` when there was no suppression.`,
+      title: "Unblock or clear an address",
+      summary: "Lift an address's suppression, so it may be mailed again.",
+      description: `Both of the editor's acts that lift a suppression: "Unblock" for the publisher's own block, when they decide to mail the address again, and "Clear" for a bounce or a complaint. ${SUBSCRIBER_ACTIONS.clear.when} Either is a deliberate, rare act, on the publisher's word. An erasure's marker is never cleared here; an erasure that found a block keeps the block, and clearing it clears the address. Answers \`cleared: false\` when there was no suppression.`,
       example: { response: { email: "reader@example.com", cleared: true } },
       errors: [{ code: "erasure_marker" }],
       handler: suppressionRoutes.clear,
@@ -1971,7 +1971,7 @@ export function createRouter({
     },
 
     // --- public reader routes (token-scoped; no login) ---
-    // The front door: a self-contained landing page, never a bounce to the
+    // The front door: a self-contained home page, never a bounce to the
     // Access-gated admin SPA at /dashboard (SPEC §11). Kept public here — the one
     // explicit non-admin surface.
     {
@@ -1979,9 +1979,9 @@ export function createRouter({
       path: "/",
       access: "public",
       resource: "archive",
-      title: "Show the landing page",
+      title: "Show the home page",
       summary:
-        "The newsletter's public landing page: identity, the latest post, and a subscribe call to action.",
+        "The newsletter's public home page: identity, the latest post, and a subscribe call to action.",
       handler: archiveRoutes.landing,
     },
     {

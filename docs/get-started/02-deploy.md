@@ -202,7 +202,7 @@ This deploys the release your instance runs, with your settings. The output ends
 
     In a browser, `https://newsletter.example.com/dashboard/` says the editor is locked until you set up Access. That's expected.
 
-1. In a browser, `https://newsletter.example.com/` shows the newsletter's public landing page. Its subscribe page, `/subscribe`, says signups aren't open yet, until Connect Amazon SES.
+1. In a browser, `https://newsletter.example.com/` shows the newsletter's public home page. Its subscribe page, `/subscribe`, says signups aren't open yet, until Connect Amazon SES.
 
 If the public pages instead say the newsletter is temporarily unavailable, and `/health` answers `500` with a body like `{"error":"invalid_config","variable":"APP_ORIGIN",…}`, the setting it names is missing, malformed, or still on `example.com`. Fix it in `wrangler.jsonc`, commit, and deploy again.
 

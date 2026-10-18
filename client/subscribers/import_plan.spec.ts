@@ -110,7 +110,7 @@ describe("rowDifferences", () => {
       {
         row: 5,
         email: "b@x.com",
-        planned: "Blocked by a suppression here",
+        planned: "Already suppressed here",
         applied: "Imported as subscribed",
       },
     ]);

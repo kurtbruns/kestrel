@@ -388,7 +388,8 @@ const SEND_FIELDS: ReferenceField[] = [
   {
     name: "email_only",
     type: "boolean",
-    description: "The post's listing: true when left out of the archive.",
+    description:
+      "The post's listing: true when left out of the archive. The editor's \"Include in archive\", unchecked.",
   },
   {
     name: "web_link",
@@ -559,7 +560,7 @@ const POST_FIELDS: ReferenceField[] = [
     name: "email_only",
     type: "boolean",
     description:
-      "The listing: true when mailed but left out of the archive index and landing page, its archive address answering nothing. Changes in any state.",
+      'The listing: true when mailed but left out of the archive index and home page, its archive address answering nothing. The editor\'s "Include in archive", unchecked. Changes in any state.',
   },
   {
     name: "unlisted_token",

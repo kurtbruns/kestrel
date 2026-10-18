@@ -64,7 +64,7 @@ describe("archive / view-in-browser", () => {
     // so it's left out; one outside a region becomes the generic link (tested below).
     expect(body).not.toContain(UNSUB_SENTINEL);
     // The browser-only masthead replaces its inert anchor and links back to the archive
-    // index (same origin as the post), not the app landing page.
+    // index (same origin as the post), not the app's home page.
     expect(body).not.toContain(ARCHIVE_MASTHEAD_ANCHOR);
     expect(body).toContain('class="k-mast"');
     expect(body).toContain('href="http://localhost:8787/archive"');
@@ -229,7 +229,7 @@ async function publish(subject: string, startedAt: number): Promise<posts.PostRo
   return post;
 }
 
-describe("landing page (the public front door, §5)", () => {
+describe("home page (the public front door, §5)", () => {
   it("features the latest post over the recent ones, linking to canonical archive URLs", async () => {
     const older = await publish("The Older One", 1_000);
     const newer = await publish("The Newer One", 2_000);
@@ -349,7 +349,7 @@ describe("a post is published when its send starts (§5)", () => {
     };
   }
 
-  it("serves a send still going out at its archive URL, in the index and on the landing page, dated by its start", async () => {
+  it("serves a send still going out at its archive URL, in the index and on the home page, dated by its start", async () => {
     const { post, sendId } = await frozenPost("Going Out");
     await setRow(sendId, { status: "sending", started_at: JAN_5 });
     const send = (await env.DB.prepare("SELECT rendered_html FROM sends WHERE id = ?")
@@ -406,7 +406,7 @@ describe("a post is published when its send starts (§5)", () => {
 describe("reader surface — no admin link once deployed (§11)", () => {
   const identity = { name: "The Publication" };
 
-  it("landing page omits the dashboard link when devDashboardUrl is unset", async () => {
+  it("home page omits the dashboard link when devDashboardUrl is unset", async () => {
     const withLink = await landingPage({
       identity,
       subscribeUrl: "https://app.example/subscribe",
@@ -994,7 +994,7 @@ describe("a publication with no name (SPEC §9)", () => {
     }
   });
 
-  it("titles the landing page and the archive index without a name", async () => {
+  it("titles the home page and the archive index without a name", async () => {
     await publish("A Post", 1_000);
     for (const [path, title] of [
       ["/", "Home"],
@@ -1012,7 +1012,7 @@ describe("a publication with no name (SPEC §9)", () => {
     }
   });
 
-  it("titles the landing page and the archive index by the name when there is one", async () => {
+  it("titles the home page and the archive index by the name when there is one", async () => {
     await publish("A Post", 1_000);
     expect(titleOf(await (await fetchWith(NAMED, "/")).text())).toBe("Birds Weekly");
     expect(titleOf(await (await fetchWith(NAMED, "/archive")).text())).toBe(

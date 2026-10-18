@@ -38,7 +38,7 @@ Kestrel is one publication, written by one person, through two clients (this edi
 
 ### What this covers
 
-The **admin UI**: the editor and authoring screens behind auth, at `/dashboard`. The reader surface (the landing page, the archive, post pages, and the subscribe, confirm, and unsubscribe pages) belongs to SPEC §5 and §11 and is not styled from these tokens.
+The **admin UI**: the editor and authoring screens behind auth, at `/dashboard`. The reader surface (the home page, the archive, post pages, and the subscribe, confirm, and unsubscribe pages) belongs to SPEC §5 and §11 and is not styled from these tokens.
 
 Two pieces of the app's own chrome do appear on reader pages, and only the publisher ever sees them: the dev-only **Open dashboard** pill on a local instance (SPEC §5), and the strip across the top of a test's unsubscribe pages, saying they only show what a subscriber would see (SPEC §7). Both are the app speaking to the publisher, not the publication, so they wear the brand accent rather than the reader's ink. The strip runs the window's full width above the publication's masthead, so the masthead beneath it is exactly the one a reader gets.
 
@@ -108,7 +108,7 @@ Each screen below is described top to bottom, then its own rules.
 
 ### Dashboard
 
-The landing page, ordered by urgency:
+The editor's first screen, ordered by urgency:
 
 1. **Head**: the publication's name and tagline, and **New post** (Primary).
 2. **Health block**, only when something needs attention (§4).
@@ -247,7 +247,7 @@ A file the server refuses (not in the format, a value it doesn't take, too many 
 
 - **The file row**: name, which kind of file, rows and distinct addresses, and **Replace file** (Ghost), which opens the picker again and plans the new file from the start: its boxes unticked, and a plain list's answer back to Subscribed.
 - **For a plain list**, "These addresses are **Subscribed | Unsubscribed | Bounced**", which plans again when changed, and a line that how they joined is recorded as unknown.
-- **What will happen**: one line per outcome with a count, in reading order (who joins, who leaves, what else the file does, what it leaves out), the first confirming line carrying its breakdown by opt-in and origin. Addresses blocked by a suppression here and readers this list keeps as they are (unsubscribed here, or confirmed here after the file says they left) sit apart under "Kept as they are here", so nobody reads them as imported. A row that also adds a suppression is said once beneath, not counted twice. **Download the N rows not imported as subscribed (CSV)** (Ghost) gives each row's number, address, and outcome. The plan's advice to move to Workers Paid, when it has one, is the list notice's amber box (§4), in the plan's words.
+- **What will happen**: one line per outcome with a count, in reading order (who joins, who leaves, what else the file does, what it leaves out), the first confirming line carrying its breakdown by opt-in and origin. Addresses suppressed here and readers this list keeps as they are (unsubscribed here, or confirmed here after the file says they left) sit apart under "Kept as they are here", so nobody reads them as imported. A row that also adds a suppression is said once beneath, not counted twice. **Download the N rows not imported as subscribed (CSV)** (Ghost) gives each row's number, address, and outcome. The plan's advice to move to Workers Paid, when it has one, is the list notice's amber box (§4), in the plan's words.
 - **Confirm**: a box per scheduled send that would grow ("“Owls”, sending Oct 14, 9:00 AM, goes to 25 more people."), then the attestation in the plan's words, both unticked, and under it "Only import people who asked to receive [publication]. If you’re unsure about some, take them out of the file before importing.", naming the publication as the plan's attestation does When nobody is imported as subscribed there's nothing to attest, and the card says so. Then Cancel (back to Subscribers) and **Import** (Primary).
 
 Import stays enabled. Pressing it with a box unticked marks that box with why it's needed and moves focus there, the first missing one down the page, as Schedule does with an empty subject (§3, Editor). If the commit comes back `plan_stale` (another import landed, or the scheduled posts it would grow changed), the page plans the file again, shows the new plan with its boxes unticked, and says above the actions, with focus there: "Your list or its scheduled posts changed since this plan, so here is the plan again as things stand now. Review it, then import." The commit always sends the plan on screen and the file it was made from, and Import is unavailable while a plain list's new answer is being planned. Any other refusal of the commit goes above the actions too, in the server's words, like a dialog error (§5). The file stays only in the page: nothing is stored between the plan and the commit.

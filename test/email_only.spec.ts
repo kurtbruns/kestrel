@@ -1,5 +1,5 @@
 // Email only (SPEC §5): a post mailed as usual but left out of the archive index and the
-// landing page, its archive address answering nothing. The listing is the post's, chosen when
+// home page, its archive address answering nothing. The listing is the post's, chosen when
 // it is scheduled and changeable after, a sent post's included, and never part of the frozen
 // copy (I3). What each address answers is test/unlisted_links.spec.ts.
 
@@ -132,7 +132,7 @@ describe("a post's listing (SPEC §5)", () => {
 });
 
 describe("the public pages and an email-only post (SPEC §5)", () => {
-  it("leave it out of the archive index and the landing page, and list the others", async () => {
+  it("leave it out of the archive index and the home page, and list the others", async () => {
     await sendPost("Listed Owls", false);
     await sendPost("Quiet Gulls", true);
     for (const path of ["/archive", "/"]) {

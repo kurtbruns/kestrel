@@ -19,7 +19,7 @@ function headers(formAction: string): Readonly<Record<string, string>> {
   };
 }
 
-/** Headers for a page the app wrote itself (the landing page, the archive index, the
+/** Headers for a page the app wrote itself (the home page, the archive index, the
  *  subscribe, confirm, and unsubscribe pages): its own forms post back to the app. */
 export const PAGE_SECURITY_HEADERS = headers("'self'");
 

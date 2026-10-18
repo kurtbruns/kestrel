@@ -52,7 +52,7 @@ describe("reader and preview pages", () => {
     expect(csp).toContain("form-action 'none'");
   });
 
-  it("serve the landing page, the archive index, a not-found post, and the subscribe, confirm, and unsubscribe pages the same way", async () => {
+  it("serve the home page, the archive index, a not-found post, and the subscribe, confirm, and unsubscribe pages the same way", async () => {
     for (const path of [
       "/",
       "/archive",

@@ -1,5 +1,5 @@
 /**
- * Public reader pages: the landing page at `/` (§5 front door — identity + a
+ * Public reader pages: the home page at `/` (§5 front door — identity + a
  * subscribe CTA, never a bounce to admin), the archive index at the archive base
  * path (every published post listed in the archive), and each post page — a started Send's frozen rendered_html,
  * the reviewed, delivered copy (I3), with edits that leave the content untouched and
@@ -45,7 +45,7 @@ export function formatPublishedDate(ms: number): string {
   });
 }
 
-/** The public front door (§5): a landing page featuring the latest post over a few
+/** The public front door (§5): a home page featuring the latest post over a few
  *  recent ones, with the publication identity and a subscribe call to action. Never
  *  bounces a visitor toward an admin path (§11). */
 export async function landing(c: RequestContext): Promise<Response> {

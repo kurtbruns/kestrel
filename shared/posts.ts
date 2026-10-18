@@ -48,7 +48,7 @@ export interface Post {
   status: PostStatus;
   /**
    * The post's listing (SPEC §5): true when it is email only, mailed as usual but left out of
-   * the archive index and the landing page, its archive address answering nothing; false,
+   * the archive index and the home page, its archive address answering nothing; false,
    * the default, when it is listed in the archive. Not part of the frozen render, so it can
    * change in any state, a sent post's included (`PUT /api/posts/:id/settings`).
    */

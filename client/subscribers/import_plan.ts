@@ -72,8 +72,8 @@ const OUTCOME_WORDS: { outcome: ImportOutcome; one: string; many: string; kept?:
   },
   {
     outcome: "blocked_by_suppression",
-    one: "address is blocked by a suppression here, so it isn’t imported",
-    many: "addresses are blocked by a suppression here, so they aren’t imported",
+    one: "address is suppressed here, so it isn’t imported",
+    many: "addresses are suppressed here, so they aren’t imported",
     kept: true,
   },
   {
@@ -144,7 +144,7 @@ const OUTCOME_SHORT: Record<ImportOutcome, string> = {
   left_out: "Left out",
   invalid: "Invalid",
   merged: "Folded into an earlier row",
-  blocked_by_suppression: "Blocked by a suppression here",
+  blocked_by_suppression: "Already suppressed here",
   kept_unsubscribed: "Kept unsubscribed",
   kept_confirmed_newer: "Kept confirmed",
 };
