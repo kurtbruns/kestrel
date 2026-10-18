@@ -277,6 +277,33 @@ describe("API reference is generated from the route registration", () => {
     ]);
   });
 
+  it("documents every field a route's example answers, so no answer carries a field the reference leaves out", () => {
+    // A route's example is the answer as a client reads it; each of its top-level fields is
+    // the returned object (under `as`) or one of the route's own `fields`. An answer that is
+    // the object itself is held to the object's own description, above.
+    const gaps = defs.flatMap((d) => {
+      const response = d.example?.response;
+      const r = d.returns;
+      if (
+        !r ||
+        (r.object && !r.as) ||
+        typeof response !== "object" ||
+        response === null ||
+        Array.isArray(response)
+      ) {
+        return [];
+      }
+      const documented = new Set([
+        ...(r.as ? [r.as] : []),
+        ...(r.fields ?? []).flatMap((f) => f.name.split(", ").map((n) => n.split(".")[0])),
+      ]);
+      return Object.keys(response)
+        .filter((k) => !documented.has(k))
+        .map((k) => `${d.method} ${d.path} ${k}`);
+    });
+    expect(gaps).toEqual([]);
+  });
+
   it("lists the refusals each route gives of its own, with the status its code carries", () => {
     // Each route that refuses with a state of its own declares it, so a client can expect the
     // refusal rather than read it as a failure. A route's codes are typed against the registry

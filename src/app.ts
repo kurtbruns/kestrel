@@ -22,7 +22,7 @@ import { UNLISTED_PATH } from "../shared/archive_url";
 import { FREE_PLAN_LIST } from "../shared/free_plan";
 import { IMPORT_LIMITS } from "../shared/imports";
 import type { ReferenceField, ReferenceResponse } from "../shared/reference";
-import { formatLead, MIN_LEAD_FLOOR_MS } from "../shared/sends";
+import { type DeliveryListResponse, formatLead, MIN_LEAD_FLOOR_MS } from "../shared/sends";
 import type { TemplateTestResponse } from "../shared/settings";
 import { SUBSCRIBER_ACTIONS } from "../shared/subscriber_meanings";
 import { buildInfo } from "./build";
@@ -1373,13 +1373,13 @@ export function createRouter({
           ],
           view: "failures",
           page: { total: 1, limit: 50, offset: 0, sort: "email", dir: "asc" },
-        },
+        } satisfies DeliveryListResponse,
       },
       returns: {
         fields: [
           {
             name: "deliveries",
-            type: "object[]",
+            type: "{ email, status, event, event_detail, event_at, error, attempts, bounce_kind }[]",
             description:
               "One row a recipient, as the record holds it: `email`; `status`, the hand-off (`pending`, `dispatched` awaiting the provider's answer, `accepted`, `unsent`, `skipped`); `event`, what the provider reported after (`delivered`, `bounced`, `complained`, or null), which a row counts under in place of `accepted`; `event_detail` and `event_at`; `error`, the last failed hand-off's words; `attempts`, its hand-offs tried; and `bounce_kind` (`hard` or `soft`) on a bounce.",
           },
@@ -1388,6 +1388,7 @@ export function createRouter({
             type: "string",
             description: "The view read, `failures` when none was asked.",
           },
+          pageField,
         ],
       },
       handler: sendRoutes.deliveries,
