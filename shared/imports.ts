@@ -745,21 +745,24 @@ export const EXAMPLE_CSV_NAME = "kestrel-import-example.csv";
 export const EXAMPLE_TXT_NAME = "kestrel-import-example.txt";
 
 /**
- * What an import does to one address (SPEC §7), after its repeats are folded together. A row
- * that changes its status and adds a suppression reports its status outcome and
- * `suppression_added: true`; `suppression_added` as the outcome is a row whose only effect
- * is the suppression.
+ * What an import does to one address (SPEC §7), after its repeats are folded together. Each
+ * is named in one form, the past tense of its effect, so the editor and Claude can relay it
+ * as it stands: `added_…` for a new subscriber, `kept_…` where the row's status isn't
+ * applied because this list's own record or a suppression wins (for `kept_suppressed`, possibly
+ * the file's own erasure), and no "blocked", which means only the publisher's own block. A row that changes its
+ * status and adds a suppression reports its status outcome and `suppression_added: true`;
+ * `suppressed` as the outcome is a row whose only effect is the suppression.
  */
 export const IMPORT_OUTCOMES = [
-  "create_confirmed",
-  "confirm_pending",
+  "added_confirmed",
+  "confirmed_pending",
   "unchanged",
-  "mark_unsubscribed",
-  "create_unsubscribed",
+  "unsubscribed",
+  "added_unsubscribed",
   "kept_confirmed_newer",
   "kept_unsubscribed",
-  "blocked_by_suppression",
-  "suppression_added",
+  "kept_suppressed",
+  "suppressed",
   "left_out",
   "invalid",
   "merged",
@@ -768,23 +771,23 @@ export type ImportOutcome = (typeof IMPORT_OUTCOMES)[number];
 
 /** When each outcome applies, for the format route and the reference page. */
 export const IMPORT_OUTCOME_MEANINGS: Record<ImportOutcome, string> = {
-  create_confirmed:
+  added_confirmed:
     "`subscribed`, with no subscriber and no suppression here, and not erased in the file: added as confirmed.",
-  confirm_pending:
+  confirmed_pending:
     "`subscribed`, pending here (never confirmed), and not erased in the file: confirmed, and its confirmation link no longer works.",
   unchanged:
     "Already confirmed here, or already in the state the row claims. A subscriber who joined here keeps their own record.",
-  mark_unsubscribed:
+  unsubscribed:
     "`unsubscribed`, and confirmed or pending here, with no confirmation here newer than the row’s `unsubscribed_at`: unsubscribed.",
-  create_unsubscribed:
+  added_unsubscribed:
     "`unsubscribed`, with no subscriber here, and not erased here or in the file: recorded as unsubscribed, so the list remembers they left.",
   kept_confirmed_newer:
     "`unsubscribed`, but the reader confirmed here after the source’s `unsubscribed_at`: their newer action stands.",
   kept_unsubscribed:
     "`subscribed`, but unsubscribed here, or pending again after leaving until they confirm here themselves. An unsubscribe here is never reversed (I2).",
-  blocked_by_suppression:
+  kept_suppressed:
     "`subscribed`, but the address carries a suppression here, a do-not-contact marker included: never added or confirmed. Also `unsubscribed` for an address whose suppression here is the do-not-contact marker an erasure left, and, for an address erased in the file (its `suppression` is `erased`, which is still added), `subscribed` or `unsubscribed` with no subscriber here, or `subscribed` and pending here, which stays pending: no subscriber is recorded or confirmed, so an import never brings back an erased person’s data.",
-  suppression_added:
+  suppressed:
     "The row carries a suppression and the address has none here (or only a do-not-contact marker, which a bounce, a complaint, or a manual suppression replaces), and nothing else changes. Applied whatever the row’s `status`.",
   left_out:
     "`pending` or `none` with nothing to apply: counted, never confirmed. An import sends no email.",
@@ -794,8 +797,8 @@ export const IMPORT_OUTCOME_MEANINGS: Record<ImportOutcome, string> = {
 
 /** The outcomes that confirm someone, which need the publisher's attestation. */
 export const CONFIRMING_OUTCOMES: ReadonlySet<ImportOutcome> = new Set([
-  "create_confirmed",
-  "confirm_pending",
+  "added_confirmed",
+  "confirmed_pending",
 ]);
 
 /** The publisher's attestation, at the version the plan returns. `[publication]` names theirs. */

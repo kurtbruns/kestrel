@@ -135,12 +135,11 @@ export function composeNotification(n: DueNotification, config: Config): Rendere
  * import's record, which holds no address.
  */
 export function composeImportNotification(n: DueImportNotification, config: Config): RenderedEmail {
-  const counts = JSON.parse(n.counts) as Partial<OutcomeCounts>;
-  const c = (k: keyof OutcomeCounts): number => counts[k] ?? 0;
-  const confirmed = c("create_confirmed") + c("confirm_pending");
-  const unsubscribed = c("mark_unsubscribed") + c("create_unsubscribed");
+  const c = (k: keyof OutcomeCounts): number => n.counts[k];
+  const confirmed = c("added_confirmed") + c("confirmed_pending");
+  const unsubscribed = c("unsubscribed") + c("added_unsubscribed");
   const notImported =
-    c("blocked_by_suppression") +
+    c("kept_suppressed") +
     c("kept_unsubscribed") +
     c("kept_confirmed_newer") +
     c("left_out") +

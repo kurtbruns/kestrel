@@ -43,11 +43,11 @@ function planFor(name: string, over: Partial<ImportPlanResponse> = {}): ImportPl
       plain_list_status: name.endsWith(".txt") ? "subscribed" : null,
     },
     counts: counts({
-      create_confirmed: 25,
-      create_unsubscribed: 5,
+      added_confirmed: 25,
+      added_unsubscribed: 5,
       invalid: 1,
       merged: 3,
-      suppression_added: 2,
+      suppressed: 2,
     }),
     suppressions_added: 2,
     confirmed: { opt_in: { double: 0, single: 0, unknown: 25 }, origin: { mailchimp: 25 } },
@@ -55,7 +55,7 @@ function planFor(name: string, over: Partial<ImportPlanResponse> = {}): ImportPl
       {
         row: 30,
         email: "charles@example.com",
-        outcome: "create_unsubscribed",
+        outcome: "added_unsubscribed",
         suppression_added: false,
       },
     ],
@@ -74,7 +74,7 @@ function plainPlan(name: string, status: PlainListStatus): ImportPlanResponse {
   return planFor(name, {
     file: { name, kind: "txt", rows: 3, addresses: 3, plain_list_status: status },
     attestation: subscribing ? { version: 1, text: ATTEST, publication: "Birds Weekly" } : null,
-    counts: counts(subscribing ? { create_confirmed: 3 } : { suppression_added: 3 }),
+    counts: counts(subscribing ? { added_confirmed: 3 } : { suppressed: 3 }),
     plan_hash: `hash-${status}`,
   });
 }
@@ -89,10 +89,10 @@ function committed(over: Partial<ImportCommitResponse> = {}): ImportCommitRespon
       file_name: "list.csv",
       file_sha256: "ab".repeat(32),
       plan_hash: "hash-1",
-      counts: counts({ create_confirmed: 25 }),
+      counts: counts({ added_confirmed: 25 }),
       suppressions_added: 0,
     },
-    counts: counts({ create_confirmed: 25 }),
+    counts: counts({ added_confirmed: 25 }),
     suppressions_added: 0,
     rows: [],
     differed: [],
@@ -219,9 +219,9 @@ describe("import view", () => {
         reply: (req) =>
           planFor((req.json() as { file: { name: string } }).file.name, {
             counts: counts({
-              create_confirmed: 25,
+              added_confirmed: 25,
               kept_unsubscribed: 2,
-              blocked_by_suppression: 1,
+              kept_suppressed: 1,
             }),
             workers_plan_advice:
               "On the Workers Free plan’s limits, this import leaves 3,025 confirmed subscribers.",
@@ -241,13 +241,13 @@ describe("import view", () => {
     // Focus moves to the plan, where the reading starts.
     expect(document.activeElement).toBe($(".imp-file"));
     expect($$(".imp-outcomes:not(.imp-kept) li").map((li) => li.dataset.outcome)).toEqual([
-      "create_confirmed",
+      "added_confirmed",
     ]);
     expect($(".imp-breakdown").textContent).toBe(
       "Of the 25 confirmed, by opt-in: 25 opt-in unknown. From: Mailchimp 25.",
     );
     expect($$(".imp-kept li").map((li) => li.dataset.outcome)).toEqual([
-      "blocked_by_suppression",
+      "kept_suppressed",
       "kept_unsubscribed",
     ]);
     // The plan's warning is shown as the plan returns it.
@@ -263,7 +263,7 @@ describe("import view", () => {
     $("#impNotImported").click();
     expect(saved.map((f) => f.name)).toEqual(["list-not-imported.csv"]);
     expect(await saved[0]?.blob.text()).toBe(
-      "row,email,outcome,suppression_added\r\n30,charles@example.com,create_unsubscribed,no\r\n",
+      "row,email,outcome,suppression_added\r\n30,charles@example.com,added_unsubscribed,no\r\n",
     );
     expect(fake.unhandled).toEqual([]);
   });
@@ -315,7 +315,7 @@ describe("import view", () => {
       {
         method: "POST",
         path: "/api/imports",
-        reply: () => jsonResponse(committed({ counts: counts({ suppression_added: 3 }) }), 201),
+        reply: () => jsonResponse(committed({ counts: counts({ suppressed: 3 }) }), 201),
       },
     ]);
     await mount(renderImport);
@@ -501,7 +501,7 @@ describe("import view", () => {
                 {
                   row: 4,
                   email: "ada@example.com",
-                  planned: "create_confirmed",
+                  planned: "added_confirmed",
                   applied: "unchanged",
                 },
               ],
@@ -552,7 +552,7 @@ describe("import view", () => {
         reply: () =>
           jsonResponse(
             committed({
-              counts: counts({ create_confirmed: 24, kept_unsubscribed: 1 }),
+              counts: counts({ added_confirmed: 24, kept_unsubscribed: 1 }),
               rows: [
                 ...planFor("list.csv").rows,
                 {
@@ -648,7 +648,7 @@ describe("import view", () => {
         method: "POST",
         path: "/api/imports/plan",
         reply: () =>
-          planFor("left.csv", { attestation: null, counts: counts({ create_unsubscribed: 5 }) }),
+          planFor("left.csv", { attestation: null, counts: counts({ added_unsubscribed: 5 }) }),
       },
       {
         method: "POST",
@@ -657,7 +657,7 @@ describe("import view", () => {
           jsonResponse(
             committed({
               import: { ...committed().import, attestation_version: null },
-              counts: counts({ create_unsubscribed: 5 }),
+              counts: counts({ added_unsubscribed: 5 }),
             }),
             201,
           ),

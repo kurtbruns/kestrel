@@ -8,6 +8,7 @@
  * of it, so a notification that fails cannot change what a send does (I1 to I6).
  */
 
+import type { OutcomeCounts } from "../../shared/imports";
 import type { HaltCause, HaltReason } from "../../shared/sends";
 import type {
   NotificationKind,
@@ -16,6 +17,7 @@ import type {
   SendNotificationKind,
 } from "../../shared/settings";
 import { MISSED_THRESHOLD_MS, NOTIFY_HORIZON_MS, STUCK_THRESHOLD_MS } from "../lib/time";
+import { readOutcomeCounts } from "./import_counts";
 import { SEND_IDLE_SINCE, stuckSendSql, WEDGED_SEND } from "./sends";
 
 export type { NotificationKind };
@@ -59,8 +61,8 @@ export interface DueImportNotification {
   file_name: string;
   created_at: number;
   attestation_version: number | null;
-  /** JSON: rows by outcome. */
-  counts: string;
+  /** Rows by outcome. */
+  counts: OutcomeCounts;
   suppressions_added: number;
 }
 
@@ -203,7 +205,7 @@ export async function dueNotifications(db: D1Database, limit: number): Promise<D
         file_name: r.file_name as string,
         created_at: r.created_at as number,
         attestation_version: r.attestation_version as number | null,
-        counts: r.counts as string,
+        counts: readOutcomeCounts(r.counts as string),
         suppressions_added: r.suppressions_added as number,
       };
     }

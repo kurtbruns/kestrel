@@ -43,7 +43,7 @@ The authority on the import format is the "The file format" section of the publi
 
 7. **If `sends_growing` isn't empty, stop here,** before asking for an attestation, and handle it as the next section says.
 
-8. **Put the plan to the publisher:** the counts by outcome, the confirmed rows by opt-in and origin, the invalid and left-out rows, and anything the plan warns about. When the plan returns `attestation`, put its `text` to them exactly as returned, word for word, and ask whether it's true. Commit only on their yes, given for this piece.
+8. **Put the plan to the publisher:** the counts by outcome, each by its name as the plan gives it (a `kept_…` outcome means the row's status isn't imported: this list's own record wins, or for `kept_suppressed` a suppression does, which may be the file's own `erased`, so don't tell the publisher their list overrode the file without checking which), the confirmed rows by opt-in and origin, the invalid and left-out rows, and anything the plan warns about. When the plan returns `attestation`, put its `text` to them exactly as returned, word for word, and ask whether it's true. Commit only on their yes, given for this piece.
 
 9. **Commit that piece** with `POST /api/imports`, sending the plan's body, its `plan_hash`, and, when the plan returned an attestation, `attestation` with its `version` and `accepted: true`. Report the answer's counts and any `differed` rows. Then plan the next piece: a plan made before another import commits is refused as `plan_stale`, so plan each piece only after the one before it has committed. On `plan_stale`, plan again and put the new plan to the publisher.
 

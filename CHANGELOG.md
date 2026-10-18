@@ -18,24 +18,27 @@ To move a running instance from one version to another, follow [Upgrade to a new
 |  | `settings.emailTemplate` | `settings.email_template` |
 |  | `settings.confirmationEmail`, `.confirmationEmailDefault` | `settings.confirmation_email`, `.confirmation_email_default` |
 |  | `settings.confirmationEmail.buttonLabel` | `settings.confirmation_email.button_label` |
-|  | `settings.publication.logoUrl` | `settings.publication.logo_url` |
 |  | `deployment.fromAddress`, `sendingDomain`, `appOrigin`, `archiveOrigin`, `archiveBasePath`, `mediaPublicBase`, `awsRegion` | `deployment.from_address`, `sending_domain`, `app_origin`, `archive_origin`, `archive_base_path`, `media_public_base`, `aws_region` |
 |  | `deployment.accessConfigured`, `authMode`, `notifyChannel`, `notifyFrom`, `minLeadMs`, `notConnectedPreview`, `freePlanLimits` | `deployment.access_configured`, `auth_mode`, `notify_channel`, `notify_from`, `min_lead_ms`, `not_connected_preview`, `free_plan_limits` |
 |  | `inUse`, `inUse.identityFields` (value `logoUrl`) | `in_use`, `in_use.identity_fields` (value `logo_url`) |
 |  | `notificationStatus.lastSent`, `.lastFailure` | `notification_status.last_sent`, `.last_failure` |
 |  | a 400's `field`, such as `confirmationEmail.buttonLabel` | the new path, such as `confirmation_email.button_label` |
+| `GET /api/settings` | `settings.publication.logoUrl` | `settings.publication.logo_url` |
 | `GET /api/version`, `deployment.build` | `buildTime`, `repoUrl`, `commitUrl`, `tagUrl` | `build_time`, `repo_url`, `commit_url`, `tag_url` |
 | `GET /api/whoami` | `principal.tokenId` | `principal.token_id` |
+| `GET /api/dev/token` | `runId` | `run_id` |
 | A send's `phase` | `backing-off`, `needs-attention` | `backing_off`, `needs_attention` |
 | `GET /api/posts` `sort` | `updated`, `title`, `scheduled` | `updated_at`, `subject`, `fire_at` |
 | `GET /api/sends` `sort` | `fire`, `recipients` | `fire_at`, `audience.count` |
 | `GET /api/subscribers` `sort` | `joined`, `confirmed` | `created_at`, `confirmed_at` |
 | `GET /api/sends/:id/deliveries` `sort` | `updated` | `event_at` |
 | An import plan | `daily_writes_warning` | `workers_plan_advice` (a different meaning: see Breaking) |
+| An import's outcomes: a plan's and a commit's `counts`, `rows`, and `differed`, the format's `outcomes`, a stored record | `create_confirmed`, `confirm_pending`, `mark_unsubscribed`, `create_unsubscribed`, `blocked_by_suppression`, `suppression_added` | `added_confirmed`, `confirmed_pending`, `unsubscribed`, `added_unsubscribed`, `kept_suppressed`, `suppressed` |
 
 ### Breaking
 
 - One naming rule on the wire: every JSON field and enum value is snake_case, and a list's sort key is the name of the field it sorts by. The settings (its preferences, its deploy reflection, `in_use`, and `notification_status`), the build info, `whoami`'s token id, the dev routes' `run_id`, the `backing_off` and `needs_attention` phases, and the sort keys of posts, sends, subscribers, and deliveries take their new names; the stored settings keep theirs, so no migration runs. `PUT /api/settings` refuses a field it doesn't take, naming it, where it ignored one before. The Upgrading paragraph lists every rename.
+- An import's outcomes are renamed into one form, the past tense of what the import does to the address, and none says "blocked" any more, which in the editor and the API means only your own block: `create_confirmed` is now `added_confirmed`, `confirm_pending` is `confirmed_pending`, `mark_unsubscribed` is `unsubscribed`, `create_unsubscribed` is `added_unsubscribed`, `blocked_by_suppression` is `kept_suppressed`, and `suppression_added` (as an outcome, not the row's field of that name) is `suppressed`. They change in an import plan's and a commit's `counts`, `rows`, and `differed`, the format route's `outcomes`, and an import's record, where one committed before this release reads under the new names too. A script that matched an old name matches the new one (SPEC §7).
 - An import plan's `daily_writes_warning` is now `workers_plan_advice`, and means something else: on the Workers Free plan's limits, the advice to move to Workers Paid when the import would leave more than 1,000 confirmed subscribers, rather than a count of the day's database writes. A script that read the old field reads the new one (SPEC §7).
 
 ### Added
@@ -58,13 +61,14 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 - The API reference and the operator's Claude context name the editor's words where the API's differ, so Claude and the publisher talk about the same thing: `email_only` is the editor's **Include in archive**, unchecked; **Edit schedule** is a reschedule and the post's settings together, so a publisher asking to edit the schedule may mean either or both; and Resolve's `unsent` and `accepted` are **Assume not sent** and **Assume sent**, which Claude now uses when it asks the publisher to choose. `npm run check-context` offers the context's change to an existing instance.
 - Three API reference routes are retitled to match the editor: `DELETE /api/suppressions/:email` is "Unblock or clear an address", since it is both the editor's **Unblock** and its **Clear**, and its description now covers both; `PUT /api/posts/:id/settings` is "Change a post's settings"; and `GET /` is "Show the home page", the name the editor and the docs already give the page at `/`, which SPEC, DESIGN, the reference, and the setup guide now use too.
+- The operator's Claude context: the migrate-list skill relays each import outcome by the name the plan gives it, now that the names read as they stand, and says a `kept_…` outcome means the row's status isn't imported because the list's own record or a suppression wins, which for `kept_suppressed` may be the file's own erasure, so Claude doesn't tell the publisher their list overrode the file when it didn't. `npm run check-context` offers the change to an existing instance.
 - A send that needs your decision on deliveries no one can confirm now says so on its page ("Some deliveries can’t be confirmed either way, and wait on your decision.") instead of calling them stuck, which the API uses for something else. An import plan says an address is already suppressed here, rather than blocked, since in the editor blocked means only your own block.
 
 ### Fixed
 
 - A send stuck awaiting Resolve that still carried an earlier refusal of the account is no longer emailed to the publisher as the provider refusing the account. Nothing retries such a send, so the editor and the API showed only that it waits for Resolve, and the email now agrees (SPEC §8).
 - A send's cached answer (`If-None-Match` on `GET /api/sends/:id`) no longer keeps a client on a stale time to finish: the tag now changes when the dispatch rate or the expected finish does.
-- The API reference's description of a send's `phase` said `needs-attention` covers a missed or stuck send, which stay `due` and `progressing` (their conditions say so), and that `backing-off` is only an outage or rate limit, when it also covers recipients waiting on a retry. It now also says which phases each `status` has, and that `status` is the one to filter and route on.
+- The API reference's description of a send's `phase` said `needs_attention` covers a missed or stuck send, which stay `due` and `progressing` (their conditions say so), and that `backing_off` is only an outage or rate limit, when it also covers recipients waiting on a retry. It now also says which phases each `status` has, and that `status` is the one to filter and route on.
 
 ## [1.12.0] - 2026-10-16
 
