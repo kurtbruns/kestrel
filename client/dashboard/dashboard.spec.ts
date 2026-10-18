@@ -66,9 +66,9 @@ const none: SubscriberCounts = { pending: 0, confirmed: 0, unsubscribed: 0, supp
 const config = () =>
   settingsResponse({
     settings: {
-      publication: { name: "Birds Weekly", tagline: "Owls & more", address: "", logoUrl: "" },
+      publication: { name: "Birds Weekly", tagline: "Owls & more", address: "", logo_url: "" },
     },
-    deployment: { archiveOrigin: "https://birds.example" },
+    deployment: { archive_origin: "https://birds.example" },
   });
 
 // The dashboard's world: the posts and subscribers it reads once, and a stateful send server
@@ -252,11 +252,11 @@ describe("dashboard", () => {
   it("raises an amber line for a rate limit the deployment causes itself, and none for an ordinary outage (SPEC §12)", async () => {
     const srv = sendServer();
     srv.put(sending({ id: "t1", subject: "Terns", c_pending: 5 }), {
-      phase: "backing-off",
+      phase: "backing_off",
       conditions: [condition.unavailable(true)],
     });
     srv.put(sending({ id: "o1", subject: "Owls", c_pending: 5 }), {
-      phase: "backing-off",
+      phase: "backing_off",
       conditions: [condition.unavailable(false)],
     });
     fake = world([post()], srv);
@@ -275,7 +275,7 @@ describe("dashboard", () => {
     // thirty-one is, and a send due six minutes ago is past the missed tolerance.
     const srv = sendServer([scheduled({ id: "m1", post_id: "p9", fire_at: NOW - 6 * 60_000 })]);
     srv.put(sending({ id: "w1", subject: "Kinglets", c_pending: 0, c_in_flight: 2 }), {
-      phase: "needs-attention",
+      phase: "needs_attention",
       conditions: [condition.wedged(2, "w1")],
     });
     srv.put(sending({ id: "ok1", c_pending: 5, started_at: NOW - 11 * 60_000 }));
@@ -380,7 +380,7 @@ describe("dashboard", () => {
         halt_cause: "outage",
         halt_error: "503",
       }),
-      { phase: "backing-off" },
+      { phase: "backing_off" },
     );
     fake = world([post()], srv);
     await mount(renderDashboard);
@@ -599,7 +599,7 @@ describe("dashboard", () => {
 
     it("counts several held sends, and in the local preview names the restart instead", async () => {
       withProvider("none");
-      appState.appConfig!.deployment.notConnectedPreview = true; // SIMULATE_SENDS=not-connected
+      appState.appConfig!.deployment.not_connected_preview = true; // SIMULATE_SENDS=not-connected
       fake = world([post()], sendServer([held("h1", "Swifts"), held("h2", "Terns")]), counts);
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
@@ -681,7 +681,7 @@ describe("dashboard", () => {
       unmount();
       fake.restore();
       const c = config();
-      c.settings.publication = { name: "", tagline: "", address: "", logoUrl: "" };
+      c.settings.publication = { name: "", tagline: "", address: "", logo_url: "" };
       appState.appConfig = c;
       fake = world([post()], sendServer(), none);
       await mount(renderDashboard);
@@ -858,7 +858,7 @@ describe("dashboard", () => {
         halt_error: "ses 429 TooManyRequestsException: Daily message quota exceeded.",
         halted_at: Date.now(),
       },
-      { phase: "needs-attention" },
+      { phase: "needs_attention" },
     );
     await vi.advanceTimersByTimeAsync(3000);
     expect($(".health.red").textContent).toMatch(
@@ -880,7 +880,7 @@ describe("dashboard", () => {
   it("keeps a wedged send's red line until Resolve lets it finish, then shows it sent", async () => {
     const srv = sendServer();
     srv.put(sending({ id: "w1", subject: "Kinglets", c_accepted: 99, c_in_flight: 1 }), {
-      phase: "needs-attention",
+      phase: "needs_attention",
       conditions: [condition.wedged(1, "w1")],
     });
     fake = world([post()], srv);

@@ -34,7 +34,7 @@ export function roomShell(active: RoomSurface, rail: Html | null, main: Html): H
   // time rides the tooltip. Build info lives in the app's own room (and at GET
   // /api/version), never in the publisher-facing dashboard.
   const parts = buildRefParts();
-  const bt = appState.appConfig?.deployment.build.buildTime;
+  const bt = appState.appConfig?.deployment.build.build_time;
   const built = bt
     ? `Built ${new Date(bt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`
     : null;

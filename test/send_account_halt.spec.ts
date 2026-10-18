@@ -72,7 +72,7 @@ describe("a send that comes due during an account refusal", () => {
       c_in_flight: 0,
     });
     const prog = viewOf(waiting, "ses", false, Date.now());
-    expect(prog.phase).toBe("needs-attention");
+    expect(prog.phase).toBe("needs_attention");
     expect(condition(prog, "refused")?.retry_at).toBe(held.halt_retry_at);
     expect(has(prog, "stuck")).toBe(false);
     expect(await notified("refused")).toEqual([first.id]);
@@ -139,7 +139,7 @@ describe("a send that comes due during an outage the provider went silent in", (
       (await row(first.id)).halt_retry_at,
     ]);
     const prog = viewOf(waiting, "ses", false, Date.now());
-    expect([prog.phase, prog.dispatch.eta_ms]).toEqual(["backing-off", null]);
+    expect([prog.phase, prog.dispatch.eta_ms]).toEqual(["backing_off", null]);
   });
 });
 

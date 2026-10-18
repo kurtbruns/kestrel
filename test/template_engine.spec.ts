@@ -204,10 +204,10 @@ describe("email-only regions ({{ if .IsEmail }} … {{ end }})", () => {
 
 describe("identityFieldsInUse", () => {
   it("reads the logo token as rendering the logo and, as its alt text, the name", () => {
-    expect(identityFieldsInUse("{{ .Publication.Logo }}")).toEqual(["logoUrl", "name"]);
+    expect(identityFieldsInUse("{{ .Publication.Logo }}")).toEqual(["logo_url", "name"]);
     expect(identityFieldsInUse(DEFAULT_EMAIL_TEMPLATE).sort()).toEqual([
       "address",
-      "logoUrl",
+      "logo_url",
       "name",
       "tagline",
     ]);

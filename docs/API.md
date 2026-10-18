@@ -36,6 +36,10 @@ When the two pull against each other, the smaller API wins, with the expectation
    - Does it protect an invariant, or a race between two acts of the same person? If the latter, principle 4 applies.
    - Can it be explained in one sentence of the API reference?
 
+## Names on the wire
+
+Every JSON field name and every enum value is snake_case: `fire_at`, `email_only`, `needs_attention`, in a request body and in an answer alike. A query parameter's name and value are snake_case too, and a list's `sort` is the name of the field it sorts by, a dotted path when that field is nested (`audience.count`), never a word from a column header. A path segment is a URL rather than JSON and keeps its own form (the reader-page ids, such as `not-an-email`). Claude writes a request from the reference, so one rule with no exception is one fewer name to guess, and `test/wire_names.spec.ts` walks the reference's fields, examples, enum values, query parameters, and sort keys so none drifts in. Stored data may keep another form, as the settings blob does, as long as the route maps it to these names.
+
 ## Resources
 
 | Resource | What it is | Notes |
@@ -48,7 +52,7 @@ When the two pull against each other, the smaller API wins, with the expectation
 | Subscriber | An address, its consent state, its suppression, and how it joined | Paged. Erasing one removes it and answers with what was done, not the resource, since nothing of it is left. The whole list also reads out as an export, a page at a time in the import format's rows: a file format, not a second shape of the subscriber. On Workers Free's limits, a list past what that plan suits carries `workers_plan_advice`, the server's words advising a larger plan, to show as they stand (SPEC §8). |
 | Suppression | An address that isn't mailed, whatever its consent state, and why | Its reason says whose decision it was: the provider's, an import's, an erasure's, or a block by hand, the publisher's own or one an import brought. A client adds only a block; a bounce or complaint is the provider's to report and an erasure's marker is Erase's to leave. Clearing refuses an erasure's marker; an erasure that found a block already on the address keeps the block instead, so clearing that block clears the address. What each reason and each act on a subscriber means is in the reference, in the editor's own words. |
 | Import | A plan of what bringing a list in would do, and the record of one committed | A plan writes nothing. The record never holds a subscriber's address. A `subscribed` or `unsubscribed` row for an address whose suppression is an erasure's `erased` marker, or that the row itself says was erased, plans and applies as `blocked_by_suppression`, so an import never creates a subscriber for it. A plan that would take the list past what Workers Free suits carries its own `workers_plan_advice`, the same advice worded for the import, outside the plan's hash. |
-| Settings | The runtime preferences (SPEC §9) | One resource. It never holds a secret. It shows deploy configuration read-only, including whether a deployment with no provider is local development's preview of that state (`deployment.notConnectedPreview`), so a client can say how to leave it. |
+| Settings | The runtime preferences (SPEC §9) | One resource. It never holds a secret. It shows deploy configuration read-only, including whether a deployment with no provider is local development's preview of that state (`deployment.not_connected_preview`), so a client can say how to leave it. |
 
 ## Reading and following
 

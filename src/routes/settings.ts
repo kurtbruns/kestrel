@@ -1,7 +1,7 @@
 /**
  * App settings surface (authed admin). Three parts:
  *
- *   GET    /api/settings      → { settings, deployment, inUse }
+ *   GET    /api/settings      → { settings, deployment, in_use, notification_status }
  *   PUT    /api/settings      → update editable settings (merge), returns { settings, warnings, remade }
  *   POST   /api/settings/logo → upload the publication logo (multipart `file`)
  *   DELETE /api/settings/logo → remove the publication logo
@@ -14,12 +14,12 @@
  * so the editor can show what was set at deploy time and link to the setup docs
  * for how to change it. It deliberately exposes NO secrets (SPEC §9/§11): the
  * provider credentials, the Access AUD, and the dev secret never appear here.
- * `inUse` is the scheduled sends a template or identity change would re-make, and
+ * `in_use` is the scheduled sends a template or identity change would re-make, and
  * the identity fields the template renders (SPEC §9): the pre-flight a client reads
  * before saving. Every write goes through the re-make (send/remake.ts): a change
  * that reaches the email is refused until the client acknowledges those sends by id
  * (`remake`), and the response says what was re-made.
- * `notificationStatus` is how the notifications to the publisher have gone lately (SPEC
+ * `notification_status` is how the notifications to the publisher have gone lately (SPEC
  * §8): the last delivered and any newer failure, so a channel that stopped working shows
  * where its destination is set.
  */
@@ -54,6 +54,7 @@ import { type Config, onFreePlanLimits } from "../env";
 import {
   fieldError,
   type JsonObject,
+  onlyKeys,
   optObject,
   optString,
   optStringList,
@@ -79,44 +80,44 @@ import { insideLead, saveSettingsRemaking } from "../send/remake";
 export const MAX_LOGO_BYTES = 512 * 1024;
 
 /** The non-secret, deploy-time facts the editor shows read-only, and how the reader of
- *  them signed in (`authMode`, from the principal: a per-request fact, never config). */
+ *  them signed in (`auth_mode`, from the principal: a per-request fact, never config). */
 function deploymentView(cfg: Config, principal: Principal): DeploymentView {
   return {
     provider: cfg.provider,
-    fromAddress: cfg.fromAddress,
-    sendingDomain: cfg.sendingDomain,
-    appOrigin: cfg.appOrigin,
-    archiveOrigin: cfg.archiveOrigin,
-    archiveBasePath: cfg.archiveBasePath,
-    mediaPublicBase: cfg.mediaPublicBase,
-    awsRegion: cfg.awsRegion,
+    from_address: cfg.fromAddress,
+    sending_domain: cfg.sendingDomain,
+    app_origin: cfg.appOrigin,
+    archive_origin: cfg.archiveOrigin,
+    archive_base_path: cfg.archiveBasePath,
+    media_public_base: cfg.mediaPublicBase,
+    aws_region: cfg.awsRegion,
     // Booleans only — never the values.
-    accessConfigured: Boolean(cfg.accessTeamDomain && cfg.accessAud),
-    authMode: principal.via,
+    access_configured: Boolean(cfg.accessTeamDomain && cfg.accessAud),
+    auth_mode: principal.via,
     // The running build (SPEC §9), so the editor can show/link it. Build metadata,
     // resolved at build (src/build.ts) — not deploy config, and never a secret.
     build: buildInfo(),
     // How notifications reach the publisher, and their sender: deploy config, shown so
     // the publisher knows which setup a failure points at. No credential rides either.
-    notifyChannel: cfg.notifyChannel,
-    notifyFrom: cfg.notifyFrom,
+    notify_channel: cfg.notifyChannel,
+    notify_from: cfg.notifyFrom,
     // The minimum lead (SPEC §6): deploy config, so the editor floors its pickers and words
     // its copy by the value this deployment enforces instead of a number of its own.
-    minLeadMs: cfg.minLeadMs,
+    min_lead_ms: cfg.minLeadMs,
     // Which provider the local send simulation models, so a dev tool can check it before a
     // demo; null in every deployed env.
     simulation: cfg.simulation,
     // Whether `provider: "none"` is local dev's preview of not connected, so the editor
     // words its way out as a restart rather than a deploy; false in every deployed env.
-    notConnectedPreview: cfg.notConnectedPreview,
+    not_connected_preview: cfg.notConnectedPreview,
     // Whether the deployment runs on Workers Free's limits, so the Schedule dialog can warn
     // before a send D1's daily writes may not cover, in the words the send's condition uses.
-    freePlanLimits: onFreePlanLimits(cfg),
+    free_plan_limits: onFreePlanLimits(cfg),
   };
 }
 
 /** The publication identity as the clients consume it: the stored fields plus a
- *  resolved absolute `logoUrl` (the current upload's own address). The raw logo
+ *  resolved absolute `logo_url` (the current upload's own address). The raw logo
  *  metadata (its version and R2 key) is an implementation detail. */
 function publicationView(settings: AppSettings, cfg: Config): PublicationView {
   const p = settings.publication;
@@ -124,26 +125,26 @@ function publicationView(settings: AppSettings, cfg: Config): PublicationView {
     name: p.name,
     tagline: p.tagline,
     address: p.address,
-    logoUrl: publicationLogoUrl(cfg.mediaPublicBase, p.logo),
+    logo_url: publicationLogoUrl(cfg.mediaPublicBase, p.logo),
   };
 }
 
 function settingsView(settings: AppSettings, cfg: Config): SettingsView {
   return {
-    testRecipients: settings.testRecipients,
+    test_recipients: settings.testRecipients,
     publication: publicationView(settings, cfg),
     // Reflect the RESOLVED template — a blank stored value means "the built-in
     // default", so a client always receives a concrete template to show and edit.
-    emailTemplate: settings.emailTemplate.trim() ? settings.emailTemplate : DEFAULT_EMAIL_TEMPLATE,
+    email_template: settings.emailTemplate.trim() ? settings.emailTemplate : DEFAULT_EMAIL_TEMPLATE,
     // The confirmation email: the resolved (effective) copy a client shows and edits,
     // plus the built-in default so "Reset to default" needs no hardcoded copy client-side.
-    confirmationEmail: resolveConfirmationEmail(settings),
-    confirmationEmailDefault: DEFAULT_CONFIRMATION_EMAIL,
+    confirmation_email: resolveConfirmationEmail(settings),
+    confirmation_email_default: DEFAULT_CONFIRMATION_EMAIL,
     notifications: settings.notifications,
   };
 }
 
-/** The identity fields the template in effect renders: `inUse.identityFields`, and what
+/** The identity fields the template in effect renders: `in_use.identity_fields`, and what
  *  the mailing-address warning reads. */
 function renderedIdentityFields(settings: AppSettings, cfg: Config): IdentityField[] {
   return identityFieldsInUse(resolveBranding(settings, cfg).template);
@@ -157,7 +158,7 @@ async function inUseView(db: D1Database, settings: AppSettings, cfg: Config): Pr
   return {
     sends,
     retry_after: insideLead(sends, cfg.minLeadMs, Date.now()).retryAfter,
-    identityFields: renderedIdentityFields(settings, cfg),
+    identity_fields: renderedIdentityFields(settings, cfg),
   };
 }
 
@@ -166,8 +167,8 @@ export async function get(c: RequestContext): Promise<Response> {
   const body: SettingsResponse = {
     settings: settingsView(settings, c.config),
     deployment: deploymentView(c.config, unwrap(c.principal, "principal")),
-    inUse: await inUseView(c.env.DB, settings, c.config),
-    notificationStatus: await notificationStatus(c.env.DB),
+    in_use: await inUseView(c.env.DB, settings, c.config),
+    notification_status: await notificationStatus(c.env.DB),
   };
   return json(body);
 }
@@ -234,8 +235,8 @@ export async function update(c: RequestContext): Promise<Response> {
   // silently resetting to the default. (A never-set template still resolves to the
   // built-in default on read — see settingsView / resolveBranding.)
   let warnings: string[] = [];
-  if (patch.emailTemplate !== undefined) {
-    const v = validateEmailTemplate(patch.emailTemplate);
+  if (patch.email_template !== undefined) {
+    const v = validateEmailTemplate(patch.email_template);
     if (v.errors.length > 0) {
       throw badRequest(v.errors.join(" "));
     }
@@ -263,7 +264,7 @@ export async function update(c: RequestContext): Promise<Response> {
   // A template or identity save that leaves an address the template doesn't print says
   // so, whichever half of that pair the save changed.
   if (
-    (patch.emailTemplate !== undefined || patch.publication !== undefined) &&
+    (patch.email_template !== undefined || patch.publication !== undefined) &&
     settings.publication.address.trim() &&
     !renderedIdentityFields(settings, c.config).includes("address")
   ) {
@@ -338,18 +339,28 @@ export async function deleteLogo(c: RequestContext): Promise<Response> {
 }
 
 /**
- * Pick the known editable keys off the request body. A present key with the wrong type
- * is a 400 naming it (`publication.name`); the value rules (lengths, valid addresses)
- * are applyPatch's.
+ * Pick the editable keys off the request body. A key it doesn't take, or a present key with
+ * the wrong type, is a 400 naming it (`publication.name`), so a misnamed field is never a
+ * save that quietly changed nothing; the value rules (lengths, valid addresses) are
+ * applyPatch's.
  */
 function readPatch(o: JsonObject): SettingsPatch {
+  onlyKeys(o, [
+    "test_recipients",
+    "publication",
+    "email_template",
+    "confirmation_email",
+    "notifications",
+    "remake",
+  ]);
   const patch: SettingsPatch = {};
-  const testRecipients = optStringList(o, "testRecipients");
+  const testRecipients = optStringList(o, "test_recipients");
   if (testRecipients !== undefined) {
-    patch.testRecipients = testRecipients;
+    patch.test_recipients = testRecipients;
   }
   const p = optObject(o, "publication");
   if (p !== undefined) {
+    onlyKeys(p, ["name", "tagline", "address"], "publication");
     const pub: NonNullable<SettingsPatch["publication"]> = {};
     for (const k of ["name", "tagline", "address"] as const) {
       const v = optString(p, k, "publication");
@@ -359,23 +370,25 @@ function readPatch(o: JsonObject): SettingsPatch {
     }
     patch.publication = pub;
   }
-  const emailTemplate = optString(o, "emailTemplate");
+  const emailTemplate = optString(o, "email_template");
   if (emailTemplate !== undefined) {
-    patch.emailTemplate = emailTemplate;
+    patch.email_template = emailTemplate;
   }
-  const ceBody = optObject(o, "confirmationEmail");
+  const ceBody = optObject(o, "confirmation_email");
   if (ceBody !== undefined) {
-    const ce: NonNullable<SettingsPatch["confirmationEmail"]> = {};
-    for (const k of ["subject", "body", "buttonLabel", "reassurance"] as const) {
-      const v = optString(ceBody, k, "confirmationEmail");
+    onlyKeys(ceBody, ["subject", "body", "button_label", "reassurance"], "confirmation_email");
+    const ce: NonNullable<SettingsPatch["confirmation_email"]> = {};
+    for (const k of ["subject", "body", "button_label", "reassurance"] as const) {
+      const v = optString(ceBody, k, "confirmation_email");
       if (v !== undefined) {
         ce[k] = v;
       }
     }
-    patch.confirmationEmail = ce;
+    patch.confirmation_email = ce;
   }
   const nBody = optObject(o, "notifications");
   if (nBody !== undefined) {
+    onlyKeys(nBody, ["to"], "notifications");
     const to = optString(nBody, "to", "notifications");
     patch.notifications = to === undefined ? {} : { to };
   }

@@ -1008,9 +1008,9 @@ describe("editor view", () => {
     beforeEach(() => {
       appState.appConfig = {
         deployment: {
-          appOrigin: "https://newsletter.example.com",
-          archiveOrigin: "https://newsletter.example.com",
-          archiveBasePath: "/archive",
+          app_origin: "https://newsletter.example.com",
+          archive_origin: "https://newsletter.example.com",
+          archive_base_path: "/archive",
         },
       } as unknown as SettingsResponse;
     });
@@ -1179,7 +1179,7 @@ describe("editor view", () => {
       { path: "/api/posts/p1", reply: () => draft() },
       {
         path: "/api/settings",
-        reply: () => ({ settings: { testRecipients: ["me@b.c", "you@b.c"] } }),
+        reply: () => ({ settings: { test_recipients: ["me@b.c", "you@b.c"] } }),
       },
       {
         method: "POST",
@@ -1208,7 +1208,7 @@ describe("editor view", () => {
     appState.appConfig = settingsResponse({ deployment: { provider: "none" } });
     await open([
       { path: "/api/posts/p1", reply: () => draft() },
-      { path: "/api/settings", reply: () => ({ settings: { testRecipients: ["me@b.c"] } }) },
+      { path: "/api/settings", reply: () => ({ settings: { test_recipients: ["me@b.c"] } }) },
     ]);
     $("#testBtn").click();
     await vi.advanceTimersByTimeAsync(0);
@@ -1227,7 +1227,7 @@ describe("editor view", () => {
       appState.appConfig = settingsResponse({ deployment: { provider } });
       await open([
         { path: "/api/posts/p1", reply: () => draft() },
-        { path: "/api/settings", reply: () => ({ settings: { testRecipients: [] } }) },
+        { path: "/api/settings", reply: () => ({ settings: { test_recipients: [] } }) },
       ]);
       $("#testBtn").click();
       await vi.advanceTimersByTimeAsync(0);
@@ -1242,7 +1242,7 @@ describe("editor view", () => {
   it("names a test recipient that isn't an address and sends nothing, instead of testing fewer people", async () => {
     await open([
       { path: "/api/posts/p1", reply: () => draft() },
-      { path: "/api/settings", reply: () => ({ settings: { testRecipients: [] } }) },
+      { path: "/api/settings", reply: () => ({ settings: { test_recipients: [] } }) },
     ]);
     $("#testBtn").click();
     await vi.advanceTimersByTimeAsync(0);
@@ -1510,7 +1510,7 @@ describe("editor view", () => {
   it("says when only some of a test's addresses were sent", async () => {
     await open([
       { path: "/api/posts/p1", reply: () => draft() },
-      { path: "/api/settings", reply: () => ({ settings: { testRecipients: [] } }) },
+      { path: "/api/settings", reply: () => ({ settings: { test_recipients: [] } }) },
       {
         method: "POST",
         path: "/api/posts/p1/test",
@@ -1535,7 +1535,7 @@ describe("editor view", () => {
       "The provider refused it: ses 400 MessageRejected: Email address is not verified. Sending to this address again gets the same answer until what the provider names is fixed.";
     await open([
       { path: "/api/posts/p1", reply: () => draft() },
-      { path: "/api/settings", reply: () => ({ settings: { testRecipients: [] } }) },
+      { path: "/api/settings", reply: () => ({ settings: { test_recipients: [] } }) },
       {
         method: "POST",
         path: "/api/posts/p1/test",
@@ -2058,7 +2058,9 @@ describe("editor view", () => {
 
   describe("on Workers Free's limits, a send D1's daily writes may not cover (SPEC §8)", () => {
     async function openWithAudience(total: number, freePlanLimits: boolean) {
-      appState.appConfig = settingsResponse({ deployment: { provider: "ses", freePlanLimits } });
+      appState.appConfig = settingsResponse({
+        deployment: { provider: "ses", free_plan_limits: freePlanLimits },
+      });
       const server = draftServer(draft({ subject: "Owls" }));
       await open([
         { path: "/api/posts/p1", reply: server.get },
@@ -2103,7 +2105,7 @@ describe("editor view", () => {
   it("floors the picker and words its copy by the deployment's minimum lead, not a number of its own", async () => {
     vi.setSystemTime(new Date(2026, 8, 23, 10, 0, 30));
     appState.appConfig = {
-      deployment: { minLeadMs: 60_000 },
+      deployment: { min_lead_ms: 60_000 },
     } as unknown as SettingsResponse;
     const server = draftServer();
     await open([
@@ -2320,7 +2322,7 @@ describe("editor view", () => {
     const linked = scheduledPost(Date.now() + 86_400_000, Date.now() - 60_000);
     await open([
       ...linked.routes,
-      { path: "/api/settings", reply: () => ({ settings: { testRecipients: [] } }) },
+      { path: "/api/settings", reply: () => ({ settings: { test_recipients: [] } }) },
       {
         method: "POST",
         path: "/api/posts/p1/test",

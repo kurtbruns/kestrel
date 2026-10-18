@@ -75,7 +75,7 @@ describe("a wedged send", () => {
       expect(now.locked_until).toBeNull();
       const p = await progress(send.id);
       expect([p.phase, has(p, "wedged"), condition(p, "wedged")?.count]).toEqual([
-        "needs-attention",
+        "needs_attention",
         true,
         3,
       ]);
@@ -168,7 +168,7 @@ describe("a wedged send a receipt with no provider id reaches", () => {
     expect((await row(send.id)).rev).toBe(wedged.rev);
     const p = await progress(send.id);
     expect([p.phase, has(p, "stuck"), condition(p, "wedged")?.count]).toEqual([
-      "needs-attention",
+      "needs_attention",
       false,
       3,
     ]);
@@ -327,7 +327,7 @@ describe("a database that refuses every query partway through a send", () => {
     const p = await progress(send.id);
     expect([p.status, p.phase, condition(p, "wedged")?.count]).toEqual([
       "sending",
-      "needs-attention",
+      "needs_attention",
       10,
     ]);
     expect(p.counts.accepted).toBe(20);

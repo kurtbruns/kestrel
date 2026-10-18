@@ -21,9 +21,9 @@ export interface Publication {
 export function derivePublication(data: SettingsResponse | null): Publication {
   const p = data?.settings.publication;
   return {
-    name: publicationName(p?.name || "", data?.deployment.fromAddress ?? "") || "Your publication",
+    name: publicationName(p?.name || "", data?.deployment.from_address ?? "") || "Your publication",
     tagline: p?.tagline || "",
-    logoUrl: p?.logoUrl || null,
+    logoUrl: p?.logo_url || null,
   };
 }
 

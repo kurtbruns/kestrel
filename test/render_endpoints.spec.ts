@@ -381,7 +381,7 @@ describe("template test-send (POST /api/settings/template/test)", () => {
     const put = await SELF.fetch(`${base}/api/settings`, {
       method: "PUT",
       headers: JSON_AUTH,
-      body: JSON.stringify({ testRecipients: [dflt] }),
+      body: JSON.stringify({ test_recipients: [dflt] }),
     });
     expect(put.status).toBe(200);
 
@@ -401,7 +401,7 @@ describe("template test-send (POST /api/settings/template/test)", () => {
     await SELF.fetch(`${base}/api/settings`, {
       method: "PUT",
       headers: JSON_AUTH,
-      body: JSON.stringify({ testRecipients: [] }),
+      body: JSON.stringify({ test_recipients: [] }),
     });
     const res = await SELF.fetch(`${base}/api/settings/template/test`, {
       method: "POST",

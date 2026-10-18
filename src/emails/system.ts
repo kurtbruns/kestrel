@@ -105,7 +105,7 @@ export function confirmationEmail(
 <p><a class="k-sys-btn" href="${escapeHtmlAttr(
       confirmUrl,
     )}" style="display:inline-block;padding:12px 20px;background:#18181b;color:#ffffff;border-radius:6px;text-decoration:none;">${escapeHtml(
-      copy.buttonLabel,
+      copy.button_label,
     )}</a></p>${reassuranceHtml}`,
   );
   const reassuranceText = copy.reassurance ? `\n\n${copy.reassurance}` : "";

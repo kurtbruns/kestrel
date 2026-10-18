@@ -173,7 +173,7 @@ export const remakeIdentity = (action: string, gerund: string): RemakeVerb => ({
 
 /**
  * The standing in-use chip (DESIGN §8): the state a template or identity change would
- * reach, read from GET /api/settings `inUse`. A plain label (DESIGN §11): while a save
+ * reach, read from GET /api/settings `in_use`. A plain label (DESIGN §11): while a save
  * would be refused for a post about to send, `remakeWait` says so in words beside it.
  */
 export function inUseChip(inUse: InUseView | null | undefined): Html {

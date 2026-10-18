@@ -13,6 +13,7 @@ import { SETTLE_FOLLOW_MS } from "../send/feed";
 
 const REQUESTS = [
   "A body is JSON (`Content-Type: application/json`) unless the route names another type, and so is an answer unless the route says it answers a file or a page (a CSV export, an email preview). Times are epoch milliseconds.",
+  "Every field name and every value from a fixed set (a `status`, a `phase`, a condition's `kind`) is snake_case, in a request and in an answer, and so is a query parameter and its value. A list's `sort` is the name of the field it sorts by, a dotted path for a nested one (`audience.count`). A path segment is a URL, not JSON, and keeps its own form.",
 ];
 
 const AUTHENTICATION = [

@@ -259,9 +259,9 @@ describe("a reader page's address", () => {
   it("is under the app or the archive as the deployment places them, without a scheme", () => {
     const d = {
       ...deployment,
-      appOrigin: "https://app.birds.example",
-      archiveOrigin: "https://birds.example",
-      archiveBasePath: "/letters",
+      app_origin: "https://app.birds.example",
+      archive_origin: "https://birds.example",
+      archive_base_path: "/letters",
     };
     expect(readerPageAddress({ base: "app", path: "/" }, d)).toBe("app.birds.example/");
     expect(readerPageAddress({ base: "archive", path: "" }, d)).toBe("birds.example/letters");

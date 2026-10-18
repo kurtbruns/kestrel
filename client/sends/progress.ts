@@ -209,7 +209,7 @@ export function activeRowHtml(s: SendView, { stuckNote = true } = {}): Html {
   const eta = s.dispatch.eta_ms ? ` · ~${fmtDuration(s.dispatch.eta_ms)} left` : "";
   const stuck = stuckNote ? conditionOf(s, "stuck") : undefined;
   const halt = s.provider.halt;
-  const outage = s.phase === "backing-off" && halt?.reason === "unavailable";
+  const outage = s.phase === "backing_off" && halt?.reason === "unavailable";
   const lead = outage ? "Backing off" : "Sending";
   const retry = outage ? ` · provider unavailable, ${nextRetry(halt.retry_at)}` : "";
   return html`<div class="card spread clickable active-card" data-watch="${s.id}">

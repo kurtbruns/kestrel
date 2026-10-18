@@ -310,12 +310,12 @@ export interface SendFilter {
 /** The sortable columns exposed by `GET /api/sends` (see `parseListParams`). */
 export const SEND_LIST_SPEC: ListSpec = {
   columns: {
-    fire: "fire_at",
+    fire_at: "fire_at",
     status: "status",
-    recipients: "recipient_count",
+    "audience.count": "recipient_count",
     subject: "subject",
   },
-  defaultSort: "fire",
+  defaultSort: "fire_at",
   defaultDir: "desc",
 };
 
@@ -750,7 +750,7 @@ export const DELIVERY_LIST_SPEC: ListSpec = {
     email: "d.email",
     status: "d.status",
     event: "d.event",
-    updated: "d.updated_at",
+    event_at: "d.event_at",
   },
   defaultSort: "email",
   defaultDir: "asc",

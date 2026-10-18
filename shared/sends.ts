@@ -343,9 +343,9 @@ export interface SendListResponse {
 /**
  * The live reporting phase, derived as of the read and never stored, so it is for showing,
  * not filtering: each value refines one `SendStatus` (scheduled: `scheduled`, `due`;
- * sending: `progressing`, `retrying`, `backing-off`, `needs-attention`; sent: `settling`,
- * `complete`; canceled: `canceled`). `backing-off` waits out an unavailable halt, or a
- * transient retry with nothing in flight; `needs-attention` is wedged or refused, while a
+ * sending: `progressing`, `retrying`, `backing_off`, `needs_attention`; sent: `settling`,
+ * `complete`; canceled: `canceled`). `backing_off` waits out an unavailable halt, or a
+ * transient retry with nothing in flight; `needs_attention` is wedged or refused, while a
  * missed send stays `due` and a stuck one `progressing`, their conditions saying so.
  */
 export type SendPhase =
@@ -353,8 +353,8 @@ export type SendPhase =
   | "due"
   | "progressing"
   | "retrying"
-  | "backing-off"
-  | "needs-attention"
+  | "backing_off"
+  | "needs_attention"
   | "settling"
   | "complete"
   | "canceled";

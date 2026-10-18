@@ -173,7 +173,7 @@ describe("everything that would send is refused with provider_not_connected", ()
     const status = await readJson(
       await settingsRoutes.get(context(NOT_CONNECTED, "/api/settings", { method: "GET" })),
     );
-    expect(status.notificationStatus.lastFailure).toBeNull();
+    expect(status.notification_status.last_failure).toBeNull();
   });
 
   it("refuses adding a subscriber by hand, since their confirmation can't go, and stores nothing", async () => {
@@ -402,8 +402,8 @@ describe("local dev's not-connected preview, SIMULATE_SENDS=not-connected (SPEC 
   it("reflects not connected, refuses what would send, and closes signups, through the real routes", async () => {
     const settings = await readJson(await fetchWith(PREVIEW, "/api/settings", { headers: AUTH }));
     expect(settings.deployment.provider).toBe("none");
-    expect(settings.deployment.notConnectedPreview).toBe(true);
-    expect(settings.deployment.notifyChannel).toBe("provider");
+    expect(settings.deployment.not_connected_preview).toBe(true);
+    expect(settings.deployment.notify_channel).toBe("provider");
 
     const { post } = await posts.createPost(env.DB, { subject: "Hi", markdown: "Hi" }, "test");
     const scheduled = await fetchWith(PREVIEW, `/api/posts/${post.id}/schedule`, {

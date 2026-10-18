@@ -378,11 +378,11 @@ export function sendServer(rows: SendSummary[] = []) {
         const status = q.get("status");
         const rows = [...sends.values()]
           .filter((s) => !status || s.row.status === status)
-          .sort(byFire(q.get("sort") === "fire" && q.get("dir") === "asc" ? 1 : -1))
+          .sort(byFire(q.get("sort") === "fire_at" && q.get("dir") === "asc" ? 1 : -1))
           .map((s) => view(s, now));
         return {
           sends: rows,
-          page: { total: rows.length, limit: 50, offset: 0, sort: "fire", dir: "desc" },
+          page: { total: rows.length, limit: 50, offset: 0, sort: "fire_at", dir: "desc" },
           cursor: cursor(),
         };
       },

@@ -16,7 +16,7 @@ import { remakeIdentity, remakeWaitHtml, savedToast, withRemakeConfirm } from ".
  *  one is about to send that a save has to wait for it (SPEC §9). The confirmation dialog
  *  carries the rest, at the moment it matters, so the standing note stays short. */
 function identityNote(inUse: InUseView): Html {
-  if (!(inUse.identityFields || []).length) {
+  if (!(inUse.identity_fields || []).length) {
     return html`Your email template doesn’t show any of these.`;
   }
   const shown = "Shown in every email.";
@@ -98,7 +98,7 @@ export function identitySection(page: SettingsPage): Html {
             </div>
           </div>
         </div>
-        <div class="set-note">${icon("info")}<span>${identityNote(page.data.inUse)}</span></div>
+        <div class="set-note">${icon("info")}<span>${identityNote(page.data.in_use)}</span></div>
       </div>
     </section>`;
 }
@@ -127,7 +127,7 @@ export function mountIdentity(
   // --- the optional address: the Add row or the open field, and the field's warning,
   // shown while an address is set and the template leaves it out.
   let addressOpen = Boolean(state.address);
-  const templatePrintsAddress = (page.data.inUse.identityFields || []).includes("address");
+  const templatePrintsAddress = (page.data.in_use.identity_fields || []).includes("address");
   const addrAdd = $("#addrAdd", root);
   const addrField = $("#addrField", root);
   const addrWarn = $("#addrWarn", root);
@@ -205,7 +205,7 @@ export function mountIdentity(
   // A logo change lands at once: the page adopts it, and every preview that shows the
   // logo repaints rather than waiting for the next identity edit.
   const logoSaved = (r: LogoResponse, done: string) => {
-    state.logoUrl = r.settings.publication.logoUrl || "";
+    state.logoUrl = r.settings.publication.logo_url || "";
     page.applySaved(r.settings);
     applyLogoUi();
     page.changed();

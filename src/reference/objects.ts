@@ -460,7 +460,7 @@ const SEND_FIELDS: ReferenceField[] = [
     name: "phase",
     type: "string",
     description:
-      "The live reading of `status`, derived as of `as_of` and never stored, so it is for showing, not filtering. Each value belongs to one `status`: `scheduled` is `scheduled` or `due`; `sending` is `progressing`, `retrying`, `backing-off`, or `needs-attention`; `sent` is `settling` or `complete`; `canceled` is `canceled`. What needs a person is in `conditions`.",
+      "The live reading of `status`, derived as of `as_of` and never stored, so it is for showing, not filtering. Each value belongs to one `status`: `scheduled` is `scheduled` or `due`; `sending` is `progressing`, `retrying`, `backing_off`, or `needs_attention`; `sent` is `settling` or `complete`; `canceled` is `canceled`. What needs a person is in `conditions`.",
     values: [
       { value: "scheduled", description: "In its review window." },
       {
@@ -474,12 +474,12 @@ const SEND_FIELDS: ReferenceField[] = [
       },
       { value: "retrying", description: "Handing off, with recipients being retried." },
       {
-        value: "backing-off",
+        value: "backing_off",
         description:
           "Waiting out an `unavailable` halt, or recipients waiting on a transient retry with nothing in flight.",
       },
       {
-        value: "needs-attention",
+        value: "needs_attention",
         description: "Waiting on a person: wedged, or refused by the provider.",
       },
       { value: "settling", description: "Dispatched, with receipts still arriving." },
@@ -780,13 +780,13 @@ const SETTINGS_FIELDS: ReferenceField[] = [
     name: "settings",
     type: "object",
     description:
-      "The runtime preferences: `testRecipients`, `publication` (`name`, `tagline`, `address`, `logoUrl`), `emailTemplate`, `confirmationEmail` and its `confirmationEmailDefault`, and `notifications.to`. Never a secret.",
+      "The runtime preferences: `test_recipients`, `publication` (`name`, `tagline`, `address`, `logo_url`), `email_template`, `confirmation_email` and its `confirmation_email_default`, and `notifications.to`. Never a secret.",
   },
   {
     name: "deployment",
     type: "object",
     description:
-      "Deploy configuration, read-only: `provider`, the origins and addresses, `minLeadMs`, `authMode`, the `build`, and the fields below.",
+      "Deploy configuration, read-only: `provider`, the origins and addresses, `min_lead_ms`, `auth_mode`, the `build`, and the fields below.",
   },
   {
     name: "deployment.provider",
@@ -795,25 +795,25 @@ const SETTINGS_FIELDS: ReferenceField[] = [
       "`fake` records a send and delivers nothing (local development, a demo); `none` while no provider is connected, when everything that would send is refused.",
   },
   {
-    name: "deployment.notConnectedPreview",
+    name: "deployment.not_connected_preview",
     type: "boolean",
     description:
       "True when `none` is local development previewing the state, whose way out is a restart, not a deploy.",
   },
   {
-    name: "deployment.freePlanLimits",
+    name: "deployment.free_plan_limits",
     type: "boolean",
     description:
       "True on the Workers Free plan's limits (`SUBREQUEST_BUDGET` unset): the import limit, the export's page, the `daily_writes` condition, and `workers_plan_advice` follow it.",
   },
   {
-    name: "inUse",
+    name: "in_use",
     type: "object",
     description:
-      "What a template or identity save would re-make: `sends`, every scheduled send, soonest first; `retry_after`, when a save stops being refused for the minimum lead (null when none is inside it); and `identityFields`, the identity fields the template renders, the only ones whose change reaches the email.",
+      "What a template or identity save would re-make: `sends`, every scheduled send, soonest first; `retry_after`, when a save stops being refused for the minimum lead (null when none is inside it); and `identity_fields`, the identity fields the template renders, the only ones whose change reaches the email.",
   },
   {
-    name: "notificationStatus",
+    name: "notification_status",
     type: "object",
     description: "The last notification delivered and the last failure, if newer.",
   },
@@ -981,9 +981,9 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
       "The runtime preferences, one resource that never holds a secret, with deploy configuration reflected read-only.",
     fields: SETTINGS_FIELDS,
     example: {
-      settings: { emailTemplate: "…", publication: { name: "Marsh Lane" } },
-      deployment: { provider: "ses", minLeadMs: 300000, freePlanLimits: false },
-      inUse: {
+      settings: { email_template: "…", publication: { name: "Marsh Lane" } },
+      deployment: { provider: "ses", min_lead_ms: 300000, free_plan_limits: false },
+      in_use: {
         sends: [
           {
             id: "s_xyz789",
@@ -994,9 +994,9 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
           },
         ],
         retry_after: null,
-        identityFields: ["name", "tagline", "logoUrl", "address"],
+        identity_fields: ["name", "tagline", "logo_url", "address"],
       },
-      notificationStatus: { lastSent: null, lastFailure: null },
+      notification_status: { last_sent: null, last_failure: null },
     } satisfies Abridged<SettingsResponse>,
   },
 };

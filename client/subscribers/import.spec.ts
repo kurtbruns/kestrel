@@ -271,7 +271,7 @@ describe("import view", () => {
   it("names the publication under the attestation as the plan names it, not as the settings it loaded do (SPEC §9)", async () => {
     // Settings changed in another tab since this one loaded them: the plan is the server's word.
     appState.appConfig = settingsResponse({
-      settings: { publication: { name: "Old Name", tagline: "", address: "", logoUrl: "" } },
+      settings: { publication: { name: "Old Name", tagline: "", address: "", logo_url: "" } },
     });
     const text =
       "Everyone I’m importing as subscribed opted in to receive Field Notes. This isn’t a purchased, rented, or scraped list.";

@@ -137,7 +137,7 @@ describe("the in-progress card", () => {
     const el = card(
       view(
         {
-          phase: "backing-off",
+          phase: "backing_off",
           conditions: [condition.stuck()],
         },
         null,
@@ -154,7 +154,7 @@ describe("the in-progress card", () => {
     try {
       const el = card(
         view({
-          phase: "backing-off",
+          phase: "backing_off",
           provider: {
             name: "ses",
             halt: {

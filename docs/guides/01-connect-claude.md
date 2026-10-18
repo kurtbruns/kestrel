@@ -89,10 +89,10 @@ To bring subscribers over from another service, ask Claude to import the list, a
 1. Ask Claude to call `GET /api/whoami`. The app answers with a program's identity, not yours:
 
     ```
-    {"principal":{"kind":"service","tokenId":"e367c0ffee5eb4.access"},"auth":{"mode":"access"}}
+    {"principal":{"kind":"service","token_id":"e367c0ffee5eb4.access"},"auth":{"mode":"access"}}
     ```
 
-    The `tokenId` is the Client ID Zero Trust shows beside `kestrel-claude`. If it's a different one, Claude Code is using another token.
+    The `token_id` is the Client ID Zero Trust shows beside `kestrel-claude`. If it's a different one, Claude Code is using another token.
 
 1. Ask Claude to list the posts. It answers with the posts the editor shows.
 

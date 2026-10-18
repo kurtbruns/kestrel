@@ -140,7 +140,7 @@ describe("auth on the admin surface", () => {
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      principal: { kind: "service", tokenId: DEV_TOKEN_ID },
+      principal: { kind: "service", token_id: DEV_TOKEN_ID },
       auth: { mode: "dev" },
     });
   });
@@ -330,13 +330,13 @@ describe("the auth mode follows how the request signed in", () => {
       auth: { mode: "access" },
     });
     const settings = await readJson(await fetchWith(vars, "/api/settings", { headers }));
-    expect(settings.deployment.authMode).toBe("access");
+    expect(settings.deployment.auth_mode).toBe("access");
     // A service token signs in through Access too, named by its Client ID.
     const service = await fetchWith(vars, "/api/whoami", {
       headers: await assertion({ common_name: "e367c0ffee5eb4.access" }),
     });
     expect(await service.json()).toEqual({
-      principal: { kind: "service", tokenId: "e367c0ffee5eb4.access" },
+      principal: { kind: "service", token_id: "e367c0ffee5eb4.access" },
       auth: { mode: "access" },
     });
     // One with neither claim is still admitted for now, with no name to give.
@@ -361,7 +361,7 @@ describe("the auth mode follows how the request signed in", () => {
 
   it("reports dev for the dev token in the settings reflection", async () => {
     const res = await SELF.fetch(`${base}/api/settings`, { headers: await adminAuth() });
-    expect((await readJson(res)).deployment.authMode).toBe("dev");
+    expect((await readJson(res)).deployment.auth_mode).toBe("dev");
   });
 
   // Config and principal agree on every door that exists today, so the only way to show which
@@ -386,6 +386,6 @@ describe("the auth mode follows how the request signed in", () => {
     const who = await whoami.def.handler(context("/api/whoami"));
     expect(await who.json()).toMatchObject({ auth: { mode: "dev" } });
     const settings = await readJson(await settingsRoutes.get(context("/api/settings")));
-    expect(settings.deployment.authMode).toBe("dev");
+    expect(settings.deployment.auth_mode).toBe("dev");
   });
 });

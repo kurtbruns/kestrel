@@ -41,9 +41,9 @@ const postReply =
 const deployment = () => {
   appState.appConfig = {
     deployment: {
-      appOrigin: "https://newsletter.example.com",
-      archiveOrigin: "https://newsletter.example.com",
-      archiveBasePath: "/archive",
+      app_origin: "https://newsletter.example.com",
+      archive_origin: "https://newsletter.example.com",
+      archive_base_path: "/archive",
     },
   } as unknown as typeof appState.appConfig;
 };

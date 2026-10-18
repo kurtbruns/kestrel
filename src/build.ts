@@ -22,13 +22,13 @@ export function buildInfo(): BuildInfo {
     version,
     sha,
     tag,
-    buildTime,
-    repoUrl,
+    build_time: buildTime,
+    repo_url: repoUrl,
     // No commit link for a "dev" SHA (no commit to point at) or without a repo.
-    commitUrl: repoUrl && sha !== "dev" ? `${repoUrl}/commit/${sha}` : "",
+    commit_url: repoUrl && sha !== "dev" ? `${repoUrl}/commit/${sha}` : "",
     // Only a build sitting exactly on its release tag links there. Deriving the URL from the
     // version instead would point every in-between build at a tag that isn't cut yet, or at
     // a release it has already moved past.
-    tagUrl: repoUrl && tag === `v${version}` ? `${repoUrl}/releases/tag/${tag}` : "",
+    tag_url: repoUrl && tag === `v${version}` ? `${repoUrl}/releases/tag/${tag}` : "",
   };
 }

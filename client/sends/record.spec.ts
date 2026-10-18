@@ -245,8 +245,8 @@ describe("sent record", () => {
         ...settingsResponse(),
         deployment: {
           ...settingsResponse().deployment,
-          archiveOrigin: "https://birds.example",
-          archiveBasePath: "/archive",
+          archive_origin: "https://birds.example",
+          archive_base_path: "/archive",
         },
       } as typeof appState.appConfig;
     });
@@ -910,7 +910,7 @@ describe("sent record", () => {
 
   it("puts the provider's refusal of the account at the top of the watch", async () => {
     const refused = sendView(send({ status: "sending", completed_at: null }), {
-      phase: "needs-attention",
+      phase: "needs_attention",
       provider: {
         name: "ses",
         halt: {
@@ -957,7 +957,7 @@ describe("sent record", () => {
   it("advises connecting a provider as a link, or the restart in the local preview", async () => {
     const advice = refusalAdvice("not_connected");
     const held = sendView(send({ status: "sending", completed_at: null }), {
-      phase: "needs-attention",
+      phase: "needs_attention",
       provider: {
         name: "none",
         halt: {
@@ -989,7 +989,7 @@ describe("sent record", () => {
     ] as const) {
       const label = preview ? "preview" : "deployed";
       appState.appConfig = settingsResponse({
-        deployment: { provider: "none", notConnectedPreview: preview },
+        deployment: { provider: "none", not_connected_preview: preview },
       });
       fake = fakeApi([
         {
@@ -1014,7 +1014,7 @@ describe("sent record", () => {
   it("says a post held on another send's halt is waiting and has handed no one off (SPEC §12)", async () => {
     const retryAt = Date.now() + 45 * 60_000;
     const held = sendView(send({ status: "sending", completed_at: null }), {
-      phase: "needs-attention",
+      phase: "needs_attention",
       audience: { count: 157, fixed: false, fixed_at: null },
       provider: {
         name: "ses",
@@ -1049,7 +1049,7 @@ describe("sent record", () => {
   it("counts a halt's next retry down on the clock while no report arrives", async () => {
     const retryAt = Date.now() + 12 * 60_000;
     const refused = sendView(send({ status: "sending", completed_at: null }), {
-      phase: "needs-attention",
+      phase: "needs_attention",
       provider: {
         name: "ses",
         halt: {
@@ -1136,7 +1136,7 @@ describe("sent record", () => {
     let selfThrottled = true;
     const current = () =>
       sendView(inFlight(), {
-        phase: "backing-off",
+        phase: "backing_off",
         conditions: [condition.unavailable(selfThrottled)],
       });
     fake = watching(current);
@@ -1153,7 +1153,7 @@ describe("sent record", () => {
     let paused = true;
     const current = () =>
       sendView(inFlight(), {
-        phase: paused ? "backing-off" : "progressing",
+        phase: paused ? "backing_off" : "progressing",
         // The server gives a time to finish only while the send is handing off.
         dispatch: { done: 5, percent: 50, rate_per_min: 30, eta_ms: paused ? null : 120_000 },
       });
@@ -1189,7 +1189,7 @@ describe("sent record", () => {
 
   it("offers Resolve while the server lists it, and names its count", async () => {
     const wedged = sendView(send({ status: "sending", c_in_flight: 2, completed_at: null }), {
-      phase: "needs-attention",
+      phase: "needs_attention",
       conditions: [condition.wedged(2, "x1")],
       actions: [{ name: "resolve", method: "POST", path: "/api/sends/x1/resolve" }],
     });

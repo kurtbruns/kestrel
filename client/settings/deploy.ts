@@ -64,12 +64,12 @@ export function senderSection(page: SettingsPage): Html {
             <div class="set-inbox-top"><span class="set-inbox-from">${fromName}</span><span class="set-inbox-time">9:02 AM</span></div>
             <div class="set-inbox-subj">Your latest post: a sample subject line</div>
             <div class="set-inbox-snip">The opening lines of your post show here as the inbox preview…</div>
-            <div class="set-inbox-addr">${bareAddress(d.fromAddress)}</div>
+            <div class="set-inbox-addr">${bareAddress(d.from_address)}</div>
           </div>
         </div>
         <div class="set-kv" style="border-top:1px solid var(--line)">
-          <div class="set-kv-k">From address</div><div class="set-kv-v set-kv-stack"><span class="mono">${d.fromAddress}</span><span class="muted" id="replyNote">Readers’ replies go to this address. <a class="set-link" href="${REPLIES_HREF}">Forward it to your inbox</a>.</span></div>
-          <div class="set-kv-k">Sending domain</div><div class="set-kv-v"><span class="mono">${d.sendingDomain}</span></div>
+          <div class="set-kv-k">From address</div><div class="set-kv-v set-kv-stack"><span class="mono">${d.from_address}</span><span class="muted" id="replyNote">Readers’ replies go to this address. <a class="set-link" href="${REPLIES_HREF}">Forward it to your inbox</a>.</span></div>
+          <div class="set-kv-k">Sending domain</div><div class="set-kv-v"><span class="mono">${d.sending_domain}</span></div>
           <div class="set-kv-k">Email provider</div><div class="set-kv-v" id="providerValue">${providerValue(d)}</div>
         </div>
       </div>
@@ -78,20 +78,20 @@ export function senderSection(page: SettingsPage): Html {
 
 export function instanceSection(page: SettingsPage): Html {
   const d = page.data.deployment;
-  const archiveBase = `${d.archiveOrigin || ""}${d.archiveBasePath || ""}`;
-  const archiveIsDefault = d.archiveOrigin === d.appOrigin;
+  const archiveBase = `${d.archive_origin || ""}${d.archive_base_path || ""}`;
+  const archiveIsDefault = d.archive_origin === d.app_origin;
   return html`
     <section class="set-sec">
       ${secHead("Instance", chip("readonly", "Read-only · set at deploy"))}
       <div class="set-card sunken">
         <div class="set-ro-note">${icon("info")}<span>Deploy-time infrastructure, shown for reference. These live in your Worker config and never pass through the API. See the <a class="set-link" href="#/docs/configuration">setup guide</a> to change them.</span></div>
         <div class="set-kv">
-          <div class="set-kv-k">App origin</div><div class="set-kv-v"><span class="mono">${d.appOrigin}</span></div>
+          <div class="set-kv-k">App origin</div><div class="set-kv-v"><span class="mono">${d.app_origin}</span></div>
           <div class="set-kv-k">Archive URL base</div><div class="set-kv-v"><span class="mono">${archiveBase}</span>${archiveIsDefault ? html`<span class="set-pill">default: app origin</span>` : null}</div>
-          <div class="set-kv-k">Image URL base</div><div class="set-kv-v"><span class="mono">${d.mediaPublicBase}</span></div>
-          <div class="set-kv-k">Auth mode</div><div class="set-kv-v">${d.authMode === "access" ? "Cloudflare Access" : "Local dev token"}</div>
-          <div class="set-kv-k">Cloudflare Access</div><div class="set-kv-v">${d.accessConfigured ? html`<span class="set-pill ok">${icon("check")}Configured</span>` : html`<span class="set-pill">Not configured</span>`}</div>
-          <div class="set-kv-k">Minimum lead</div><div class="set-kv-v">${formatLead(d.minLeadMs)}${d.minLeadMs === DEFAULT_MIN_LEAD_MS ? html`<span class="set-pill">default</span>` : null}</div>
+          <div class="set-kv-k">Image URL base</div><div class="set-kv-v"><span class="mono">${d.media_public_base}</span></div>
+          <div class="set-kv-k">Auth mode</div><div class="set-kv-v">${d.auth_mode === "access" ? "Cloudflare Access" : "Local dev token"}</div>
+          <div class="set-kv-k">Cloudflare Access</div><div class="set-kv-v">${d.access_configured ? html`<span class="set-pill ok">${icon("check")}Configured</span>` : html`<span class="set-pill">Not configured</span>`}</div>
+          <div class="set-kv-k">Minimum lead</div><div class="set-kv-v">${formatLead(d.min_lead_ms)}${d.min_lead_ms === DEFAULT_MIN_LEAD_MS ? html`<span class="set-pill">default</span>` : null}</div>
         </div>
       </div>
     </section>`;

@@ -101,7 +101,7 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
       // ≤720px layout can stack a row and label its dates from CSS alone.
       setHtml(
         listEl,
-        html`<div class="table-wrap"><table class="list-table posts-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Title", "title", state)}${th("Status", null, state)}${th("Scheduled", "scheduled", state)}${th("Updated", "updated", state)}<th></th></tr></thead><tbody>${posts.map(
+        html`<div class="table-wrap"><table class="list-table posts-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Title", "subject", state)}${th("Status", null, state)}${th("Scheduled", "fire_at", state)}${th("Updated", "updated_at", state)}<th></th></tr></thead><tbody>${posts.map(
           (p) => {
             // A post whose send is in flight is no longer an editable/cancelable draft —
             // show it as `sending` and route it to the live watch, not the editor.

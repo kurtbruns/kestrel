@@ -206,9 +206,9 @@ export type { IdentityField };
 const IDENTITY_TOKENS: ReadonlyArray<[token: string, fields: IdentityField[]]> = [
   [".Publication.Name", ["name"]],
   [".Publication.Tagline", ["tagline"]],
-  [".Publication.LogoURL", ["logoUrl"]],
+  [".Publication.LogoURL", ["logo_url"]],
   // The logo image carries the name as its alt text.
-  [".Publication.Logo", ["logoUrl", "name"]],
+  [".Publication.Logo", ["logo_url", "name"]],
   [".Publication.Address", ["address"]],
 ];
 
@@ -235,8 +235,18 @@ export function brandingDiffers(current: EmailBranding, next: EmailBranding): bo
   if (current.template !== next.template) {
     return true;
   }
-  return identityFieldsInUse(next.template).some((field) => current[field] !== next[field]);
+  return identityFieldsInUse(next.template).some(
+    (field) => current[BRANDING_KEY[field]] !== next[BRANDING_KEY[field]],
+  );
 }
+
+// Where each identity field, named as the settings surface names it, sits in the branding.
+const BRANDING_KEY: Record<IdentityField, keyof EmailBranding> = {
+  name: "name",
+  tagline: "tagline",
+  logo_url: "logoUrl",
+  address: "address",
+};
 
 export interface TemplateValidation {
   errors: string[];

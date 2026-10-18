@@ -150,7 +150,7 @@ describe("archive / view-in-browser", () => {
 
   it("serves a footer outside any region on the archive page, as before regions existed", async () => {
     await updateSettings(env.DB, {
-      emailTemplate:
+      email_template:
         '{{ .Post.Body }}<p class="foot"><a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a></p>',
     });
     try {
@@ -160,7 +160,7 @@ describe("archive / view-in-browser", () => {
       const body = await (await SELF.fetch(`${base}/archive/${post.slug}`)).text();
       expect(body).toContain('href="http://localhost:8787/unsubscribe"');
     } finally {
-      await updateSettings(env.DB, { emailTemplate: "" });
+      await updateSettings(env.DB, { email_template: "" });
     }
   });
 

@@ -140,14 +140,14 @@ describe("a provider outage", () => {
     expect(emails.every((e) => transport.timesMailed(e) === 1)).toBe(true);
   });
 
-  it("reads backing-off, and is raised as stuck only once its retry is long overdue", async () => {
+  it("reads backing_off, and is raised as stuck only once its retry is long overdue", async () => {
     await seedConfirmed(addresses(3));
     const send = await dueSend();
     transport.rateLimit = 2;
     await ticks(2, capped());
 
     const prog = viewOf((await sends.getSend(env.DB, send.id))!, "ses", false, Date.now());
-    expect(prog.phase).toBe("backing-off");
+    expect(prog.phase).toBe("backing_off");
     expect(prog.provider.halt).toMatchObject({ reason: "unavailable" });
     expect([has(prog, "refused"), has(prog, "stuck"), has(prog, "wedged")]).toEqual([
       false,
@@ -164,9 +164,9 @@ describe("a provider outage", () => {
     );
     const threshold = row.halt_retry_at! + STUCK_THRESHOLD_MS;
     const at = (now: number) => viewOf(row, "ses", false, now);
-    expect([at(threshold).phase, has(at(threshold), "stuck")]).toEqual(["backing-off", false]);
+    expect([at(threshold).phase, has(at(threshold), "stuck")]).toEqual(["backing_off", false]);
     expect([at(threshold + 1).phase, has(at(threshold + 1), "stuck")]).toEqual([
-      "backing-off",
+      "backing_off",
       true,
     ]);
   });
@@ -190,7 +190,7 @@ describe("a request with no answer on a provider without a key", () => {
     // Paused, not progressing, though a batch is in flight: it waits for Resolve and will
     // not move on its own, and nothing else goes out before the retry (SPEC §12).
     const paused = viewOf(row, "ses", false, Date.now());
-    expect([paused.phase, paused.dispatch.eta_ms]).toEqual(["backing-off", null]);
+    expect([paused.phase, paused.dispatch.eta_ms]).toEqual(["backing_off", null]);
     expect(condition(paused, "provider_unavailable")?.retry_at).toBe(row.halt_retry_at);
     await sweep(capped()); // the same minute: the retry isn't due
     expect(ses.requests).toBe(1);
@@ -214,7 +214,7 @@ describe("the provider refusing the account", () => {
     expect(held.halt_reason).toBe("account");
     expect(transport.requests).toBe(TICKS); // one refused request a tick, then the run stops
     const prog = viewOf(held, "ses", false, Date.now());
-    expect(prog.phase).toBe("needs-attention");
+    expect(prog.phase).toBe("needs_attention");
     expect(has(prog, "refused")).toBe(true);
     expect(prog.provider.halt?.error).toBe(
       "ses 403 UnrecognizedClientException: The security token included in the request is invalid",
@@ -339,7 +339,7 @@ describe("the halt's backoff", () => {
     const prog = viewOf(held, "ses", false, Date.now());
     expect(prog.provider.halt?.retry_at).toBe(held.halt_retry_at);
     expect(prog.provider.halt!.retry_at).toBeGreaterThan(Date.now());
-    expect(prog.phase).toBe(reason === "account" ? "needs-attention" : "backing-off");
+    expect(prog.phase).toBe(reason === "account" ? "needs_attention" : "backing_off");
     // A long halt is raised as the halt, which says why it waits, never as in flight too long.
     expect(has(prog, "stuck")).toBe(false);
   });

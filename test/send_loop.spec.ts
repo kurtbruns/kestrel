@@ -69,7 +69,7 @@ describe("the freeze reads the template it froze with", () => {
     await updateSettings(env.DB, { publication: { tagline: "before" } });
     const { post } = await posts.createPost(env.DB, { subject: "Subj", markdown: "hi" }, "test");
     const tpl = `<div>{{ .Post.Body }} <i>{{ .Publication.Tagline }}</i> <a href="{{ .Email.UnsubscribeURL }}">u</a></div>`;
-    await updateSettings(env.DB, { emailTemplate: tpl });
+    await updateSettings(env.DB, { email_template: tpl });
     let bumped = false;
     vi.spyOn(subscribersDb, "audienceCount").mockImplementation(async (db) => {
       // Runs after the render and before the insert, once: the "concurrent" save.

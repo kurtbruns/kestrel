@@ -253,8 +253,13 @@ export interface SubscriberFilter {
 
 /** The sortable columns exposed by `GET /api/subscribers` (see `parseListParams`). */
 export const SUBSCRIBER_LIST_SPEC: ListSpec = {
-  columns: { joined: "created_at", confirmed: "confirmed_at", email: "email", status: "status" },
-  defaultSort: "joined",
+  columns: {
+    created_at: "created_at",
+    confirmed_at: "confirmed_at",
+    email: "email",
+    status: "status",
+  },
+  defaultSort: "created_at",
   defaultDir: "desc",
 };
 

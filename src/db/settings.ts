@@ -10,6 +10,11 @@
  * The typed shape lives here (not in the schema) so adding a preference is a code
  * change, not a migration. Reads always merge the stored blob onto DEFAULTS, so a
  * field added here is safely absent-then-defaulted on existing rows.
+ *
+ * The blob keeps its own camelCase keys while the wire is snake_case (docs/API.md): the
+ * route builds the view by an explicit mapping, and `applyPatch` maps a wire patch onto
+ * the blob, so the stored form never changes with the API's names and a release rolled
+ * back still reads every row it wrote.
  */
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
@@ -59,6 +64,14 @@ export interface PublicationSettings {
  */
 export type { ConfirmationEmailCopy };
 
+/** The confirmation copy as the blob stores it: the wire's words under the blob's keys. */
+export interface StoredConfirmationEmail {
+  subject: string;
+  body: string;
+  buttonLabel: string;
+  reassurance: string;
+}
+
 /** Editable, non-secret preferences. Extend here (not the schema) to add one. */
 export interface AppSettings {
   /** Default recipients pre-filled into the Send-test flow. */
@@ -73,7 +86,7 @@ export interface AppSettings {
    */
   emailTemplate: string;
   /** Editable wording of the double opt-in confirmation email (SPEC §7). */
-  confirmationEmail: ConfirmationEmailCopy;
+  confirmationEmail: StoredConfirmationEmail;
   /**
    * Where notifications about the publisher's sends go (SPEC §8): an address, which is a
    * preference because it holds no secret. The channel that carries them, and its
@@ -115,15 +128,24 @@ export function publicationLogoUrl(mediaBase: string, logo: PublicationLogo | nu
 export const DEFAULT_CONFIRMATION_EMAIL: ConfirmationEmailCopy = {
   subject: "Confirm your subscription",
   body: "Thanks for subscribing. Please confirm your email address to start receiving the newsletter.",
-  buttonLabel: "Confirm subscription",
+  button_label: "Confirm subscription",
   reassurance: "If you didn't request this, you can safely ignore this email.",
 };
+
+function storedConfirmation(c: ConfirmationEmailCopy): StoredConfirmationEmail {
+  return {
+    subject: c.subject,
+    body: c.body,
+    buttonLabel: c.button_label,
+    reassurance: c.reassurance,
+  };
+}
 
 export const DEFAULT_SETTINGS: AppSettings = {
   testRecipients: [],
   publication: { name: "", tagline: "", address: "", logo: null },
   emailTemplate: "",
-  confirmationEmail: DEFAULT_CONFIRMATION_EMAIL,
+  confirmationEmail: storedConfirmation(DEFAULT_CONFIRMATION_EMAIL),
   notifications: { to: "" },
 };
 
@@ -168,7 +190,7 @@ function coercePublication(raw: unknown): PublicationSettings {
 
 /** Coerce a stored (possibly partial / legacy) confirmation blob. Stores the raw
  *  strings, blanks and all; `resolveConfirmationEmail` fills blanks at send time. */
-function coerceConfirmation(raw: unknown): ConfirmationEmailCopy {
+function coerceConfirmation(raw: unknown): StoredConfirmationEmail {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" ? v : "");
   return {
@@ -195,7 +217,7 @@ function coerce(raw: unknown): AppSettings {
     confirmationEmail:
       "confirmationEmail" in o
         ? coerceConfirmation(o.confirmationEmail)
-        : { ...DEFAULT_CONFIRMATION_EMAIL },
+        : storedConfirmation(DEFAULT_CONFIRMATION_EMAIL),
     notifications: coerceNotifications(o.notifications),
   };
 }
@@ -218,7 +240,7 @@ export function resolveConfirmationEmail(settings: AppSettings): ConfirmationEma
   return {
     subject: c.subject.trim() || d.subject,
     body: c.body.trim() || d.body,
-    buttonLabel: c.buttonLabel.trim() || d.buttonLabel,
+    button_label: c.buttonLabel.trim() || d.button_label,
     reassurance: c.reassurance,
   };
 }
@@ -394,7 +416,9 @@ export class SettingsFieldError extends Error {
   }
 }
 
-/** Merge a validated patch onto the current settings (pure; throws on invalid input). */
+/** Merge a validated patch onto the current settings (pure; throws on invalid input). The
+ *  patch carries the wire's names, and an error names the wire field; the result is the
+ *  blob's shape. */
 export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSettings {
   const next: AppSettings = {
     ...current,
@@ -403,8 +427,8 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
     notifications: { ...current.notifications },
   };
 
-  if (patch.testRecipients !== undefined) {
-    next.testRecipients = normalizeRecipients(patch.testRecipients);
+  if (patch.test_recipients !== undefined) {
+    next.testRecipients = normalizeRecipients(patch.test_recipients);
   }
   if (patch.publication !== undefined) {
     const p = patch.publication;
@@ -433,31 +457,31 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
       );
     }
   }
-  if (patch.emailTemplate !== undefined) {
+  if (patch.email_template !== undefined) {
     // Structural validation (required variables, warnings) is the route's job; here
     // we only enforce the type + storage cap. "" resets to the built-in default.
-    if (typeof patch.emailTemplate !== "string") {
-      throw new SettingsFieldError("emailTemplate", "The email template must be text.");
+    if (typeof patch.email_template !== "string") {
+      throw new SettingsFieldError("email_template", "The email template must be text.");
     }
-    if (patch.emailTemplate.length > MAX_TEMPLATE) {
+    if (patch.email_template.length > MAX_TEMPLATE) {
       throw new SettingsFieldError(
-        "emailTemplate",
+        "email_template",
         `The email template must be ${MAX_TEMPLATE.toLocaleString("en-US")} characters or fewer. Shorten it, then save.`,
       );
     }
-    next.emailTemplate = patch.emailTemplate;
+    next.emailTemplate = patch.email_template;
   }
-  if (patch.confirmationEmail !== undefined) {
+  if (patch.confirmation_email !== undefined) {
     // Words only: trim + cap each field. A blank stays blank here and resolves to the
     // built-in default at send time (resolveConfirmationEmail), so there is no invalid
     // value to reject — the confirm link and layout are never the operator's to break.
-    const c = patch.confirmationEmail;
+    const c = patch.confirmation_email;
     if (c.subject !== undefined) {
       next.confirmationEmail.subject = normalizeText(
         c.subject,
         "The confirmation subject",
         MAX_CE_SUBJECT,
-        "confirmationEmail.subject",
+        "confirmation_email.subject",
       );
     }
     if (c.body !== undefined) {
@@ -465,15 +489,15 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
         c.body,
         "The confirmation message",
         MAX_CE_BODY,
-        "confirmationEmail.body",
+        "confirmation_email.body",
       );
     }
-    if (c.buttonLabel !== undefined) {
+    if (c.button_label !== undefined) {
       next.confirmationEmail.buttonLabel = normalizeText(
-        c.buttonLabel,
+        c.button_label,
         "The button label",
         MAX_CE_BUTTON,
-        "confirmationEmail.buttonLabel",
+        "confirmation_email.button_label",
       );
     }
     if (c.reassurance !== undefined) {
@@ -481,7 +505,7 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
         c.reassurance,
         "The reassurance line",
         MAX_CE_REASSURANCE,
-        "confirmationEmail.reassurance",
+        "confirmation_email.reassurance",
       );
     }
   }
@@ -533,7 +557,7 @@ function normalizeText(v: unknown, what: string, max: number, field: string): st
 function normalizeRecipients(input: unknown): string[] {
   if (!Array.isArray(input)) {
     throw new SettingsFieldError(
-      "testRecipients",
+      "test_recipients",
       "Test recipients must be a list of email addresses.",
     );
   }
@@ -542,7 +566,7 @@ function normalizeRecipients(input: unknown): string[] {
   for (const raw of input) {
     if (typeof raw !== "string") {
       throw new SettingsFieldError(
-        "testRecipients",
+        "test_recipients",
         "Each test recipient must be an email address.",
       );
     }
@@ -552,7 +576,7 @@ function normalizeRecipients(input: unknown): string[] {
     }
     if (!isValidEmail(email)) {
       throw new SettingsFieldError(
-        "testRecipients",
+        "test_recipients",
         `“${raw.trim()}” isn’t a valid email address. Fix or remove it, then save.`,
       );
     }
@@ -564,7 +588,7 @@ function normalizeRecipients(input: unknown): string[] {
   }
   if (out.length > MAX_TEST_RECIPIENTS) {
     throw new SettingsFieldError(
-      "testRecipients",
+      "test_recipients",
       `There can be at most ${MAX_TEST_RECIPIENTS} test recipients. Remove some, then save.`,
     );
   }

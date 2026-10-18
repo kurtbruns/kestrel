@@ -153,7 +153,7 @@ describe("a send's view on GET /api/sends/:id", () => {
     expect(body.provider.name).toBe("fake");
   });
 
-  it("reports the sending state as backing-off after a transient whole-batch failure", async () => {
+  it("reports the sending state as backing_off after a transient whole-batch failure", async () => {
     await seedConfirmed("q1@example.com");
     const send = await frozenSend(Date.now() - 1000);
     failFakeSendBatch(1);
@@ -163,7 +163,7 @@ describe("a send's view on GET /api/sends/:id", () => {
       (await (await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH })).json()) as any
     ).send;
     expect(body.status).toBe("sending");
-    expect(body.phase).toBe("backing-off"); // work remains, nothing in flight
+    expect(body.phase).toBe("backing_off"); // work remains, nothing in flight
     expect(body.counts.pending).toBe(1);
   });
 
@@ -271,13 +271,13 @@ describe("buildSendView — derived phase", () => {
     // A send too large for one tick's budget waits for the next: healthy, not a back-off.
     expect(phase({ status: "sending", c_pending: 5, c_in_flight: 0 })).toBe("progressing");
   });
-  it("backing-off when nothing is in flight and recipients wait on a retry", () => {
-    expect(phase({ status: "sending", c_pending: 5, c_in_flight: 0 }, true)).toBe("backing-off");
+  it("backing_off when nothing is in flight and recipients wait on a retry", () => {
+    expect(phase({ status: "sending", c_pending: 5, c_in_flight: 0 }, true)).toBe("backing_off");
   });
-  it("needs-attention (wedged) when nothing is pending but rows are stuck in flight", () => {
-    expect(phase({ status: "sending", c_pending: 0, c_in_flight: 2 })).toBe("needs-attention");
+  it("needs_attention (wedged) when nothing is pending but rows are stuck in flight", () => {
+    expect(phase({ status: "sending", c_pending: 0, c_in_flight: 2 })).toBe("needs_attention");
   });
-  it("progressing (NOT needs-attention) while the loop holds the lease on the final batch", () => {
+  it("progressing (NOT needs_attention) while the loop holds the lease on the final batch", () => {
     // pending 0, in flight > 0, but the loop is actively working it (lease in the future):
     // the tail of a normal dispatch, not a wedge. Without the lease check this flashed
     // "needs attention" at the end of every send.
@@ -289,7 +289,7 @@ describe("buildSendView — derived phase", () => {
     expect(phase({ status: "sent", c_accepted: 4 })).toBe("settling");
     expect(phase({ status: "sent", c_accepted: 0, c_delivered: 4 })).toBe("complete");
   });
-  it("needs-attention, flagged refused with the provider's words, when the account is refused", () => {
+  it("needs_attention, flagged refused with the provider's words, when the account is refused", () => {
     const since = Date.now() - 120_000;
     const prog = viewOf(
       mkSend({
@@ -307,7 +307,7 @@ describe("buildSendView — derived phase", () => {
       false,
       Date.now(),
     );
-    expect(prog.phase).toBe("needs-attention");
+    expect(prog.phase).toBe("needs_attention");
     expect(has(prog, "refused")).toBe(true);
     expect(has(prog, "wedged")).toBe(false);
     expect(prog.provider.halt).toEqual({
@@ -320,7 +320,7 @@ describe("buildSendView — derived phase", () => {
       retry_at: since + 20 * 60_000,
     });
   });
-  it("backing-off with its retry and no time to finish while an outage pauses it, even with a batch awaiting Resolve (SPEC §12)", () => {
+  it("backing_off with its retry and no time to finish while an outage pauses it, even with a batch awaiting Resolve (SPEC §12)", () => {
     const now = Date.now();
     const paused = {
       status: "sending" as const,
@@ -336,26 +336,26 @@ describe("buildSendView — derived phase", () => {
       halt_retry_at: now + 5 * 60_000,
     };
     const prog = viewOf(mkSend(paused), "ses", false, now);
-    expect(prog.phase).toBe("backing-off");
+    expect(prog.phase).toBe("backing_off");
     expect(prog.provider.halt?.retry_at).toBe(now + 5 * 60_000);
     expect(prog.dispatch.eta_ms).toBeNull();
-    expect(phase(paused, true)).toBe("backing-off"); // with a retried recipient too
+    expect(phase(paused, true)).toBe("backing_off"); // with a retried recipient too
     // The provider answering a batch ends the halt: progressing again.
     const answered = { ...paused, halt_reason: null, halt_cause: null, halt_error: null };
     expect(phase({ ...answered, halted_at: null, halt_retries: 0, halt_retry_at: null })).toBe(
       "progressing",
     );
     // Nothing left to send but the batch awaiting Resolve: needs attention, as ever.
-    expect(phase({ ...paused, c_pending: 0 })).toBe("needs-attention");
+    expect(phase({ ...paused, c_pending: 0 })).toBe("needs_attention");
   });
-  it("backing-off, not refused, while the provider is only unavailable", () => {
+  it("backing_off, not refused, while the provider is only unavailable", () => {
     const prog = viewOf(
       mkSend({ status: "sending", c_pending: 5, halt_reason: "unavailable", halt_error: "503" }),
       "ses",
       false,
       Date.now(),
     );
-    expect(prog.phase).toBe("backing-off");
+    expect(prog.phase).toBe("backing_off");
     expect(has(prog, "refused")).toBe(false);
     expect(prog.provider.halt?.reason).toBe("unavailable");
   });

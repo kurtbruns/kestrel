@@ -17,8 +17,8 @@ import { mountSampleEmailPreview } from "./template";
 export function templateSection(page: SettingsPage): Html {
   return html`
     <section class="set-sec">
-      ${secHead("Email template", chip("editable", "Editable"), inUseChip(page.data.inUse))}
-      <p class="set-lede">The template controls the look and feel of the emails you send. Edit it on the Template page.${remakeWaitHtml(page.data.inUse)}</p>
+      ${secHead("Email template", chip("editable", "Editable"), inUseChip(page.data.in_use))}
+      <p class="set-lede">The template controls the look and feel of the emails you send. Edit it on the Template page.${remakeWaitHtml(page.data.in_use)}</p>
       <div class="set-preview set-tpl-sample">
         <div class="set-preview-bar">
           <span class="set-preview-lbl">Sample email</span>
@@ -32,7 +32,7 @@ export function templateSection(page: SettingsPage): Html {
 
 /** The sample follows the identity fields as they are typed. */
 export function mountTemplate(root: HTMLElement, page: SettingsPage): SectionHandle {
-  const template = page.data.settings.emailTemplate || "";
+  const template = page.data.settings.email_template || "";
   const preview = mountSampleEmailPreview(
     $<HTMLIFrameElement>("#tplPreview", root),
     () => template,

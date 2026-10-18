@@ -6,7 +6,7 @@
  * router built for another config still 404s.
  *
  *   GET  /api/dev/token → mint a local admin token (the editor's + seed's bootstrap), with
- *                         the `runId` `kestrel dev` gave this run, which seed and reset
+ *                         the `run_id` `kestrel dev` gave this run, which seed and reset
  *                         check against their directory's record before wiping anything.
  *   POST /api/dev/seed  → reset the DB and load the local "Field Notes" dataset.
  *                         Optional multipart files: `image` (repeatable, named
@@ -47,7 +47,7 @@ export async function token(c: RequestContext): Promise<Response> {
   return json({
     token: jwt,
     kind: service ? "service" : "human",
-    ...(c.config.devRunId ? { runId: c.config.devRunId } : {}),
+    ...(c.config.devRunId ? { run_id: c.config.devRunId } : {}),
   });
 }
 

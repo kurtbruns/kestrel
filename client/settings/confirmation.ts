@@ -58,7 +58,7 @@ export function confirmationSection(page: SettingsPage): Html {
             </div>
             <div class="set-field">
               <label for="ceButton">Button label</label>
-              <input id="ceButton" value="${state.confirmation.buttonLabel}" maxlength="80" autocomplete="off">
+              <input id="ceButton" value="${state.confirmation.button_label}" maxlength="80" autocomplete="off">
             </div>
             <div class="set-field">
               <label for="ceFooter">Reassurance line</label>
@@ -80,7 +80,7 @@ export function confirmationSection(page: SettingsPage): Html {
  *  built-in default (from the API) exactly as the send does, so it's never wordless. */
 export function mountConfirmation(root: HTMLElement, page: SettingsPage): SectionHandle {
   const { state } = page;
-  const ceDefault = page.data.settings.confirmationEmailDefault;
+  const ceDefault = page.data.settings.confirmation_email_default;
   const fields = {
     subject: $<HTMLInputElement>("#ceSubject", root),
     message: $<HTMLTextAreaElement>("#ceMessage", root),
@@ -105,7 +105,7 @@ export function mountConfirmation(root: HTMLElement, page: SettingsPage): Sectio
     pv.from.textContent = state.name || page.fromName;
     pv.subject.textContent = c.subject.trim() || ceDefault.subject || "";
     pv.body.textContent = c.body.trim() || ceDefault.body || "";
-    pv.button.textContent = c.buttonLabel.trim() || ceDefault.buttonLabel || "Confirm";
+    pv.button.textContent = c.button_label.trim() || ceDefault.button_label || "Confirm";
     pv.foot.textContent = c.reassurance;
     pv.foot.hidden = !c.reassurance.trim();
     // The publication masthead (logo + name + tagline) up top. Mirrors masthead() in
@@ -131,7 +131,7 @@ export function mountConfirmation(root: HTMLElement, page: SettingsPage): Sectio
   const onInput = () => {
     state.confirmation.subject = fields.subject.value;
     state.confirmation.body = fields.message.value;
-    state.confirmation.buttonLabel = fields.button.value;
+    state.confirmation.button_label = fields.button.value;
     state.confirmation.reassurance = fields.footer.value;
     page.changed();
   };
@@ -158,7 +158,7 @@ export function mountConfirmation(root: HTMLElement, page: SettingsPage): Sectio
   $("#ceReset", root).onclick = () => {
     fields.subject.value = ceDefault.subject || "";
     fields.message.value = ceDefault.body || "";
-    fields.button.value = ceDefault.buttonLabel || "";
+    fields.button.value = ceDefault.button_label || "";
     fields.footer.value = ceDefault.reassurance || "";
     onInput();
   };
@@ -169,7 +169,7 @@ export function mountConfirmation(root: HTMLElement, page: SettingsPage): Sectio
     reset() {
       fields.subject.value = state.confirmation.subject;
       fields.message.value = state.confirmation.body;
-      fields.button.value = state.confirmation.buttonLabel;
+      fields.button.value = state.confirmation.button_label;
       fields.footer.value = state.confirmation.reassurance;
       repaint();
     },

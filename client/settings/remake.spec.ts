@@ -175,28 +175,28 @@ describe("isRemakeTooClose", () => {
 });
 
 describe("inUseChip", () => {
-  const chip = (inUse: Parameters<typeof inUseChip>[0]) => {
+  const chip = (in_use: Parameters<typeof inUseChip>[0]) => {
     const el = document.createElement("div");
-    el.innerHTML = inUseChip(inUse).markup;
+    el.innerHTML = inUseChip(in_use).markup;
     return el.firstElementChild as HTMLElement;
   };
 
   it("says nothing is scheduled, or how many posts a change would reach, as a plain label (DESIGN §11)", () => {
     expect(chip(null).textContent?.trim()).toBe("No posts scheduled");
-    expect(chip({ sends: [], retry_after: null, identityFields: [] }).classList).not.toContain(
+    expect(chip({ sends: [], retry_after: null, identity_fields: [] }).classList).not.toContain(
       "inuse",
     );
     const two = chip({
       sends: [ref("a", "A"), ref("b", "B")],
       retry_after: null,
-      identityFields: [],
+      identity_fields: [],
     });
     expect(two.textContent).toBe("In use by 2 scheduled posts");
     expect(two.hasAttribute("title")).toBe(false);
     const waiting = chip({
       sends: [ref("a", "A")],
       retry_after: 1_800_000_000_000,
-      identityFields: [],
+      identity_fields: [],
     });
     expect(waiting.textContent).toBe("In use by 1 scheduled post");
     expect(waiting.hasAttribute("title")).toBe(false);
@@ -207,7 +207,7 @@ describe("remakeWait", () => {
   const inside = (fireAts: number[], until: number | null) => ({
     sends: fireAts.map((t, i) => ({ ...ref(`s${i}`, `S${i}`), fire_at: t })),
     retry_after: until,
-    identityFields: [],
+    identity_fields: [],
   });
 
   it("names when a post about to send has gone, and that a save can follow (SPEC §9)", () => {

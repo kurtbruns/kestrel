@@ -1269,7 +1269,7 @@ export async function renderEditor(
     // Pre-fill with saved defaults (don't clobber anything already typed).
     api<SettingsResponse>("/api/settings")
       .then((s) => {
-        const defaults = s.settings.testRecipients || [];
+        const defaults = s.settings.test_recipients || [];
         if (defaults.length && !to.value.trim()) {
           to.value = defaults.join("\n");
           m.clearError(); // an empty-field error raised before the defaults arrived no longer holds

@@ -143,10 +143,10 @@ describe("GET /api/sends/feed after a cursor", () => {
         headers: JSON_AUTH,
         body: JSON.stringify(body),
       });
-    expect((await put({ emailTemplate: tpl("v1") })).status).toBe(200);
+    expect((await put({ email_template: tpl("v1") })).status).toBe(200);
     const remade = await frozenSend(Date.now() + 24 * 3_600_000, { subject: "Remade" });
     const since = await listCursor();
-    expect((await put({ emailTemplate: tpl("v2"), remake: [remade.id] })).status).toBe(200);
+    expect((await put({ email_template: tpl("v2"), remake: [remade.id] })).status).toBe(200);
     expect((await feed(since)).sends.map((s) => [s.id, s.phase])).toEqual([
       [remade.id, "scheduled"],
     ]);
@@ -226,7 +226,7 @@ describe("GET /api/sends/feed after a cursor", () => {
     await sends.releaseLease(env.DB, send.id, lease!);
     const body = await feed(since);
     expect(body.sends.map((s) => [s.id, s.phase, has(s, "wedged")])).toEqual([
-      [send.id, "needs-attention", true],
+      [send.id, "needs_attention", true],
     ]);
   });
 
@@ -540,7 +540,7 @@ describe("GET /api/sends/feed paces from each send's next change", () => {
       halt_retry_at: now + 50_000,
     });
     const body = await feed();
-    expect(body.sends[0]?.phase).toBe("backing-off");
+    expect(body.sends[0]?.phase).toBe("backing_off");
     expect(body.read_again_at).toBe(now + 50_000 - 30_000 + 1000);
   });
 

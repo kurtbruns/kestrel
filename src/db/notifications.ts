@@ -336,8 +336,8 @@ export async function notificationStatus(db: D1Database): Promise<NotificationSt
   const sent = results.find((r) => r.which === "sent");
   const failed = results.find((r) => r.which === "failed");
   return {
-    lastSent: sent ? { kind: sent.kind, subject: sent.subject, at: sent.at } : null,
-    lastFailure:
+    last_sent: sent ? { kind: sent.kind, subject: sent.subject, at: sent.at } : null,
+    last_failure:
       failed && (!sent || failed.at > sent.at)
         ? { kind: failed.kind, subject: failed.subject, at: failed.at, error: failed.error ?? "" }
         : null,

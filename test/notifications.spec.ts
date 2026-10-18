@@ -344,9 +344,9 @@ describe("isolation", () => {
     const surface = async () =>
       (
         (await (await SELF.fetch(`${base}/api/settings`, { headers: AUTH })).json()) as {
-          notificationStatus: Awaited<ReturnType<typeof notifications.notificationStatus>>;
+          notification_status: Awaited<ReturnType<typeof notifications.notificationStatus>>;
         }
-      ).notificationStatus;
+      ).notification_status;
 
     await ticks(1);
     const failed = (await sends.getSend(env.DB, send.id))!;
@@ -354,8 +354,8 @@ describe("isolation", () => {
     expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 3 });
     expect(fakeNotifications()).toHaveLength(0);
     expect(await surface()).toMatchObject({
-      lastSent: null,
-      lastFailure: {
+      last_sent: null,
+      last_failure: {
         kind: "finished",
         subject: "Owls in winter",
         error: "fake notification failure",
@@ -365,8 +365,8 @@ describe("isolation", () => {
     await ticks(1);
     expect(fakeNotifications()).toHaveLength(1); // the retry got through
     expect(await surface()).toMatchObject({
-      lastSent: { kind: "finished", subject: "Owls in winter" },
-      lastFailure: null,
+      last_sent: { kind: "finished", subject: "Owls in winter" },
+      last_failure: null,
     });
     expect(logged(warnings)).toContainEqual(
       expect.objectContaining({ event: "notify.failed", sendId: send.id, kind: "finished" }),
@@ -390,8 +390,8 @@ describe("isolation", () => {
     ]);
     expect(transport.mailed).toHaveLength(2);
     const status = await notifications.notificationStatus(env.DB);
-    expect(status.lastSent).toBeNull();
-    expect(status.lastFailure).toMatchObject({
+    expect(status.last_sent).toBeNull();
+    expect(status.last_failure).toMatchObject({
       kind: "finished",
       subject: "Owls in winter",
       error: "fake notification failure",
@@ -504,7 +504,7 @@ describe("after the review", () => {
     const byKind = Object.fromEntries((await rows(send.id)).map((r) => [r.kind, r.status]));
     expect(byKind).toEqual({ refused: "cleared", finished: "sent" });
     // A cleared notification is not a channel failure.
-    expect((await notifications.notificationStatus(env.DB)).lastFailure).toBeNull();
+    expect((await notifications.notificationStatus(env.DB)).last_failure).toBeNull();
   });
 
   it("a test that gets through clears Not delivered, and a failed one takes its place", async () => {
@@ -512,7 +512,7 @@ describe("after the review", () => {
     await dueSend();
     failFakeNotify(100);
     await ticks(MAX_NOTIFY_ATTEMPTS + 2);
-    expect((await notifications.notificationStatus(env.DB)).lastFailure).not.toBeNull();
+    expect((await notifications.notificationStatus(env.DB)).last_failure).not.toBeNull();
 
     clearFakeNotifications();
     const test = async () =>
@@ -522,13 +522,13 @@ describe("after the review", () => {
       });
     expect((await test()).status).toBe(200);
     let status = await notifications.notificationStatus(env.DB);
-    expect(status.lastFailure).toBeNull();
-    expect(status.lastSent).toMatchObject({ kind: "test", subject: "" });
+    expect(status.last_failure).toBeNull();
+    expect(status.last_sent).toMatchObject({ kind: "test", subject: "" });
 
     failFakeNotify(1);
     expect((await test()).status).toBe(502);
     status = await notifications.notificationStatus(env.DB);
-    expect(status.lastFailure).toMatchObject({ kind: "test", error: "fake notification failure" });
+    expect(status.last_failure).toMatchObject({ kind: "test", error: "fake notification failure" });
     const { n } = (await env.DB.prepare(
       "SELECT COUNT(*) AS n FROM notifications WHERE kind = 'test'",
     ).first<{ n: number }>())!;
@@ -645,9 +645,9 @@ describe("the settings surface", () => {
     expect(res.status).toBe(200);
     const body = await get();
     expect(body.settings.notifications).toEqual({ to: "me@example.com" });
-    expect(body.deployment.notifyChannel).toBe("fake");
-    expect(body.deployment.notifyFrom).toBe(env.FROM_ADDRESS);
-    expect(body.notificationStatus).toEqual({ lastSent: null, lastFailure: null });
+    expect(body.deployment.notify_channel).toBe("fake");
+    expect(body.deployment.notify_from).toBe(env.FROM_ADDRESS);
+    expect(body.notification_status).toEqual({ last_sent: null, last_failure: null });
   });
 
   it("refuses an address that isn't one, and a wrong type naming the field", async () => {

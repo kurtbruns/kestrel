@@ -462,19 +462,19 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
   const d = data.deployment;
   const p = s.publication;
   const identity: TemplateIdentity = {
-    name: publicationName(p.name || "", d.fromAddress),
+    name: publicationName(p.name || "", d.from_address),
     tagline: p.tagline || "",
-    logoUrl: p.logoUrl || "",
+    logoUrl: p.logo_url || "",
     address: p.address || "",
   };
-  let templateBaseline = s.emailTemplate || "";
-  const defaultRecipients = Array.isArray(s.testRecipients) ? s.testRecipients : [];
+  let templateBaseline = s.email_template || "";
+  const defaultRecipients = Array.isArray(s.test_recipients) ? s.test_recipients : [];
   // Standing: whether scheduled posts are using this template (SPEC §9, DESIGN §8).
-  setHtml($("#tplInUse"), inUseChip(data.inUse));
+  setHtml($("#tplInUse"), inUseChip(data.in_use));
   // While one is about to send, the lede says saving has to wait for it (DESIGN §11: not
   // on the chip), until it no longer does.
-  setHtml($("#tplWait"), html`${remakeWaitHtml(data.inUse)}`);
-  expireRemakeWait(root, data.inUse, signal);
+  setHtml($("#tplWait"), html`${remakeWaitHtml(data.in_use)}`);
+  expireRemakeWait(root, data.in_use, signal);
 
   setHtml(
     bodyEl,
@@ -632,8 +632,8 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
     const r = await withRemakeConfirm(
       (ack) => {
         const body: SettingsPatchBody = ack
-          ? { emailTemplate: value, remake: ack }
-          : { emailTemplate: value };
+          ? { email_template: value, remake: ack }
+          : { email_template: value };
         return api<SettingsSavedResponse>("/api/settings", { method: "PUT", json: body });
       },
       REMAKE_TEMPLATE,
@@ -643,7 +643,7 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
       return null;
     }
     // The server may resolve "" to the default — reflect what was actually stored.
-    templateBaseline = r.settings.emailTemplate;
+    templateBaseline = r.settings.email_template;
     tplEditor.value = templateBaseline;
     // The cached config the sidebar reads: this page's own response, with the saved half.
     appState.appConfig = { ...data, settings: r.settings };

@@ -342,7 +342,7 @@ describe("the SES profile reaches what an SES failure leads to", { timeout: 60_0
     expect(row.c_pending).toBe(30 - row.c_accepted);
     expect(sentTo()).toEqual(new Set(await addresses("accepted")));
     expect(fakeOutbox()).toHaveLength(row.c_accepted);
-    expect((await progress()).phase).toBe("needs-attention");
+    expect((await progress()).phase).toBe("needs_attention");
     const haltedAt = Date.now();
     const beforeQuota = row.c_accepted;
 
@@ -381,7 +381,7 @@ describe("the SES profile reaches what an SES failure leads to", { timeout: 60_0
     expect(row.c_pending).toBe(0);
     expect(row.c_in_flight).toBeGreaterThanOrEqual(1);
     const stuck = await progress();
-    expect(stuck.phase).toBe("needs-attention");
+    expect(stuck.phase).toBe("needs_attention");
     expect(has(stuck, "wedged")).toBe(true);
     // It did leave: the lost request is in the outbox, as it would be in the reader's inbox.
     // Only a reader SES refused for good (rare, at its real rate) is missing.

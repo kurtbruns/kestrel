@@ -116,7 +116,7 @@ describe("API reference is generated from the route registration", () => {
       expect(byKey.get(key)?.description ?? "").toMatch(/re-make/);
       expect(byKey.get(key)?.description ?? "").toMatch(/remake/);
     }
-    expect(byKey.get("GET /api/settings")?.summary ?? "").toMatch(/inUse/);
+    expect(byKey.get("GET /api/settings")?.summary ?? "").toMatch(/in_use/);
     // SPEC §5: once scheduled, the test and preview are the frozen copy.
     for (const key of [
       "POST /api/posts/:id/preview",
@@ -264,10 +264,10 @@ describe("API reference is generated from the route registration", () => {
     ]);
     expect(byKey.get("PUT /api/settings")?.body?.map((f) => f.name)).toEqual(
       expect.arrayContaining([
-        "testRecipients",
+        "test_recipients",
         "publication.name",
-        "emailTemplate",
-        "confirmationEmail.subject",
+        "email_template",
+        "confirmation_email.subject",
         "notifications.to",
         "remake",
       ]),

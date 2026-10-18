@@ -38,7 +38,7 @@ function pickedImage(width: number, height: number) {
 const DEFAULT_COPY = {
   subject: "Confirm your subscription",
   body: "Click below to confirm.",
-  buttonLabel: "Confirm",
+  button_label: "Confirm",
   reassurance: "If this wasn't you, ignore this email.",
 };
 
@@ -50,18 +50,18 @@ const response = (
   settingsResponse({
     deployment: {
       provider: "ses",
-      fromAddress: "Birds <hello@send.birds.example>",
-      sendingDomain: "send.birds.example",
-      awsRegion: "us-east-1",
-      notifyChannel: "provider",
-      notifyFrom: "Birds <hello@send.birds.example>",
+      from_address: "Birds <hello@send.birds.example>",
+      sending_domain: "send.birds.example",
+      aws_region: "us-east-1",
+      notify_channel: "provider",
+      notify_from: "Birds <hello@send.birds.example>",
     },
-    inUse: { sends: [], retry_after: null, identityFields: ["name", "logoUrl"] },
+    in_use: { sends: [], retry_after: null, identity_fields: ["name", "logo_url"] },
     ...over,
     settings: {
-      testRecipients: ["me@b.c"],
-      publication: { name: "Birds Weekly", tagline: "Owls & more", address: "", logoUrl: "" },
-      confirmationEmailDefault: DEFAULT_COPY,
+      test_recipients: ["me@b.c"],
+      publication: { name: "Birds Weekly", tagline: "Owls & more", address: "", logo_url: "" },
+      confirmation_email_default: DEFAULT_COPY,
       ...over.settings,
     },
   });
@@ -149,7 +149,7 @@ describe("settings view", () => {
   it("shows the template as a sample email, with the way to the Template page", async () => {
     const signed = "<div>{{ .Post.Body }}<p>{{ .Publication.Name }}</p></div>";
     await open([
-      { path: "/api/settings", reply: () => response({ settings: { emailTemplate: signed } }) },
+      { path: "/api/settings", reply: () => response({ settings: { email_template: signed } }) },
     ]);
     const frame = $<HTMLIFrameElement>("#tplPreview");
     frame.dispatchEvent(new Event("load"));
@@ -176,7 +176,7 @@ describe("settings view", () => {
     local.deployment = {
       ...local.deployment,
       provider: "fake",
-      minLeadMs: 60_000,
+      min_lead_ms: 60_000,
       simulation: { profile: "ses", faults: "none" },
     };
     await open([{ path: "/api/settings", reply: () => local }]);
@@ -253,14 +253,14 @@ describe("settings view", () => {
   });
 
   it("shows a saved address as the open field, quiet while the template prints it", async () => {
-    const pub = { name: "Birds Weekly", tagline: "", address: "PO Box 1142", logoUrl: "" };
+    const pub = { name: "Birds Weekly", tagline: "", address: "PO Box 1142", logo_url: "" };
     await open([
       {
         path: "/api/settings",
         reply: () =>
           response({
             settings: { publication: pub },
-            inUse: { sends: [], retry_after: null, identityFields: ["name", "address"] },
+            in_use: { sends: [], retry_after: null, identity_fields: ["name", "address"] },
           }),
       },
     ]);
@@ -305,9 +305,9 @@ describe("settings view", () => {
         // whitespace collapsed, the tagline cleared, and the recipients in its order.
         reply: () => ({
           settings: settings({
-            publication: { name: "Birds Monthly", tagline: "", address: "", logoUrl: "" },
-            testRecipients: ["new@b.c", "me@b.c"],
-            confirmationEmail: { ...DEFAULT_COPY, subject: "Please confirm" },
+            publication: { name: "Birds Monthly", tagline: "", address: "", logo_url: "" },
+            test_recipients: ["new@b.c", "me@b.c"],
+            confirmation_email: { ...DEFAULT_COPY, subject: "Please confirm" },
           }),
           warnings: [],
           remade: [],
@@ -324,8 +324,13 @@ describe("settings view", () => {
     const put = fake.calls.find((c) => c.method === "PUT");
     expect(put?.json()).toEqual({
       publication: { name: "Birds   Monthly", tagline: "Owls & more", address: "" },
-      testRecipients: ["me@b.c", "new@b.c"],
-      confirmationEmail: { subject: "Please confirm", body: "", buttonLabel: "", reassurance: "" },
+      test_recipients: ["me@b.c", "new@b.c"],
+      confirmation_email: {
+        subject: "Please confirm",
+        body: "",
+        button_label: "",
+        reassurance: "",
+      },
       notifications: { to: "" },
     });
     // The server's result is the baseline now, wherever it differs from what was sent.
@@ -348,9 +353,9 @@ describe("settings view", () => {
         reply: () =>
           response({
             settings: { notifications: { to: "me@b.c" } },
-            notificationStatus: {
-              lastSent: { kind: "finished", subject: "Gulls", at: 1_800_000_000_000 },
-              lastFailure: {
+            notification_status: {
+              last_sent: { kind: "finished", subject: "Gulls", at: 1_800_000_000_000 },
+              last_failure: {
                 kind: "refused",
                 subject: "Terns",
                 at: 1_800_000_100_000,
@@ -384,9 +389,9 @@ describe("settings view", () => {
         reply: () =>
           response({
             settings: { notifications: { to: "me@b.c" } },
-            notificationStatus: {
-              lastSent: { kind: "sandbox", subject: "", at: 1_800_000_000_000 },
-              lastFailure: null,
+            notification_status: {
+              last_sent: { kind: "sandbox", subject: "", at: 1_800_000_000_000 },
+              last_failure: null,
             },
           }),
       },
@@ -484,7 +489,7 @@ describe("settings view", () => {
     await open([
       {
         path: "/api/settings",
-        reply: () => response({ inUse: { sends, retry_after: null, identityFields: ["name"] } }),
+        reply: () => response({ in_use: { sends, retry_after: null, identity_fields: ["name"] } }),
       },
       {
         method: "PUT",
@@ -523,7 +528,7 @@ describe("settings view", () => {
     await open([
       {
         path: "/api/settings",
-        reply: () => response({ inUse: { sends, retry_after: at, identityFields: ["name"] } }),
+        reply: () => response({ in_use: { sends, retry_after: at, identity_fields: ["name"] } }),
       },
     ]);
     const wait = ` A scheduled post sends at ${fmt(at)}. You can save once it has sent.`;
@@ -774,7 +779,7 @@ describe("settings view", () => {
     const unnamed = response({
       settings: { publication: { ...settings().publication, name: "" } },
     });
-    unnamed.deployment.fromAddress = "hello@send.birds.example";
+    unnamed.deployment.from_address = "hello@send.birds.example";
     unmount();
     await open([{ path: "/api/settings", reply: () => unnamed }]);
     expect($("#subscribePageLine").textContent).toBe(
@@ -801,7 +806,7 @@ describe("settings view", () => {
     const unnamed = response({
       settings: { publication: { ...settings().publication, name: "" } },
     });
-    unnamed.deployment.fromAddress = "hello@send.birds.example";
+    unnamed.deployment.from_address = "hello@send.birds.example";
     await open([{ path: "/api/settings", reply: () => unnamed }]);
     expect($("#embedPreview .l").textContent).toBe("Subscribe");
     expect($("#embedCode").textContent).toContain('margin-bottom:12px">Subscribe</div>');
@@ -824,7 +829,7 @@ describe("settings view", () => {
         name: "Birds Weekly",
         tagline: "",
         address: "",
-        logoUrl: "https://app.birds.example/media/branding/logo?v=1",
+        logo_url: "https://app.birds.example/media/branding/logo?v=1",
       },
     });
     await open([
@@ -936,8 +941,8 @@ describe("settings view", () => {
       },
     );
     const pub = { name: "Birds Weekly", tagline: "", address: "" };
-    const withLogo = (logoUrl: string) =>
-      response({ settings: { publication: { ...pub, logoUrl } } });
+    const withLogo = (logo_url: string) =>
+      response({ settings: { publication: { ...pub, logo_url } } });
     await open([
       {
         path: "/api/settings",

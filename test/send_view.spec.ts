@@ -208,7 +208,7 @@ describe("one SendView on every route", () => {
       .bind(now, send.id)
       .run();
     const paused = await read();
-    expect(paused.phase).toBe("backing-off");
+    expect(paused.phase).toBe("backing_off");
     expect(paused.dispatch.rate_per_min).not.toBeNull();
     expect(paused.dispatch.eta_ms).toBeNull();
   });
@@ -324,7 +324,7 @@ describe("the time to finish, in ticks", () => {
       halted_at: now,
       halt_retry_at: now + MIN,
     });
-    expect(viewOf(halted, "fake", false, now).phase).toBe("backing-off");
+    expect(viewOf(halted, "fake", false, now).phase).toBe("backing_off");
     expect(dispatchAt(halted, now).eta_ms).toBeNull();
   });
 

@@ -134,7 +134,7 @@ export async function seedCommand(argv) {
     `  posts: ${summary.posts.sent} sent, ${summary.posts.scheduled} scheduled, ${summary.posts.draft} draft`,
   );
   console.log(
-    `  deliveries: ${summary.deliveries}  •  images written: ${summary.imagesWritten}  •  logo written: ${summary.logoWritten}`,
+    `  deliveries: ${summary.deliveries}  •  images written: ${summary.images_written}  •  logo written: ${summary.logo_written}`,
   );
   console.log("");
   console.log("  view it:");

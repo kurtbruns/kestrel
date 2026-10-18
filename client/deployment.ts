@@ -32,11 +32,11 @@ export function buildRefParts(): BuildRefParts | null {
   if (!b?.version) {
     return null;
   }
-  const version = b.tagUrl
-    ? html`<a class="build-link" href="${b.tagUrl}" target="_blank" rel="noopener">v${b.version}</a>`
+  const version = b.tag_url
+    ? html`<a class="build-link" href="${b.tag_url}" target="_blank" rel="noopener">v${b.version}</a>`
     : html`v${b.version}`;
-  const sha = b.commitUrl
-    ? html`<a class="build-link" href="${b.commitUrl}" target="_blank" rel="noopener">${b.sha}</a>`
+  const sha = b.commit_url
+    ? html`<a class="build-link" href="${b.commit_url}" target="_blank" rel="noopener">${b.sha}</a>`
     : html`${b.sha}`;
   return { version, sha };
 }
@@ -47,7 +47,7 @@ export function buildRefParts(): BuildRefParts | null {
  * default until the reflection has loaded: the editor never states a lead of its own.
  */
 export function minLeadMs(): number {
-  return appState.appConfig?.deployment.minLeadMs ?? DEFAULT_MIN_LEAD_MS;
+  return appState.appConfig?.deployment.min_lead_ms ?? DEFAULT_MIN_LEAD_MS;
 }
 
 /** The minimum lead in words, "5 minutes", for the editor's hints and toasts. */
@@ -117,7 +117,7 @@ export function providerNotConnected(): boolean {
  * D1's daily writes (SPEC §8).
  */
 export function freePlanLimits(): boolean {
-  return appState.appConfig?.deployment.freePlanLimits === true;
+  return appState.appConfig?.deployment.free_plan_limits === true;
 }
 
 /**
@@ -126,7 +126,7 @@ export function freePlanLimits(): boolean {
  * as the reflection says. Its way out is a restart, not a deploy.
  */
 export function notConnectedPreview(): boolean {
-  return providerNotConnected() && appState.appConfig?.deployment.notConnectedPreview === true;
+  return providerNotConnected() && appState.appConfig?.deployment.not_connected_preview === true;
 }
 
 /** The setup step that connects a provider: Get started's Connect Amazon SES. */
@@ -250,5 +250,5 @@ export function withNoProviderNote(msg: string): string {
  *  uses (shared/archive_url.ts), or null before the reflection has loaded. */
 export function postArchiveUrl(slug: string): string | null {
   const d = appState.appConfig?.deployment;
-  return d ? archivePostUrl(d.archiveOrigin, d.archiveBasePath, slug) : null;
+  return d ? archivePostUrl(d.archive_origin, d.archive_base_path, slug) : null;
 }

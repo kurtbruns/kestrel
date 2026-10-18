@@ -81,10 +81,10 @@ describe("a send's rev", () => {
         headers: JSON_AUTH,
         body: JSON.stringify(body),
       });
-    expect((await put({ emailTemplate: tpl("v1") })).status).toBe(200);
+    expect((await put({ email_template: tpl("v1") })).status).toBe(200);
     const a = await frozenSend(Date.now() + 3_600_000);
     const before = await rev(a.id);
-    expect((await put({ emailTemplate: tpl("v2"), remake: [a.id] })).status).toBe(200);
+    expect((await put({ email_template: tpl("v2"), remake: [a.id] })).status).toBe(200);
     expect(await rev(a.id)).toBeGreaterThan(before);
   });
 

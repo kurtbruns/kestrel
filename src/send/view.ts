@@ -33,13 +33,13 @@ import { isWedged } from "./wedged";
  *   - `progressing`     handing recipients to the provider at the pace the platform allows,
  *                       including a send too large for one tick waiting for the next.
  *   - `retrying`        handing off, but with recipients already retried (transient errors).
- *   - `backing-off`     work remains and the pause follows an error: nothing in flight and
+ *   - `backing_off`     work remains and the pause follows an error: nothing in flight and
  *                       recipients waiting on their retry after a transient error, or the
  *                       provider unavailable until the halt's next retry
  *                       (`provider.halt.retry_at`), even with a batch it never answered
  *                       in flight awaiting Resolve, or held on another send's outage
  *                       before its first hand-off.
- *   - `needs-attention` wedged: nothing left to hand off, and the last run released the
+ *   - `needs_attention` wedged: nothing left to hand off, and the last run released the
  *                       send with recipients in flight whose fate is unknown (§12) —
  *                       awaiting Resolve;
  *                       or refused: the provider refuses the account, which the operator
@@ -73,7 +73,7 @@ function derivePhase(
       if (wedged || refused) {
         // dispatched rows stuck in flight with no lease and nothing left to send, or the
         // provider refusing the account
-        return "needs-attention";
+        return "needs_attention";
       }
       // Paused for a provider outage with work left: nothing goes out until the halt's next
       // retry, whatever is in flight. A batch the provider never answered stays in flight
@@ -82,7 +82,7 @@ function derivePhase(
       // A send held on the outage before its first hand-off has fixed no audience yet, so
       // nothing is pending, but all of it is still to go.
       if (unavailable && (counts.pending > 0 || !audienceFixed)) {
-        return "backing-off";
+        return "backing_off";
       }
       if (counts.in_flight > 0) {
         return hasRetries ? "retrying" : "progressing";
@@ -92,7 +92,7 @@ function derivePhase(
       // with attempts is one a transient error put back in the queue. Without it, the tick's
       // budget ran out on a healthy send, which the next tick carries on (SPEC §12).
       if (counts.pending > 0 && hasRetries) {
-        return "backing-off";
+        return "backing_off";
       }
       return "progressing";
     }

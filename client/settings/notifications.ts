@@ -18,7 +18,7 @@ import { chip, message, type SectionHandle, type SettingsPage, secHead } from ".
 
 /** How the deploy-time notification channel reads to the publisher. */
 function notifyChannelLabel(
-  channel: SettingsResponse["deployment"]["notifyChannel"],
+  channel: SettingsResponse["deployment"]["notify_channel"],
   provider: string,
 ): string {
   switch (channel) {
@@ -54,8 +54,8 @@ function aboutNotification(n: { kind: NotificationStatusKind; subject: string })
 }
 
 /** The last delivered notification, and a newer failure when the channel has stopped working. */
-function notificationStatusHtml(status: SettingsResponse["notificationStatus"]): Html {
-  const { lastSent, lastFailure } = status;
+function notificationStatusHtml(status: SettingsResponse["notification_status"]): Html {
+  const { last_sent: lastSent, last_failure: lastFailure } = status;
   if (lastFailure) {
     return html`<span class="set-pill danger">Not delivered</span> <span class="muted">${fmt(lastFailure.at)}, ${aboutNotification(lastFailure)}: ${lastFailure.error}</span>`;
   }
@@ -81,11 +81,11 @@ export function notificationsSection(page: SettingsPage): Html {
           <div class="row"><button type="button" class="ghost" id="notifyTest">Send a test notification</button><span class="field-hint" id="notifyTestHint"></span></div>
         </div>
         <div class="set-kv" style="border-top:1px solid var(--line)">
-          <div class="set-kv-k">Sent through</div><div class="set-kv-v">${notifyChannelLabel(d.notifyChannel, d.provider)}</div>
-          <div class="set-kv-k">From address</div><div class="set-kv-v"><span class="mono">${d.notifyFrom}</span></div>
-          <div class="set-kv-k">Last notification</div><div class="set-kv-v" id="notifyStatus">${notificationStatusHtml(page.data.notificationStatus)}</div>
+          <div class="set-kv-k">Sent through</div><div class="set-kv-v">${notifyChannelLabel(d.notify_channel, d.provider)}</div>
+          <div class="set-kv-k">From address</div><div class="set-kv-v"><span class="mono">${d.notify_from}</span></div>
+          <div class="set-kv-k">Last notification</div><div class="set-kv-v" id="notifyStatus">${notificationStatusHtml(page.data.notification_status)}</div>
         </div>
-        <div class="set-note">${icon("readonly")}<span>The channel and its sender are set at deploy. ${d.notifyChannel === "provider" ? "Notifications go through your newsletter’s own provider, so one about the provider refusing your account cannot reach you; Cloudflare’s email avoids that. " : ""}See the <a class="set-link" href="#/docs/notifications">setup guide</a>.</span></div>
+        <div class="set-note">${icon("readonly")}<span>The channel and its sender are set at deploy. ${d.notify_channel === "provider" ? "Notifications go through your newsletter’s own provider, so one about the provider refusing your account cannot reach you; Cloudflare’s email avoids that. " : ""}See the <a class="set-link" href="#/docs/notifications">setup guide</a>.</span></div>
       </div>
     </section>`;
 }
@@ -126,8 +126,8 @@ export function mountNotifications(root: HTMLElement, page: SettingsPage): Secti
         setHtml(
           status,
           notificationStatusHtml({
-            lastSent: { kind: "test", subject: "", at: Date.now() },
-            lastFailure: null,
+            last_sent: { kind: "test", subject: "", at: Date.now() },
+            last_failure: null,
           }),
         );
       } catch (err) {
@@ -136,8 +136,8 @@ export function mountNotifications(root: HTMLElement, page: SettingsPage): Secti
         setHtml(
           status,
           notificationStatusHtml({
-            lastSent: null,
-            lastFailure: { kind: "test", subject: "", at: Date.now(), error: message(err) },
+            last_sent: null,
+            last_failure: { kind: "test", subject: "", at: Date.now(), error: message(err) },
           }),
         );
       }

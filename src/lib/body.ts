@@ -142,6 +142,20 @@ export function optObject(o: JsonObject, key: string, at?: string): JsonObject |
   return v;
 }
 
+/** Refuse a key the body may not carry, naming the first one, so a field misnamed (an old
+ *  name, a typo) is a 400 rather than a success that ignored it. For a body that is a set of
+ *  optional fields, where nothing else would notice the key. */
+export function onlyKeys(o: JsonObject, known: readonly string[], at?: string): void {
+  const unknown = Object.keys(o).find((k) => !known.includes(k));
+  if (unknown !== undefined) {
+    const names = known.map((k) => `'${k}'`).join(", ");
+    throw fieldError(
+      path(unknown, at),
+      `${path(unknown, at)} isn’t a field this takes; it takes ${names}`,
+    );
+  }
+}
+
 /** A required field that must be one of a fixed set of strings; anything else is a 400 listing them. */
 export function oneOf<const T extends string>(
   o: JsonObject,

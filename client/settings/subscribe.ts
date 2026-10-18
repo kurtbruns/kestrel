@@ -62,7 +62,7 @@ function embedPreview(mode: EmbedMode, name: string): Html {
 }
 
 function appOriginOf(page: SettingsPage): string {
-  return page.data.deployment.appOrigin || location.origin;
+  return page.data.deployment.app_origin || location.origin;
 }
 
 /** The page's line names the publication only when it has a name, since the page then

@@ -26,7 +26,7 @@ const TEMPLATE = `<style>.email{color:#111}</style>\n<div class="email">{{ .Post
 
 const response = (over: Partial<Omit<SettingsResponse, "settings">> = {}): SettingsResponse =>
   settingsResponse({
-    settings: { testRecipients: ["me@b.c", "you@b.c"], emailTemplate: TEMPLATE },
+    settings: { test_recipients: ["me@b.c", "you@b.c"], email_template: TEMPLATE },
     ...over,
   });
 
@@ -118,7 +118,7 @@ describe("template view", () => {
         method: "PUT",
         path: "/api/settings",
         reply: () => ({
-          settings: { ...response().settings, emailTemplate: stored },
+          settings: { ...response().settings, email_template: stored },
           warnings: ["No {{ .Email.ViewInBrowserURL }} link."],
           remade: [],
         }),
@@ -128,13 +128,13 @@ describe("template view", () => {
     $("#savebarSave").click();
     await vi.advanceTimersByTimeAsync(0);
     const put = fake.calls.find((c) => c.method === "PUT");
-    expect(put?.json()).toEqual({ emailTemplate: `${TEMPLATE} ` });
+    expect(put?.json()).toEqual({ email_template: `${TEMPLATE} ` });
     expect(editor().value).toBe(stored);
     expect($("#tplMsgs").hidden).toBe(false);
     expect($("#tplMsgs").textContent).toBe("No {{ .Email.ViewInBrowserURL }} link.");
     expect($("#toasts").textContent).toMatch(/Template saved with warnings/);
     expect(bar().classList.contains("show")).toBe(false);
-    expect(appState.appConfig?.settings.emailTemplate).toBe(stored);
+    expect(appState.appConfig?.settings.email_template).toBe(stored);
   });
 
   it("links the mailing-address warning to the docs section, in a new tab, and no other warning", async () => {
@@ -194,7 +194,7 @@ describe("template view", () => {
     await open([
       {
         path: "/api/settings",
-        reply: () => response({ inUse: { sends, retry_after: null, identityFields: [] } }),
+        reply: () => response({ in_use: { sends, retry_after: null, identity_fields: [] } }),
       },
       {
         method: "PUT",
@@ -224,7 +224,7 @@ describe("template view", () => {
     await open([
       {
         path: "/api/settings",
-        reply: () => response({ inUse: { sends, retry_after: at, identityFields: [] } }),
+        reply: () => response({ in_use: { sends, retry_after: at, identity_fields: [] } }),
       },
     ]);
     expect($(".set-chip.inuse").textContent).toBe("In use by 1 scheduled post");
@@ -241,7 +241,7 @@ describe("template view", () => {
     await open([
       {
         path: "/api/settings",
-        reply: () => response({ inUse: { sends, retry_after: at, identityFields: [] } }),
+        reply: () => response({ in_use: { sends, retry_after: at, identity_fields: [] } }),
       },
     ]);
     await vi.advanceTimersByTimeAsync(119_000);
@@ -264,7 +264,7 @@ describe("template view", () => {
     await open([
       {
         path: "/api/settings",
-        reply: () => response({ inUse: { sends, retry_after: null, identityFields: [] } }),
+        reply: () => response({ in_use: { sends, retry_after: null, identity_fields: [] } }),
       },
       {
         method: "PUT",
@@ -392,7 +392,7 @@ describe("template view", () => {
         reply: (req) => ({
           settings: {
             ...response().settings,
-            emailTemplate: (req.json() as { emailTemplate: string }).emailTemplate,
+            email_template: (req.json() as { email_template: string }).email_template,
           },
           warnings: [],
           remade: [],

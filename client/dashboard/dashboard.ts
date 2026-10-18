@@ -309,7 +309,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
 
   // The publication's home page is at the app's own origin (SPEC §11); the
   // archive and every post are a click from it, so the card names the one address to share.
-  const homeUrl = deployment?.appOrigin || location.origin;
+  const homeUrl = deployment?.app_origin || location.origin;
   const pubCardHtml = html`<div class="card pub-card">
     <div class="pub-row"><code class="pub-val">${homeUrl}</code>${copyButton(homeUrl, "Copy the publication’s address")}</div>
     <div class="pub-foot"><a href="/" target="_blank" rel="noopener">View publication&nbsp;↗</a></div>
@@ -601,7 +601,7 @@ function setupStepsHtml(
   progress: SetupProgress,
   layout: "checklist" | "card",
 ): Html {
-  const subscribeUrl = `${deployment?.appOrigin || location.origin}/subscribe`;
+  const subscribeUrl = `${deployment?.app_origin || location.origin}/subscribe`;
   const notConnected = providerNotConnected();
   const { onList } = progress;
   const done = (yes: boolean) => (yes ? " setup-done" : "");

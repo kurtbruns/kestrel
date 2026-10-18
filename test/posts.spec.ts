@@ -429,13 +429,13 @@ describe("posts list: filter, sort, paginate", () => {
     for (const s of ["A", "B", "C"]) {
       await createPost({ subject: `${marker} ${s}`, markdown: "x" });
     }
-    const q = `search=${marker}&sort=title&dir=asc`;
+    const q = `search=${marker}&sort=subject&dir=asc`;
 
     const p1 = await readJson(
       await SELF.fetch(`${base}/api/posts?${q}&limit=2&offset=0`, { headers: AUTH }),
     );
     expect(p1.posts.map((p: any) => p.subject)).toEqual([`${marker} A`, `${marker} B`]);
-    expect(p1.page).toMatchObject({ total: 3, limit: 2, offset: 0, sort: "title", dir: "asc" });
+    expect(p1.page).toMatchObject({ total: 3, limit: 2, offset: 0, sort: "subject", dir: "asc" });
 
     const p2 = await readJson(
       await SELF.fetch(`${base}/api/posts?${q}&limit=2&offset=2`, { headers: AUTH }),

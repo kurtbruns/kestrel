@@ -2365,7 +2365,7 @@ body.web-mode .content {
   font-size: 22px;
   letter-spacing: -0.01em;
 }
-/* The derived-phase pill (progressing / retrying / backing-off / needs-attention /
+/* The derived-phase pill (progressing / retrying / backing_off / needs_attention /
    settling / …). Tones reuse the status + semantic palettes so a phase reads the same
    hue as its badge elsewhere. A plain label, so the default cursor (DESIGN §11). */
 .phase-pill {

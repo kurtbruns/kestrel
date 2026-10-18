@@ -117,7 +117,7 @@ export function readerPagesSection(head: Html): Html {
 /** Where a reader meets a page on this deployment, as the address line shows it: without
  *  its scheme, which says nothing to a publisher. */
 export function readerPageAddress(at: ReaderPageAddress, d: DeploymentView): string {
-  const base = at.base === "app" ? d.appOrigin : `${d.archiveOrigin}${d.archiveBasePath}`;
+  const base = at.base === "app" ? d.app_origin : `${d.archive_origin}${d.archive_base_path}`;
   return `${base}${at.path}`.replace(/^https?:\/\//, "");
 }
 

@@ -86,8 +86,8 @@ const PHASE_META: Record<SendPhase, { label: string; tone: string }> = {
   due: { label: "Due", tone: "scheduled" },
   progressing: { label: "Sending", tone: "sending" },
   retrying: { label: "Retrying", tone: "warn" },
-  "backing-off": { label: "Backing off", tone: "warn" },
-  "needs-attention": { label: "Needs attention", tone: "danger" },
+  backing_off: { label: "Backing off", tone: "warn" },
+  needs_attention: { label: "Needs attention", tone: "danger" },
   settling: { label: "Settling", tone: "sending" },
   complete: { label: "Complete", tone: "ok" },
   canceled: { label: "Canceled", tone: "muted" },
@@ -95,8 +95,8 @@ const PHASE_META: Record<SendPhase, { label: string; tone: string }> = {
 const PHASE_BLURB: Partial<Record<SendPhase, string>> = {
   progressing: "Handing recipients to the provider.",
   retrying: "Some recipients hit a transient error and will be retried.",
-  "backing-off": "Some recipients hit a transient error. They’re retried on the next sweep.",
-  "needs-attention": "Some deliveries can’t be confirmed either way, and wait on your decision.",
+  backing_off: "Some recipients hit a transient error. They’re retried on the next sweep.",
+  needs_attention: "Some deliveries can’t be confirmed either way, and wait on your decision.",
   settling: "Dispatch complete, waiting on delivery receipts.",
 };
 /** The phase's one-line gloss, said for the cause when the phase has more than one. */
@@ -119,7 +119,7 @@ function phaseBlurb(prog: SendView): string {
     const what = isSendOwnHalt(halt.cause) ? "this send" : "this account";
     return `The provider is refusing ${what}, so nothing more goes out until it’s fixed; ${nextRetry(halt.retry_at)}.`;
   }
-  if (prog.phase === "backing-off" && halt?.reason === "unavailable") {
+  if (prog.phase === "backing_off" && halt?.reason === "unavailable") {
     return `The provider is unavailable; ${nextRetry(halt.retry_at)}.`;
   }
   // In flight too long: the alert above says why, so the gloss must not say it is handing off.

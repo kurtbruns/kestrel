@@ -600,11 +600,11 @@ describe("schedule / send / cancel + soft-lock", () => {
     });
 
     const list = await readJson(
-      await SELF.fetch(`${base}/api/sends?status=scheduled&sort=fire&dir=asc&limit=100`, {
+      await SELF.fetch(`${base}/api/sends?status=scheduled&sort=fire_at&dir=asc&limit=100`, {
         headers: AUTH,
       }),
     );
-    expect(list.page).toMatchObject({ sort: "fire", dir: "asc", offset: 0 });
+    expect(list.page).toMatchObject({ sort: "fire_at", dir: "asc", offset: 0 });
     expect(list.sends.every((s: any) => s.status === "scheduled")).toBe(true);
     // fire asc → scheduled sends come back in ascending fire-time order.
     const fires = list.sends.map((s: any) => s.fire_at);
@@ -677,9 +677,9 @@ describe("the minimum lead is the deployment's own", () => {
 
   it("reflects the lead read-only in the settings deployment view", async () => {
     const defaults = await readJson(await fetchWith({}, "/api/settings", { headers: AUTH }));
-    expect(defaults.deployment.minLeadMs).toBe(DEFAULT_MIN_LEAD_MS);
+    expect(defaults.deployment.min_lead_ms).toBe(DEFAULT_MIN_LEAD_MS);
     const minute = await readJson(await fetchWith(MINUTE_LEAD, "/api/settings", { headers: AUTH }));
-    expect(minute.deployment.minLeadMs).toBe(60_000);
+    expect(minute.deployment.min_lead_ms).toBe(60_000);
   });
 
   it("states the lead on every route that enforces it in the API reference, and its floor once", async () => {

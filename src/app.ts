@@ -86,7 +86,7 @@ export function createRouter({
   /** The given routes in a dev-shaped env, none anywhere else. */
   const devOnly = (...defs: RouteDef[]): RouteDef[] => (devMode ? defs : []);
   /** The minimum lead as the reference states it: this deployment's value and the floor. */
-  const lead = `${formatLead(minLeadMs)} on this deployment (\`deployment.minLeadMs\` in \`GET /api/settings\`); a deployment sets it with \`MIN_LEAD_SECONDS\`, never below ${formatLead(MIN_LEAD_FLOOR_MS)}`;
+  const lead = `${formatLead(minLeadMs)} on this deployment (\`deployment.min_lead_ms\` in \`GET /api/settings\`); a deployment sets it with \`MIN_LEAD_SECONDS\`, never below ${formatLead(MIN_LEAD_FLOOR_MS)}`;
   // A post's archive address, and its listing: the post's settings, which Schedule and Send
   // now take as well as their own route, the address also on a create or a save.
   const slugField: BodyField = {
@@ -251,14 +251,14 @@ export function createRouter({
       resource: "system",
       title: "Get who is signed in",
       summary:
-        "The authenticated principal and the auth mode: how this request signed in (access or dev). A service token's principal carries its Client ID as `tokenId`.",
+        "The authenticated principal and the auth mode: how this request signed in (access or dev). A service token's principal carries its Client ID as `token_id`.",
       returns: {
         fields: [
           {
             name: "principal",
-            type: "{ kind, email, tokenId }",
+            type: "{ kind, email, token_id }",
             description:
-              "`kind` `human`, signed in as `email`, or `service`, a service token as Claude uses, with no `email` and its Client ID as `tokenId` when the token names one.",
+              "`kind` `human`, signed in as `email`, or `service`, a service token as Claude uses, with no `email` and its Client ID as `token_id` when the token names one.",
           },
           {
             name: "auth.mode",
@@ -269,7 +269,7 @@ export function createRouter({
       },
       handler: (c) => {
         const { kind, email, tokenId, via } = unwrap(c.principal, "principal");
-        return json({ principal: { kind, email, tokenId }, auth: { mode: via } });
+        return json({ principal: { kind, email, token_id: tokenId }, auth: { mode: via } });
       },
     },
     {
@@ -289,10 +289,10 @@ export function createRouter({
           version: "0.1.0",
           sha: "a1b2c3d",
           tag: "v0.1.0",
-          buildTime: "2026-01-15T09:00:00.000Z",
-          repoUrl: "https://github.com/kurtbruns/kestrel",
-          commitUrl: "https://github.com/kurtbruns/kestrel/commit/a1b2c3d",
-          tagUrl: "https://github.com/kurtbruns/kestrel/releases/tag/v0.1.0",
+          build_time: "2026-01-15T09:00:00.000Z",
+          repo_url: "https://github.com/kurtbruns/kestrel",
+          commit_url: "https://github.com/kurtbruns/kestrel/commit/a1b2c3d",
+          tag_url: "https://github.com/kurtbruns/kestrel/releases/tag/v0.1.0",
         },
       },
       handler: () => json(buildInfo()),
@@ -307,7 +307,7 @@ export function createRouter({
       title: "Mint a dev token",
       summary: "Mint an admin token (local dev only).",
       description:
-        "Public because it's how a local client gets the token every admin route requires. Registered only on a local instance. When `kestrel dev` started the server, the answer also carries `runId`, the ID it recorded for this run, which `kestrel seed` and `kestrel reset` check before wiping the database.",
+        "Public because it's how a local client gets the token every admin route requires. Registered only on a local instance. When `kestrel dev` started the server, the answer also carries `run_id`, the ID it recorded for this run, which `kestrel seed` and `kestrel reset` check before wiping the database.",
       query: [
         {
           name: "kind",
@@ -406,7 +406,7 @@ export function createRouter({
       resource: "settings",
       title: "Get the settings",
       summary:
-        "Runtime preferences, a read-only reflection of deploy config (no secrets), and `inUse`: the scheduled sends a template or identity change would re-make.",
+        "Runtime preferences, a read-only reflection of deploy config (no secrets), and `in_use`: the scheduled sends a template or identity change would re-make.",
       returns: { object: "settings" },
       handler: settingsRoutes.get,
     },
@@ -420,11 +420,11 @@ export function createRouter({
       summary:
         "Update runtime preferences: test recipients, the publication identity, the email template, the confirmation email wording.",
       description:
-        "Every field is optional: send only what changes. Saving a changed template, or an identity field the template renders, re-makes every scheduled send's email at once, once the client acknowledges those sends by id in `remake`; a save that leaves the email's inputs unchanged asks nothing. `GET /api/settings` lists them under `inUse` beforehand.",
+        "Every field is optional: send only what changes. Saving a changed template, or an identity field the template renders, re-makes every scheduled send's email at once, once the client acknowledges those sends by id in `remake`; a save that leaves the email's inputs unchanged asks nothing. `GET /api/settings` lists them under `in_use` beforehand.",
       example: {
-        request: { emailTemplate: "<style>…</style>…", remake: ["s_xyz789"] },
+        request: { email_template: "<style>…</style>…", remake: ["s_xyz789"] },
         response: {
-          settings: { emailTemplate: "…" },
+          settings: { email_template: "…" },
           warnings: [],
           remade: [
             {
@@ -439,7 +439,7 @@ export function createRouter({
       },
       body: [
         {
-          name: "testRecipients",
+          name: "test_recipients",
           type: "string[]",
           description: "The addresses a test goes to when it names none.",
         },
@@ -451,28 +451,28 @@ export function createRouter({
           description: "The mailing address the template prints in each email's footer.",
         },
         {
-          name: "emailTemplate",
+          name: "email_template",
           type: "string",
           description:
             "The email template's HTML. One missing the unsubscribe link or the body is a 400.",
         },
         {
-          name: "confirmationEmail.subject",
+          name: "confirmation_email.subject",
           type: "string",
           description: "The confirmation email's subject.",
         },
         {
-          name: "confirmationEmail.body",
+          name: "confirmation_email.body",
           type: "string",
           description: "Its text above the button.",
         },
         {
-          name: "confirmationEmail.buttonLabel",
+          name: "confirmation_email.button_label",
           type: "string",
           description: "Its button's label.",
         },
         {
-          name: "confirmationEmail.reassurance",
+          name: "confirmation_email.reassurance",
           type: "string",
           description: "Its line under the button.",
         },
@@ -485,7 +485,7 @@ export function createRouter({
           name: "remake",
           type: "string[]",
           description:
-            "The id of every scheduled send this save would re-make, acknowledging it (`inUse.sends` in `GET /api/settings`).",
+            "The id of every scheduled send this save would re-make, acknowledging it (`in_use.sends` in `GET /api/settings`).",
         },
       ],
       errors: remakeRefusals,
@@ -506,7 +506,7 @@ export function createRouter({
             name: "remade",
             type: "object[]",
             description:
-              "The scheduled sends the save re-made, as `inUse.sends` lists them; each then needs a fresh test.",
+              "The scheduled sends the save re-made, as `in_use.sends` lists them; each then needs a fresh test.",
           },
         ],
       },
@@ -586,7 +586,7 @@ export function createRouter({
         {
           name: "to",
           type: "string or string[]",
-          description: `Where to send it, at most ${renderRoutes.MAX_TEMPLATE_TEST_RECIPIENTS} addresses. Omitted, the saved \`testRecipients\`.`,
+          description: `Where to send it, at most ${renderRoutes.MAX_TEMPLATE_TEST_RECIPIENTS} addresses. Omitted, the saved \`test_recipients\`.`,
         },
       ],
       errors: [notConnected],
@@ -677,7 +677,7 @@ export function createRouter({
         {
           name: "sort",
           description:
-            "`updated` (default: scheduled-first, then newest edit), `title`, `status`, or `scheduled`.",
+            "`updated_at` (default: scheduled-first, then newest edit), `subject`, `status`, or `fire_at`.",
         },
         { name: "dir", description: "`asc` or `desc` (default `desc`)." },
         ...pageParams,
@@ -1077,7 +1077,7 @@ export function createRouter({
         title: "Load the demo dataset",
         summary: "Load the local demo dataset (local dev only).",
         description:
-          "Resets the database first, as `POST /api/dev/reset` does, then loads the demo publication. Answers what it loaded: `subscribers` by status, `suppressions`, `audience`, `posts` by status, `deliveries`, `imagesWritten`, `logoWritten`, and `urls`.",
+          "Resets the database first, as `POST /api/dev/reset` does, then loads the demo publication. Answers what it loaded: `subscribers` by status, `suppressions`, `audience`, `posts` by status, `deliveries`, `images_written`, `logo_written`, and `urls`.",
         query: [
           {
             name: "size",
@@ -1195,7 +1195,7 @@ export function createRouter({
         },
         {
           name: "sort",
-          description: "`fire` (default), `status`, `recipients`, or `subject`.",
+          description: "`fire_at` (default), `status`, `audience.count`, or `subject`.",
         },
         { name: "dir", description: "`asc` or `desc` (default `desc`)." },
         ...pageParams,
@@ -1355,7 +1355,7 @@ export function createRouter({
             "`failures` (default: bounced/complained/unsent), `delivered`, `all`, or a single bucket (`bounced`, `complained`, `unsent`, `skipped`, `accepted`, `in_flight`). Anything else is a 400 naming the field.",
         },
         { name: "search", description: "Email contains-search." },
-        { name: "sort", description: "`email` (default), `status`, `event`, or `updated`." },
+        { name: "sort", description: "`email` (default), `status`, `event`, or `event_at`." },
         { name: "dir", description: "`asc` (default) or `desc`." },
         ...pageParams,
       ],
@@ -1570,7 +1570,10 @@ export function createRouter({
           description: "Suppression facet: `only` (suppressed addresses) or `hide` (exclude them).",
         },
         { name: "search", description: "Email contains-search." },
-        { name: "sort", description: "`joined` (default), `confirmed`, `email`, or `status`." },
+        {
+          name: "sort",
+          description: "`created_at` (default), `confirmed_at`, `email`, or `status`.",
+        },
         { name: "dir", description: "`asc` or `desc` (default `desc`)." },
         ...pageParams,
         {

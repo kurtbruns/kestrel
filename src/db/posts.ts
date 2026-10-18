@@ -303,12 +303,12 @@ export interface PostFilter {
 /** The sortable columns exposed by `GET /api/posts` (see `parseListParams`). */
 export const POST_LIST_SPEC: ListSpec = {
   columns: {
-    updated: "p.updated_at",
-    title: "p.subject",
+    updated_at: "p.updated_at",
+    subject: "p.subject",
     status: "p.status",
-    scheduled: "s.fire_at",
+    fire_at: "s.fire_at",
   },
-  defaultSort: "updated",
+  defaultSort: "updated_at",
   defaultDir: "desc",
 };
 

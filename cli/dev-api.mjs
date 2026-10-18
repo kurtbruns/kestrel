@@ -145,7 +145,7 @@ async function devToken(base, tag) {
       ...(typeof message === "string" ? [message] : []),
     );
   }
-  const { token, runId } = await res.json();
+  const { token, run_id: runId } = await res.json();
   return { token, runId: typeof runId === "string" && runId ? runId : undefined };
 }
 

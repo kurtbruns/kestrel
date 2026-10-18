@@ -61,7 +61,7 @@ export async function renderSubscribers(
     status: "",
     search: "",
     suppressed: "",
-    sort: "joined",
+    sort: "created_at",
     dir: "desc",
     offset: 0,
     limit: 50,
@@ -279,7 +279,7 @@ function renderSubTable(
   // what the stacking measures: this table stacks by its own width, not the viewport's.
   setHtml(
     listEl,
-    html`<div class="table-wrap subs-wrap"><table class="list-table subs-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-how"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Email", "email", state)}${th("Status", null, state)}${th("How they joined", null, state)}${th("Joined", "joined", state)}<th></th></tr></thead><tbody>${rows.map(
+    html`<div class="table-wrap subs-wrap"><table class="list-table subs-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-how"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Email", "email", state)}${th("Status", null, state)}${th("How they joined", null, state)}${th("Joined", "created_at", state)}<th></th></tr></thead><tbody>${rows.map(
       (s) => {
         const how = joinedVia(s);
         return html`<tr data-id="${s.id}"><td>${breakableEmail(s.email)}${suppressionFlag(s)}</td><td>${statusBadge(s)}</td><td class="muted how${how ? "" : " empty"}">${how ?? "—"}</td><td class="muted joined">${fmt(s.created_at)}</td><td class="act"><button class="icon" data-menu="${s.id}" aria-label="Subscriber actions" aria-haspopup="menu">⋯</button></td></tr>`;

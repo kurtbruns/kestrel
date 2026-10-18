@@ -59,7 +59,7 @@ const sameList = (a: string[], b: string[]) =>
 const sameCopy = (a: ConfirmationEmailCopy, b: ConfirmationEmailCopy) =>
   a.subject === b.subject &&
   a.body === b.body &&
-  a.buttonLabel === b.buttonLabel &&
+  a.button_label === b.button_label &&
   a.reassurance === b.reassurance;
 
 export async function renderSettings(root: HTMLElement, signal: AbortSignal): Promise<void> {
@@ -77,7 +77,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
   }
   const s = data.settings;
   const p = s.publication;
-  const ce = s.confirmationEmail;
+  const ce = s.confirmation_email;
   // Live, in-memory state. The save bar tracks the persisted fields against the saved
   // baseline; the logo saves the moment it changes (its own endpoints), and the email
   // template has its own page and its own Save, so neither feeds the bar.
@@ -85,20 +85,20 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     name: p.name || "",
     tagline: p.tagline || "",
     address: p.address || "",
-    logoUrl: p.logoUrl || "",
-    recipients: [...(s.testRecipients || [])],
+    logoUrl: p.logo_url || "",
+    recipients: [...(s.test_recipients || [])],
     // The confirmation email's words (SPEC §7); the layout, masthead, and confirm link
     // are Kestrel's.
     confirmation: {
       subject: ce.subject || "",
       body: ce.body || "",
-      buttonLabel: ce.buttonLabel || "",
+      button_label: ce.button_label || "",
       reassurance: ce.reassurance || "",
     },
     notifyTo: s.notifications.to || "",
   };
   let baseline = baselineOf(state);
-  const fromDisplay = fromDisplayName(data.deployment.fromAddress);
+  const fromDisplay = fromDisplayName(data.deployment.from_address);
 
   const isDirty = () =>
     state.name !== baseline.name ||
@@ -154,7 +154,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     mountNotifications(body, page),
   );
   // The template lede's and the identity note's word that saving has to wait, until it no longer does.
-  expireRemakeWait(body, data.inUse, signal);
+  expireRemakeWait(body, data.in_use, signal);
   const readerPages = mountReaderPages(body, data.deployment, signal);
   refreshReaderPages = readerPages.refresh;
 
@@ -175,8 +175,8 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
       // touches only recipients or the confirmation wording never does.
       const payload: SettingsPatchBody = {
         publication: { name: state.name, tagline: state.tagline, address: state.address },
-        testRecipients: state.recipients,
-        confirmationEmail: state.confirmation,
+        test_recipients: state.recipients,
+        confirmation_email: state.confirmation,
         notifications: { to: state.notifyTo },
       };
       const r = await withRemakeConfirm(
@@ -196,8 +196,8 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
       state.name = ns.publication.name;
       state.tagline = ns.publication.tagline;
       state.address = ns.publication.address;
-      state.recipients = [...ns.testRecipients];
-      state.confirmation = { ...ns.confirmationEmail };
+      state.recipients = [...ns.test_recipients];
+      state.confirmation = { ...ns.confirmation_email };
       state.notifyTo = ns.notifications.to;
       baseline = baselineOf(state);
       for (const h of handles) {
@@ -238,12 +238,12 @@ const FIELD_INPUTS: Record<string, string> = {
   "publication.name": "#setName",
   "publication.tagline": "#setTagline",
   "publication.address": "#setAddress",
-  testRecipients: "#recipInput",
+  test_recipients: "#recipInput",
   "notifications.to": "#notifyTo",
-  "confirmationEmail.subject": "#ceSubject",
-  "confirmationEmail.body": "#ceMessage",
-  "confirmationEmail.buttonLabel": "#ceButton",
-  "confirmationEmail.reassurance": "#ceFooter",
+  "confirmation_email.subject": "#ceSubject",
+  "confirmation_email.body": "#ceMessage",
+  "confirmation_email.button_label": "#ceButton",
+  "confirmation_email.reassurance": "#ceFooter",
 };
 
 /** The input a refusal's `field` names, when the page shows it; null otherwise. */

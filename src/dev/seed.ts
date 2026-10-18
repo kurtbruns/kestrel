@@ -899,8 +899,8 @@ export interface SeedSummary {
   posts: { sent: number; scheduled: number; draft: number };
   deliveries: number;
   /** How many of the images the posts show had their bytes supplied and written to R2. */
-  imagesWritten: number;
-  logoWritten: boolean;
+  images_written: number;
+  logo_written: boolean;
   urls: { archive: string[]; admin: string };
 }
 
@@ -946,7 +946,7 @@ export async function seedDatabase(
       tagline: demo.publication.tagline,
       address: demo.publication.address,
     },
-    testRecipients: demo.publication.testRecipients,
+    test_recipients: demo.publication.testRecipients,
   });
 
   // And a real logo when one was supplied, so the brand tile isn't just the initial.
@@ -1152,8 +1152,8 @@ export async function seedDatabase(
     audience: audience.length,
     posts: { sent: counts.sent, scheduled: counts.scheduled, draft: counts.draft },
     deliveries: counts.deliveries,
-    imagesWritten: imageBytesWritten,
-    logoWritten,
+    images_written: imageBytesWritten,
+    logo_written: logoWritten,
     urls: { archive: archiveUrls, admin: `${config.appOrigin}/dashboard/` },
   };
 }

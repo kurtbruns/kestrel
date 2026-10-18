@@ -299,7 +299,7 @@ describe("dev seed (Field Notes dataset)", () => {
     // re-populates only the demo's own — so a re-seed can't carry the stale row forward.
     await updateSettings(env.DB, {
       publication: { name: "Old Name" },
-      emailTemplate:
+      email_template:
         '<div>{{ post.body }}<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a></div>',
     });
     await seedDatabase(env, config());

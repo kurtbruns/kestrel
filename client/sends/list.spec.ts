@@ -172,7 +172,7 @@ describe("sent view", () => {
         halt_error: "ses 400 SendingPausedException: Account is paused",
         halted_at: NOW - 60_000,
       }),
-      { phase: "needs-attention" },
+      { phase: "needs_attention" },
     );
     fake = world(srv);
     await mount(renderSent);
@@ -513,7 +513,7 @@ describe("sent view", () => {
 
   it("names every held send, and in the local preview the restart", async () => {
     appState.appConfig = settingsResponse({
-      deployment: { provider: "none", notConnectedPreview: true },
+      deployment: { provider: "none", not_connected_preview: true },
     });
     fake = world(sendServer([held("h1", "Swifts"), held("h2", "Terns"), held("h3", "Gulls")]));
     await mount(renderSent);
@@ -685,7 +685,7 @@ describe("sent view", () => {
     srv.put(
       sending({ id: "wedge", subject: "Kinglets", c_pending: 0, c_accepted: 149, c_in_flight: 1 }),
       {
-        phase: "needs-attention",
+        phase: "needs_attention",
         conditions: [condition.wedged(1, "wedge")],
       },
     );
@@ -727,7 +727,7 @@ describe("sent view", () => {
     srv.edit(
       "act",
       { halt_reason: "account", halt_cause: "quota", halt_error: "Daily quota exceeded." },
-      { phase: "needs-attention" },
+      { phase: "needs_attention" },
     );
     await vi.advanceTimersByTimeAsync(3000);
     expect($("#stuck .stuck-card").textContent).toMatch(

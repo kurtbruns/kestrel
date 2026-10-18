@@ -673,9 +673,9 @@ describe("the dev routes exist only in local development", () => {
   // directory before wiping a database (cli/dev-api.mjs).
   it("reports the run ID kestrel dev gave the server beside the token, and none without one", async () => {
     const withId = await fetchWith({ DEV_RUN_ID: "run-1234" }, "/api/dev/token?kind=service");
-    expect(await withId.json()).toMatchObject({ kind: "service", runId: "run-1234" });
+    expect(await withId.json()).toMatchObject({ kind: "service", run_id: "run-1234" });
     const without = await fetchWith({}, "/api/dev/token");
-    expect(await without.json()).not.toHaveProperty("runId");
+    expect(await without.json()).not.toHaveProperty("run_id");
   });
 
   it("never resolves a run ID outside local development", () => {

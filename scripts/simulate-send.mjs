@@ -76,7 +76,7 @@ async function main() {
       JSON.stringify(settings.body),
     );
   }
-  const { minLeadMs, simulation, provider } = settings.body.deployment;
+  const { min_lead_ms: minLeadMs, simulation, provider } = settings.body.deployment;
 
   // The simulation is the server's to run, fixed when it starts.
   const wanted = flags.profile === "1" ? "generic" : flags.profile;

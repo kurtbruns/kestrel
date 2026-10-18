@@ -141,8 +141,8 @@ describe("stageOf", () => {
   it("names where a send is in its life from its state and phase", () => {
     expect(stageOf(live("a", "scheduled", "scheduled"))).toBe("scheduled");
     expect(stageOf(live("a", "scheduled", "due"))).toBe("due");
-    expect(stageOf(live("a", "sending", "backing-off"))).toBe("sending");
-    expect(stageOf(live("a", "sending", "needs-attention"))).toBe("sending");
+    expect(stageOf(live("a", "sending", "backing_off"))).toBe("sending");
+    expect(stageOf(live("a", "sending", "needs_attention"))).toBe("sending");
     expect(stageOf(live("a", "sent", "settling"))).toBe("sent");
     expect(stageOf(live("a", "sent", "complete"))).toBe("complete");
     expect(stageOf(live("a", "canceled", "canceled"))).toBe("canceled");

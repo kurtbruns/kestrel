@@ -15,7 +15,7 @@ import {
 } from "../test/support";
 import { renderSubscribers } from "./list";
 
-const page = { total: 3, limit: 50, offset: 0, sort: "joined", dir: "desc" };
+const page = { total: 3, limit: 50, offset: 0, sort: "created_at", dir: "desc" };
 const counts = { pending: 1, confirmed: 2, unsubscribed: 0, suppressed: 1 };
 /** A row of the list as the API answers it: someone who confirmed here, unless `over` says otherwise. */
 const subscriber = (over: Partial<SubscriberListItem>): SubscriberListItem => ({

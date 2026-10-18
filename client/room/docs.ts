@@ -138,7 +138,7 @@ function renderDocsIndex(
   // absent when no repo is known.
   // Each link carries a short form for the mobile chip row (styles.css swaps which span
   // shows); the full label stays the accessible name at every width.
-  const repoUrl = appState.appConfig?.deployment.build.repoUrl || "";
+  const repoUrl = appState.appConfig?.deployment.build.repo_url || "";
   const out = (href: string, label: string, short = label): Html =>
     html`<a class="rail-link" href="${href}" target="_blank" rel="noopener" aria-label="${label}"><span class="rail-link-full">${label}</span><span class="rail-link-short" aria-hidden="true">${short}</span> <span aria-hidden="true">↗</span></a>`;
   const rail = html`<div class="toc-label">Kestrel</div>${out("https://getkestrel.dev", "Project site", "Project")}${
