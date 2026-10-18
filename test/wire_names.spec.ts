@@ -1,12 +1,16 @@
+import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { ReferenceField, ReferenceResponse } from "../shared/reference";
 import { createRouter } from "../src/app";
 import { POST_LIST_SPEC } from "../src/db/posts";
 import { DELIVERY_LIST_SPEC, SEND_LIST_SPEC } from "../src/db/sends";
 import { SUBSCRIBER_LIST_SPEC } from "../src/db/subscribers";
 import { type AppEnv, getConfig } from "../src/env";
+import { clearFakeNotifications, FakeNotifier } from "../src/notify/fake";
+import { clearFakeOutbox, FakeProvider } from "../src/providers/fake";
 import { buildReferenceResponse } from "../src/reference";
+import { AUTH, base, readJson } from "./support/http";
 
 // The naming rule on the wire (docs/API.md, "Names on the wire"): every JSON field name and
 // enum value is snake_case, a query parameter's value is too, and a sort key is the name of
@@ -171,6 +175,30 @@ describe("names on the wire are snake_case", () => {
         .filter((k) => !fields.has(k) || !k.split(".").every((seg) => SNAKE.test(seg)))
         .map((k) => `${list}: sort=${k}`),
     );
+    expect(bad).toEqual([]);
+  });
+});
+
+// The dev outbox answers module state, not a documented object, so the reference walks above
+// never see its keys; this reads the live answer once something is in it.
+describe("the dev outbox's names are snake_case", () => {
+  beforeEach(() => {
+    clearFakeOutbox();
+    clearFakeNotifications();
+  });
+
+  it("names every key of a message and a notification in snake_case", async () => {
+    const email = { subject: "Gulls", html: "<p>Gulls</p>", text: "Gulls" };
+    await new FakeProvider().sendBatch(email, [{ email: "a@example.com", unsubscribeUrl: "" }], {
+      purpose: "test",
+      tag: "names",
+    });
+    await new FakeNotifier().send("me@example.com", email, "names");
+
+    const outbox = await readJson(await SELF.fetch(`${base}/api/dev/outbox`, { headers: AUTH }));
+    expect(outbox.messages).toHaveLength(1);
+    expect(outbox.notifications).toHaveLength(1);
+    const bad = keysOf(outbox, "").filter((path) => !SNAKE.test(lastSegment(path)));
     expect(bad).toEqual([]);
   });
 });

@@ -32,6 +32,7 @@ import { RASTER_IMAGE_TYPES } from "./lib/image_types";
 import { unwrap } from "./lib/unwrap";
 import { buildReferenceResponse, referenceIndexMarkdown, resourceMarkdown } from "./reference";
 import { sendBrief } from "./reference/objects";
+import { openApiDocument } from "./reference/openapi";
 import { type BodyField, param, type RouteDef, type RouteRefusal, Router } from "./router";
 import * as archiveRoutes from "./routes/archive";
 import * as devRoutes from "./routes/dev";
@@ -410,6 +411,25 @@ export function createRouter({
         }
         return docsRoutes.markdownResponse(md);
       },
+    },
+    {
+      method: "GET",
+      path: "/api/openapi.json",
+      access: "admin",
+      resource: "system",
+      title: "Get the OpenAPI document",
+      summary:
+        "The same reference as an OpenAPI 3.1 document, for tooling such as client generators and API clients to import.",
+      description:
+        "Generated from the same registration as the reference, so it lists the same routes, objects, and refusals. Each operation's `operationId` is the route's anchor in the editor's reference, and its success is `2XX`, since a route that creates answers 201.",
+      handler: (c) =>
+        json(
+          openApiDocument(
+            buildReferenceResponse(r.routes.map((route) => route.def)),
+            c.url.origin,
+            buildInfo().version,
+          ),
+        ),
     },
 
     // --- app settings (authed; runtime preferences, never secrets) ---
@@ -1036,7 +1056,7 @@ export function createRouter({
         title: "Read the fake outbox",
         summary: "Inspect the fake transport's outbox (local dev only).",
         description:
-          "Answers `messages`, each email the fake transport took since the server started (`to`, `subject`, `html`, `text`, `providerId`, `sentAt`), and the `notifications` it would have sent. Held in memory, so a restart empties it.",
+          "Answers `messages`, each email the fake transport took since the server started (`to`, `subject`, `html`, `text`, `provider_id`, `sent_at`), and the `notifications` it would have sent (`to`, `subject`, `text`, `html`, `key`, `sent_at`). Held in memory, so a restart empties it.",
         handler: renderRoutes.devOutbox,
       },
       {
