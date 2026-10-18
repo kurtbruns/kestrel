@@ -24,13 +24,14 @@ import type {
   WebhookResult,
 } from "./types";
 
+/** One message the fake took, in the shape `GET /api/dev/outbox` answers (snake_case). */
 export interface FakeMessage {
   to: string;
   subject: string;
   html: string;
   text: string;
-  providerId: string;
-  sentAt: number;
+  provider_id: string;
+  sent_at: number;
 }
 
 const outbox: FakeMessage[] = [];
@@ -80,8 +81,8 @@ export function deliverToOutbox(
       subject: final.subject,
       html: final.html,
       text: final.text,
-      providerId,
-      sentAt: Date.now(),
+      provider_id: providerId,
+      sent_at: Date.now(),
     });
     return { email: r.email, accepted: true as const, providerId };
   });

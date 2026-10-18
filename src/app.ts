@@ -1030,7 +1030,7 @@ export function createRouter({
         title: "Read the fake outbox",
         summary: "Inspect the fake transport's outbox (local dev only).",
         description:
-          "Answers `messages`, each email the fake transport took since the server started (`to`, `subject`, `html`, `text`, `providerId`, `sentAt`), and the `notifications` it would have sent. Held in memory, so a restart empties it.",
+          "Answers `messages`, each email the fake transport took since the server started (`to`, `subject`, `html`, `text`, `provider_id`, `sent_at`), and the `notifications` it would have sent (`to`, `subject`, `text`, `html`, `key`, `sent_at`). Held in memory, so a restart empties it.",
         handler: renderRoutes.devOutbox,
       },
       {

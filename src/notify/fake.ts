@@ -9,13 +9,14 @@
 import type { RenderedEmail } from "../render/render";
 import type { Notifier } from "./channel";
 
+/** One notification the fake took, in the shape `GET /api/dev/outbox` answers (snake_case). */
 export interface FakeNotification {
   to: string;
   subject: string;
   text: string;
   html: string;
   key: string;
-  sentAt: number;
+  sent_at: number;
 }
 
 const outbox: FakeNotification[] = [];
@@ -43,6 +44,6 @@ export class FakeNotifier implements Notifier {
       failCount -= 1;
       throw new Error("fake notification failure");
     }
-    outbox.push({ to, ...message, key, sentAt: Date.now() });
+    outbox.push({ to, ...message, key, sent_at: Date.now() });
   }
 }
