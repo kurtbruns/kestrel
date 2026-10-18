@@ -734,10 +734,14 @@ const SUBSCRIBER_FIELDS: ReferenceField[] = [
     description: "When they last left, kept while they are pending again.",
   },
   {
-    name: "confirm_token, unsub_token",
+    name: "confirm_token",
+    type: "string | null",
+    description: "The confirmation link's one-shot token, null once spent.",
+  },
+  {
+    name: "unsub_token",
     type: "string",
-    description:
-      "The confirmation link's one-shot token (null once spent) and the unsubscribe link's, never rotated.",
+    description: "The unsubscribe link's token, never rotated.",
   },
   {
     name: "confirm_sent_at, confirm_attempt_at",
@@ -783,8 +787,9 @@ const IMPORT_PLAN_FIELDS: ReferenceField[] = [
   },
   {
     name: "rows",
-    type: "object[]",
-    description: "Each row that won't be confirmed, in file order, with its `outcome`.",
+    type: "{ row, email, outcome, suppression_added }[]",
+    description:
+      "Each row that won't be confirmed, in file order: its `row` in the file (numbered as a refusal's `row` is), its `email`, its `outcome`, and `suppression_added`, true when the row adds a suppression. The flag is wider than the `suppressed` outcome, which is a row whose only effect is the suppression: a row that also changes a status reports that outcome (`unsubscribed`, say) with `suppression_added: true`.",
   },
   {
     name: "sends_growing",
@@ -830,6 +835,35 @@ const SETTINGS_FIELDS: ReferenceField[] = [
     type: "boolean",
     description:
       "True when `none` is local development previewing the state, whose way out is a restart, not a deploy.",
+  },
+  {
+    name: "deployment.access_configured",
+    type: "boolean",
+    description:
+      "True when Cloudflare Access is set up; a deployment without it can authenticate no request.",
+  },
+  {
+    name: "deployment.aws_region",
+    type: "string",
+    description:
+      "The AWS region SES is reached in (`AWS_REGION`), used only while `provider` is `ses`.",
+  },
+  {
+    name: "deployment.notify_channel",
+    type: '"cloudflare" | "provider" | "fake"',
+    description:
+      "How notifications reach the publisher: Cloudflare's own email, the newsletter's provider, or `fake`, which delivers nothing (local development, a demo).",
+  },
+  {
+    name: "deployment.notify_from",
+    type: "string",
+    description: "The `From:` address a notification carries.",
+  },
+  {
+    name: "deployment.simulation",
+    type: "{ profile, faults } | null",
+    description:
+      "In local development, the send simulation standing in for a provider: its `profile` and its `faults` (`realistic` or `none`). Always null once deployed.",
   },
   {
     name: "deployment.free_plan_limits",

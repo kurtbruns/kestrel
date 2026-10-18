@@ -13,7 +13,9 @@
 import type { ReferenceRefusalGroup, ReferenceStatus } from "../../shared/reference";
 
 /** One code: its status, and one line on it. The fields a refusal carries are each route's
- *  (`details`), so the line never names them, or a route would say them twice. */
+ *  (`details`), so the line never names them, or a route would say them twice. The one
+ *  exception is `field`, which every code under Fix the request carries when one field is at
+ *  fault: the Errors topic says so once, and no route lists it there. */
 type Refusal = readonly [status: number, meaning: string];
 
 const FIX_REQUEST = {

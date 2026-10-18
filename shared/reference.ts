@@ -140,7 +140,8 @@ export interface RouteError {
   code: string;
   /** One line on the condition as this route gives it; absent when the code's own meaning says it all. */
   when?: string;
-  /** The fields the body carries beside `error` and `message` (`send`, `retry_after`). */
+  /** The fields the body carries beside `error` and `message` (`send`, `retry_after`), less a
+   *  `field` on a code under Fix the request, which the Errors topic states once for them all. */
   details?: string[];
   /** The client's next move on it, from the refusal registry ("Read again, then decide"). */
   move: string;

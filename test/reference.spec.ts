@@ -360,6 +360,7 @@ describe("API reference is generated from the route registration", () => {
       "retry_after",
       "send",
       "sends",
+      "cursor",
       "attestation",
       "row",
       "column",
