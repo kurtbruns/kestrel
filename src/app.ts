@@ -25,9 +25,13 @@ import type { ReferenceField, ReferenceResponse } from "../shared/reference";
 import { formatLead, MIN_LEAD_FLOOR_MS, STUCK_THRESHOLD_MS } from "../shared/sends";
 import { SUBSCRIBER_ACTIONS } from "../shared/subscriber_meanings";
 import { buildInfo } from "./build";
+import { POST_LIST_SPEC } from "./db/posts";
+import { DELIVERY_LIST_SPEC, DELIVERY_VIEWS, SEND_LIST_SPEC } from "./db/sends";
+import { SUBSCRIBER_LIST_SPEC } from "./db/subscribers";
 import type { Config } from "./env";
 import { json, notFound } from "./lib/errors";
 import { RASTER_IMAGE_TYPES } from "./lib/image_types";
+import type { ListSpec } from "./lib/list";
 import { MISSED_THRESHOLD_MS } from "./lib/time";
 import { unwrap } from "./lib/unwrap";
 import { buildReferenceResponse, referenceIndexMarkdown, resourceMarkdown } from "./reference";
@@ -229,6 +233,10 @@ export function createRouter({
     { name: "limit", description: "Page size (default 50, max 200)." },
     { name: "offset", description: "Rows to skip." },
   ];
+  // A list's sort direction, and its sort keys read from the list's own spec so the values
+  // the router holds `sort` to can't drift from the columns it orders by.
+  const dirParam = { name: "dir", values: ["asc", "desc"] };
+  const sortValues = (spec: ListSpec): string[] => Object.keys(spec.columns);
   const r = new Router(isReaderPath);
 
   const manifest: RouteDef[] = [
@@ -690,14 +698,17 @@ export function createRouter({
           name: "status",
           description:
             "Filter by status: `draft`, `scheduled`, or `sent`; a comma list (`draft,scheduled`) matches any.",
+          values: postRoutes.POST_STATUSES,
+          list: true,
         },
         { name: "search", description: "Subject contains-search." },
         {
           name: "sort",
           description:
             "`updated_at` (default: scheduled-first, then newest edit), `subject`, `status`, or `send.fire_at`, the fire time of the post's send.",
+          values: sortValues(POST_LIST_SPEC),
         },
-        { name: "dir", description: "`asc` or `desc` (default `desc`)." },
+        { ...dirParam, description: "`asc` or `desc` (default `desc`)." },
         ...pageParams,
       ],
       returns: {
@@ -1172,20 +1183,22 @@ export function createRouter({
       query: [
         {
           name: "status",
-          description:
-            "Filter by status: `scheduled`, `sending`, `sent`, or `canceled`; anything else is a 400.",
+          description: "Filter by status: `scheduled`, `sending`, `sent`, or `canceled`.",
+          values: sendRoutes.SEND_STATUSES,
         },
         { name: "search", description: "Subject contains-search." },
         {
           name: "failures",
           description:
             "`only` narrows to sends with a delivery failure (any bounced, complained, or unsent recipient).",
+          values: ["only"],
         },
         {
           name: "sort",
           description: "`fire_at` (default), `status`, `audience.count`, or `subject`.",
+          values: sortValues(SEND_LIST_SPEC),
         },
-        { name: "dir", description: "`asc` or `desc` (default `desc`)." },
+        { ...dirParam, description: "`asc` or `desc` (default `desc`)." },
         ...pageParams,
       ],
       returns: { object: "send", as: "sends", list: true, fields: [pageField, cursorField] },
@@ -1328,7 +1341,8 @@ export function createRouter({
       query: [
         {
           name: "format",
-          description: "`html` (default) or `text`; anything else is a 400 naming the field.",
+          description: "`html` (default) or `text`.",
+          values: ["html", "text"],
         },
       ],
       handler: sendRoutes.email,
@@ -1345,11 +1359,16 @@ export function createRouter({
         {
           name: "view",
           description:
-            "`failures` (default: bounced/complained/unsent), `delivered`, `all`, or a single bucket, in the words of the send's `counts` (`bounced`, `complained`, `unsent`, `skipped`, `accepted`, `pending`, `dispatched`). Anything else is a 400 naming the field.",
+            "`failures` (default: bounced/complained/unsent), `delivered`, `all`, or a single bucket, in the words of the send's `counts` (`bounced`, `complained`, `unsent`, `skipped`, `accepted`, `pending`, `dispatched`).",
+          values: DELIVERY_VIEWS,
         },
         { name: "search", description: "Email contains-search." },
-        { name: "sort", description: "`email` (default), `status`, `event`, or `event_at`." },
-        { name: "dir", description: "`asc` (default) or `desc`." },
+        {
+          name: "sort",
+          description: "`email` (default), `status`, `event`, or `event_at`.",
+          values: sortValues(DELIVERY_LIST_SPEC),
+        },
+        { ...dirParam, description: "`asc` (default) or `desc`." },
         ...pageParams,
       ],
       example: {
@@ -1557,17 +1576,20 @@ export function createRouter({
         {
           name: "status",
           description: "Filter by consent status: `pending`, `confirmed`, or `unsubscribed`.",
+          values: subscriberRoutes.SUBSCRIBER_STATUSES,
         },
         {
           name: "suppressed",
           description: "Suppression facet: `only` (suppressed addresses) or `hide` (exclude them).",
+          values: subscriberRoutes.SUPPRESSED_FACETS,
         },
         { name: "search", description: "Email contains-search." },
         {
           name: "sort",
           description: "`created_at` (default), `confirmed_at`, `email`, or `status`.",
+          values: sortValues(SUBSCRIBER_LIST_SPEC),
         },
-        { name: "dir", description: "`asc` or `desc` (default `desc`)." },
+        { ...dirParam, description: "`asc` or `desc` (default `desc`)." },
         ...pageParams,
         {
           name: "email",

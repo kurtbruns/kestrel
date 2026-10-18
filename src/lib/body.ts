@@ -6,7 +6,8 @@
  * array, a string) is refused before any route reads a field from it; a field that is
  * present with the wrong type is refused with its name, both in the message and as the
  * error body's `field` key, so a client learns what to fix instead of getting a 200
- * that quietly ignored it. Absent optional fields stay absent. The domain rules above
+ * that quietly ignored it. A field the route doesn't declare at all was refused before the
+ * handler ran (`strict.ts`). Absent optional fields stay absent. The domain rules above
  * this layer (a valid email, `fire_at` far enough out, a template with an unsubscribe
  * link) stay with their routes.
  *
@@ -140,20 +141,6 @@ export function optObject(o: JsonObject, key: string, at?: string): JsonObject |
     throw fieldError(path(key, at), `${path(key, at)} must be an object`);
   }
   return v;
-}
-
-/** Refuse a key the body may not carry, naming the first one, so a field misnamed (an old
- *  name, a typo) is a 400 rather than a success that ignored it. For a body that is a set of
- *  optional fields, where nothing else would notice the key. */
-export function onlyKeys(o: JsonObject, known: readonly string[], at?: string): void {
-  const unknown = Object.keys(o).find((k) => !known.includes(k));
-  if (unknown !== undefined) {
-    const names = known.map((k) => `'${k}'`).join(", ");
-    throw fieldError(
-      path(unknown, at),
-      `${path(unknown, at)} isn’t a field this takes; it takes ${names}`,
-    );
-  }
 }
 
 /** A required field that must be one of a fixed set of strings; anything else is a 400 listing them. */

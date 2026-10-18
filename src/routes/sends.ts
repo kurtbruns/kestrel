@@ -16,7 +16,7 @@ import {
 import { getPost } from "../db/posts";
 import * as sends from "../db/sends";
 import { onFreePlanLimits } from "../env";
-import { fieldError, type JsonObject, oneOf, readJsonObject } from "../lib/body";
+import { oneOf, readJsonObject } from "../lib/body";
 import { badRequest, HttpError, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
 import { POST_PAGE_SECURITY_HEADERS } from "../lib/page_headers";
@@ -32,19 +32,21 @@ import { cancel as cancelSend, reschedule as rescheduleSend } from "../send/sche
 import { buildSendView } from "../send/view";
 import { parseFireAt } from "./schedule";
 
-/** The `GET /api/sends` filters: each a value from its set, or absent; anything else is a 400
- *  naming the field. */
+/** The statuses `GET /api/sends` filters by, which its manifest entry declares as the only
+ *  values `status` takes. */
+export const SEND_STATUSES: readonly sends.SendStatus[] = [
+  "scheduled",
+  "sending",
+  "sent",
+  "canceled",
+];
+
+/** The `GET /api/sends` filters: each absent or one of the values its manifest entry declares,
+ *  the router having refused any other. */
 function parseSendFilter(url: URL): sends.SendFilter {
   const q = url.searchParams;
   const status = q.get("status");
-  const statuses: sends.SendStatus[] = ["scheduled", "sending", "sent", "canceled"];
-  if (status !== null && !statuses.includes(status as sends.SendStatus)) {
-    throw badRequest(`status must be one of ${statuses.join(", ")}`, { field: "status" });
-  }
   const failures = q.get("failures");
-  if (failures !== null && failures !== "only") {
-    throw badRequest("failures must be only", { field: "failures" });
-  }
   return {
     status: (status as sends.SendStatus | null) ?? undefined,
     search: q.get("search") ?? undefined,
@@ -366,26 +368,14 @@ export async function cancel(c: RequestContext): Promise<Response> {
  * machine's CAS enforces the latter, I6).
  */
 export async function reschedule(c: RequestContext): Promise<Response> {
+  // A post's settings named here are refused at the door, since the route declares only
+  // `fire_at` (SPEC §6): they are the post's, at their own route.
   const body = await readJsonObject(c);
-  rejectSettingsFields(body);
   const fireAt = parseFireAt(body.fire_at);
   const id = param(c, "id");
   const { changed } = await rescheduleSend(c.env, id, fireAt, c.config.minLeadMs);
   const response: SendActionResponse = { ...(await answerWith(c, id)), changed };
   return json(response);
-}
-
-/** A reschedule moves the time and nothing else (SPEC §6): a post's settings named on one are a
- *  400 pointing to their own route, never accepted and ignored. */
-function rejectSettingsFields(body: JsonObject): void {
-  for (const field of ["email_only", "slug", "slug_auto"]) {
-    if (field in body) {
-      throw fieldError(
-        field,
-        `${field} is not a field of a reschedule, which moves only the send time: change a post’s settings with PUT /api/posts/:id/settings`,
-      );
-    }
-  }
 }
 
 /**

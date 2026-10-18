@@ -16,6 +16,7 @@
 import {
   concretePath,
   type ObjectKey,
+  type QueryParam,
   type ReferenceEntry,
   type ReferenceField,
   type ReferenceResponse,
@@ -63,6 +64,19 @@ interface Parameter {
   required: boolean;
   description?: string;
   schema: Schema;
+  style?: "form";
+  explode?: boolean;
+}
+
+/** A query parameter's schema: its values as an enum, and a comma list as an array of them. */
+function querySchema(q: QueryParam): Pick<Parameter, "schema" | "style" | "explode"> {
+  if (!q.values) {
+    return { schema: { type: "string" } };
+  }
+  const values = { type: "string", enum: [...q.values] };
+  return q.list
+    ? { schema: { type: "array", items: values }, style: "form", explode: false }
+    : { schema: values };
 }
 
 interface MediaType {
@@ -304,7 +318,7 @@ function operation(
         in: "query",
         required: q.required ?? false,
         description: q.description,
-        schema: { type: "string" },
+        ...querySchema(q),
       }),
     ),
   ];

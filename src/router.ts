@@ -8,7 +8,9 @@
  * reference reads (see src/reference/), the documented tier and the enforced gate
  * cannot disagree. The admin gate also refuses a write another site's page could have
  * made the publisher's browser send (`refuseForeignWrite`), against the body types the
- * route declares in `accepts`, which the reference shows too.
+ * route declares in `accepts`, which the reference shows too. Past the gate, an admin request
+ * naming a query parameter, query value, or body field the route doesn't declare is refused
+ * (`src/lib/strict.ts`), so the reference lists exactly what a route takes.
  *
  * Middleware run in order; the first one to return a `Response` short-circuits
  * (this is how auth returns 401 before the handler runs). Handlers and middleware
@@ -38,6 +40,7 @@ import {
   unsupportedMediaType,
 } from "./lib/errors";
 import { serverErrorPage } from "./lib/page";
+import { refuseUndeclaredBody, refuseUndeclaredQuery } from "./lib/strict";
 import type { RefusalCode } from "./reference/refusals";
 
 export interface Principal {
@@ -314,6 +317,10 @@ export class Router {
         // request with its 401 whatever the path holds.
         if (badParam) {
           throw badParam;
+        }
+        if (route.def.access === "admin") {
+          refuseUndeclaredQuery(url, route.def.query ?? []);
+          await refuseUndeclaredBody(req, route.def.accepts ?? [], route.def.body ?? []);
         }
         return guard(route.def.access, await route.def.handler(c));
       } catch (err) {

@@ -61,6 +61,11 @@ export async function create(c: RequestContext): Promise<Response> {
   return json(response, outcome.action === "created" ? 201 : 200);
 }
 
+/** The values `GET /api/subscribers` filters by, which its manifest entry declares as the only
+ *  ones `status` and `suppressed` take. */
+export const SUBSCRIBER_STATUSES = ["pending", "confirmed", "unsubscribed"] as const;
+export const SUPPRESSED_FACETS = ["only", "hide"] as const;
+
 export async function list(c: RequestContext): Promise<Response> {
   const emailQuery = c.url.searchParams.get("email");
   if (emailQuery) {
@@ -73,17 +78,16 @@ export async function list(c: RequestContext): Promise<Response> {
     };
     return json(body);
   }
-  const statusParam = c.url.searchParams.get("status") ?? undefined;
-  const status =
-    statusParam === "pending" || statusParam === "confirmed" || statusParam === "unsubscribed"
-      ? statusParam
-      : undefined;
+  // Each filter is absent or one of its declared values: the router refused any other.
+  const status = (c.url.searchParams.get("status") ?? undefined) as
+    | (typeof SUBSCRIBER_STATUSES)[number]
+    | undefined;
   const search = c.url.searchParams.get("search") ?? undefined;
   // Suppression is an overlay, not a status, so it's its own facet (see subscriberWhere):
   // "only" narrows to suppressed addresses, "hide" drops them, absent leaves both.
-  const suppressedParam = c.url.searchParams.get("suppressed");
-  const suppressed =
-    suppressedParam === "only" ? "only" : suppressedParam === "hide" ? "hide" : undefined;
+  const suppressed = (c.url.searchParams.get("suppressed") ?? undefined) as
+    | (typeof SUPPRESSED_FACETS)[number]
+    | undefined;
   const filter = { status, search, suppressed } satisfies subscribers.SubscriberFilter;
   const page = parseListParams(c.url, subscribers.SUBSCRIBER_LIST_SPEC);
   const [counts, total, rows] = await Promise.all([

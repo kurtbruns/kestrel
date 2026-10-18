@@ -131,23 +131,18 @@ export async function createPost(c: RequestContext): Promise<Response> {
   return json(body, 201, revisionHeaders(post));
 }
 
-const POST_STATUSES: posts.PostStatus[] = ["draft", "scheduled", "sent"];
+/** The statuses `GET /api/posts` filters by, which its manifest entry declares as the only
+ *  values `status` takes, so the router has refused any other before the handler runs. */
+export const POST_STATUSES: readonly posts.PostStatus[] = ["draft", "scheduled", "sent"];
 
-/** Parse the `status` query param: one status, or a comma list (`draft,scheduled`,
- *  which the Drafts view sends). Unknown values are dropped; empty → no filter. */
+/** Parse the `status` query param: absent, one status, or a comma list (`draft,scheduled`,
+ *  which the Drafts view sends), each part one of `POST_STATUSES` by then. */
 function parseStatusFilter(raw: string | null): posts.PostStatus | posts.PostStatus[] | undefined {
-  if (!raw) {
+  if (raw === null) {
     return undefined;
   }
-  const seen = new Set<posts.PostStatus>();
-  for (const part of raw.split(",")) {
-    const s = part.trim();
-    if ((POST_STATUSES as string[]).includes(s)) {
-      seen.add(s as posts.PostStatus);
-    }
-  }
-  const list = [...seen];
-  return list.length === 0 ? undefined : list.length === 1 ? list[0] : list;
+  const list = [...new Set(raw.split(",").map((part) => part.trim() as posts.PostStatus))];
+  return list.length === 1 ? list[0] : list;
 }
 
 export async function listPosts(c: RequestContext): Promise<Response> {

@@ -58,21 +58,6 @@ export function parseFutureFireAt(input: unknown, minLeadMs: number): number {
   return acceptFireAt(parseFireAt(input), minLeadMs);
 }
 
-/**
- * A freeze always uses the template and identity as they stand (SPEC §6): there is no
- * per-send template to choose, so a request that tries to name one is refused rather
- * than silently given the current template. Keeps a client written against a design
- * that had such a field from believing its choice took.
- */
-function rejectStrayTemplateChoice(body: unknown): void {
-  if (body && typeof body === "object" && "template_revision" in body) {
-    throw fieldError(
-      "template_revision",
-      "template_revision is not a field: a send is made with the template and identity as they stand, and a later change re-makes it",
-    );
-  }
-}
-
 /** A refusal about the post or the settings a freeze read carries that resource as it stands. */
 function carryingResources(c: RequestContext, act: () => Promise<Response>): Promise<Response> {
   return carryingPost(c.env, c.config, param(c, "id"), () => carryingSettings(c, act));
@@ -92,8 +77,9 @@ async function scheduleOnce(c: RequestContext): Promise<Response> {
     throw notFound("post");
   }
 
+  // A freeze always uses the template and identity as they stand (SPEC §6), so a body naming
+  // a template to use was refused at the door, as every field the route doesn't declare is.
   const body = await readJsonObject(c);
-  rejectStrayTemplateChoice(body);
   const fields = readSettingsBody(body);
   requireConnectedProvider(c.config);
   const fireAt = parseFutureFireAt(body.fire_at, c.config.minLeadMs);
@@ -109,9 +95,8 @@ async function sendNowOnce(c: RequestContext): Promise<Response> {
     throw notFound("post");
   }
   // Send-now needs no body, so an empty one needs no content type; one that is sent is
-  // read like any other JSON body: to refuse a stray template choice, and for the settings.
+  // read like any other JSON body, for the settings.
   const body = await readJsonObject(c, { optional: true });
-  rejectStrayTemplateChoice(body);
   const fields = readSettingsBody(body);
 
   // Idempotent: if a send is already in flight for this post, return it. A repeat changes

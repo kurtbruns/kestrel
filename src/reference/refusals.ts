@@ -17,7 +17,10 @@ import type { ReferenceRefusalGroup, ReferenceStatus } from "../../shared/refere
 type Refusal = readonly [status: number, meaning: string];
 
 const FIX_REQUEST = {
-  bad_request: [400, "A body or query value it can't take, naming `field`."],
+  bad_request: [
+    400,
+    "A body field, query parameter, or value it can't take or doesn't declare, naming `field`.",
+  ],
   subject_required: [400, "Scheduling a post with an empty subject."],
   fire_at_too_soon: [
     400,
