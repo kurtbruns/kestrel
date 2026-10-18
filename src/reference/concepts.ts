@@ -57,7 +57,7 @@ const ERROR_BODY: ReferenceField[] = [
 
 const ACTING = [
   "A post and a send list in `actions` exactly the acts the server would accept now, each with its method and path, and a send's `conditions` say what is wrong, in words to show. Both are the server's own answer, so a client can show them as they stand instead of deriving them from `status` or `phase`, and stays right when the rules behind them change.",
-  "Repeating an act is safe: after a lost answer, send it again, and one that already took effect answers success, in the way its route describes. Saving a post is the exception: a save names the revision it was based on and is refused once someone else has saved, so no edit is overwritten unseen.",
+  "Repeating an act is safe: after a lost answer, send it again, and one that already took effect answers success, in the way its route describes. An act on a send applies to the send as it stands, whatever you last read of it, so read its answer to see what it did. Saving a post is the exception: a save names the revision it was based on and is refused once someone else has saved, so no edit is overwritten unseen.",
   "A resource reads the same on every route that returns it, and every answer and refusal about one carries it as it now stands, so keep one copy and replace it from whichever answer arrives.",
 ];
 
