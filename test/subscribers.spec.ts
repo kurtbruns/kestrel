@@ -1033,6 +1033,60 @@ describe("adding someone who left (SPEC §7, Joining)", () => {
     }
   });
 
+  it("refuses them while they are pending again after signing up through the form, until they confirm", async () => {
+    for (const make of [addComplainer, addErased]) {
+      const email = uniqueEmail();
+      const before = await make(email);
+      await ageConfirmation(email, CONFIRM_COOLDOWN_MS);
+      await publicSubscribe(email);
+      expect(await confirmationsTo(email)).toBe(1);
+      await ageConfirmation(email, CONFIRM_COOLDOWN_MS);
+
+      const res = await adminAdd(email);
+
+      expect(res.status).toBe(409);
+      expect(await readJson(res)).toMatchObject({
+        error: "signup_required",
+        subscriber: { status: "pending", unsubscribe_cause: before.unsubscribe_cause },
+      });
+      expect(await confirmationsTo(email)).toBe(1);
+    }
+  });
+
+  it("keeps the stronger reason when someone pending again leaves again, so it still refuses them (SPEC §7, Leaving)", async () => {
+    const email = uniqueEmail();
+    await addComplainer(email);
+    await ageConfirmation(email, CONFIRM_COOLDOWN_MS);
+    await publicSubscribe(email);
+    const pending = (await subs.getByEmail(env.DB, email))!;
+
+    const left = await subs.unsubscribeById(env.DB, pending.id);
+
+    expect([left?.status, left?.unsubscribe_cause]).toEqual(["unsubscribed", "complaint"]);
+    expect((await adminAdd(email)).status).toBe(409);
+  });
+
+  it("strips again someone erased who signed up again and left, when they are erased again", async () => {
+    const email = uniqueEmail();
+    await addErased(email);
+    await ageConfirmation(email, CONFIRM_COOLDOWN_MS);
+    await publicSubscribe(email);
+    const pending = (await subs.getByEmail(env.DB, email))!;
+    expect(pending.unsub_token).not.toBeNull();
+    await subs.unsubscribeById(env.DB, pending.id);
+
+    const outcome = await subs.erase(env.DB, pending.id);
+
+    expect(outcome.kind).toBe("erased");
+    expect(await subs.getByEmail(env.DB, email)).toMatchObject({
+      status: "unsubscribed",
+      unsubscribe_cause: "erased",
+      unsub_token: null,
+      origin: null,
+      confirm_token: null,
+    });
+  });
+
   it("sends a confirmation to someone who left for any other reason, as before", async () => {
     const email = uniqueEmail();
     const { id } = await addConfirmed(email);

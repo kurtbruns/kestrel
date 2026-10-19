@@ -219,8 +219,9 @@ export async function confirm(
 
 /**
  * Leave the list (I2), immediate and idempotent: a pending or confirmed subscriber is
- * unsubscribed with `cause`. One who already left keeps the stronger cause (SPEC §7, Leaving),
- * and when they left; one pending again after leaving is leaving anew, so the new cause stands.
+ * unsubscribed with `cause`. One who already left, unsubscribed or pending again until they
+ * confirm, keeps the stronger cause (SPEC §7, Leaving); one still unsubscribed keeps when
+ * they left.
  */
 function leaveStatement(
   db: D1Database,
@@ -235,10 +236,10 @@ function leaveStatement(
       `UPDATE subscribers SET
          unsubscribed_at = CASE WHEN status = 'unsubscribed' THEN unsubscribed_at ELSE ?1 END,
          unsubscribe_cause = CASE
-           WHEN status <> 'unsubscribed' THEN ?2
+           WHEN unsubscribe_cause IS NULL THEN ?2
            WHEN unsubscribe_cause = 'erased' OR ?2 = 'erased' THEN 'erased'
            WHEN unsubscribe_cause = 'complaint' OR ?2 = 'complaint' THEN 'complaint'
-           ELSE COALESCE(unsubscribe_cause, ?2) END,
+           ELSE unsubscribe_cause END,
          status = 'unsubscribed'
        WHERE ${where}`,
     )
@@ -295,13 +296,14 @@ export async function complain(db: D1Database, email: string): Promise<Complaint
 
 /**
  * The subscriber an address belongs to when only the person's own sign-up may bring them
- * back (SPEC §7): unsubscribed by a complaint or an erasure. Null for anyone else.
+ * back (SPEC §7): one who left by a complaint or an erasure, unsubscribed or pending again
+ * until they confirm. Null for anyone else.
  */
 export async function signupOnly(db: D1Database, email: string): Promise<SubscriberRow | null> {
   const row = await getByEmail(db, email);
-  return row?.status === "unsubscribed" &&
-    row.unsubscribe_cause !== null &&
-    SIGNUP_ONLY_CAUSES.includes(row.unsubscribe_cause)
+  // Whatever their status: one pending again after leaving has signed up through the form, and
+  // only their own confirmation brings them back, so the publisher sends them nothing first.
+  return row && row.unsubscribe_cause !== null && SIGNUP_ONLY_CAUSES.includes(row.unsubscribe_cause)
     ? row
     : null;
 }
@@ -478,7 +480,11 @@ export async function erase(db: D1Database, id: string): Promise<EraseOutcome> {
   const email = row.email;
   const now = Date.now();
   const deliveries = await forgetDeliveries(db, [email], now);
-  if (row.status === "unsubscribed" && row.unsubscribe_cause === "erased") {
+  if (
+    row.status === "unsubscribed" &&
+    row.unsubscribe_cause === "erased" &&
+    row.unsub_token === null
+  ) {
     const statements = [...deliveries.rewrite, ...deliveries.move];
     const moved = statements.length === 0 ? [] : await db.batch(statements);
     return {

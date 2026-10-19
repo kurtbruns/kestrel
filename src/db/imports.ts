@@ -274,8 +274,9 @@ export async function applyImport(
 
   // Unsubscribe a pending or confirmed subscriber by the row's cause, unless they confirmed
   // here (not by an import) after the source says they left: their newer act stands. One who
-  // already left takes the row's cause only when it is the stronger, an erasure over a
-  // complaint over the rest, as `strongerCause` ranks them, keeping when they left.
+  // already left, unsubscribed or pending again, takes the row's cause only when it is the
+  // stronger, an erasure over a complaint over the rest, as `strongerCause` ranks them; one
+  // still unsubscribed keeps when they left.
   const cause = v("c");
   const held = "COALESCE(subscribers.unsubscribe_cause, 'import')";
   add(
@@ -283,10 +284,10 @@ export async function applyImport(
     `UPDATE subscribers SET
             unsubscribed_at = CASE WHEN subscribers.status = 'unsubscribed' THEN subscribers.unsubscribed_at
                                    ELSE COALESCE(${v("uat")}, ?2) END,
-            unsubscribe_cause = CASE WHEN subscribers.status = 'unsubscribed' AND ${held} = 'erased' THEN 'erased'
-                                     WHEN subscribers.status = 'unsubscribed' AND ${held} = 'complaint' AND ${cause} <> 'erased' THEN 'complaint'
-                                     WHEN subscribers.status = 'unsubscribed' AND ${cause} NOT IN ('erased', 'complaint') THEN ${held}
-                                     ELSE ${cause} END,
+            unsubscribe_cause = CASE WHEN subscribers.unsubscribe_cause IS NULL THEN ${cause}
+                                     WHEN subscribers.unsubscribe_cause = 'erased' OR ${cause} = 'erased' THEN 'erased'
+                                     WHEN subscribers.unsubscribe_cause = 'complaint' OR ${cause} = 'complaint' THEN 'complaint'
+                                     ELSE subscribers.unsubscribe_cause END,
             status = 'unsubscribed'
        FROM json_each(?1) AS j
       WHERE subscribers.email = ${v("e")}

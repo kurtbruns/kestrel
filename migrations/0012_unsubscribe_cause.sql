@@ -75,7 +75,7 @@ CREATE INDEX idx_subscribers_created ON subscribers (created_at);
 -- had not left leaves when the complaint came, and one who had keeps when they left.
 UPDATE subscribers
    SET unsubscribed_at = (SELECT p.created_at FROM suppressions p WHERE p.email = subscribers.email)
- WHERE status <> 'unsubscribed'
+ WHERE status <> 'unsubscribed' AND unsubscribed_at IS NULL
    AND email IN (SELECT email FROM suppressions WHERE reason IN ('complaint', 'import_complaint'));
 
 UPDATE subscribers SET status = 'unsubscribed', unsubscribe_cause = 'complaint'

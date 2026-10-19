@@ -539,7 +539,7 @@ export async function commitImport(
       : applied.addedConfirmed.has(e)
         ? "added_confirmed"
         : applied.unsubscribed.has(e)
-          ? p.outcome === "erased"
+          ? p.row.unsubscribe_cause === "erased"
             ? "erased"
             : "unsubscribed"
           : applied.addedUnsubscribed.has(e)
