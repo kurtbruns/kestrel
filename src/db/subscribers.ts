@@ -601,20 +601,19 @@ export async function suppressionsFor(
 }
 
 /**
- * Clear an address's suppression, the publisher's deliberate act (SPEC §7). An erasure's
- * marker is never cleared this way: only the person's own confirmation lifts it, so it
- * answers `erased` and leaves the marker in place.
+ * Lift an address's suppression, the publisher's deliberate act (SPEC §7), only while its
+ * reason is still `reason`, so a lift asked for a bounce never lifts another reason that
+ * arrived since. The caller decides which reasons the publisher may lift (`PUBLISHER_LIFTS`).
+ * Answers whether it lifted.
  */
-export async function clearSuppression(
+export async function liftSuppression(
   db: D1Database,
   email: string,
-): Promise<"cleared" | "none" | "erased"> {
+  reason: SuppressionReason,
+): Promise<boolean> {
   const res = await db
-    .prepare("DELETE FROM suppressions WHERE email = ? AND reason <> ?")
-    .bind(email, ERASED)
+    .prepare("DELETE FROM suppressions WHERE email = ? AND reason = ?")
+    .bind(email, reason)
     .run();
-  if ((res.meta.changes ?? 0) > 0) {
-    return "cleared";
-  }
-  return (await suppressionOf(db, email))?.reason === ERASED ? "erased" : "none";
+  return (res.meta.changes ?? 0) > 0;
 }

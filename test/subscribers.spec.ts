@@ -638,11 +638,12 @@ describe("subscribers: admin + suppressions", () => {
     // The block is the publisher's; the subscriber's consent is untouched.
     expect((await subs.getByEmail(env.DB, email))?.status).toBe("confirmed");
 
-    const del = await SELF.fetch(`${base}/api/suppressions/${encodeURIComponent(email)}`, {
-      method: "DELETE",
-      headers: AUTH,
+    const lifted = await SELF.fetch(`${base}/api/suppressions/lift`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ email, reason: "manual" }),
     });
-    expect(await readJson(del)).toMatchObject({ cleared: true });
+    expect(await readJson(lifted)).toEqual({ email, lifted: true });
     expect(await subs.audienceEmails(env.DB)).toContain(email);
   });
 });
@@ -654,10 +655,11 @@ describe("suppressions: a client records only its own block (SPEC §7)", () => {
       headers: JSON_AUTH,
       body: JSON.stringify(body),
     });
-  const clear = (email: string) =>
-    SELF.fetch(`${base}/api/suppressions/${encodeURIComponent(email)}`, {
-      method: "DELETE",
-      headers: AUTH,
+  const lift = (body: Record<string, unknown>) =>
+    SELF.fetch(`${base}/api/suppressions/lift`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify(body),
     });
 
   it("blocks with reason manual when none is given", async () => {
@@ -709,12 +711,63 @@ describe("suppressions: a client records only its own block (SPEC §7)", () => {
     expect((await subs.suppressionOf(env.DB, email))?.reason).toBe("erased");
   });
 
-  it("refuses to clear an erasure's marker, which only the person's confirmation lifts", async () => {
+  it("lifts a block, and a bounce seen here or imported, on the publisher's word", async () => {
+    for (const reason of ["manual", "bounce", "import_bounce"] as const) {
+      const email = uniqueEmail();
+      await subs.addSuppression(env.DB, email, reason);
+      const res = await lift({ email: email.toUpperCase(), reason });
+      expect(res.status).toBe(200);
+      expect(await readJson(res)).toEqual({ email, lifted: true });
+      expect(await subs.suppressionOf(env.DB, email)).toBeNull();
+    }
+  });
+
+  it("refuses a reason that isn't the one standing, so a lift for a bounce never lifts another reason that arrived since", async () => {
+    const email = uniqueEmail();
+    await subs.addSuppression(env.DB, email, "complaint", "abuse report");
+    const res = await lift({ email, reason: "bounce" });
+    expect(res.status).toBe(409);
+    expect(await readJson(res)).toMatchObject({
+      error: "suppression_changed",
+      suppression: { email, reason: "complaint", detail: "abuse report" },
+    });
+    expect((await subs.suppressionOf(env.DB, email))?.reason).toBe("complaint");
+  });
+
+  it("lifts only a block or a bounce, refusing any other reason as the request's, naming the field", async () => {
+    for (const reason of ["complaint", "import_complaint"] as const) {
+      const email = uniqueEmail();
+      await subs.addSuppression(env.DB, email, reason);
+      const res = await lift({ email, reason });
+      expect(res.status).toBe(400);
+      expect(await readJson(res)).toMatchObject({ error: "bad_request", field: "reason" });
+      expect((await subs.suppressionOf(env.DB, email))?.reason).toBe(reason);
+    }
+    expect(await readJson(await lift({ reason: "manual" }))).toMatchObject({ field: "email" });
+    for (const body of [{ email: uniqueEmail() }, { email: uniqueEmail(), reason: "spam" }]) {
+      const res = await lift(body);
+      expect(res.status).toBe(400);
+      expect(await readJson(res)).toMatchObject({ field: "reason" });
+    }
+  });
+
+  it("no longer serves the old DELETE route, which put the address in the path", async () => {
+    const email = uniqueEmail();
+    await subs.addSuppression(env.DB, email, "manual");
+    const res = await SELF.fetch(`${base}/api/suppressions/${encodeURIComponent(email)}`, {
+      method: "DELETE",
+      headers: AUTH,
+    });
+    expect(res.status).toBe(404);
+    expect((await subs.suppressionOf(env.DB, email))?.reason).toBe("manual");
+  });
+
+  it("refuses to lift an erasure's marker, which only the person's confirmation lifts", async () => {
     const email = uniqueEmail();
     await subs.addSuppression(env.DB, email, "erased");
-    const res = await clear(email);
+    const res = await lift({ email, reason: "erased" });
     expect(res.status).toBe(409);
-    // It carries the marker as it stands, which clearing left in place.
+    // It carries the marker as it stands, which the refusal left in place.
     expect(await readJson(res)).toMatchObject({
       error: "erasure_marker",
       suppression: { email, reason: "erased", detail: null },
@@ -722,11 +775,11 @@ describe("suppressions: a client records only its own block (SPEC §7)", () => {
     expect((await subs.suppressionOf(env.DB, email))?.reason).toBe("erased");
   });
 
-  it("answers cleared: false for an address with no suppression", async () => {
+  it("answers lifted: false for an address with no suppression", async () => {
     const email = uniqueEmail();
-    const res = await clear(email);
+    const res = await lift({ email, reason: "manual" });
     expect(res.status).toBe(200);
-    expect(await readJson(res)).toEqual({ email, cleared: false });
+    expect(await readJson(res)).toEqual({ email, lifted: false });
   });
 });
 

@@ -814,7 +814,7 @@ describe("a commit is idempotent and atomic (SPEC §7)", () => {
     ]);
     const first = await importFile(file);
     expect(first.counts.kept_suppressed).toBe(1);
-    await subscribers.clearSuppression(env.DB, "b@x.io");
+    await subscribers.liftSuppression(env.DB, "b@x.io", "manual");
     const again = await importFile(file);
     expect(again.replayed).toBe(false);
     expect(again.counts).toEqual(counts({ unchanged: 1, added_confirmed: 1 }));

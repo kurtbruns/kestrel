@@ -1923,16 +1923,43 @@ export function createRouter({
       handler: suppressionRoutes.add,
     },
     {
-      method: "DELETE",
-      path: "/api/suppressions/:email",
+      method: "POST",
+      path: "/api/suppressions/lift",
       access: "admin",
+      accepts: JSON_BODY,
       resource: "suppressions",
       title: "Unblock or clear an address",
-      summary: "Lift an address's suppression, so it may be mailed again.",
-      description: `Both of the editor's acts that lift a suppression: "Unblock" for the publisher's own block, when they decide to mail the address again, and "Clear" for a bounce or a complaint. ${SUBSCRIBER_ACTIONS.clear.when} Either is a deliberate, rare act, on the publisher's word. An erasure's marker is never cleared here; an erasure that found a block keeps the block, and clearing it clears the address. Answers \`cleared: false\` when there was no suppression.`,
-      example: { response: { email: "reader@example.com", cleared: true } },
-      errors: [{ code: "erasure_marker", details: ["suppression"] }],
-      handler: suppressionRoutes.clear,
+      summary: "Lift a block or a bounce on the publisher's word, naming the reason it lifts.",
+      description: `The editor's two acts that lift a suppression, each a deliberate, rare act on the publisher's word. "Unblock" lifts a block (\`manual\`): ${SUBSCRIBER_ACTIONS.unblock.when} "Clear" lifts a bounce (\`bounce\` or \`import_bounce\`): ${SUBSCRIBER_ACTIONS.clear.when} No other reason is lifted here, and an erasure's marker is refused. Answers \`lifted: false\` when the address has no suppression, as a repeat after a lift does.`,
+      example: {
+        request: { email: "reader@example.com", reason: "bounce" },
+        response: { email: "reader@example.com", lifted: true },
+      },
+      body: [
+        { name: "email", type: "string", required: true, description: "The address." },
+        {
+          name: "reason",
+          type: '"manual" | "bounce" | "import_bounce"',
+          required: true,
+          description:
+            "The reason the client saw, which must be the one standing: a lift never reaches a reason it didn't name. Any other is a 400.",
+        },
+      ],
+      returns: {
+        fields: [
+          { name: "email", type: "string", description: "The address, normalized." },
+          {
+            name: "lifted",
+            type: "boolean",
+            description: "Whether the named suppression was there and was lifted.",
+          },
+        ],
+      },
+      errors: [
+        { code: "suppression_changed", details: ["suppression"] },
+        { code: "erasure_marker", details: ["suppression"] },
+      ],
+      handler: suppressionRoutes.lift,
     },
 
     // --- provider webhooks (public; signature-verified inside the adapter) ---

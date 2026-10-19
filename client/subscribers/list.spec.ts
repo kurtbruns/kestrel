@@ -356,9 +356,9 @@ describe("subscribers view", () => {
         }),
       },
       {
-        method: "DELETE",
-        path: /^\/api\/suppressions\/a%40b\.c$/,
-        reply: () => ({ email: "a@b.c", cleared: true }),
+        method: "POST",
+        path: "/api/suppressions/lift",
+        reply: () => ({ email: "a@b.c", lifted: true }),
       },
     ]);
     await mount((r, s) => renderSubscribers(undefined, r, s));
@@ -374,12 +374,13 @@ describe("subscribers view", () => {
     );
     $("#ubGo").click();
     await settle();
-    expect(fake.calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
+    const lifts = fake.calls.filter((c) => c.url.pathname === "/api/suppressions/lift");
+    expect(lifts.map((c) => c.json())).toEqual([{ email: "a@b.c", reason: "manual" }]);
     expect($("#toasts").textContent).toMatch(/Unblocked a@b\.c/);
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("clears a bounce or complaint only after a Danger confirmation, and never offers it on an erasure's marker (SPEC §7)", async () => {
+  it("clears a bounce only after a Danger confirmation, and offers nothing on a complaint or an erasure's marker (SPEC §7)", async () => {
     fake = fakeApi([
       {
         path: "/api/subscribers",
@@ -394,9 +395,9 @@ describe("subscribers view", () => {
         }),
       },
       {
-        method: "DELETE",
-        path: /^\/api\/suppressions\/bad%40b\.c$/,
-        reply: () => ({ email: "bad@b.c", cleared: true }),
+        method: "POST",
+        path: "/api/suppressions/lift",
+        reply: () => ({ email: "bad@b.c", lifted: true }),
       },
     ]);
     await mount((r, s) => renderSubscribers(undefined, r, s));
@@ -408,12 +409,7 @@ describe("subscribers view", () => {
       return items;
     };
     expect(menuOf("s1")).toEqual(["View subscriber", "Unsubscribe", "Erase"]);
-    pick("s3", "Clear");
-    expect($(".modal h3").textContent).toBe("Clear this complaint?");
-    expect($(".modal .hint").textContent).toBe(
-      "Lets mail go again to <script>@b.c, an address that reported your mail as spam. Clear it only when they’ve asked you to send them your posts again. They’ll receive posts again only once they’re confirmed.",
-    );
-    $("#cCancel").click();
+    expect(menuOf("s3")).toEqual(["View subscriber", "Erase"]);
     pick("s2", "Clear");
     expect($(".modal h3").textContent).toBe("Clear this bounce?");
     expect($(".modal .hint").textContent).toBe(
@@ -422,7 +418,8 @@ describe("subscribers view", () => {
     expect($("#cGo").classList.contains("danger")).toBe(true);
     $("#cGo").click();
     await settle();
-    expect(fake.calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
+    const lifts = fake.calls.filter((c) => c.url.pathname === "/api/suppressions/lift");
+    expect(lifts.map((c) => c.json())).toEqual([{ email: "bad@b.c", reason: "bounce" }]);
     expect($("#toasts").textContent).toMatch(/Cleared the bounce on bad@b\.c/);
     expect(fake.unhandled).toEqual([]);
   });
@@ -533,8 +530,12 @@ describe("subscribers view", () => {
         "When you decide yourself to stop mailing an address. Their status stays as it was, and you can unblock it.",
       ],
       [
+        "Unblock",
+        "When you decide to mail an address you blocked again. They receive your posts only if they’re confirmed.",
+      ],
+      [
         "Clear",
-        "When you know a bounce’s cause is gone, such as a reader who tells you their mailbox is fixed, or when someone who marked your mail as spam asks you for it again. Mail goes again to an address that failed or reported spam.",
+        "When you know a bounce’s cause is gone, such as a reader who tells you their mailbox is fixed. Mail goes again to an address that failed.",
       ],
       ["Erase", "When they ask you to delete their data. It can’t be undone."],
     ]);

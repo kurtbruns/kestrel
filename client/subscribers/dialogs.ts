@@ -6,9 +6,9 @@ import type { OptIn } from "../../shared/imports";
 import { SUPPRESSION_FLAG } from "../../shared/subscriber_meanings";
 import type {
   BlockResponse,
-  ClearSuppressionResponse,
   EraseResponse,
   ErasureAcknowledgementRequired,
+  LiftSuppressionResponse,
   SubscribeAction,
   SubscribeResponse,
   Subscriber,
@@ -262,9 +262,7 @@ export function confirmUnblock(sub: Subscriber, onDone: () => void, signal: Abor
     busy(go, "Unblocking…", async () => {
       m.clearError();
       try {
-        await api<ClearSuppressionResponse>(`/api/suppressions/${encodeURIComponent(sub.email)}`, {
-          method: "DELETE",
-        });
+        await liftSuppression(sub);
         m.close();
         toast(`Unblocked ${sub.email}`);
         onDone();
@@ -274,30 +272,28 @@ export function confirmUnblock(sub: Subscriber, onDone: () => void, signal: Abor
     });
 }
 
+/** Lift the subscriber's suppression, naming the reason the row showed, so a reason that
+ *  changed since is refused rather than lifted (SPEC §7). */
+function liftSuppression(sub: Subscriber): Promise<LiftSuppressionResponse> {
+  return api<LiftSuppressionResponse>("/api/suppressions/lift", {
+    method: "POST",
+    json: { email: sub.email, reason: sub.suppression?.reason },
+  });
+}
+
 /**
- * Clear lifts a bounce or a complaint, which records someone else's verdict on the address
- * (the provider's, or the previous service's), so it is the riskier way back to mailing it:
- * the dialog says the address failed or reported spam (SPEC §7). A bounce is cleared once the
- * publisher knows its cause is gone. A complaint was the person's own act, and providers
- * tolerate far fewer of them, so only the person asking for the mail again clears one.
+ * Clear lifts a bounce, which records someone else's verdict on the address (the provider's,
+ * or the previous service's), so it is the riskier way back to mailing it: the dialog says
+ * the address failed, and a bounce is cleared once the publisher knows its cause is gone
+ * (SPEC §7).
  */
-export function confirmClear(
-  sub: Subscriber,
-  flag: "bounced" | "complaint",
-  onDone: () => void,
-  signal: AbortSignal,
-): void {
-  const what = flag === "bounced" ? "bounce" : "complaint";
-  const why =
-    flag === "bounced"
-      ? "an address where mail failed. Clear it only when you know the reason is gone, such as a reader who tells you their mailbox is fixed"
-      : "an address that reported your mail as spam. Clear it only when they’ve asked you to send them your posts again";
+export function confirmClear(sub: Subscriber, onDone: () => void, signal: AbortSignal): void {
   const mailed =
     sub.status === "confirmed"
       ? "They’re confirmed, so they’ll receive your posts again."
       : "They’ll receive posts again only once they’re confirmed.";
   const m = modal(
-    html`<h3>Clear this ${what}?</h3><p class="hint">Lets mail go again to <strong>${sub.email}</strong>, ${why}. ${mailed}</p><div class="actions"><button type="button" id="cCancel">Cancel</button><button type="button" class="danger" id="cGo">Clear</button></div>`,
+    html`<h3>Clear this bounce?</h3><p class="hint">Lets mail go again to <strong>${sub.email}</strong>, an address where mail failed. Clear it only when you know the reason is gone, such as a reader who tells you their mailbox is fixed. ${mailed}</p><div class="actions"><button type="button" id="cCancel">Cancel</button><button type="button" class="danger" id="cGo">Clear</button></div>`,
     signal,
   );
   const go = $<HTMLButtonElement>("#cGo", m.el);
@@ -306,11 +302,9 @@ export function confirmClear(
     busy(go, "Clearing…", async () => {
       m.clearError();
       try {
-        await api<ClearSuppressionResponse>(`/api/suppressions/${encodeURIComponent(sub.email)}`, {
-          method: "DELETE",
-        });
+        await liftSuppression(sub);
         m.close();
-        toast(`Cleared the ${what} on ${sub.email}`);
+        toast(`Cleared the bounce on ${sub.email}`);
         onDone();
       } catch (e) {
         m.error(describeError(e));

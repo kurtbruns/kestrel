@@ -41,6 +41,10 @@ const READ_AGAIN = {
   active_send_exists: [409, "The post already has its one active send."],
   cursor_ahead: [409, "A cursor ahead of this database: read again, follow from that cursor."],
   plan_stale: [409, "The import's plan changed: plan again."],
+  suppression_changed: [
+    409,
+    "The address's suppression isn't the `reason` a lift named: decide again on the one standing.",
+  ],
 } as const satisfies Record<string, Refusal>;
 
 const TRY_AGAIN = {
@@ -73,10 +77,7 @@ const NO_LONGER_APPLIES = {
   window_closed: [409, "The send's fire time has passed."],
   send_canceled: [409, "The send is canceled: schedule the post again instead."],
   not_wedged: [409, "Nothing on the send needs resolving."],
-  erasure_marker: [
-    409,
-    "Clearing an erasure's marker, which only the person's confirmation lifts.",
-  ],
+  erasure_marker: [409, "Lifting an erasure's marker, which only the person's confirmation lifts."],
 } as const satisfies Record<string, Refusal>;
 
 const FIX_DEPLOYMENT = {

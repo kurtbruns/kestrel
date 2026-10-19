@@ -10,7 +10,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading from 1.12.0.** Run `npm run check-context` in your instance's repository: this release changes the operator's Claude context, and a copy you've edited is merged by hand. Several API changes can break a script of yours, each listed under Breaking; the table gives every renamed field, value, and sort key, old to new. A request that still sends an old name is refused with a 400 naming it, never answered as if it had been read: `PUT /api/settings` now refuses any field it doesn't take.
+**Upgrading from 1.12.0.** Run `npm run check-context` in your instance's repository: this release changes the operator's Claude context, and a copy you've edited is merged by hand. Several API changes can break a script of yours, each listed under Breaking; the table gives every renamed route, field, value, and sort key, old to new. A request that still sends an old name is refused with a 400 naming it, never answered as if it had been read: `PUT /api/settings` now refuses any field it doesn't take.
 
 | Where | Was | Now |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 | A send's `counts` | `in_flight` | `dispatched` |
 | `GET /api/sends/:id` `outcomes` | `in_flight` (pending and dispatched together) | `pending`, `dispatched` |
 | `GET /api/sends/:id/deliveries` `view` | `in_flight` (pending and dispatched together) | `pending`, `dispatched` |
+| Lifting a suppression | `DELETE /api/suppressions/:email`, answering `{ email, cleared }` | `POST /api/suppressions/lift` with `{ email, reason }`, answering `{ email, lifted }` (see Breaking) |
 | An import plan | `daily_writes_warning` | `workers_plan_advice` (a different meaning: see Breaking) |
 | An import's outcomes: a plan's and a commit's `counts`, `rows`, and `differed`, the format's `outcomes`, a stored record | `create_confirmed`, `confirm_pending`, `mark_unsubscribed`, `create_unsubscribed`, `blocked_by_suppression`, `suppression_added` | `added_confirmed`, `confirmed_pending`, `unsubscribed`, `added_unsubscribed`, `kept_suppressed`, `suppressed` |
 
@@ -53,6 +54,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - A post reads the same on every route and carries its send whole: `send`, the send's own view (its active send, else the one that sent it), and `actions`, what the server would take for it now (`edit`, `delete`, and, while an email provider is connected, `schedule` and `send_now`). They replace a list row's `fire_at`, `active_send_id`, and `active_send_status` and one post's `scheduled`, `sending`, and `sent`, and its `author` moves inside the post. The editor offers a post's controls from its `actions`. The posts list's `fire_at` sort is now `send.fire_at`.
 - A subscriber carries its suppression inside it on every route, `suppression: { reason, detail }` or null, in place of `suppressed`, `suppression_reason`, and `suppression_detail`, which sat in list rows only, and `suppressed` beside one subscriber's answer.
 - A refusal about a resource's state carries it as it stands: `post_not_draft` and `slug_permanent` the `post`, `settings_changed` and `conflict` the `settings`, an erasure's `run_in_progress` the `subscriber`, `erasure_marker` the `suppression`, and every send refusal the `cursor` beside the `send`. The re-make's `sends`, `in_use.sends`, and `remade` are full send views, in place of a smaller reference.
+- `DELETE /api/suppressions/:email` is replaced by `POST /api/suppressions/lift`, which takes `{ email, reason }` in the body, so a subscriber's address is no longer in a logged path, and lifts only the reason named: a different one standing now is refused with `suppression_changed`, carrying it. It lifts a block (`manual`) or a bounce (`bounce`, `import_bounce`); any other reason is a 400, and an erasure's marker is refused with `erasure_marker`, as before. It answers `{ email, lifted }` in place of `{ email, cleared }`. The old route answers 404.
 - An import plan's `daily_writes_warning` is now `workers_plan_advice`, and means something else: on the Workers Free plan's limits, the advice to move to Workers Paid when the import would leave more than 1,000 confirmed subscribers, rather than a count of the day's database writes. A script that read the old field reads the new one (SPEC §7).
 
 ### Added
@@ -60,8 +62,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - Each instance serves its API as an OpenAPI 3.1 document at `GET /api/openapi.json`, behind Access like the reference, so a client generator or an API client such as Postman can import it. It is generated from the same registration as the reference, so it lists the same routes, objects, and refusals, and `/llms.txt` and the reference's index name it.
 - Each instance serves a public `/llms.txt`, so an agent given only its address learns what it is and where to start: the publication's name, its archive and subscribe page, and the API reference and docs behind Access, with a link to Connect Claude to the API for a service token. It is generated from the routes the instance registers, so it always matches the release (SPEC §11).
 - A scheduled post that no test has been sent for says so on the editor's scheduled banner until the first test lands, and the API carries it as an `untested` condition (`info`) on the send and in the feed, so Claude can tell whether the email was tested (SPEC §8).
-- **Clear** in a subscriber's ⋯ menu lifts a bounce or a complaint, after a dialog that says the address failed or reported spam, and to clear a bounce only when you know its cause is gone and a complaint only when the reader asks for your posts again, which before only the API could do (SPEC §7). It is never offered on an erasure's marker. The list's legend, under What you can do, and the API reference say when to use it, in the same words.
-- The operator's Claude context tells Claude to clear a complaint only when the publisher says the reader asked for their mail again, not merely that the problem is gone, since a complaint was the reader's own act.
+- **Clear** in a subscriber's ⋯ menu lifts a bounce, after a dialog that says the address failed and to clear it only when you know its cause is gone, which before only the API could do (SPEC §7). It isn't offered on a complaint or an erasure's marker. The list's legend, under What you can do, and the API reference say when to use it and when to use **Unblock**, in the same words.
+- The operator's Claude context lifts a suppression through `POST /api/suppressions/lift`, naming the reason it shows, and lifts only a block or a bounce. `npm run check-context` offers the change to an existing instance.
 
 ### Changed
 
