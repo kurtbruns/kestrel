@@ -22,13 +22,19 @@ import { UNLISTED_PATH } from "../shared/archive_url";
 import { FREE_PLAN_LIST } from "../shared/free_plan";
 import { IMPORT_LIMITS } from "../shared/imports";
 import type { ReferenceField, ReferenceResponse } from "../shared/reference";
-import { type DeliveryListResponse, formatLead, MIN_LEAD_FLOOR_MS } from "../shared/sends";
+import {
+  type DeliveryListResponse,
+  formatLead,
+  MIN_LEAD_FLOOR_MS,
+  STUCK_THRESHOLD_MS,
+} from "../shared/sends";
 import type { TemplateTestResponse } from "../shared/settings";
 import { SUBSCRIBER_ACTIONS } from "../shared/subscriber_meanings";
 import { buildInfo } from "./build";
 import type { Config } from "./env";
 import { json, notFound } from "./lib/errors";
 import { RASTER_IMAGE_TYPES } from "./lib/image_types";
+import { MISSED_THRESHOLD_MS } from "./lib/time";
 import { unwrap } from "./lib/unwrap";
 import { buildReferenceResponse, referenceIndexMarkdown, resourceMarkdown } from "./reference";
 import { sendBrief } from "./reference/objects";
@@ -50,6 +56,7 @@ import * as settingsRoutes from "./routes/settings";
 import * as subscriberRoutes from "./routes/subscribers";
 import * as suppressionRoutes from "./routes/suppressions";
 import * as webhookRoutes from "./routes/webhooks";
+import { SETTLE_FOLLOW_MS } from "./send/feed";
 
 // The body types a route declares (`RouteDef.accepts`); a raw upload adds its own.
 const JSON_BODY = ["application/json"];
@@ -214,7 +221,8 @@ export function createRouter({
   const cursorField: ReferenceField = {
     name: "cursor",
     type: "string",
-    description: "Where this answer stands among changes to sends (Following changes).",
+    description:
+      "Where this answer stands among changes to sends: pass it to Follow changes to sends (`GET /api/sends/feed`) as `since`.",
   };
   const pageField: ReferenceField = {
     name: "page",
@@ -1203,8 +1211,12 @@ export function createRouter({
       title: "Follow changes to sends",
       summary:
         "What changed among sends since a cursor, every open condition, and when to read again: how a client keeps up with sends without polling each one.",
-      description:
-        "Following changes, above, says what it reports and how to pace it. Each send is its view, read off its counters, never its delivery rows, so a send reads the same here as on its page; soonest fire first. Reading it changes nothing.",
+      description: [
+        "Every read of sends answers a `cursor`, `<seq>.<at>`: where one sequence of changes across all sends stood, and the server's time. Pass it here as `since` to keep up.",
+        `This answers every send that changed after that cursor, including those the clock changed with no write (a fire time passing, the ${MISSED_THRESHOLD_MS / 60_000}-minute missed tolerance, the ${STUCK_THRESHOLD_MS / 60_000}-minute stuck threshold), the sends \`removed\`, every open condition, a new \`cursor\`, and \`read_again_at\`. Without \`since\`, it answers the sends that can change on their own: due, sending, or settling (sent within ${SETTLE_FOLLOW_MS / 60_000} minutes).`,
+        "`read_again_at` is the server's pace: about 3 seconds while a send can move, slowing to a minute while none can. It is advisory: reading sooner, as right after acting, is fine, and reading late loses nothing. When `more` is true, read again at once. A cursor ahead of the database, as after a restore, is refused with `cursor_ahead`: read the sends again and follow from that read.",
+        "Each send is its view, read off its counters, never its delivery rows, so a send reads the same here as on its page; soonest fire first. Reading it changes nothing.",
+      ].join("\n\n"),
       query: [
         {
           name: "since",
@@ -1929,16 +1941,43 @@ export function createRouter({
       handler: suppressionRoutes.add,
     },
     {
-      method: "DELETE",
-      path: "/api/suppressions/:email",
+      method: "POST",
+      path: "/api/suppressions/lift",
       access: "admin",
+      accepts: JSON_BODY,
       resource: "suppressions",
       title: "Unblock or clear an address",
-      summary: "Lift an address's suppression, so it may be mailed again.",
-      description: `Both of the editor's acts that lift a suppression: "Unblock" for the publisher's own block, when they decide to mail the address again, and "Clear" for a bounce or a complaint. ${SUBSCRIBER_ACTIONS.clear.when} Either is a deliberate, rare act, on the publisher's word. An erasure's marker is never cleared here; an erasure that found a block keeps the block, and clearing it clears the address. Answers \`cleared: false\` when there was no suppression.`,
-      example: { response: { email: "reader@example.com", cleared: true } },
-      errors: [{ code: "erasure_marker", details: ["suppression"] }],
-      handler: suppressionRoutes.clear,
+      summary: "Lift a block or a bounce on the publisher's word, naming the reason it lifts.",
+      description: `The editor's two acts that lift a suppression, each a deliberate, rare act on the publisher's word. "Unblock" lifts a block (\`manual\`): ${SUBSCRIBER_ACTIONS.unblock.when} "Clear" lifts a bounce (\`bounce\` or \`import_bounce\`): ${SUBSCRIBER_ACTIONS.clear.when} No other reason is lifted here, and an erasure's marker is refused. Answers \`lifted: false\` when the address has no suppression, as a repeat after a lift does.`,
+      example: {
+        request: { email: "reader@example.com", reason: "bounce" },
+        response: { email: "reader@example.com", lifted: true },
+      },
+      body: [
+        { name: "email", type: "string", required: true, description: "The address." },
+        {
+          name: "reason",
+          type: '"manual" | "bounce" | "import_bounce"',
+          required: true,
+          description:
+            "The reason the client saw, which must be the one standing: a lift never reaches a reason it didn't name. Any other is a 400.",
+        },
+      ],
+      returns: {
+        fields: [
+          { name: "email", type: "string", description: "The address, normalized." },
+          {
+            name: "lifted",
+            type: "boolean",
+            description: "Whether the named suppression was there and was lifted.",
+          },
+        ],
+      },
+      errors: [
+        { code: "suppression_changed", details: ["suppression"] },
+        { code: "erasure_marker", details: ["suppression"] },
+      ],
+      handler: suppressionRoutes.lift,
     },
 
     // --- provider webhooks (public; signature-verified inside the adapter) ---

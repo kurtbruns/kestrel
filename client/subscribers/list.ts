@@ -296,8 +296,8 @@ function renderSubTable(
       }
       // Anyone can be viewed and anyone can be erased (SPEC §7); only a confirmed
       // subscriber has anything to unsubscribe from. An address with no suppression can be
-      // blocked; a block is undone by Unblock, and a bounce or complaint by Clear, the
-      // weightier act. An erasure's marker is never cleared by hand.
+      // blocked; a block is undone by Unblock, and a bounce by Clear, the weightier act.
+      // Nothing else is lifted by hand.
       const items: MenuItem[] = [
         {
           label: "View subscriber",
@@ -325,16 +325,16 @@ function renderSubTable(
           onClick: () => confirmBlock(row, reload, signal),
         });
       } else if (row.suppression.reason === "manual") {
-        items.push({ label: "Unblock", onClick: () => confirmUnblock(row, reload, signal) });
-      } else {
-        const flag = SUPPRESSION_FLAG[row.suppression.reason];
-        if (flag === "bounced" || flag === "complaint") {
-          items.push({
-            label: SUBSCRIBER_ACTIONS.clear.label,
-            danger: true,
-            onClick: () => confirmClear(row, flag, reload, signal),
-          });
-        }
+        items.push({
+          label: SUBSCRIBER_ACTIONS.unblock.label,
+          onClick: () => confirmUnblock(row, reload, signal),
+        });
+      } else if (SUPPRESSION_FLAG[row.suppression.reason] === "bounced") {
+        items.push({
+          label: SUBSCRIBER_ACTIONS.clear.label,
+          danger: true,
+          onClick: () => confirmClear(row, reload, signal),
+        });
       }
       items.push({
         label: SUBSCRIBER_ACTIONS.erase.label,

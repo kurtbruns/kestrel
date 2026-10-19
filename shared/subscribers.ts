@@ -15,13 +15,19 @@ export type SubscriberStatus = "pending" | "confirmed" | "unsubscribed";
  * one an import brought from the previous service, or an
  * erasure's do-not-contact marker (`erased`). `subscriber_meanings.ts` says what each means.
  */
-export type SuppressionReason =
-  | "bounce"
-  | "complaint"
-  | "manual"
-  | "erased"
-  | "import_bounce"
-  | "import_complaint";
+export const SUPPRESSION_REASONS = [
+  "bounce",
+  "complaint",
+  "manual",
+  "erased",
+  "import_bounce",
+  "import_complaint",
+] as const;
+export type SuppressionReason = (typeof SUPPRESSION_REASONS)[number];
+
+/** The reasons the publisher lifts (SPEC §7): their own block (Unblock), and a bounce once its
+ *  cause is gone (Clear). */
+export const PUBLISHER_LIFTS: readonly SuppressionReason[] = ["manual", "bounce", "import_bounce"];
 
 /** One suppressed address: why, the provider's or the publisher's words if any, and since when. */
 export interface Suppression {
@@ -163,8 +169,8 @@ export interface BlockResponse {
   added: boolean;
 }
 
-/** DELETE /api/suppressions/:email: whether a suppression was there to clear. */
-export interface ClearSuppressionResponse {
+/** POST /api/suppressions/lift: whether the named suppression was there to lift. */
+export interface LiftSuppressionResponse {
   email: string;
-  cleared: boolean;
+  lifted: boolean;
 }

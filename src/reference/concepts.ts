@@ -1,15 +1,13 @@
 /**
  * The topics the API reference states once, ahead of the routes (SPEC §11): authentication,
- * requests, errors, paging, acting safely, and following changes, each a few plain sentences carrying
+ * requests, errors, paging, and acting safely, each a few plain sentences carrying
  * docs/API.md's principles in the words a client needs. A route then says only what is its own. Claude reads
  * the reference at the start of every conversation and never docs/API.md, so what a client
- * must know about the whole API lives here.
+ * must know about the whole API lives here. What one resource's routes share stays with that
+ * resource, as following sends is told on the feed route.
  */
 
 import type { ReferenceConcept, ReferenceField } from "../../shared/reference";
-import { STUCK_THRESHOLD_MS } from "../../shared/sends";
-import { MISSED_THRESHOLD_MS } from "../lib/time";
-import { SETTLE_FOLLOW_MS } from "../send/feed";
 
 const REQUESTS = [
   "A body is JSON (`Content-Type: application/json`) unless the route names another type, and so is an answer unless the route says it answers a file or a page (a CSV export, an email preview). Times are epoch milliseconds.",
@@ -58,19 +56,13 @@ const ERROR_BODY: ReferenceField[] = [
 ];
 
 const ACTING = [
-  "A send and a post say what can be done with them now: `actions` lists exactly the acts the server would accept, each with its method and path, and a send's `conditions` say what is wrong, in words to show. Offer those rather than working them out from other fields: a post offers `schedule` and `send_now` only while an email provider is connected.",
-  "Repeating an act is safe, so after a lost answer, send it again: one that already took effect answers success, and each route says how its repeat reads (`changed: false` on Cancel a send and Reschedule a send, `idempotent` on Send a post now, `replayed` on Commit an import). An act on a send applies to the send as it stands, whatever you last read of it. Saving a post is the exception: a save names the revision it was based on (`base_revision` or `If-Match`) and is refused once someone else has saved, so no edit is overwritten unseen.",
+  "A post and a send list in `actions` exactly the acts the server would accept now, each with its method and path, and a send's `conditions` say what is wrong, in words to show. Both are the server's own answer, so a client can show them as they stand instead of deriving them from `status` or `phase`, and stays right when the rules behind them change.",
+  "Repeating an act is safe: after a lost answer, send it again, and one that already took effect answers success, in the way its route describes. An act on a send applies to the send as it stands, whatever you last read of it, so read its answer to see what it did. Saving a post is the exception: a save names the revision it was based on and is refused once someone else has saved, so no edit is overwritten unseen.",
+  "A resource reads the same on every route that returns it, and every answer and refusal about one carries it as it now stands, so keep one copy and replace it from whichever answer arrives.",
 ];
 
 const LISTS =
-  "A list answers its rows and `page`: `{ total, limit, offset, sort, dir }`. `limit` is the page size (default 50, at most 200; a larger one is held to 200) and `offset` the rows to skip. A `sort` or `dir` the route doesn't list, or a `limit` or `offset` that isn't a whole number, is a 400 naming the field. Export the list (`GET /api/subscribers/export`) pages by its own `next` instead, and the send feed doesn't page.";
-
-const FOLLOWING = [
-  "A resource reads the same on every route that returns it, so keep one copy and replace it from whichever answer arrives. Of two copies of a send, the higher `rev` is newer: every change to a send takes the next number in one sequence across all sends.",
-  "Every read of sends also answers a `cursor`, `<seq>.<at>`: where that sequence stood and the server's time. To keep up, pass it to `GET /api/sends/feed` as `since`.",
-  `The feed answers every send that changed after that cursor, including those the clock changed with no write (a fire time passing, the ${MISSED_THRESHOLD_MS / 60_000}-minute missed tolerance, the ${STUCK_THRESHOLD_MS / 60_000}-minute stuck threshold), the sends \`removed\`, every open condition, a new \`cursor\`, and \`read_again_at\`. Without \`since\`, it answers the sends that can change on their own: due, sending, or settling (sent within ${SETTLE_FOLLOW_MS / 60_000} minutes).`,
-  "`read_again_at` is the server's pace: about 3 seconds while a send can move, slowing to a minute while none can. It is advisory: reading sooner, as right after acting, is fine, and reading late loses nothing. When `more` is true, read again at once. A cursor ahead of the database, as after a restore, is refused with `cursor_ahead`: read the sends again and follow from that read.",
-];
+  "A list answers its rows and `page`: `{ total, limit, offset, sort, dir }`. `limit` is the page size (default 50, at most 200; a larger one is held to 200) and `offset` the rows to skip. A `sort` or `dir` the route doesn't list, or a `limit` or `offset` that isn't a whole number, is a 400 naming the field.";
 
 /** The topics, in the order the reference lists them. */
 export function referenceConcepts(): ReferenceConcept[] {
@@ -80,6 +72,5 @@ export function referenceConcepts(): ReferenceConcept[] {
     { key: "errors", title: "Errors", text: ERRORS.join("\n\n"), fields: ERROR_BODY },
     { key: "lists", title: "Lists and paging", text: LISTS },
     { key: "acting", title: "Acting safely", text: ACTING.join("\n\n") },
-    { key: "following", title: "Following changes", text: FOLLOWING.join("\n\n") },
   ];
 }
