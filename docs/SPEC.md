@@ -225,7 +225,7 @@ A subscriber is an email address with a **consent state**, plus an orthogonal **
 
 **Suppressed** is not a consent state but a flag that can sit on top of one: an address that bounced hard, or that the publisher blocked, is excluded from every send whatever its consent state, so a subscriber can be *confirmed and suppressed* at once, consented but never mailed. The audience for any send is exactly *confirmed minus suppressed*. Suppression is a deliverability rule (§10), separate from the consent rule (I1).
 
-**Each mark has one owner.** The consent state is the person's. They set it by subscribing, confirming, unsubscribing, or reporting the mail as spam; the publisher sets it only on their behalf, by unsubscribing or erasing them when they ask; and only the person's own confirmation of a new sign-up brings back someone who left. The suppression is the sender's side. It records that mail to the address failed, as the provider reported, or that the publisher decided to stop mailing it, and the publisher alone lifts it, deliberately: a bounce once they know its cause is gone, a block when they change their mind. The publisher may **block** an address to record their own decision, as opposed to the person's: they block when they decide themselves, and unsubscribe someone only when that person asks. A block keeps the person's consent state and sends them nothing, a confirmation included. An import may bring a bounce or a block the previous service recorded, which reads and lifts the same way. The publisher lifts a suppression only by naming the one they saw, so a lift meant for a block never lifts a bounce that arrived since. A client adding a suppression adds only a block, since a bounce is the provider's report. Keeping the owners apart is what lets each mark be lifted by the one party it belongs to: no lift ever has to work out whose decision it is undoing.
+**Each mark has one owner.** The consent state is the person's. They set it by subscribing, confirming, unsubscribing, or reporting the mail as spam; the publisher sets it only on their behalf, by unsubscribing or erasing them when they ask; and only the person's own confirmation of a new sign-up brings back someone who left. The suppression is the sender's side. It records that mail to the address failed, as the provider reported, or that the publisher decided to stop mailing it, and the publisher alone lifts it, deliberately: a bounce once they know its cause is gone, a block when they change their mind. The publisher may **block** an address to record their own decision, as opposed to the person's: they block when they decide themselves, and unsubscribe someone only when that person asks. A block keeps the person's consent state and sends them nothing, a confirmation included. An import may bring a bounce or a block the previous service recorded, which reads and lifts the same way. A bounce or a block can sit on any status, or on an address with no subscriber, and only the first one an address gets stands. The publisher lifts a suppression only by naming the one they saw, so a lift meant for a block never lifts a bounce that arrived since. A client adding a suppression adds only a block, since a bounce is the provider's report. Keeping the owners apart is what lets each mark be lifted by the one party it belongs to: no lift ever has to work out whose decision it is undoing.
 
 ### How an address moves
 
@@ -241,17 +241,6 @@ A subscriber is an email address with a **consent state**, plus an orthogonal **
 | unsubscribed | pending | The reader subscribing again; the publisher adding the address, unless the person left by a complaint or an erasure |
 
 An import can also add an address or move one already on the list, by rules of its own (Bringing an existing list, below), so it is left out of the diagram. Nothing returns an address to having no subscriber.
-
-![No suppression on the left. A hard bounce the provider reports, or a bounce an import brings, makes an address bounced, and the publisher's Clear lifts it. The publisher's Block, or a block an import brings, makes it blocked, and the publisher's Unblock lifts it. A bounce is the provider's report and a block the publisher's decision. Either can sit on any status.](spec-suppressions.svg)
-
-| From | To | By |
-| --- | --- | --- |
-| none | bounced | A hard bounce the provider reports (§10), or a bounce an import brings |
-| bounced | none | The publisher clearing it, once they know its cause is gone |
-| none | blocked | The publisher blocking the address, or a block an import brings |
-| blocked | none | The publisher unblocking it |
-
-A bounce or a block can sit on any status, and on an address with no subscriber, and only the first one an address gets stands.
 
 ### Joining
 
