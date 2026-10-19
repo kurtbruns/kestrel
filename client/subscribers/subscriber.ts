@@ -8,9 +8,9 @@ import type {
   SubscriberDeliveriesResponse,
   SubscriberDelivery,
   SubscriberResponse,
+  UnsubscribeCause,
 } from "../../shared/subscribers";
 import { api, describeError } from "../api";
-import { mount } from "../lifecycle";
 import { deliveryOutcome } from "../sends/outcome";
 import { $, $$ } from "../ui/dom";
 import { fmt } from "../ui/format";
@@ -24,68 +24,112 @@ const BACK = html`<div class="editor-head"><a href="#/subscribers" class="back">
 
 /**
  * The page for one subscriber (DESIGN §3), at `#/subscribers/:id`. It shows the same meanings
- * the roster's legend gives, for this person: their status and flag as the list draws them,
- * then how they joined, their suppression, why they left, and their sends (SPEC §8). The acts
- * are the row menu's, with the same dialogs, and after one lands the page reads itself again.
+ * the roster's legend gives, for this person: their status and flag as the list draws them and
+ * whether they receive posts, then how they joined, their suppression, why they left, and their
+ * sends (SPEC §8). The acts are the row menu's, with the same dialogs. After one lands the page
+ * reads itself again in place, keeping what it showed until the answer arrives, and puts focus
+ * on its title, since the button that opened the dialog may be gone (DESIGN §11).
  */
 export async function renderSubscriber(
   id: string,
   root: HTMLElement,
   signal: AbortSignal,
 ): Promise<void> {
-  const remount = () => {
-    if (!signal.aborted) {
-      mount((r, s) => renderSubscriber(id, r, s));
-    }
-  };
   setHtml(root, html`${BACK}<p class="muted">Loading…</p>`);
-  let sub: Subscriber;
-  let sends: SubscriberDeliveriesResponse;
-  let record: ImportRecord | null = null;
-  try {
-    const [one, firstPage] = await Promise.all([
-      api<SubscriberResponse>(`/api/subscribers/${id}`, { signal }),
-      api<SubscriberDeliveriesResponse>(`/api/subscribers/${id}/deliveries`, { signal }),
-    ]);
-    sub = one.subscriber;
-    sends = firstPage;
-    if (sub.import_id !== null) {
-      record = (await api<ImportRecordResponse>(`/api/imports/${sub.import_id}`, { signal }))
-        .import;
+
+  async function load(afterAct: boolean): Promise<void> {
+    let sub: Subscriber;
+    let sends: SubscriberDeliveriesResponse;
+    let record: ImportRecord | null = null;
+    try {
+      const [one, firstPage] = await Promise.all([
+        api<SubscriberResponse>(`/api/subscribers/${id}`, { signal }),
+        api<SubscriberDeliveriesResponse>(`/api/subscribers/${id}/deliveries`, { signal }),
+      ]);
+      sub = one.subscriber;
+      sends = firstPage;
+      if (sub.import_id !== null) {
+        record = (await api<ImportRecordResponse>(`/api/imports/${sub.import_id}`, { signal }))
+          .import;
+      }
+    } catch (e) {
+      const body = document.createElement("div");
+      setHtml(root, BACK);
+      root.append(body);
+      renderError(body, describeError(e), () => {
+        setHtml(root, html`${BACK}<p class="muted">Loading…</p>`);
+        void load(false);
+      });
+      return;
     }
-  } catch (e) {
-    const body = document.createElement("div");
-    setHtml(root, BACK);
-    root.append(body);
-    renderError(body, describeError(e), remount);
-    return;
+    if (signal.aborted) {
+      return;
+    }
+    paint(sub, sends, record);
+    if (afterAct) {
+      $<HTMLElement>("h1.sub-title", root).focus();
+    }
   }
 
-  const acts = subscriberActs(sub, remount, signal);
-  const erased = isErased(sub);
-  setHtml(
-    root,
-    html`${BACK}
-    <div class="spread page-head sub-page-head">
-      <div class="sub-page-title"><h1 class="sub-title">${sub.email}</h1><span class="sub-pills">${statusBadge(sub)}${suppressionFlag(sub)}</span></div>
-      <span class="row sub-acts">${acts.map(
-        (a, i) =>
-          html`<button type="button" class="${a.danger ? "danger-subtle" : ""}" data-act="${i}">${a.label}…</button>`,
-      )}</span>
-    </div>
-    ${erased ? null : joinedSection(sub, record)}
-    ${suppressionSection(sub)}
-    ${sub.unsubscribe_cause ? leftSection(sub, sends.deliveries) : null}
-    <section class="sub-sec sub-sends" aria-labelledby="subSendsTitle">
-      <h2 class="rec-part-title" id="subSendsTitle">Sends</h2>
-      <div id="subSends"></div>
-      <div id="subMore"></div>
-    </section>`,
-  );
-  for (const b of $$<HTMLButtonElement>("[data-act]", root)) {
-    b.onclick = () => acts[Number(b.dataset.act)]?.onClick();
+  function paint(
+    sub: Subscriber,
+    sends: SubscriberDeliveriesResponse,
+    record: ImportRecord | null,
+  ): void {
+    const acts = subscriberActs(sub, () => void load(true), signal);
+    const erased = isErased(sub);
+    setHtml(
+      root,
+      html`${BACK}
+      <div class="spread page-head sub-page-head">
+        <div class="sub-page-title"><h1 class="sub-title" tabindex="-1">${sub.email}</h1><span class="sub-pills">${statusBadge(sub)}${suppressionFlag(sub)}</span></div>
+        <span class="row sub-acts">${acts.map(
+          (a, i) =>
+            html`<button type="button" class="${a.danger ? "danger-subtle" : ""}" data-act="${i}">${a.label}…</button>`,
+        )}</span>
+      </div>
+      <p class="sub-receives${sub.receives_posts ? " yes" : ""}">${receivesLine(sub)}</p>
+      ${erased ? null : joinedSection(sub, record)}
+      ${suppressionSection(sub)}
+      ${sub.unsubscribe_cause ? leftSection(sub, sends.deliveries) : null}
+      <section class="sub-sec sub-sends" aria-labelledby="subSendsTitle">
+        <h2 class="rec-part-title" id="subSendsTitle">Sends</h2>
+        <div id="subSends"></div>
+        <div id="subMore"></div>
+      </section>`,
+    );
+    for (const b of $$<HTMLButtonElement>("[data-act]", root)) {
+      b.onclick = () => acts[Number(b.dataset.act)]?.onClick();
+    }
+    paintSends(root, id, sends, erased, signal);
   }
-  paintSends(root, id, sends, erased, signal);
+
+  await load(false);
+}
+
+/**
+ * Whether they receive your posts, which the server decides (`receives_posts`), and when they
+ * don't, every reason in the words of their status and suppression, so the page answers "did
+ * they get my post?" before anything else.
+ */
+function receivesLine(sub: Subscriber): string {
+  if (sub.receives_posts) {
+    return "Receives your posts.";
+  }
+  const why: string[] = [];
+  if (sub.status === "pending") {
+    why.push("they haven’t confirmed");
+  } else if (sub.status === "unsubscribed") {
+    why.push(`they left the list on ${fmt(sub.unsubscribed_at)}`);
+  }
+  if (sub.suppression) {
+    why.push(
+      SUPPRESSION_FLAG[sub.suppression.reason] === "bounced"
+        ? "the address bounced"
+        : "the address is blocked",
+    );
+  }
+  return why.length > 0 ? `Not sent your posts: ${why.join(", and ")}.` : "Not sent your posts.";
 }
 
 function row(term: string, value: Html | string): Html {
@@ -132,7 +176,7 @@ function joinedSection(sub: Subscriber, record: ImportRecord | null): Html {
       ${row("Confirmed", fmt(sub.confirmed_at))}
       ${row("Evidence", evidence ? html`<pre class="sub-evidence">${evidence}</pre>` : "None recorded")}
     </dl>
-    ${sub.import_id !== null ? html`<p class="hint sub-note">The origin, opt-in, confirmation date, and evidence are what the imported file said, not something Kestrel recorded itself.</p>` : null}
+    ${sub.import_id !== null ? html`<p class="sub-note">The origin, opt-in, confirmation date, and evidence are what the imported file said, not something Kestrel recorded itself.</p>` : null}
   </section>`;
 }
 
@@ -145,7 +189,7 @@ function suppressionSection(sub: Subscriber): Html {
   const sup = sub.suppression;
   let body: Html;
   if (!sup) {
-    body = html`<p class="muted">None. Nothing on your side stops mail to this address.</p>`;
+    body = html`<p class="muted">None.</p>`;
   } else {
     const flag = SUPPRESSION_FLAG[sup.reason];
     body = html`<p class="sub-sup-line"><span class="badge suppressed">${flag}</span> <span class="muted">since ${fmt(sup.created_at)}</span></p>
@@ -158,24 +202,36 @@ function suppressionSection(sub: Subscriber): Html {
   </section>`;
 }
 
+/** Why someone left, said in the past for someone who has since signed up again, whose
+ *  leaving no longer holds: the shared meanings describe someone still gone. */
+const LEFT_BEFORE: Record<UnsubscribeCause, string> = {
+  reader: "They had unsubscribed themselves, from the link or the button in your email.",
+  publisher: "You had unsubscribed them, when they asked you to.",
+  complaint: "They had reported your email as spam.",
+  erased: "You had erased them at their request.",
+  import: "The list you imported said they had left.",
+};
+
 /**
- * Why they left (SPEC §7), in the words the API reference uses, and when; for a complaint, the send whose
- * report it was, when it is among the sends shown. An erasure keeps nothing else, so an
- * erased subscriber's page says only that they were erased and when.
+ * Why they left (SPEC §7), in the words the API reference uses, and when; for a complaint, the
+ * send whose report it was, when it is among the sends shown. An erasure keeps nothing else, so
+ * an erased subscriber's page says only that they were erased and when. Someone who has signed
+ * up again since reads it as what happened before, in the past tense, under "Left before".
  */
 function leftSection(sub: Subscriber, deliveries: SubscriberDelivery[]): Html | null {
   const cause = sub.unsubscribe_cause;
   if (!cause) {
     return null;
   }
+  const returned = sub.status !== "unsubscribed";
   const complaint =
     cause === "complaint" ? deliveries.find((d) => d.delivery.event === "complained") : undefined;
   return html`<section class="card sub-sec" aria-labelledby="subLeftTitle">
-    <h2 class="rec-part-title" id="subLeftTitle">Why they left</h2>
+    <h2 class="rec-part-title" id="subLeftTitle">${returned ? "Left before" : "Why they left"}</h2>
     <p class="sub-left-line"><span class="muted">Left ${fmt(sub.unsubscribed_at)}</span></p>
-    <p class="sub-meaning">${CAUSE_MEANING[cause]}</p>
-    ${complaint ? html`<p>The report was about <a href="#/sent/${complaint.send.id}">${complaint.send.subject || "an untitled post"}</a>.</p>` : null}
-    ${sub.status === "pending" ? html`<p class="muted">They signed up again and haven’t confirmed yet.</p>` : null}
+    <p class="sub-meaning">${returned ? LEFT_BEFORE[cause] : CAUSE_MEANING[cause]}</p>
+    ${complaint ? html`<p class="sub-meaning">The report was about <a href="#/sent/${complaint.send.id}">${complaint.send.subject || "an untitled post"}</a>.</p>` : null}
+    ${returned ? html`<p class="sub-meaning">They signed up again, and haven’t confirmed yet.</p>` : null}
   </section>`;
 }
 

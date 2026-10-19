@@ -182,6 +182,35 @@ describe("a subscriber's suppression says since when (SPEC §7)", () => {
   });
 });
 
+describe("a subscriber says whether they receive posts (SPEC §7)", () => {
+  it("is true only for a confirmed address with no suppression, the audience a send takes", async () => {
+    await seedConfirmed([READER, "blocked@example.com"]);
+    await SELF.fetch(`${base}/api/suppressions`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ email: "blocked@example.com" }),
+    });
+    await SELF.fetch(`${base}/api/subscribers`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ email: "pending@example.com" }),
+    });
+    const { subscribers } = await readJson(
+      await SELF.fetch(`${base}/api/subscribers?sort=email&dir=asc`, { headers: AUTH }),
+    );
+    expect(
+      subscribers.map((s: { email: string; receives_posts: boolean }) => [
+        s.email,
+        s.receives_posts,
+      ]),
+    ).toEqual([
+      ["blocked@example.com", false],
+      ["pending@example.com", false],
+      [READER, true],
+    ]);
+  });
+});
+
 describe("an import's record (SPEC §8)", () => {
   it("answers the record a subscriber's import_id names, and 404 for one that names none", async () => {
     const now = Date.now();

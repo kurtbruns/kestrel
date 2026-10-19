@@ -35,6 +35,7 @@ const subscriber = (over: Partial<Subscriber> = {}): Subscriber => ({
   consent_evidence: '{"confirmed_ip":"203.0.113.7"}',
   import_id: null,
   suppression: null,
+  receives_posts: (over.status ?? "confirmed") === "confirmed" && !over.suppression,
   ...over,
 });
 
@@ -225,7 +226,7 @@ describe("the subscriber page (SPEC §8, DESIGN §3)", () => {
         method: "POST",
         path: "/api/suppressions/lift",
         reply: () => {
-          sub = { ...sub, suppression: null };
+          sub = { ...sub, suppression: null, receives_posts: true };
           return { email: sub.email, lifted: true };
         },
       },
@@ -239,9 +240,60 @@ describe("the subscriber page (SPEC §8, DESIGN §3)", () => {
     $("#cGo").click();
     await settle();
     expect(acts()).toEqual(["Unsubscribe…", "Block…", "Erase…"]);
-    expect($("section[aria-labelledby='subSupTitle'] p").textContent).toBe(
-      "None. Nothing on your side stops mail to this address.",
+    expect($("section[aria-labelledby='subSupTitle'] p").textContent).toBe("None.");
+    expect($(".sub-receives").textContent).toBe("Receives your posts.");
+    // The Clear… that opened the dialog is gone, so focus goes to the title (DESIGN §11).
+    expect(document.activeElement).toBe($("h1.sub-title"));
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("says first whether they receive your posts, and every reason when they don't (SPEC §7)", async () => {
+    const left = Date.UTC(2026, 3, 1);
+    const cases: [Partial<Subscriber>, string][] = [
+      [{}, "Receives your posts."],
+      [
+        { suppression: { reason: "bounce", detail: null, created_at: 1 } },
+        "Not sent your posts: the address bounced.",
+      ],
+      [{ status: "pending", confirmed_at: null }, "Not sent your posts: they haven’t confirmed."],
+      [
+        {
+          status: "unsubscribed",
+          unsubscribed_at: left,
+          unsubscribe_cause: "reader",
+          suppression: { reason: "manual", detail: null, created_at: 1 },
+        },
+        `Not sent your posts: they left the list on ${fmt(left)}, and the address is blocked.`,
+      ],
+    ];
+    for (const [over, line] of cases) {
+      fake?.restore();
+      fake = serve(subscriber(over));
+      await mount((r, s) => renderSubscriber("s1", r, s));
+      await settle();
+      expect($(".sub-receives").textContent).toBe(line);
+    }
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("tells someone who signed up again after leaving what happened before, in the past (SPEC §7)", async () => {
+    const left = Date.UTC(2026, 3, 1);
+    fake = serve(
+      subscriber({
+        status: "pending",
+        confirmed_at: null,
+        unsubscribed_at: left,
+        unsubscribe_cause: "erased",
+      }),
     );
+    await mount((r, s) => renderSubscriber("s1", r, s));
+    await settle();
+    const section = $("section[aria-labelledby='subLeftTitle']");
+    expect($("h2", section).textContent).toBe("Left before");
+    expect($$(".sub-meaning", section).map((p) => p.textContent)).toEqual([
+      "You had erased them at their request.",
+      "They signed up again, and haven’t confirmed yet.",
+    ]);
     expect(fake.unhandled).toEqual([]);
   });
 

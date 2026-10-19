@@ -35,6 +35,7 @@ const subscriber = (over: Partial<Subscriber>): Subscriber => ({
   consent_evidence: null,
   import_id: null,
   suppression: null,
+  receives_posts: (over.status ?? "confirmed") === "confirmed" && !over.suppression,
   ...over,
 });
 const subs = [

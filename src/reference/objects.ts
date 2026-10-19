@@ -711,6 +711,12 @@ const SUBSCRIBER_FIELDS: ReferenceField[] = [
     description: `Whether the address is suppressed, null when it isn't: \`reason\`, why and whose decision it was, as a suppression's (Suppressions), \`detail\`, the provider's words or the publisher's, and \`created_at\`, since when. ${SUPPRESSED_MEANING}`,
   },
   {
+    name: "receives_posts",
+    type: "boolean",
+    description:
+      "Whether a send firing now would include them: confirmed, and the address not suppressed. The status and the suppression say why not.",
+  },
+  {
     name: "unsubscribe_cause",
     type: '"reader" | "publisher" | "complaint" | "erased" | "import" | null',
     description:
@@ -987,6 +993,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
       unsubscribed_at: null,
       unsubscribe_cause: null,
       suppression: null,
+      receives_posts: true,
     } satisfies Subscriber,
   },
   suppression: {

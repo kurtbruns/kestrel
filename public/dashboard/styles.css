@@ -6959,6 +6959,28 @@ body.has-savebar .content {
 .sub-page-title .sub-pills {
   white-space: nowrap;
 }
+/* Whether they receive posts: the page's first answer, under the head, in the record's
+   meta-line place; muted, with a green dot only when they do, as a confirmed pill is. */
+.sub-receives {
+  margin: -6px 0 14px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.sub-receives.yes::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--ok-fg);
+}
+/* The import note: the card's own small print, outside a dialog's hint styles. */
+.sub-note {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
 .sub-sec .sub-meaning {
   margin: 8px 0;
   font-size: 13.5px;

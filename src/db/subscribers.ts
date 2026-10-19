@@ -18,10 +18,11 @@ import { forgetDeliveries, idleFor } from "./erasure";
 // The row shapes live in shared/ so the editor reads the same definitions; the names
 // here are the Worker's own.
 export type { SubscribeAction, SubscriberStatus };
-export type SubscriberRow = Omit<Subscriber, "suppression">;
+export type SubscriberRow = Omit<Subscriber, "suppression" | "receives_posts">;
 
 /** Subscribers as the API answers them, in the order given: each with its suppression, or
- *  null (docs/API.md, principle 2: one shape on every route), in one read for them all. */
+ *  null, and whether they receive posts (docs/API.md, principle 2: one shape on every route),
+ *  in one read for them all. */
 export async function withSuppressions(
   db: D1Database,
   rows: readonly SubscriberRow[],
@@ -38,6 +39,9 @@ export async function withSuppressions(
       suppression: sup
         ? { reason: sup.reason, detail: sup.detail, created_at: sup.created_at }
         : null,
+      // The audience rule (I1), stated once here so no client works it out: confirmed, minus
+      // suppressed.
+      receives_posts: row.status === "confirmed" && !sup,
     };
   });
 }

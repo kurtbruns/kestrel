@@ -1757,6 +1757,7 @@ export function createRouter({
             consent_evidence: null,
             import_id: null,
             suppression: null,
+            receives_posts: false,
           },
           deliveries: 12,
         },

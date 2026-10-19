@@ -135,6 +135,7 @@ describe("confirmUnsubscribe", () => {
     consent_evidence: null,
     import_id: null,
     suppression: null,
+    receives_posts: true,
   };
 
   it("names the address, unsubscribes on confirm, and tells the caller", async () => {

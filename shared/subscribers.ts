@@ -95,6 +95,8 @@ export interface Subscriber {
   import_id: string | null;
   /** Whether the address is suppressed, and why; null when it is mailed as its status says. */
   suppression: SubscriberSuppression | null;
+  /** Whether a send firing now would include them (SPEC §7): confirmed, and not suppressed. */
+  receives_posts: boolean;
 }
 
 /** The list's composition: subscribers by consent state, and how many of them are suppressed. */
