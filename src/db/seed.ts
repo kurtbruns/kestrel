@@ -7,6 +7,7 @@
  * the normal `db/` write path. Only the fake-provider seed route calls them.
  */
 
+import type { OptIn, OutcomeCounts } from "../../shared/imports";
 import type { UnsubscribeCause } from "../../shared/subscribers";
 import type { PostStatus } from "./posts";
 import { NEXT_REV, type SendStatus, tombstoneSendsStmt } from "./sends";
@@ -16,15 +17,35 @@ export interface SeedSubscriber {
   id: string;
   email: string;
   status: SubscriberStatus;
-  confirm_token: string;
+  /** Null for an erased subscriber, whose tokens the erasure discarded. */
+  confirm_token: string | null;
   /** When the confirmation carrying `confirm_token` went out (also the cooldown's clock). */
-  confirm_sent_at: number;
-  unsub_token: string;
+  confirm_sent_at: number | null;
+  unsub_token: string | null;
   created_at: number;
   confirmed_at: number | null;
   unsubscribed_at: number | null;
   /** Why they left; absent, `reader` for an unsubscribed row and none otherwise. */
   unsubscribe_cause?: UnsubscribeCause;
+  /** How they joined (SPEC §7); absent, this app's own double opt-in. Null once erased. */
+  origin?: string | null;
+  opt_in?: OptIn | null;
+  consent_evidence?: string | null;
+  /** The import that brought them, or none. */
+  import_id?: string | null;
+}
+
+/** One committed import's record (SPEC §8), which holds no subscriber's address. */
+export interface SeedImport {
+  id: string;
+  created_at: number;
+  principal_email: string;
+  attestation_version: number | null;
+  file_name: string;
+  file_sha256: string;
+  plan_hash: string;
+  counts: OutcomeCounts;
+  suppressions_added: number;
 }
 
 export interface SeedSuppression {
@@ -126,6 +147,7 @@ export async function resetAll(db: D1Database): Promise<void> {
     db.prepare("DELETE FROM posts"),
     db.prepare("DELETE FROM suppressions"),
     db.prepare("DELETE FROM subscribers"),
+    db.prepare("DELETE FROM imports"),
     db.prepare("DELETE FROM settings"),
   ]);
 }
@@ -136,7 +158,7 @@ export async function insertSubscribers(db: D1Database, rows: SeedSubscriber[]):
       group.map((r) =>
         db
           .prepare(
-            "INSERT INTO subscribers (id, email, status, confirm_token, confirm_sent_at, confirm_attempt_at, unsub_token, created_at, confirmed_at, unsubscribed_at, unsubscribe_cause) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO subscribers (id, email, status, confirm_token, confirm_sent_at, confirm_attempt_at, unsub_token, created_at, confirmed_at, unsubscribed_at, unsubscribe_cause, origin, opt_in, consent_evidence, import_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
           )
           .bind(
             r.id,
@@ -150,10 +172,36 @@ export async function insertSubscribers(db: D1Database, rows: SeedSubscriber[]):
             r.confirmed_at,
             r.unsubscribed_at,
             r.unsubscribe_cause ?? (r.status === "unsubscribed" ? "reader" : null),
+            r.origin === undefined ? "kestrel" : r.origin,
+            r.opt_in === undefined ? "double" : r.opt_in,
+            r.consent_evidence ?? null,
+            r.import_id ?? null,
           ),
       ),
     );
   }
+}
+
+/** Insert an import's record, before the subscribers that name it. */
+export async function insertImport(db: D1Database, r: SeedImport): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO imports (id, created_at, principal_kind, principal_email, attestation_version,
+                            file_name, file_sha256, plan_hash, counts, suppressions_added)
+       VALUES (?, ?, 'human', ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      r.id,
+      r.created_at,
+      r.principal_email,
+      r.attestation_version,
+      r.file_name,
+      r.file_sha256,
+      r.plan_hash,
+      JSON.stringify(r.counts),
+      r.suppressions_added,
+    )
+    .run();
 }
 
 export async function insertSuppressions(db: D1Database, rows: SeedSuppression[]): Promise<void> {
