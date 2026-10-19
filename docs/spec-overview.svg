@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 45 1055 362" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1055" height="362" viewBox="0 45 1055 362" role="img" aria-labelledby="title desc">
   <title id="title">Kestrel and the parties that reach it</title>
   <desc id="desc">The publisher drives the web editor and asks Claude; both reach Kestrel only through its authoring API, which reads and writes the database and object storage and hands email to the email provider. The provider delivers it to readers. Readers come back through the public pages (subscribe, confirm, unsubscribe, and the archive), which read the same store. The provider reports deliveries, bounces, and complaints through signed webhooks, which record them in the store without passing through the authoring API.</desc>
   <style>
