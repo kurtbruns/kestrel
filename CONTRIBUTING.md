@@ -39,13 +39,11 @@ The editor's **API** tab lists every route.
 
 The most useful contributions right now are issues and discussion. If something didn't work, or the docs left you guessing, open an issue with what you did, what you expected, and what happened.
 
-Pull requests are welcome, but may be closed with little explanation. The ones that get merged clearly fix a bug and:
+Pull requests are welcome, but may be closed with little explanation. The ones most likely to be merged come from people using Kestrel, after a discussion on the issue, and:
 
 - pass `npm test`, `npm run typecheck`, and `npm run check`;
 - update the docs they affect in the same commit, as `.claude/CLAUDE.md` describes;
 - close their issue (`Closes #N`) and say what differs from it, if anything.
-
-A pull request that grew out of a discussion on its issue is much easier to merge. The best ones come from people running their own Kestrel instance, who found the bug by using it.
 
 ## Going further
 
