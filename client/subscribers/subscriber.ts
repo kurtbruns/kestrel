@@ -37,22 +37,35 @@ export async function renderSubscriber(
   signal: AbortSignal,
 ): Promise<void> {
   setHtml(root, html`${BACK}<p class="muted">Loading…</p>`);
+  // The route's segment is the server's id, but it reaches an API path only encoded.
+  const path = `/api/subscribers/${encodeURIComponent(id)}`;
 
   async function load(afterAct: boolean): Promise<void> {
     let sub: Subscriber;
     let sends: SubscriberDeliveriesResponse;
-    let record: ImportRecord | null = null;
+    let record: ImportRecord | null;
     try {
-      const [one, firstPage] = await Promise.all([
-        api<SubscriberResponse>(`/api/subscribers/${id}`, { signal }),
-        api<SubscriberDeliveriesResponse>(`/api/subscribers/${id}/deliveries`, { signal }),
+      const one = api<SubscriberResponse>(path, { signal });
+      // The import that brought them is read as soon as the subscriber names it, beside their
+      // sends; it only adds rows, so the page shows without them if it can't be read.
+      const imported = one.then(({ subscriber }) =>
+        subscriber.import_id === null
+          ? null
+          : api<ImportRecordResponse>(`/api/imports/${encodeURIComponent(subscriber.import_id)}`, {
+              signal,
+            }).then(
+              (r) => r.import,
+              () => null,
+            ),
+      );
+      const [first, firstPage, importRecord] = await Promise.all([
+        one,
+        api<SubscriberDeliveriesResponse>(`${path}/deliveries`, { signal }),
+        imported,
       ]);
-      sub = one.subscriber;
+      sub = first.subscriber;
       sends = firstPage;
-      if (sub.import_id !== null) {
-        record = (await api<ImportRecordResponse>(`/api/imports/${sub.import_id}`, { signal }))
-          .import;
-      }
+      record = importRecord;
     } catch (e) {
       const body = document.createElement("div");
       setHtml(root, BACK);
@@ -92,7 +105,7 @@ export async function renderSubscriber(
       <p class="sub-receives${sub.receives_posts ? " yes" : ""}">${receivesLine(sub)}</p>
       ${erased ? null : joinedSection(sub, record)}
       ${suppressionSection(sub)}
-      ${sub.unsubscribe_cause ? leftSection(sub, sends.deliveries) : null}
+      ${sub.unsubscribe_cause ? leftSection(sub) : null}
       <section class="sub-sec sub-sends" aria-labelledby="subSendsTitle">
         <h2 class="rec-part-title" id="subSendsTitle">Sends</h2>
         <div id="subSends"></div>
@@ -102,7 +115,19 @@ export async function renderSubscriber(
     for (const b of $$<HTMLButtonElement>("[data-act]", root)) {
       b.onclick = () => acts[Number(b.dataset.act)]?.onClick();
     }
-    paintSends(root, id, sends, erased, signal);
+    // A complaint's send is linked once it is among the sends shown, whichever page brings it.
+    const complaintLine = root.querySelector<HTMLElement>("#subComplaint");
+    const linkComplaint = (deliveries: SubscriberDelivery[]) => {
+      const d = deliveries.find((x) => x.delivery.event === "complained");
+      if (complaintLine?.hidden && d) {
+        setHtml(
+          complaintLine,
+          html`The report was about <a href="#/sent/${d.send.id}">${d.send.subject || "an untitled post"}</a>.`,
+        );
+        complaintLine.hidden = false;
+      }
+    };
+    paintSends(root, path, sends, erased, signal, linkComplaint);
   }
 
   await load(false);
@@ -234,25 +259,23 @@ function flagMeaning(sub: Subscriber, reason: SuppressionReason): string {
 }
 
 /**
- * Why they left (SPEC §7), in the words the API reference uses, and when; for a complaint, the
- * send whose report it was, when it is among the sends shown. An erasure keeps nothing else, so
+ * Why they left (SPEC §7), in the words the API reference uses, and when; for a complaint, a
+ * place for the send whose report it was, filled once that send is among the sends shown. An erasure keeps nothing else, so
  * an erased subscriber's page says only that they were erased and when. Someone who has signed
  * up again since reads it as what happened before, in the past tense, under "Left before".
  */
-function leftSection(sub: Subscriber, deliveries: SubscriberDelivery[]): Html | null {
+function leftSection(sub: Subscriber): Html | null {
   const cause = sub.unsubscribe_cause;
   if (!cause) {
     return null;
   }
   const returned = sub.status !== "unsubscribed";
-  const complaint =
-    cause === "complaint" ? deliveries.find((d) => d.delivery.event === "complained") : undefined;
   return html`<section class="card sub-sec" aria-labelledby="subLeftTitle">
     <h2 class="rec-part-title" id="subLeftTitle">${returned ? "Left before" : "Why they left"}</h2>
     <p class="sub-left-line"><span class="muted">Left ${fmt(sub.unsubscribed_at)}</span></p>
     <p class="sub-meaning">${returned ? LEFT_BEFORE[cause] : CAUSE_MEANING[cause]}</p>
-    ${complaint ? html`<p class="sub-meaning">The report was about <a href="#/sent/${complaint.send.id}">${complaint.send.subject || "an untitled post"}</a>.</p>` : null}
-    ${returned ? html`<p class="sub-meaning">They signed up again, and haven’t confirmed yet.</p>` : null}
+    ${cause === "complaint" ? html`<p class="sub-meaning" id="subComplaint" hidden></p>` : null}
+    ${sub.status === "pending" ? html`<p class="sub-meaning">They signed up again, and haven’t confirmed yet.</p>` : null}
   </section>`;
 }
 
@@ -264,10 +287,11 @@ function leftSection(sub: Subscriber, deliveries: SubscriberDelivery[]): Html | 
  */
 function paintSends(
   root: HTMLElement,
-  id: string,
+  path: string,
   first: SubscriberDeliveriesResponse,
   erased: boolean,
   signal: AbortSignal,
+  onPage: (deliveries: SubscriberDelivery[]) => void,
 ): void {
   const list = $("#subSends", root);
   const more = $("#subMore", root);
@@ -286,6 +310,7 @@ function paintSends(
   );
   const body = $("tbody", list);
   const add = (page: SubscriberDeliveriesResponse) => {
+    onPage(page.deliveries);
     const tmp = document.createElement("tbody");
     setHtml(tmp, html`${page.deliveries.map(sendRow)}`);
     body.append(...tmp.childNodes);
@@ -303,7 +328,7 @@ function paintSends(
         try {
           add(
             await api<SubscriberDeliveriesResponse>(
-              `/api/subscribers/${id}/deliveries?after=${encodeURIComponent(next)}`,
+              `${path}/deliveries?after=${encodeURIComponent(next)}`,
               { signal },
             ),
           );

@@ -859,6 +859,12 @@ function deliveryListWhere(
   return { clause: `WHERE ${where.join(" AND ")}`, binds };
 }
 
+/** A delivery row as the API carries it (`DeliveryRecord`), the one column list every read of
+ *  one shares, so a send's record and a subscriber's sends can't answer different shapes. */
+const DELIVERY_RECORD_COLS = `d.email AS email, d.status AS status, d.event AS event,
+  d.event_detail AS event_detail, d.event_at AS event_at, d.error AS error,
+  d.attempts AS attempts, d.bounce_kind AS bounce_kind`;
+
 /** One page of a send's per-recipient rows for the in-app record, filtered by `view`
  *  and an optional email search. Read-only over the frozen delivery record (I3). */
 export async function listDeliveriesPage(
@@ -873,9 +879,7 @@ export async function listDeliveriesPage(
   const order = orderByClause(page, "d.email");
   const { results } = await db
     .prepare(
-      `SELECT d.email AS email, d.status AS status, d.event AS event, d.event_detail AS event_detail,
-              d.event_at AS event_at, d.error AS error, d.attempts AS attempts,
-              d.bounce_kind AS bounce_kind
+      `SELECT ${DELIVERY_RECORD_COLS}
          FROM deliveries d
          ${clause} ${order} LIMIT ? OFFSET ?`,
     )
@@ -913,9 +917,7 @@ export async function deliveriesForAddress(
     : { clause: "", binds: [] };
   const { results } = await db
     .prepare(
-      `SELECT d.email AS email, d.status AS status, d.event AS event, d.event_detail AS event_detail,
-              d.event_at AS event_at, d.error AS error, d.attempts AS attempts,
-              d.bounce_kind AS bounce_kind, s.id AS send_id, s.fire_at AS fire_at
+      `SELECT ${DELIVERY_RECORD_COLS}, s.id AS send_id, s.fire_at AS fire_at
          FROM deliveries d JOIN sends s ON s.id = d.send_id
         WHERE d.email = ? ${page.clause}
         ORDER BY s.fire_at DESC, s.id DESC LIMIT ?`,

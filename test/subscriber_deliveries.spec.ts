@@ -190,10 +190,23 @@ describe("a subscriber says whether they receive posts (SPEC §7)", () => {
       headers: JSON_AUTH,
       body: JSON.stringify({ email: "blocked@example.com" }),
     });
-    await SELF.fetch(`${base}/api/subscribers`, {
+    for (const email of ["pending@example.com", "pending-blocked@example.com"]) {
+      await SELF.fetch(`${base}/api/subscribers`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ email }),
+      });
+    }
+    await SELF.fetch(`${base}/api/suppressions`, {
       method: "POST",
       headers: JSON_AUTH,
-      body: JSON.stringify({ email: "pending@example.com" }),
+      body: JSON.stringify({ email: "pending-blocked@example.com" }),
+    });
+    // Someone who left is sent nothing, suppressed or not.
+    await seedConfirmed("left@example.com");
+    await SELF.fetch(`${base}/api/subscribers/id-left@example.com/unsubscribe`, {
+      method: "POST",
+      headers: AUTH,
     });
     const { subscribers } = await readJson(
       await SELF.fetch(`${base}/api/subscribers?sort=email&dir=asc`, { headers: AUTH }),
@@ -205,6 +218,8 @@ describe("a subscriber says whether they receive posts (SPEC §7)", () => {
       ]),
     ).toEqual([
       ["blocked@example.com", false],
+      ["left@example.com", false],
+      ["pending-blocked@example.com", false],
       ["pending@example.com", false],
       [READER, true],
     ]);

@@ -236,6 +236,49 @@ describe("the subscriber page (SPEC §8, DESIGN §3)", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("links a complaint's send once a later page brings it (SPEC §7)", async () => {
+    fake = serve(
+      subscriber({ status: "unsubscribed", unsubscribed_at: 1, unsubscribe_cause: "complaint" }),
+      [[delivered("x2", "Spring")], [delivered("x1", "Winter", { event: "complained" })]],
+    );
+    await mount((r, s) => renderSubscriber("s1", r, s));
+    await settle();
+    const line = $<HTMLElement>("#subComplaint");
+    expect(line.hidden).toBe(true);
+    $(".sub-more").click();
+    await settle();
+    expect(line.hidden).toBe(false);
+    expect($("a", line).getAttribute("href")).toBe("#/sent/x1");
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("shows the page without the import's rows when its record can't be read", async () => {
+    const sub = subscriber({ origin: "sendy", opt_in: "single", import_id: "gone" });
+    fake = fakeApi([
+      { method: "GET", path: "/api/subscribers/s1", reply: () => ({ subscriber: sub }) },
+      {
+        method: "GET",
+        path: "/api/subscribers/s1/deliveries",
+        reply: () => ({ deliveries: [], next: null }),
+      },
+      {
+        method: "GET",
+        path: "/api/imports/gone",
+        reply: () =>
+          new Response(JSON.stringify({ error: "not_found", message: "Not found: import" }), {
+            status: 404,
+            headers: { "content-type": "application/json" },
+          }),
+      },
+    ]);
+    await mount((r, s) => renderSubscriber("s1", r, s));
+    await settle();
+    const rows = rowsOf("subJoinedTitle");
+    expect(rows["How they joined"]).toBe("Imported · Sendy, single opt-in");
+    expect("Import" in rows).toBe(false);
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("offers the row menu's acts for who they are, and reads itself again after one lands", async () => {
     let sub = subscriber({ suppression: { reason: "bounce", detail: null, created_at: 1 } });
     fake = fakeApi([

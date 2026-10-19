@@ -589,7 +589,7 @@ function buildAudience(t: Timeline): BuiltAudience {
   }
 
   // Organic growth: confirmed sign-ups arriving in one continuous stream from just after the
-  // import, a day before the first post, right up to today — the list is still growing, it
+  // import, a day before the first post, right up to today: the list is still growing, it
   // doesn't stop at the last historical send. By today they are about as many as the import
   // brought, so the list reads as half carried over and half grown here. Each confirms shortly after signing up (double opt-in is near-instant for
   // most), and the stream spans every send, so every completed send freezes a different,
@@ -1036,6 +1036,8 @@ function buildDeliveries(
         status: "skipped",
         provider_id: null,
         attempts: 0,
+        // Closed by the run that reached them, so no later than the send's completion.
+        updated_at: sentAt,
         event: null,
         event_at: null,
       };

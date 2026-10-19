@@ -69,11 +69,7 @@ export async function renderSubscribers(
   };
   if (initialFilter === "suppressed") {
     state.suppressed = "only";
-  } else if (
-    initialFilter === "confirmed" ||
-    initialFilter === "pending" ||
-    initialFilter === "unsubscribed"
-  ) {
+  } else if (initialFilter && LIST_FILTERS.includes(initialFilter)) {
     state.status = initialFilter;
   }
 

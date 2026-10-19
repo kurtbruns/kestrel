@@ -11,7 +11,7 @@ export const STATUS_MEANING: Record<SubscriberStatus, string> = {
   confirmed:
     "Receives your posts. They confirmed here, or opted in at the service you imported them from.",
   unsubscribed:
-    "Left the list. They’re sent nothing until they sign up again, or you add them back and they confirm.",
+    "Left the list. They’re sent nothing until they sign up again, or, unless they left by a complaint or an erasure, you add them back and they confirm.",
 };
 
 /** What each reason for leaving means, and what it allows. */

@@ -509,7 +509,7 @@ describe("subscribers view", () => {
       [
         "badge unsubscribed",
         "unsubscribed",
-        "Left the list. They’re sent nothing until they sign up again, or you add them back and they confirm. Why they left is on their page.",
+        "Left the list. They’re sent nothing until they sign up again, or, unless they left by a complaint or an erasure, you add them back and they confirm. Why they left is on their page.",
       ],
     ]);
     expect(pills(lists[1]!)).toEqual([
