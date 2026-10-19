@@ -119,7 +119,7 @@ describe("API reference is generated from the route registration", () => {
     expect(byKey.get("GET /api/settings")?.summary ?? "").toMatch(/in_use/);
     // SPEC §5: once scheduled, the test and preview are the frozen copy.
     for (const key of [
-      "POST /api/posts/:id/preview",
+      "GET /api/posts/:id/preview.json",
       "GET /api/posts/:id/preview",
       "POST /api/posts/:id/test",
     ]) {

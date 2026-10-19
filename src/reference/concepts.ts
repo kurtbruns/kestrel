@@ -10,9 +10,12 @@
 import type { ReferenceConcept, ReferenceField } from "../../shared/reference";
 
 const REQUESTS = [
+  "This reference is the API's whole contract, generated from the same declaration the server checks each request against: a field, a value, or a detail of a refusal that a route doesn't list here isn't part of the API, even if an answer happens to carry it.",
+  "A route that changes nothing is a `GET`, so it is always safe to send again; the one exception is a read that takes a file, planning an import. A subscriber's address is never part of a path: a route that takes one takes it in the body, or in the query on a read (`?email=`, `?search=`).",
   "A body is JSON (`Content-Type: application/json`) unless the route names another type, and so is an answer unless the route says it answers a file or a page (a CSV export, an email preview). Times are epoch milliseconds.",
   "A route takes only the body fields and query parameters it lists: one it doesn't list, a parameter given twice, or a value outside the ones a parameter takes is refused with a 400 naming it in `field`, never ignored.",
   "Every field name and every value from a fixed set (a `status`, a `phase`, a condition's `kind`) is snake_case, in a request and in an answer, and so is a query parameter and its value. A list's `sort` is the name of the field it sorts by, a dotted path for a nested one (`audience.count`). A path segment is a URL, not JSON, and keeps its own form.",
+  "The API changes only in a release, and each change that can break a client is listed under Breaking in the changelog, with what to do. The version number doesn't say whether a release breaks anything, so read those entries before moving to it.",
 ];
 
 const AUTHENTICATION = [

@@ -172,19 +172,19 @@ describe("each admin route takes only the body types it declares", () => {
   });
 
   it("lets an empty JSON body through to a route that takes none, and refuses a non-empty one", async () => {
-    const id = await newDraft();
+    const id = (await readJson(await addSubscriber("xs-empty@example.com"))).subscriber.id;
     // HTTP helpers declare application/json by habit, with nothing to send.
     for (const body of [undefined, "", " \n"]) {
-      const res = await post(`/api/posts/${id}/preview`, {
+      const res = await post(`/api/subscribers/${id}/unsubscribe`, {
         headers: { "content-type": "application/json; charset=utf-8" },
         body,
       });
       expect(res.status, JSON.stringify(body)).toBe(200);
     }
     // A body the route would ignore is still refused, so no 200 drops part of a request.
-    const filled = await post(`/api/posts/${id}/preview`, {
+    const filled = await post(`/api/subscribers/${id}/unsubscribe`, {
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ markdown: "ignored" }),
+      body: JSON.stringify({ reason: "ignored" }),
     });
     expect(filled.status).toBe(415);
     expect((await readJson(filled)).error).toBe("unsupported_media_type");

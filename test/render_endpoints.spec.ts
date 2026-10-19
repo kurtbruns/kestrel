@@ -34,16 +34,22 @@ async function draftWithImage(title: string): Promise<string> {
 }
 
 describe("preview + test endpoints", () => {
-  it("POST /preview returns a hosted view-in-browser URL", async () => {
+  it("GET /preview.json says where the rendered page is, and its subject", async () => {
     const id = await draftWithImage("Preview One");
-    const res = await SELF.fetch(`${base}/api/posts/${id}/preview`, {
-      method: "POST",
-      headers: AUTH,
-    });
+    const res = await SELF.fetch(`${base}/api/posts/${id}/preview.json`, { headers: AUTH });
     expect(res.status).toBe(200);
     const body = await readJson(res);
     expect(body.url).toBe(`http://localhost:8787/api/posts/${id}/preview`);
     expect(body.subject).toBe("Subject: Preview One");
+  });
+
+  it("answers the preview's description only to a GET, since it writes nothing", async () => {
+    const id = await draftWithImage("Preview Read");
+    const res = await SELF.fetch(`${base}/api/posts/${id}/preview`, {
+      method: "POST",
+      headers: AUTH,
+    });
+    expect(res.status).toBe(404);
   });
 
   it("GET /preview serves rendered HTML with the sentinel substituted", async () => {
@@ -165,7 +171,7 @@ describe("preview + test endpoints", () => {
     expect(page).toContain("/unsubscribe?test=1");
     expect(page).not.toContain(UNSUB_SENTINEL);
     const action = await readJson(
-      await SELF.fetch(`${base}/api/posts/${id}/preview`, { method: "POST", headers: AUTH }),
+      await SELF.fetch(`${base}/api/posts/${id}/preview.json`, { headers: AUTH }),
     );
     expect(action.frozen).toBe(true);
 
@@ -225,7 +231,7 @@ describe("preview + test endpoints", () => {
     expect(scheduled.status).toBe(201);
     expect((await readJson(scheduled)).warnings).toEqual([missing]);
     const action = await readJson(
-      await SELF.fetch(`${base}/api/posts/${id}/preview`, { method: "POST", headers: AUTH }),
+      await SELF.fetch(`${base}/api/posts/${id}/preview.json`, { headers: AUTH }),
     );
     expect([action.frozen, action.warnings]).toEqual([true, [missing]]);
     const test = await readJson(
@@ -254,7 +260,7 @@ describe("preview + test endpoints", () => {
   it("a draft's test and preview are a live render (frozen: false)", async () => {
     const id = await draftWithImage("Live");
     const action = await readJson(
-      await SELF.fetch(`${base}/api/posts/${id}/preview`, { method: "POST", headers: AUTH }),
+      await SELF.fetch(`${base}/api/posts/${id}/preview.json`, { headers: AUTH }),
     );
     expect(action.frozen).toBe(false);
     const test = await readJson(

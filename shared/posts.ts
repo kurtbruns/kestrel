@@ -139,7 +139,7 @@ export interface PostSavedResponse {
   revision_id: string;
 }
 
-/** GET /api/posts/:id/preview: where the rendered page is, and whether it is a frozen send's copy. */
+/** GET /api/posts/:id/preview.json: where the rendered page is, and whether it is a frozen send's copy. */
 export interface PreviewResponse {
   url: string;
   subject: string;

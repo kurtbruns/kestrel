@@ -1,6 +1,6 @@
 /**
  * Preview, test-send, and the fake outbox. All authed.
- *   POST /api/posts/:id/preview        → { url, subject, warnings, frozen } (hosted view-in-browser)
+ *   GET  /api/posts/:id/preview.json   → { url, subject, warnings, frozen } (where the preview is)
  *   GET  /api/posts/:id/preview        → the rendered HTML (generic unsubscribe link)
  *   GET  /api/posts/:id/web            → the same copy as its archive page will show it
  *   POST /api/posts/:id/test           → send the post's email to one address via the provider

@@ -426,7 +426,7 @@ describe("a template or identity change re-makes the scheduled emails", () => {
       (await putSettings({ email_template: linked, remake: [scheduled.send.id] })).status,
     ).toBe(200);
     const preview = await readJson(
-      await SELF.fetch(`${base}/api/posts/${postId}/preview`, { method: "POST", headers: AUTH }),
+      await SELF.fetch(`${base}/api/posts/${postId}/preview.json`, { headers: AUTH }),
     );
     expect([preview.frozen, preview.warnings]).toEqual([true, []]);
 

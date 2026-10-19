@@ -977,13 +977,13 @@ export function createRouter({
 
     // --- render: preview + test (authed); all go through the one render path ---
     {
-      method: "POST",
-      path: "/api/posts/:id/preview",
+      method: "GET",
+      path: "/api/posts/:id/preview.json",
       access: "admin",
       resource: "posts",
       title: "Render a post's email",
       summary:
-        "Render the post to its email (returns the hosted URL, subject, warnings, and `frozen`).",
+        "Render the post to its email and describe it (the preview's URL, subject, warnings, and `frozen`), as JSON.",
       description:
         "Once the post is scheduled this is its frozen copy, exactly as it will fire, and once sent the record's; a draft renders live. A frozen copy's `warnings` are the ones its render gave when it was frozen or last re-made.",
       returns: {
