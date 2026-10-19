@@ -436,6 +436,22 @@ describe("schema (0011_sends_render_warnings)", () => {
 });
 
 describe("schema (0012_unsubscribe_cause)", () => {
+  it("keeps why someone left exactly while they have left, and empty fields only on an erased record (SPEC §7)", async () => {
+    const insert = (status: string, cause: string | null, token: string | null = "u") =>
+      env.DB.prepare(
+        "INSERT INTO subscribers (id, email, status, unsub_token, created_at, unsubscribe_cause) VALUES ('x', 'x@example.com', ?, ?, 0, ?)",
+      )
+        .bind(status, token, cause)
+        .run();
+    await expect(insert("unsubscribed", null)).rejects.toThrow(/CHECK/);
+    await expect(insert("confirmed", "reader")).rejects.toThrow(/CHECK/);
+    await expect(insert("unsubscribed", "reader", null)).rejects.toThrow(/CHECK/);
+    await insert("unsubscribed", "erased", null);
+    await env.DB.prepare("DELETE FROM subscribers").run();
+    // A pending row that left before keeps its cause until it confirms.
+    await insert("pending", "complaint");
+  });
+
   it("admits only the five reasons for leaving (SPEC §7)", async () => {
     const insert = (cause: string) =>
       env.DB.prepare(
@@ -450,16 +466,33 @@ describe("schema (0012_unsubscribe_cause)", () => {
   });
 
   it("turns each complaint into an unsubscribe by it and each erasure into an address-only one, keeping bounces and blocks (SPEC §7)", async () => {
-    // The suppressions as they stood before it, in the table's old shape. The live table is
-    // set aside and the migration's own statements run over the old one, which they rebuild.
-    await env.DB.prepare("ALTER TABLE suppressions RENAME TO suppressions_now").run();
+    // The subscribers and suppressions as they stood before it, in their old shapes. The live
+    // tables are set aside, with the indexes the migration makes again, and the migration's own
+    // statements run over the old ones, which they rebuild.
+    await env.DB.batch([
+      env.DB.prepare("DROP INDEX idx_subscribers_status"),
+      env.DB.prepare("DROP INDEX idx_subscribers_created"),
+      env.DB.prepare("ALTER TABLE subscribers RENAME TO subscribers_now"),
+      env.DB.prepare("ALTER TABLE suppressions RENAME TO suppressions_now"),
+    ]);
     let migrated = false;
     try {
-      await env.DB.prepare(
-        `CREATE TABLE suppressions (
-           email TEXT PRIMARY KEY, reason TEXT NOT NULL, detail TEXT, created_at INTEGER NOT NULL
-         ) STRICT`,
-      ).run();
+      await env.DB.batch([
+        env.DB.prepare(
+          `CREATE TABLE subscribers (
+             id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, status TEXT NOT NULL DEFAULT 'pending',
+             confirm_token TEXT UNIQUE, confirm_sent_at INTEGER, confirm_attempt_at INTEGER,
+             unsub_token TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, confirmed_at INTEGER,
+             unsubscribed_at INTEGER, origin TEXT NOT NULL DEFAULT 'kestrel',
+             opt_in TEXT NOT NULL DEFAULT 'double', consent_evidence TEXT, import_id TEXT
+           ) STRICT`,
+        ),
+        env.DB.prepare(
+          `CREATE TABLE suppressions (
+             email TEXT PRIMARY KEY, reason TEXT NOT NULL, detail TEXT, created_at INTEGER NOT NULL
+           ) STRICT`,
+        ),
+      ]);
       await env.DB.batch([
         env.DB.prepare(
           `INSERT INTO subscribers (id, email, status, unsub_token, created_at, confirmed_at, unsubscribed_at,
@@ -486,27 +519,34 @@ describe("schema (0012_unsubscribe_cause)", () => {
         ),
       ]);
       const migration = FOLDER.find((m) => m.name === "0012_unsubscribe_cause.sql");
-      const statements = (migration?.queries ?? []).filter(
-        (q) => !q.startsWith("ALTER TABLE subscribers ADD COLUMN"),
-      );
-      expect(statements.length).toBeGreaterThan(5);
+      const statements = migration?.queries ?? [];
+      expect(statements.length).toBeGreaterThan(10);
       for (const q of statements) {
         await env.DB.prepare(q).run();
       }
       migrated = true;
     } finally {
-      // The table the migration rebuilt is the live one now; had it failed, put the live one
-      // back, so the other tests still have it.
+      // The tables the migration rebuilt are the live ones now; had it failed, put the live ones
+      // back, so the other tests still have them.
       if (!migrated) {
-        await env.DB.prepare("DROP TABLE IF EXISTS suppressions").run();
-        await env.DB.prepare("ALTER TABLE suppressions_now RENAME TO suppressions").run();
+        await env.DB.batch([
+          env.DB.prepare("DROP TABLE IF EXISTS subscribers_next"),
+          env.DB.prepare("DROP TABLE IF EXISTS subscribers"),
+          env.DB.prepare("DROP TABLE IF EXISTS suppressions_next"),
+          env.DB.prepare("DROP TABLE IF EXISTS suppressions"),
+          env.DB.prepare("ALTER TABLE subscribers_now RENAME TO subscribers"),
+          env.DB.prepare("ALTER TABLE suppressions_now RENAME TO suppressions"),
+          env.DB.prepare("CREATE INDEX idx_subscribers_status ON subscribers (status)"),
+          env.DB.prepare("CREATE INDEX idx_subscribers_created ON subscribers (created_at)"),
+        ]);
       }
     }
+    await env.DB.prepare("DROP TABLE IF EXISTS subscribers_now").run();
     await env.DB.prepare("DROP TABLE IF EXISTS suppressions_now").run();
 
     const { results: subscribers } = await env.DB.prepare(
       `SELECT email, status, unsubscribe_cause, created_at, confirmed_at, unsubscribed_at, origin,
-              opt_in, consent_evidence, confirm_token
+              opt_in, consent_evidence, confirm_token, unsub_token
          FROM subscribers ORDER BY email`,
     ).all<Record<string, unknown>>();
     const by = Object.fromEntries(subscribers.map((r) => [r.email, r]));
@@ -514,10 +554,11 @@ describe("schema (0012_unsubscribe_cause)", () => {
       status: "unsubscribed",
       unsubscribe_cause: "erased",
       confirmed_at: null,
-      origin: "unknown",
-      opt_in: "unknown",
+      origin: null,
+      opt_in: null,
       consent_evidence: null,
       confirm_token: null,
+      unsub_token: null,
     };
     expect(by["conf-c@x.io"]).toMatchObject({
       status: "unsubscribed",
@@ -547,12 +588,17 @@ describe("schema (0012_unsubscribe_cause)", () => {
     expect(by["left@x.io"]).toMatchObject({ unsubscribe_cause: "reader" });
     expect(by["back@x.io"]).toMatchObject({ status: "pending", unsubscribe_cause: "reader" });
     expect(by["conf@x.io"]).toMatchObject({ status: "confirmed", unsubscribe_cause: null });
-    // Every token is still its own: an erasure's is a fresh one no mail carries.
-    const { results: tokens } = await env.DB.prepare(
-      "SELECT unsub_token FROM subscribers WHERE email IN ('conf-e@x.io', 'ghost-e@x.io', 'ghost-c@x.io')",
-    ).all<{ unsub_token: string }>();
-    expect(tokens.map((t) => t.unsub_token)).not.toContain("u3");
-    expect(new Set(tokens.map((t) => t.unsub_token)).size).toBe(3);
+    // A complainer it records for an address with no subscriber gets a token of its own.
+    expect(by["ghost-c@x.io"]?.unsub_token).toMatch(/^[0-9a-f]{64}$/);
+    expect(by["conf@x.io"]?.unsub_token).toBe("u7");
+    // The rebuilt table keeps its indexes.
+    const { results: indexes } = await env.DB.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'subscribers' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+    ).all<{ name: string }>();
+    expect(indexes.map((i) => i.name)).toEqual([
+      "idx_subscribers_created",
+      "idx_subscribers_status",
+    ]);
 
     expect(
       (

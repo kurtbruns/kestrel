@@ -198,7 +198,7 @@ describe("a batch interrupted after acceptance", () => {
       const handedOff = results[0]!.email;
       const notYet = emails.find((e) => !results.some((r) => r.email === e))!;
       await env.DB.prepare(
-        "UPDATE subscribers SET status = 'unsubscribed' WHERE email IN (SELECT value FROM json_each(?))",
+        "UPDATE subscribers SET status = 'unsubscribed', unsubscribe_cause = 'reader' WHERE email IN (SELECT value FROM json_each(?))",
       )
         .bind(JSON.stringify([handedOff, notYet]))
         .run();
@@ -566,7 +566,9 @@ describe("a group whose requests are answered differently", () => {
     expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ pending: 10 });
 
     // One of the group unsubscribes while the send waits out the refusal.
-    await env.DB.prepare("UPDATE subscribers SET status = 'unsubscribed' WHERE email = ?")
+    await env.DB.prepare(
+      "UPDATE subscribers SET status = 'unsubscribed', unsubscribe_cause = 'reader' WHERE email = ?",
+    )
       .bind(emails[5])
       .run();
     await tick();
@@ -647,7 +649,9 @@ describe("the hand-off and close writes", () => {
     await seedConfirmed(emails);
     const send = await dueSend();
     // One reader leaves before the send, so the close write runs too.
-    await env.DB.prepare("UPDATE subscribers SET status = 'unsubscribed' WHERE email = ?")
+    await env.DB.prepare(
+      "UPDATE subscribers SET status = 'unsubscribed', unsubscribe_cause = 'reader' WHERE email = ?",
+    )
       .bind(emails[0])
       .run();
     const seen: { sql: string; binds: unknown[] }[] = [];

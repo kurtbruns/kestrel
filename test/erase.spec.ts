@@ -119,8 +119,9 @@ const STRIPPED = {
   confirm_token: null,
   confirm_sent_at: null,
   confirm_attempt_at: null,
-  origin: "unknown",
-  opt_in: "unknown",
+  unsub_token: null,
+  origin: null,
+  opt_in: null,
   consent_evidence: null,
   import_id: null,
 };
@@ -199,7 +200,7 @@ describe("erasing a subscriber (SPEC §7)", () => {
     expect(body.deliveries).toBe(2);
     expect(body.subscriber).toMatchObject({ id: before.id, email, ...STRIPPED, suppression: null });
     expect(body.subscriber.created_at).toBe(body.subscriber.unsubscribed_at);
-    expect(body.subscriber.unsub_token).not.toBe(before.unsub_token);
+    expect(before.unsub_token).not.toBeNull();
     expect(await tablesNaming(email)).toEqual(["subscribers"]);
     expect((await everyRow()).filter((l) => l.includes("203.0.113.7"))).toEqual([]);
     // One placeholder for the person, the same on every send.

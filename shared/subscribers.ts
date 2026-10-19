@@ -74,18 +74,18 @@ export interface Subscriber {
   confirm_sent_at: number | null;
   /** When a confirmation was last attempted, the per-address cooldown's clock. */
   confirm_attempt_at: number | null;
-  /** Durable per-subscriber token in every delivered mail's unsubscribe link; never rotated (I2), except that an erasure discards it for one no mail carries. */
-  unsub_token: string;
+  /** Durable per-subscriber token in every delivered mail's unsubscribe link; never rotated (I2). Null once erased, which discards it; a person who signs up again gets a new one. */
+  unsub_token: string | null;
   created_at: number;
   confirmed_at: number | null;
   /** When they last left; kept while they are pending again, so a row that left still reads so until its owner confirms. */
   unsubscribed_at: number | null;
   /** Why they left, while they have left and not confirmed since: on every unsubscribed subscriber, and on a pending one who left and signed up again. Null otherwise. */
   unsubscribe_cause: UnsubscribeCause | null;
-  /** Where consent was collected (SPEC §7): `kestrel` for this app's own double opt-in, or the source an import claimed; `unknown` once erased. */
-  origin: string;
-  /** How consent was collected: this app's is `double`; an import's is what its file claimed; `unknown` once erased. */
-  opt_in: OptIn;
+  /** Where consent was collected (SPEC §7): `kestrel` for this app's own double opt-in, or the source an import claimed; null once erased. */
+  origin: string | null;
+  /** How consent was collected: this app's is `double`; an import's is what its file claimed; null once erased. */
+  opt_in: OptIn | null;
   /** The proof of consent, as JSON text: an import's evidence verbatim, or the IP a confirmation here came from. */
   consent_evidence: string | null;
   /** The import that confirmed or added this subscriber, or null when they joined here. What makes a subscriber read as imported. */

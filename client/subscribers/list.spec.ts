@@ -141,8 +141,9 @@ describe("subscribers view", () => {
       email: "<script>@b.c",
       status: "unsubscribed",
       unsubscribe_cause: "erased",
-      origin: "unknown",
-      opt_in: "unknown",
+      unsub_token: null,
+      origin: null,
+      opt_in: null,
       confirmed_at: null,
     });
     let erased = false;

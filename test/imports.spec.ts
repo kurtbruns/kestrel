@@ -915,7 +915,7 @@ describe("a commit is idempotent and atomic (SPEC §7)", () => {
     ]);
     const p = await planImport(env.DB, { ...file, plainListStatus: null }, planOptions);
     await env.DB.prepare(
-      "UPDATE subscribers SET status = 'unsubscribed' WHERE email = 'reader@x.io'",
+      "UPDATE subscribers SET status = 'unsubscribed', unsubscribe_cause = 'reader' WHERE email = 'reader@x.io'",
     ).run();
     vi.spyOn(importsDb, "setImportCounts").mockRejectedValue(new Error("D1 went away"));
     allowErrorLogs("import.incomplete");
@@ -968,7 +968,7 @@ describe("the list moving between the plan and the commit (SPEC §7)", () => {
     );
     expect(p.counts.confirmed_pending).toBe(1);
     await env.DB.prepare(
-      "UPDATE subscribers SET status = 'unsubscribed' WHERE email = 'reader@x.io'",
+      "UPDATE subscribers SET status = 'unsubscribed', unsubscribe_cause = 'reader' WHERE email = 'reader@x.io'",
     ).run();
     await subscribers.addSuppression(env.DB, "new@x.io", "bounce");
 
@@ -994,7 +994,7 @@ describe("the list moving between the plan and the commit (SPEC §7)", () => {
     const p = await planOk({ file });
     expect(p.counts.confirmed_pending).toBe(1);
     await env.DB.prepare(
-      "UPDATE subscribers SET status = 'unsubscribed' WHERE email = 'reader@x.io'",
+      "UPDATE subscribers SET status = 'unsubscribed', unsubscribe_cause = 'reader' WHERE email = 'reader@x.io'",
     ).run();
     const res = await commit({ file, plan_hash: p.plan_hash, attestation: ATTEST });
     expect(res.status).toBe(201);
@@ -1193,7 +1193,8 @@ describe("the export, and the round trip (SPEC §7)", () => {
     ]);
     // An erasure arrives with its address alone, naming no import.
     expect(await subscriberRow("erased@x.io")).toMatchObject({
-      origin: "unknown",
+      origin: null,
+      opt_in: null,
       import_id: null,
       consent_evidence: null,
     });

@@ -460,7 +460,7 @@ export async function commitImport(
         const ids = { id: newId(), tok: token(), uat: row.unsubscribed_at, c: cause };
         writes.addUnsubscribed.push(
           cause === "erased"
-            ? { ...ids, e: row.email, opt: "unknown", org: "unknown", ev: null, cat: null }
+            ? { ...ids, tok: null, e: row.email, opt: null, org: null, ev: null, cat: null }
             : { ...ids, ...consent, cat: row.confirmed_at },
         );
       }

@@ -523,7 +523,7 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
         "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirm_sent_at) VALUES ('x','x@example.com','pending','cfm-x','uns-x',?,1)",
       ).bind(now),
       env.DB.prepare(
-        "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, unsubscribed_at) VALUES ('u','u@example.com','unsubscribed',NULL,'uns-u',?,?)",
+        "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, unsubscribed_at, unsubscribe_cause) VALUES ('u','u@example.com','unsubscribed',NULL,'uns-u',?,?,'reader')",
       ).bind(now, now),
     ]);
     const html = { method: "POST", headers: { accept: "text/html" } };
@@ -895,7 +895,7 @@ describe("a publication with no name (SPEC §9)", () => {
         "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirm_sent_at) VALUES ('x','x@example.com','pending','cfm-x','uns-x',?,1)",
       ).bind(now),
       env.DB.prepare(
-        "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, unsubscribed_at) VALUES ('u','u@example.com','unsubscribed',NULL,'uns-u',?,?)",
+        "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, unsubscribed_at, unsubscribe_cause) VALUES ('u','u@example.com','unsubscribed',NULL,'uns-u',?,?,'reader')",
       ).bind(now, now),
     ]);
   }

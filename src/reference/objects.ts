@@ -720,14 +720,14 @@ const SUBSCRIBER_FIELDS: ReferenceField[] = [
   },
   {
     name: "origin",
-    type: "string",
+    type: "string | null",
     description:
-      "Where consent was collected: `kestrel`, or the source an import claimed; `unknown` once erased.",
+      "Where consent was collected: `kestrel`, or the source an import claimed; null once erased.",
   },
   {
     name: "opt_in",
-    type: '"double" | "single" | "unknown"',
-    description: "How consent was collected: this app's is `double`; `unknown` once erased.",
+    type: '"double" | "single" | "unknown" | null',
+    description: "How consent was collected: this app's is `double`; null once erased.",
   },
   {
     name: "consent_evidence",
@@ -748,9 +748,9 @@ const SUBSCRIBER_FIELDS: ReferenceField[] = [
   },
   {
     name: "confirm_token, unsub_token",
-    type: "string",
+    type: "string | null",
     description:
-      "The confirmation link's one-shot token (null once spent) and the unsubscribe link's, never rotated except by an erasure, which discards both.",
+      "The confirmation link's one-shot token (null once spent) and the unsubscribe link's, never rotated; an erasure discards both, leaving them null, and a person who signs up again gets new ones.",
   },
   {
     name: "confirm_sent_at, confirm_attempt_at",

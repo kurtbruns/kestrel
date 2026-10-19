@@ -286,7 +286,13 @@ describe("viewSubscriberModal", () => {
     expect(recordRows()["Why they left"]).toBe(CAUSE_MEANING.reader);
     $("#vsClose").click();
     viewSubscriberModal(
-      { ...signedUp, unsubscribe_cause: "erased", origin: "unknown", opt_in: "unknown" },
+      {
+        ...signedUp,
+        unsubscribe_cause: "erased",
+        unsub_token: null,
+        origin: null,
+        opt_in: null,
+      },
       live,
     );
     const rows = recordRows();

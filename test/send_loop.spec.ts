@@ -93,9 +93,9 @@ describe("send loop + sweep", () => {
     // Everyone else on the list, none of whom the audience may reach (I1): a reader who
     // never confirmed, one who left, and a confirmed reader whose address is suppressed.
     await env.DB.prepare(
-      `INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES
-         ('id-p', 'pending@example.com', 'pending', 'cfm-p', 'uns-p', ?1, NULL),
-         ('id-u', 'left@example.com', 'unsubscribed', 'cfm-u', 'uns-u', ?1, ?1)`,
+      `INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at, unsubscribe_cause) VALUES
+         ('id-p', 'pending@example.com', 'pending', 'cfm-p', 'uns-p', ?1, NULL, NULL),
+         ('id-u', 'left@example.com', 'unsubscribed', 'cfm-u', 'uns-u', ?1, ?1, 'reader')`,
     )
       .bind(Date.now())
       .run();
@@ -303,7 +303,9 @@ describe("send loop + sweep", () => {
 
   it("skips a recipient who unsubscribed after audience resolution (I2)", async () => {
     await leaveAfterResolution((email) =>
-      env.DB.prepare("UPDATE subscribers SET status = 'unsubscribed' WHERE email = ?")
+      env.DB.prepare(
+        "UPDATE subscribers SET status = 'unsubscribed', unsubscribe_cause = 'reader' WHERE email = ?",
+      )
         .bind(email)
         .run(),
     );

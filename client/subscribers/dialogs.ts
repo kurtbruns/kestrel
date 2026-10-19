@@ -114,7 +114,7 @@ export function viewSubscriberModal(
       ${
         imported
           ? html`<dt>Origin</dt><dd>${originName(sub.origin) ?? "Unknown"}</dd>
-            <dt>Opt-in</dt><dd>${OPT_IN_WORDS[sub.opt_in]}</dd>
+            <dt>Opt-in</dt><dd>${OPT_IN_WORDS[sub.opt_in ?? "unknown"]}</dd>
             <dt>Import</dt><dd><code>${sub.import_id ?? ""}</code></dd>`
           : null
       }

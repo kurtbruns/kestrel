@@ -166,11 +166,12 @@ export async function getImportByPlanHash(
   return row ? toRecord(row) : null;
 }
 
-/** A subscriber the import confirms or adds, with the provenance the import gives them. */
+/** A subscriber the import confirms or adds, with the provenance the import gives them;
+ *  none for one the file says was erased. */
 export interface ConsentRow {
   e: string;
-  opt: OptIn;
-  org: string;
+  opt: OptIn | null;
+  org: string | null;
   ev: string | null;
   /** The source's confirmation time (its `confirmed_at`, else its `subscribed_at`), or null. */
   cat: number | null;
@@ -179,7 +180,8 @@ export interface ConsentRow {
 /** A new subscriber's ids, beside its consent. */
 export interface NewRow extends ConsentRow {
   id: string;
-  tok: string;
+  /** Null for one the file says was erased, who holds no token. */
+  tok: string | null;
   /** For an unsubscribed one, when the source says they left, or null. */
   uat: number | null;
 }
@@ -369,11 +371,9 @@ export async function applyImport(
         .prepare(
           `UPDATE subscribers SET created_at = COALESCE(unsubscribed_at, ?2), confirmed_at = NULL,
                   confirm_token = NULL, confirm_sent_at = NULL, confirm_attempt_at = NULL,
-                  unsub_token = lower(hex(randomblob(32))), origin = 'unknown', opt_in = 'unknown',
+                  unsub_token = NULL, origin = NULL, opt_in = NULL,
                   consent_evidence = NULL, import_id = NULL
-            WHERE email IN (${erasedHere})
-              AND (confirmed_at IS NOT NULL OR confirm_token IS NOT NULL OR origin <> 'unknown'
-                   OR opt_in <> 'unknown' OR consent_evidence IS NOT NULL OR import_id IS NOT NULL)`,
+            WHERE email IN (${erasedHere}) AND unsub_token IS NOT NULL`,
         )
         .bind(chunk, now),
       db

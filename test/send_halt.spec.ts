@@ -491,7 +491,9 @@ describe("a refused batch", () => {
       "ses 403 UnrecognizedClientException: The security token included in the request is invalid";
     await ticks(2, capped());
     const leaving = emails[1]!;
-    await env.DB.prepare("UPDATE subscribers SET status = 'unsubscribed' WHERE email = ?")
+    await env.DB.prepare(
+      "UPDATE subscribers SET status = 'unsubscribed', unsubscribe_cause = 'reader' WHERE email = ?",
+    )
       .bind(leaving)
       .run();
 

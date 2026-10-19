@@ -20,17 +20,17 @@ const ORIGIN_NAMES: Record<string, string> = {
   ghost: "Ghost",
 };
 
-/** An import's origin as a name: `sendy` reads Sendy; `unknown` reads as none. */
-export function originName(origin: string): string | null {
-  if (origin === "" || origin === "unknown") {
+/** An import's origin as a name: `sendy` reads Sendy; `unknown`, or none kept, reads as none. */
+export function originName(origin: string | null): string | null {
+  if (origin === null || origin === "" || origin === "unknown") {
     return null;
   }
   return ORIGIN_NAMES[origin] ?? origin.charAt(0).toUpperCase() + origin.slice(1);
 }
 
 /** How consent was collected, as a phrase. */
-export function optInPhrase(optIn: OptIn): string {
-  return optIn === "unknown" ? "opt-in unknown" : `${optIn} opt-in`;
+export function optInPhrase(optIn: OptIn | null): string {
+  return optIn === null || optIn === "unknown" ? "opt-in unknown" : `${optIn} opt-in`;
 }
 
 /**
