@@ -464,17 +464,15 @@ describe("subscribers view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("says how each subscriber joined, keyed on the import, never the file's claim (SPEC §7)", async () => {
+  it("leaves how each subscriber joined to their page, with no column for it (DESIGN §3)", async () => {
     fake = fakeApi([
       { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
     ]);
     await mount((r, s) => renderSubscribers(undefined, r, s));
     await settle();
-    expect($$("thead th").map((th) => th.textContent)).toContain("How they joined");
-    expect($("tr[data-id='s1'] td.how").textContent).toBe("Imported · Sendy, single opt-in");
-    expect($("tr[data-id='s2'] td.how").textContent).toBe("Double opt-in");
-    // Pending and never confirmed here: nothing to say yet, and the stacked row drops the cell.
-    expect($("tr[data-id='s3'] td.how").classList.contains("empty")).toBe(true);
+    expect($$("thead th")).toHaveLength(4);
+    expect($$("thead th").map((th) => th.textContent)).not.toContain("How they joined");
+    expect(document.querySelector("tr[data-id] td.how")).toBeNull();
     expect(fake.unhandled).toEqual([]);
   });
 
@@ -508,7 +506,11 @@ describe("subscribers view", () => {
         "Receives your posts. They confirmed here, or opted in at the service you imported them from.",
       ],
       ["badge pending", "pending", "Subscribed but hasn’t clicked the confirmation email."],
-      ["badge unsubscribed", "unsubscribed", "Left the list. Why they left is on their page."],
+      [
+        "badge unsubscribed",
+        "unsubscribed",
+        "Left the list. They’re sent nothing, and only their own sign-up or being manually added brings them back. Why they left is on their page.",
+      ],
     ]);
     expect(pills(lists[1]!)).toEqual([
       [

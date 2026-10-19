@@ -8,6 +8,7 @@ import type {
   SubscriberDeliveriesResponse,
   SubscriberDelivery,
   SubscriberResponse,
+  SuppressionReason,
   UnsubscribeCause,
 } from "../../shared/subscribers";
 import { api, describeError } from "../api";
@@ -193,7 +194,7 @@ function suppressionSection(sub: Subscriber): Html {
   } else {
     const flag = SUPPRESSION_FLAG[sup.reason];
     body = html`<p class="sub-sup-line"><span class="badge suppressed">${flag}</span> <span class="muted">since ${fmt(sup.created_at)}</span></p>
-      <p class="sub-meaning">${FLAG_MEANING[flag]}${sup.reason === "import_bounce" ? " This one came from the service the list was imported from." : null}</p>
+      <p class="sub-meaning">${flagMeaning(sub, sup.reason)}</p>
       ${sup.detail ? html`<dl class="sub-dl">${row("Detail", sup.detail)}</dl>` : null}`;
   }
   return html`<section class="card sub-sec" aria-labelledby="subSupTitle">
@@ -211,6 +212,26 @@ const LEFT_BEFORE: Record<UnsubscribeCause, string> = {
   erased: "You had erased them at their request.",
   import: "The list you imported said they had left.",
 };
+
+/**
+ * What the flag means for this address. The legend's words cover every case ("by you or at
+ * the service it was imported from"); this page says which, where the record can tell: a
+ * bounce seen here is the provider's, an imported one the previous service's, and a block on
+ * someone who joined here is the publisher's. A block on an imported or erased person may
+ * have come with the import, which the suppression doesn't record, so it keeps the legend's.
+ */
+function flagMeaning(sub: Subscriber, reason: SuppressionReason): string {
+  switch (reason) {
+    case "bounce":
+      return "Your email provider reported that mail to this address failed. You can clear it.";
+    case "import_bounce":
+      return "Mail to this address failed at the service your list was imported from. You can clear it.";
+    default:
+      return sub.import_id === null && !isErased(sub)
+        ? "You blocked this address. You can unblock it."
+        : FLAG_MEANING[SUPPRESSION_FLAG[reason]];
+  }
+}
 
 /**
  * Why they left (SPEC §7), in the words the API reference uses, and when; for a complaint, the

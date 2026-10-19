@@ -32,7 +32,6 @@ import { subscriberActs } from "./acts";
 import { addSubscriberModal } from "./dialogs";
 import { exportFile } from "./export";
 import { breakableEmail, statusBadge, subscriberHref, suppressionFlag } from "./labels";
-import { joinedVia } from "./provenance";
 
 // The story of the list as a whole: its composition (by-status counts) and the roster,
 // filterable, sortable, and searchable. Consent status and suppression are separate
@@ -212,7 +211,15 @@ function legend(): Html {
   const flags = Object.keys(FLAG_MEANING) as SuppressionFlag[];
   return html`<div class="sub-legend" id="subLegend" role="region" aria-labelledby="subLegendToggle" hidden><div class="sub-legend-body">
     <h2>Status</h2>
-    <dl>${SUB_STATUSES.map(({ value }) => legendRow(badge(value), STATUS_MEANING[value]))}</dl>
+    <dl>${SUB_STATUSES.map(({ value }) =>
+      legendRow(
+        badge(value),
+        // Where to read why someone left is the editor's to say; the shared words stop at what it means.
+        value === "unsubscribed"
+          ? `${STATUS_MEANING[value]} Why they left is on their page.`
+          : STATUS_MEANING[value],
+      ),
+    )}</dl>
     <h2>Suppressed</h2>
     <p>${SUPPRESSED_MEANING} The red flag beside the address says why:</p>
     <dl>${flags.map((flag) => legendRow(html`<span class="badge suppressed">${flag}</span>`, FLAG_MEANING[flag]))}</dl>
@@ -241,14 +248,13 @@ function renderSubTable(
     );
     return;
   }
-  // The joined and how cells are named so the stacked layout can label them. The wrapper is
+  // The joined cell is named so the stacked layout can label it. The wrapper is
   // what the stacking measures: this table stacks by its own width, not the viewport's.
   setHtml(
     listEl,
-    html`<div class="table-wrap subs-wrap"><table class="list-table subs-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-how"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Email", "email", state)}${th("Status", null, state)}${th("How they joined", null, state)}${th("Joined", "created_at", state)}<th></th></tr></thead><tbody>${rows.map(
+    html`<div class="table-wrap subs-wrap"><table class="list-table subs-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Email", "email", state)}${th("Status", null, state)}${th("Joined", "created_at", state)}<th></th></tr></thead><tbody>${rows.map(
       (s) => {
-        const how = joinedVia(s);
-        return html`<tr class="clickable" data-id="${s.id}"><td><a class="sub-email" href="${subscriberHref(s.id)}">${breakableEmail(s.email)}</a>${suppressionFlag(s)}</td><td>${statusBadge(s)}</td><td class="muted how${how ? "" : " empty"}">${how ?? "—"}</td><td class="muted joined">${fmt(s.created_at)}</td><td class="act"><button class="icon" data-menu="${s.id}" aria-label="Subscriber actions" aria-haspopup="menu">⋯</button></td></tr>`;
+        return html`<tr class="clickable" data-id="${s.id}"><td><a class="sub-email" href="${subscriberHref(s.id)}">${breakableEmail(s.email)}</a>${suppressionFlag(s)}</td><td>${statusBadge(s)}</td><td class="muted joined">${fmt(s.created_at)}</td><td class="act"><button class="icon" data-menu="${s.id}" aria-label="Subscriber actions" aria-haspopup="menu">⋯</button></td></tr>`;
       },
     )}</tbody></table></div>`,
   );

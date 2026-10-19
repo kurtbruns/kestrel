@@ -1867,13 +1867,9 @@ td a:hover {
 .list-table .c-act {
   width: 56px;
 }
-/* Subscribers: how each joined ("Imported · Sendy, single opt-in"), which may wrap to two
-   lines; the table takes a wider floor so the email column keeps room beside it. */
-.list-table .c-how {
-  width: 152px;
-}
+/* Subscribers: a floor that keeps the email column about 250px beside its two others. */
 .list-table.subs-table {
-  min-width: 680px;
+  min-width: 610px;
 }
 
 .dash-section table {
@@ -6727,7 +6723,7 @@ body.has-savebar .content {
 .subs-wrap {
   container-type: inline-size;
 }
-@container (max-width: 759px) {
+@container (max-width: 609px) {
   .list-table.subs-table.stacks,
   .list-table.subs-table.stacks tbody,
   .list-table.subs-table.stacks tr {
@@ -6768,10 +6764,7 @@ body.has-savebar .content {
   .list-table.subs-table.stacks td.empty {
     display: none;
   }
-  /* Subscribers: status pill · how they joined · joined <date>. */
-  .subs-table td.how::before {
-    content: " · ";
-  }
+  /* Subscribers: status pill · joined <date>. */
   .subs-table td.joined::before {
     content: " · joined ";
   }

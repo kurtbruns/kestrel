@@ -10,7 +10,8 @@ export const STATUS_MEANING: Record<SubscriberStatus, string> = {
   pending: "Subscribed but hasn’t clicked the confirmation email.",
   confirmed:
     "Receives your posts. They confirmed here, or opted in at the service you imported them from.",
-  unsubscribed: "Left the list. Why they left is on their page.",
+  unsubscribed:
+    "Left the list. They’re sent nothing, and only their own sign-up or being manually added brings them back.",
 };
 
 /** What each reason for leaving means, and what it allows. */

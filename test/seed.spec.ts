@@ -10,12 +10,12 @@ import { AUTH, base } from "./support/http";
 
 const config = () => getConfig(env);
 
-// The seeded publication's shape. The list is imported, grows in a continuous confirmed
-// stream to today, and churns across four completed sends, so the mailable audience
-// fluctuates 140 → 141 → 142 → 148 and settles at 154 today (155 confirmed, 1 of them suppressed). These
+// The seeded publication's shape. Half the list is imported, the rest signs up in a continuous
+// confirmed stream to today, and it churns across four completed sends, so the mailable audience
+// grows 83 → 103 → 120 → 141 and settles at 158 today (159 confirmed, 1 of them suppressed). These
 // are the numbers the lifecycle produces; they lock the "frozen at send time" behavior, so a
 // regression is obvious.
-const CONFIRMED = 155;
+const CONFIRMED = 159;
 const PENDING = 3;
 // Fifteen readers who left (one of them on request, one later erased), one reader who
 // complained, one who left while post #4 went out, one the import says left elsewhere, and the
@@ -27,11 +27,11 @@ const SUPPRESSED_CONFIRMED = 1;
 const SUPPRESSED = 3;
 // And two suppressions with no subscriber: a bounce the import brought, and a blocked role address.
 const SUPPRESSIONS = SUPPRESSED + 2;
-const AUDIENCE_NOW = CONFIRMED - SUPPRESSED_CONFIRMED; // 154
-const SENT_RECIPIENTS = [140, 141, 142, 148]; // oldest → newest
+const AUDIENCE_NOW = CONFIRMED - SUPPRESSED_CONFIRMED; // 158
+const SENT_RECIPIENTS = [83, 103, 120, 141]; // oldest → newest
 // Before them, the operator's email-only test send, to their own second address (SPEC §5).
 const TEST_SUBJECT = "Test email";
-const TOTAL_DELIVERIES = SENT_RECIPIENTS.reduce((a, b) => a + b, 1); // 572
+const TOTAL_DELIVERIES = SENT_RECIPIENTS.reduce((a, b) => a + b, 1); // 448
 
 /** The sends on the list's timeline, oldest first: every sent send but the test send. */
 const timelineSends = async () =>
@@ -183,7 +183,7 @@ describe("dev seed (Field Notes dataset)", () => {
       suppressions_added: 1,
     });
     expect(JSON.parse(record.counts)).toMatchObject({
-      added_confirmed: 140,
+      added_confirmed: 80,
       added_unsubscribed: 1,
       suppressed: 1,
     });
@@ -201,8 +201,8 @@ describe("dev seed (Field Notes dataset)", () => {
         opt_in: string;
         consent_evidence: string;
       }>();
-    // The 140 the file added confirmed, less the one later erased, and the one it says left.
-    expect(imported).toHaveLength(140);
+    // The 80 the file added confirmed, less the one later erased, and the one it says left.
+    expect(imported).toHaveLength(80);
     for (const s of imported) {
       expect(s.created_at).toBe(record.created_at);
       expect(s.origin).toBe("sendy");

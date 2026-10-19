@@ -220,8 +220,8 @@ describe("dev seed — scaled (parametric, DB-backed)", () => {
   it("leaves the default (unsized) seed unchanged", async () => {
     const summary = await seedDatabase(env, config());
     // The curated list's signature numbers — the two-path contract's default half.
-    expect(summary.subscribers.confirmed).toBe(155);
+    expect(summary.subscribers.confirmed).toBe(159);
     expect(summary.suppressions).toBe(5);
-    expect(summary.audience).toBe(154);
+    expect(summary.audience).toBe(158);
   });
 });

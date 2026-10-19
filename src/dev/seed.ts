@@ -505,8 +505,8 @@ function mailableAt(subs: SeedSubscriber[], sups: SeedSuppression[], t: number):
  * (the bounce suppressed, the complaint unsubscribed), two blocks on unsubscribed and pending
  * rows that shadow nothing, and a pending sign-up from someone erased before; then one of
  * each remaining state (see the end). The counts are chosen so the mailable audience
- * genuinely fluctuates from send to send (140 → 141 → 142 → 148) and settles at 154 today
- * (155 confirmed, 1 of them suppressed).
+ * genuinely grows from send to send (83 → 103 → 120 → 141) and settles at 158 today
+ * (159 confirmed, 1 of them suppressed), about half of them imported and half signed up here.
  */
 function buildAudience(t: Timeline): BuiltAudience {
   const importId = newId();
@@ -545,7 +545,7 @@ function buildAudience(t: Timeline): BuiltAudience {
   // Every imported row was added here when the import was committed, so that is when they
   // joined (`markImported`). The wave tags are interleaved (round-robin) across those scattered slots
   // too, so "left after #1" and "left after #3" both span the whole window.
-  const IMPORT = 140;
+  const IMPORT = 80;
   const importStep = (10 * DAY) / IMPORT; // spread across ~10 days, all before send #1
   const churnWaves = [
     { sentAt: unwrap(t.sentAt[0], "send timeline slot"), count: 6 }, // after #1, gone before #2
@@ -589,12 +589,13 @@ function buildAudience(t: Timeline): BuiltAudience {
   }
 
   // Organic growth: confirmed sign-ups arriving in one continuous stream from just after the
-  // first post right up to today — the list is still growing, it doesn't stop at the last
-  // historical send. Each confirms shortly after signing up (double opt-in is near-instant for
+  // import, a day before the first post, right up to today — the list is still growing, it
+  // doesn't stop at the last historical send. By today they are about as many as the import
+  // brought, so the list reads as half carried over and half grown here. Each confirms shortly after signing up (double opt-in is near-instant for
   // most), and the stream spans every send, so every completed send freezes a different,
   // growing slice while the newest confirmations sit near "now".
-  const GROWTH = 32;
-  const growthStart = unwrap(t.sentAt[0], "send timeline slot") + 3 * DAY;
+  const GROWTH = 96;
+  const growthStart = t.importCommitAt + DAY;
   const growthSpan = t.now - growthStart;
   const growthEmails: string[] = [];
   for (let i = 0; i < GROWTH; i++) {

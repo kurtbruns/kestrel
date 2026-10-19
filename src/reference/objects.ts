@@ -662,7 +662,10 @@ const REVISION_FIELDS: ReferenceField[] = [
 /** A subscriber's status and what it means, in the editor legend's words. */
 const STATUS_VALUES = (Object.keys(STATUS_MEANING) as SubscriberStatus[]).map((status) => ({
   value: status,
-  description: STATUS_MEANING[status],
+  description:
+    status === "unsubscribed"
+      ? `${STATUS_MEANING[status]} \`unsubscribe_cause\` says why.`
+      : STATUS_MEANING[status],
 }));
 
 /** Why a subscriber left, each with what it means, in the words the editor's subscriber page shows. */

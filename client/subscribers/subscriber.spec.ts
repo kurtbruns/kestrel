@@ -155,9 +155,32 @@ describe("the subscriber page (SPEC §8, DESIGN §3)", () => {
     const section = $("section[aria-labelledby='subSupTitle']");
     expect($(".sub-sup-line", section).textContent).toBe(`bounced since ${fmt(since)}`);
     expect($(".sub-meaning", section).textContent).toBe(
-      `${FLAG_MEANING.bounced} This one came from the service the list was imported from.`,
+      "Mail to this address failed at the service your list was imported from. You can clear it.",
     );
     expect(rowsOf("subSupTitle")).toEqual({ Detail: "550 no such user" });
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("says whose the suppression was where the record can tell, and the legend's words where it can't (SPEC §7)", async () => {
+    const meaningFor = async (over: Partial<Subscriber>) => {
+      fake?.restore();
+      fake = serve(subscriber(over));
+      await mount((r, s) => renderSubscriber("s1", r, s));
+      await settle();
+      return $("section[aria-labelledby='subSupTitle'] .sub-meaning").textContent;
+    };
+    const blocked = { reason: "manual" as const, detail: null, created_at: 1 };
+    expect(await meaningFor({ suppression: { ...blocked, reason: "bounce" } })).toBe(
+      "Your email provider reported that mail to this address failed. You can clear it.",
+    );
+    // Joined here, so the block can only be the publisher's.
+    expect(await meaningFor({ suppression: blocked })).toBe(
+      "You blocked this address. You can unblock it.",
+    );
+    // Imported, so the block may have come with the file: the record doesn't say.
+    expect(await meaningFor({ suppression: blocked, import_id: "imp1", origin: "sendy" })).toBe(
+      FLAG_MEANING.blocked,
+    );
     expect(fake.unhandled).toEqual([]);
   });
 
