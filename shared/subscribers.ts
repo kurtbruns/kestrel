@@ -4,6 +4,7 @@
 
 import type { OptIn } from "./imports";
 import type { PageMeta } from "./list";
+import type { DeliveryRecord, SendView } from "./sends";
 
 /** A subscriber's consent state (SPEC §7); `subscriber_meanings.ts` says what each means. */
 export type SubscriberStatus = "pending" | "confirmed" | "unsubscribed";
@@ -62,6 +63,8 @@ export interface SubscriberSuppression {
   reason: SuppressionReason;
   /** The provider's or the publisher's words, if any. */
   detail: string | null;
+  /** Since when the address has been suppressed. */
+  created_at: number;
 }
 
 export interface Subscriber {
@@ -92,6 +95,8 @@ export interface Subscriber {
   import_id: string | null;
   /** Whether the address is suppressed, and why; null when it is mailed as its status says. */
   suppression: SubscriberSuppression | null;
+  /** Whether a send firing now would include them (SPEC §7): confirmed, and not suppressed. */
+  receives_posts: boolean;
 }
 
 /** The list's composition: subscribers by consent state, and how many of them are suppressed. */
@@ -144,6 +149,21 @@ export interface PublicSubscribeResponse {
 /** GET /api/subscribers/:id, and an unsubscribe by id */
 export interface SubscriberResponse {
   subscriber: Subscriber;
+}
+
+/** One send a subscriber's address was in: the send as its view, and the address's row in its record. */
+export interface SubscriberDelivery {
+  send: SendView;
+  delivery: DeliveryRecord;
+}
+
+/**
+ * GET /api/subscribers/:id/deliveries: the sends the subscriber's address was in, newest
+ * fire time first, a page at a time. `next` is the cursor for the page after, null on the last.
+ */
+export interface SubscriberDeliveriesResponse {
+  deliveries: SubscriberDelivery[];
+  next: string | null;
 }
 
 /** What an erasure puts in place of the address on a person's past delivery rows (SPEC §7),

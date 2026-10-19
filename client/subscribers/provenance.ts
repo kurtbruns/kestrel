@@ -2,7 +2,7 @@
 // brought them, never on what a file claimed, so only a confirmation Kestrel recorded
 // itself reads as its double opt-in.
 
-import type { OptIn } from "../../shared/imports";
+import type { ImportRecord, OptIn } from "../../shared/imports";
 import type { Subscriber } from "../../shared/subscribers";
 
 // Services a list is commonly brought from, as their own names spell them. Any other origin
@@ -57,4 +57,12 @@ export function evidenceText(evidence: string | null): string | null {
   } catch {
     return evidence;
   }
+}
+
+/** Who committed an import, as the publisher reads it: their address, or Claude for them. */
+export function importedBy(record: ImportRecord): string {
+  if (record.principal.kind === "service") {
+    return "Claude, for you";
+  }
+  return record.principal.email || "you";
 }

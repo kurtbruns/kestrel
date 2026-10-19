@@ -3,32 +3,35 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { listSends } from "../src/db/sends";
 import { getSettings, updateSettings } from "../src/db/settings";
-import { audienceEmails, counts } from "../src/db/subscribers";
+import { audienceEmails, counts, isSuppressed } from "../src/db/subscribers";
 import { seedDatabase } from "../src/dev/seed";
 import { getConfig } from "../src/env";
 import { AUTH, base } from "./support/http";
 
 const config = () => getConfig(env);
 
-// The seeded publication's shape. The list is imported, grows in a continuous confirmed
-// stream to today, and churns across four completed sends, so the mailable audience
-// fluctuates 140 → 141 → 142 → 148 and settles at 155 today (156 confirmed, 1 of them suppressed). These
+// The seeded publication's shape. Half the list is imported, the rest signs up in a continuous
+// confirmed stream to today, and it churns across four completed sends, so the mailable audience
+// grows 83 → 103 → 120 → 141 and settles at 158 today (159 confirmed, 1 of them suppressed). These
 // are the numbers the lifecycle produces; they lock the "frozen at send time" behavior, so a
 // regression is obvious.
-const CONFIRMED = 156;
+const CONFIRMED = 159;
 const PENDING = 3;
-// Fifteen readers who left, one reader who complained, and the operator's own test address,
-// unsubscribed after the test send as Verify it works has them do.
-const UNSUBSCRIBED = 17;
+// Fifteen readers who left (one of them on request, one later erased), one reader who
+// complained, one who left while post #4 went out, one the import says left elsewhere, and the
+// operator's own test address, unsubscribed after the test send as Verify it works has them do.
+const UNSUBSCRIBED = 19;
 // A bounce on a confirmed subscriber, plus a block on an unsubscribed and a pending address,
-// which shadow no one.
+// which shadow no one: the subscribers the list counts as suppressed.
 const SUPPRESSED_CONFIRMED = 1;
 const SUPPRESSED = 3;
-const AUDIENCE_NOW = CONFIRMED - SUPPRESSED_CONFIRMED; // 155
-const SENT_RECIPIENTS = [140, 141, 142, 148]; // oldest → newest
+// And two suppressions with no subscriber: a bounce the import brought, and a blocked role address.
+const SUPPRESSIONS = SUPPRESSED + 2;
+const AUDIENCE_NOW = CONFIRMED - SUPPRESSED_CONFIRMED; // 158
+const SENT_RECIPIENTS = [83, 103, 120, 141]; // oldest → newest
 // Before them, the operator's email-only test send, to their own second address (SPEC §5).
 const TEST_SUBJECT = "Test email";
-const TOTAL_DELIVERIES = SENT_RECIPIENTS.reduce((a, b) => a + b, 1); // 572
+const TOTAL_DELIVERIES = SENT_RECIPIENTS.reduce((a, b) => a + b, 1); // 448
 
 /** The sends on the list's timeline, oldest first: every sent send but the test send. */
 const timelineSends = async () =>
@@ -53,6 +56,7 @@ const RESET_TABLES = [
   "posts",
   "suppressions",
   "subscribers",
+  "imports",
   "settings",
 ];
 
@@ -79,7 +83,7 @@ describe("dev seed (Field Notes dataset)", () => {
       pending: PENDING,
       unsubscribed: UNSUBSCRIBED,
     });
-    expect(summary.suppressions).toBe(SUPPRESSED);
+    expect(summary.suppressions).toBe(SUPPRESSIONS);
     expect(summary.audience).toBe(AUDIENCE_NOW); // confirmed − suppressed (SPEC §7)
     expect(summary.posts).toEqual({ sent: 5, scheduled: 1, draft: 2 });
     expect(summary.deliveries).toBe(TOTAL_DELIVERIES);
@@ -108,31 +112,40 @@ describe("dev seed (Field Notes dataset)", () => {
   it("puts a suppression on every consent state, and shows each reason for leaving (SPEC §7)", async () => {
     await seedDatabase(env, config());
     const { results } = await env.DB.prepare(
-      `SELECT s.status, x.reason, x.detail, x.created_at, s.created_at AS joined
-       FROM suppressions x JOIN subscribers s ON s.email = x.email ORDER BY s.status, x.reason`,
+      `SELECT COALESCE(s.status, 'none') AS status, x.reason, x.detail, x.created_at, s.created_at AS joined
+       FROM suppressions x LEFT JOIN subscribers s ON s.email = x.email ORDER BY status, x.reason`,
     ).all<{
       status: string;
       reason: string;
       detail: string | null;
       created_at: number;
-      joined: number;
+      joined: number | null;
     }>();
+    // On each consent state, and on an address that never subscribed: a bounce the import
+    // brought, and a role address the publisher blocked.
     expect(results.map((r) => `${r.status}/${r.reason}`)).toEqual([
       "confirmed/bounce",
+      "none/import_bounce",
+      "none/manual",
       "pending/manual",
       "unsubscribed/manual",
     ]);
+    // Every suppression says why, and a block says it in the publisher's own words.
+    expect(results.every((r) => r.detail !== null && r.detail !== "")).toBe(true);
     const { results: causes } = await env.DB.prepare(
       "SELECT status, unsubscribe_cause AS cause, COUNT(*) AS n FROM subscribers WHERE unsubscribe_cause IS NOT NULL GROUP BY status, cause ORDER BY status, cause",
     ).all<{ status: string; cause: string; n: number }>();
-    expect(causes.map((r) => `${r.status}/${r.cause}`)).toEqual([
-      "pending/erased",
-      "unsubscribed/complaint",
-      "unsubscribed/reader",
+    expect(causes.map((r) => `${r.status}/${r.cause}/${r.n}`)).toEqual([
+      "pending/erased/1",
+      "unsubscribed/complaint/1",
+      "unsubscribed/erased/1",
+      "unsubscribed/import/1",
+      "unsubscribed/publisher/1",
+      "unsubscribed/reader/15",
     ]);
     // The erased person who signed up again left before the sign-up that came after it.
     const returning = await env.DB.prepare(
-      "SELECT created_at, unsubscribed_at FROM subscribers WHERE unsubscribe_cause = 'erased'",
+      "SELECT created_at, unsubscribed_at FROM subscribers WHERE unsubscribe_cause = 'erased' AND status = 'pending'",
     ).first<{ created_at: number; unsubscribed_at: number }>();
     expect(returning!.unsubscribed_at).toBeLessThan(returning!.created_at);
     // A block by hand comes after the unsubscribe it follows, and nothing is dated ahead.
@@ -144,6 +157,104 @@ describe("dev seed (Field Notes dataset)", () => {
     for (const r of results) {
       expect(r.created_at).toBeLessThanOrEqual(Date.now());
     }
+  });
+
+  it("brings the list in by one import, whose record each imported subscriber names (SPEC §7, §8)", async () => {
+    await seedDatabase(env, config());
+    const { results: imports } = await env.DB.prepare(
+      "SELECT id, created_at, principal_kind, principal_email, attestation_version, file_name, counts, suppressions_added FROM imports",
+    ).all<{
+      id: string;
+      created_at: number;
+      principal_kind: string;
+      principal_email: string;
+      attestation_version: number;
+      file_name: string;
+      counts: string;
+      suppressions_added: number;
+    }>();
+    expect(imports).toHaveLength(1);
+    const record = imports[0]!;
+    expect(record).toMatchObject({
+      principal_kind: "human",
+      principal_email: "editor@fieldnotes.example",
+      attestation_version: 1,
+      file_name: "sendy-export.csv",
+      suppressions_added: 1,
+    });
+    expect(JSON.parse(record.counts)).toMatchObject({
+      added_confirmed: 80,
+      added_unsubscribed: 1,
+      suppressed: 1,
+    });
+    // Every imported subscriber was added when the import was committed, says where and how
+    // they opted in and the file's evidence, and kept the file's own confirmation date.
+    const { results: imported } = await env.DB.prepare(
+      "SELECT status, created_at, confirmed_at, origin, opt_in, consent_evidence FROM subscribers WHERE import_id = ?",
+    )
+      .bind(record.id)
+      .all<{
+        status: string;
+        created_at: number;
+        confirmed_at: number | null;
+        origin: string;
+        opt_in: string;
+        consent_evidence: string;
+      }>();
+    // The 80 the file added confirmed, less the one later erased, and the one it says left.
+    expect(imported).toHaveLength(80);
+    for (const s of imported) {
+      expect(s.created_at).toBe(record.created_at);
+      expect(s.origin).toBe("sendy");
+      expect(["double", "single"]).toContain(s.opt_in);
+      expect(Object.keys(JSON.parse(s.consent_evidence))).toEqual(["signup_ip", "form"]);
+      if (s.confirmed_at !== null) {
+        expect(s.confirmed_at).toBeLessThan(record.created_at);
+      }
+    }
+    expect(new Set(imported.map((s) => s.opt_in))).toEqual(new Set(["double", "single"]));
+  });
+
+  it("shows on the records an erased recipient, a soft bounce, and a skipped reader (SPEC §7, §8)", async () => {
+    await seedDatabase(env, config());
+    const sent = await timelineSends();
+    const rowsOf = async (i: number) =>
+      (
+        await env.DB.prepare(
+          "SELECT email, status, event, bounce_kind FROM deliveries WHERE send_id = ?",
+        )
+          .bind(sent[i]!.id)
+          .all<{
+            email: string;
+            status: string;
+            event: string | null;
+            bounce_kind: string | null;
+          }>()
+      ).results;
+    // Erased after post #3: posts #1 to #3 each hold one placeholder in their place, the same
+    // one, and post #4 never had them.
+    const placeholders = await Promise.all(
+      [0, 1, 2, 3].map(async (i) =>
+        (await rowsOf(i)).filter((r) => r.email.startsWith("erased:")).map((r) => r.email),
+      ),
+    );
+    expect(placeholders.map((p) => p.length)).toEqual([1, 1, 1, 0]);
+    expect(new Set(placeholders.flat()).size).toBe(1);
+    const erased = await env.DB.prepare(
+      "SELECT unsub_token, origin, import_id FROM subscribers WHERE status = 'unsubscribed' AND unsubscribe_cause = 'erased'",
+    ).first();
+    expect(erased).toEqual({ unsub_token: null, origin: null, import_id: null });
+    // A full mailbox on post #3: a soft bounce, which suppresses no one.
+    const soft = (await rowsOf(2)).filter((r) => r.bounce_kind === "soft");
+    expect(soft).toHaveLength(1);
+    expect(await isSuppressed(env.DB, soft[0]!.email)).toBe(false);
+    // A reader who left while post #4 went out: skipped, and unsubscribed today.
+    const skipped = (await rowsOf(3)).filter((r) => r.status === "skipped");
+    expect(skipped).toHaveLength(1);
+    const leaver = await env.DB.prepare("SELECT status FROM subscribers WHERE email = ?")
+      .bind(skipped[0]!.email)
+      .first<{ status: string }>();
+    expect(leaver!.status).toBe("unsubscribed");
   });
 
   it("freezes each send's audience as it was AT THAT MOMENT, not the final list", async () => {

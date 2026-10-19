@@ -35,6 +35,7 @@ const subscriber = (over: Partial<Subscriber>): Subscriber => ({
   consent_evidence: null,
   import_id: null,
   suppression: null,
+  receives_posts: (over.status ?? "confirmed") === "confirmed" && !over.suppression,
   ...over,
 });
 const subs = [
@@ -50,7 +51,7 @@ const subs = [
     id: "s2",
     email: "bad@b.c",
     created_at: 2,
-    suppression: { reason: "bounce", detail: "550 no such user" },
+    suppression: { reason: "bounce", detail: "550 no such user", created_at: 1 },
   }),
   subscriber({
     id: "s3",
@@ -120,7 +121,7 @@ describe("subscribers view", () => {
     expect($("tr[data-id='s1'] .badge.confirmed").classList.contains("held")).toBe(false);
     expect($("tr[data-id='s3'] td").textContent).toBe("<script>@b.c"); // shown as text
     // A wrapping address breaks before its "@", not mid-word.
-    expect($("tr[data-id='s1'] td").innerHTML).toBe("a<wbr>@b.c");
+    expect($("tr[data-id='s1'] a.sub-email").innerHTML).toBe("a<wbr>@b.c");
     const menuOf = (id: string) => {
       $(`tr[data-id='${id}'] [data-menu]`).click();
       const items = $$(".menu .menu-item").map((b) => b.textContent);
@@ -173,7 +174,7 @@ describe("subscribers view", () => {
     await settle();
     expect($("#toasts").textContent).toMatch(/Erased <script>@b\.c/);
     // Still on the list, unsubscribed by the erasure, and nothing more to erase.
-    expect($("tr[data-id='s3'] td:nth-child(2)").textContent).toBe("unsubscribed erased");
+    expect($("tr[data-id='s3'] td:nth-child(2)").textContent).toBe("unsubscribed");
     $("tr[data-id='s3'] [data-menu]").click();
     expect($$(".menu .menu-item").map((b) => b.textContent)).toEqual(["View subscriber", "Block"]);
     expect(fake.unhandled).toEqual([]);
@@ -299,7 +300,11 @@ describe("subscribers view", () => {
         reply: () => ({
           counts,
           subscribers: blocked
-            ? [{ ...subs[0], suppression: { reason: "manual", detail: null } }, subs[1], subs[2]]
+            ? [
+                { ...subs[0], suppression: { reason: "manual", detail: null, created_at: 1 } },
+                subs[1],
+                subs[2],
+              ]
             : subs,
           page,
         }),
@@ -364,8 +369,8 @@ describe("subscribers view", () => {
         reply: () => ({
           counts,
           subscribers: [
-            { ...subs[0], suppression: { reason: "manual", detail: null } },
-            { ...subs[2], suppression: { reason: "manual", detail: null } },
+            { ...subs[0], suppression: { reason: "manual", detail: null, created_at: 1 } },
+            { ...subs[2], suppression: { reason: "manual", detail: null, created_at: 1 } },
           ],
           page,
         }),
@@ -404,7 +409,7 @@ describe("subscribers view", () => {
           subscribers: [
             subs[1],
             { ...subs[2], status: "unsubscribed", unsubscribe_cause: "complaint" },
-            { ...subs[0], suppression: { reason: "import_bounce", detail: null } },
+            { ...subs[0], suppression: { reason: "import_bounce", detail: null, created_at: 1 } },
           ],
           page,
         }),
@@ -439,47 +444,35 @@ describe("subscribers view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("shows a suppressed address's flag and the provider's words in View subscriber", async () => {
+  it("a row, its address, and View subscriber each open the subscriber's page, and the menu doesn't (DESIGN §3)", async () => {
     fake = fakeApi([
       { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
     ]);
     await mount((r, s) => renderSubscribers(undefined, r, s));
     await settle();
-    $("tr[data-id='s2'] [data-menu]").click();
-    $$<HTMLElement>(".menu .menu-item")
-      .find((b) => b.textContent === "View subscriber")!
-      .click();
-    const dt = $$(".modal .sub-dl dt").find((d) => d.textContent === "Suppressed")!;
-    expect(dt.nextElementSibling!.textContent).toBe("bounced: 550 no such user");
-    $("#vsClose").click();
-    // An address that isn't suppressed has no such line.
+    expect($("tr[data-id='s2'] a.sub-email").getAttribute("href")).toBe("#/subscribers/s2");
+    $("tr[data-id='s2'] td.joined").click();
+    expect(location.hash).toBe("#/subscribers/s2");
+    location.hash = "#/subscribers";
     $("tr[data-id='s1'] [data-menu]").click();
+    expect(location.hash).toBe("#/subscribers");
     $$<HTMLElement>(".menu .menu-item")
       .find((b) => b.textContent === "View subscriber")!
       .click();
-    expect($$(".modal .sub-dl dt").map((d) => d.textContent)).not.toContain("Suppressed");
+    expect(location.hash).toBe("#/subscribers/s1");
+    expect(document.querySelector(".modal")).toBeNull();
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("says how each subscriber joined, keyed on the import, never the file's claim (SPEC §7)", async () => {
+  it("leaves how each subscriber joined to their page, with no column for it (DESIGN §3)", async () => {
     fake = fakeApi([
       { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
     ]);
     await mount((r, s) => renderSubscribers(undefined, r, s));
     await settle();
-    expect($$("thead th").map((th) => th.textContent)).toContain("How they joined");
-    expect($("tr[data-id='s1'] td.how").textContent).toBe("Imported · Sendy, single opt-in");
-    expect($("tr[data-id='s2'] td.how").textContent).toBe("Double opt-in");
-    // Pending and never confirmed here: nothing to say yet, and the stacked row drops the cell.
-    expect($("tr[data-id='s3'] td.how").classList.contains("empty")).toBe(true);
-    // View subscriber shows the evidence on request, under the address.
-    $("tr[data-id='s1'] [data-menu]").click();
-    $$<HTMLButtonElement>(".menu .menu-item")[0]?.click();
-    expect($(".modal h3").textContent).toBe(subs[0]?.email);
-    expect($(".modal .hint").textContent).toBe("Confirmed");
-    expect($(".modal").textContent).toContain("Imported · Sendy, single opt-in");
-    expect($(".sub-evidence").textContent).toBe('{\n  "signup_ip": "203.0.113.7"\n}');
-    expect($(".modal").textContent).toContain("not something Kestrel recorded itself.");
+    expect($$("thead th")).toHaveLength(4);
+    expect($$("thead th").map((th) => th.textContent)).not.toContain("How they joined");
+    expect(document.querySelector("tr[data-id] td.how")).toBeNull();
     expect(fake.unhandled).toEqual([]);
   });
 
@@ -498,7 +491,7 @@ describe("subscribers view", () => {
     // Each pill as the list draws it (its classes), beside its definition; why someone left,
     // in the words beside an unsubscribed status; then each act.
     const lists = $$("#subLegend dl");
-    expect(lists).toHaveLength(4);
+    expect(lists).toHaveLength(3);
     const pills = (dl: HTMLElement) =>
       $$("dt", dl).map((dt) => {
         const pill = dt.querySelector(".badge")!;
@@ -513,22 +506,13 @@ describe("subscribers view", () => {
         "Receives your posts. They confirmed here, or opted in at the service you imported them from.",
       ],
       ["badge pending", "pending", "Subscribed but hasn’t clicked the confirmation email."],
-      ["badge unsubscribed", "unsubscribed", "Left the list. Why they left is shown beside it."],
-    ]);
-    expect(terms(lists[1]!)).toEqual([
-      ["by their link", "They unsubscribed themselves, from the link or the button in your email."],
-      ["on request", "You unsubscribed them, when they asked you to."],
       [
-        "complaint",
-        "They reported your email as spam. Only their own sign-up brings them back, so you can’t add them: ask them to subscribe through your subscribe page.",
+        "badge unsubscribed",
+        "unsubscribed",
+        "Left the list. They’re sent nothing until they sign up again, or, unless they left by a complaint or an erasure, you add them back and they confirm. Why they left is on their page.",
       ],
-      [
-        "erased",
-        "You erased them at their request. Only the address is kept, so it isn’t mailed again, and only their own sign-up brings them back.",
-      ],
-      ["left elsewhere", "The list you imported says they left, without saying why."],
     ]);
-    expect(pills(lists[2]!)).toEqual([
+    expect(pills(lists[1]!)).toEqual([
       [
         "badge suppressed",
         "bounced",
@@ -540,7 +524,7 @@ describe("subscribers view", () => {
         "Stopped by hand, by you or at the service it was imported from. You can unblock it.",
       ],
     ]);
-    expect(terms(lists[3]!)).toEqual([
+    expect(terms(lists[2]!)).toEqual([
       [
         "Unsubscribe",
         "When they ask you to take them off the list. They can rejoin by subscribing again.",
@@ -564,12 +548,10 @@ describe("subscribers view", () => {
     ]);
     expect($$("#subLegend h2").map((h) => h.textContent)).toEqual([
       "Status",
-      "Why they left",
       "Suppressed",
       "What you can do",
     ]);
     expect($$("#subLegend p").map((p) => p.textContent)).toEqual([
-      "Beside an unsubscribed status:",
       "The address isn’t sent your posts, whatever its status. The status stays as it was, greyed while the suppression keeps it from taking effect. The red flag beside the address says why:",
     ]);
     toggle.click();
@@ -589,7 +571,7 @@ describe("subscribers view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("says beside an unsubscribed status why they left, and nothing beside one pending again (SPEC §7)", async () => {
+  it("shows the status alone, leaving why someone left to their page (DESIGN §3)", async () => {
     fake = fakeApi([
       {
         path: "/api/subscribers",
@@ -606,10 +588,11 @@ describe("subscribers view", () => {
     ]);
     await mount((r, s) => renderSubscribers(undefined, r, s));
     await settle();
-    expect($("tr[data-id='s1'] .sub-cause").textContent).toBe("complaint");
-    expect($("tr[data-id='s2'] .sub-cause").textContent).toBe("erased");
+    const statusCell = (id: string) => $(`tr[data-id='${id}'] td:nth-child(2)`).textContent;
+    expect(statusCell("s1")).toBe("unsubscribed");
+    expect(statusCell("s2")).toBe("unsubscribed");
     // Signed up again after an erasure: pending, and their own confirmation brings them back.
-    expect(document.querySelector("tr[data-id='s3'] .sub-cause")).toBeNull();
+    expect(statusCell("s3")).toBe("pending");
     expect($("tr[data-id='s3'] .badge.pending").classList.contains("held")).toBe(false);
     expect(fake.unhandled).toEqual([]);
   });
@@ -620,7 +603,9 @@ describe("subscribers view", () => {
         path: "/api/subscribers",
         reply: () => ({
           counts,
-          subscribers: [{ ...subs[0], suppression: { reason: "import_bounce", detail: null } }],
+          subscribers: [
+            { ...subs[0], suppression: { reason: "import_bounce", detail: null, created_at: 1 } },
+          ],
           page,
         }),
       },

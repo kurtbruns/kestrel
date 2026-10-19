@@ -166,6 +166,12 @@ export async function getImportByPlanHash(
   return row ? toRecord(row) : null;
 }
 
+/** One committed import's record, or null when no import has the id. */
+export async function getImport(db: D1Database, id: string): Promise<ImportRecord | null> {
+  const row = await db.prepare("SELECT * FROM imports WHERE id = ?").bind(id).first<ImportRow>();
+  return row ? toRecord(row) : null;
+}
+
 /** A subscriber the import confirms or adds, with the provenance the import gives them;
  *  none for one the file says was erased. */
 export interface ConsentRow {

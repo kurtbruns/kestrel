@@ -62,7 +62,7 @@ const ACTING = [
 ];
 
 const LISTS =
-  "A list answers its rows and `page`: `{ total, limit, offset, sort, dir }`. `limit` is the page size (default 50, at most 200; a larger one is held to 200) and `offset` the rows to skip. A `sort` or `dir` the route doesn't list, or a `limit` or `offset` that isn't a whole number, is a 400 naming the field.";
+  "A list answers its rows and `page`: `{ total, limit, offset, sort, dir }`. `limit` is the page size (default 50, at most 200; a larger one is held to 200) and `offset` the rows to skip. A `sort` or `dir` the route doesn't list, or a `limit` or `offset` that isn't a whole number, is a 400 naming the field. A list that pages on its own order instead (the export, a subscriber's sends) answers `next` in place of `page`: pass it back as `after` for the page that follows, until it is null. The server sets such a page's size.";
 
 /** The topics, in the order the reference lists them. */
 export function referenceConcepts(): ReferenceConcept[] {

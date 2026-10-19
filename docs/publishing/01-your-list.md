@@ -39,7 +39,7 @@ Under **Subscribers → Import**, choose your file. Nothing changes yet: Kestrel
 
 ## What carries over
 
-Asking your whole list to confirm again would lose readers who already said yes. So an import carries over the consent each person gave on your old service, and your word for it. Imported subscribers are **Confirmed** and receive your posts, and **How they joined** shows where they came from, such as "Imported · Sendy, single opt-in".
+Asking your whole list to confirm again would lose readers who already said yes. So an import carries over the consent each person gave on your old service, and your word for it. Imported subscribers are **Confirmed** and receive your posts, and each one's page, opened from their row, shows where they came from, such as "Imported · Sendy, single opt-in".
 
 **Why someone left carries over too.** Your file can say a person unsubscribed themselves, that you unsubscribed them when they asked, that they reported your email as spam, or that they asked to be erased. Someone who complained or was erased can't be added back by hand, only by subscribing themselves, and an erasure is recorded with the address alone.
 
@@ -143,7 +143,7 @@ Anyone can type an address into your subscribe form, which puts a reader who lef
 
 **Repeats of an address** are folded into one row first. Its status is the first of unsubscribed, subscribed, pending, and none that any repeat claims. Its reason for leaving is the strongest: an erasure, then a complaint, then the first of the rest. Its suppression is the first of bounce and manual. Its opt-in is the weakest claim. It keeps the earliest consent times and the latest unsubscribe and suppression times, and the origin and evidence of the row whose status won.
 
-A subscriber an import confirmed is **confirmed**, like anyone who confirmed in Kestrel, and gets your posts. How they joined shows beside their state: imported, with the origin and opt-in method the file claimed, and the evidence. That holds even when the file says they confirmed through Kestrel itself. Only a confirmation Kestrel recorded reads as Kestrel's double opt-in, and a subscriber who later confirms in Kestrel becomes Kestrel's own.
+A subscriber an import confirmed is **confirmed**, like anyone who confirmed in Kestrel, and gets your posts. Their page, opened from their row, says how they joined: imported, with the origin and opt-in method the file claimed, the evidence, and the import that brought them: the file, when, by whom, and the attestation. That holds even when the file says they confirmed through Kestrel itself. Only a confirmation Kestrel recorded reads as Kestrel's double opt-in, and a subscriber who later confirms in Kestrel becomes Kestrel's own.
 
 ### Limits in detail
 

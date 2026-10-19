@@ -34,6 +34,7 @@ import {
   outcomeLines,
   rowDifferences,
 } from "./import_plan";
+import { importedBy } from "./provenance";
 
 /** The prompt the "Just ask Claude" card offers to copy. */
 export const ASK_CLAUDE_PROMPT =
@@ -433,12 +434,7 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
     // The promise that nothing changes yet is kept; what changed is below.
     $("#impLede", root).hidden = true;
     const rec = done.import;
-    const who =
-      rec.principal.kind === "service"
-        ? "Claude, for you"
-        : rec.principal.email
-          ? rec.principal.email
-          : "you";
+    const who = importedBy(rec);
     const lines = outcomeLines(done.counts);
     const extra = extraSuppressionsLine(done.counts, done.suppressions_added);
     // A replay answers with the stored record, not the plan on screen, so nothing compares.

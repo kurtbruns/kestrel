@@ -1,13 +1,10 @@
 // The subscribers list: the by-status composition and the filterable roster.
 
 import {
-  CAUSE_LABEL,
-  CAUSE_MEANING,
   FLAG_MEANING,
   STATUS_MEANING,
   SUBSCRIBER_ACTIONS,
   SUPPRESSED_MEANING,
-  SUPPRESSION_FLAG,
   type SuppressionFlag,
 } from "../../shared/subscriber_meanings";
 import type {
@@ -15,7 +12,6 @@ import type {
   SubscriberCounts,
   SubscriberListResponse,
   SubscriberStatus,
-  UnsubscribeCause,
 } from "../../shared/subscribers";
 import { api, describeError } from "../api";
 import { $, $$ } from "../ui/dom";
@@ -32,17 +28,10 @@ import {
   wireToolbar,
 } from "../ui/list_controls";
 import { badge, busy, type MenuItem, openMenu, renderError, toast } from "../ui/widgets";
-import {
-  addSubscriberModal,
-  confirmBlock,
-  confirmClear,
-  confirmErase,
-  confirmUnblock,
-  confirmUnsubscribe,
-  viewSubscriberModal,
-} from "./dialogs";
+import { subscriberActs } from "./acts";
+import { addSubscriberModal } from "./dialogs";
 import { exportFile } from "./export";
-import { joinedVia } from "./provenance";
+import { breakableEmail, statusBadge, subscriberHref, suppressionFlag } from "./labels";
 
 // The story of the list as a whole: its composition (by-status counts) and the roster,
 // filterable, sortable, and searchable. Consent status and suppression are separate
@@ -53,6 +42,15 @@ const SUB_STATUSES: { value: SubscriberStatus; label: string }[] = [
   { value: "confirmed", label: "Confirmed" },
   { value: "pending", label: "Pending" },
   { value: "unsubscribed", label: "Unsubscribed" },
+];
+
+/** The slices of the list a route can open on (`#/subscribers/confirmed`), the dashboard's
+ *  tiles linking each; any other segment there names a subscriber. */
+export const LIST_FILTERS: readonly string[] = [
+  "confirmed",
+  "pending",
+  "unsubscribed",
+  "suppressed",
 ];
 
 export async function renderSubscribers(
@@ -71,11 +69,7 @@ export async function renderSubscribers(
   };
   if (initialFilter === "suppressed") {
     state.suppressed = "only";
-  } else if (
-    initialFilter === "confirmed" ||
-    initialFilter === "pending" ||
-    initialFilter === "unsubscribed"
-  ) {
+  } else if (initialFilter && LIST_FILTERS.includes(initialFilter)) {
     state.status = initialFilter;
   }
 
@@ -199,22 +193,6 @@ function wireCountFilters(root: HTMLElement, state: ListState, reload: () => voi
   };
 }
 
-// The inline suppression flag rides next to the email (suppression is a deliverability
-// overlay, not a consent status) and names WHY, which also says whose decision it was:
-// bounced (the provider's, or the previous service's for an import) or blocked (the
-// publisher's). Anything unrecognized falls back to a generic label. The pills carry no hover tooltip, which keyboard, screen-reader, and touch
-// users can't reach: the legend under the counts defines each label once, and a
-// subscriber's own detail belongs on their page.
-function flagLabel(s: Subscriber): string {
-  return (s.suppression && SUPPRESSION_FLAG[s.suppression.reason]) || "suppressed";
-}
-function suppressionFlag(s: Subscriber): Html | null {
-  if (!s.suppression) {
-    return null;
-  }
-  return html` <span class="badge suppressed row-flag">${flagLabel(s)}</span>`;
-}
-
 // The legend: what each label a row can show means (DESIGN §3), every pill drawn as the
 // list draws it beside its definition, so it also says what the colors mean; then the acts
 // on a subscriber and when each is the one to use, which say whose decision each records.
@@ -227,13 +205,17 @@ function legendRow(term: Html, means: string): Html {
 }
 function legend(): Html {
   const flags = Object.keys(FLAG_MEANING) as SuppressionFlag[];
-  const causes = Object.keys(CAUSE_MEANING) as UnsubscribeCause[];
   return html`<div class="sub-legend" id="subLegend" role="region" aria-labelledby="subLegendToggle" hidden><div class="sub-legend-body">
     <h2>Status</h2>
-    <dl>${SUB_STATUSES.map(({ value }) => legendRow(badge(value), STATUS_MEANING[value]))}</dl>
-    <h2>Why they left</h2>
-    <p>Beside an unsubscribed status:</p>
-    <dl>${causes.map((cause) => legendRow(html`<span class="muted">${CAUSE_LABEL[cause]}</span>`, CAUSE_MEANING[cause]))}</dl>
+    <dl>${SUB_STATUSES.map(({ value }) =>
+      legendRow(
+        badge(value),
+        // Where to read why someone left is the editor's to say; the shared words stop at what it means.
+        value === "unsubscribed"
+          ? `${STATUS_MEANING[value]} Why they left is on their page.`
+          : STATUS_MEANING[value],
+      ),
+    )}</dl>
     <h2>Suppressed</h2>
     <p>${SUPPRESSED_MEANING} The red flag beside the address says why:</p>
     <dl>${flags.map((flag) => legendRow(html`<span class="badge suppressed">${flag}</span>`, FLAG_MEANING[flag]))}</dl>
@@ -242,27 +224,6 @@ function legend(): Html {
       legendRow(html`<strong class="sub-legend-act">${label}</strong>`, when),
     )}</dl>
   </div></div>`;
-}
-
-// A suppressed address keeps its consent status, but the status isn't in effect while the
-// suppression stands, so its badge takes the not-mailed grey (DESIGN §3). An unsubscribed
-// row says beside its badge why the person left.
-function statusBadge(s: Subscriber): Html {
-  const status = s.suppression
-    ? html`<span class="badge ${s.status} held">${s.status}</span>`
-    : badge(s.status);
-  const cause =
-    s.status === "unsubscribed" && s.unsubscribe_cause
-      ? html` <span class="muted sub-cause">${CAUSE_LABEL[s.unsubscribe_cause]}</span>`
-      : null;
-  return html`${status}${cause}`;
-}
-
-// An address that has to wrap breaks before its "@", keeping the mailbox and the domain
-// whole where they fit, rather than wherever the column runs out.
-function breakableEmail(email: string): Html {
-  const at = email.lastIndexOf("@");
-  return at > 0 ? html`${email.slice(0, at)}<wbr>${email.slice(at)}` : html`${email}`;
 }
 
 function renderSubTable(
@@ -283,18 +244,26 @@ function renderSubTable(
     );
     return;
   }
-  // The joined and how cells are named so the stacked layout can label them. The wrapper is
+  // The joined cell is named so the stacked layout can label it. The wrapper is
   // what the stacking measures: this table stacks by its own width, not the viewport's.
   setHtml(
     listEl,
-    html`<div class="table-wrap subs-wrap"><table class="list-table subs-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-how"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Email", "email", state)}${th("Status", null, state)}${th("How they joined", null, state)}${th("Joined", "created_at", state)}<th></th></tr></thead><tbody>${rows.map(
+    html`<div class="table-wrap subs-wrap"><table class="list-table subs-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Email", "email", state)}${th("Status", null, state)}${th("Joined", "created_at", state)}<th></th></tr></thead><tbody>${rows.map(
       (s) => {
-        const how = joinedVia(s);
-        return html`<tr data-id="${s.id}"><td>${breakableEmail(s.email)}${suppressionFlag(s)}</td><td>${statusBadge(s)}</td><td class="muted how${how ? "" : " empty"}">${how ?? "—"}</td><td class="muted joined">${fmt(s.created_at)}</td><td class="act"><button class="icon" data-menu="${s.id}" aria-label="Subscriber actions" aria-haspopup="menu">⋯</button></td></tr>`;
+        return html`<tr class="clickable" data-id="${s.id}"><td><a class="sub-email" href="${subscriberHref(s.id)}">${breakableEmail(s.email)}</a>${suppressionFlag(s)}</td><td>${statusBadge(s)}</td><td class="muted joined">${fmt(s.created_at)}</td><td class="act"><button class="icon" data-menu="${s.id}" aria-label="Subscriber actions" aria-haspopup="menu">⋯</button></td></tr>`;
       },
     )}</tbody></table></div>`,
   );
   wireSort(listEl, state, reload);
+  // The whole row opens the subscriber's page, as Sent's rows open a record; the address is
+  // the link for the keyboard and a middle click, and the ⋯ menu stays outside the target.
+  for (const tr of $$<HTMLTableRowElement>("tr[data-id]", listEl)) {
+    tr.onclick = (e) => {
+      if (!(e.target instanceof Element && e.target.closest("a, button"))) {
+        location.hash = subscriberHref(tr.dataset.id ?? "");
+      }
+    };
+  }
   for (const b of $$<HTMLButtonElement>("[data-menu]", listEl)) {
     b.onclick = (e) => {
       e.stopPropagation();
@@ -302,54 +271,16 @@ function renderSubTable(
       if (!row) {
         return;
       }
-      // Anyone can be viewed, and anyone not already erased can be erased (SPEC §7); a
-      // pending or confirmed subscriber can be unsubscribed. An address with no suppression
-      // can be blocked; a block is undone by Unblock, and a bounce by Clear, the weightier act.
+      // Anyone can be viewed, on their own page; the acts are the ones it offers too.
       const items: MenuItem[] = [
         {
           label: "View subscriber",
-          onClick: () =>
-            viewSubscriberModal(
-              row,
-              signal,
-              row.suppression
-                ? { label: flagLabel(row), detail: row.suppression.detail }
-                : undefined,
-            ),
+          onClick: () => {
+            location.hash = subscriberHref(row.id);
+          },
         },
+        ...subscriberActs(row, reload, signal),
       ];
-      if (row.status !== "unsubscribed") {
-        items.push({
-          label: SUBSCRIBER_ACTIONS.unsubscribe.label,
-          danger: true,
-          onClick: () => confirmUnsubscribe(row, reload, signal),
-        });
-      }
-      if (!row.suppression) {
-        items.push({
-          label: SUBSCRIBER_ACTIONS.block.label,
-          danger: true,
-          onClick: () => confirmBlock(row, reload, signal),
-        });
-      } else if (row.suppression.reason === "manual") {
-        items.push({
-          label: SUBSCRIBER_ACTIONS.unblock.label,
-          onClick: () => confirmUnblock(row, reload, signal),
-        });
-      } else if (SUPPRESSION_FLAG[row.suppression.reason] === "bounced") {
-        items.push({
-          label: SUBSCRIBER_ACTIONS.clear.label,
-          danger: true,
-          onClick: () => confirmClear(row, reload, signal),
-        });
-      }
-      if (row.unsubscribe_cause !== "erased" || row.status !== "unsubscribed") {
-        items.push({
-          label: SUBSCRIBER_ACTIONS.erase.label,
-          danger: true,
-          onClick: () => confirmErase(row, reload, signal),
-        });
-      }
       openMenu(b, items, signal);
     };
   }

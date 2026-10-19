@@ -16,7 +16,8 @@ import { renderSettings } from "./settings/settings";
 import { renderTemplate } from "./settings/template";
 import { setNavOpen } from "./shell";
 import { renderImport } from "./subscribers/import";
-import { renderSubscribers } from "./subscribers/list";
+import { LIST_FILTERS, renderSubscribers } from "./subscribers/list";
+import { renderSubscriber } from "./subscribers/subscriber";
 
 const LEAVE_MSG = "You have unsaved changes. Leave without saving?";
 
@@ -72,6 +73,9 @@ export function route(): Promise<void> {
   }
   if (view === "subscribers" && arg === "import") {
     return mount(renderImport);
+  }
+  if (view === "subscribers" && arg && !LIST_FILTERS.includes(arg)) {
+    return mount((root, signal) => renderSubscriber(arg, root, signal));
   }
   if (view === "subscribers") {
     return mount((root, signal) => renderSubscribers(arg, root, signal));

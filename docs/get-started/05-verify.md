@@ -86,7 +86,7 @@ When an address bounces or marks your mail as spam, SES tells the app through SN
 
     Each one gets a confirmation email, which bounces or is marked as spam.
 
-1. In the editor, **Subscribers** lists the bounce address as **Pending** with a **bounced** flag, and the complaint address as **Unsubscribed**, with **complaint** beside it. The app mails neither again.
+1. In the editor, **Subscribers** lists the bounce address as **Pending** with a **bounced** flag, and the complaint address as **Unsubscribed**. Open its row: its page says it left by a complaint. The app mails neither again.
 
 If the bounce address has no flag, or the complaint address is still pending, SES's events aren't reaching the app. Check the configuration set and the SNS subscription in [Connect Amazon SES](04-ses.md#6-send-bounces-and-complaints-to-sns).
 

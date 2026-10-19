@@ -31,7 +31,6 @@ import {
 } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import {
-  CAUSE_LABEL,
   CAUSE_MEANING,
   FLAG_MEANING,
   STATUS_MEANING,
@@ -663,13 +662,16 @@ const REVISION_FIELDS: ReferenceField[] = [
 /** A subscriber's status and what it means, in the editor legend's words. */
 const STATUS_VALUES = (Object.keys(STATUS_MEANING) as SubscriberStatus[]).map((status) => ({
   value: status,
-  description: STATUS_MEANING[status],
+  description:
+    status === "unsubscribed"
+      ? `${STATUS_MEANING[status]} \`unsubscribe_cause\` says why.`
+      : STATUS_MEANING[status],
 }));
 
-/** Why a subscriber left, each with the words the editor shows beside the status and what it means. */
+/** Why a subscriber left, each with what it means, in the words the editor's subscriber page shows. */
 const CAUSE_VALUES = (Object.keys(CAUSE_MEANING) as UnsubscribeCause[]).map((cause) => ({
   value: cause,
-  description: `Shown as “${CAUSE_LABEL[cause]}”: ${CAUSE_MEANING[cause]}`,
+  description: CAUSE_MEANING[cause],
 }));
 
 /**
@@ -708,8 +710,14 @@ const SUBSCRIBER_FIELDS: ReferenceField[] = [
   },
   {
     name: "suppression",
-    type: "{ reason, detail } | null",
-    description: `Whether the address is suppressed, null when it isn't: \`reason\`, why and whose decision it was, as a suppression's (Suppressions), and \`detail\`, the provider's words or the publisher's. ${SUPPRESSED_MEANING}`,
+    type: "{ reason, detail, created_at } | null",
+    description: `Whether the address is suppressed, null when it isn't: \`reason\`, why and whose decision it was, as a suppression's (Suppressions), \`detail\`, the provider's words or the publisher's, and \`created_at\`, since when. ${SUPPRESSED_MEANING}`,
+  },
+  {
+    name: "receives_posts",
+    type: "boolean",
+    description:
+      "Whether a send firing now would include them: confirmed, and the address not suppressed. The status and the suppression say why not.",
   },
   {
     name: "unsubscribe_cause",
@@ -988,6 +996,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
       unsubscribed_at: null,
       unsubscribe_cause: null,
       suppression: null,
+      receives_posts: true,
     } satisfies Subscriber,
   },
   suppression: {

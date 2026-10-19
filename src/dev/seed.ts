@@ -6,11 +6,16 @@
  *
  * It models a chronological lifecycle so the app's states are actually exercised:
  * an email-only test send to the operator's own address before anything else (as Verify it
- * works has them send, SPEC §5), then an initial import of already-confirmed subscribers backdated before the first post,
+ * works has them send, SPEC §5), then an initial import of already-confirmed subscribers
+ * backdated before the first post, with its record and the file's account of each person,
  * four completed sends spread over time, and — in between — new confirmations (the
- * list grows) and unsubscribes (the list churns), plus a hard bounce that becomes a
- * suppression, a spam complaint that unsubscribes its reader, a block on an unsubscribed and a
- * pending row, and an erased person who has signed up again.
+ * list grows) and unsubscribes (the list churns). Along the way the list meets one of each
+ * state a publisher can find on it (SPEC §7), as a real list this size has: a hard bounce that
+ * becomes a suppression and a soft one that doesn't, a spam complaint that unsubscribes its
+ * reader, a reader the publisher unsubscribed on request, one the import says left elsewhere,
+ * one who left mid-send and so was skipped, one erased at their request, an erased person
+ * who has signed up again, blocks on an unsubscribed and a pending row and on a role address
+ * that never subscribed, and a bounce the import brought for an address it didn't add.
  * The upshot is that every completed send freezes the audience AS IT WAS at that moment: someone who unsubscribes after post #2 is
  * still recorded as mailed by posts #1–#2, and a later suppression shadows the current
  * audience (confirmed − suppressed = mailable, I1) without rewriting any past send.
@@ -29,18 +34,22 @@
  * is why the inserts go through the seed-only helpers in `db/seed.ts`.
  */
 
+import { ATTESTATION, type OptIn, type OutcomeCounts } from "../../shared/imports";
 import { slugify } from "../../shared/slug";
+import { ERASED_PREFIX } from "../../shared/subscribers";
 import type { ImageRow } from "../db/images";
 import type { PostRow, RevisionRow } from "../db/posts";
 import {
   insertDeliveries,
   insertImage,
+  insertImport,
   insertPost,
   insertSend,
   insertSubscribers,
   insertSuppressions,
   resetAll,
   type SeedDelivery,
+  type SeedImport,
   type SeedSubscriber,
   type SeedSuppression,
 } from "../db/seed";
@@ -86,7 +95,10 @@ interface Timeline {
   now: number;
   /** The operator's test send, before the list is imported (Verify it works). */
   testSendAt: number;
+  /** When the list's first confirmations happened, at the previous service (the file's dates). */
   importAt: number;
+  /** When the import of that list was committed here. */
+  importCommitAt: number;
   bounceAt: number; // hard bounce reported just after #2
   complaintAt: number; // spam complaint reported just after #2
   scheduledFireAt: number;
@@ -107,6 +119,7 @@ export function buildTimeline(now: number): Timeline {
     now,
     testSendAt: importAt - 2 * DAY,
     importAt,
+    importCommitAt: first - 2 * DAY,
     bounceAt: send2At + DAY,
     complaintAt: send2At + 2 * DAY,
     scheduledFireAt: onTheMinute(now + 2 * DAY), // on the minute, as the API stores a fire time
@@ -351,10 +364,105 @@ interface BuiltAudience {
   suppressions: SeedSuppression[];
   /** The mailable audience frozen at each completed send (sorted emails), oldest first. */
   sentAudiences: string[][];
-  /** The bounce/complaint webhook events attributed to send #2 (reported just after it,
-   *  and the source of this dataset's suppressions), keyed by recipient email. Applied to
-   *  that send's delivery rows so the record carries the event that shadowed each address. */
-  sendTwoEvents: Map<string, DeliveryEvent>;
+  /** The provider events on each completed send's rows, oldest send first, keyed by recipient
+   *  email: send #2's bounce and complaint (the source of this dataset's bounce suppressions
+   *  and its complaint), and, on the curated list, send #3's soft bounce. */
+  sendEvents: Map<string, DeliveryEvent>[];
+  /** The recipients each completed send skipped: in its audience when it was fixed, and
+   *  unsubscribed by their turn. */
+  sendSkipped: Set<string>[];
+  /** The import the list came in by, its record bar who committed it. */
+  importRecord: Omit<SeedImport, "principal_email">;
+}
+
+/** The previous service the demo list was exported from, and its file. */
+const IMPORT_ORIGIN = "sendy";
+const IMPORT_FILE = "sendy-export.csv";
+
+/**
+ * The import's account of one person, as a commit records it (SPEC §7): added here when the
+ * import was committed, never sent a confirmation from here, and holding where and how they
+ * opted in and the file's evidence for it. Their `confirmed_at` stays the file's own date.
+ */
+function markImported(sub: SeedSubscriber, i: number, importId: string, commitAt: number): void {
+  sub.created_at = commitAt;
+  sub.confirm_token = null;
+  sub.confirm_sent_at = null;
+  sub.origin = IMPORT_ORIGIN;
+  sub.opt_in = (i % 5 === 4 ? "single" : "double") satisfies OptIn;
+  sub.consent_evidence = JSON.stringify({
+    signup_ip: `198.51.100.${(i % 254) + 1}`,
+    form: i % 3 === 0 ? "Sidebar" : "Homepage",
+  });
+  sub.import_id = importId;
+}
+
+/** An import's counts, every outcome present, from the ones it applied. */
+function importCounts(applied: Partial<OutcomeCounts>): OutcomeCounts {
+  return {
+    added_confirmed: 0,
+    confirmed_pending: 0,
+    unchanged: 0,
+    unsubscribed: 0,
+    erased: 0,
+    added_unsubscribed: 0,
+    kept_confirmed_newer: 0,
+    kept_unsubscribed: 0,
+    kept_suppressed: 0,
+    suppressed: 0,
+    left_out: 0,
+    invalid: 0,
+    merged: 0,
+    ...applied,
+  };
+}
+
+/** An import's record (SPEC §8), bar who committed it: one file, attested, with its counts. */
+function importRecordFor(
+  id: string,
+  commitAt: number,
+  applied: Partial<OutcomeCounts>,
+  suppressionsAdded: number,
+): Omit<SeedImport, "principal_email"> {
+  return {
+    id,
+    created_at: commitAt,
+    attestation_version: ATTESTATION.version,
+    file_name: IMPORT_FILE,
+    file_sha256: newToken(32),
+    plan_hash: newToken(32),
+    counts: importCounts(applied),
+    suppressions_added: suppressionsAdded,
+  };
+}
+
+/**
+ * Erase a subscriber as Erase does (SPEC §7), after their past sends: stripped to the address
+ * and when, unsubscribed by the erasure, and every frozen audience holding one placeholder in
+ * place of the address, so each send's record still sums to its audience.
+ */
+function erase(sub: SeedSubscriber, at: number, audiences: string[][]): void {
+  const placeholder = `${ERASED_PREFIX}${newToken(8)}`;
+  for (const audience of audiences) {
+    const i = audience.indexOf(sub.email);
+    if (i >= 0) {
+      audience[i] = placeholder;
+    }
+  }
+  Object.assign(sub, {
+    status: "unsubscribed",
+    unsubscribe_cause: "erased",
+    created_at: at,
+    unsubscribed_at: at,
+    confirmed_at: null,
+    confirm_token: null,
+    confirm_sent_at: null,
+    unsub_token: null,
+    origin: null,
+    opt_in: null,
+    consent_evidence: null,
+    import_id: null,
+  } satisfies Partial<SeedSubscriber>);
 }
 
 /** A confirmed subscriber's spam complaint, which unsubscribes them from `at` (SPEC §7). */
@@ -395,11 +503,13 @@ function mailableAt(subs: SeedSubscriber[], sups: SeedSuppression[], t: number):
  * the days after a post lands, a few still-pending sign-ups biased toward the recent past,
  * a bounce and a complaint drawn from the core so they visibly leave the current audience
  * (the bounce suppressed, the complaint unsubscribed), two blocks on unsubscribed and pending
- * rows that shadow nothing, and a pending sign-up from someone erased before. The counts are
- * chosen so the mailable audience genuinely fluctuates from send to send
- * (140 → 141 → 142 → 148) and settles at 155 today (156 confirmed, 1 of them suppressed).
+ * rows that shadow nothing, and a pending sign-up from someone erased before; then one of
+ * each remaining state (see the end). The counts are chosen so the mailable audience
+ * genuinely grows from send to send (83 → 103 → 120 → 141) and settles at 158 today
+ * (159 confirmed, 1 of them suppressed), about half of them imported and half signed up here.
  */
 function buildAudience(t: Timeline): BuiltAudience {
+  const importId = newId();
   let seq = 0;
   const subscribers: SeedSubscriber[] = [];
   const make = (
@@ -430,12 +540,12 @@ function buildAudience(t: Timeline): BuiltAudience {
   // — each wave leaving in the days after the last post it received, so its members are
   // still mailed by that post but not the next; the rest are the core that stays.
   //
-  // The churners are scattered THROUGH the import window, not appended after the core, so a
-  // subscriber's signup date carries no hint of whether they later leave — the roster reads
-  // as mixed statuses over time, not a block of confirmations followed by a block of
-  // unsubscribes. The wave tags are interleaved (round-robin) across those scattered slots
+  // The churners are scattered THROUGH the file's confirmation dates, not appended after the
+  // core, so a subscriber's confirmation date carries no hint of whether they later leave.
+  // Every imported row was added here when the import was committed, so that is when they
+  // joined (`markImported`). The wave tags are interleaved (round-robin) across those scattered slots
   // too, so "left after #1" and "left after #3" both span the whole window.
-  const IMPORT = 140;
+  const IMPORT = 80;
   const importStep = (10 * DAY) / IMPORT; // spread across ~10 days, all before send #1
   const churnWaves = [
     { sentAt: unwrap(t.sentAt[0], "send timeline slot"), count: 6 }, // after #1, gone before #2
@@ -470,20 +580,28 @@ function buildAudience(t: Timeline): BuiltAudience {
     } else {
       coreEmails.push(make("confirmed", createdAt, createdAt, null));
     }
+    markImported(
+      unwrap(subscribers.at(-1), "imported subscriber"),
+      slot,
+      importId,
+      t.importCommitAt,
+    );
   }
 
   // Organic growth: confirmed sign-ups arriving in one continuous stream from just after the
-  // first post right up to today — the list is still growing, it doesn't stop at the last
-  // historical send. Each confirms shortly after signing up (double opt-in is near-instant for
+  // import, a day before the first post, right up to today: the list is still growing, it
+  // doesn't stop at the last historical send. By today they are about as many as the import
+  // brought, so the list reads as half carried over and half grown here. Each confirms shortly after signing up (double opt-in is near-instant for
   // most), and the stream spans every send, so every completed send freezes a different,
   // growing slice while the newest confirmations sit near "now".
-  const GROWTH = 32;
-  const growthStart = unwrap(t.sentAt[0], "send timeline slot") + 3 * DAY;
+  const GROWTH = 96;
+  const growthStart = t.importCommitAt + DAY;
   const growthSpan = t.now - growthStart;
+  const growthEmails: string[] = [];
   for (let i = 0; i < GROWTH; i++) {
     const signupAt = Math.round(growthStart + ((i + 0.5) * growthSpan) / GROWTH);
     const confirmLatency = Math.round((0.3 + (i % 5) * 0.4) * HOUR); // ~20 min to ~2 h
-    make("confirmed", signupAt, signupAt + confirmLatency, null);
+    growthEmails.push(make("confirmed", signupAt, signupAt + confirmLatency, null));
   }
   // Still pending: signed up but never clicked confirm — in no audience. Confirmation is
   // near-instant for almost everyone, so a still-pending row is either a sign-up from the last
@@ -533,32 +651,100 @@ function buildAudience(t: Timeline): BuiltAudience {
     subscribers.find((s) => s.email === blockedEmail),
     "unsubscribed subscriber",
   );
+  // A block is the publisher's own judgment, so each says why in their words.
   suppressions.push(
     {
       email: blockedEmail,
       reason: "manual",
-      detail: "Asked by reply not to be contacted again",
+      detail: "Forwards to a shared team inbox",
       created_at: unwrap(blocked.unsubscribed_at, "unsubscribe time") + DAY,
     },
     {
       email: oldestPending.email,
       reason: "manual",
-      detail: "Signed up with a role address",
+      detail: "Signed up three times in a minute, likely a bot",
       created_at: oldestPending.createdAt + 6 * HOUR,
     },
   );
 
+  // The rest of the states a list this size meets, none of them changing a send's audience:
+  //  - Someone the import says left at the previous service, without saying why: added here
+  //    unsubscribed, never mailed.
+  //  - A bounce the import brought for an address it didn't add as a subscriber.
+  //  - A role address the publisher blocked before it ever subscribed.
+  make("unsubscribed", t.importCommitAt, null, t.importAt - 30 * DAY);
+  const left = unwrap(subscribers.at(-1), "imported leaver");
+  markImported(left, IMPORT, importId, t.importCommitAt);
+  left.unsubscribe_cause = "import";
+  suppressions.push(
+    {
+      email: "former.reader@post.example",
+      reason: "import_bounce",
+      detail: `imported from ${IMPORT_FILE}`,
+      created_at: t.importCommitAt,
+    },
+    {
+      email: "info@mail.example",
+      reason: "manual",
+      detail: "A shared role inbox, not a person",
+      created_at: unwrap(t.sentAt[1], "send timeline slot") + 3 * DAY,
+    },
+  );
+
   const sentAudiences = t.sentAt.map((at) => mailableAt(subscribers, suppressions, at));
+  const sendEvents = t.sentAt.map(() => new Map<string, DeliveryEvent>());
+  const sendSkipped = t.sentAt.map(() => new Set<string>());
   // The bounce and complaint were reported just after post #2, so their delivery events
   // belong to that send alone (see the loop in seedDatabase).
-  const sendTwoEvents = new Map<string, DeliveryEvent>([
-    [
-      bounceEmail,
-      { event: "bounced", detail: "Recipient address rejected (550 5.1.1)", at: t.bounceAt },
-    ],
-    [complaintEmail, { event: "complained", detail: "abuse", at: t.complaintAt }],
-  ]);
-  return { subscribers, suppressions, sentAudiences, sendTwoEvents };
+  sendEvents[1]?.set(bounceEmail, {
+    event: "bounced",
+    detail: "Recipient address rejected (550 5.1.1)",
+    at: t.bounceAt,
+  });
+  sendEvents[1]?.set(complaintEmail, { event: "complained", detail: "abuse", at: t.complaintAt });
+  // A soft bounce on post #3: a full mailbox, counted on the record, and the address stays.
+  const sentThird = unwrap(t.sentAt[2], "send timeline slot");
+  sendEvents[2]?.set(unwrap(coreEmails[20], "core subscriber"), {
+    event: "bounced",
+    kind: "soft",
+    detail: "Mailbox full (452 4.2.2)",
+    at: sentThird + 3 * HOUR,
+  });
+
+  // After the audiences are fixed, the acts that change who someone is today without
+  // changing who each send went to:
+  //  - A churner who wrote in to ask to leave, whom the publisher unsubscribed.
+  const onRequest = unwrap(
+    subscribers.find((s) => s.email === churnEmails[1]),
+    "unsubscribed subscriber",
+  );
+  onRequest.unsubscribe_cause = "publisher";
+  //  - A reader who unsubscribed while post #4 was going out, after its audience was fixed and
+  //    before their turn, so the send skipped them.
+  const sentFourth = unwrap(t.sentAt[3], "send timeline slot");
+  const leaverEmail = unwrap(growthEmails[20], "growth subscriber");
+  const leaver = unwrap(
+    subscribers.find((s) => s.email === leaverEmail),
+    "growth subscriber",
+  );
+  leaver.status = "unsubscribed";
+  leaver.unsubscribed_at = onTheMinute(sentFourth) - 60 * 1000 + 1000;
+  sendSkipped[3]?.add(leaverEmail);
+  //  - A churner from after post #3 who later asked to be erased: their record is stripped,
+  //    and posts #1 to #3 show an erased recipient in their place.
+  const erasedSub = unwrap(
+    subscribers.find((s) => s.email === churnEmails[2]),
+    "unsubscribed subscriber",
+  );
+  erase(erasedSub, unwrap(erasedSub.unsubscribed_at, "unsubscribe time") + 2 * DAY, sentAudiences);
+
+  const importRecord = importRecordFor(
+    importId,
+    t.importCommitAt,
+    { added_confirmed: IMPORT, added_unsubscribed: 1, suppressed: 1 },
+    1,
+  );
+  return { subscribers, suppressions, sentAudiences, sendEvents, sendSkipped, importRecord };
 }
 
 // --- scaled audience (parametric seed) --------------------------------------
@@ -623,6 +809,7 @@ function drawUnsentSlots(rand: () => number, audienceLen: number): Set<number> {
  * to the 100k cap and beyond.
  */
 export function buildScaledAudience(t: Timeline, size: number, rand: () => number): BuiltAudience {
+  const importId = newId();
   // Jitter the target and each cohort with the PRNG so the counts read like a real list —
   // 1283, not exactly 1000 — instead of landing on round, synthetic-looking numbers. The
   // jitter is part of the seeded stream, so a given (size, seed) still reproduces exactly.
@@ -698,6 +885,12 @@ export function buildScaledAudience(t: Timeline, size: number, rand: () => numbe
     } else {
       coreEmails.push(make("confirmed", createdAt, createdAt, null));
     }
+    markImported(
+      unwrap(subscribers.at(-1), "imported subscriber"),
+      slot,
+      importId,
+      t.importCommitAt,
+    );
   }
 
   // Organic growth: one continuous stream of confirmed sign-ups from just after the first
@@ -730,7 +923,8 @@ export function buildScaledAudience(t: Timeline, size: number, rand: () => numbe
   const complaintCount = Math.max(1, Math.round(n * SCALE.complaintRate * jitter(0.3)));
   const victims = drawDistinct(rand, bounceCount + complaintCount, coreEmails.length);
   const suppressions: SeedSuppression[] = [];
-  const sendTwoEvents = new Map<string, DeliveryEvent>();
+  const sendEvents = t.sentAt.map(() => new Map<string, DeliveryEvent>());
+  const sendTwoEvents = unwrap(sendEvents[1], "send #2 events");
   victims.slice(0, bounceCount).forEach((idx) => {
     const email = unwrap(coreEmails[idx], "core subscriber");
     suppressions.push({
@@ -752,7 +946,14 @@ export function buildScaledAudience(t: Timeline, size: number, rand: () => numbe
   });
 
   const sentAudiences = t.sentAt.map((at) => mailableAt(subscribers, suppressions, at));
-  return { subscribers, suppressions, sentAudiences, sendTwoEvents };
+  return {
+    subscribers,
+    suppressions,
+    sentAudiences,
+    sendEvents,
+    sendSkipped: t.sentAt.map(() => new Set<string>()),
+    importRecord: importRecordFor(importId, t.importCommitAt, { added_confirmed: importCount }, 0),
+  };
 }
 
 /**
@@ -783,6 +984,8 @@ export function parseSeedSize(raw: string | null | undefined): number | undefine
 /** A post-send provider event applied to one recipient's delivery row. */
 interface DeliveryEvent {
   event: string;
+  /** For a bounce: whether the provider called it permanent; absent, `hard`. */
+  kind?: "hard" | "soft";
   detail: string;
   at: number;
 }
@@ -794,8 +997,9 @@ interface DeliveryEvent {
  * recipients at `unsentSlots` (audience indices the caller picks — fixed for the curated
  * demo, drawn from the seeded PRNG for a scaled list) are left unsent at the transport
  * level (a send-loop failure, which does NOT itself suppress — only the webhook events
- * below do); and the addresses in `events` carry the bounce/complaint that produced this
- * send's suppressions.
+ * below do); the addresses in `events` carry what the provider reported after (the bounce
+ * and complaint that produced this send's suppressions, or a soft bounce that didn't); and the
+ * addresses in `skipped` had left by their turn, so the send never handed them over.
  */
 function buildDeliveries(
   sendId: string,
@@ -803,6 +1007,7 @@ function buildDeliveries(
   sentAt: number,
   events: Map<string, DeliveryEvent>,
   unsentSlots: Set<number>,
+  skipped: Set<string> = new Set(),
 ): SeedDelivery[] {
   return audience.map((email, i): SeedDelivery => {
     const base: SeedDelivery = {
@@ -819,11 +1024,23 @@ function buildDeliveries(
     };
     const ev = events.get(email);
     if (ev) {
-      // Accepted by the provider, then bounced/complained via a later webhook. The demo's
-      // bounces are permanent (they draw the send's suppressions), so their frozen kind is
-      // `hard`; a complaint carries no bounce kind.
-      const bounce_kind = ev.event === "bounced" ? "hard" : null;
+      // Accepted by the provider, then bounced/complained via a later webhook. A bounce keeps
+      // its kind, hard unless said (a hard one draws the send's suppression); a complaint
+      // carries none.
+      const bounce_kind = ev.event === "bounced" ? (ev.kind ?? "hard") : null;
       return { ...base, event: ev.event, event_detail: ev.detail, event_at: ev.at, bounce_kind };
+    }
+    if (skipped.has(email)) {
+      return {
+        ...base,
+        status: "skipped",
+        provider_id: null,
+        attempts: 0,
+        // Closed by the run that reached them, so no later than the send's completion.
+        updated_at: sentAt,
+        event: null,
+        event_at: null,
+      };
     }
     if (unsentSlots.has(i)) {
       return {
@@ -975,6 +1192,11 @@ export async function seedDatabase(
   const rand = makePrng(options?.seed ?? DEFAULT_SEED);
   const built = size != null ? buildScaledAudience(timeline, size, rand) : buildAudience(timeline);
   built.subscribers.push(...testRecipients(demo.posts, timeline));
+  // The import's record first, since its subscribers name it; the publisher committed it.
+  await insertImport(db, {
+    ...built.importRecord,
+    principal_email: demo.publication.testRecipients[0] ?? "editor@fieldnotes.example",
+  });
   await insertSubscribers(db, built.subscribers);
   await insertSuppressions(db, built.suppressions);
 
@@ -1120,14 +1342,21 @@ export async function seedDatabase(
       started_at: fireAt,
       completed_at: completedAt,
     });
-    // The bounce and the complaint were reported just after post #2, so their events
-    // (and the suppressions they produced) belong to that send alone.
-    const events: Map<string, DeliveryEvent> = sentIndex === 1 ? built.sendTwoEvents : new Map();
+    // What the provider reported after each send, and who it skipped (see the builders).
+    const events = built.sendEvents[sentIndex] ?? new Map<string, DeliveryEvent>();
+    const skipped = built.sendSkipped[sentIndex] ?? new Set<string>();
     // Transport failures: the curated list's two fixed slots, or a PRNG-drawn set scaled
     // to the frozen audience when a size was requested.
     const unsentSlots =
       size != null ? drawUnsentSlots(rand, sentAudience.length) : new Set<number>([7, 53]);
-    const deliveries = buildDeliveries(sendId, sentAudience, completedAt, events, unsentSlots);
+    const deliveries = buildDeliveries(
+      sendId,
+      sentAudience,
+      completedAt,
+      events,
+      unsentSlots,
+      skipped,
+    );
     await insertDeliveries(db, deliveries);
     // The seed writes delivery rows directly (fixture data the normal path never
     // produces), so bring the denormalized counters (`sends.c_*`) in line with them.

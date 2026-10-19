@@ -124,7 +124,7 @@ describe("buildScaledAudience", () => {
     expect(complainers.length).toBeGreaterThanOrEqual(1);
     expect(built.suppressions.every((x) => x.reason === "bounce")).toBe(true);
     // The second send's events are those bounces and complaints.
-    expect(built.sendTwoEvents.size).toBe(built.suppressions.length + complainers.length);
+    expect(built.sendEvents[1]!.size).toBe(built.suppressions.length + complainers.length);
   });
 
   it("is reproducible for a (size, seed) and varies the churn timing across seeds", () => {
@@ -220,8 +220,8 @@ describe("dev seed — scaled (parametric, DB-backed)", () => {
   it("leaves the default (unsized) seed unchanged", async () => {
     const summary = await seedDatabase(env, config());
     // The curated list's signature numbers — the two-path contract's default half.
-    expect(summary.subscribers.confirmed).toBe(156);
-    expect(summary.suppressions).toBe(3);
-    expect(summary.audience).toBe(155);
+    expect(summary.subscribers.confirmed).toBe(159);
+    expect(summary.suppressions).toBe(5);
+    expect(summary.audience).toBe(158);
   });
 });

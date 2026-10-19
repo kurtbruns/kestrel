@@ -54,6 +54,7 @@ import * as scheduleRoutes from "./routes/schedule";
 import * as sendRoutes from "./routes/sends";
 import * as settingsRoutes from "./routes/settings";
 import * as subscriberRoutes from "./routes/subscribers";
+import { SUBSCRIBER_DELIVERIES_PAGE } from "./routes/subscribers";
 import * as suppressionRoutes from "./routes/suppressions";
 import * as webhookRoutes from "./routes/webhooks";
 import { SETTLE_FOLLOW_MS } from "./send/feed";
@@ -1663,6 +1664,59 @@ export function createRouter({
       handler: subscriberRoutes.get,
     },
     {
+      method: "GET",
+      path: "/api/subscribers/:id/deliveries",
+      access: "admin",
+      resource: "subscribers",
+      title: "List a subscriber's deliveries",
+      summary:
+        "Every send the subscriber's address was in, newest first: the send's view beside the address's row in its record.",
+      description: `What happened to the address on each send: whether the provider accepted it, or it was left unsent or skipped, and what the provider reported after. Read from the records, the source of truth, a page at a time: following \`next\` until \`null\` reads each send once, the server setting the page size (${SUBSCRIBER_DELIVERIES_PAGE} sends). An erased subscriber's past rows show a placeholder in place of the address, so none of them is listed.`,
+      query: [
+        {
+          name: "after",
+          description:
+            "The `next` a page returned, for the page after it; leave it out for the first. A value this server didn't issue is a 400 naming the field.",
+        },
+      ],
+      example: {
+        response: {
+          deliveries: [
+            {
+              send: sendBrief({ status: "sent", phase: "complete" }),
+              delivery: {
+                email: "reader@example.com",
+                status: "accepted",
+                event: "bounced",
+                event_detail: "Permanent/General",
+                event_at: 1768467700000,
+                error: null,
+                attempts: 1,
+                bounce_kind: "hard",
+              },
+            },
+          ],
+          next: null,
+        },
+      },
+      returns: {
+        fields: [
+          {
+            name: "deliveries",
+            type: "object[]",
+            description:
+              "One a send, newest fire time first: `send`, the send's view, and `delivery`, the address's row in its record, as `GET /api/sends/:id/deliveries` lists it: `status`, the hand-off (`pending`, `dispatched`, `accepted`, `unsent`, `skipped`), and `event`, what the provider reported after (`delivered`, `bounced`, `complained`, or null), with `event_detail`, `event_at`, `error`, `attempts`, and `bounce_kind`.",
+          },
+          {
+            name: "next",
+            type: "string | null",
+            description: "The `after` for the next page, or null on the last.",
+          },
+        ],
+      },
+      handler: subscriberRoutes.deliveries,
+    },
+    {
       method: "POST",
       path: "/api/subscribers/:id/unsubscribe",
       access: "admin",
@@ -1703,6 +1757,7 @@ export function createRouter({
             consent_evidence: null,
             import_id: null,
             suppression: null,
+            receives_posts: false,
           },
           deliveries: 12,
         },
@@ -1912,6 +1967,58 @@ export function createRouter({
         ...importRefusals,
       ],
       handler: importRoutes.commit,
+    },
+    {
+      // After the format and its templates, which `:id` would otherwise take as an id.
+      method: "GET",
+      path: "/api/imports/:id",
+      access: "admin",
+      resource: "imports",
+      title: "Get an import",
+      summary:
+        "One committed import's record: when, by whom, the attestation, the file, and the counts. Never an address.",
+      description:
+        "A subscriber's `import_id` names the import that brought them; this is its record, the one a commit answered.",
+      example: {
+        response: {
+          import: {
+            id: "imp_1",
+            created_at: 1768467600000,
+            principal: { kind: "human", email: "you@example.com" },
+            attestation_version: 1,
+            file_name: "subscribers.csv",
+            file_sha256: "3b1f…",
+            plan_hash: "9f2c…",
+            counts: {
+              added_confirmed: 1,
+              confirmed_pending: 0,
+              unchanged: 0,
+              unsubscribed: 0,
+              erased: 0,
+              added_unsubscribed: 1,
+              kept_confirmed_newer: 0,
+              kept_unsubscribed: 0,
+              kept_suppressed: 0,
+              suppressed: 0,
+              left_out: 0,
+              invalid: 0,
+              merged: 0,
+            },
+            suppressions_added: 0,
+          },
+        },
+      },
+      returns: {
+        fields: [
+          {
+            name: "import",
+            type: "object",
+            description:
+              "The record: `id`; `created_at`, when it was committed; `principal`, who committed it (`kind` `human` with their `email`, or `service` with null); `attestation_version`, the attestation's wording, null when no row was confirmed; `file_name` and `file_sha256`; `plan_hash`; `counts`, rows by outcome; and `suppressions_added`.",
+          },
+        ],
+      },
+      handler: importRoutes.get,
     },
 
     // --- suppressions (authed admin) ---

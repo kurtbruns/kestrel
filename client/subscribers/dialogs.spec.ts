@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CAUSE_MEANING } from "../../shared/subscriber_meanings";
 import { appState } from "../state";
 import {
   $,
@@ -10,13 +9,7 @@ import {
   settingsResponse,
   typeInto,
 } from "../test/support";
-import { fmt } from "../ui/format";
-import {
-  addSubscriberModal,
-  confirmErase,
-  confirmUnsubscribe,
-  viewSubscriberModal,
-} from "./dialogs";
+import { addSubscriberModal, confirmErase, confirmUnsubscribe } from "./dialogs";
 
 // The signal of a page that stays mounted throughout.
 const live = new AbortController().signal;
@@ -142,6 +135,7 @@ describe("confirmUnsubscribe", () => {
     consent_evidence: null,
     import_id: null,
     suppression: null,
+    receives_posts: true,
   };
 
   it("names the address, unsubscribes on confirm, and tells the caller", async () => {
@@ -171,7 +165,7 @@ describe("confirmUnsubscribe", () => {
             ...sub,
             status: "unsubscribed",
             unsubscribe_cause: "erased",
-            suppression: { reason: "bounce", detail: null },
+            suppression: { reason: "bounce", detail: null, created_at: 1 },
           },
           deliveries: 3,
         }),
@@ -201,103 +195,5 @@ describe("confirmUnsubscribe", () => {
     expect(document.querySelector(".modal")).toBeNull();
     expect(fake.calls).toEqual([]);
     expect(onDone).not.toHaveBeenCalled();
-  });
-});
-
-describe("viewSubscriberModal", () => {
-  const signedUp = {
-    id: "s2",
-    email: "left@b.c",
-    status: "unsubscribed" as const,
-    confirm_token: null,
-    confirm_sent_at: 1,
-    confirm_attempt_at: 1,
-    unsub_token: "t",
-    created_at: 1,
-    confirmed_at: null,
-    unsubscribed_at: 3,
-    unsubscribe_cause: "reader" as const,
-    origin: "kestrel",
-    opt_in: "double" as const,
-    consent_evidence: null,
-    import_id: null,
-    suppression: null,
-  };
-
-  /** The subscriber's rows, label to value, as the dialog shows them. */
-  const recordRows = () => {
-    const dts = [...document.querySelectorAll(".sub-dl dt")];
-    return Object.fromEntries(
-      dts.map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]),
-    );
-  };
-
-  it("dates every subscriber Joined, as the roster does, and says an import's confirmation date is the file's (SPEC §7)", () => {
-    fake = fakeApi([]);
-    const importedAt = Date.UTC(2026, 9, 13, 12);
-    const fileSaid = Date.UTC(2024, 2, 1, 9, 30);
-    viewSubscriberModal(
-      {
-        ...signedUp,
-        status: "confirmed",
-        created_at: importedAt,
-        confirmed_at: fileSaid,
-        unsubscribed_at: null,
-        origin: "sendy",
-        opt_in: "single",
-        import_id: "imp1",
-      },
-      live,
-    );
-    const rows = recordRows();
-    expect(rows.Joined).toBe(fmt(importedAt));
-    expect(rows.Confirmed).toBe(fmt(fileSaid));
-    expect("Imported" in rows || "Subscribed" in rows).toBe(false);
-    expect($(".sub-note").textContent).toBe(
-      "The origin, opt-in, confirmation date, and evidence are what the imported file said, not something Kestrel recorded itself.",
-    );
-    $("#vsClose").click();
-    // Someone who joined here reads the same way, with no line about a file.
-    viewSubscriberModal({ ...signedUp, status: "confirmed", created_at: 5, confirmed_at: 6 }, live);
-    const here = recordRows();
-    expect(here.Joined).toBe(fmt(5));
-    expect("Imported" in here || "Subscribed" in here).toBe(false);
-    expect(document.querySelector(".sub-note")).toBeNull();
-    expect(fake.calls).toEqual([]);
-  });
-
-  it("says a reader who signed up here and left never confirmed, and a pending one hasn't yet", () => {
-    fake = fakeApi([]);
-    viewSubscriberModal(signedUp, live);
-    expect($(".sub-dl dd").textContent).toBe("Signed up here, never confirmed");
-    expect($(".sub-dl").textContent).toContain("None recorded");
-    $("#vsClose").click();
-    viewSubscriberModal(
-      { ...signedUp, status: "pending", unsubscribed_at: null, unsubscribe_cause: null },
-      live,
-    );
-    expect($(".sub-dl dd").textContent).toBe("Signed up here, not confirmed yet");
-    expect(fake.calls).toEqual([]);
-  });
-
-  it("says why someone left, and keeps nothing of how an erased person joined (SPEC §7)", () => {
-    fake = fakeApi([]);
-    viewSubscriberModal(signedUp, live);
-    expect(recordRows()["Why they left"]).toBe(CAUSE_MEANING.reader);
-    $("#vsClose").click();
-    viewSubscriberModal(
-      {
-        ...signedUp,
-        unsubscribe_cause: "erased",
-        unsub_token: null,
-        origin: null,
-        opt_in: null,
-      },
-      live,
-    );
-    const rows = recordRows();
-    expect(rows["How they joined"]).toBe("Not kept: they were erased");
-    expect(rows["Why they left"]).toBe(CAUSE_MEANING.erased);
-    expect(fake.calls).toEqual([]);
   });
 });

@@ -1638,12 +1638,6 @@ td a:hover {
   font-size: 11px;
   vertical-align: middle;
 }
-/* Why an unsubscribed row left, beside its status: plain words, secondary to the badge. */
-.sub-cause {
-  margin-left: 2px;
-  font-size: 12px;
-  white-space: nowrap;
-}
 
 /* The Subscribers summary: the counts, with the Legend toggle at the card's right edge
    (at the end of the counts' last line when they wrap), and the legend opening below
@@ -1860,8 +1854,10 @@ td a:hover {
 .dash-drafts {
   table-layout: fixed;
 }
+/* Wide enough for the longest "edited <date>", a two-digit day and hour included, with the
+   cell's padding: the fixed layout clips anything wider rather than growing the column. */
 .dash-drafts td.edited {
-  width: 11.5em;
+  width: 15em;
   white-space: nowrap;
 }
 @media (min-width: 721px) {
@@ -1873,13 +1869,15 @@ td a:hover {
 .list-table .c-act {
   width: 56px;
 }
-/* Subscribers: how each joined ("Imported · Sendy, single opt-in"), which may wrap to two
-   lines; the table takes a wider floor so the email column keeps room beside it. */
-.list-table .c-how {
-  width: 152px;
-}
+/* Subscribers: a floor that keeps the email column about 250px beside its two others. With
+   only Status and Joined beside an address, which rarely needs more than half the row, fixed
+   widths left one wide gap before them; a share of the row each spreads the space evenly. */
 .list-table.subs-table {
-  min-width: 680px;
+  min-width: 610px;
+}
+.list-table.subs-table .c-status,
+.list-table.subs-table .c-date {
+  width: 24%;
 }
 
 .dash-section table {
@@ -6733,7 +6731,7 @@ body.has-savebar .content {
 .subs-wrap {
   container-type: inline-size;
 }
-@container (max-width: 759px) {
+@container (max-width: 609px) {
   .list-table.subs-table.stacks,
   .list-table.subs-table.stacks tbody,
   .list-table.subs-table.stacks tr {
@@ -6774,10 +6772,7 @@ body.has-savebar .content {
   .list-table.subs-table.stacks td.empty {
     display: none;
   }
-  /* Subscribers: status pill · how they joined · joined <date>. */
-  .subs-table td.how::before {
-    content: " · ";
-  }
+  /* Subscribers: status pill · joined <date>. */
   .subs-table td.joined::before {
     content: " · joined ";
   }
@@ -6949,9 +6944,73 @@ body.has-savebar .content {
   gap: 14px;
   margin-top: 18px;
 }
-/* View subscriber's title is the address, so a long one breaks rather than widens the dialog. */
+/* A subscriber's page is titled with the address, so a long one breaks rather than widens
+   the head; the status pill and the flag sit beside it, as the roster draws them. */
 .sub-title {
   overflow-wrap: anywhere;
+  margin: 0;
+}
+.sub-page-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.sub-page-title .sub-pills {
+  white-space: nowrap;
+}
+/* Whether they receive posts: the page's first answer, under the head, in the record's
+   meta-line place; muted, with a green dot only when they do, as a confirmed pill is. */
+.sub-receives {
+  margin: -6px 0 14px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.sub-receives.yes::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--ok-fg);
+}
+/* The import note: the card's own small print, outside a dialog's hint styles. */
+.sub-note {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.sub-sec .sub-meaning {
+  margin: 8px 0;
+  font-size: 13.5px;
+}
+.sub-sec p:last-child {
+  margin-bottom: 0;
+}
+.sub-sup-line,
+.sub-left-line {
+  margin: 0;
+}
+/* Sends is a table, and a table is already a card, so its section is no card of its own:
+   the label sits on the page above it, as the dashboard's sections do. */
+.sub-sends {
+  margin-top: 22px;
+}
+.sub-sends-table .c-out {
+  width: 160px;
+}
+.sub-sends-table .sub-send a {
+  font-weight: 500;
+}
+.sub-more {
+  margin-top: 12px;
+}
+/* The roster's address is its row's link, as a Sent row's subject is, in the text's color
+   since the whole row is the click target. */
+.subs-table a.sub-email {
+  color: inherit;
 }
 .imp-dl,
 .sub-dl {

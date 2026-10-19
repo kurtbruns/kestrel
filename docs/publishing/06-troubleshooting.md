@@ -64,15 +64,19 @@ When SES refuses your account or a send, the red line carries SES's words and th
 
 A server error from SES may come after SES already took the emails, so Kestrel never sends that batch again: its readers wait for **Resolve…**, as for "The provider never answered for …".
 
+## A reader says they never got a post
+
+Under **Subscribers**, search for their address and open their row. Their page lists every send they were in, newest first, with what happened on each: **Delivered**, a bounce, a complaint, **Unsent** with your email provider's words, or **Skipped** because they had unsubscribed or were suppressed by then. Each send links to its record. The page also shows how they joined, any bounce or block on the address with the provider's words or yours, and why they left, if they did. If they aren't on the list, or are still **pending**, they never confirmed, and only confirmed subscribers are sent your posts.
+
 ## Bounces and complaints
 
 Kestrel acts on these for you, so a bad address can't keep hurting your sending reputation:
 
 - **A hard bounce** means the address can't receive mail. Kestrel never mails it again.
 - **A soft bounce** is temporary, such as a full mailbox. The address stays on your list.
-- **A complaint** means the reader marked your email as spam. Kestrel unsubscribes them, with **complaint** beside their status, whichever email they reported.
+- **A complaint** means the reader marked your email as spam. Kestrel unsubscribes them, whichever email they reported, and their page, opened from their row, says they left by a complaint.
 
-Under **Subscribers**, a bounced address keeps its status and carries a label saying why. When a recent send's bounces reach about 5% of its recipients, the dashboard warns you. That's about the rate at which email providers start to review a sender, so check the addresses on its record.
+Under **Subscribers**, a bounced address keeps its status and carries a label saying why, and its page, opened from its row, gives your email provider's words for the bounce and when it happened. When a recent send's bounces reach about 5% of its recipients, the dashboard warns you. That's about the rate at which email providers start to review a sender, so check the addresses on its record.
 
 ### Lifting a suppression
 
