@@ -12,7 +12,7 @@
  */
 
 import { afterEach, beforeEach } from "vitest";
-import { type LogFields, log } from "../src/lib/log";
+import { type LogEventAt, type LogFields, log } from "../src/lib/log";
 import { errorGuard } from "./support/log";
 
 // How many frames of the logging call's stack a failure shows: enough to reach from the
@@ -21,7 +21,7 @@ import { errorGuard } from "./support/log";
 const STACK_FRAMES = 8;
 
 const logError = log.error;
-log.error = (event: string, fields: LogFields = {}): void => {
+log.error = (event: LogEventAt<"error">, fields: LogFields = {}): void => {
   // Drop the "Error" line and this wrapper's own frame, so the first frame is the caller,
   // and the test runner's frames, which say nothing about where the line came from.
   const at = (new Error().stack ?? "")

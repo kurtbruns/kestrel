@@ -1,6 +1,7 @@
 /**
  * Structured logging: one JSON object per line, so Workers Logs indexes every field and a
- * send's timeline is one query on its `sendId` (SPEC §12, the event catalog).
+ * send's timeline is one query on its `sendId` (SPEC §12). `LOG_EVENTS` is the catalog of
+ * every event and its level.
  *
  * Logs explain; the record decides. Nothing reads a log line to make a decision, so the
  * helper is fire-and-forget: it never throws, never awaits, and is called only after the
@@ -19,6 +20,79 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { redactCredentials } from "./redact";
 
 export type LogLevel = "error" | "warn" | "info";
+
+/**
+ * Every event the Worker logs, and its level: the catalog an operator filters and alerts
+ * on, so a name here is public surface. A new event joins it with the level the rule on
+ * `log` gives it, and `log.error`, `log.warn`, and `log.info` each take only their own
+ * level's names, so a line can't name an event that isn't here or carry another level.
+ */
+export const LOG_EVENTS = {
+  // The sweep (SPEC §6).
+  "sweep.tick": "info",
+  "sweep.error": "error",
+  // A send's lifecycle (SPEC §6, §12).
+  "send.fired": "info",
+  "send.batch": "info",
+  "send.resumed": "info",
+  "send.completed": "info",
+  "send.canceled": "info",
+  "send.rescheduled": "info",
+  "send.halted": "warn",
+  "send.lease_lost": "warn",
+  "send.ambiguous": "error",
+  "send.wedged": "error",
+  "send.missed": "error",
+  "send.stuck": "error",
+  "send.error": "error",
+  // Receipts and the list they feed (SPEC §10).
+  "webhook.received": "info",
+  "receipt.applied": "info",
+  "suppression.added": "info",
+  "receipt.dropped": "warn",
+  "webhook.cert_unavailable": "warn",
+  "webhook.render_failed": "error",
+  "webhook.refused": "error",
+  // Telling the publisher (SPEC §8).
+  "notify.sent": "info",
+  "notify.failed": "warn",
+  "notify.error": "error",
+  // Joining, test emails, and the provider's answers to them (SPEC §5, §7).
+  "subscribe.confirmation_refused": "warn",
+  "subscribe.confirmation_unknown": "warn",
+  "subscribe.not_connected": "warn",
+  "provider.unrecognized": "warn",
+  "test.refused": "warn",
+  "test.unknown": "warn",
+  "subscribe.failed": "error",
+  // The list (SPEC §7).
+  "import.committed": "info",
+  "subscriber.complained": "info",
+  "subscriber.erased": "info",
+  "import.incomplete": "error",
+  // Who is calling (SPEC §11).
+  "auth.service": "info",
+  "auth.unidentified": "warn",
+  // Configuration and the schema (SPEC §9).
+  "schema.unchecked": "warn",
+  "settings.corrupt": "error",
+  "config.invalid": "error",
+  "schema.behind": "error",
+  // A failure nothing else handled.
+  "request.error": "error",
+  // The send simulation, in local development only (SPEC §10).
+  "sim.quota_spent": "info",
+  "sim.quota_lifted": "info",
+  "sim.request_lost": "info",
+  "sim.receipts_error": "error",
+} as const satisfies Record<string, LogLevel>;
+
+export type LogEvent = keyof typeof LOG_EVENTS;
+
+/** The events the catalog logs at `level`. */
+export type LogEventAt<L extends LogLevel> = {
+  [E in LogEvent]: (typeof LOG_EVENTS)[E] extends L ? E : never;
+}[LogEvent];
 
 /** A field's value: a scalar, never an object, so nothing is logged whole by accident.
  *  `undefined` drops the field. */
@@ -85,8 +159,8 @@ function emit(level: LogLevel, event: string, fields: LogFields): void {
 }
 
 /**
- * The logger. `event` is a dotted name from the catalog in SPEC §12 (`send.batch`), which
- * a new event joins. The level carries the meaning, so pick it by this rule:
+ * The logger. `event` is a dotted name from `LOG_EVENTS` (`send.batch`), which a new event
+ * joins. The level carries the meaning (SPEC §12), so pick it by this rule:
  *   - `error`: something could mail a person twice (I4), a send that should have gone out
  *     has not (missed, stuck, wedged), or a failure nothing else handled. Worth a look.
  *   - `warn`: the app is waiting something out that it recovers from on its own (a halt,
@@ -95,9 +169,9 @@ function emit(level: LogLevel, event: string, fields: LogFields): void {
  * Work over many recipients is one line of counts, never a line each.
  */
 export const log = {
-  error: (event: string, fields: LogFields = {}): void => emit("error", event, fields),
-  warn: (event: string, fields: LogFields = {}): void => emit("warn", event, fields),
-  info: (event: string, fields: LogFields = {}): void => emit("info", event, fields),
+  error: (event: LogEventAt<"error">, fields: LogFields = {}): void => emit("error", event, fields),
+  warn: (event: LogEventAt<"warn">, fields: LogFields = {}): void => emit("warn", event, fields),
+  info: (event: LogEventAt<"info">, fields: LogFields = {}): void => emit("info", event, fields),
 };
 
 /** An error's message as a field value (scrubbed like any string on the way out). */

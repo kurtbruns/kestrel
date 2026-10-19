@@ -27,7 +27,7 @@ SES caps how many emails your account sends a day, and how many a second. A send
 
 ## 2. Upgrade to Workers Paid
 
-On the free plan, [D1](https://developers.cloudflare.com/d1/platform/pricing/) allows 100,000 written rows a day, reset at midnight UTC. A send writes about 14 rows a recipient, receipts included, and an import about 7 for each new subscriber. Once the day's rows are spent, the whole app stops until midnight UTC, the SES webhook with it, so that day's bounces and complaints are lost, and suppress or unsubscribe no one.
+On the free plan, [D1](https://developers.cloudflare.com/d1/platform/pricing/) allows 100,000 written rows a day, reset at midnight UTC. A send writes about 14 rows a recipient, receipts included, and an import about 7 for each new subscriber. So at 1,000 subscribers, an import of the whole list and two sends on one day use about a third of the day. Once the day's rows are spent, the whole app stops until midnight UTC, the SES webhook with it, so that day's bounces and complaints are lost, and suppress or unsubscribe no one.
 
 It's recommended to upgrade from about 1,000 subscribers. Past that, the Dashboard and the Subscribers screen say so, and so does an import that would take the list past it. Past about 5,000, a send that could use up the day on its own also warns before it's scheduled. The app doesn't count the day's writes, so between the two, two large sends or several imports and a send on one UTC day can still use it up without a warning at that moment.
 

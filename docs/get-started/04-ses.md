@@ -1,6 +1,6 @@
 # Connect Amazon SES
 
-Kestrel sends the newsletter's posts through Amazon SES, Amazon's email service. SES only delivers the mail: Kestrel keeps the list, each subscriber's consent, and the record of every send. AWS reviews your account before it lets you send to anyone but yourself. This page asks for that early, and you test in the sandbox while you wait.
+Kestrel sends the newsletter's posts through Amazon SES, Amazon's email service. SES only delivers the mail: Kestrel keeps the list, each subscriber's consent, and the record of every send. SES prices every email alike, with no split between transactional and marketing mail, and costs the least at every list size above a tiny one. AWS reviews your account before it lets you send to anyone but yourself. This page asks for that early, and you test in the sandbox while you wait.
 
 In this guide, you verify your sending hostname with SES and add a DMARC record. You forward readers' replies to the publisher's inbox, and ask AWS for production access. You also route bounces and complaints to the app through SNS. Then you give the app its AWS credentials, set the provider, and deploy.
 
