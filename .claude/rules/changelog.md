@@ -30,4 +30,4 @@ A non-blocking `Stop` hook (`.claude/hooks/changelog-reminder.mjs`, wired in `.c
 
 ## Cutting a release
 
-How and when to cut one, from the version bump to the docs site and the demo, is `.claude/rules/release.md`.
+When to cut one and how to number it is `.claude/rules/release.md`; the `release` skill cuts one, from the version bump to the docs site and the demo.

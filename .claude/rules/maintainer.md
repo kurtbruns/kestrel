@@ -45,7 +45,7 @@ A change starts at the highest level it touches, and everything below that resta
 | A docs page, or a docs index | The index that lists it, and any editor link to its headings. getkestrel.dev parses the indexes (`.claude/rules/docs.md`). | `test/docs.spec.ts`. |
 | `template/claude/` | A changelog line saying what changed and why. | `kestrel check-context`, on each instance at upgrade. |
 | Anything a publisher or operator would notice | A line under `[Unreleased]` (`.claude/rules/changelog.md`). | The Stop hook's reminder, which never blocks. |
-| The release itself | `.claude/rules/release.md`. | `publish.yml` re-runs the gate before npm. |
+| The release itself | `.claude/rules/release.md` (policy) and the `release` skill (procedure). | `publish.yml` re-runs the gate before npm. |
 
 ## The rules
 

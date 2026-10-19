@@ -1,5 +1,5 @@
 # Publish @kurtbruns/kestrel to npm when a GitHub release is published. Cutting a release
-# (.claude/rules/release.md) ends with `gh release create`, which triggers this: the
+# (the `release` skill) ends with `gh release create`, which triggers this: the
 # package that instances install is built from that release's tag, and nothing else publishes.
 #
 # It authenticates through npm's trusted publishing: npm trusts this workflow file in this

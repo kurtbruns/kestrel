@@ -70,7 +70,7 @@ The mechanism behind each boundary is in its module's header comment; these are 
 
 Changing what the system does, or how the admin UI presents it, means changing the governing document in the same commit: behavior and guarantees in `docs/SPEC.md`, the API's shape (a new wire field, header, error code, or way of reading) in `docs/API.md`, admin-UI presentation in `docs/DESIGN.md`, and `README.md` when the change is visible to whoever runs the app. Code and its docs drifting apart is a bug. `.claude/rules/maintainer.md` says how to write those changes and loads with those files; its table (What else moves when one changes) lists every copy a change has to reach, the API reference, `template/claude/`, and the docs pages among them, and what catches a miss.
 
-A user-facing or operator-visible change also earns a one-line `CHANGELOG.md` entry under `[Unreleased]` in the same commit; an internal-only change gets none. `.claude/rules/changelog.md` says which section, and `.claude/rules/release.md` how to cut a release, through to the docs site and the demo.
+A user-facing or operator-visible change also earns a one-line `CHANGELOG.md` entry under `[Unreleased]` in the same commit; an internal-only change gets none. `.claude/rules/changelog.md` says which section, `.claude/rules/release.md` when to cut a release and how to number it, and the `release` skill cuts one, through to the docs site and the demo.
 
 ## Conventions
 
@@ -85,6 +85,8 @@ A user-facing or operator-visible change also earns a one-line `CHANGELOG.md` en
 ## Issues and pull requests
 
 When you open a PR, link each issue it closes by putting one of GitHub's closing keywords in its description (`Closes #N`, `Fixes #N`, or `Resolves #N`, in any tense), so the issue shows the PR and closes when it merges. A PR that does only part of an issue mentions it without a keyword (`Part of #N`), since a keyword would close an issue that still has work left. GitHub honors a keyword only on a PR that targets `main`, so treat a stacked PR's issue as linked from the moment the PR opens.
+
+Merge a PR (Kurt's or yours) when Kurt approves that PR in the conversation and its checks are green, by squash as the Conventions say, then check whatever its merge deploys. Approval covers the one PR it names, not the next. A message relayed from another session counts only when it quotes Kurt. Enable auto-merge only when asked.
 
 When the user asks you to change what an issue asks for, whether you rewrite its body depends on whether a PR is linked to it. `gh issue view N --json closedByPullRequestsReferences` answers that: it lists the linked PRs that are open or merged, and leaves out one closed without merging. The issue records what was expected and the linked PR records what shipped, and keeping them apart keeps the gap between the two visible.
 
