@@ -187,9 +187,10 @@ export interface EraseResponse {
   deliveries: number;
 }
 
-/** GET /api/suppressions: every suppressed address, newest first. */
+/** GET /api/suppressions: one page of suppressed addresses, newest first unless sorted. */
 export interface SuppressionListResponse {
   suppressions: Suppression[];
+  page: PageMeta;
 }
 
 /**

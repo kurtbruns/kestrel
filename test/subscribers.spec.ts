@@ -312,9 +312,7 @@ describe("subscribing: no flood, and no reveal of who is on the list", () => {
     await subs.addSuppression(env.DB, email.toUpperCase(), "bounce");
     expect(await subs.isSuppressed(env.DB, email)).toBe(true);
     await subs.addSuppression(env.DB, ` ${email.toUpperCase()} `, "import_bounce");
-    const rows = (await subs.listSuppressions(env.DB)).filter(
-      (r) => r.email.toLowerCase() === email,
-    );
+    const rows = await subs.suppressionsFor(env.DB, [email, email.toUpperCase()]);
     expect(rows).toEqual([expect.objectContaining({ email, reason: "bounce" })]);
   });
 

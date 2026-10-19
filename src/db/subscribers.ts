@@ -359,15 +359,26 @@ function subscriberWhere(filter: SubscriberFilter): { clause: string; binds: unk
   } else if (filter.suppressed === "hide") {
     where.push("email NOT IN (SELECT email FROM suppressions)");
   }
-  // Contains-search on email. Emails are stored normalized (trimmed, lowercased), so
-  // match the term the same way; escape LIKE's own wildcards so `_`/`%` in an address
-  // are literal.
-  const term = filter.search?.trim().toLowerCase();
-  if (term) {
-    where.push("email LIKE ? ESCAPE '\\'");
-    binds.push(`%${term.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`);
+  const search = emailSearch(filter.search);
+  if (search) {
+    where.push(search.clause);
+    binds.push(search.bind);
   }
   return { clause: where.length ? `WHERE ${where.join(" AND ")}` : "", binds };
+}
+
+// Contains-search on email, for the roster and the suppression list alike. Emails are stored
+// normalized (trimmed, lowercased), so match the term the same way; escape LIKE's own
+// wildcards so `_`/`%` in an address are literal.
+function emailSearch(term: string | undefined): { clause: string; bind: string } | null {
+  const t = term?.trim().toLowerCase();
+  if (!t) {
+    return null;
+  }
+  return {
+    clause: "email LIKE ? ESCAPE '\\'",
+    bind: `%${t.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`,
+  };
 }
 
 /** The filtered roster, one page's worth. Omit `page` for the legacy default (newest
@@ -586,15 +597,71 @@ export async function block(
   return { suppression, added: (insert?.meta.changes ?? 0) > 0 };
 }
 
-export async function listSuppressions(db: D1Database): Promise<SuppressionRow[]> {
+/** What `GET /api/suppressions` can be narrowed by: one `reason`, and an email contains-search. */
+export interface SuppressionFilter {
+  reason?: SuppressionReason;
+  search?: string;
+}
+
+/** The sortable columns exposed by `GET /api/suppressions` (see `parseListParams`). */
+export const SUPPRESSION_LIST_SPEC: ListSpec = {
+  columns: {
+    created_at: "created_at",
+    email: "email",
+    reason: "reason",
+  },
+  defaultSort: "created_at",
+  defaultDir: "desc",
+};
+
+// Shared WHERE for the suppression list and its count, so the page total and the rows on it
+// are filtered identically.
+function suppressionWhere(filter: SuppressionFilter): { clause: string; binds: unknown[] } {
+  const where: string[] = [];
+  const binds: unknown[] = [];
+  if (filter.reason) {
+    where.push("reason = ?");
+    binds.push(filter.reason);
+  }
+  const search = emailSearch(filter.search);
+  if (search) {
+    where.push(search.clause);
+    binds.push(search.bind);
+  }
+  return { clause: where.length ? `WHERE ${where.join(" AND ")}` : "", binds };
+}
+
+/** The filtered suppressions, one page's worth. */
+export async function listSuppressions(
+  db: D1Database,
+  filter: SuppressionFilter,
+  page: ListParams,
+): Promise<SuppressionRow[]> {
+  const { clause, binds } = suppressionWhere(filter);
+  // The address is the table's key, so it settles a tie and keeps offset paging stable.
+  const order = orderByClause(page, "email");
   const { results } = await db
-    .prepare("SELECT * FROM suppressions ORDER BY created_at DESC LIMIT 1000")
+    .prepare(`SELECT * FROM suppressions ${clause} ${order} LIMIT ? OFFSET ?`)
+    .bind(...binds, page.limit, page.offset)
     .all<SuppressionRow>();
   return results;
 }
 
+/** How many suppressions match `filter`: the `page.total` for the suppression list. */
+export async function countSuppressions(
+  db: D1Database,
+  filter: SuppressionFilter,
+): Promise<number> {
+  const { clause, binds } = suppressionWhere(filter);
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS n FROM suppressions ${clause}`)
+    .bind(...binds)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
 /** The suppressions on exactly these addresses, so a roster page is annotated from its
- *  own rows rather than from the capped `listSuppressions`. */
+ *  own rows rather than from a page of `listSuppressions`. */
 export async function suppressionsFor(
   db: D1Database,
   emails: readonly string[],

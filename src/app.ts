@@ -33,7 +33,11 @@ import {
 } from "../shared/sends";
 import type { TemplateTestResponse } from "../shared/settings";
 import { SUBSCRIBER_ACTIONS } from "../shared/subscriber_meanings";
-import { SUBSCRIBER_STATUSES } from "../shared/subscribers";
+import {
+  SUBSCRIBER_STATUSES,
+  SUPPRESSION_REASONS,
+  type SuppressionListResponse,
+} from "../shared/subscribers";
 import { buildInfo } from "./build";
 import { DELIVERY_VIEWS } from "./db/sends";
 import { SUPPRESSED_FILTERS } from "./db/subscribers";
@@ -2043,8 +2047,33 @@ export function createRouter({
       resource: "suppressions",
       title: "List suppressions",
       summary: "List suppressed addresses, with why.",
-      description: "Newest first, up to 1,000, whether or not the address is on the list.",
-      returns: { object: "suppression", as: "suppressions", list: true },
+      description:
+        "Every suppressed address, whether or not it is on the list, a page at a time: follow `page` to read past the first.",
+      query: [
+        {
+          name: "reason",
+          values: SUPPRESSION_REASONS,
+          description: "Filter by reason: `bounce`, `import_bounce`, or `manual`.",
+        },
+        { name: "search", description: "Email contains-search." },
+        { name: "sort", description: "`created_at` (default), `email`, or `reason`." },
+        { name: "dir", values: SORT_DIRS, description: "`asc` or `desc` (default `desc`)." },
+        ...pageParams,
+      ],
+      example: {
+        response: {
+          suppressions: [
+            {
+              email: "bounce@example.com",
+              reason: "bounce",
+              detail: "Permanent/General",
+              created_at: 1768467700000,
+            },
+          ],
+          page: { total: 1, limit: 50, offset: 0, sort: "created_at", dir: "desc" },
+        } satisfies SuppressionListResponse,
+      },
+      returns: { object: "suppression", as: "suppressions", list: true, fields: [pageField] },
       handler: suppressionRoutes.list,
     },
     {

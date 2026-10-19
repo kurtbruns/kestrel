@@ -1,4 +1,4 @@
-/** Authed suppression admin (SPEC §7): list, the publisher's block, and lifting one.
+/** Authed suppression admin (SPEC §7): the paged list, the publisher's block, and lifting one.
  *  Webhooks add the provider's bounces; a client adds only a block, and lifts a block or a
  *  bounce, a deliberate, rare human action. */
 
@@ -9,17 +9,28 @@ import {
   SUPPRESSION_REASONS,
   type Suppression,
   type SuppressionListResponse,
+  type SuppressionReason,
 } from "../../shared/subscribers";
 import * as subscribers from "../db/subscribers";
 import { fieldError, oneOf, optString, readJsonObject } from "../lib/body";
 import { json, refusal } from "../lib/errors";
+import { listPage, parseListParams } from "../lib/list";
 import { log } from "../lib/log";
 import type { RequestContext } from "../router";
 
 export async function list(c: RequestContext): Promise<Response> {
-  const body: SuppressionListResponse = {
-    suppressions: await subscribers.listSuppressions(c.env.DB),
+  // The router has held `reason` to the values the manifest declares.
+  const q = c.url.searchParams;
+  const filter: subscribers.SuppressionFilter = {
+    reason: (q.get("reason") as SuppressionReason | null) ?? undefined,
+    search: q.get("search") ?? undefined,
   };
+  const page = parseListParams(c.url, subscribers.SUPPRESSION_LIST_SPEC);
+  const [total, rows] = await Promise.all([
+    subscribers.countSuppressions(c.env.DB, filter),
+    subscribers.listSuppressions(c.env.DB, filter, page),
+  ]);
+  const body: SuppressionListResponse = { suppressions: rows, page: listPage(total, page) };
   return json(body);
 }
 
