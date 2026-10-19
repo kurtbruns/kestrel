@@ -1867,9 +1867,15 @@ td a:hover {
 .list-table .c-act {
   width: 56px;
 }
-/* Subscribers: a floor that keeps the email column about 250px beside its two others. */
+/* Subscribers: a floor that keeps the email column about 250px beside its two others. With
+   only Status and Joined beside an address, which rarely needs more than half the row, fixed
+   widths left one wide gap before them; a share of the row each spreads the space evenly. */
 .list-table.subs-table {
   min-width: 610px;
+}
+.list-table.subs-table .c-status,
+.list-table.subs-table .c-date {
+  width: 24%;
 }
 
 .dash-section table {
