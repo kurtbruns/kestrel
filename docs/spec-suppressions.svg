@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 20 900 220" role="img" aria-labelledby="title desc">
+  <title id="title">How a suppression is set and lifted</title>
+  <desc id="desc">No suppression on the left. A hard bounce the provider reports, or a bounce an import brings, makes an address bounced, and the publisher's Clear lifts it. The publisher's Block, or a block an import brings, makes it blocked, and the publisher's Unblock lifts it. A bounce is the provider's report and a block the publisher's decision. Either can sit on any status.</desc>
+  <style>
+    .n-none rect { fill: #ffffff; stroke: #8792a2; stroke-width: 1.5; stroke-dasharray: 5 4; }
+    .n-pending rect { fill: #fef3c7; stroke: #f2c94c; stroke-width: 1.5; }
+    .n-confirmed rect { fill: #dcfce7; stroke: #86d9a3; stroke-width: 1.5; }
+    .n-unsub rect { fill: #f4f4f5; stroke: #c4c4cc; stroke-width: 1.5; }
+    .n-supp rect { fill: #fee2e2; stroke: #f5a3a3; stroke-width: 1.5; }
+    .ntitle { font: 600 15px system-ui, -apple-system, "Segoe UI", sans-serif; fill: #1d2330; }
+    .n-pending .ntitle { fill: #b45309; } .n-confirmed .ntitle { fill: #15803d; } .n-unsub .ntitle { fill: #52525b; } .n-supp .ntitle { fill: #b91c1c; }
+    .nsub { font: 11.5px system-ui, -apple-system, "Segoe UI", sans-serif; fill: #5a6273; }
+    .lbl { font: 600 12.5px system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .a-reader { fill: #2453c7; } .a-publisher { fill: #7a3fb8; } .a-import { fill: #0f7a5a; } .a-provider { fill: #c2410c; } .a-time { fill: #5a6273; }
+    .a-who { fill: #5a6273; font-weight: 500; font-style: italic; }
+    .e { stroke: #5a6273; stroke-width: 1.5; fill: none; }
+    .ahead { fill: #5a6273; }
+    @media (prefers-color-scheme: dark) {
+      .n-none rect { fill: #191e27; stroke: #6b7586; }
+      .n-pending rect { fill: #45350f; stroke: #b45309; } .n-pending .ntitle { fill: #fbbf24; }
+      .n-confirmed rect { fill: #14532d; stroke: #15803d; } .n-confirmed .ntitle { fill: #4ade80; }
+      .n-unsub rect { fill: #27272a; stroke: #52525b; } .n-unsub .ntitle { fill: #c4c4cc; }
+      .n-supp rect { fill: #4c1d1d; stroke: #b91c1c; } .n-supp .ntitle { fill: #f87171; }
+      .ntitle { fill: #e3e7ee; } .nsub, .a-time, .a-who { fill: #9aa3b4; }
+      .a-reader { fill: #7d9bff; } .a-publisher { fill: #c4a5f0; } .a-import { fill: #34d399; } .a-provider { fill: #fb923c; }
+      .e { stroke: #9aa3b4; } .ahead { fill: #9aa3b4; }
+    }
+  </style>
+
+<defs><marker id="sp-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ahead" d="M0,0.5 L10,5 L0,9.5 z"/></marker><marker id="sp-c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ahead" d="M0,0.5 L10,5 L0,9.5 z"/></marker></defs>
+<path class="e" d="M210,70 H558" marker-end="url(#sp-a)"/>
+<path class="e" d="M560,90 H212" marker-end="url(#sp-a)"/>
+<path class="e" d="M210,170 H558" marker-end="url(#sp-a)"/>
+<path class="e" d="M560,190 H212" marker-end="url(#sp-a)"/>
+<g class="node n-none"><rect x="40" y="40" width="170" height="180" rx="16"/><text class="ntitle" x="125" y="128" text-anchor="middle">No suppression</text><text class="nsub" x="125" y="145" text-anchor="middle">the status decides</text></g>
+<g class="node n-supp"><rect x="560" y="52" width="180" height="56" rx="16"/><text class="ntitle" x="650" y="78" text-anchor="middle">bounced</text><text class="nsub" x="650" y="95" text-anchor="middle">bounce · import_bounce</text></g>
+<g class="node n-supp"><rect x="560" y="152" width="180" height="56" rx="16"/><text class="ntitle" x="650" y="178" text-anchor="middle">blocked</text><text class="nsub" x="650" y="195" text-anchor="middle">manual</text></g>
+<text class="lbl a-provider" x="385" y="49" text-anchor="middle">hard bounce</text>
+<text class="lbl a-import" x="385" y="64" text-anchor="middle">import</text>
+<text class="lbl a-publisher" x="385" y="110" text-anchor="middle">Clear</text>
+<text class="lbl a-who" x="752" y="76" text-anchor="start">the provider's report</text>
+<text class="lbl a-publisher" x="385" y="149" text-anchor="middle">Block</text>
+<text class="lbl a-import" x="385" y="164" text-anchor="middle">import</text>
+<text class="lbl a-publisher" x="385" y="210" text-anchor="middle">Unblock</text>
+<text class="lbl a-who" x="752" y="176" text-anchor="start">the publisher's decision</text>
+</svg>
