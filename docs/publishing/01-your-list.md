@@ -143,7 +143,7 @@ Anyone can type an address into your subscribe form, which puts a reader who lef
 
 **Repeats of an address** are folded into one row first. Its status is the first of unsubscribed, subscribed, pending, and none that any repeat claims. Its reason for leaving is the strongest: an erasure, then a complaint, then the first of the rest. Its suppression is the first of bounce and manual. Its opt-in is the weakest claim. It keeps the earliest consent times and the latest unsubscribe and suppression times, and the origin and evidence of the row whose status won.
 
-A subscriber an import confirmed is **confirmed**, like anyone who confirmed in Kestrel, and gets your posts. How they joined shows beside their state: imported, with the origin and opt-in method the file claimed, and the evidence. That holds even when the file says they confirmed through Kestrel itself. Only a confirmation Kestrel recorded reads as Kestrel's double opt-in, and a subscriber who later confirms in Kestrel becomes Kestrel's own.
+A subscriber an import confirmed is **confirmed**, like anyone who confirmed in Kestrel, and gets your posts. How they joined shows beside their state: imported, with the origin and opt-in method the file claimed. Their page, opened from their row, adds the evidence and the import that brought them: the file, when, by whom, and the attestation. That holds even when the file says they confirmed through Kestrel itself. Only a confirmation Kestrel recorded reads as Kestrel's double opt-in, and a subscriber who later confirms in Kestrel becomes Kestrel's own.
 
 ### Limits in detail
 

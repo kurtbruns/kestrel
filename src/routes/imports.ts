@@ -19,6 +19,7 @@ import {
   fileKindOf,
   IMPORT_FORMAT,
   IMPORT_LIMITS,
+  type ImportRecordResponse,
   type ImportStatus,
   PLAIN_LIST_STATUSES,
   type SuppressionClaim,
@@ -38,9 +39,10 @@ import {
   optStringList,
   readJsonObject,
 } from "../lib/body";
-import { badRequest, HttpError, json, refusal } from "../lib/errors";
+import { badRequest, HttpError, json, notFound, refusal } from "../lib/errors";
 import { log } from "../lib/log";
-import type { RequestContext } from "../router";
+import { decodePageCursor, encodePageCursor } from "../lib/page_cursor";
+import { param, type RequestContext } from "../router";
 import {
   commitImport,
   exportPageRows,
@@ -236,40 +238,35 @@ const CAUSE_CLAIM: Record<string, UnsubscribeCauseClaim> = {
 
 const iso = (ms: number | null): string | null => (ms === null ? null : new Date(ms).toISOString());
 
-// The export's cursor: the last address a page held and when the export began, as base64url
-// JSON, so a log doesn't show the address at a glance. Opaque to clients (it isn't a
-// secret; the route is admin-only), and one that doesn't decode is refused, never guessed at.
+// The export's cursor: the last address a page held and when the export began.
 interface ExportCursor {
   after: string;
   at: number;
 }
 
 function encodeExportCursor(cursor: ExportCursor): string {
-  const bytes = new TextEncoder().encode(JSON.stringify({ v: 1, ...cursor }));
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return encodePageCursor({ after: cursor.after, at: cursor.at });
 }
 
 function decodeExportCursor(raw: string): ExportCursor | null {
-  try {
-    const binary = atob(raw.replace(/-/g, "+").replace(/_/g, "/"));
-    const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
-    const value: unknown = JSON.parse(
-      new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes),
-    );
-    if (typeof value !== "object" || value === null) {
-      return null;
-    }
-    const { v, after, at } = value as Record<string, unknown>;
-    return v === 1 && typeof after === "string" && after !== "" && Number.isSafeInteger(at)
-      ? { after, at: at as number }
-      : null;
-  } catch {
+  const fields = decodePageCursor(raw);
+  if (!fields) {
     return null;
   }
+  const { after, at } = fields;
+  return typeof after === "string" && after !== "" && Number.isSafeInteger(at)
+    ? { after, at: at as number }
+    : null;
+}
+
+/** GET /api/imports/:id: the record an import keeps, which holds no subscriber's address. */
+export async function get(c: RequestContext): Promise<Response> {
+  const record = await imports.getImport(c.env.DB, param(c, "id"));
+  if (!record) {
+    throw notFound("import");
+  }
+  const body: ImportRecordResponse = { import: record };
+  return json(body);
 }
 
 /** GET /api/subscribers/export */

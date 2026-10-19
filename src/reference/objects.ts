@@ -708,8 +708,8 @@ const SUBSCRIBER_FIELDS: ReferenceField[] = [
   },
   {
     name: "suppression",
-    type: "{ reason, detail } | null",
-    description: `Whether the address is suppressed, null when it isn't: \`reason\`, why and whose decision it was, as a suppression's (Suppressions), and \`detail\`, the provider's words or the publisher's. ${SUPPRESSED_MEANING}`,
+    type: "{ reason, detail, created_at } | null",
+    description: `Whether the address is suppressed, null when it isn't: \`reason\`, why and whose decision it was, as a suppression's (Suppressions), \`detail\`, the provider's words or the publisher's, and \`created_at\`, since when. ${SUPPRESSED_MEANING}`,
   },
   {
     name: "unsubscribe_cause",

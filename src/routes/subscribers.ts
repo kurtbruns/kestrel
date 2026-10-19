@@ -5,17 +5,21 @@ import { freePlanListNotice, pastFreePlanList } from "../../shared/free_plan";
 import type {
   EraseResponse,
   SubscribeResponse,
+  SubscriberDeliveriesResponse,
   SubscriberListResponse,
   SubscriberResponse,
 } from "../../shared/subscribers";
+import * as sends from "../db/sends";
 import * as subscribers from "../db/subscribers";
 import { onFreePlanLimits } from "../env";
 import { fieldError, optString, readJsonObject } from "../lib/body";
 import { HttpError, json, notFound, refusal } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
 import { log } from "../lib/log";
+import { decodePageCursor, encodePageCursor } from "../lib/page_cursor";
 import type { RequestContext } from "../router";
 import { param } from "../router";
+import { viewSends } from "../send/describe";
 import { requestSubscription } from "../services/subscriptions";
 
 export async function create(c: RequestContext): Promise<Response> {
@@ -104,6 +108,57 @@ export async function get(c: RequestContext): Promise<Response> {
   }
   const body: SubscriberResponse = {
     subscriber: await subscribers.withSuppression(c.env.DB, subscriber),
+  };
+  return json(body);
+}
+
+/** How many sends one page of a subscriber's deliveries holds. The server sets it: each row is
+ *  one send's view, so a page costs the same on every plan. */
+export const SUBSCRIBER_DELIVERIES_PAGE = 25;
+
+function readDeliveriesAfter(raw: string | null): sends.AddressDeliveriesAfter | null {
+  if (raw === null) {
+    return null;
+  }
+  const fields = decodePageCursor(raw);
+  const fireAt = fields?.fire_at;
+  const sendId = fields?.send;
+  if (!Number.isSafeInteger(fireAt) || typeof sendId !== "string" || sendId === "") {
+    throw fieldError("after", "after must be the next value a page of these deliveries returned");
+  }
+  return { fire_at: fireAt as number, send_id: sendId };
+}
+
+/**
+ * The sends a subscriber's address was in (SPEC §8), newest first, each as the send's view
+ * beside the address's row in its record, a page at a time. Read-only over the frozen records
+ * (I3). An erased subscriber's past rows carry a placeholder, not the address, so none match.
+ */
+export async function deliveries(c: RequestContext): Promise<Response> {
+  const subscriber = await subscribers.getById(c.env.DB, param(c, "id"));
+  if (!subscriber) {
+    throw notFound("subscriber");
+  }
+  const after = readDeliveriesAfter(c.url.searchParams.get("after"));
+  // One row past the page says whether another follows, so the last page never comes empty.
+  const read = await sends.deliveriesForAddress(
+    c.env.DB,
+    subscriber.email,
+    after,
+    SUBSCRIBER_DELIVERIES_PAGE + 1,
+  );
+  const page = read.slice(0, SUBSCRIBER_DELIVERIES_PAGE);
+  const views = await viewSends(c.env, [...new Set(page.map((r) => r.send_id))]);
+  const last = page.at(-1);
+  const body: SubscriberDeliveriesResponse = {
+    deliveries: page.flatMap(({ send_id, fire_at: _fireAt, ...delivery }) => {
+      const send = views.get(send_id);
+      return send ? [{ send, delivery }] : [];
+    }),
+    next:
+      read.length > SUBSCRIBER_DELIVERIES_PAGE && last
+        ? encodePageCursor({ fire_at: last.fire_at, send: last.send_id })
+        : null,
   };
   return json(body);
 }

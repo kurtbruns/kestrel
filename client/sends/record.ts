@@ -27,6 +27,7 @@ import { icon } from "../ui/icons";
 import { type ListState, renderPager, th, wireSort } from "../ui/list_controls";
 import { busy, type Modal, modal, renderError, toast } from "../ui/widgets";
 import { openResolveModal } from "./dialogs";
+import { deliveryOutcome } from "./outcome";
 import { can, clampPct, conditionOf, fmtDuration, has, nextRetry } from "./progress";
 
 const message = describeError;
@@ -416,45 +417,6 @@ function outcomeReconHtml(outcomes: DeliveryOutcomes): string {
 // brought nothing new leaves the page as it is.
 function sameOutcomes(a: DeliveryOutcomes, b: DeliveryOutcomes): boolean {
   return (Object.keys(a) as (keyof DeliveryOutcomes)[]).every((k) => a[k] === b[k]);
-}
-
-interface Outcome {
-  label: string;
-  sw: string;
-}
-
-// The per-recipient record: the outcome tiles summarize, this shows the actual rows. A
-// row's OUTCOME is derived from the same two facts the tiles bucket (the webhook `event`
-// winning over the send-loop `status`), so a row reads the same bucket (and reuses the
-// same swatch palette) as its tile. A bounce splits soft vs hard on `bounce_kind`, the
-// provider's permanent/transient signal frozen onto the row when the event landed (SPEC
-// §8), a fact of THIS send, not a read of the current suppression list. Null = unknown.
-function deliveryOutcome(r: DeliveryRecord): Outcome {
-  if (r.event === "delivered") {
-    return { label: "Delivered", sw: "ok" };
-  }
-  if (r.event === "bounced") {
-    if (r.bounce_kind === "hard") {
-      return { label: "Hard bounce", sw: "warn" };
-    }
-    if (r.bounce_kind === "soft") {
-      return { label: "Soft bounce", sw: "warn" };
-    }
-    return { label: "Bounce", sw: "warn" };
-  }
-  if (r.event === "complained") {
-    return { label: "Complained", sw: "danger" };
-  }
-  switch (r.status) {
-    case "unsent":
-      return { label: "Unsent", sw: "neutral" };
-    case "skipped":
-      return { label: "Skipped", sw: "neutral" };
-    case "accepted":
-      return { label: "Accepted", sw: "sending" };
-    default:
-      return { label: "In flight", sw: "sending" };
-  }
 }
 
 // The three view tabs the record opens on, failures first (the rows that went wrong).

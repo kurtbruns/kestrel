@@ -884,6 +884,47 @@ export async function listDeliveriesPage(
   return results;
 }
 
+/** Where a page of an address's deliveries ended: the last row's send, by fire time and id. */
+export interface AddressDeliveriesAfter {
+  fire_at: number;
+  send_id: string;
+}
+
+/** One of an address's delivery rows, with the send it belongs to and when that send fires. */
+export type AddressDeliveryRow = DeliveryRecordRow & { send_id: string; fire_at: number };
+
+/**
+ * An address's delivery rows across every send, newest fire time first (the send's id breaking
+ * a tie), up to `limit`, after `after` when given: a page keyed on the order itself, so a send
+ * starting while the pages are read never repeats or skips a row. Read-only over the frozen
+ * records (I3). Rows an erasure reached carry a placeholder, never the address, so none match.
+ */
+export async function deliveriesForAddress(
+  db: D1Database,
+  email: string,
+  after: AddressDeliveriesAfter | null,
+  limit: number,
+): Promise<AddressDeliveryRow[]> {
+  const page = after
+    ? {
+        clause: "AND (s.fire_at < ? OR (s.fire_at = ? AND s.id < ?))",
+        binds: [after.fire_at, after.fire_at, after.send_id],
+      }
+    : { clause: "", binds: [] };
+  const { results } = await db
+    .prepare(
+      `SELECT d.email AS email, d.status AS status, d.event AS event, d.event_detail AS event_detail,
+              d.event_at AS event_at, d.error AS error, d.attempts AS attempts,
+              d.bounce_kind AS bounce_kind, s.id AS send_id, s.fire_at AS fire_at
+         FROM deliveries d JOIN sends s ON s.id = d.send_id
+        WHERE d.email = ? ${page.clause}
+        ORDER BY s.fire_at DESC, s.id DESC LIMIT ?`,
+    )
+    .bind(email, ...page.binds, limit)
+    .all<AddressDeliveryRow>();
+  return results;
+}
+
 /** How many recipients match `view` (+ search) — the `page.total` for the record list. */
 export async function countDeliveriesFiltered(
   db: D1Database,

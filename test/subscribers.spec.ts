@@ -894,8 +894,12 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     expect(res.status).toBe(200);
     const body = await readJson(res);
     expect(body.subscribers.map((s: any) => s.email)).toEqual([suppressed]);
-    // Each row carries its suppression inside it (for the inline flag): why, and the words.
-    expect(body.subscribers[0].suppression).toEqual({ reason: "manual", detail: null });
+    // Each row carries its suppression inside it (for the inline flag): why, the words, and since when.
+    expect(body.subscribers[0].suppression).toEqual({
+      reason: "manual",
+      detail: null,
+      created_at: expect.any(Number),
+    });
     // The page envelope reflects the filtered total, not the whole table.
     expect(body.page).toMatchObject({ total: 1, offset: 0 });
   });

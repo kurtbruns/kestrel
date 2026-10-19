@@ -50,7 +50,7 @@ const subs = [
     id: "s2",
     email: "bad@b.c",
     created_at: 2,
-    suppression: { reason: "bounce", detail: "550 no such user" },
+    suppression: { reason: "bounce", detail: "550 no such user", created_at: 1 },
   }),
   subscriber({
     id: "s3",
@@ -120,7 +120,7 @@ describe("subscribers view", () => {
     expect($("tr[data-id='s1'] .badge.confirmed").classList.contains("held")).toBe(false);
     expect($("tr[data-id='s3'] td").textContent).toBe("<script>@b.c"); // shown as text
     // A wrapping address breaks before its "@", not mid-word.
-    expect($("tr[data-id='s1'] td").innerHTML).toBe("a<wbr>@b.c");
+    expect($("tr[data-id='s1'] a.sub-email").innerHTML).toBe("a<wbr>@b.c");
     const menuOf = (id: string) => {
       $(`tr[data-id='${id}'] [data-menu]`).click();
       const items = $$(".menu .menu-item").map((b) => b.textContent);
@@ -299,7 +299,11 @@ describe("subscribers view", () => {
         reply: () => ({
           counts,
           subscribers: blocked
-            ? [{ ...subs[0], suppression: { reason: "manual", detail: null } }, subs[1], subs[2]]
+            ? [
+                { ...subs[0], suppression: { reason: "manual", detail: null, created_at: 1 } },
+                subs[1],
+                subs[2],
+              ]
             : subs,
           page,
         }),
@@ -364,8 +368,8 @@ describe("subscribers view", () => {
         reply: () => ({
           counts,
           subscribers: [
-            { ...subs[0], suppression: { reason: "manual", detail: null } },
-            { ...subs[2], suppression: { reason: "manual", detail: null } },
+            { ...subs[0], suppression: { reason: "manual", detail: null, created_at: 1 } },
+            { ...subs[2], suppression: { reason: "manual", detail: null, created_at: 1 } },
           ],
           page,
         }),
@@ -404,7 +408,7 @@ describe("subscribers view", () => {
           subscribers: [
             subs[1],
             { ...subs[2], status: "unsubscribed", unsubscribe_cause: "complaint" },
-            { ...subs[0], suppression: { reason: "import_bounce", detail: null } },
+            { ...subs[0], suppression: { reason: "import_bounce", detail: null, created_at: 1 } },
           ],
           page,
         }),
@@ -439,25 +443,23 @@ describe("subscribers view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("shows a suppressed address's flag and the provider's words in View subscriber", async () => {
+  it("a row, its address, and View subscriber each open the subscriber's page, and the menu doesn't (DESIGN §3)", async () => {
     fake = fakeApi([
       { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
     ]);
     await mount((r, s) => renderSubscribers(undefined, r, s));
     await settle();
-    $("tr[data-id='s2'] [data-menu]").click();
-    $$<HTMLElement>(".menu .menu-item")
-      .find((b) => b.textContent === "View subscriber")!
-      .click();
-    const dt = $$(".modal .sub-dl dt").find((d) => d.textContent === "Suppressed")!;
-    expect(dt.nextElementSibling!.textContent).toBe("bounced: 550 no such user");
-    $("#vsClose").click();
-    // An address that isn't suppressed has no such line.
+    expect($("tr[data-id='s2'] a.sub-email").getAttribute("href")).toBe("#/subscribers/s2");
+    $("tr[data-id='s2'] td.joined").click();
+    expect(location.hash).toBe("#/subscribers/s2");
+    location.hash = "#/subscribers";
     $("tr[data-id='s1'] [data-menu]").click();
+    expect(location.hash).toBe("#/subscribers");
     $$<HTMLElement>(".menu .menu-item")
       .find((b) => b.textContent === "View subscriber")!
       .click();
-    expect($$(".modal .sub-dl dt").map((d) => d.textContent)).not.toContain("Suppressed");
+    expect(location.hash).toBe("#/subscribers/s1");
+    expect(document.querySelector(".modal")).toBeNull();
     expect(fake.unhandled).toEqual([]);
   });
 
@@ -472,14 +474,6 @@ describe("subscribers view", () => {
     expect($("tr[data-id='s2'] td.how").textContent).toBe("Double opt-in");
     // Pending and never confirmed here: nothing to say yet, and the stacked row drops the cell.
     expect($("tr[data-id='s3'] td.how").classList.contains("empty")).toBe(true);
-    // View subscriber shows the evidence on request, under the address.
-    $("tr[data-id='s1'] [data-menu]").click();
-    $$<HTMLButtonElement>(".menu .menu-item")[0]?.click();
-    expect($(".modal h3").textContent).toBe(subs[0]?.email);
-    expect($(".modal .hint").textContent).toBe("Confirmed");
-    expect($(".modal").textContent).toContain("Imported · Sendy, single opt-in");
-    expect($(".sub-evidence").textContent).toBe('{\n  "signup_ip": "203.0.113.7"\n}');
-    expect($(".modal").textContent).toContain("not something Kestrel recorded itself.");
     expect(fake.unhandled).toEqual([]);
   });
 
@@ -620,7 +614,9 @@ describe("subscribers view", () => {
         path: "/api/subscribers",
         reply: () => ({
           counts,
-          subscribers: [{ ...subs[0], suppression: { reason: "import_bounce", detail: null } }],
+          subscribers: [
+            { ...subs[0], suppression: { reason: "import_bounce", detail: null, created_at: 1 } },
+          ],
           page,
         }),
       },

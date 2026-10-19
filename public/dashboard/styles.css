@@ -6949,9 +6949,45 @@ body.has-savebar .content {
   gap: 14px;
   margin-top: 18px;
 }
-/* View subscriber's title is the address, so a long one breaks rather than widens the dialog. */
+/* A subscriber's page is titled with the address, so a long one breaks rather than widens
+   the head; the status pill and the flag sit beside it, as the roster draws them. */
 .sub-title {
   overflow-wrap: anywhere;
+  margin: 0;
+}
+.sub-page-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.sub-page-title .sub-pills {
+  white-space: nowrap;
+}
+.sub-sec .sub-meaning {
+  margin: 8px 0;
+}
+.sub-sec p:last-child {
+  margin-bottom: 0;
+}
+.sub-sup-line,
+.sub-left-line {
+  margin: 0;
+}
+.sub-sends-table .c-out {
+  width: 160px;
+}
+.sub-sends-table .sub-send a {
+  font-weight: 500;
+}
+.sub-more {
+  margin-top: 12px;
+}
+/* The roster's address is its row's link, as a Sent row's subject is, in the text's color
+   since the whole row is the click target. */
+.subs-table a.sub-email {
+  color: inherit;
 }
 .imp-dl,
 .sub-dl {

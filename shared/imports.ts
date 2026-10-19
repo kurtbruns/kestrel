@@ -988,6 +988,11 @@ export interface ImportRecord {
   suppressions_added: number;
 }
 
+/** GET /api/imports/:id: one committed import's record. */
+export interface ImportRecordResponse {
+  import: ImportRecord;
+}
+
 /** A row the commit planned to write that the list, changed in the meantime, didn't let it. */
 export interface ImportDifference {
   row: number;

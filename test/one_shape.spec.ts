@@ -131,7 +131,10 @@ describe("a subscriber carries its suppression on every route (SPEC §7)", () =>
     const email = "reader@example.com";
     const { subscriber } = await subs.ensureSubscriber(env.DB, email);
     await subs.addSuppression(env.DB, email, "bounce", "mailbox gone");
-    const suppression = { reason: "bounce", detail: "mailbox gone" };
+    const since = await env.DB.prepare("SELECT created_at FROM suppressions WHERE email = ?")
+      .bind(email)
+      .first<{ created_at: number }>();
+    const suppression = { reason: "bounce", detail: "mailbox gone", created_at: since!.created_at };
     const answers = [
       (await readJson(await call(`/api/subscribers/${subscriber.id}`))).subscriber,
       (await readJson(await call(`/api/subscribers?email=${email}`))).subscriber,

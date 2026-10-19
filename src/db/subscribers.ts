@@ -33,7 +33,12 @@ export async function withSuppressions(
   const by = new Map(found.map((s) => [s.email, s]));
   return rows.map((row) => {
     const sup = by.get(row.email);
-    return { ...row, suppression: sup ? { reason: sup.reason, detail: sup.detail } : null };
+    return {
+      ...row,
+      suppression: sup
+        ? { reason: sup.reason, detail: sup.detail, created_at: sup.created_at }
+        : null,
+    };
   });
 }
 
