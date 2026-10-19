@@ -45,7 +45,7 @@ function openBrowser(url) {
 }
 
 /** Sign in to `origin`, store the result, and answer who it signed in as. */
-async function signIn(origin, { browser }) {
+export async function signIn(origin, { browser }) {
   const found = await discover(origin);
   const stored = readSignIn(origin);
   // A client registered for this computer is reused while its redirect can be served again,

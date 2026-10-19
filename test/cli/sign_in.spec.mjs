@@ -4,7 +4,8 @@
  * loopback callback that receives the browser's approval. Access itself is stubbed at fetch;
  * the flow against a real Access application is checked by hand on a test instance.
  */
-import { mkdtempSync, rmSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,6 +17,7 @@ import {
   readSignIns,
   writeSignIn,
 } from "../../cli/credentials.mjs";
+import { signIn } from "../../cli/login.mjs";
 import {
   authorizeUrl,
   discover,
@@ -287,5 +289,163 @@ describe("the loopback callback", () => {
       `${listener.redirectUri}?state=s&error=access_denied&error_description=not+allowed`,
     );
     await refused;
+  });
+});
+
+describe("refusing a credentials file it can't read", () => {
+  it("names the file and leaves it as it is, rather than dropping the sign-ins it holds", () => {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(credentialsFile(), '{"version":2,"instances":{}}');
+    expect(() => readSignIns()).toThrow(credentialsFile());
+    expect(() => writeSignIn(ORIGIN, stored(60_000))).toThrow(/left as it is/);
+    writeFileSync(credentialsFile(), "not json");
+    expect(() => readSignIn(ORIGIN)).toThrow(credentialsFile());
+  });
+});
+
+describe("refreshing side by side", () => {
+  it("spends one refresh token once, however many calls need a fresh token at the same moment", async () => {
+    writeSignIn(ORIGIN, stored(10_000));
+    let refreshes = 0;
+    vi.stubGlobal("fetch", async () => {
+      refreshes++;
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      return json({ access_token: `oauth:new-${refreshes}`, expires_in: 900, refresh_token: "r2" });
+    });
+    const tokens = await Promise.all([
+      accessToken(ORIGIN),
+      accessToken(ORIGIN),
+      accessToken(ORIGIN),
+    ]);
+    expect(refreshes).toBe(1);
+    expect(tokens).toEqual(["oauth:new-1", "oauth:new-1", "oauth:new-1"]);
+  });
+
+  it("asks for a new sign-in, by the instance's address, when no refresh token is stored", async () => {
+    writeSignIn(ORIGIN, stored(-1, { refresh_token: undefined }));
+    await expect(accessToken(ORIGIN)).rejects.toThrow(`Run \`npx kestrel login ${ORIGIN}\` again.`);
+  });
+});
+
+describe("kestrel login's sign-in", () => {
+  const AS = "https://team.cloudflareaccess.com";
+  const realFetch = globalThis.fetch;
+
+  /** Access and the instance, stubbed by URL; the loopback callback stays real. */
+  function stubAccess() {
+    const calls = [];
+    vi.stubGlobal("fetch", async (url, init = {}) => {
+      const u = String(url);
+      if (u.startsWith("http://127.0.0.1:")) {
+        return realFetch(url, init);
+      }
+      calls.push({ url: u, init });
+      if (u === `${ORIGIN}/api/whoami` && !init.headers?.authorization) {
+        return json({ error: "invalid_token" }, 401, {
+          "www-authenticate": `Bearer realm="OAuth", resource_metadata="${ORIGIN}/meta"`,
+        });
+      }
+      if (u === `${ORIGIN}/meta`) {
+        return json({ resource: `${ORIGIN}/api/whoami`, authorization_servers: [AS] });
+      }
+      if (u === `${AS}/.well-known/oauth-authorization-server`) {
+        return json({
+          authorization_endpoint: `${AS}/authorize`,
+          token_endpoint: `${AS}/token`,
+          registration_endpoint: `${AS}/register`,
+        });
+      }
+      if (u === `${AS}/register`) {
+        return json({ client_id: "client-new" }, 201);
+      }
+      if (u === `${AS}/token`) {
+        return json({ access_token: "oauth:a", expires_in: 900, refresh_token: "r" });
+      }
+      if (u === `${ORIGIN}/api/whoami`) {
+        return json({
+          principal: { kind: "human", email: "you@example.com", client: "claude-code" },
+        });
+      }
+      throw new Error(`unexpected fetch ${u}`);
+    });
+    return calls;
+  }
+
+  /** Approve the sign-in as the browser would: follow the printed URL's redirect with a code. */
+  function approveWhenAsked() {
+    vi.spyOn(console, "log").mockImplementation((line) => {
+      const m = /(https:\/\/team\S+authorize\S+)/.exec(String(line));
+      if (m) {
+        const asked = new URL(m[1]);
+        const back = new URL(asked.searchParams.get("redirect_uri"));
+        back.search = new URLSearchParams({
+          code: "the-code",
+          state: asked.searchParams.get("state"),
+        }).toString();
+        realFetch(back);
+      }
+    });
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("registers a public loopback client, then trades the code with its verifier, the redirect, and the resource", async () => {
+    const calls = stubAccess();
+    approveWhenAsked();
+    const principal = await signIn(ORIGIN, { browser: false });
+    expect(principal).toEqual({ kind: "human", email: "you@example.com", client: "claude-code" });
+
+    const register = JSON.parse(String(calls.find((c) => c.url === `${AS}/register`)?.init.body));
+    expect(register).toMatchObject({
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+    });
+    expect(register.redirect_uris[0]).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/callback$/);
+
+    const form = new URLSearchParams(String(calls.find((c) => c.url === `${AS}/token`)?.init.body));
+    expect(form.get("grant_type")).toBe("authorization_code");
+    expect(form.get("code")).toBe("the-code");
+    expect(form.get("client_id")).toBe("client-new");
+    expect(form.get("redirect_uri")).toBe(register.redirect_uris[0]);
+    expect(form.get("resource")).toBe(`${ORIGIN}/api/whoami`);
+    expect(form.get("code_verifier")?.length).toBeGreaterThan(40);
+
+    expect(readSignIn(ORIGIN)).toMatchObject({
+      client_id: "client-new",
+      redirect_uri: register.redirect_uris[0],
+      access_token: "oauth:a",
+      refresh_token: "r",
+    });
+  });
+
+  it("reuses this computer's registered client while its redirect port is free", async () => {
+    const port = await new Promise((resolve) => {
+      const probe = createServer().listen(0, "127.0.0.1", () => {
+        const p = probe.address().port;
+        probe.close(() => resolve(p));
+      });
+    });
+    writeSignIn(
+      ORIGIN,
+      stored(-1, {
+        registration_endpoint: `${AS}/register`,
+        client_id: "client-kept",
+        redirect_uri: `http://127.0.0.1:${port}/callback`,
+      }),
+    );
+    const calls = stubAccess();
+    approveWhenAsked();
+    await signIn(ORIGIN, { browser: false });
+    expect(calls.some((c) => c.url === `${AS}/register`)).toBe(false);
+    const form = new URLSearchParams(String(calls.find((c) => c.url === `${AS}/token`)?.init.body));
+    expect(form.get("client_id")).toBe("client-kept");
+  });
+});
+
+describe("the loopback callback's wait", () => {
+  it("gives up when no sign-in comes back in time", async () => {
+    const listener = await listenForCode({ state: "s", timeoutMs: 20 });
+    await expect(listener.code).rejects.toThrow(/No sign-in came back in time/);
   });
 });

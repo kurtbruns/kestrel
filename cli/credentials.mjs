@@ -13,9 +13,24 @@
  * sees half of it. Each entry holds what the OAuth client needs to go on without the
  * browser: the authorization server's endpoints, the client registered for this computer,
  * the access token with its expiry, and the refresh token, which lasts as long as the
- * Access application's grant session.
+ * Access application's grant session. A file that exists but isn't one this release can
+ * read is refused, never rewritten, since rewriting it would drop every sign-in it holds.
+ *
+ * A refresh token may be single-use, and Claude Code runs commands side by side, so a refresh
+ * happens under a lock file beside the credentials: whoever waited reads the token the other
+ * stored rather than spending the same refresh token twice.
  */
-import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  closeSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -37,17 +52,31 @@ export function credentialsFile(env = process.env) {
   return join(configDir(env), "credentials.json");
 }
 
-/** Every stored sign-in, keyed by origin; empty when there is no file or it can't be read. */
+/** Every stored sign-in, keyed by origin; empty when there is no file yet. Throws, naming
+ *  the file, when it exists and can't be read as this release's. */
 export function readSignIns(env = process.env) {
+  const file = credentialsFile(env);
+  let text;
   try {
-    const data = JSON.parse(readFileSync(credentialsFile(env), "utf8"));
-    if (data && data.version === VERSION && data.instances && typeof data.instances === "object") {
-      return data.instances;
+    text = readFileSync(file, "utf8");
+  } catch (err) {
+    if (err?.code === "ENOENT") {
+      return {};
     }
-  } catch {
-    /* no file yet, or not ours: nothing is stored */
+    throw new Error(`Couldn't read the sign-ins in ${file}: ${err?.message ?? err}`);
   }
-  return {};
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = undefined;
+  }
+  if (data?.version === VERSION && data.instances && typeof data.instances === "object") {
+    return data.instances;
+  }
+  throw new Error(
+    `${file} isn't a sign-ins file this release of Kestrel can read, so it was left as it is. Move it aside, then run \`npx kestrel login <url>\` again.`,
+  );
 }
 
 /** The stored sign-in for one origin, or undefined. */
@@ -73,4 +102,49 @@ export function writeSignIn(origin, entry, env = process.env) {
   // The mode on create is masked by umask, so set it outright before the file takes its name.
   chmodSync(tmp, 0o600);
   renameSync(tmp, file);
+}
+
+// How long a lock is waited for, and when one left behind by a crashed process is taken over.
+const LOCK_WAIT_MS = 15_000;
+const LOCK_STALE_MS = 30_000;
+
+/**
+ * Run `fn` holding the credentials lock, so only one process refreshes at a time. A lock
+ * older than any refresh takes is a crashed process's, and is taken over.
+ */
+export async function withCredentialsLock(fn, env = process.env) {
+  mkdirSync(configDir(env), { recursive: true, mode: 0o700 });
+  const lock = `${credentialsFile(env)}.lock`;
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  let fd;
+  while (fd === undefined) {
+    try {
+      fd = openSync(lock, "wx", 0o600);
+    } catch (err) {
+      if (err?.code !== "EEXIST") {
+        throw err;
+      }
+      let age = 0;
+      try {
+        age = Date.now() - statSync(lock).mtimeMs;
+      } catch {
+        continue; // released between the open and the stat: try again
+      }
+      if (age > LOCK_STALE_MS) {
+        rmSync(lock, { force: true });
+      } else if (Date.now() > deadline) {
+        throw new Error(
+          `Another kestrel command has held ${lock} too long. If none is running, delete it.`,
+        );
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    closeSync(fd);
+    rmSync(lock, { force: true });
+  }
 }

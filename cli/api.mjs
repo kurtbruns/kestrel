@@ -14,7 +14,7 @@
  */
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
-import { readSignIn, readSignIns, writeSignIn } from "./credentials.mjs";
+import { readSignIn, readSignIns, withCredentialsLock, writeSignIn } from "./credentials.mjs";
 import { devTarget } from "./dev-api.mjs";
 import {
   DEFAULT_CLIENT,
@@ -142,10 +142,13 @@ async function requestBody({ data, type, forms }) {
 
 /**
  * A usable access token for `origin`'s stored sign-in, refreshed first when it is about to
- * expire, or when `force` says Access just turned it away. A refresh that fails leaves the
- * person to sign in again, unless another `kestrel api` refreshed it meanwhile.
+ * expire, or when `force` says Access just turned it away. The refresh runs under the
+ * credentials lock, and a call that waited there uses the token the other stored, so one
+ * refresh token is never spent twice. A grant that has ended leaves the person to sign in
+ * again.
  */
 export async function accessToken(origin, { force = false, env = process.env } = {}) {
+  const ended = `Your sign-in to ${origin} has ended. Run \`npx kestrel login ${origin}\` again.`;
   const entry = readSignIn(origin, env);
   if (!entry) {
     throw new SignInError(
@@ -155,24 +158,32 @@ export async function accessToken(origin, { force = false, env = process.env } =
   if (!force && !needsRefresh(entry)) {
     return entry.access_token;
   }
-  try {
-    const fields = tokenFields(await refreshTokens(entry), entry);
-    writeSignIn(origin, { ...entry, ...fields }, env);
-    return fields.access_token;
-  } catch (err) {
-    // Two calls at once can race to refresh, and a refresh token is single-use: whoever lost
-    // finds the winner's token stored.
+  // The token Access just refused, when it did: a stored token equal to it is no use.
+  const refused = force ? entry.access_token : undefined;
+  return withCredentialsLock(async () => {
     const now = readSignIn(origin, env);
-    if (now && now.access_token !== entry.access_token && !needsRefresh(now)) {
-      return now.access_token;
-    }
-    if (err instanceof SignInError && err.oauthError === "invalid_grant") {
+    if (!now) {
       throw new SignInError(
-        `Your sign-in to ${origin} has ended. Run \`npx kestrel login ${origin}\` again.`,
+        `You aren't signed in to ${origin}. Run \`npx kestrel login ${origin}\`.`,
       );
     }
-    throw err;
-  }
+    if (!needsRefresh(now) && now.access_token !== refused) {
+      return now.access_token;
+    }
+    if (!now.refresh_token) {
+      throw new SignInError(ended);
+    }
+    try {
+      const fields = tokenFields(await refreshTokens(now), now);
+      writeSignIn(origin, { ...now, ...fields }, env);
+      return fields.access_token;
+    } catch (err) {
+      if (err instanceof SignInError && err.oauthError === "invalid_grant") {
+        throw new SignInError(ended);
+      }
+      throw err;
+    }
+  }, env);
 }
 
 /**
@@ -209,10 +220,12 @@ export async function apiCommand(argv) {
     const args = parseApiArgs(argv);
     const client = args.client ?? DEFAULT_CLIENT;
     const { body, headers } = await requestBody(args);
-    if (args.local || (args.url && isLoopback(instanceOrigin(args.url)))) {
+    // A loopback address, given or in KESTREL_URL, is a dev server, which has no sign-in.
+    const named = args.url || process.env.KESTREL_URL || undefined;
+    if (args.local || (named && isLoopback(instanceOrigin(named)))) {
       // A local dev server: its own human token, minted as the editor's is (SPEC §10).
       const { base, token } = await devTarget(
-        args.local ? undefined : instanceOrigin(args.url),
+        args.local ? undefined : instanceOrigin(named),
         "api",
         "human",
       );

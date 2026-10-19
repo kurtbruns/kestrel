@@ -235,7 +235,7 @@ export function exchangeCode(entry, { code, verifier }) {
 /** A new access token from the stored refresh token. Access checks its policies again. */
 export function refreshTokens(entry) {
   if (!entry.refresh_token) {
-    throw new SignInError("There is no refresh token stored for this sign-in.");
+    throw new SignInError("This sign-in can't be renewed. Run `npx kestrel login <url>` again.");
   }
   return tokenRequest(entry.token_endpoint, {
     grant_type: "refresh_token",
@@ -323,7 +323,10 @@ export async function listenForCode({ port, state, timeoutMs = 5 * 60_000 }) {
     tryPort(port ?? 0, Boolean(port));
   });
   const timer = setTimeout(
-    () => settle.reject(new SignInError("No sign-in came back within five minutes.")),
+    () =>
+      settle.reject(
+        new SignInError("No sign-in came back in time. Run `npx kestrel login <url>` again."),
+      ),
     timeoutMs,
   );
   const close = () => {
