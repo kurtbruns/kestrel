@@ -262,7 +262,7 @@ export async function update(c: RequestContext): Promise<Response> {
   if (patch.email_template !== undefined) {
     const v = validateEmailTemplate(patch.email_template);
     if (v.errors.length > 0) {
-      throw badRequest(v.errors.join(" "));
+      throw fieldError("email_template", v.errors.join(" "));
     }
     warnings = v.warnings;
   }
@@ -303,25 +303,28 @@ export async function update(c: RequestContext): Promise<Response> {
 export async function uploadLogo(c: RequestContext): Promise<Response> {
   const ct = c.req.headers.get("content-type") ?? "";
   if (!ct.includes("multipart/form-data")) {
-    throw badRequest("a multipart form with a 'file' field is required");
+    throw fieldError("file", "a multipart form with a 'file' field is required");
   }
   const form = await c.req.formData();
   const file = form.get("file");
   if (!(file instanceof File)) {
-    throw badRequest("missing 'file' field");
+    throw fieldError("file", "missing 'file' field");
   }
   // The post images' allowlist: the logo rides in every email's sign-off, and most email
   // apps don't show an SVG. A logo stored before this rule was set keeps serving.
   const type = mediaType(file.type);
   if (!RASTER_IMAGE_TYPES.includes(type)) {
-    throw badRequest("The logo must be a PNG, JPEG, WebP, or GIF. Most email apps don’t show SVG.");
+    throw fieldError(
+      "file",
+      "The logo must be a PNG, JPEG, WebP, or GIF. Most email apps don’t show SVG.",
+    );
   }
   const bytes = await file.arrayBuffer();
   if (bytes.byteLength === 0) {
-    throw badRequest("The logo file is empty.");
+    throw fieldError("file", "The logo file is empty.");
   }
   if (bytes.byteLength > MAX_LOGO_BYTES) {
-    throw badRequest(`The logo must be ${MAX_LOGO_BYTES / 1024} KB or smaller.`);
+    throw fieldError("file", `The logo must be ${MAX_LOGO_BYTES / 1024} KB or smaller.`);
   }
   // A timestamp names the upload's key, so a new upload never lands on an old key, even
   // after a removal, and nothing already sent changes what it shows (I3).

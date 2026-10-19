@@ -115,6 +115,8 @@ export interface RouteRefusal {
   code: RefusalCode;
   /** What is this route's own about it; absent when the code's one line says it all. */
   when?: string;
+  /** The fields its body carries beside `error` and `message`; `field` only on a code outside
+   *  Fix the request, since the Errors topic states it once for every code in that group. */
   details?: string[];
 }
 

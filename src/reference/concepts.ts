@@ -40,7 +40,7 @@ const ERROR_BODY: ReferenceField[] = [
     name: "field",
     type: "string",
     description:
-      "For a refusal about the request: the field it names, a dotted path for a nested one (`notifications.to`).",
+      "The body or query field a refusal is about, a dotted path for a nested one (`notifications.to`). Every refusal whose next move is to fix the request carries it when one field is at fault, so a route doesn't list it there; a body it can't read at all, or a fault in the path, names none. A route lists it on any other refusal that carries it (`slug_taken`).",
   },
   {
     name: "retry_after",

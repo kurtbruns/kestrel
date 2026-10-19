@@ -22,7 +22,13 @@ import { UNLISTED_PATH } from "../shared/archive_url";
 import { FREE_PLAN_LIST } from "../shared/free_plan";
 import { IMPORT_LIMITS } from "../shared/imports";
 import type { ReferenceField, ReferenceResponse } from "../shared/reference";
-import { formatLead, MIN_LEAD_FLOOR_MS, STUCK_THRESHOLD_MS } from "../shared/sends";
+import {
+  type DeliveryListResponse,
+  formatLead,
+  MIN_LEAD_FLOOR_MS,
+  STUCK_THRESHOLD_MS,
+} from "../shared/sends";
+import type { TemplateTestResponse } from "../shared/settings";
 import { SUBSCRIBER_ACTIONS } from "../shared/subscriber_meanings";
 import { buildInfo } from "./build";
 import type { Config } from "./env";
@@ -142,7 +148,7 @@ export function createRouter({
   ];
   // What an import's plan refuses, naming what was wrong and what was expected; a commit too.
   const importRefusals: RouteRefusal[] = [
-    { code: "unrecognized_format", details: ["row"] },
+    { code: "unrecognized_format", details: ["row", "column", "allowed"] },
     { code: "invalid_field", details: ["row", "column", "allowed"] },
     { code: "too_many_rows", details: ["limit"] },
     { code: "body_too_large" },
@@ -177,7 +183,16 @@ export function createRouter({
     },
     { code: "conflict", details: ["settings"] },
   ];
-  const slugRefusals: RouteRefusal[] = [{ code: "slug_invalid" }, { code: "slug_taken" }];
+  const slugRefusals: RouteRefusal[] = [
+    { code: "slug_invalid" },
+    { code: "slug_taken", details: ["field"] },
+  ];
+  // A move of an address that can no longer move, naming the field that tried.
+  const slugPermanent: RouteRefusal = {
+    code: "slug_permanent",
+    when: "A change to the address once the post's send has started, or while its scheduled email (frozen before unlisted links) links it. Naming the address it has is fine.",
+    details: ["field", "post"],
+  };
   const activeSendExists: RouteRefusal = {
     code: "active_send_exists",
     details: ["send", "cursor"],
@@ -189,6 +204,7 @@ export function createRouter({
     { code: "settings_changed", details: ["settings"] },
     notConnected,
     ...slugRefusals,
+    slugPermanent,
   ];
   const notDraft: RouteRefusal = { code: "post_not_draft", details: ["post"] };
   // A send in a route's example: its state, since the whole view is described once.
@@ -597,8 +613,10 @@ export function createRouter({
           failed: [],
           not_sent: [],
           provider: "fake",
+          recipients: ["you@example.com"],
           subject: "Template test — …",
-        },
+          warnings: [],
+        } satisfies TemplateTestResponse,
       },
       body: [
         {
@@ -839,14 +857,7 @@ export function createRouter({
         },
       },
       body: postSettingsFields,
-      errors: [
-        ...slugRefusals,
-        {
-          code: "slug_permanent",
-          when: "A change to the address once the post's send has started, or while its scheduled email (frozen before unlisted links) links it. Naming the address it has is fine.",
-          details: ["post"],
-        },
-      ],
+      errors: [...slugRefusals, slugPermanent],
       returns: {
         object: "post",
         as: "post",
@@ -1240,7 +1251,13 @@ export function createRouter({
           read_again_at: 1768467613000,
         },
       },
-      errors: [{ code: "cursor_ahead" }],
+      errors: [
+        {
+          code: "cursor_ahead",
+          when: "`since` is ahead of this database, as after a restore; `cursor` is where the database stands now. Read the sends again, then follow from that read's cursor.",
+          details: ["field", "cursor"],
+        },
+      ],
       returns: {
         object: "send",
         as: "sends",
@@ -1368,13 +1385,13 @@ export function createRouter({
           ],
           view: "failures",
           page: { total: 1, limit: 50, offset: 0, sort: "email", dir: "asc" },
-        },
+        } satisfies DeliveryListResponse,
       },
       returns: {
         fields: [
           {
             name: "deliveries",
-            type: "object[]",
+            type: "{ email, status, event, event_detail, event_at, error, attempts, bounce_kind }[]",
             description:
               "One row a recipient, as the record holds it: `email`; `status`, the hand-off (`pending`, `dispatched` awaiting the provider's answer, `accepted`, `unsent`, `skipped`); `event`, what the provider reported after (`delivered`, `bounced`, `complained`, or null), which a row counts under in place of `accepted`; `event_detail` and `event_at`; `error`, the last failed hand-off's words; `attempts`, its hand-offs tried; and `bounce_kind` (`hard` or `soft`) on a bounce.",
           },
@@ -1383,6 +1400,7 @@ export function createRouter({
             type: "string",
             description: "The view read, `failures` when none was asked.",
           },
+          pageField,
         ],
       },
       handler: sendRoutes.deliveries,

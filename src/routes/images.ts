@@ -46,13 +46,17 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
   let filename: string;
   let contentType: string;
   let bytes: ArrayBuffer;
+  // What a refusal of the image itself names: the form's `file`, or, for a raw upload, the
+  // body as a whole, which is no field.
+  let imageField: { field: string } | undefined;
 
   if (ct.includes("multipart/form-data")) {
     const form = await c.req.formData();
     const file = form.get("file");
     if (!(file instanceof File)) {
-      throw badRequest("missing 'file' field");
+      throw badRequest("missing 'file' field", { field: "file" });
     }
+    imageField = { field: "file" };
     const override = form.get("filename");
     filename = baseName(
       typeof override === "string" && override ? override : file.name || "upload",
@@ -63,24 +67,27 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
     // Raw body upload: filename via query, content-type via header.
     filename = baseName(c.url.searchParams.get("filename") ?? "");
     if (!filename) {
-      throw badRequest("filename query param required for a raw upload");
+      throw badRequest("filename query param required for a raw upload", { field: "filename" });
     }
     contentType = mediaType(ct);
     bytes = await c.req.arrayBuffer();
   }
 
   if (!filename) {
-    throw badRequest("a filename is required");
+    throw badRequest("a filename is required", { field: "filename" });
   }
   // Raster images only (lib/image_types says why), and not too large.
   if (!RASTER_IMAGE_TYPES.includes(contentType)) {
-    throw badRequest("An image must be a PNG, JPEG, WebP, or GIF.");
+    throw badRequest("An image must be a PNG, JPEG, WebP, or GIF.", imageField);
   }
   if (bytes.byteLength === 0) {
-    throw badRequest("The image file is empty.");
+    throw badRequest("The image file is empty.", imageField);
   }
   if (bytes.byteLength > MAX_POST_IMAGE_BYTES) {
-    throw badRequest(`An image must be ${MAX_POST_IMAGE_BYTES / (1024 * 1024)} MB or smaller.`);
+    throw badRequest(
+      `An image must be ${MAX_POST_IMAGE_BYTES / (1024 * 1024)} MB or smaller.`,
+      imageField,
+    );
   }
 
   const key = storageKey(post.id, filename);
