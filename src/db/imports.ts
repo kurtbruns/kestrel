@@ -225,8 +225,8 @@ const v = (field: string) => `json_extract(j.value, '$.${field}')`;
  * Apply an import in one batch, all of it or none: its record first (every row it touches
  * names it), then, each guarded against the list as it stands, the unsubscribes, the new
  * unsubscribed addresses, the confirmations of pending subscribers, the new confirmed ones,
- * the suppressions, the stripping of whoever the file says left by an erasure, and the
- * publisher's notice. Confirmations run before the suppressions so a row's own bounce lands
+ * the suppressions, the stripping of whoever the file says left by an erasure, the records of
+ * past sends losing their address (`forget`), and the publisher's notice. Confirmations run before the suppressions so a row's own bounce lands
  * beside its subscriber; a suppression already here holds any confirmation back and is never
  * replaced. Throws on a second import of the same plan (`plan_hash` is unique), having
  * written nothing.
@@ -235,6 +235,7 @@ export async function applyImport(
   db: D1Database,
   writes: ImportWrites,
   suppressionDetail: string,
+  forget: D1PreparedStatement[] = [],
 ): Promise<AppliedWrites> {
   const r = writes.record;
   const now = r.created_at;
@@ -381,6 +382,9 @@ export async function applyImport(
         .bind(chunk),
     );
   }
+  // Then the records of past sends lose each erased person's address, as Erase rewrites them:
+  // `forget` is `forgetDeliveries`' statements for the addresses this import erases.
+  statements.push(...forget);
   if (writes.notice) {
     statements.push(importNotice(db, r.id, now));
   }

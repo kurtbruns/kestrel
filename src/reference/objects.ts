@@ -986,6 +986,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
         confirmed_pending: 0,
         unchanged: 0,
         unsubscribed: 0,
+        erased: 0,
         added_unsubscribed: 1,
         kept_confirmed_newer: 0,
         kept_unsubscribed: 0,

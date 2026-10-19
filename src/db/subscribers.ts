@@ -1,7 +1,6 @@
 /** Subscriber + suppression queries, and audience selection (I1/I2). */
 import { normalizeEmail } from "../../shared/email";
 import {
-  ERASED_PREFIX,
   SIGNUP_ONLY_CAUSES,
   type SubscribeAction,
   type Subscriber,
@@ -14,6 +13,7 @@ import {
 import { newId, newToken } from "../lib/ids";
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
 import { unwrap } from "../lib/unwrap";
+import { forgetDeliveries, idleFor } from "./erasure";
 
 // The row shapes live in shared/ so the editor reads the same definitions; the names
 // here are the Worker's own.
@@ -455,76 +455,42 @@ export type EraseOutcome =
   | { kind: "not_found" }
   | { kind: "in_flight" };
 
-/** `text` with every occurrence of `email` replaced by `placeholder`, matched whatever its
- *  case and leaving the rest of the text as it was; null stays null. */
-function withoutAddress(text: string | null, email: string, placeholder: string): string | null {
-  if (text === null) {
-    return null;
-  }
-  const pattern = new RegExp(email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "giu");
-  return text.replace(pattern, placeholder);
-}
-
 /**
  * Erase a subscriber (SPEC §7): unsubscribe them with cause `erased` and strip their row to the
  * address and when, which takes how they joined and the evidence for it along and discards
- * both tokens, so the link in every post they were sent matches no one; put one random placeholder, `erased:<hex>`, in place of their
- * address on every past delivery row, so each record still sums to its audience; and drop the
- * words from a bounce or block kept on the address, which may name them. A provider's words
- * or message id on a delivery row that name the address get the placeholder in its place
- * too, in whatever case it was written, the rest of the text kept as it was. A real
- * provider's message id is opaque and never matches; the local stand-in's spells out the
- * address, and it is still unique with the placeholder in it. A subscriber already erased is
- * answered as they stand, with nothing changed.
+ * both tokens, so the link in every post they were sent matches no one; put a placeholder in
+ * place of their address on every past delivery row (`forgetDeliveries`); and drop the words
+ * from a bounce or block kept on the address, which may name them. A subscriber already erased
+ * is answered as they stand, only any delivery row still naming them (an import's erasure that
+ * a send run's lease held back) rewritten.
  *
  * One batch, so it all lands together or not at all. It is refused (`in_flight`) while a
- * send run holding its lease has one of the address's rows pending or dispatched: that run
- * holds the real address in hand and would write the provider's answer, which may name it,
- * back onto the row. Every write carries that condition, so a run that takes its lease
- * between the check and the batch is still caught. A pending row of a send between runs
- * becomes the placeholder, which no subscriber holds, so the send skips it (I2).
+ * send run holding its lease has one of the address's rows pending or dispatched, and every
+ * write carries that condition, so a run that takes its lease between the check and the
+ * batch is still caught. A pending row of a send between runs becomes the placeholder, which
+ * no subscriber holds, so the send skips it (I2).
  */
 export async function erase(db: D1Database, id: string): Promise<EraseOutcome> {
   const row = await getById(db, id);
   if (!row) {
     return { kind: "not_found" };
   }
-  if (row.status === "unsubscribed" && row.unsubscribe_cause === "erased") {
-    return { kind: "erased", subscriber: row, deliveries: 0 };
-  }
   const email = row.email;
   const now = Date.now();
-  const placeholder = `${ERASED_PREFIX}${newToken(8)}`;
-  // Through idx_deliveries_email: the rows whose provider text or id names the address.
-  const { results } = await db
-    .prepare("SELECT id, error, event_detail, provider_id FROM deliveries WHERE email = ?")
-    .bind(email)
-    .all<{
-      id: number;
-      error: string | null;
-      event_detail: string | null;
-      provider_id: string | null;
-    }>();
-  const rewritten = results.flatMap((r) => {
-    const next = {
-      id: r.id,
-      error: withoutAddress(r.error, email, placeholder),
-      event_detail: withoutAddress(r.event_detail, email, placeholder),
-      provider_id: withoutAddress(r.provider_id, email, placeholder),
+  const deliveries = await forgetDeliveries(db, [email], now);
+  if (row.status === "unsubscribed" && row.unsubscribe_cause === "erased") {
+    const statements = [...deliveries.rewrite, ...deliveries.move];
+    const moved = statements.length === 0 ? [] : await db.batch(statements);
+    return {
+      kind: "erased",
+      subscriber: row,
+      deliveries: moved
+        .slice(deliveries.rewrite.length)
+        .reduce((n, r) => n + (r.meta.changes ?? 0), 0),
     };
-    const changed =
-      next.error !== r.error ||
-      next.event_detail !== r.event_detail ||
-      next.provider_id !== r.provider_id;
-    return changed ? [next] : [];
-  });
-  // Every statement binds ?1 the address and ?2 the time, for this condition: no run holding
-  // its lease has the address in hand.
-  const idle =
-    "NOT EXISTS (SELECT 1 FROM deliveries d JOIN sends s ON s.id = d.send_id WHERE d.email = ?1 AND d.status IN ('pending', 'dispatched') AND s.locked_until >= ?2)";
-  const field = (name: string) =>
-    `${name} = (SELECT json_extract(value, '$.${name}') FROM json_each(?3) WHERE json_extract(value, '$.id') = deliveries.id)`;
-  const [stripped, , , moved] = await db.batch([
+  }
+  const idle = idleFor("?1", "?2");
+  const results = await db.batch([
     db
       .prepare(
         `UPDATE subscribers SET status = 'unsubscribed', unsubscribe_cause = 'erased',
@@ -537,23 +503,22 @@ export async function erase(db: D1Database, id: string): Promise<EraseOutcome> {
     db
       .prepare(`UPDATE suppressions SET detail = NULL WHERE email = ?1 AND ${idle}`)
       .bind(email, now),
-    db
-      .prepare(
-        `UPDATE deliveries SET ${field("error")}, ${field("event_detail")}, ${field("provider_id")} WHERE id IN (SELECT json_extract(value, '$.id') FROM json_each(?3)) AND email = ?1 AND ${idle}`,
-      )
-      .bind(email, now, JSON.stringify(rewritten)),
-    db
-      .prepare(`UPDATE deliveries SET email = ?3 WHERE email = ?1 AND ${idle}`)
-      .bind(email, now, placeholder),
+    ...deliveries.rewrite,
+    ...deliveries.move,
   ]);
   const after = await getById(db, id);
   if (!after) {
     return { kind: "not_found" };
   }
-  if ((stripped?.meta.changes ?? 0) === 0) {
+  if ((results[0]?.meta.changes ?? 0) === 0) {
     return { kind: "in_flight" };
   }
-  return { kind: "erased", subscriber: after, deliveries: moved?.meta.changes ?? 0 };
+  const moved = results.slice(2 + deliveries.rewrite.length);
+  return {
+    kind: "erased",
+    subscriber: after,
+    deliveries: moved.reduce((n, r) => n + (r.meta.changes ?? 0), 0),
+  };
 }
 
 /**

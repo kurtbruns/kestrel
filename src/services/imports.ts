@@ -38,6 +38,7 @@ import {
   parseImportFile,
 } from "../../shared/imports";
 import { strongerCause } from "../../shared/subscribers";
+import { deliveriesNaming, forgetDeliveries, handingOff } from "../db/erasure";
 import type { ListEntry, ListState } from "../db/imports";
 import * as imports from "../db/imports";
 import { countSubscribers } from "../db/subscribers";
@@ -112,6 +113,7 @@ const WRITE_OUTCOMES: ReadonlySet<ImportOutcome> = new Set([
   "added_confirmed",
   "confirmed_pending",
   "unsubscribed",
+  "erased",
   "added_unsubscribed",
 ]);
 
@@ -123,7 +125,8 @@ const WRITE_OUTCOMES: ReadonlySet<ImportOutcome> = new Set([
  * A pending subscriber who once left counts as unsubscribed: anyone can put an address back
  * to pending through the public form, so only its owner's confirmation undoes the leaving
  * (I2). Someone already unsubscribed here takes the row's cause only when it is the stronger
- * (an erasure over a complaint over the rest), as when a person leaves again. A suppression
+ * (an erasure over a complaint over the rest), as when a person leaves again. Someone here the
+ * row unsubscribes by an erasure is `erased`, since it erases them as Erase does. A suppression
  * here stands: the first one an address gets is the one it keeps.
  */
 export function classify(
@@ -167,6 +170,10 @@ export function classify(
             : "unsubscribed";
   } else {
     outcome = "left_out";
+  }
+  // An erasure that unsubscribes someone here erases them, which the plan names apart.
+  if (outcome === "unsubscribed" && row.unsubscribe_cause === "erased") {
+    outcome = "erased";
   }
   if (suppressionAdded && (outcome === "unchanged" || outcome === "left_out")) {
     outcome = "suppressed";
@@ -450,7 +457,11 @@ export async function commitImport(
       writes.addConfirmed.push({ ...consent, id: newId(), tok: token(), uat: null });
     } else if (outcome === "confirmed_pending") {
       writes.confirm.push(consent);
-    } else if (outcome === "unsubscribed" || outcome === "added_unsubscribed") {
+    } else if (
+      outcome === "unsubscribed" ||
+      outcome === "erased" ||
+      outcome === "added_unsubscribed"
+    ) {
       // An added one in the unsubscribe too, so an address that subscribed here since the plan
       // still leaves.
       const cause = row.unsubscribe_cause ?? "import";
@@ -477,9 +488,22 @@ export async function commitImport(
     }
   }
 
+  // Whoever the import erases loses their address on past sends here too, as with Erase, and
+  // like Erase the commit waits while a send run is handing one of them to the provider.
+  if ((await handingOff(db, writes.erase, now)).length > 0) {
+    throw refusal(
+      "run_in_progress",
+      "A send is handing someone this import would erase to the email provider right now, so it can’t be committed this moment. Try again in a minute.",
+    );
+  }
+  const forget = await forgetDeliveries(db, writes.erase, now);
+
   let applied: imports.AppliedWrites;
   try {
-    applied = await imports.applyImport(db, writes, `imported from ${plan.input.name}`);
+    applied = await imports.applyImport(db, writes, `imported from ${plan.input.name}`, [
+      ...forget.rewrite,
+      ...forget.move,
+    ]);
   } catch (err) {
     // Another commit of this plan got there first: its batch wrote the record, this one
     // wrote nothing.
@@ -492,6 +516,19 @@ export async function commitImport(
   // From here the import is written: nothing below may fail the commit, or a retry would
   // read as a replay of a commit that answered nothing.
 
+  // A run that took its lease between the check and the batch held back an erased person's
+  // delivery rows: say so, since Erase on them finishes the job.
+  if (writes.erase.length > 0) {
+    try {
+      const left = await deliveriesNaming(db, writes.erase);
+      if (left > 0) {
+        log.error("import.incomplete", { importId: id, step: "erase", deliveries: left });
+      }
+    } catch (err) {
+      log.error("import.incomplete", { importId: id, step: "erase", error: errorText(err) });
+    }
+  }
+
   // What each row's writes actually did, against what the plan meant them to.
   const actual: PlannedRow[] = [];
   const unsettled: PlannedRow[] = [];
@@ -502,7 +539,9 @@ export async function commitImport(
       : applied.addedConfirmed.has(e)
         ? "added_confirmed"
         : applied.unsubscribed.has(e)
-          ? "unsubscribed"
+          ? p.outcome === "erased"
+            ? "erased"
+            : "unsubscribed"
           : applied.addedUnsubscribed.has(e)
             ? "added_unsubscribed"
             : WRITE_OUTCOMES.has(p.outcome)

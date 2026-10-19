@@ -1887,6 +1887,10 @@ export function createRouter({
         },
         { code: "attestation_required", details: ["attestation"] },
         { code: "sends_acknowledgement_required", details: ["sends"] },
+        {
+          code: "run_in_progress",
+          when: "A send run is handing someone the import would erase to the provider: nothing is written, try again a moment later.",
+        },
         ...importRefusals,
       ],
       handler: importRoutes.commit,

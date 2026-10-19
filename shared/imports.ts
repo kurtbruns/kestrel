@@ -840,6 +840,7 @@ export const IMPORT_OUTCOMES = [
   "confirmed_pending",
   "unchanged",
   "unsubscribed",
+  "erased",
   "added_unsubscribed",
   "kept_confirmed_newer",
   "kept_unsubscribed",
@@ -859,7 +860,9 @@ export const IMPORT_OUTCOME_MEANINGS: Record<ImportOutcome, string> = {
   unchanged:
     "Already confirmed here, or already in the state the row claims. A subscriber who joined here keeps their own record.",
   unsubscribed:
-    "`unsubscribed`, and confirmed or pending here, with no confirmation here newer than the row’s `unsubscribed_at`: unsubscribed, by the row’s cause. Also `unsubscribed` for someone already unsubscribed here whose cause the row’s stronger one replaces (an erasure over a complaint over the rest). A row whose cause is `erased` leaves only the address.",
+    "`unsubscribed`, and confirmed or pending here, with no confirmation here newer than the row’s `unsubscribed_at`: unsubscribed, by the row’s cause. Also `unsubscribed` for someone already unsubscribed here whose cause the row’s stronger one replaces, a complaint over the rest.",
+  erased:
+    "`unsubscribed` with cause `erased`, for someone here it unsubscribes, or who already left here for another reason: erased, as Erase does. Their record keeps only the address and when, and past sends here show an erased recipient in place of the address. Named apart so the publisher sees who on their list the file erases.",
   added_unsubscribed:
     "`unsubscribed`, with no subscriber here: recorded as unsubscribed, by the row’s cause, so the list remembers they left. A row whose cause is `erased` is recorded with its address alone.",
   kept_confirmed_newer:

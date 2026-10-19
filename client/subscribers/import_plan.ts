@@ -45,14 +45,19 @@ const OUTCOME_WORDS: { outcome: ImportOutcome; one: string; many: string; kept?:
     many: "subscribers here unsubscribed",
   },
   {
+    outcome: "erased",
+    one: "subscriber here erased, as the file says: only the address is kept, and past sends show an erased recipient",
+    many: "subscribers here erased, as the file says: only their addresses are kept, and past sends show an erased recipient",
+  },
+  {
     outcome: "added_unsubscribed",
     one: "address recorded as having left (unsubscribed), so the list remembers them",
     many: "addresses recorded as having left (unsubscribed), so the list remembers them",
   },
   {
     outcome: "suppressed",
-    one: "address suppressed as the file says (bounced, complained, or blocked), so it’s never mailed",
-    many: "addresses suppressed as the file says (bounced, complained, or blocked), so they’re never mailed",
+    one: "address suppressed as the file says (bounced or blocked), so it’s never mailed",
+    many: "addresses suppressed as the file says (bounced or blocked), so they’re never mailed",
   },
   {
     outcome: "unchanged",
@@ -138,6 +143,7 @@ const OUTCOME_SHORT: Record<ImportOutcome, string> = {
   added_confirmed: "Imported as subscribed",
   confirmed_pending: "Imported as subscribed",
   unsubscribed: "Unsubscribed",
+  erased: "Erased",
   added_unsubscribed: "Recorded as having left",
   suppressed: "Suppressed",
   unchanged: "Unchanged",

@@ -137,7 +137,7 @@ export function composeNotification(n: DueNotification, config: Config): Rendere
 export function composeImportNotification(n: DueImportNotification, config: Config): RenderedEmail {
   const c = (k: keyof OutcomeCounts): number => n.counts[k];
   const confirmed = c("added_confirmed") + c("confirmed_pending");
-  const unsubscribed = c("unsubscribed") + c("added_unsubscribed");
+  const unsubscribed = c("unsubscribed") + c("erased") + c("added_unsubscribed");
   const notImported =
     c("kept_suppressed") +
     c("kept_unsubscribed") +

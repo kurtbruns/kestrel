@@ -40,6 +40,17 @@ describe("outcomeLines", () => {
     );
   });
 
+  it("names the people on the list a file erases in a line of their own, after those it unsubscribes (SPEC §7)", () => {
+    const lines = outcomeLines(counts({ unsubscribed: 3, erased: 1 }));
+    expect(lines.map((l) => [l.outcome, l.text])).toEqual([
+      ["unsubscribed", "3 subscribers here unsubscribed"],
+      [
+        "erased",
+        "1 subscriber here erased, as the file says: only the address is kept, and past sends show an erased recipient",
+      ],
+    ]);
+  });
+
   it("gives a line for every outcome the server has", () => {
     const all = counts(Object.fromEntries(IMPORT_OUTCOMES.map((o) => [o, 2])));
     expect(

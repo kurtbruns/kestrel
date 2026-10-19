@@ -124,7 +124,8 @@ Each row gets exactly one outcome. A row that both changes its status and adds a
 | `added_confirmed` | `subscribed`, with no subscriber and no suppression in Kestrel: added as confirmed. |
 | `confirmed_pending` | `subscribed`, pending in Kestrel (never confirmed): confirmed, and its confirmation link no longer works. |
 | `unchanged` | Already confirmed in Kestrel, or already in the state the row claims. A subscriber who joined through Kestrel keeps their own record. |
-| `unsubscribed` | `unsubscribed`, and confirmed or pending in Kestrel, with no confirmation in Kestrel newer than the row's `unsubscribed_at`: unsubscribed, with the row's cause. Also an address already unsubscribed in Kestrel for a weaker reason, which the row's stronger one replaces. |
+| `unsubscribed` | `unsubscribed`, and confirmed or pending in Kestrel, with no confirmation in Kestrel newer than the row's `unsubscribed_at`: unsubscribed, with the row's cause. Also an address already unsubscribed in Kestrel for a weaker reason, which the row's complaint replaces. |
+| `erased` | `unsubscribed` with cause `erased`, for someone in Kestrel it unsubscribes, or who already left for another reason: erased, as **Erase** does. Their record keeps only the address and when, and your past sends show an erased recipient in place of the address. Named apart so you see who on your list the file erases. |
 | `added_unsubscribed` | `unsubscribed`, with no subscriber in Kestrel: recorded as unsubscribed, with the row's cause, so the list remembers they left. |
 | `kept_confirmed_newer` | `unsubscribed`, but the reader confirmed in Kestrel after the source's `unsubscribed_at`: their newer action stands. |
 | `kept_unsubscribed` | `subscribed`, but unsubscribed in Kestrel, or pending again after leaving until they confirm in Kestrel themselves. An unsubscribe is never reversed. |
@@ -136,7 +137,7 @@ Each row gets exactly one outcome. A row that both changes its status and adds a
 
 A suppression already in Kestrel is never replaced: the first one an address gets stands. An imported bounce is kept apart from one Kestrel saw itself, so the list says where each came from.
 
-**Why someone left.** A row with no `unsubscribe_cause` is recorded as having left elsewhere, which is all an import can know. One whose cause is `erased` is recorded with its address alone, whatever else the row says, and so is a subscriber already in Kestrel whom it unsubscribes: their consent history, how they joined, and its evidence are stripped, as **Erase** strips them. Someone already unsubscribed in Kestrel keeps the stronger of the two reasons: an erasure, then a complaint, then the reason Kestrel already has.
+**Why someone left.** A row with no `unsubscribe_cause` is recorded as having left elsewhere, which is all an import can know. One whose cause is `erased` is recorded with its address alone, whatever else the row says. A subscriber already in Kestrel whom it unsubscribes is erased, as **Erase** erases them: their consent history, how they joined, and its evidence go, and your past sends show an erased recipient in place of the address. The plan names each such person apart, as `erased`, so you see who on your list the file erases before you commit. A commit that lands while a send is handing one of them to your email provider is refused, and you try again a minute later. Someone already unsubscribed in Kestrel keeps the stronger of the two reasons: an erasure, then a complaint, then the reason Kestrel already has.
 
 Anyone can type an address into your subscribe form, which puts a reader who left back to pending until they confirm. An import treats such a reader as unsubscribed, so it never confirms someone who left in Kestrel.
 

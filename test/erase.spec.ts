@@ -430,12 +430,10 @@ describe("an import row whose person left by an erasure (SPEC §7)", () => {
     });
   }
 
-  it("unsubscribes and strips a subscriber an import confirmed, whom only their own sign-up brings back", async () => {
+  it("erases a subscriber an import confirmed, whom only their own sign-up brings back", async () => {
     await importCsv([`${email},subscribed,double,sendy,,,,,,${evidence}`]);
     const result = await importCsv([`${email},subscribed,double,sendy,erased,,,,,`]);
-    expect(result.rows).toEqual([
-      { row: 1, email, outcome: "unsubscribed", suppression_added: false },
-    ]);
+    expect(result.rows).toEqual([{ row: 1, email, outcome: "erased", suppression_added: false }]);
     expect(await stored(email)).toMatchObject(STRIPPED);
     expect(await subs.audienceEmails(env.DB)).toEqual([]);
 
@@ -448,7 +446,7 @@ describe("an import row whose person left by an erasure (SPEC §7)", () => {
     expect(await subs.audienceEmails(env.DB)).toEqual([email]);
   });
 
-  it("unsubscribes a pending sign-up, whose confirmation link then no longer confirms", async () => {
+  it("erases a pending sign-up, whose confirmation link then no longer confirms", async () => {
     await publicSubscribe(email);
     const token = (await stored(email))!.confirm_token!;
 
@@ -456,9 +454,7 @@ describe("an import row whose person left by an erasure (SPEC §7)", () => {
       csvFile2([`${email},unsubscribed,unknown,unknown,erased,,,`]),
     );
 
-    expect(result.rows).toEqual([
-      { row: 1, email, outcome: "unsubscribed", suppression_added: false },
-    ]);
+    expect(result.rows).toEqual([{ row: 1, email, outcome: "erased", suppression_added: false }]);
     expect(await stored(email)).toMatchObject(STRIPPED);
     const confirm = await SELF.fetch(`${base}/confirm`, {
       method: "POST",
@@ -466,6 +462,68 @@ describe("an import row whose person left by an erasure (SPEC §7)", () => {
       body: new URLSearchParams({ token }).toString(),
     });
     expect(confirm.status).toBe(400);
+  });
+
+  it("erases someone on the list as Erase does, past sends' records included, and names them apart in the plan", async () => {
+    await seedConfirmed([email, "other@example.com"]);
+    const sendId = await sentSend();
+    await env.DB.prepare(
+      "UPDATE deliveries SET event = 'bounced', bounce_kind = 'soft', event_detail = ? WHERE email = ?",
+    )
+      .bind("452 <Ada@Example.com> Mailbox Full", email)
+      .run();
+    const file = csvFile2([`${email},unsubscribed,unknown,unknown,erased,,,`]);
+
+    const { plan, result } = await planAndCommit(file);
+
+    const rows = [{ row: 1, email, outcome: "erased", suppression_added: false }];
+    expect(plan.counts).toEqual(counts({ erased: 1 }));
+    expect(plan.rows).toEqual(rows);
+    expect(result.counts).toEqual(counts({ erased: 1 }));
+    expect(result.rows).toEqual(rows);
+    expect(await stored(email)).toMatchObject(STRIPPED);
+    expect(await tablesNaming(email)).toEqual(["subscribers"]);
+    const { results } = await env.DB.prepare(
+      "SELECT email, event_detail FROM deliveries WHERE send_id = ? AND email <> 'other@example.com'",
+    )
+      .bind(sendId)
+      .all<{ email: string; event_detail: string }>();
+    expect(results).toHaveLength(1);
+    expect(results[0]!.email).toMatch(PLACEHOLDER);
+    expect(results[0]!.event_detail).toBe(`452 <${results[0]!.email}> Mailbox Full`);
+  });
+
+  it("is refused for now, changing nothing, while a send run is handing that person to the provider", async () => {
+    await seedConfirmed(email);
+    const send = await frozenSend(Date.now() - 1000);
+    await sends.resolveAudience(env.DB, send.id, Date.now());
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE sends SET status = 'sending', locked_until = ?, lease_token = 'run' WHERE id = ?",
+      ).bind(Date.now() + 60_000, send.id),
+      env.DB.prepare(
+        "UPDATE deliveries SET status = 'dispatched', dispatch_key = 'k' WHERE send_id = ?",
+      ).bind(send.id),
+    ]);
+    const file = csvFile2([`${email},unsubscribed,unknown,unknown,erased,,,`]);
+    const plan: ImportPlanResponse = await readJson(
+      await SELF.fetch(`${base}/api/imports/plan`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ file }),
+      }),
+    );
+    const before = await everyRow();
+
+    const res = await SELF.fetch(`${base}/api/imports`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ file, plan_hash: plan.plan_hash }),
+    });
+
+    expect(res.status).toBe(409);
+    expect((await readJson(res)).error).toBe("run_in_progress");
+    expect(await everyRow()).toEqual(before);
   });
 
   it("keeps a bounce already here beside it, without its words", async () => {

@@ -207,7 +207,8 @@ export async function commit(c: RequestContext): Promise<Response> {
     principal: principal.kind,
     rows: p.rowCount,
     confirmed: result.counts.added_confirmed + result.counts.confirmed_pending,
-    unsubscribed: result.counts.unsubscribed + result.counts.added_unsubscribed,
+    unsubscribed:
+      result.counts.unsubscribed + result.counts.erased + result.counts.added_unsubscribed,
     suppressed: result.suppressions_added,
     differed: result.differed.length,
   });
