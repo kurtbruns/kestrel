@@ -213,7 +213,7 @@ export interface ImportWrites {
   suppress: { e: string; r: string; at: number | null }[];
   /** The addresses the file says left by an erasure, whose records are stripped to the address. */
   erase: string[];
-  /** Whether to tell the publisher of the import (one Claude committed, SPEC §8). */
+  /** Whether to tell the publisher of the import (one a service token committed, SPEC §8). */
   notice: boolean;
 }
 

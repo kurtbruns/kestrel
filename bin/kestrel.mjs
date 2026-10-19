@@ -6,8 +6,9 @@
  * bringing a release's migrations and Claude context in, and the demo. This repository's npm scripts run the same commands, so both
  * use one implementation.
  *
- * Every command acts on the directory it runs in. Seed and reset work only against a local
- * dev server, whose dev routes exist nowhere else.
+ * Every command acts on the directory it runs in, except the sign-in: login, logout, and api
+ * act as the person at this computer, whose sign-ins are theirs rather than a folder's.
+ * Seed and reset work only against a local dev server, whose dev routes exist nowhere else.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -28,6 +29,10 @@ Usage: kestrel <command> [options]
   check-context --merged <file> record that you merged this release's changes into one
   seed [--size <n>] [port|url]  load the demo publication into the local dev server
   reset [port|url]              return the local dev server to a fresh install
+
+  login <url> [--no-browser]    sign in to a deployed instance as you, in your browser
+  logout [url]                  sign out of it on this computer
+  api <method> <path> [opts]    call the API as you, via Claude Code (kestrel api for options)
 
   help, --help                  show this
   version, --version            print the installed version`;
@@ -52,6 +57,15 @@ switch (command) {
     break;
   case "reset":
     await (await import("../cli/reset.mjs")).resetCommand(argv);
+    break;
+  case "login":
+    await (await import("../cli/login.mjs")).loginCommand(argv);
+    break;
+  case "logout":
+    await (await import("../cli/login.mjs")).logoutCommand(argv);
+    break;
+  case "api":
+    await (await import("../cli/api.mjs")).apiCommand(argv);
     break;
   case "version":
   case "--version":

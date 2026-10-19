@@ -35,8 +35,8 @@ function requireDevMode(c: RequestContext): void {
  * Bootstrap credential for local dev. Public by necessity (it is the thing that hands
  * out the admin token) but absent once deployed: `devAuthSecret` is resolved only in a
  * dev-shaped env and the secret is never committed (it lives in the gitignored
- * `.dev.vars`). A token with no `email` is a `service` principal, mirroring Claude in
- * production.
+ * `.dev.vars`). A token with no `email` is a `service` principal, mirroring a service
+ * token, automation, in production.
  */
 export async function token(c: RequestContext): Promise<Response> {
   requireDevMode(c);

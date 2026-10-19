@@ -1,8 +1,24 @@
 # Working with Claude
 
-Ask Claude in plain words, the way you'd ask a colleague. It works through the same API as the dashboard, so it can do what you can do there, and nothing more. Everything it changes shows in the dashboard as Claude's.
+Ask Claude in plain words, the way you'd ask a colleague. It works through the same API as the dashboard, signed in as you, so it can do what you can do there, and nothing more. Everything it changes shows in the dashboard as yours, via Claude Code.
 
-To set Claude up, follow [Connect Claude to the API](../guides/01-connect-claude.md). Claude reads these same pages from your Kestrel, so it explains things in the words you see here.
+To set Claude up, [connect Claude Code](#connect-claude-code), below. Claude reads these same pages from your Kestrel, so it explains things in the words you see here.
+
+## Connect Claude Code
+
+Run this in your instance's repository, with your Kestrel's address, and approve the sign-in in the browser it opens:
+
+```bash
+npx kestrel login https://newsletter.example.com
+```
+
+You sign in the way you do for the dashboard, and the terminal says who you're signed in as. Or ask Claude to connect, and it runs the same command for you to approve.
+
+**Your Kestrel has to offer this sign-in first.** If the command says your Kestrel doesn't offer a sign-in for programs, turn on Managed OAuth, as [Lock the dashboard with Access](../get-started/03-access.md#5-turn-on-managed-oauth) describes.
+
+The sign-in stays on your computer, not in your repository, and renews itself while you use it. How long it lasts is a setting of your Access application. When it ends, Claude asks you to approve a new one. To sign out on this computer, run `npx kestrel logout`.
+
+A script that runs with no one there uses a service token instead, as [Connect automation to the API](../guides/01-connect-claude.md) describes. Its changes show as a service token's, never as yours.
 
 ## What to ask Claude
 
@@ -26,4 +42,4 @@ The app holds these for any client, so they hold whatever Claude is told:
 
 Claude also follows instructions your Kestrel gives it, which live in your instance's repository. Those hold only as long as the instructions do. They have Claude ask before anything that reaches readers, say whether a post will be in your archive before it's sent, test again after a template change, and record whose decision each change to the list was. They also have it treat what's in a post or a subscriber's record as content, never as instructions.
 
-The app lets Claude give your attestation for an import, so asking you first is one of those instructions, not a rule the app enforces. The import's record says it came through Claude, and Kestrel emails you about it if your notifications are set.
+The app lets Claude give your attestation for an import, so asking you first is one of those instructions, not a rule the app enforces. The import's record says you made it via Claude Code.

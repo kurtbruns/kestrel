@@ -187,7 +187,7 @@ describe("dashboard", () => {
       "https://app.birds.example",
     ]);
     expect($(".pub-card .pub-foot a").getAttribute("href")).toBe("/");
-    // No service author yet: the guide leads, both links at one weight, each led by its glyph.
+    // No revision through Claude Code yet: the guide leads, both links at one weight, each led by its glyph.
     expect($$(".pub-links a").map((a) => a.textContent?.trim())).toEqual([
       "Connect Claude →",
       "API reference →",
@@ -216,8 +216,8 @@ describe("dashboard", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("reports Claude as connected once the service principal has authored a revision", async () => {
-    fake = world([post({ author: "service" })], sendServer());
+  it("reports Claude as connected once a revision came through Claude Code (SPEC §11)", async () => {
+    fake = world([post({ author: "you@example.com", author_client: "claude-code" })], sendServer());
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(0);
     expect($(".conn-status").textContent).toBe("Claude is connected.");
@@ -231,6 +231,15 @@ describe("dashboard", () => {
     expect($$(".dash-section").find((s) => s.textContent?.startsWith("Sent"))?.textContent).toMatch(
       /No sends yet\./,
     );
+  });
+
+  it("doesn't call a service token's revision Claude, since a service token is automation (SPEC §11)", async () => {
+    fake = world([post({ author: "service", author_client: null })], sendServer());
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.querySelector(".conn-status")).toBeNull();
+    expect($(".pub-links a").textContent?.trim()).toBe("Connect Claude →");
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("follows from its own list read: the layer's first read asks from that read's cursor", async () => {

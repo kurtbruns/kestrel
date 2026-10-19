@@ -99,7 +99,7 @@ Used only with the `NOTIFY` binding. It must be an address on a domain set up fo
 | `SNS_TOPIC_ARN` | the SNS topic the SES webhook accepts; it refuses every other topic | SES |
 | `SES_CONFIGURATION_SET` | the configuration set named on every email, so SES reports bounces and complaints; a name SES can't find in the region holds every list send until it's fixed | SES, recommended |
 
-`ACCESS_ALLOWED_EMAILS` applies to people only. A service token, such as the one Claude uses, carries no email, so the Access policy alone decides whether it gets in.
+`ACCESS_ALLOWED_EMAILS` applies to people only. A service token, the credential a script uses, carries no email, so the Access policy alone decides whether it gets in.
 
 Never set `DEV_AUTH_SECRET` on a deployed environment. It's local development's stand-in for Access, and a deployed instance ignores it anyway. The app honors it only when the environment looks like local development: `PROVIDER` is `fake`, Access isn't set up, and `APP_ORIGIN` is on `localhost` or `127.0.0.1`. A real provider, Access, or a real hostname each turns it off, and Access becomes the only way in.
 

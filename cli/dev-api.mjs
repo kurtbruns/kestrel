@@ -68,12 +68,18 @@ export function ownsServer(target, reportedId) {
 /**
  * The dev server to act on and a local admin token for it, `{ base, token }`, or exit saying
  * why there is none to act on (see `chooseTarget`). `arg` is the command's port or URL
- * argument, if any; `tag` names the command, as in `npm run <tag>`.
+ * argument, if any; `tag` names the command, as in `npm run <tag>`. `kind` is the token's
+ * principal: `service` for a script, as seed and reset are, and `human` for a person working
+ * through a client, as `kestrel api` is (SPEC §11, Who acted).
  */
-export async function devTarget(arg, tag) {
+export async function devTarget(arg, tag, kind = "service") {
   const target = chooseTarget({ arg, record: readDevServer() });
+  const naming =
+    tag === "api"
+      ? "`npx kestrel api --url http://localhost:<port> …`"
+      : `\`npm run ${tag} -- <port>\``;
   const deliberately = [
-    `To act on a server deliberately, name its port: \`npm run ${tag} -- <port>\`.`,
+    `To act on a server deliberately, name its port: ${naming}.`,
     ...(process.env.PORT
       ? [
           `(PORT=${process.env.PORT} is set, but PORT doesn't name a target here: a shell can carry it unawares.)`,
@@ -88,7 +94,7 @@ export async function devTarget(arg, tag) {
       ...deliberately,
     );
   }
-  const { token, runId } = await devToken(target.base, tag);
+  const { token, runId } = await devToken(target.base, tag, kind);
   if (!ownsServer(target, runId)) {
     fail(
       tag,
@@ -101,7 +107,7 @@ export async function devTarget(arg, tag) {
     );
   }
   if (target.explicit) {
-    console.log(`[${tag}] acting on ${target.base}, as named`);
+    console.error(`[${tag}] acting on ${target.base}, as named`);
   }
   return { base: target.base, token };
 }
@@ -116,13 +122,13 @@ export function fail(tag, ...lines) {
   process.exit(1);
 }
 
-/** Mint a local admin token, a `service` principal as Claude is in production, with the run
- *  ID the server reports (undefined when it reports none), as `{ token, runId }`, or exit
- *  saying why the server can't give one. */
-async function devToken(base, tag) {
+/** Mint a local admin token for a principal of `kind`, with the run ID the server reports
+ *  (undefined when it reports none), as `{ token, runId }`, or exit saying why the server
+ *  can't give one. */
+async function devToken(base, tag, kind) {
   let res;
   try {
-    res = await fetch(`${base}/api/dev/token?kind=service`);
+    res = await fetch(`${base}/api/dev/token?kind=${kind}`);
   } catch (err) {
     fail(
       tag,

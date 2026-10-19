@@ -263,9 +263,16 @@ function pathParams(path: string): string[] {
   return [...openApiPath(path).matchAll(/\{(\w+)\}/g)].map((m) => m[1] ?? "");
 }
 
-/** The schemes an admin route takes: a deployed instance's Access service token (both headers),
- *  or a local instance's dev token. */
+/** The schemes an admin route takes: once deployed, a person's Access access token (as
+ *  `kestrel login` gets it) or an Access service token (both headers); on a local instance,
+ *  the dev token. */
 const SECURITY_SCHEMES = {
+  access_token: {
+    type: "http",
+    scheme: "bearer",
+    description:
+      "A person's access token from Cloudflare Access's Managed OAuth, as `kestrel login` gets it. Access discovers its endpoints from the 401 it answers a request with no credential.",
+  },
   access_client_id: {
     type: "apiKey",
     in: "header",
@@ -296,6 +303,7 @@ const CLIENT_PARAMETER: Parameter = {
 };
 
 const ADMIN_SECURITY: Record<string, string[]>[] = [
+  { access_token: [] },
   { access_client_id: [], access_client_secret: [] },
   { dev_token: [] },
 ];

@@ -2,7 +2,7 @@
 
 Cloudflare Access puts a login in front of the editor and the API. Kestrel checks every request against that login as well, so a path left out of Access stays locked. The public pages readers see stay public.
 
-In this guide, you set up Cloudflare Zero Trust, create one Access application that covers the editor and the API, and allow yourself in. Then you give the app two values from that application, and check that the login works.
+In this guide, you set up Cloudflare Zero Trust, create one Access application that covers the editor and the API, and allow yourself in. Then you give the app two values from that application, optionally let Claude Code sign in as you, and check that the login works.
 
 ## 1. Set up Zero Trust
 
@@ -83,6 +83,26 @@ The app verifies each login against your team domain, and checks that it was iss
 
     Without it, the app lets in anyone your Access policy allows.
 
+## 5. Turn on Managed OAuth
+
+**(Optional, recommended)** Managed OAuth lets a program sign in as you, the way the editor does in your browser. `kestrel login` uses it to connect Claude Code, so Claude works as you, and its changes show as yours, via Claude Code. Without it, Claude Code can't sign in, and only a service token reaches the API. Cloudflare marks Managed OAuth as beta, and its [Managed OAuth](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/) page describes it.
+
+1. In **Zero Trust**, go to **Access controls → Applications**, and select **Edit** on your application.
+
+1. On the **Additional settings** tab, select the **OAuth** filter, and find **Managed OAuth (Beta)**.
+
+1. Turn on **Managed OAuth**.
+
+1. Turn on **Allow localhost clients** and **Allow loopback clients**. `kestrel login` receives your approval on your own computer, at a `127.0.0.1` address. Leave **Allowed redirect URIs** empty.
+
+1. Keep the **Access token lifetime** at 15 minutes. A program renews its access token while you use it, so a short lifetime costs nothing.
+
+1. Choose the **Grant session duration**, how long a program's sign-in lasts before you approve it again. It defaults to **Same as session duration**, the session you chose in [section 2](#2-create-the-access-application). Cloudflare recommends one to two weeks for a command-line tool, so Claude Code doesn't ask you to approve every day.
+
+1. Save the application.
+
+With Managed OAuth on, a program that asks for a page without signing in gets a `401` that tells it how to sign in, instead of Cloudflare's login page. A browser still gets the login page.
+
 ## Check it
 
 1. In a private browser window, open `https://newsletter.example.com/dashboard/`. Cloudflare asks you to sign in.
@@ -94,6 +114,14 @@ The app verifies each login against your team domain, and checks that it was iss
     ```
     {"principal":{"kind":"human","email":"you@example.com"},"auth":{"mode":"access"}}
     ```
+
+1. If you turned on Managed OAuth, a request with no sign-in names where a program signs in:
+
+    ```bash
+    curl -si https://newsletter.example.com/api/whoami
+    ```
+
+    It answers `401`, and its `www-authenticate` line starts with `Bearer` and names `resource_metadata`. Without Managed OAuth, Cloudflare answers with a redirect to its login page instead.
 
 1. The public pages still need no login:
 

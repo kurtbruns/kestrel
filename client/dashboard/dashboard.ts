@@ -5,6 +5,7 @@ import type { Post, PostListResponse } from "../../shared/posts";
 import type { SendListResponse, SendView } from "../../shared/sends";
 import type { DeploymentView } from "../../shared/settings";
 import type { SubscriberCounts, SubscriberListResponse } from "../../shared/subscribers";
+import { CLAUDE_CODE_CLIENT } from "../../shared/who_acted";
 import { api, describeError } from "../api";
 import { derivePublication, type Publication } from "../brand";
 import {
@@ -315,10 +316,11 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
     <div class="pub-foot"><a href="/" target="_blank" rel="noopener">View publication&nbsp;↗</a></div>
   </div>`;
 
-  // Has Claude (the `service` principal) edited here? Authorship on any current revision
-  // flips the API-access card to "connected" (SPEC §4). Uses the author already on each
-  // list row, so no extra fetch; a post a human later re-edited no longer counts.
-  const claudeConnected = posts.some((p) => p.author === "service");
+  // Has Claude edited here? A current revision saved through Claude Code flips the API-access
+  // card to "connected" (SPEC §11, Who acted). Uses the client already on each list row, so no
+  // extra fetch; a post re-edited in the editor since no longer counts. A service token is
+  // automation, not Claude, so its revisions don't.
+  const claudeConnected = posts.some((p) => p.author_client === CLAUDE_CODE_CLIENT);
   const apiCardHtml = apiConnectCard(claudeConnected);
 
   const quickHtml = html`<div class="row quick-actions"><button data-act="new-post">New post</button><button data-act="add-sub">Add subscriber</button><button data-nav="#/settings">Edit publication</button></div>`;
@@ -545,13 +547,13 @@ function wireDashButtons(root: HTMLElement, reload: () => void, signal: AbortSig
   }
 }
 
-// The "API access" card. Two states: an invitation to connect Claude, or — once Claude
-// (the `service` principal, SPEC §4) has edited here — a plain "Claude is connected" note.
+// The "API access" card. Two states: an invitation to connect Claude, or — once a revision
+// came through Claude Code (SPEC §11) — a plain "Claude is connected" note.
 // Shared by the populated dashboard and the first-run state (a card below the setup
 // checklist), so the two can't drift; connecting an agent is optional, so this is never a
 // required setup step. Both states have one shape — a line, then the card's links stacked
 // at one weight, each led by a glyph for what it is (the guide, the reference) — because
-// neither link is an action: connecting happens outside the app (an Access service token),
+// neither link is an action: connecting happens outside the app (`kestrel login`),
 // so nothing here may look like a button that would do it. Typography-led with no base-URL
 // field: the operator already knows their own origin (it's the Publication card's URL right
 // beside this one), and the connect guide is where that URL is actually used.
@@ -559,12 +561,12 @@ function apiConnectCard(connected: boolean): Html {
   if (connected) {
     return html`<div class="card pub-card">
     <p class="conn-status"><span class="conn-dot" aria-hidden="true"></span>Claude is connected.</p>
-    <div class="pub-foot pub-links"><a href="#/api-reference">${icon("code")}API reference →</a><a href="#/docs/connect-claude">${icon("article")}Connection guide →</a></div>
+    <div class="pub-foot pub-links"><a href="#/api-reference">${icon("code")}API reference →</a><a href="#/docs/working-with-claude/connect-claude-code">${icon("article")}Connection guide →</a></div>
   </div>`;
   }
   return html`<div class="card pub-card">
     <p class="pub-note">Let Claude draft, proofread, and schedule your posts.</p>
-    <div class="pub-foot pub-links"><a href="#/docs/connect-claude">${icon("article")}Connect Claude →</a><a href="#/api-reference">${icon("code")}API reference →</a></div>
+    <div class="pub-foot pub-links"><a href="#/docs/working-with-claude/connect-claude-code">${icon("article")}Connect Claude →</a><a href="#/api-reference">${icon("code")}API reference →</a></div>
   </div>`;
 }
 

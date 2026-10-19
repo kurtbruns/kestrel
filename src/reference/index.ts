@@ -55,7 +55,7 @@ const TIERS: { access: Access; title: string; blurb: string }[] = [
     access: "admin",
     title: "Admin",
     blurb:
-      "The authoring API, which the web editor and Claude both call, each with its own credential (Authentication, above).",
+      "The authoring API, which the web editor and Claude both call, signed in as the publisher, and which a script calls with a service token (Authentication, above).",
   },
   {
     access: "public",

@@ -15,9 +15,9 @@ describe("whoActed (SPEC §11, Who acted)", () => {
     expect(whoActed("you@example.com", null)).toBe("you@example.com via the API");
   });
 
-  it("shows a service token as Claude whatever the client, and nobody as nothing", () => {
-    expect(whoActed("service", null)).toBe("Claude");
-    expect(whoActed("service", "claude-code")).toBe("Claude");
+  it("shows a service token as automation whatever the client, and nobody as nothing", () => {
+    expect(whoActed("service", null)).toBe("a service token");
+    expect(whoActed("service", "claude-code")).toBe("a service token");
     expect(whoActed(null, "editor")).toBeNull();
   });
 });

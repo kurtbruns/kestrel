@@ -293,7 +293,7 @@ export function createRouter({
             name: "principal",
             type: "{ kind, email, token_id, client }",
             description:
-              "`kind` `human`, signed in as `email`, or `service`, a service token as Claude uses, with no `email` and its Client ID as `token_id` when the token names one. `client` is the client a person's request came through, as it named itself in `Kestrel-Client` (`editor`, `claude-code`), or null when it named none; a service token's is always null, since the token already names the program.",
+              "`kind` `human`, signed in as `email`, or `service`, a service token, the credential for scripts and other automation, with no `email` and its Client ID as `token_id` when the token names one. `client` is the client a person's request came through, as it named itself in `Kestrel-Client` (`editor`, `claude-code`), or null when it named none; a service token's is always null, since the token already names the program.",
           },
           {
             name: "auth.mode",
@@ -352,7 +352,7 @@ export function createRouter({
           name: "kind",
           values: ["human", "service"],
           description:
-            "`human` (default, as the editor uses) or `service` (no email, as Claude uses).",
+            "`human` (default), a person, as the editor and `kestrel api` use, or `service`, a service token with no email, as scripts such as `kestrel seed` use.",
         },
       ],
       handler: devRoutes.token,

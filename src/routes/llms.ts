@@ -16,8 +16,12 @@ import { getSettingsForDisplay } from "../db/settings";
 import { docSets } from "../docs";
 import type { RequestContext, RouteDef } from "../router";
 
-/** Where an agent's operator learns to make the token the gated routes take. The instance's
- *  own copy of the page is gated too, so this points at the project's. */
+// The instance's own copies of these pages are gated too, so these point at the project's.
+
+/** Where a publisher learns to sign Claude Code in as themselves, the way an agent comes in. */
+export const SIGN_IN_URL = "https://getkestrel.dev/docs/working-with-claude/#connect-claude-code";
+
+/** Where whoever runs the instance learns to make a service token, for a script. */
 export const CONNECT_CLAUDE_URL = "https://getkestrel.dev/docs/connect-claude/";
 
 interface Entry {
@@ -106,13 +110,14 @@ export function llmsText({
     "",
     "## Behind Cloudflare Access",
     "",
-    "Send a Cloudflare Access service token with every request, as the `CF-Access-Client-Id` and `CF-Access-Client-Secret` headers. Without one, the request is refused: Access answers with its login page.",
+    "Sign in as the person you work for: `npx kestrel login <this instance's address>` signs in through Cloudflare Access in their browser, and `npx kestrel api <method> <path>` then calls these routes as them. A script that runs with no one present sends a Cloudflare Access service token with every request instead, as the `CF-Access-Client-Id` and `CF-Access-Client-Secret` headers. Without a credential, the request is refused.",
     "",
     ...tier("admin"),
     "",
-    "## Getting a token",
+    "## Signing in",
     "",
-    `- [Connect Claude to the API](${CONNECT_CLAUDE_URL}): how whoever runs this instance makes a service token and lets it through Access.`,
+    `- [Connect Claude Code](${SIGN_IN_URL}): how a publisher signs Claude Code in as themselves.`,
+    `- [Connect automation to the API](${CONNECT_CLAUDE_URL}): how whoever runs this instance makes a service token for a script.`,
     "",
   ].join("\n");
 }

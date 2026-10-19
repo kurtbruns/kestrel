@@ -1,6 +1,6 @@
 /**
  * The sweep's last step: tell the publisher about what happened to their sends, and of a list
- * Claude imported for them (SPEC §8).
+ * a service token imported (SPEC §8).
  *
  * Each tick records every new event once (`recordNotifications`), then delivers the
  * pending ones through the channel, as many as its share of the invocation's subrequest

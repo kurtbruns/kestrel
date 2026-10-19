@@ -48,9 +48,9 @@ describe("evidenceText", () => {
 describe("importedBy", () => {
   const record = (principal: ImportRecord["principal"]) => ({ principal }) as ImportRecord;
 
-  it("reads a service token's import as Claude's, for the publisher", () => {
+  it("reads a service token's import as automation's, never a person's (SPEC §11)", () => {
     expect(importedBy(record({ kind: "service", email: null, client: null }))).toBe(
-      "Claude, for you",
+      "a service token",
     );
   });
 

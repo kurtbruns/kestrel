@@ -609,7 +609,7 @@ const POST_FIELDS: ReferenceField[] = [
     name: "author",
     type: "string | null",
     description:
-      "Who wrote the current revision: a person's email, or `service` for a service token such as Claude's.",
+      "Who wrote the current revision: a person's email, or `service` for a service token, which is automation.",
   },
   {
     name: "author_client",
@@ -654,7 +654,7 @@ const REVISION_FIELDS: ReferenceField[] = [
     name: "author",
     type: "string | null",
     description:
-      "Who saved it: a person's email, or `service` for a service token such as Claude's.",
+      "Who saved it: a person's email, or `service` for a service token, which is automation.",
   },
   {
     name: "author_client",

@@ -1,6 +1,6 @@
 // Who acted, in the editor's words (SPEC §11, docs/DESIGN.md): a person in the editor reads as
 // the person alone, a person through another client reads with the client, and a service token
-// reads as Claude, since until Claude signs in as a person every service token is Claude's.
+// reads as one, since a service token is automation: Claude signs in as the person it works for.
 
 import { CLAUDE_CODE_CLIENT, EDITOR_CLIENT } from "../shared/who_acted";
 
@@ -19,7 +19,7 @@ export function whoActed(who: string | null, client: string | null): string | nu
     return null;
   }
   if (who === "service") {
-    return "Claude";
+    return "a service token";
   }
   if (client === EDITOR_CLIENT) {
     return who;

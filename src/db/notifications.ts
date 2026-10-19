@@ -1,6 +1,6 @@
 /**
  * The notifications that tell the publisher, by email, when a send goes out or runs into a
- * problem, or when Claude imports a list for them (SPEC §8): recording each event once, and
+ * problem, or when a service token imports a list (SPEC §8): recording each event once, and
  * the delivery record the sweep keeps for them.
  *
  * Every read of the send here is of the record the send path already keeps, and nothing
@@ -51,7 +51,7 @@ export interface DueNotification {
   c_unsent: number;
 }
 
-/** A notice of an import Claude committed that is due, with the import's record. */
+/** A notice of an import a service token committed that is due, with the import's record. */
 export interface DueImportNotification {
   send_id: null;
   import_id: string;

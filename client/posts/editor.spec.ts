@@ -371,7 +371,7 @@ describe("editor view", () => {
     const banner = $("#freshnessBanner");
     expect(banner.hidden).toBe(false);
     expect(banner.textContent).toMatch(/changed elsewhere/);
-    expect(banner.textContent).toMatch(/Claude/); // "service" reads as Claude
+    expect(banner.textContent).toMatch(/last edited by a service token/); // "service" is automation
     expect(handle().beforeLeave()).toBe("confirm"); // a leave would clobber: the router must ask
     typeInto(body(), "mine still");
     await vi.advanceTimersByTimeAsync(30000);

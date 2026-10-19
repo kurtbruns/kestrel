@@ -734,9 +734,9 @@ describe("the record and the notice (SPEC §8)", () => {
     await notifyPublisher(env, new Budget(50));
     const sent = fakeNotifications();
     expect(sent).toHaveLength(1);
-    expect(sent[0]?.subject).toBe("Claude imported 1 subscribers from list.csv");
+    expect(sent[0]?.subject).toBe("A service token imported 1 subscribers from list.csv");
     expect(sent[0]?.text).toContain("Confirmed as subscribers: 1. Unsubscribed: 1.");
-    expect(sent[0]?.text).toContain("Claude attested for you");
+    expect(sent[0]?.text).toContain("The service token attested for you");
     expect(sent[0]?.text).toContain("/dashboard/?to=/subscribers");
     // Told once.
     await notifyPublisher(env, new Budget(50));

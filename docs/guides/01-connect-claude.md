@@ -1,23 +1,25 @@
-# Connect Claude to the API
+# Connect automation to the API
 
-Claude Code can draft, edit, proofread, and schedule posts through the same API the editor uses. It has its own Cloudflare Access credential, so its changes show as Claude's, not a person's. Anything it schedules waits out the review window, where the publisher can still cancel it.
+A script or a scheduled job can call the same API the editor uses, with no one signed in. It uses a Cloudflare Access service token, so its changes show as a service token's, never a person's. Anything it schedules waits out the review window, where the publisher can still cancel it.
 
-In this guide, you create a service token for Claude Code, and add a policy for it to your Access application. Then you store the token where Claude Code reads it, check that it works, and point Claude at the API reference.
+Claude Code doesn't need this. It signs in as the publisher with `kestrel login`, as [Working with Claude](../publishing/07-working-with-claude.md#connect-claude-code) describes, so its changes show as theirs, via Claude Code. Use a service token only for a program that runs when no one is there.
+
+In this guide, you create a service token, and add a policy for it to your Access application. Then you give the token to your script, check that it works, and point the script at the API reference.
 
 ## Before you begin
 
 You need:
 
 - The dashboard locked with Access, from [Lock the dashboard with Access](../get-started/03-access.md).
-- [Claude Code](https://code.claude.com/docs/en/overview), run from your instance's repository.
+- The script or job that will call the API, and somewhere it keeps secrets.
 
 ## 1. Create a service token
 
-A service token is a Client ID and a Client Secret that a program sends with each request. It carries no email, so the app tells it apart from your own login.
+A service token is a Client ID and a Client Secret that a program sends with each request. It carries no email, so the app tells it apart from a person's sign-in.
 
 1. In **Zero Trust**, go to **Access controls → Service credentials → Service Tokens**, and select **Create Service Token**.
 
-1. Name it `kestrel-claude`, and choose a **Service Token Duration**. A year is a good default.
+1. Name it for what will use it, such as `kestrel-automation`, and choose a **Service Token Duration**. A year is a good default.
 
 1. Select **Generate token**.
 
@@ -31,71 +33,54 @@ Your application lets in only the people its `Publishers` policy names. A token 
 
 1. Add a policy:
 
-    - **Policy name:** `Claude`
+    - **Policy name:** `Automation`
     - **Action:** Service Auth
-    - **Include:** the **Service Token** selector, with `kestrel-claude`
+    - **Include:** the **Service Token** selector, with your token
 
 1. Save the application.
 
 `ACCESS_ALLOWED_EMAILS` doesn't apply to the token, since it has no email. This policy is the only thing that lets it in.
 
-## 3. Store the token for Claude Code
+## 3. Give the token to your script
 
-Claude Code loads the `env` block of `.claude/settings.local.json` into every session. That file stays on your computer: your repository's `.gitignore` keeps it out of git.
+The script sends the two values as headers on every request: `CF-Access-Client-Id` with the Client ID, and `CF-Access-Client-Secret` with the Client Secret.
 
-1. Open `.claude/settings.local.json` in your instance's repository. Create it if it doesn't exist.
+1. Store the Client ID and the Client Secret where your script reads secrets, such as its environment, your CI's secrets, or a password manager.
 
-1. Add an `env` block, beside anything already in the file:
+1. Have the script send both headers with every request to `https://newsletter.example.com/api/…`.
 
-    ```json
-    {
-      "env": {
-        "KESTREL_URL": "https://newsletter.example.com",
-        "CF_ACCESS_CLIENT_ID": "REPLACE_WITH_CLIENT_ID",
-        "CF_ACCESS_CLIENT_SECRET": "REPLACE_WITH_CLIENT_SECRET"
-      }
-    }
-    ```
+Never commit the secret to a repository, and never put it in `.claude/settings.json`.
 
-    `KESTREL_URL` is your app's address. The other two are the Client ID and Client Secret from section 1.
+## 4. Point the script at the API
 
-1. Start a new Claude Code session, so it loads the values.
+The API reference describes every route: its method and path, the body it takes, its refusals, and an example. The editor's **API** tab shows the same reference.
 
-Never put the secret in `.claude/settings.json`. That file is committed.
+For a program, the reference is Markdown in two levels: `GET /api/reference.md` is the index, with what every route shares and each route on one line, and `GET /api/reference/<resource>.md` holds one resource's routes in full. The JSON at `GET /api/reference` is the whole reference in one answer, as the editor reads it, and `GET /api/openapi.json` is the same reference as an OpenAPI 3.1 document, for a tool that imports one. The docs are served as Markdown too: `GET /api/docs/publishing.md` lists the publisher's pages, `GET /api/docs/self-hosting.md` this guide's, and each page is at `GET /api/docs/<slug>.md`.
 
-## 4. Point Claude at the API
+An agent given only your app's address finds these routes too. `GET /llms.txt` is public. It names the publication, its archive and subscribe page, and the reference and docs indexes, and links the ways to sign in.
 
-Kestrel has no plugin or connector for Claude. Claude calls the HTTP API directly, and the API reference describes every route: its method and path, the body it takes, and an example. The editor's **API** tab shows the same reference.
+The reference lists the body types each route takes. Most take JSON, sent with `Content-Type: application/json`. An image upload takes a multipart form, or the image file itself.
 
-Your instance's `.claude/CLAUDE.md` already tells Claude Code how to call the API, so a session in your instance's repository reads the reference before its first call. If it doesn't, a prompt like this one points it there:
-
-```
-Kestrel's API is at $KESTREL_URL. Send the CF-Access-Client-Id and
-CF-Access-Client-Secret headers from your environment with every request.
-Read GET /api/reference.md first, then the reference of the resource
-you're working with, such as GET /api/reference/sends.md, before calling it.
-```
-
-For Claude the reference is Markdown in two levels: `GET /api/reference.md` is the index, with what every route shares and each route on one line, and `GET /api/reference/<resource>.md` holds one resource's routes in full, so Claude reads only what its work needs. The JSON at `GET /api/reference` is the whole reference in one answer, as the editor reads it, and `GET /api/openapi.json` is the same reference as an OpenAPI 3.1 document, for a tool that imports one. The docs are served as Markdown too: `GET /api/docs/publishing.md` lists the publisher's pages, `GET /api/docs/self-hosting.md` this guide's, and each page is at `GET /api/docs/<slug>.md`.
-
-An agent given only your app's address finds these routes too. `GET /llms.txt` is public. It names the publication, its archive and subscribe page, and the reference and docs indexes, and links this guide for the token.
-
-Claude reads the reference, and from there can list the posts, write a draft, and schedule it. The reference lists the body types each route takes. Most take JSON, sent with `Content-Type: application/json`. An image upload takes a multipart form, or the image file itself.
-
-To bring subscribers over from another service, ask Claude to import the list, as [Bring your existing list](../publishing/01-your-list.md) describes. Its [file format](../publishing/01-your-list.md#the-file-format) section describes every column.
+A service token is held to everything Claude is, and more. An import it commits is emailed to the publisher, if notifications are set, since no one saw it happen. An import that would grow a scheduled send is refused, until the publisher finishes it in the dashboard.
 
 ## Check it
 
-1. Ask Claude to call `GET /api/whoami`. The app answers with a program's identity, not yours:
+1. Call `GET /api/whoami` with the two headers. The app answers with a program's identity, not a person's:
+
+    ```bash
+    curl -s https://newsletter.example.com/api/whoami \
+      -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+      -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET"
+    ```
 
     ```
-    {"principal":{"kind":"service","token_id":"e367c0ffee5eb4.access"},"auth":{"mode":"access"}}
+    {"principal":{"kind":"service","token_id":"e367c0ffee5eb4.access","client":null},"auth":{"mode":"access"}}
     ```
 
-    The `token_id` is the Client ID Zero Trust shows beside `kestrel-claude`. If it's a different one, Claude Code is using another token.
+    The `token_id` is the Client ID Zero Trust shows beside your token. If it's a different one, the script is using another token.
 
-1. Ask Claude to list the posts. It answers with the posts the editor shows.
+1. Call `GET /api/posts`. It answers with the posts the editor shows.
 
-1. Open a draft in the editor, and ask Claude to change a word in it. The editor shows that the draft was changed elsewhere, last edited by **Claude**.
+1. Open a draft in the editor, and have the script save a change to it. The editor shows that the draft was changed elsewhere, last edited by **a service token**.
 
-If Claude gets a `401`, a `403`, or a login page, check the policy from section 2, and the token's two values in `.claude/settings.local.json`. Check that the token hasn't expired, too.
+If the script gets a `401`, a `403`, or a login page, check the policy from section 2, and the token's two values. Check that the token hasn't expired, too.

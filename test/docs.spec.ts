@@ -130,7 +130,7 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
       'href="#/docs/as-your-list-grows"',
     );
     expect(docs.find((d) => d.slug === "connect-claude")?.html).toContain(
-      'href="#/docs/your-list/the-file-format"',
+      'href="#/docs/working-with-claude/connect-claude-code"',
     );
   });
 

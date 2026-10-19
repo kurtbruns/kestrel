@@ -866,7 +866,7 @@ export async function renderEditor(
   }
 
   // --- concurrent-edit detection (SPEC §4) ---
-  // Another tab, or Claude through the API, can save this draft while it's open
+  // Another tab, Claude, or a script through the API can save this draft while it's open
   // here. A save carries base_revision so the server rejects a stale write (409);
   // a light poll warns before the writer invests more effort. We notify, never
   // adopt: Reload takes the other version, Keep editing keeps yours (your next

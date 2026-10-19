@@ -5,7 +5,7 @@
 
 import { ApiError } from "../api";
 
-/** Who wrote a revision: an email, "service" for a service token, or unknown. */
+/** Who wrote a revision: a person's email, "service" for a service token (automation), or unknown. */
 export type Author = string | null;
 
 /** What the editor must surface: another writer's newer revision, with who wrote it and the

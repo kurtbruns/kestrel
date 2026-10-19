@@ -61,12 +61,12 @@ export function evidenceText(evidence: string | null): string | null {
 }
 
 /**
- * Who committed an import, as the publisher reads it: Claude for them (a service token), or
- * their address, with the client when it wasn't the editor (SPEC §11).
+ * Who committed an import, as the publisher reads it: a service token, which is automation,
+ * or their address, with the client when it wasn't the editor (SPEC §11).
  */
 export function importedBy(record: ImportRecord): string {
   if (record.principal.kind === "service") {
-    return "Claude, for you";
+    return "a service token";
   }
   return whoActed(record.principal.email, record.principal.client) ?? "you";
 }

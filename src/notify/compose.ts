@@ -130,9 +130,10 @@ export function composeNotification(n: DueNotification, config: Config): Rendere
 }
 
 /**
- * Tell the publisher Claude imported a list for them (SPEC §8): the counts that changed who
- * gets their posts, and that Claude gave the attestation in their name. Written from the
- * import's record, which holds no address.
+ * Tell the publisher a service token imported a list (SPEC §8): the counts that changed who
+ * gets their posts, and whether the token gave the attestation in their name. A service token
+ * is automation, run with no one signed in, so this is how the publisher hears of it. Written
+ * from the import's record, which holds no address.
  */
 export function composeImportNotification(n: DueImportNotification, config: Config): RenderedEmail {
   const c = (k: keyof OutcomeCounts): number => n.counts[k];
@@ -145,13 +146,13 @@ export function composeImportNotification(n: DueImportNotification, config: Conf
     c("left_out") +
     c("invalid");
   return message(
-    `Claude imported ${confirmed} subscribers from ${n.file_name}`,
+    `A service token imported ${confirmed} subscribers from ${n.file_name}`,
     [
-      `Claude imported "${n.file_name}" into your list at ${when(n.created_at)}, through the API with its service token.`,
+      `A service token imported "${n.file_name}" into your list at ${when(n.created_at)}, through the API, with no one signed in. Service tokens are the credentials your Cloudflare Access application gives to scripts and other automation.`,
       `Confirmed as subscribers: ${confirmed}. Unsubscribed: ${unsubscribed}. Suppressions added: ${n.suppressions_added}. Not imported as subscribers (suppressed here, unsubscribed here, invalid, or with no consent claim): ${notImported}. Already on your list as the file says: ${c("unchanged")}.`,
       n.attestation_version === null
         ? "No one was confirmed, so no attestation was needed."
-        : "Claude attested for you that everyone imported as subscribed opted in to receive your newsletter, and that the list isn’t purchased, rented, or scraped. If that isn’t so, remove those subscribers before your next post goes out.",
+        : "The service token attested for you that everyone imported as subscribed opted in to receive your newsletter, and that the list isn’t purchased, rented, or scraped. If that isn’t so, remove those subscribers before your next post goes out.",
       "Nobody was emailed by the import.",
     ],
     dashboardLink(config.appOrigin, "/subscribers"),

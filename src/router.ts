@@ -46,7 +46,7 @@ import type { RefusalCode } from "./reference/refusals";
 
 export interface Principal {
   /** `human` = a person, with an email (an Access login, or the local dev token);
-   *  `service` = a token with no email (Claude or automation, through Access or the dev token). */
+   *  `service` = a token with no email (automation, through Access or the dev token). */
   kind: "human" | "service";
   email?: string;
   /** A service token's Client ID (Access's `common_name`, or the dev token's stand-in),
@@ -178,7 +178,7 @@ const UNSAFE_METHODS: ReadonlySet<string> = new Set(["POST", "PUT", "PATCH", "DE
 /**
  * What a browser says of a request it sends from the admin's own pages (`same-origin`) or
  * one the person typed (`none`); any other value means a page elsewhere started it.
- * A client that isn't a browser (Claude's service token, curl, the tests) sends none.
+ * A client that isn't a browser (`kestrel api`, a script, curl, the tests) sends none.
  */
 const OWN_FETCH_SITES: ReadonlySet<string> = new Set(["same-origin", "none"]);
 
