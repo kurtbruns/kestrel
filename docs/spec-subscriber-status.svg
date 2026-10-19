@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="790" height="423" viewBox="0 0 790 423" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="945" height="453" viewBox="0 0 945 453" role="img" aria-labelledby="title desc">
   <title id="title">How a subscriber's status moves</title>
-  <desc id="desc">No subscriber, pending and confirmed sit in a row, with unsubscribed below pending. The reader subscribing, or the publisher adding the address, makes it pending, and the reader pressing Confirm makes it confirmed; a confirmation link that expires changes nothing. A pending or confirmed subscriber becomes unsubscribed by their own unsubscribe link, the publisher's Unsubscribe on their request, a complaint about the mail, or the publisher's Erase, and Erase also strips the record of someone already unsubscribed. An unsubscribed person returns to pending by subscribing again, or by the publisher adding them, unless they left by a complaint or an erasure. Imports are not drawn.</desc>
+  <desc id="desc">No subscriber, pending and confirmed sit in a row, with unsubscribed below pending. The reader subscribing, or the publisher adding the address, makes it pending, and the reader confirming makes it confirmed; a confirmation link that expires changes nothing. A pending or confirmed subscriber becomes unsubscribed when the reader unsubscribes, when the email provider passes on the reader's spam complaint, or when the publisher unsubscribes or erases them on their request, and the publisher erasing someone already unsubscribed strips their record. An unsubscribed person returns to pending by subscribing again, or by the publisher adding them, unless they left by a complaint or an erasure. Each act is coloured by who does it: the reader, the publisher, the email provider, or time. Imports are not drawn.</desc>
   <style>
     .n-none rect { fill: #ffffff; stroke: #8792a2; stroke-width: 1.5; stroke-dasharray: 5 4; }
     .n-pending rect { fill: #fef3c7; stroke: #f2c94c; stroke-width: 1.5; }
@@ -27,30 +27,35 @@
   </style>
 
 <defs><marker id="ss-a" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto-start-reverse"><path d="M0,0.5 L10,5 L0,9.5 z" class="ahead"/></marker><marker id="ss-c" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto-start-reverse"><path d="M0,0.5 L10,5 L0,9.5 z" class="ahead"/></marker></defs>
-<path class="e" d="M190,110 H302" marker-end="url(#ss-a)"/>
-<path class="e" d="M475,110 H587" marker-end="url(#ss-a)"/>
-<path class="e" d="M364,81 C344,23 436,23 416,78" marker-end="url(#ss-a)"/>
-<path class="e" d="M675,139 V306 Q675,320 661,320 H478" marker-end="url(#ss-a)"/>
-<path class="e" d="M420,139 V288" marker-end="url(#ss-a)"/>
-<path class="e" d="M360,291 V142" marker-end="url(#ss-a)"/>
-<path class="e" d="M364,349 C344,407 436,407 416,352" marker-end="url(#ss-a)"/>
+<path class="e" d="M190,110 H337" marker-end="url(#ss-a)"/>
+<path class="e" d="M510,110 H657" marker-end="url(#ss-a)"/>
+<path class="e" d="M399,81 C379,23 471,23 451,78" marker-end="url(#ss-a)"/>
+<path class="e" d="M745,139 V306 Q745,320 731,320 H513" marker-end="url(#ss-a)"/>
+<path class="e" d="M455,139 V288" marker-end="url(#ss-a)"/>
+<path class="e" d="M395,291 V142" marker-end="url(#ss-a)"/>
+<path class="e" d="M399,349 C379,407 471,407 451,352" marker-end="url(#ss-a)"/>
 <g class="node n-none"><rect x="20" y="81" width="170" height="58" rx="14"/><text class="ntitle" x="105" y="108" text-anchor="middle">No subscriber</text><text class="nsub" x="105" y="125.5" text-anchor="middle">unknown address</text></g>
-<g class="node n-pending"><rect x="305" y="81" width="170" height="58" rx="14"/><text class="ntitle" x="390" y="108" text-anchor="middle">pending</text><text class="nsub" x="390" y="125.5" text-anchor="middle">gets its confirmation only</text></g>
-<g class="node n-confirmed"><rect x="590" y="81" width="170" height="58" rx="14"/><text class="ntitle" x="675" y="108" text-anchor="middle">confirmed</text><text class="nsub" x="675" y="125.5" text-anchor="middle">gets posts</text></g>
-<g class="node n-unsub"><rect x="305" y="291" width="170" height="58" rx="14"/><text class="ntitle" x="390" y="318" text-anchor="middle">unsubscribed</text><text class="nsub" x="390" y="335.5" text-anchor="middle">keeps why they left</text></g>
-<text class="lbl a-reader" x="247.5" y="84" text-anchor="middle">subscribes</text>
-<text class="lbl a-publisher" x="247.5" y="100" text-anchor="middle">Add</text>
-<text class="lbl a-reader" x="532.5" y="84" text-anchor="middle">Confirm</text>
-<text class="lbl a-time" x="440" y="51" text-anchor="start">link expires</text>
-<text class="lbl a-reader" x="348" y="207" text-anchor="end">subscribes again</text>
-<text class="lbl a-publisher" x="348" y="223" text-anchor="end">Add</text>
-<text class="lbl a-publisher" x="432" y="183" text-anchor="start">Unsubscribe</text>
-<text class="lbl a-provider" x="432" y="199" text-anchor="start">complaint</text>
-<text class="lbl a-publisher" x="432" y="215" text-anchor="start">Erase</text>
-<text class="lbl a-reader" x="432" y="231" text-anchor="start">old post's link</text>
-<text class="lbl a-reader" x="663" y="183" text-anchor="end">unsubscribes</text>
-<text class="lbl a-publisher" x="663" y="199" text-anchor="end">Unsubscribe</text>
-<text class="lbl a-provider" x="663" y="215" text-anchor="end">complaint</text>
-<text class="lbl a-publisher" x="663" y="231" text-anchor="end">Erase</text>
-<text class="lbl a-publisher" x="440" y="387" text-anchor="start">Erase</text>
+<g class="node n-pending"><rect x="340" y="81" width="170" height="58" rx="14"/><text class="ntitle" x="425" y="108" text-anchor="middle">pending</text><text class="nsub" x="425" y="125.5" text-anchor="middle">gets its confirmation only</text></g>
+<g class="node n-confirmed"><rect x="660" y="81" width="170" height="58" rx="14"/><text class="ntitle" x="745" y="108" text-anchor="middle">confirmed</text><text class="nsub" x="745" y="125.5" text-anchor="middle">gets posts</text></g>
+<g class="node n-unsub"><rect x="340" y="291" width="170" height="58" rx="14"/><text class="ntitle" x="425" y="318" text-anchor="middle">unsubscribed</text><text class="nsub" x="425" y="335.5" text-anchor="middle">keeps why they left</text></g>
+<text class="lbl a-reader" x="265" y="84" text-anchor="middle">reader subscribes</text>
+<text class="lbl a-publisher" x="265" y="100" text-anchor="middle">publisher adds</text>
+<text class="lbl a-reader" x="585" y="84" text-anchor="middle">reader confirms</text>
+<text class="lbl a-time" x="475" y="51" text-anchor="start">link expires</text>
+<text class="lbl a-reader" x="383" y="207" text-anchor="end">reader subscribes again</text>
+<text class="lbl a-publisher" x="383" y="223" text-anchor="end">publisher adds</text>
+<text class="lbl a-reader" x="467" y="191" text-anchor="start">reader unsubscribes</text>
+<text class="lbl a-provider" x="467" y="207" text-anchor="start">spam complaint</text>
+<text class="lbl a-publisher" x="467" y="223" text-anchor="start">publisher unsubscribes</text>
+<text class="lbl a-publisher" x="467" y="239" text-anchor="start">publisher erases</text>
+<text class="lbl a-reader" x="757" y="183" text-anchor="start">reader unsubscribes</text>
+<text class="lbl a-provider" x="757" y="199" text-anchor="start">spam complaint</text>
+<text class="lbl a-publisher" x="757" y="215" text-anchor="start">publisher unsubscribes</text>
+<text class="lbl a-publisher" x="757" y="231" text-anchor="start">publisher erases</text>
+<text class="lbl a-publisher" x="475" y="387" text-anchor="start">publisher erases</text>
+<text class="nsub" x="20" y="439" text-anchor="start">Who acts:</text>
+<text class="lbl a-reader" x="86.4" y="439" text-anchor="start">the reader</text>
+<text class="lbl a-publisher" x="162.60000000000002" y="439" text-anchor="start">the publisher</text>
+<text class="lbl a-provider" x="256.86" y="439" text-anchor="start">the email provider, passing on the reader's report</text>
+<text class="lbl a-time" x="573.86" y="439" text-anchor="start">time</text>
 </svg>

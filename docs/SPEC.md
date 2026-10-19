@@ -229,7 +229,7 @@ A subscriber is an email address with a **consent state**, plus an orthogonal **
 
 ### How an address moves
 
-![No subscriber, pending and confirmed sit in a row, with unsubscribed below pending. The reader subscribing, or the publisher adding the address, makes it pending, and the reader pressing Confirm makes it confirmed; a confirmation link that expires changes nothing. A pending or confirmed subscriber becomes unsubscribed by their own unsubscribe link, the publisher's Unsubscribe on their request, a complaint about the mail, or the publisher's Erase, and Erase also strips the record of someone already unsubscribed. An unsubscribed person returns to pending by subscribing again, or by the publisher adding them, unless they left by a complaint or an erasure. Imports are not drawn.](spec-subscriber-status.svg)
+![No subscriber, pending and confirmed sit in a row, with unsubscribed below pending. The reader subscribing, or the publisher adding the address, makes it pending, and the reader confirming makes it confirmed; a confirmation link that expires changes nothing. A pending or confirmed subscriber becomes unsubscribed when the reader unsubscribes, when the email provider passes on the reader's spam complaint, or when the publisher unsubscribes or erases them on their request, and the publisher erasing someone already unsubscribed strips their record. An unsubscribed person returns to pending by subscribing again, or by the publisher adding them, unless they left by a complaint or an erasure. Each act is coloured by who does it: the reader, the publisher, the email provider, or time. Imports are not drawn.](spec-subscriber-status.svg)
 
 | From | To | By |
 | --- | --- | --- |
