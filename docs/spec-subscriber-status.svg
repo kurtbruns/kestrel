@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="898" height="424" viewBox="0 0 898 424" role="img" aria-labelledby="title desc">
   <title id="title">How a subscriber's status moves</title>
-  <desc id="desc">No subscriber, pending and confirmed sit in a row, with unsubscribed below pending. The reader subscribing, or the publisher adding the address, makes it pending, and the reader confirming makes it confirmed; a confirmation link that expires changes nothing. A pending or confirmed subscriber becomes unsubscribed when the reader unsubscribes or reports the mail as spam, or when the publisher unsubscribes or erases them on their request, and the publisher erasing someone already unsubscribed strips their record. An unsubscribed person returns to pending by subscribing again, or by the publisher adding them, unless they left by a complaint or an erasure. Imports are not drawn.</desc>
+  <desc id="desc">The four states an address can be in (no subscriber, pending, confirmed, unsubscribed) and the moves between them, each labeled with who makes it, as the table below lists. Imports are not drawn.</desc>
   <style>
     .n-none rect { fill: #ffffff; stroke: #8792a2; stroke-width: 1.5; stroke-dasharray: 5 4; }
     .n-pending rect { fill: #fef3c7; stroke: #f2c94c; stroke-width: 1.5; }
