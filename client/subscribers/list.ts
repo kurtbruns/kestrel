@@ -1,8 +1,6 @@
 // The subscribers list: the by-status composition and the filterable roster.
 
 import {
-  CAUSE_LABEL,
-  CAUSE_MEANING,
   FLAG_MEANING,
   STATUS_MEANING,
   SUBSCRIBER_ACTIONS,
@@ -14,7 +12,6 @@ import type {
   SubscriberCounts,
   SubscriberListResponse,
   SubscriberStatus,
-  UnsubscribeCause,
 } from "../../shared/subscribers";
 import { api, describeError } from "../api";
 import { $, $$ } from "../ui/dom";
@@ -213,13 +210,9 @@ function legendRow(term: Html, means: string): Html {
 }
 function legend(): Html {
   const flags = Object.keys(FLAG_MEANING) as SuppressionFlag[];
-  const causes = Object.keys(CAUSE_MEANING) as UnsubscribeCause[];
   return html`<div class="sub-legend" id="subLegend" role="region" aria-labelledby="subLegendToggle" hidden><div class="sub-legend-body">
     <h2>Status</h2>
     <dl>${SUB_STATUSES.map(({ value }) => legendRow(badge(value), STATUS_MEANING[value]))}</dl>
-    <h2>Why they left</h2>
-    <p>Beside an unsubscribed status:</p>
-    <dl>${causes.map((cause) => legendRow(html`<span class="muted">${CAUSE_LABEL[cause]}</span>`, CAUSE_MEANING[cause]))}</dl>
     <h2>Suppressed</h2>
     <p>${SUPPRESSED_MEANING} The red flag beside the address says why:</p>
     <dl>${flags.map((flag) => legendRow(html`<span class="badge suppressed">${flag}</span>`, FLAG_MEANING[flag]))}</dl>

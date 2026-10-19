@@ -31,7 +31,6 @@ import {
 } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import {
-  CAUSE_LABEL,
   CAUSE_MEANING,
   FLAG_MEANING,
   STATUS_MEANING,
@@ -666,10 +665,10 @@ const STATUS_VALUES = (Object.keys(STATUS_MEANING) as SubscriberStatus[]).map((s
   description: STATUS_MEANING[status],
 }));
 
-/** Why a subscriber left, each with the words the editor shows beside the status and what it means. */
+/** Why a subscriber left, each with what it means, in the words the editor's subscriber page shows. */
 const CAUSE_VALUES = (Object.keys(CAUSE_MEANING) as UnsubscribeCause[]).map((cause) => ({
   value: cause,
-  description: `Shown as “${CAUSE_LABEL[cause]}”: ${CAUSE_MEANING[cause]}`,
+  description: CAUSE_MEANING[cause],
 }));
 
 /**

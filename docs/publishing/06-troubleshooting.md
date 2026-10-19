@@ -74,7 +74,7 @@ Kestrel acts on these for you, so a bad address can't keep hurting your sending 
 
 - **A hard bounce** means the address can't receive mail. Kestrel never mails it again.
 - **A soft bounce** is temporary, such as a full mailbox. The address stays on your list.
-- **A complaint** means the reader marked your email as spam. Kestrel unsubscribes them, with **complaint** beside their status, whichever email they reported.
+- **A complaint** means the reader marked your email as spam. Kestrel unsubscribes them, whichever email they reported, and their page, opened from their row, says they left by a complaint.
 
 Under **Subscribers**, a bounced address keeps its status and carries a label saying why, and its page, opened from its row, gives your email provider's words for the bounce and when it happened. When a recent send's bounces reach about 5% of its recipients, the dashboard warns you. That's about the rate at which email providers start to review a sender, so check the addresses on its record.
 

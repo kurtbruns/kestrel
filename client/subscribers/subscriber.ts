@@ -2,12 +2,7 @@
 // their address was in, with the acts their roster row offers.
 
 import type { ImportRecord, ImportRecordResponse } from "../../shared/imports";
-import {
-  CAUSE_LABEL,
-  CAUSE_MEANING,
-  FLAG_MEANING,
-  SUPPRESSION_FLAG,
-} from "../../shared/subscriber_meanings";
+import { CAUSE_MEANING, FLAG_MEANING, SUPPRESSION_FLAG } from "../../shared/subscriber_meanings";
 import type {
   Subscriber,
   SubscriberDeliveriesResponse,
@@ -164,7 +159,7 @@ function suppressionSection(sub: Subscriber): Html {
 }
 
 /**
- * Why they left (SPEC §7), in the legend's words, and when; for a complaint, the send whose
+ * Why they left (SPEC §7), in the words the API reference uses, and when; for a complaint, the send whose
  * report it was, when it is among the sends shown. An erasure keeps nothing else, so an
  * erased subscriber's page says only that they were erased and when.
  */
@@ -175,10 +170,9 @@ function leftSection(sub: Subscriber, deliveries: SubscriberDelivery[]): Html | 
   }
   const complaint =
     cause === "complaint" ? deliveries.find((d) => d.delivery.event === "complained") : undefined;
-  const label = CAUSE_LABEL[cause];
   return html`<section class="card sub-sec" aria-labelledby="subLeftTitle">
     <h2 class="rec-part-title" id="subLeftTitle">Why they left</h2>
-    <p class="sub-left-line"><strong>${label.charAt(0).toUpperCase()}${label.slice(1)}</strong> <span class="muted">${fmt(sub.unsubscribed_at)}</span></p>
+    <p class="sub-left-line"><span class="muted">Left ${fmt(sub.unsubscribed_at)}</span></p>
     <p class="sub-meaning">${CAUSE_MEANING[cause]}</p>
     ${complaint ? html`<p>The report was about <a href="#/sent/${complaint.send.id}">${complaint.send.subject || "an untitled post"}</a>.</p>` : null}
     ${sub.status === "pending" ? html`<p class="muted">They signed up again and haven’t confirmed yet.</p>` : null}

@@ -1,6 +1,7 @@
 // What each subscriber label and action means, in the words the publisher reads (SPEC §7).
-// The editor's legend and the API reference both print these, so a person in the editor
-// and a client reading the reference are told the same thing, and neither can drift.
+// The editor (the list's legend, a subscriber's page) and the API reference both print these,
+// so a person in the editor and a client reading the reference are told the same thing, and
+// neither can drift.
 
 import type { SubscriberStatus, SuppressionReason, UnsubscribeCause } from "./subscribers";
 
@@ -9,16 +10,7 @@ export const STATUS_MEANING: Record<SubscriberStatus, string> = {
   pending: "Subscribed but hasn’t clicked the confirmation email.",
   confirmed:
     "Receives your posts. They confirmed here, or opted in at the service you imported them from.",
-  unsubscribed: "Left the list. Why they left is shown beside it.",
-};
-
-/** The words beside an unsubscribed status that say why the person left. */
-export const CAUSE_LABEL: Record<UnsubscribeCause, string> = {
-  reader: "by their link",
-  publisher: "on request",
-  complaint: "complaint",
-  erased: "erased",
-  import: "left elsewhere",
+  unsubscribed: "Left the list. Why they left is on their page.",
 };
 
 /** What each reason for leaving means, and what it allows. */

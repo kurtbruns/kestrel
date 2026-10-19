@@ -1,7 +1,7 @@
 // How a subscriber's state reads wherever it is drawn: the roster's row and their own page
 // draw the status pill, the words beside it, and the suppression flag the same way.
 
-import { CAUSE_LABEL, SUPPRESSION_FLAG } from "../../shared/subscriber_meanings";
+import { SUPPRESSION_FLAG } from "../../shared/subscriber_meanings";
 import type { Subscriber } from "../../shared/subscribers";
 import { type Html, html } from "../ui/html";
 import { badge } from "../ui/widgets";
@@ -27,18 +27,13 @@ export function suppressionFlag(s: Subscriber): Html | null {
 
 /**
  * The status pill. A suppressed address keeps its consent status, but the status isn't in
- * effect while the suppression stands, so its badge takes the not-mailed grey (DESIGN §3). An
- * unsubscribed subscriber says beside the badge why they left.
+ * effect while the suppression stands, so its badge takes the not-mailed grey (DESIGN §3). Why
+ * an unsubscribed subscriber left is their own detail, on their page, not beside the badge.
  */
 export function statusBadge(s: Subscriber): Html {
-  const status = s.suppression
+  return s.suppression
     ? html`<span class="badge ${s.status} held">${s.status}</span>`
     : badge(s.status);
-  const cause =
-    s.status === "unsubscribed" && s.unsubscribe_cause
-      ? html` <span class="muted sub-cause">${CAUSE_LABEL[s.unsubscribe_cause]}</span>`
-      : null;
-  return html`${status}${cause}`;
 }
 
 /** An address that has to wrap breaks before its "@", keeping the mailbox and the domain

@@ -173,7 +173,7 @@ describe("subscribers view", () => {
     await settle();
     expect($("#toasts").textContent).toMatch(/Erased <script>@b\.c/);
     // Still on the list, unsubscribed by the erasure, and nothing more to erase.
-    expect($("tr[data-id='s3'] td:nth-child(2)").textContent).toBe("unsubscribed erased");
+    expect($("tr[data-id='s3'] td:nth-child(2)").textContent).toBe("unsubscribed");
     $("tr[data-id='s3'] [data-menu]").click();
     expect($$(".menu .menu-item").map((b) => b.textContent)).toEqual(["View subscriber", "Block"]);
     expect(fake.unhandled).toEqual([]);
@@ -492,7 +492,7 @@ describe("subscribers view", () => {
     // Each pill as the list draws it (its classes), beside its definition; why someone left,
     // in the words beside an unsubscribed status; then each act.
     const lists = $$("#subLegend dl");
-    expect(lists).toHaveLength(4);
+    expect(lists).toHaveLength(3);
     const pills = (dl: HTMLElement) =>
       $$("dt", dl).map((dt) => {
         const pill = dt.querySelector(".badge")!;
@@ -507,22 +507,9 @@ describe("subscribers view", () => {
         "Receives your posts. They confirmed here, or opted in at the service you imported them from.",
       ],
       ["badge pending", "pending", "Subscribed but hasn’t clicked the confirmation email."],
-      ["badge unsubscribed", "unsubscribed", "Left the list. Why they left is shown beside it."],
+      ["badge unsubscribed", "unsubscribed", "Left the list. Why they left is on their page."],
     ]);
-    expect(terms(lists[1]!)).toEqual([
-      ["by their link", "They unsubscribed themselves, from the link or the button in your email."],
-      ["on request", "You unsubscribed them, when they asked you to."],
-      [
-        "complaint",
-        "They reported your email as spam. Only their own sign-up brings them back, so you can’t add them: ask them to subscribe through your subscribe page.",
-      ],
-      [
-        "erased",
-        "You erased them at their request. Only the address is kept, so it isn’t mailed again, and only their own sign-up brings them back.",
-      ],
-      ["left elsewhere", "The list you imported says they left, without saying why."],
-    ]);
-    expect(pills(lists[2]!)).toEqual([
+    expect(pills(lists[1]!)).toEqual([
       [
         "badge suppressed",
         "bounced",
@@ -534,7 +521,7 @@ describe("subscribers view", () => {
         "Stopped by hand, by you or at the service it was imported from. You can unblock it.",
       ],
     ]);
-    expect(terms(lists[3]!)).toEqual([
+    expect(terms(lists[2]!)).toEqual([
       [
         "Unsubscribe",
         "When they ask you to take them off the list. They can rejoin by subscribing again.",
@@ -558,12 +545,10 @@ describe("subscribers view", () => {
     ]);
     expect($$("#subLegend h2").map((h) => h.textContent)).toEqual([
       "Status",
-      "Why they left",
       "Suppressed",
       "What you can do",
     ]);
     expect($$("#subLegend p").map((p) => p.textContent)).toEqual([
-      "Beside an unsubscribed status:",
       "The address isn’t sent your posts, whatever its status. The status stays as it was, greyed while the suppression keeps it from taking effect. The red flag beside the address says why:",
     ]);
     toggle.click();
@@ -583,7 +568,7 @@ describe("subscribers view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("says beside an unsubscribed status why they left, and nothing beside one pending again (SPEC §7)", async () => {
+  it("shows the status alone, leaving why someone left to their page (DESIGN §3)", async () => {
     fake = fakeApi([
       {
         path: "/api/subscribers",
@@ -600,10 +585,11 @@ describe("subscribers view", () => {
     ]);
     await mount((r, s) => renderSubscribers(undefined, r, s));
     await settle();
-    expect($("tr[data-id='s1'] .sub-cause").textContent).toBe("complaint");
-    expect($("tr[data-id='s2'] .sub-cause").textContent).toBe("erased");
+    const statusCell = (id: string) => $(`tr[data-id='${id}'] td:nth-child(2)`).textContent;
+    expect(statusCell("s1")).toBe("unsubscribed");
+    expect(statusCell("s2")).toBe("unsubscribed");
     // Signed up again after an erasure: pending, and their own confirmation brings them back.
-    expect(document.querySelector("tr[data-id='s3'] .sub-cause")).toBeNull();
+    expect(statusCell("s3")).toBe("pending");
     expect($("tr[data-id='s3'] .badge.pending").classList.contains("held")).toBe(false);
     expect(fake.unhandled).toEqual([]);
   });

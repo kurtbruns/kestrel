@@ -202,9 +202,10 @@ describe("the subscriber page (SPEC §8, DESIGN §3)", () => {
     );
     await mount((r, s) => renderSubscriber("s1", r, s));
     await settle();
-    expect($(".sub-pills .sub-cause").textContent).toBe("complaint");
+    // The head shows the status alone, as the roster does; why is in its own section.
+    expect($(".sub-pills").textContent).toBe("unsubscribed");
     const section = $("section[aria-labelledby='subLeftTitle']");
-    expect($(".sub-left-line", section).textContent).toBe(`Complaint ${fmt(left)}`);
+    expect($(".sub-left-line", section).textContent).toBe(`Left ${fmt(left)}`);
     expect($(".sub-meaning", section).textContent).toBe(CAUSE_MEANING.complaint);
     expect($("a", section).getAttribute("href")).toBe("#/sent/x2");
     expect($("a", section).textContent).toBe("Spring");
@@ -284,7 +285,7 @@ describe("the subscriber page (SPEC §8, DESIGN §3)", () => {
     await settle();
     expect($("h1.sub-title").textContent).toBe("reader@b.c");
     expect(sectionTitles()).toEqual(["Suppression", "Why they left", "Sends"]);
-    expect($(".sub-left-line").textContent).toBe(`Erased ${fmt(at)}`);
+    expect($(".sub-left-line").textContent).toBe(`Left ${fmt(at)}`);
     expect($(".sub-meaning", $("section[aria-labelledby='subLeftTitle']")).textContent).toBe(
       CAUSE_MEANING.erased,
     );

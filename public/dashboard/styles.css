@@ -1638,12 +1638,6 @@ td a:hover {
   font-size: 11px;
   vertical-align: middle;
 }
-/* Why an unsubscribed row left, beside its status: plain words, secondary to the badge. */
-.sub-cause {
-  margin-left: 2px;
-  font-size: 12px;
-  white-space: nowrap;
-}
 
 /* The Subscribers summary: the counts, with the Legend toggle at the card's right edge
    (at the end of the counts' last line when they wrap), and the legend opening below
@@ -6967,6 +6961,7 @@ body.has-savebar .content {
 }
 .sub-sec .sub-meaning {
   margin: 8px 0;
+  font-size: 13.5px;
 }
 .sub-sec p:last-child {
   margin-bottom: 0;
