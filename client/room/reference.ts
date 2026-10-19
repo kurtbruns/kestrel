@@ -8,7 +8,6 @@ import type {
   ReferenceField,
   ReferenceGroup,
   ReferenceObject,
-  ReferenceRefusalGroup,
   ReferenceResource,
   ReferenceResponse,
   ReferenceStatus,
