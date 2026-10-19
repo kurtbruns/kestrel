@@ -975,10 +975,10 @@ export async function renderEditor(
   });
 
   if (locked && scheduled) {
-    // The send as last reported: this page's read of it (or, until that succeeds, what the
-    // post's read says of it), then each read of the send-state layer that found it
-    // changed, whichever client changed it (DESIGN §4).
-    let current: BannerSend = sendRead?.send ?? scheduled;
+    // The send as last reported: this page's read of it (or, until that succeeds, the post's
+    // reference to it, which says its fire time and no condition), then each read of the
+    // send-state layer that found it changed, whichever client changed it (DESIGN §4).
+    let current: BannerSend = sendRead?.send ?? { ...scheduled, conditions: [] };
     const whenEl = $("#schedWhen");
     const controls = $("#schedControls");
     // --- the banner: the cards' countdown, and the review window closing at the fire time ---
@@ -1063,7 +1063,7 @@ export async function renderEditor(
             // A change to the post's settings gives its send a new `rev` with no change of stage,
             // so such a report may carry a change made elsewhere (Claude, another tab): read the
             // post again for the banner's row. A stage change hands off below instead.
-            const settingsMayHaveChanged = !change && "rev" in current && send.rev !== current.rev;
+            const settingsMayHaveChanged = !change && send.rev !== current.rev;
             current = send;
             if (settingsMayHaveChanged) {
               void rereadPublishing();
@@ -1561,10 +1561,10 @@ export async function renderEditor(
   return handle;
 }
 
-/** What the scheduled banner reads of its send. `actions` is absent only until the send's
- *  own read answers (the post's read does not carry them). */
-type BannerSend = Pick<SendView, "id" | "fire_at" | "phase" | "conditions" | "remade_at"> &
-  Partial<Pick<SendView, "actions">>;
+/** What the scheduled banner reads of its send. `phase` and `actions` are absent only until
+ *  the send's own read answers (the post's reference to it carries neither). */
+type BannerSend = Pick<SendView, "id" | "fire_at" | "rev" | "conditions"> &
+  Partial<Pick<SendView, "phase" | "actions">>;
 
 /**
  * Whether the send has moved on from scheduled, found on the editor's own read of it: once

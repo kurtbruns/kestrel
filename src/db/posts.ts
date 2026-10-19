@@ -364,7 +364,7 @@ export async function listPosts(
   // the send that sent a post, as the post's `send` does, while the default order groups only
   // the posts still waiting on a send first, so a sent post's old fire time never ranks it
   // among them.
-  // The row carries only the post: its send is read as a view beside it (`viewPosts`).
+  // The row carries only the post: its send is read as a reference beside it (`viewPosts`).
   const { results } = await db
     .prepare(
       `SELECT p.*

@@ -15,8 +15,8 @@ import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 import { fetchOn, withVars } from "./support/worker_env";
 
 // One shape per noun (docs/API.md, principles 2, 3, and 5): a post and a subscriber read the
-// same on every route that carries them, a post says where its send stands as the send's own
-// view and what can be done to it, and a refusal about state carries the resource as it stands.
+// same on every route that carries them, a post refers to its send by one fixed reference and
+// says what can be done to it, and a refusal about state carries the resource as it stands.
 
 const call = (path: string, init: { method?: string; body?: unknown } = {}) =>
   SELF.fetch(`${base}${path}`, {
@@ -42,7 +42,7 @@ async function bothReads(id: string) {
 describe("a post reads the same on every route, with its send and its actions (SPEC §6, §8)", () => {
   beforeEach(resetDatabase);
 
-  it("carries its send as the send's own view through each state, and what the server would take", async () => {
+  it("refers to its send through each state, and says what the server would take", async () => {
     const { post } = await readJson(
       await call("/api/posts", { method: "POST", body: { subject: "Owls", markdown: "# Hi" } }),
     );
@@ -52,7 +52,7 @@ describe("a post reads the same on every route, with its send and its actions (S
     expect(Object.keys(row).sort()).toEqual(Object.keys(one).sort());
     expect([one.send, one.actions]).toEqual([null, DRAFT_ACTIONS(post.id)]);
 
-    // Scheduled: the send as `GET /api/sends/:id` answers it, and nothing to do to the post.
+    // Scheduled: a reference to the send `GET /api/sends/:id` answers, and nothing to do to the post.
     const fire_at = Date.now() + 3_600_000;
     const sched = await readJson(
       await call(`/api/posts/${post.id}/schedule`, { method: "POST", body: { fire_at } }),
@@ -61,7 +61,12 @@ describe("a post reads the same on every route, with its send and its actions (S
     const { send } = await readJson(await call(`/api/sends/${sendId}`));
     ({ one, row } = await bothReads(post.id));
     for (const p of [one, row]) {
-      expect({ ...p.send, as_of: 0 }).toEqual({ ...send, as_of: 0 });
+      expect(p.send).toEqual({
+        id: sendId,
+        status: "scheduled",
+        fire_at: send.fire_at,
+        rev: send.rev,
+      });
       expect(p.actions).toEqual([]);
     }
     // A settings change answers the same post.
@@ -94,6 +99,38 @@ describe("a post reads the same on every route, with its send and its actions (S
         "sent",
         [],
       ]);
+    }
+  });
+
+  it("refers to its send by the same reference on every route that carries the post", async () => {
+    const { post } = await readJson(
+      await call("/api/posts", { method: "POST", body: { subject: "Owls", markdown: "# Hi" } }),
+    );
+    await call(`/api/posts/${post.id}/schedule`, {
+      method: "POST",
+      body: { fire_at: Date.now() + 3_600_000 },
+    });
+    // A settings change writes the send, so the reference it answers carries the new rev.
+    const settings = await readJson(
+      await call(`/api/posts/${post.id}/settings`, { method: "PUT", body: { email_only: true } }),
+    );
+    const refused = await readJson(
+      await call(`/api/posts/${post.id}`, {
+        method: "PUT",
+        body: { subject: "x", base_revision: "r" },
+      }),
+    );
+    expect(refused.error).toBe("post_not_draft");
+    const { one, row } = await bothReads(post.id);
+    const { send } = await readJson(await call(`/api/sends/${settings.post.send.id}`));
+    const ref = { id: send.id, status: send.status, fire_at: send.fire_at, rev: send.rev };
+    for (const [route, p] of [
+      ["GET /api/posts/:id", one],
+      ["GET /api/posts", row],
+      ["PUT /api/posts/:id/settings", settings.post],
+      ["post_not_draft", refused.post],
+    ]) {
+      expect(p.send, route).toEqual(ref);
     }
   });
 

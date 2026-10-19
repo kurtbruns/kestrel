@@ -147,12 +147,14 @@ describe("names on the wire are snake_case", () => {
       const rows = (route?.example?.response as Record<string, unknown> | undefined)?.[as];
       const examples = [described?.example, Array.isArray(rows) ? rows[0] : undefined];
       const keys = examples.flatMap((e) => keysOf(e, "").map((k) => k.slice(1)));
-      // A field that holds an object described on its own (a post's `send`) sorts by that
-      // object's fields too, by dotted path (`send.fire_at`).
+      // A field that holds an object, one described on its own or one its type spells out (a
+      // post's `send`, `{ id, status, fire_at, rev }`), sorts by that object's fields too, by
+      // dotted path (`send.fire_at`).
       const nested = (described?.fields ?? []).flatMap((f) =>
-        (ref.objects.find((o) => o.key === f.object)?.fields ?? []).map(
-          (g) => `${f.name}.${g.name}`,
-        ),
+        [
+          ...(ref.objects.find((o) => o.key === f.object)?.fields ?? []).map((g) => g.name),
+          ...(/^\{([^}]*)\}/.exec(f.type)?.[1]?.split(",") ?? []).map((g) => g.trim()),
+        ].map((g) => `${f.name}.${g}`),
       );
       return new Set([...names, ...keys, ...nested]);
     };

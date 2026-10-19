@@ -1,8 +1,8 @@
 /**
  * A send read as a `SendView` (SPEC §8), for every route that answers with one: the send's
- * route, every action, every refusal that carries the send as it stands, a post's `send`, and
- * the scheduled sends a settings save would re-make, so a client
- * learns where the send stands without a second read. Beside it, the cursor an answer hands
+ * route, every action, every refusal that carries the send as it stands, and the scheduled
+ * sends a settings save would re-make, so a client learns where the send stands without a
+ * second read. A post refers to its send instead (`postSendRefs`). Beside it, the cursor an answer hands
  * back: where the read stood among the changes to sends, to follow the send from.
  */
 

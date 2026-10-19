@@ -1,19 +1,18 @@
 /**
  * A post as the API answers it (docs/API.md, principle 2): one shape on every route, in a list,
  * alone, in an act's answer, and in a refusal. A stored post plus its two addresses and where it
- * stands for readers, who wrote its current revision, its send as the send's own view, and
+ * stands for readers, who wrote its current revision, a reference to its send, and
  * `actions`, exactly what the server would take for it now, so neither client works out from
  * `status` whether a post can be edited, scheduled, sent, or deleted (principle 3).
  */
 
 import type { Post, PostAction } from "../../shared/posts";
 import { currentAuthors, getPost, type PostRow } from "../db/posts";
-import { postSendIds, publicationsFor } from "../db/sends";
+import { postSendRefs, publicationsFor } from "../db/sends";
 import type { AppEnv, Config } from "../env";
 import { withAddresses } from "../lib/archive_address";
 import { HttpError } from "../lib/errors";
 import { unwrap } from "../lib/unwrap";
-import { viewSends } from "../send/describe";
 
 /**
  * What can be done to a post now, as its routes would take it given its state and the
@@ -47,21 +46,17 @@ export function postActions(
 /** Stored posts as the API answers them, in the order given: a few reads for all of them. */
 export async function viewPosts(env: AppEnv, config: Config, rows: PostRow[]): Promise<Post[]> {
   const ids = rows.map((r) => r.id);
-  const [published, authors, sendIds] = await Promise.all([
+  const [published, authors, sends] = await Promise.all([
     publicationsFor(env.DB, ids),
     currentAuthors(env.DB, rows),
-    postSendIds(env.DB, ids),
+    postSendRefs(env.DB, ids),
   ]);
-  const views = await viewSends(env, [...new Set(sendIds.values())]);
-  return rows.map((row) => {
-    const sendId = sendIds.get(row.id);
-    return {
-      ...withAddresses(config, row, published.get(row.id) ?? null),
-      author: authors.get(row.id) ?? null,
-      send: (sendId && views.get(sendId)) || null,
-      actions: postActions(row, config),
-    };
-  });
+  return rows.map((row) => ({
+    ...withAddresses(config, row, published.get(row.id) ?? null),
+    author: authors.get(row.id) ?? null,
+    send: sends.get(row.id) ?? null,
+    actions: postActions(row, config),
+  }));
 }
 
 /** One stored post as the API answers it. */

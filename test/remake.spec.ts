@@ -141,11 +141,16 @@ describe("a template or identity change re-makes the scheduled emails", () => {
       expect(after.audience.count).toBe(before.audience.count);
       expect(after.remade_at).toBe(body.remade[0].remade_at);
     }
-    // The post read and the send list carry the mark.
+    // The post's reference moves to the re-made send's rev, and the send list carries the mark.
     const post = await readJson(
       await SELF.fetch(`${base}/api/posts/${a.post_id}`, { headers: AUTH }),
     );
-    expect(post.post.send).toMatchObject({ id: a.id, remade_at: body.remade[0].remade_at });
+    expect(post.post.send).toEqual({
+      id: a.id,
+      status: "scheduled",
+      fire_at: a.fire_at,
+      rev: body.remade[0].rev,
+    });
     const list = await readJson(
       await SELF.fetch(`${base}/api/sends?status=scheduled`, { headers: AUTH }),
     );

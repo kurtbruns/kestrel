@@ -1,9 +1,10 @@
 // What a post offers and where its send stands, read from the post as the server answers it:
 // its `actions`, which say exactly what the server would take now, and its `send`. A view
 // offers a post control only from these, never from `status`, so the editor and Claude agree.
+// The send is a reference (its id, status, fire time, and rev); a view that shows more of it
+// reads the send's own route.
 
-import type { Post, PostAction } from "../../shared/posts";
-import type { SendView } from "../../shared/sends";
+import type { Post, PostAction, SendRef } from "../../shared/posts";
 
 /** The act the server would take for the post now, by name, or undefined when it wouldn't. */
 export function postAction(
@@ -14,7 +15,7 @@ export function postAction(
 }
 
 /** The post's send while it is scheduled or going out, or null: a sent post's send is its record. */
-export function activeSend(post: Pick<Post, "send">): SendView | null {
+export function activeSend(post: Pick<Post, "send">): SendRef | null {
   const s = post.send;
   return s && (s.status === "scheduled" || s.status === "sending") ? s : null;
 }
