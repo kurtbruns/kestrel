@@ -6,8 +6,9 @@ import type { OptIn } from "./imports";
 import type { PageMeta } from "./list";
 import type { DeliveryRecord, SendView } from "./sends";
 
-/** A subscriber's consent state (SPEC §7); `subscriber_meanings.ts` says what each means. */
-export type SubscriberStatus = "pending" | "confirmed" | "unsubscribed";
+/** A subscriber's consent states (SPEC §7); `subscriber_meanings.ts` says what each means. */
+export const SUBSCRIBER_STATUSES = ["pending", "confirmed", "unsubscribed"] as const;
+export type SubscriberStatus = (typeof SUBSCRIBER_STATUSES)[number];
 
 /**
  * Why a subscriber left (SPEC §7), kept while they have left and not confirmed since: their own

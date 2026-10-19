@@ -21,16 +21,22 @@
 import { UNLISTED_PATH } from "../shared/archive_url";
 import { FREE_PLAN_LIST } from "../shared/free_plan";
 import { IMPORT_LIMITS } from "../shared/imports";
+import { SORT_DIRS } from "../shared/list";
+import { POST_STATUSES } from "../shared/posts";
 import type { ReferenceField, ReferenceResponse } from "../shared/reference";
 import {
   type DeliveryListResponse,
   formatLead,
   MIN_LEAD_FLOOR_MS,
+  SEND_STATUSES,
   STUCK_THRESHOLD_MS,
 } from "../shared/sends";
 import type { TemplateTestResponse } from "../shared/settings";
 import { SUBSCRIBER_ACTIONS } from "../shared/subscriber_meanings";
+import { SUBSCRIBER_STATUSES } from "../shared/subscribers";
 import { buildInfo } from "./build";
+import { DELIVERY_VIEWS } from "./db/sends";
+import { SUPPRESSED_FILTERS } from "./db/subscribers";
 import type { Config } from "./env";
 import { json, notFound } from "./lib/errors";
 import { RASTER_IMAGE_TYPES } from "./lib/image_types";
@@ -335,6 +341,7 @@ export function createRouter({
       query: [
         {
           name: "kind",
+          values: ["human", "service"],
           description:
             "`human` (default, as the editor uses) or `service` (no email, as Claude uses).",
         },
@@ -707,6 +714,8 @@ export function createRouter({
       query: [
         {
           name: "status",
+          values: POST_STATUSES,
+          list: true,
           description:
             "Filter by status: `draft`, `scheduled`, or `sent`; a comma list (`draft,scheduled`) matches any.",
         },
@@ -716,7 +725,7 @@ export function createRouter({
           description:
             "`updated_at` (default: scheduled-first, then newest edit), `subject`, `status`, or `send.fire_at`, the fire time of the post's send.",
         },
-        { name: "dir", description: "`asc` or `desc` (default `desc`)." },
+        { name: "dir", values: SORT_DIRS, description: "`asc` or `desc` (default `desc`)." },
         ...pageParams,
       ],
       returns: {
@@ -1184,12 +1193,13 @@ export function createRouter({
       query: [
         {
           name: "status",
-          description:
-            "Filter by status: `scheduled`, `sending`, `sent`, or `canceled`; anything else is a 400.",
+          values: SEND_STATUSES,
+          description: "Filter by status: `scheduled`, `sending`, `sent`, or `canceled`.",
         },
         { name: "search", description: "Subject contains-search." },
         {
           name: "failures",
+          values: ["only"],
           description:
             "`only` narrows to sends with a delivery failure (any bounced, complained, or unsent recipient).",
         },
@@ -1197,7 +1207,7 @@ export function createRouter({
           name: "sort",
           description: "`fire_at` (default), `status`, `audience.count`, or `subject`.",
         },
-        { name: "dir", description: "`asc` or `desc` (default `desc`)." },
+        { name: "dir", values: SORT_DIRS, description: "`asc` or `desc` (default `desc`)." },
         ...pageParams,
       ],
       returns: { object: "send", as: "sends", list: true, fields: [pageField, cursorField] },
@@ -1346,7 +1356,8 @@ export function createRouter({
       query: [
         {
           name: "format",
-          description: "`html` (default) or `text`; anything else is a 400 naming the field.",
+          values: ["html", "text"],
+          description: "`html` (default) or `text`.",
         },
       ],
       handler: sendRoutes.email,
@@ -1362,12 +1373,13 @@ export function createRouter({
       query: [
         {
           name: "view",
+          values: DELIVERY_VIEWS,
           description:
-            "`failures` (default: bounced/complained/unsent), `delivered`, `all`, or a single bucket, in the words of the send's `counts` (`bounced`, `complained`, `unsent`, `skipped`, `accepted`, `pending`, `dispatched`). Anything else is a 400 naming the field.",
+            "`failures` (default: bounced/complained/unsent), `delivered`, `all`, or a single bucket, in the words of the send's `counts` (`bounced`, `complained`, `unsent`, `skipped`, `accepted`, `pending`, `dispatched`).",
         },
         { name: "search", description: "Email contains-search." },
         { name: "sort", description: "`email` (default), `status`, `event`, or `event_at`." },
-        { name: "dir", description: "`asc` (default) or `desc`." },
+        { name: "dir", values: SORT_DIRS, description: "`asc` (default) or `desc`." },
         ...pageParams,
       ],
       example: {
@@ -1571,10 +1583,12 @@ export function createRouter({
       query: [
         {
           name: "status",
+          values: SUBSCRIBER_STATUSES,
           description: "Filter by consent status: `pending`, `confirmed`, or `unsubscribed`.",
         },
         {
           name: "suppressed",
+          values: SUPPRESSED_FILTERS,
           description: "Suppression facet: `only` (suppressed addresses) or `hide` (exclude them).",
         },
         { name: "search", description: "Email contains-search." },
@@ -1582,7 +1596,7 @@ export function createRouter({
           name: "sort",
           description: "`created_at` (default), `confirmed_at`, `email`, or `status`.",
         },
-        { name: "dir", description: "`asc` or `desc` (default `desc`)." },
+        { name: "dir", values: SORT_DIRS, description: "`asc` or `desc` (default `desc`)." },
         ...pageParams,
         {
           name: "email",

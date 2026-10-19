@@ -54,10 +54,10 @@ import { type AppEnv, type Config, onFreePlanLimits } from "../env";
 import {
   fieldError,
   type JsonObject,
-  onlyKeys,
   optObject,
   optString,
   optStringList,
+  readForm,
   readJsonObject,
 } from "../lib/body";
 import { badRequest, HttpError, json } from "../lib/errors";
@@ -305,7 +305,7 @@ export async function uploadLogo(c: RequestContext): Promise<Response> {
   if (!ct.includes("multipart/form-data")) {
     throw fieldError("file", "a multipart form with a 'file' field is required");
   }
-  const form = await c.req.formData();
+  const form = await readForm(c.req);
   const file = form.get("file");
   if (!(file instanceof File)) {
     throw fieldError("file", "missing 'file' field");
@@ -367,20 +367,12 @@ export async function deleteLogo(c: RequestContext): Promise<Response> {
 }
 
 /**
- * Pick the editable keys off the request body. A key it doesn't take, or a present key with
- * the wrong type, is a 400 naming it (`publication.name`), so a misnamed field is never a
- * save that quietly changed nothing; the value rules (lengths, valid addresses) are
- * applyPatch's.
+ * Pick the editable keys off the request body. A present key with the wrong type is a 400
+ * naming it (`publication.name`); one the route doesn't declare never reaches here, since the
+ * router refuses it first (`src/lib/strict.ts`). The value rules (lengths, valid addresses)
+ * are applyPatch's.
  */
 function readPatch(o: JsonObject): SettingsPatch {
-  onlyKeys(o, [
-    "test_recipients",
-    "publication",
-    "email_template",
-    "confirmation_email",
-    "notifications",
-    "remake",
-  ]);
   const patch: SettingsPatch = {};
   const testRecipients = optStringList(o, "test_recipients");
   if (testRecipients !== undefined) {
@@ -388,7 +380,6 @@ function readPatch(o: JsonObject): SettingsPatch {
   }
   const p = optObject(o, "publication");
   if (p !== undefined) {
-    onlyKeys(p, ["name", "tagline", "address"], "publication");
     const pub: NonNullable<SettingsPatch["publication"]> = {};
     for (const k of ["name", "tagline", "address"] as const) {
       const v = optString(p, k, "publication");
@@ -404,7 +395,6 @@ function readPatch(o: JsonObject): SettingsPatch {
   }
   const ceBody = optObject(o, "confirmation_email");
   if (ceBody !== undefined) {
-    onlyKeys(ceBody, ["subject", "body", "button_label", "reassurance"], "confirmation_email");
     const ce: NonNullable<SettingsPatch["confirmation_email"]> = {};
     for (const k of ["subject", "body", "button_label", "reassurance"] as const) {
       const v = optString(ceBody, k, "confirmation_email");
@@ -416,7 +406,6 @@ function readPatch(o: JsonObject): SettingsPatch {
   }
   const nBody = optObject(o, "notifications");
   if (nBody !== undefined) {
-    onlyKeys(nBody, ["to"], "notifications");
     const to = optString(nBody, "to", "notifications");
     patch.notifications = to === undefined ? {} : { to };
   }

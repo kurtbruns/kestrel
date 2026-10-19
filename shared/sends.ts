@@ -7,7 +7,9 @@
 
 import type { PageMeta } from "./list";
 
-export type SendStatus = "scheduled" | "sending" | "sent" | "canceled";
+/** A send's statuses, in their order, which the list's `status` filter takes. */
+export const SEND_STATUSES = ["scheduled", "sending", "sent", "canceled"] as const;
+export type SendStatus = (typeof SEND_STATUSES)[number];
 
 /**
  * Why a provider refused a whole batch (SPEC §12): it is `unavailable` (an outage or a

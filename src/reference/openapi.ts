@@ -304,7 +304,8 @@ function operation(
         in: "query",
         required: q.required ?? false,
         description: q.description,
-        schema: { type: "string" },
+        // A fixed set is an enum; a comma list of one stays a string, its values in the prose.
+        schema: q.values && !q.list ? { type: "string", enum: [...q.values] } : { type: "string" },
       }),
     ),
   ];

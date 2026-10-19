@@ -32,23 +32,14 @@ import { cancel as cancelSend, reschedule as rescheduleSend } from "../send/sche
 import { buildSendView } from "../send/view";
 import { parseFireAt } from "./schedule";
 
-/** The `GET /api/sends` filters: each a value from its set, or absent; anything else is a 400
- *  naming the field. */
+/** The `GET /api/sends` filters, each held by the router to the values the manifest
+ *  declares, or absent. */
 function parseSendFilter(url: URL): sends.SendFilter {
   const q = url.searchParams;
-  const status = q.get("status");
-  const statuses: sends.SendStatus[] = ["scheduled", "sending", "sent", "canceled"];
-  if (status !== null && !statuses.includes(status as sends.SendStatus)) {
-    throw badRequest(`status must be one of ${statuses.join(", ")}`, { field: "status" });
-  }
-  const failures = q.get("failures");
-  if (failures !== null && failures !== "only") {
-    throw badRequest("failures must be only", { field: "failures" });
-  }
   return {
-    status: (status as sends.SendStatus | null) ?? undefined,
+    status: (q.get("status") as sends.SendStatus | null) ?? undefined,
     search: q.get("search") ?? undefined,
-    failures: failures === "only" ? "only" : undefined,
+    failures: q.get("failures") === "only" ? "only" : undefined,
   };
 }
 
@@ -132,10 +123,8 @@ export async function get(c: RequestContext): Promise<Response> {
  * route, so a view of the send never carries the bodies.
  */
 export async function email(c: RequestContext): Promise<Response> {
+  // The router has held `format` to `html` or `text`.
   const format = c.url.searchParams.get("format") ?? "html";
-  if (format !== "html" && format !== "text") {
-    throw badRequest("format must be html or text", { field: "format" });
-  }
   const send = await sends.getSend(c.env.DB, param(c, "id"));
   if (!send) {
     throw notFound("send");
@@ -262,9 +251,7 @@ function parseDeliveryView(raw: string | null): sends.DeliveryView {
   if (raw === null) {
     return "failures";
   }
-  if (!sends.DELIVERY_VIEWS.includes(raw as sends.DeliveryView)) {
-    throw badRequest(`view must be one of ${sends.DELIVERY_VIEWS.join(", ")}`, { field: "view" });
-  }
+  // The router has held it to `DELIVERY_VIEWS`.
   return raw as sends.DeliveryView;
 }
 

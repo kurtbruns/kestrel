@@ -8,6 +8,7 @@ import type {
   SubscriberDeliveriesResponse,
   SubscriberListResponse,
   SubscriberResponse,
+  SubscriberStatus,
 } from "../../shared/subscribers";
 import * as sends from "../db/sends";
 import * as subscribers from "../db/subscribers";
@@ -69,18 +70,15 @@ export async function list(c: RequestContext): Promise<Response> {
     };
     return json(body);
   }
-  const statusParam = c.url.searchParams.get("status") ?? undefined;
-  const status =
-    statusParam === "pending" || statusParam === "confirmed" || statusParam === "unsubscribed"
-      ? statusParam
-      : undefined;
-  const search = c.url.searchParams.get("search") ?? undefined;
+  // The router has held `status` and `suppressed` to the values the manifest declares.
   // Suppression is an overlay, not a status, so it's its own facet (see subscriberWhere):
   // "only" narrows to suppressed addresses, "hide" drops them, absent leaves both.
-  const suppressedParam = c.url.searchParams.get("suppressed");
-  const suppressed =
-    suppressedParam === "only" ? "only" : suppressedParam === "hide" ? "hide" : undefined;
-  const filter = { status, search, suppressed } satisfies subscribers.SubscriberFilter;
+  const q = c.url.searchParams;
+  const filter: subscribers.SubscriberFilter = {
+    status: (q.get("status") as SubscriberStatus | null) ?? undefined,
+    search: q.get("search") ?? undefined,
+    suppressed: (q.get("suppressed") as subscribers.SuppressedFilter | null) ?? undefined,
+  };
   const page = parseListParams(c.url, subscribers.SUBSCRIBER_LIST_SPEC);
   const [counts, total, rows] = await Promise.all([
     subscribers.counts(c.env.DB),

@@ -2,7 +2,9 @@
 // (SPEC §4 lists are offset-paged), typed once so the editor's pager and the Worker's
 // responses can never disagree about it.
 
-export type SortDir = "asc" | "desc";
+/** A list's sort directions, which its `dir` takes. */
+export const SORT_DIRS = ["asc", "desc"] as const;
+export type SortDir = (typeof SORT_DIRS)[number];
 
 /** The pagination envelope attached to every list response. */
 export interface PageMeta {

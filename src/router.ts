@@ -8,7 +8,10 @@
  * reference reads (see src/reference/), the documented tier and the enforced gate
  * cannot disagree. The admin gate also refuses a write another site's page could have
  * made the publisher's browser send (`refuseForeignWrite`), against the body types the
- * route declares in `accepts`, which the reference shows too.
+ * route declares in `accepts`, which the reference shows too. On the API, a query parameter
+ * or body key the route doesn't declare is refused next, before the handler
+ * (`src/lib/strict.ts`); a reader page and a webhook take what they are sent, since a link in
+ * an email gathers parameters its reader never added.
  *
  * Middleware run in order; the first one to return a `Response` short-circuits
  * (this is how auth returns 401 before the handler runs). Handlers and middleware
@@ -38,6 +41,7 @@ import {
   unsupportedMediaType,
 } from "./lib/errors";
 import { serverErrorPage } from "./lib/page";
+import { refuseUndeclared } from "./lib/strict";
 import type { RefusalCode } from "./reference/refusals";
 
 export interface Principal {
@@ -275,8 +279,11 @@ export class Router {
 
   /** Register a route from its manifest entry; the `access` tier decides the gate. */
   register(def: RouteDef): this {
-    const gate = gateFor(def);
-    const middleware = def.middleware ? [...gate, ...def.middleware] : gate;
+    // On the API, after the gate (so an unauthenticated request still gets its 401), what
+    // the route doesn't declare is refused; a reader page and a webhook take what they're sent.
+    const strict =
+      def.access !== "webhook" && !this.readerPage(def.path) ? [refuseUndeclared(def)] : [];
+    const middleware = [...gateFor(def), ...strict, ...(def.middleware ?? [])];
     this.compiled.push({ def, pattern: new URLPattern({ pathname: def.path }), middleware });
     return this;
   }

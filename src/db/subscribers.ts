@@ -324,8 +324,12 @@ export async function signupOnly(db: D1Database, email: string): Promise<Subscri
 export interface SubscriberFilter {
   status?: SubscriberStatus;
   search?: string;
-  suppressed?: "only" | "hide";
+  suppressed?: SuppressedFilter;
 }
+
+/** The `suppressed` facet's values, which the list's query parameter takes. */
+export const SUPPRESSED_FILTERS = ["only", "hide"] as const;
+export type SuppressedFilter = (typeof SUPPRESSED_FILTERS)[number];
 
 /** The sortable columns exposed by `GET /api/subscribers` (see `parseListParams`). */
 export const SUBSCRIBER_LIST_SPEC: ListSpec = {

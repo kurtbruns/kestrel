@@ -20,6 +20,7 @@ import { mintDevToken } from "../auth/dev_token";
 import { resetAll } from "../db/seed";
 import { BRANDING_LOGO_KEY } from "../db/settings";
 import { type DemoImageFile, parseSeedSize, seedDatabase } from "../dev/seed";
+import { fieldError, readForm } from "../lib/body";
 import { json, notFound } from "../lib/errors";
 import type { RequestContext } from "../router";
 
@@ -42,6 +43,7 @@ export async function token(c: RequestContext): Promise<Response> {
   if (!c.config.devAuthSecret) {
     throw notFound("only available in local development");
   }
+  // The router has held `kind` to `human` or `service`.
   const service = c.url.searchParams.get("kind") === "service";
   const jwt = await mintDevToken(c.config.devAuthSecret, service ? {} : { email: "dev@localhost" });
   return json({
@@ -58,7 +60,7 @@ export async function seed(c: RequestContext): Promise<Response> {
   let logoFile: { bytes: ArrayBuffer; contentType: string } | undefined;
   const ct = c.req.headers.get("content-type") ?? "";
   if (ct.includes("multipart/form-data")) {
-    const form = await c.req.formData();
+    const form = await readForm(c.req);
     for (const file of form.getAll("image")) {
       // `<bundle>/<file>`: the post's folder under demo/posts, then the image beside it.
       const filename = file instanceof File ? file.name.replaceAll("\\", "/") : "";
@@ -82,10 +84,17 @@ export async function seed(c: RequestContext): Promise<Response> {
   // Optional scale controls: `?size=` (100 / 1k / 10k / 100k, an approximate target)
   // selects the parametric PRNG-driven list; absent, the curated demo list loads unchanged.
   // `?seed=` pins the PRNG so a given (size, seed) is reproducible.
-  const size = parseSeedSize(c.url.searchParams.get("size"));
+  // A value neither reads is refused naming it, never read as the curated list.
+  const sizeRaw = c.url.searchParams.get("size");
+  const size = parseSeedSize(sizeRaw);
+  if (sizeRaw !== null && size === undefined) {
+    throw fieldError("size", "size must be a count of subscribers, such as 100, 1k, or 10k");
+  }
   const seedRaw = c.url.searchParams.get("seed");
-  const seedNum = seedRaw ? Number.parseInt(seedRaw, 10) : Number.NaN;
-  const seed = Number.isFinite(seedNum) ? seedNum : undefined;
+  if (seedRaw !== null && !/^\d+$/.test(seedRaw)) {
+    throw fieldError("seed", "seed must be a whole number");
+  }
+  const seed = seedRaw === null ? undefined : Number.parseInt(seedRaw, 10);
   const options = size != null ? { size, seed } : undefined;
 
   const summary = await seedDatabase(c.env, c.config, images, logoFile, options);

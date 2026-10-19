@@ -9,6 +9,7 @@ import type { ImageListResponse, ImageUploadResponse, PostImage } from "../../sh
 import type { ImageRow } from "../db/images";
 import * as images from "../db/images";
 import * as posts from "../db/posts";
+import { readForm } from "../lib/body";
 import { badRequest, json, notFound } from "../lib/errors";
 import { probeImageDimensions } from "../lib/image_dims";
 import { mediaType, RASTER_IMAGE_TYPES } from "../lib/image_types";
@@ -51,7 +52,7 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
   let imageField: { field: string } | undefined;
 
   if (ct.includes("multipart/form-data")) {
-    const form = await c.req.formData();
+    const form = await readForm(c.req);
     const file = form.get("file");
     if (!(file instanceof File)) {
       throw badRequest("missing 'file' field", { field: "file" });

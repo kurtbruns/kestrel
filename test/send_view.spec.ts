@@ -150,9 +150,14 @@ describe("one SendView on every route", () => {
       .bind(Date.now(), Date.now(), send.id)
       .run();
     await sends.recomputeSendCounters(env.DB, send.id);
-    // A retired `expected_count`, even one that names a different count, is ignored.
+    // A retired `expected_count` is refused naming it, never read as a resolve that ignored it.
+    const stray = await post(`/api/sends/${send.id}/resolve`, {
+      resolution: "unsent",
+      expected_count: 5,
+    });
+    expect([stray.status, (await readJson(stray)).field]).toEqual([400, "expected_count"]);
     const res = (await readJson(
-      await post(`/api/sends/${send.id}/resolve`, { resolution: "unsent", expected_count: 5 }),
+      await post(`/api/sends/${send.id}/resolve`, { resolution: "unsent" }),
     )) as ResolveResponse;
     expectView(res.send);
     expect([res.resolved, res.completed, res.send.status]).toEqual([1, true, "sent"]);

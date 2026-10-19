@@ -13,6 +13,11 @@
  * A body is read as JSON only when it says it is (a 415 otherwise): a browser form can
  * post JSON-shaped text as `text/plain`, and it can never post `application/json` to
  * another origin without a preflight the app never grants (SPEC §11).
+ *
+ * A request's body is read once, whoever reads it first: the router, which refuses a key the
+ * route doesn't declare before the handler runs (`src/lib/strict.ts`), or the route's own
+ * reader. `bodyJson` and `readForm` hold what that read found, so the second reader takes it
+ * from there rather than from a stream already spent, and an import's file is parsed once.
  */
 
 import type { RequestContext } from "../router";
@@ -39,6 +44,62 @@ export function mediaTypeOf(req: Request): string | undefined {
   return declared ? (declared.split(";")[0] ?? "").trim().toLowerCase() || undefined : undefined;
 }
 
+/** A body as read once: its text, and what it parsed to as JSON once something asked. */
+interface BodyRead {
+  text: string;
+  /** Absent until parsed; `null` when the text is not JSON. */
+  json?: { value: unknown } | null;
+}
+
+const bodyReads = new WeakMap<Request, Promise<BodyRead>>();
+const formReads = new WeakMap<Request, Promise<FormData>>();
+
+function bodyRead(req: Request): Promise<BodyRead> {
+  let read = bodyReads.get(req);
+  if (!read) {
+    // The bytes decoded as UTF-8, which is what `.text()` does, but without workerd's
+    // console warning for a body whose type isn't text: its type is checked after an
+    // empty body (whitespace included, whatever its type) has had its answer.
+    read = req.arrayBuffer().then((bytes) => ({ text: new TextDecoder().decode(bytes) }));
+    bodyReads.set(req, read);
+  }
+  return read;
+}
+
+function parsedJson(read: BodyRead): { value: unknown } | undefined {
+  if (read.json === undefined) {
+    try {
+      read.json = { value: JSON.parse(read.text) };
+    } catch {
+      read.json = null;
+    }
+  }
+  return read.json ?? undefined;
+}
+
+/**
+ * The request's body as a JSON object, read once (`readJsonObject` reads the same), or
+ * `undefined` when it is empty or not a JSON object, which is its reader's to refuse.
+ */
+export async function bodyJson(req: Request): Promise<JsonObject | undefined> {
+  const read = await bodyRead(req);
+  if (read.text.trim() === "") {
+    return undefined;
+  }
+  const value = parsedJson(read)?.value;
+  return isObject(value) ? value : undefined;
+}
+
+/** The request's multipart form, read once: the router's key check and the route read the same. */
+export function readForm(req: Request): Promise<FormData> {
+  let read = formReads.get(req);
+  if (!read) {
+    read = req.formData();
+    formReads.set(req, read);
+  }
+  return read;
+}
+
 /**
  * Read the request body as a JSON object, or throw a 400 naming what is wrong with it.
  * `optional` lets an empty body stand for `{}`, for the routes that have a sensible
@@ -49,11 +110,8 @@ export async function readJsonObject(
   c: RequestContext,
   opts: { optional?: boolean } = {},
 ): Promise<JsonObject> {
-  // The bytes decoded as UTF-8, which is what `.text()` does, but without workerd's
-  // console warning for a body whose type isn't text: the type is checked below, after
-  // an empty body (whitespace included, whatever its type) has had its answer.
-  const text = new TextDecoder().decode(await c.req.arrayBuffer());
-  if (text.trim() === "") {
+  const read = await bodyRead(c.req);
+  if (read.text.trim() === "") {
     if (opts.optional) {
       return {};
     }
@@ -62,12 +120,11 @@ export async function readJsonObject(
   if (mediaTypeOf(c.req) !== "application/json") {
     throw unsupportedMediaType("a JSON body must be sent with Content-Type: application/json");
   }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
+  const json = parsedJson(read);
+  if (json === undefined) {
     throw badRequest("the body is not valid JSON");
   }
+  const parsed = json.value;
   if (!isObject(parsed)) {
     const what = parsed === null ? "null" : Array.isArray(parsed) ? "an array" : typeof parsed;
     throw badRequest(`the body must be a JSON object, not ${what}`);
@@ -140,20 +197,6 @@ export function optObject(o: JsonObject, key: string, at?: string): JsonObject |
     throw fieldError(path(key, at), `${path(key, at)} must be an object`);
   }
   return v;
-}
-
-/** Refuse a key the body may not carry, naming the first one, so a field misnamed (an old
- *  name, a typo) is a 400 rather than a success that ignored it. For a body that is a set of
- *  optional fields, where nothing else would notice the key. */
-export function onlyKeys(o: JsonObject, known: readonly string[], at?: string): void {
-  const unknown = Object.keys(o).find((k) => !known.includes(k));
-  if (unknown !== undefined) {
-    const names = known.map((k) => `'${k}'`).join(", ");
-    throw fieldError(
-      path(unknown, at),
-      `${path(unknown, at)} isn’t a field this takes; it takes ${names}`,
-    );
-  }
 }
 
 /** A required field that must be one of a fixed set of strings; anything else is a 400 listing them. */

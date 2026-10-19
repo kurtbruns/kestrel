@@ -39,6 +39,11 @@ export interface QueryParam {
   description: string;
   /** The route can't be called without it (a token-scoped link), unlike a list's optional filters. */
   required?: boolean;
+  /** The values it takes, when they are a fixed set; on the API any other is refused, naming
+   *  the parameter. Absent for a free value (a search, a cursor, a number), whose route checks it. */
+  values?: readonly string[];
+  /** It takes several of `values` at once, as a comma list (`draft,scheduled`). */
+  list?: boolean;
 }
 
 /**

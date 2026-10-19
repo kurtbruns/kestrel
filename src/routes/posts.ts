@@ -131,23 +131,14 @@ export async function createPost(c: RequestContext): Promise<Response> {
   return json(body, 201, revisionHeaders(post));
 }
 
-const POST_STATUSES: posts.PostStatus[] = ["draft", "scheduled", "sent"];
-
-/** Parse the `status` query param: one status, or a comma list (`draft,scheduled`,
- *  which the Drafts view sends). Unknown values are dropped; empty → no filter. */
+/** The `status` query param: one status, or a comma list (`draft,scheduled`, which the
+ *  Drafts view sends). The router has held each to `POST_STATUSES`; absent, no filter. */
 function parseStatusFilter(raw: string | null): posts.PostStatus | posts.PostStatus[] | undefined {
-  if (!raw) {
+  if (raw === null) {
     return undefined;
   }
-  const seen = new Set<posts.PostStatus>();
-  for (const part of raw.split(",")) {
-    const s = part.trim();
-    if ((POST_STATUSES as string[]).includes(s)) {
-      seen.add(s as posts.PostStatus);
-    }
-  }
-  const list = [...seen];
-  return list.length === 0 ? undefined : list.length === 1 ? list[0] : list;
+  const list = [...new Set(raw.split(",").map((s) => s.trim() as posts.PostStatus))];
+  return list.length === 1 ? list[0] : list;
 }
 
 export async function listPosts(c: RequestContext): Promise<Response> {

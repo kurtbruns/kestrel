@@ -5,7 +5,9 @@
 import type { PageMeta } from "./list";
 import type { SendView } from "./sends";
 
-export type PostStatus = "draft" | "scheduled" | "sent";
+/** A post's statuses, in their order, which the list's `status` filter takes. */
+export const POST_STATUSES = ["draft", "scheduled", "sent"] as const;
+export type PostStatus = (typeof POST_STATUSES)[number];
 
 /** Something a person can do to a post through the API, exactly as the server would take it now. */
 export interface PostAction {
