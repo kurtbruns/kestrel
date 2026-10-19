@@ -790,6 +790,14 @@ describe("a refusal to fix the request names the one field at fault (the Errors 
       async () => call("PUT", "/api/settings", { email_template: "<p>{{ .Post.Body }}</p>" }),
       "email_template",
     ],
+    [
+      "a subscriber's deliveries cursor this server didn't issue",
+      async () => {
+        await seedConfirmed("reader@example.com");
+        return call("GET", "/api/subscribers/id-reader@example.com/deliveries?after=nope");
+      },
+      "after",
+    ],
   ] as const)("%s", async (_, run, field) => {
     const res = await run();
     expect(res.status).toBe(400);
