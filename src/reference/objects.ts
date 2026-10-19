@@ -614,10 +614,9 @@ const POST_FIELDS: ReferenceField[] = [
   { name: "updated_at", type: "number", description: "When it last changed." },
   {
     name: "send",
-    type: "object | null",
-    object: "send",
+    type: "{ id, status, fire_at, rev } | null",
     description:
-      "Where its send stands, as the send's own view: its active send, the one scheduled or going out, else the one that sent it; null for a post with neither, such as a draft whose schedule was canceled. Its `status` and `phase` say whether a `scheduled` post is still waiting or already going out.",
+      "A reference to its send, the same on every route: its active send, the one scheduled or going out, else the one that sent it; null for a post with neither, such as a draft whose schedule was canceled. Its `status` says whether a `scheduled` post is still waiting or already going out, and `rev` is the send's own, so a copy of the send you hold is current while its `rev` matches. The whole send is Get a send (`GET /api/sends/:id`).",
   },
   {
     name: "actions",

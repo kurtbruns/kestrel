@@ -9,6 +9,13 @@ import type { SendView } from "./sends";
 export const POST_STATUSES = ["draft", "scheduled", "sent"] as const;
 export type PostStatus = (typeof POST_STATUSES)[number];
 
+/**
+ * A post's reference to its send: one fixed shape on every route that carries a post. `rev` is
+ * the send's own (`SendView.rev`), so a client that also holds the send's view, from the feed,
+ * tells whether that copy is current.
+ */
+export type SendRef = Pick<SendView, "id" | "status" | "fire_at" | "rev">;
+
 /** Something a person can do to a post through the API, exactly as the server would take it now. */
 export interface PostAction {
   name: "edit" | "delete" | "schedule" | "send_now";
@@ -71,12 +78,12 @@ export interface Post {
   created_at: number;
   updated_at: number;
   /**
-   * Where the post's send stands, as the send's own view (SPEC §6, §8): its active send, the
-   * one scheduled or going out, else the one that sent it; null for a post with neither. A
-   * post stays `scheduled` while its send goes out, so the send's `status` and `phase` say
-   * which it is.
+   * The post's send, by reference (SPEC §6, §8): its active send, the one scheduled or going
+   * out, else the one that sent it; null for a post with neither. A post stays `scheduled`
+   * while its send goes out, so the reference's `status` says which it is. The send's whole
+   * view is `GET /api/sends/:id`, and the feed's.
    */
-  send: SendView | null;
+  send: SendRef | null;
   /** Exactly what the server would take for this post now, each with its method and path. */
   actions: PostAction[];
 }

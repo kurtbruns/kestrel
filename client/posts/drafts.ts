@@ -1,6 +1,7 @@
 // The drafts list (draft + scheduled), kept current with its posts' sends.
 
-import type { PostListResponse, PostSavedResponse } from "../../shared/posts";
+import type { PostListResponse, PostSavedResponse, SendRef } from "../../shared/posts";
+import type { SendView } from "../../shared/sends";
 import { api, describeError } from "../api";
 import { mount } from "../lifecycle";
 import { followSends } from "../send_state";
@@ -68,10 +69,9 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
   const listEl = $("#list", root);
   const pagerEl = $("#postsPager", root);
 
-  // The posts on screen and their sends' fire times, so a report of a send knows whether it
-  // changes this page; and the active sends shown, for a report of one removed.
-  let shownFire = new Map<string, number | null>();
-  let shownSends = new Set<string>();
+  // The posts on screen and each one's active send as the list referred to it, so a report of
+  // a send knows whether it changes this page.
+  let shown = new Map<string, SendRef | null>();
   // Loads can overlap (a send's change reloading while the reader sorts or pages), so only
   // the latest paints. A background reload that fails leaves the list the reader is
   // reading; only a load the reader started shows the error.
@@ -85,8 +85,7 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
         return null;
       }
       const posts = data.posts;
-      shownFire = new Map(posts.map((p) => [p.id, activeSend(p)?.fire_at ?? null]));
-      shownSends = new Set(posts.flatMap((p) => activeSend(p)?.id ?? []));
+      shown = new Map(posts.map((p) => [p.id, activeSend(p)]));
       if (!posts.length) {
         // "Filtered" = a real narrowing beyond the default drafts scope (a search, or a
         // single-status pick) — so a fresh, empty list still reads as an invitation.
@@ -165,28 +164,22 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
     }
   }
   // Follow the listed posts' sends from the first read of the list that answers (DESIGN §4):
-  // a send that starts or is canceled, or moves, re-reads the list, whichever client made the
-  // change, so a post that has gone out stops reading scheduled. A send's progress alone
-  // (counts moving while it sends) changes nothing Drafts shows, so it reads nothing.
+  // a send that starts, finishes, or is canceled, or moves, re-reads the list, whichever client
+  // made the change, so a post that has gone out stops reading scheduled. A send's progress
+  // alone (counts moving while it sends) changes nothing Drafts shows, so it reads nothing.
+  // What Drafts shows of a send is its reference's, so a report is compared with that.
   let following = false;
   const follow = (first: PostListResponse) => {
     following = true;
     followSends(
+      { cursor: first.cursor, sends: [] },
       {
-        cursor: first.cursor,
-        sends: first.posts.flatMap((p) => activeSend(p) ?? []),
-      },
-      {
-        update({ sends, changes, removed }) {
+        update({ sends, removed }) {
+          const shownSends = new Set([...shown.values()].flatMap((r) => r?.id ?? []));
           const touched =
-            changes.some((c) => shownFire.has(c.send.post_id)) ||
             sends.some(
-              (s) =>
-                s.status === "scheduled" &&
-                shownFire.has(s.post_id) &&
-                shownFire.get(s.post_id) !== s.fire_at,
-            ) ||
-            removed.some((id) => shownSends.has(id));
+              (s) => shown.has(s.post_id) && changesRow(shown.get(s.post_id) ?? null, s),
+            ) || removed.some((id) => shownSends.has(id));
           if (touched) {
             void load(true);
           }
@@ -204,6 +197,16 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
   };
   wireToolbar(root, state, reload);
   await firstLoad();
+}
+
+/** Whether a report of a send changes the row of a post Drafts shows: the send it shows
+ *  starting, ending, or moving, or another send of the post becoming its active one. A send
+ *  the post already sent settling its receipts changes nothing here. */
+function changesRow(shown: SendRef | null, s: SendView): boolean {
+  if (shown?.id === s.id) {
+    return s.status !== shown.status || s.fire_at !== shown.fire_at;
+  }
+  return s.status === "scheduled" || s.status === "sending";
 }
 
 function confirmDelete(pid: string, reload: () => unknown, signal: AbortSignal): void {

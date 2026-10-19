@@ -4,6 +4,7 @@
 // `condition`). Imported by specs only; never part of the bundle.
 
 import { decodeSendCursor, encodeSendCursor } from "../../shared/cursor";
+import type { SendRef } from "../../shared/posts";
 import {
   refusalAdvice,
   refusedMessage,
@@ -35,6 +36,11 @@ export interface SendExtras {
   email_only?: boolean;
   /** Which address the send's email carries, `archive` for a send frozen before unlisted links. */
   web_link?: "unlisted" | "archive";
+}
+
+/** A send as a post refers to it (`Post.send`): its id, status, fire time, and rev. */
+export function sendRef({ id, status, fire_at, rev }: SendView): SendRef {
+  return { id, status, fire_at, rev };
 }
 
 /**

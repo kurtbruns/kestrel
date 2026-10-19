@@ -7,7 +7,7 @@ import { slugify } from "../../shared/slug";
 import type { ViewHandle } from "../lifecycle";
 import { readSendsNow } from "../send_state";
 import { appState } from "../state";
-import { feedReads, sendServer, sendView } from "../test/send_server";
+import { feedReads, sendRef, sendServer, sendView } from "../test/send_server";
 import {
   $,
   type FakeApi,
@@ -87,9 +87,12 @@ const draft = (over: Record<string, unknown> = {}): Draft => ({
 function draftServer(initial = draft(), sendOf?: () => SendView | null) {
   let state = initial;
   let n = 1;
-  // The post as the server answers it now: its actions, and its send as the send routes hold it.
-  const answer = (post: Record<string, unknown>) =>
-    served(sendOf ? { ...post, send: sendOf() } : post);
+  // The post as the server answers it now: its actions, and its reference to its send as the
+  // send routes hold it.
+  const answer = (post: Record<string, unknown>) => {
+    const send = sendOf?.();
+    return served(send === undefined ? post : { ...post, send: send && sendRef(send) });
+  };
   const server = {
     get: () => ({ ...state, post: answer(state.post) }),
     /** Apply a save, unless `intercept` answers instead (a 409, or a promise to answer later). */
@@ -162,7 +165,7 @@ function draftServer(initial = draft(), sendOf?: () => SendView | null) {
     },
     /** The post's send, or null once canceled. */
     scheduled(send: SendView | null) {
-      state = { ...state, post: { ...state.post, send } };
+      state = { ...state, post: { ...state.post, send: send && sendRef(send) } };
     },
   };
   return server;
@@ -467,7 +470,7 @@ describe("editor view", () => {
       {
         path: "/api/posts/p1",
         reply: () =>
-          draft({ status: "sent", send: sendView(sendRow({ id: "x9", status: "sent" })) }),
+          draft({ status: "sent", send: sendRef(sendView(sendRow({ id: "x9", status: "sent" }))) }),
       },
     ]);
     expect(location.hash).toBe("#/sent/x9");
@@ -478,7 +481,10 @@ describe("editor view", () => {
       {
         path: "/api/posts/p1",
         reply: () =>
-          draft({ status: "scheduled", send: sendView(sendRow({ id: "x8", status: "sending" })) }),
+          draft({
+            status: "scheduled",
+            send: sendRef(sendView(sendRow({ id: "x8", status: "sending" }))),
+          }),
       },
     ]);
     expect(location.hash).toBe("#/sent/x8");

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { feedReads, listReads, sendServer, sendView } from "../test/send_server";
+import { feedReads, listReads, sendRef, sendServer, sendView } from "../test/send_server";
 import {
   $,
   $$,
@@ -34,7 +34,7 @@ const posts = [
     subject: "Waxwings",
     status: "scheduled",
     updated_at: "2026-09-21T10:00:00Z",
-    send: sendView(sendSummary({ id: "s9", post_id: "p2", status: "sending" })),
+    send: sendRef(sendView(sendSummary({ id: "s9", post_id: "p2", status: "sending" }))),
     actions: [],
   },
 ];
@@ -160,8 +160,8 @@ describe("drafts view", () => {
     const sends = sendServer([row]);
     let failing = false;
     const cursors: string[] = [];
-    // The listed post carries its send as the send routes hold it, as the server's list does.
-    const listed = () => [posts[0], { ...posts[1], send: sends.view("s2") }];
+    // The listed post refers to its send as the send routes hold it, as the server's list does.
+    const listed = () => [posts[0], { ...posts[1], send: sendRef(sends.view("s2")!) }];
     return {
       routes: [
         ...sends.routes,

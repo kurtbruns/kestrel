@@ -470,7 +470,7 @@ describe("API reference is generated from the route registration", () => {
     const returned = ref.groups.flatMap((g) => g.routes).flatMap((r) => r.returns?.object ?? []);
     const held = ref.objects.flatMap((o) => o.fields.flatMap((f) => f.object ?? []));
     expect(new Set([...returned, ...held])).toEqual(new Set(ref.objects.map((o) => o.key)));
-    expect(new Set(held)).toEqual(new Set(["condition", "halt", "send"]));
+    expect(new Set(held)).toEqual(new Set(["condition", "halt"]));
     for (const o of ref.objects) {
       expect(all.match(new RegExp(`^## ${o.title}$`, "gm")), o.key).toHaveLength(1);
       expect(docs.get(o.resource), o.key).toMatch(new RegExp(`^## ${o.title}$`, "m"));

@@ -3,6 +3,7 @@
  *  to a send stamps its `rev` (see `NEXT_REV`). */
 
 import { normalizeEmail } from "../../shared/email";
+import type { SendRef } from "../../shared/posts";
 import type {
   DeliveryEvent,
   DeliveryOutcomes,
@@ -392,21 +393,24 @@ export const POST_SEND_ID_SQL = `COALESCE(
   (SELECT a.id FROM sends a WHERE a.post_id = p.id AND a.status IN ('scheduled', 'sending') ORDER BY a.scheduled_at DESC LIMIT 1),
   (SELECT l.id FROM sends l WHERE l.post_id = p.id AND l.status = 'sent' ORDER BY l.completed_at DESC LIMIT 1))`;
 
-/** Each post's send id (`POST_SEND_ID_SQL`), by post id; a post with none is left out. */
-export async function postSendIds(db: D1Database, postIds: string[]): Promise<Map<string, string>> {
+/** Each post's send (`POST_SEND_ID_SQL`) as the post refers to it, by post id; a post with
+ *  none is left out. */
+export async function postSendRefs(
+  db: D1Database,
+  postIds: string[],
+): Promise<Map<string, SendRef>> {
   if (postIds.length === 0) {
     return new Map();
   }
   const { results } = await db
     .prepare(
-      `SELECT p.id AS post_id, ${POST_SEND_ID_SQL} AS send_id
-         FROM posts p WHERE p.id IN (SELECT value FROM json_each(?))`,
+      `SELECT ps.post_id, ps.id, ps.status, ps.fire_at, ps.rev
+         FROM posts p JOIN sends ps ON ps.id = ${POST_SEND_ID_SQL}
+        WHERE p.id IN (SELECT value FROM json_each(?))`,
     )
     .bind(JSON.stringify(postIds))
-    .all<{ post_id: string; send_id: string | null }>();
-  return new Map(
-    results.flatMap((r) => (r.send_id ? [[r.post_id, r.send_id] as [string, string]] : [])),
-  );
+    .all<SendRef & { post_id: string }>();
+  return new Map(results.map(({ post_id, ...ref }) => [post_id, ref]));
 }
 
 function sendWhere(filter: SendFilter): { clause: string; binds: unknown[] } {
