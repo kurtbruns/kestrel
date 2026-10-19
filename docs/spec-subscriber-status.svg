@@ -1,14 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 790 423" role="img" aria-labelledby="title desc">
-  <title id="title">How a subscriber’s status moves</title>
+  <title id="title">How a subscriber's status moves</title>
   <desc id="desc">No subscriber, pending and confirmed sit in a row, with unsubscribed below pending. The reader subscribing, or the publisher adding the address, makes it pending, and the reader pressing Confirm makes it confirmed; a confirmation link that expires changes nothing. A pending or confirmed subscriber becomes unsubscribed by their own unsubscribe link, the publisher's Unsubscribe on their request, a complaint about the mail, or the publisher's Erase, and Erase also strips the record of someone already unsubscribed. An unsubscribed person returns to pending by subscribing again, or by the publisher adding them, unless they left by a complaint or an erasure. Imports are not drawn.</desc>
   <style>
     .n-none rect { fill: #ffffff; stroke: #8792a2; stroke-width: 1.5; stroke-dasharray: 5 4; }
     .n-pending rect { fill: #fef3c7; stroke: #f2c94c; stroke-width: 1.5; }
     .n-confirmed rect { fill: #dcfce7; stroke: #86d9a3; stroke-width: 1.5; }
     .n-unsub rect { fill: #f4f4f5; stroke: #c4c4cc; stroke-width: 1.5; }
-    .n-supp rect { fill: #fee2e2; stroke: #f5a3a3; stroke-width: 1.5; }
     .ntitle { font: 600 15px system-ui, -apple-system, "Segoe UI", sans-serif; fill: #1d2330; }
-    .n-pending .ntitle { fill: #b45309; } .n-confirmed .ntitle { fill: #15803d; } .n-unsub .ntitle { fill: #52525b; } .n-supp .ntitle { fill: #b91c1c; }
+    .n-pending .ntitle { fill: #b45309; } .n-confirmed .ntitle { fill: #15803d; } .n-unsub .ntitle { fill: #52525b; }
     .nsub { font: 11.5px system-ui, -apple-system, "Segoe UI", sans-serif; fill: #5a6273; }
     .lbl { font: 600 12.5px system-ui, -apple-system, "Segoe UI", sans-serif; }
     .a-reader { fill: #2453c7; } .a-publisher { fill: #7a3fb8; } .a-import { fill: #0f7a5a; } .a-provider { fill: #c2410c; } .a-time { fill: #5a6273; }
@@ -20,8 +19,8 @@
       .n-pending rect { fill: #45350f; stroke: #b45309; } .n-pending .ntitle { fill: #fbbf24; }
       .n-confirmed rect { fill: #14532d; stroke: #15803d; } .n-confirmed .ntitle { fill: #4ade80; }
       .n-unsub rect { fill: #27272a; stroke: #52525b; } .n-unsub .ntitle { fill: #c4c4cc; }
-      .n-supp rect { fill: #4c1d1d; stroke: #b91c1c; } .n-supp .ntitle { fill: #f87171; }
-      .ntitle { fill: #e3e7ee; } .nsub, .a-time, .a-who { fill: #9aa3b4; }
+      .ntitle { fill: #e3e7ee; }
+      .n-pending .ntitle { fill: #fbbf24; } .n-confirmed .ntitle { fill: #4ade80; } .n-unsub .ntitle { fill: #c4c4cc; } .nsub, .a-time, .a-who { fill: #9aa3b4; }
       .a-reader { fill: #7d9bff; } .a-publisher { fill: #c4a5f0; } .a-import { fill: #34d399; } .a-provider { fill: #fb923c; }
       .e { stroke: #9aa3b4; } .ahead { fill: #9aa3b4; }
     }
@@ -45,9 +44,10 @@
 <text class="lbl a-time" x="440" y="51" text-anchor="start">link expires</text>
 <text class="lbl a-reader" x="348" y="207" text-anchor="end">subscribes again</text>
 <text class="lbl a-publisher" x="348" y="223" text-anchor="end">Add</text>
-<text class="lbl a-publisher" x="432" y="191" text-anchor="start">Unsubscribe</text>
-<text class="lbl a-publisher" x="432" y="207" text-anchor="start">Erase</text>
-<text class="lbl a-reader" x="432" y="223" text-anchor="start">old post's link</text>
+<text class="lbl a-publisher" x="432" y="183" text-anchor="start">Unsubscribe</text>
+<text class="lbl a-provider" x="432" y="199" text-anchor="start">complaint</text>
+<text class="lbl a-publisher" x="432" y="215" text-anchor="start">Erase</text>
+<text class="lbl a-reader" x="432" y="231" text-anchor="start">old post's link</text>
 <text class="lbl a-reader" x="663" y="183" text-anchor="end">unsubscribes</text>
 <text class="lbl a-publisher" x="663" y="199" text-anchor="end">Unsubscribe</text>
 <text class="lbl a-provider" x="663" y="215" text-anchor="end">complaint</text>
