@@ -20,7 +20,7 @@ The app holds these for any client, so they hold whatever Claude is told:
 - **Every send waits out the review window,** and you can cancel it until it goes out.
 - **A scheduled post is locked,** and what goes out is exactly the copy that was scheduled.
 - **No one is mailed twice,** and only confirmed subscribers receive a post.
-- **An unsubscribe is final** until the reader subscribes again, and an erased address stays erased until the person confirms again.
+- **An unsubscribe is final** until the reader subscribes again. Someone who complained or was erased comes back only by subscribing themselves: neither you nor Claude can add them.
 - **No one's edit is overwritten.** A save based on an older version is refused.
 - **Only you can let an import grow a scheduled send.** An import through Claude that would stops there, until you finish it in the dashboard.
 

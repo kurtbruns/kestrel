@@ -38,7 +38,7 @@ A send's page becomes its permanent record once it finishes. Its counts cover ev
 
 Delivered always means confirmed, not just accepted by your provider. Confirmations can lag by days, so counts keep rising after a send finishes. Some emails are never confirmed at all, so a send can read **Settling** for good, which is normal, as long as some receipts have come.
 
-**"No delivery receipt has arrived for any of …".** An hour after a send went out, Kestrel has heard back about none of its readers. Your provider's reports probably aren't reaching Kestrel, so its bounces and complaints suppress no one, and your next post mails those addresses again. Look for `webhook.refused` errors in the app's logs, as [Read the logs](../get-started/05-verify.md#7-read-the-logs) describes. It names the SNS topic that reached Kestrel and the one it expects. Then check the subscription in [Connect Amazon SES](../get-started/04-ses.md#9-subscribe-the-app-to-the-topic). The line goes as soon as a receipt arrives.
+**"No delivery receipt has arrived for any of …".** An hour after a send went out, Kestrel has heard back about none of its readers. Your provider's reports probably aren't reaching Kestrel, so its bounces suppress no one and its complaints unsubscribe no one, and your next post mails those addresses again. Look for `webhook.refused` errors in the app's logs, as [Read the logs](../get-started/05-verify.md#7-read-the-logs) describes. It names the SNS topic that reached Kestrel and the one it expects. Then check the subscription in [Connect Amazon SES](../get-started/04-ses.md#9-subscribe-the-app-to-the-topic). The line goes as soon as a receipt arrives.
 
 **Unsent recipients** are still on your list, and get your next post. A recipient is unsent when their own email kept failing, or their address isn't one SES accepts, with the provider's words on the row, or when you chose **Assume not sent**.
 
@@ -70,13 +70,13 @@ Kestrel acts on these for you, so a bad address can't keep hurting your sending 
 
 - **A hard bounce** means the address can't receive mail. Kestrel never mails it again.
 - **A soft bounce** is temporary, such as a full mailbox. The address stays on your list.
-- **A complaint** means the reader marked your email as spam. Kestrel never mails them again.
+- **A complaint** means the reader marked your email as spam. Kestrel unsubscribes them, with **complaint** beside their status. A complaint about a post sent before they last confirmed stays on that post's record but leaves them subscribed, since their newer choice stands.
 
-Under **Subscribers**, a suppressed address keeps its status and carries a label saying why. When a recent send's bounces reach about 5% of its recipients, the dashboard warns you. That's about the rate at which email providers start to review a sender, so check the addresses on its record.
+Under **Subscribers**, a bounced address keeps its status and carries a label saying why. When a recent send's bounces reach about 5% of its recipients, the dashboard warns you. That's about the rate at which email providers start to review a sender, so check the addresses on its record.
 
 ### Lifting a suppression
 
-Lift one only when you know the address works again, such as a reader who tells you their mailbox is fixed. Mailing an address that keeps failing can hurt every send after it. In a subscriber's ⋯ menu, **Unblock** lifts a block and **Clear** lifts a bounce, after asking you to confirm. A complaint isn't something you can lift. Past records keep the bounce or complaint where it happened.
+Lift one only when you know the address works again, such as a reader who tells you their mailbox is fixed. Mailing an address that keeps failing can hurt every send after it. In a subscriber's ⋯ menu, **Unblock** lifts a block and **Clear** lifts a bounce, after asking you to confirm. A complaint isn't a suppression but the reader leaving, so nothing lifts it: they come back only by subscribing again themselves, and **Add subscriber** refuses them. Past records keep the bounce or complaint where it happened.
 
 ## An import is refused
 

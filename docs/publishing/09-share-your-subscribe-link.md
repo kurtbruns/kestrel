@@ -10,9 +10,9 @@ A reader enters their address, gets a confirmation email, and presses **Confirm 
 
 Every address gets the same answer, so the form never reveals who subscribes. Behind it, Kestrel sends a confirmation only when one is due:
 
-- **Already subscribed, bounced, complained, or blocked:** no email goes out.
+- **Already subscribed, bounced, or blocked:** no email goes out.
 - **Waiting to confirm:** at most one confirmation every 15 minutes, however often the form is submitted. A link works for 7 days, and an expired one offers a fresh link.
-- **Unsubscribed earlier, or erased at their request:** they get a confirmation, and confirming puts them back on your list.
+- **Unsubscribed earlier, for any reason, a complaint or an erasure included:** they get a confirmation, and confirming puts them back on your list. This form is the only way back for someone who complained or was erased.
 
 ## The confirmation email
 

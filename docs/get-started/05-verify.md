@@ -77,7 +77,7 @@ Every email carries an unsubscribe link, and a header that lets mail clients sho
 
 ## 6. Check that bounces and complaints come back
 
-When an address bounces or marks your mail as spam, SES tells the app through SNS. The app then stops mailing that address. SES has test addresses that act out each case without reaching a real person, and the sandbox lets you mail them.
+When an address bounces or marks your mail as spam, SES tells the app through SNS. The app then stops mailing that address: a bounce suppresses it, and a complaint unsubscribes it. SES has test addresses that act out each case without reaching a real person, and the sandbox lets you mail them.
 
 1. Open `https://newsletter.example.com/subscribe`, and subscribe each test address:
 
@@ -86,9 +86,9 @@ When an address bounces or marks your mail as spam, SES tells the app through SN
 
     Each one gets a confirmation email, which bounces or is marked as spam.
 
-1. In the editor, **Subscribers** lists both addresses as **Pending**, each with a **Suppressed** flag. The app never mails a suppressed address again.
+1. In the editor, **Subscribers** lists the bounce address as **Pending** with a **bounced** flag, and the complaint address as **Unsubscribed**, with **complaint** beside it. The app mails neither again.
 
-If an address has no flag, SES's events aren't reaching the app. Check the configuration set and the SNS subscription in [Connect Amazon SES](04-ses.md#6-send-bounces-and-complaints-to-sns).
+If the bounce address has no flag, or the complaint address is still pending, SES's events aren't reaching the app. Check the configuration set and the SNS subscription in [Connect Amazon SES](04-ses.md#6-send-bounces-and-complaints-to-sns).
 
 ## 7. Read the logs
 
@@ -122,7 +122,7 @@ The checks leave test addresses on the list. Erase them, so the publisher starts
 
 1. Erase your second address too, if it won't be a reader.
 
-Erasing keeps a do-not-contact marker, but the person can subscribe again through the subscribe page. Erasing your own address doesn't lock you out.
+Erasing keeps only the address, so it's never mailed again, but the person can subscribe again through the subscribe page. Erasing your own address doesn't lock you out.
 
 When every section gives the result it describes, your instance is ready for subscribers.
 

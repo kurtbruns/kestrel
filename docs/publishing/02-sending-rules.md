@@ -8,7 +8,7 @@ This page covers what Kestrel handles, what you handle, and how to act on a read
 
 - **Consent.** Kestrel mails only people who confirmed they want your newsletter. Someone who subscribes gets an email with a link, and only once they confirm do they receive posts. People you import come with your old service's record of their consent, and your word for it ([Bring your existing list](01-your-list.md#what-carries-over)).
 - **Unsubscribing.** Every email has an unsubscribe link, and the one-click unsubscribe header that Gmail and Yahoo ask bulk senders for. It takes effect at once. US law allows up to 10 business days.
-- **Bounces and complaints.** An address that bounces, or a reader who marks your email as spam, is never mailed again. So a bad address can't keep hurting your sending reputation.
+- **Bounces and complaints.** An address that bounces is never mailed again, so a bad address can't keep hurting your sending reputation. A reader who marks your email as spam is unsubscribed, as if they had used the link, and you can't add them back: only their own sign-up does.
 - **Sender authentication.** Your emails are signed with DKIM for your own domain, and SPF and DMARC records in its DNS vouch for them. You set them up in [Connect Amazon SES](../get-started/04-ses.md), and mailbox providers now expect them.
 
 ## What you handle
@@ -23,9 +23,9 @@ This page covers what Kestrel handles, what you handle, and how to act on a read
 Kestrel offers readers no form for deleting their data, so they ask you. In many places the law gives a reader that right. The European Union's GDPR, for example, may apply if you have readers there.
 
 - **Say how to reach you.** Your privacy notice, wherever you publish it, should say how readers ask you about their data. Replying to any post works once replies reach your inbox.
-- **To stop the email,** find a confirmed reader under **Subscribers**, and choose **Unsubscribe** from their ⋯ menu. It records that they asked, and they can rejoin by subscribing again. A reader who never confirmed gets no posts, so **Erase** is the choice for them.
+- **To stop the email,** find the reader under **Subscribers**, and choose **Unsubscribe** from their ⋯ menu. It works whether or not they've confirmed, records that they asked, and they can rejoin by subscribing again.
 - **To stop mailing someone on your own judgment,** not at their request, choose **Block** instead. It stops every email to the address whatever its status, and **Unblock** undoes it.
-- **To delete their data,** choose **Erase** from the same menu. It removes the subscriber and how they joined, and can't be undone. Past send records show an erased recipient in their place. Kestrel keeps only a do-not-contact marker, or the bounce, complaint, or block the address already had, so it's never mailed again. The reader can still rejoin by subscribing and confirming themselves.
+- **To delete their data,** choose **Erase** from the same menu, even for someone who already unsubscribed. It unsubscribes them and deletes how they joined and the evidence for it, and can't be undone. Past send records show an erased recipient in their place. Kestrel keeps only the address and when you erased it, so it's never mailed again, beside any bounce or block the address already had. The reader can still rejoin by subscribing and confirming themselves, but you can't add them back.
 - **Act promptly.** Under the [GDPR](https://eur-lex.europa.eu/eli/reg/2016/679/oj), you answer within a month in most cases (Article 12). The right to have data deleted is Article 17, and Article 13 asks you to tell readers about it when they sign up.
 
 ## Outside the US
