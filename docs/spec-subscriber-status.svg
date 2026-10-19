@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="945" height="453" viewBox="0 0 945 453" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="945" height="423" viewBox="0 0 945 423" role="img" aria-labelledby="title desc">
   <title id="title">How a subscriber's status moves</title>
-  <desc id="desc">No subscriber, pending and confirmed sit in a row, with unsubscribed below pending. The reader subscribing, or the publisher adding the address, makes it pending, and the reader confirming makes it confirmed; a confirmation link that expires changes nothing. A pending or confirmed subscriber becomes unsubscribed when the reader unsubscribes, when the email provider passes on the reader's spam complaint, or when the publisher unsubscribes or erases them on their request, and the publisher erasing someone already unsubscribed strips their record. An unsubscribed person returns to pending by subscribing again, or by the publisher adding them, unless they left by a complaint or an erasure. Each act is coloured by who does it: the reader, the publisher, the email provider, or time. Imports are not drawn.</desc>
+  <desc id="desc">No subscriber, pending and confirmed sit in a row, with unsubscribed below pending. The reader subscribing, or the publisher adding the address, makes it pending, and the reader confirming makes it confirmed; a confirmation link that expires changes nothing. A pending or confirmed subscriber becomes unsubscribed when the reader unsubscribes or reports the mail as spam, or when the publisher unsubscribes or erases them on their request, and the publisher erasing someone already unsubscribed strips their record. An unsubscribed person returns to pending by subscribing again, or by the publisher adding them, unless they left by a complaint or an erasure. Imports are not drawn.</desc>
   <style>
     .n-none rect { fill: #ffffff; stroke: #8792a2; stroke-width: 1.5; stroke-dasharray: 5 4; }
     .n-pending rect { fill: #fef3c7; stroke: #f2c94c; stroke-width: 1.5; }
@@ -45,17 +45,12 @@
 <text class="lbl a-reader" x="383" y="207" text-anchor="end">reader subscribes again</text>
 <text class="lbl a-publisher" x="383" y="223" text-anchor="end">publisher adds</text>
 <text class="lbl a-reader" x="467" y="191" text-anchor="start">reader unsubscribes</text>
-<text class="lbl a-provider" x="467" y="207" text-anchor="start">spam complaint</text>
+<text class="lbl a-reader" x="467" y="207" text-anchor="start">reader reports spam</text>
 <text class="lbl a-publisher" x="467" y="223" text-anchor="start">publisher unsubscribes</text>
 <text class="lbl a-publisher" x="467" y="239" text-anchor="start">publisher erases</text>
 <text class="lbl a-reader" x="757" y="183" text-anchor="start">reader unsubscribes</text>
-<text class="lbl a-provider" x="757" y="199" text-anchor="start">spam complaint</text>
+<text class="lbl a-reader" x="757" y="199" text-anchor="start">reader reports spam</text>
 <text class="lbl a-publisher" x="757" y="215" text-anchor="start">publisher unsubscribes</text>
 <text class="lbl a-publisher" x="757" y="231" text-anchor="start">publisher erases</text>
 <text class="lbl a-publisher" x="475" y="387" text-anchor="start">publisher erases</text>
-<text class="nsub" x="20" y="439" text-anchor="start">Who acts:</text>
-<text class="lbl a-reader" x="86.4" y="439" text-anchor="start">the reader</text>
-<text class="lbl a-publisher" x="162.60000000000002" y="439" text-anchor="start">the publisher</text>
-<text class="lbl a-provider" x="256.86" y="439" text-anchor="start">the email provider, passing on the reader's report</text>
-<text class="lbl a-time" x="573.86" y="439" text-anchor="start">time</text>
 </svg>
