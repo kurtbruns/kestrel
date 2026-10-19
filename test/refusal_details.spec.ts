@@ -508,11 +508,19 @@ const CASES: Case[] = [
     run: async () => call("POST", `/api/subscribers/${await handedOff("h@x.io")}/erase`),
   },
   {
-    refusal: "DELETE /api/suppressions/:email erasure_marker",
-    when: "clearing an erasure's marker",
+    refusal: "POST /api/suppressions/lift erasure_marker",
+    when: "lifting an erasure's marker",
     run: async () => {
       await erased("m@x.io");
-      return call("DELETE", "/api/suppressions/m@x.io");
+      return call("POST", "/api/suppressions/lift", { email: "m@x.io", reason: "erased" });
+    },
+  },
+  {
+    refusal: "POST /api/suppressions/lift suppression_changed",
+    when: "lifting a reason that isn't the one standing",
+    run: async () => {
+      expect((await call("POST", "/api/suppressions", { email: "b@x.io" })).status).toBe(201);
+      return call("POST", "/api/suppressions/lift", { email: "b@x.io", reason: "bounce" });
     },
   },
 
