@@ -64,6 +64,7 @@ function revision(markdown: string, metaOver: Record<string, string> = {}): Revi
       ...metaOver,
     }),
     author: "service",
+    client: null,
     created_at: 0,
   };
 }

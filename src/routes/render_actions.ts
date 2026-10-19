@@ -269,6 +269,7 @@ export function sampleRenderInput(subject = TEMPLATE_TEST_SUBJECT): RenderInput 
     markdown: TEMPLATE_TEST_MARKDOWN,
     metadata: JSON.stringify({ subject, slug: post.slug }),
     author: null,
+    client: null,
     created_at: now,
   };
   return { post, revision, images: [] };

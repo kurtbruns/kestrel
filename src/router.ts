@@ -45,7 +45,7 @@ import { refuseUndeclared } from "./lib/strict";
 import type { RefusalCode } from "./reference/refusals";
 
 export interface Principal {
-  /** `human` = a person, with an email (an Access login, or the editor's local dev token);
+  /** `human` = a person, with an email (an Access login, or the local dev token);
    *  `service` = a token with no email (Claude or automation, through Access or the dev token). */
   kind: "human" | "service";
   email?: string;
@@ -53,6 +53,10 @@ export interface Principal {
    *  which names the token so two are told apart and the right one revoked (SPEC §11).
    *  Absent on a human, and on a service token that carried none. */
   tokenId?: string;
+  /** The client a person's request came through, as it named itself in `Kestrel-Client`
+   *  (`editor`, `claude-code`): never proven, only recorded (SPEC §11, Who acted). Absent
+   *  when the request named none, and on a service token, which already names the program. */
+  client?: string;
   /** How this request authenticated: a Cloudflare Access assertion, or the local dev token.
    *  What `auth.mode` reports, so it says how the caller got in rather than what is configured. */
   via: "access" | "dev";

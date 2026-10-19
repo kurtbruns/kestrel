@@ -4,6 +4,7 @@
 
 import type { ImportRecord, OptIn } from "../../shared/imports";
 import type { Subscriber } from "../../shared/subscribers";
+import { whoActed } from "../who_acted";
 
 // Services a list is commonly brought from, as their own names spell them. Any other origin
 // reads with its first letter raised.
@@ -59,10 +60,13 @@ export function evidenceText(evidence: string | null): string | null {
   }
 }
 
-/** Who committed an import, as the publisher reads it: their address, or Claude for them. */
+/**
+ * Who committed an import, as the publisher reads it: Claude for them (a service token), or
+ * their address, with the client when it wasn't the editor (SPEC §11).
+ */
 export function importedBy(record: ImportRecord): string {
   if (record.principal.kind === "service") {
     return "Claude, for you";
   }
-  return record.principal.email || "you";
+  return whoActed(record.principal.email, record.principal.client) ?? "you";
 }

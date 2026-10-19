@@ -5,23 +5,32 @@
 
 import { ApiError } from "../api";
 
-/** Who wrote a revision: an email, "service" for Claude, or unknown. */
+/** Who wrote a revision: an email, "service" for a service token, or unknown. */
 export type Author = string | null;
 
-/** What the editor must surface: another writer's newer revision, or a post no longer editable here. */
-export type Conflict = { kind: "stale"; revision: string; author: Author } | { kind: "locked" };
+/** What the editor must surface: another writer's newer revision, with who wrote it and the
+ *  client they came through (SPEC §11), or a post no longer editable here. */
+export type Conflict =
+  | { kind: "stale"; revision: string; author: Author; client: string | null }
+  | { kind: "locked" };
 
 /** Classify a failed save; null when it is a plain failure, not a conflict. */
 export function conflictFromError(e: unknown): Conflict | null {
   if (!(e instanceof ApiError) || e.status !== 409) {
     return null;
   }
-  const d = e.data as { error?: unknown; current_revision?: unknown; author?: unknown } | null;
+  const d = e.data as {
+    error?: unknown;
+    current_revision?: unknown;
+    author?: unknown;
+    author_client?: unknown;
+  } | null;
   if (d?.error === "stale_revision" && typeof d.current_revision === "string") {
     return {
       kind: "stale",
       revision: d.current_revision,
       author: typeof d.author === "string" ? d.author : null,
+      client: typeof d.author_client === "string" ? d.author_client : null,
     };
   }
   return { kind: "locked" };
@@ -32,6 +41,7 @@ export interface PollAnswer {
   status: string;
   revision: string | null;
   author: Author;
+  client: string | null;
 }
 
 /** What was true when the poll was sent, to tell our own save's effect from another writer's. */
@@ -89,7 +99,7 @@ export class RevisionTracker {
     }
     const rev = answer.revision;
     if (rev && rev !== this.base && rev !== this.warnedRevision) {
-      return { kind: "stale", revision: rev, author: answer.author };
+      return { kind: "stale", revision: rev, author: answer.author, client: answer.client };
     }
     return "fresh";
   }

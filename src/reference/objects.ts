@@ -528,6 +528,7 @@ const POST_EXAMPLE = {
   email_only: false,
   current_revision: "r_1",
   author: "you@example.com",
+  author_client: "editor",
   created_at: 1768381200000,
   updated_at: 1768381200000,
   send: null,
@@ -610,6 +611,12 @@ const POST_FIELDS: ReferenceField[] = [
     description:
       "Who wrote the current revision: a person's email, or `service` for a service token such as Claude's.",
   },
+  {
+    name: "author_client",
+    type: "string | null",
+    description:
+      "The client the current revision's author came through, as it named itself in `Kestrel-Client`: `editor` for the web editor, `claude-code` for Claude Code, or another name as given. Null when the request named none, and on a service token's revision, since the token already names the program.",
+  },
   { name: "created_at", type: "number", description: "When it was made." },
   { name: "updated_at", type: "number", description: "When it last changed." },
   {
@@ -646,7 +653,14 @@ const REVISION_FIELDS: ReferenceField[] = [
   {
     name: "author",
     type: "string | null",
-    description: "Who saved it: an email, or `service` for Claude.",
+    description:
+      "Who saved it: a person's email, or `service` for a service token such as Claude's.",
+  },
+  {
+    name: "author_client",
+    type: "string | null",
+    description:
+      "The client its author came through, as it named itself in `Kestrel-Client` (`editor`, `claude-code`, or another name as given). Null when the request named none, and on a service token's revision.",
   },
   { name: "created_at", type: "number", description: "When it was saved." },
   { name: "metadata", type: "object", description: "The subject and slug it was saved with." },
@@ -967,6 +981,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
       n: 1,
       id: "r_1",
       author: "you@example.com",
+      author_client: "editor",
       created_at: 1768381200000,
       metadata: { subject: "Hello, world", slug: "hello-world" },
       markdown: "# Hello\n\nWelcome.",

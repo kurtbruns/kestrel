@@ -73,8 +73,12 @@ export interface Post {
   email_only: boolean;
   /** The current revision's id; the editor carries it on every save (optimistic concurrency). */
   current_revision: string | null;
-  /** Who wrote the current revision ("Claude" surfaces as `service`; SPEC §4). */
+  /** Who wrote the current revision: a person's email, or `service` for a service token
+   *  (SPEC §4, §11). */
   author: string | null;
+  /** The client the current revision's author came through, as it named itself (`editor`,
+   *  `claude-code`); null when it named none, and on a service token's (SPEC §11). */
+  author_client: string | null;
   created_at: number;
   updated_at: number;
   /**
@@ -189,7 +193,11 @@ export interface PostRevision {
   n: number;
   /** What a save names as `base_revision`. */
   id: string;
+  /** A person's email, or `service` for a service token. */
   author: string | null;
+  /** The client the author came through, as it named itself; null when it named none, and on
+   *  a service token's (SPEC §11). */
+  author_client: string | null;
   created_at: number;
   metadata: { subject: string; slug: string };
 }
@@ -214,6 +222,7 @@ export interface StaleRevisionError {
   current_revision: string | null;
   updated_at: number;
   author: string | null;
+  author_client: string | null;
   post: Post;
   markdown: string;
 }

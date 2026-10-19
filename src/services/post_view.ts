@@ -53,7 +53,8 @@ export async function viewPosts(env: AppEnv, config: Config, rows: PostRow[]): P
   ]);
   return rows.map((row) => ({
     ...withAddresses(config, row, published.get(row.id) ?? null),
-    author: authors.get(row.id) ?? null,
+    author: authors.get(row.id)?.author ?? null,
+    author_client: authors.get(row.id)?.client ?? null,
     send: sends.get(row.id) ?? null,
     actions: postActions(row, config),
   }));

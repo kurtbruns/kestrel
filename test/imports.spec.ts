@@ -729,7 +729,7 @@ describe("the record and the notice (SPEC §8)", () => {
     const res = await commit({ file, plan_hash: p.plan_hash, attestation: ATTEST }, service);
     expect(res.status).toBe(201);
     const result: ImportCommitResponse = await res.json();
-    expect(result.import.principal).toEqual({ kind: "service", email: null });
+    expect(result.import.principal).toEqual({ kind: "service", email: null, client: null });
 
     await notifyPublisher(env, new Budget(50));
     const sent = fakeNotifications();
@@ -853,6 +853,65 @@ describe("a person sees every send an import would grow (SPEC §7, I6)", () => {
         })
       ).status,
     ).toBe(201);
+  });
+});
+
+describe("what the app holds Claude to applies to every act not through the editor (SPEC §7, §11)", () => {
+  const through = async (client?: string) => ({
+    ...(await adminAuth(
+      client === undefined ? { email: "you@example.com" } : { email: "you@example.com", client },
+    )),
+    "content-type": "application/json",
+  });
+
+  it("refuses a person's commit that would grow a send through any client but the editor, named or not, acknowledged or not", async () => {
+    const send = await frozenSend(Date.now() + 3_600_000);
+    const file = csvFile(["a@x.io,subscribed,double,sendy,,,,,,"]);
+    const p = await planOk({ file });
+    const body = {
+      file,
+      plan_hash: p.plan_hash,
+      attestation: ATTEST,
+      acknowledge_sends: [send.id],
+    };
+    for (const headers of [
+      await through("claude-code"),
+      await through("my-script"),
+      await through(),
+    ]) {
+      const res = await commit(body, headers);
+      expect(res.status).toBe(409);
+      expect(await readJson(res)).toMatchObject({
+        error: "sends_acknowledgement_required",
+        sends: p.sends_growing,
+      });
+    }
+    expect(await count("SELECT COUNT(*) AS n FROM subscribers")).toBe(0);
+    // The same person in the editor finishes it.
+    expect((await commit(body, await through("editor"))).status).toBe(201);
+  });
+
+  it("records the client a person's import came through, and tells no one, since a person was there", async () => {
+    await updateSettings(env.DB, { notifications: { to: "publisher@example.com" } });
+    const file = csvFile(["a@x.io,subscribed,double,sendy,,,,,,"]);
+    const p = await planOk({ file });
+    const res = await commit(
+      { file, plan_hash: p.plan_hash, attestation: ATTEST },
+      await through("claude-code"),
+    );
+    expect(res.status).toBe(201);
+    const result: ImportCommitResponse = await res.json();
+    expect(result.import.principal).toEqual({
+      kind: "human",
+      email: "you@example.com",
+      client: "claude-code",
+    });
+    const read = await readJson(
+      await SELF.fetch(`${base}/api/imports/${result.import.id}`, { headers: AUTH }),
+    );
+    expect(read.import.principal).toEqual(result.import.principal);
+    await notifyPublisher(env, new Budget(50));
+    expect(fakeNotifications()).toHaveLength(0);
   });
 });
 

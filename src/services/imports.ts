@@ -428,6 +428,7 @@ export async function commitImport(
       created_at: now,
       principal_kind: principal.kind,
       principal_email: principal.kind === "human" ? (principal.email ?? "").toLowerCase() : null,
+      client: principal.client ?? null,
       attestation_version: plan.attestation ? plan.attestation.version : null,
       file_name: plan.input.name,
       file_sha256: plan.fileSha256,
@@ -614,7 +615,11 @@ export async function commitImport(
     import: {
       id,
       created_at: now,
-      principal: { kind: writes.record.principal_kind, email: writes.record.principal_email },
+      principal: {
+        kind: writes.record.principal_kind,
+        email: writes.record.principal_email,
+        client: writes.record.client,
+      },
       attestation_version: writes.record.attestation_version,
       file_name: writes.record.file_name,
       file_sha256: writes.record.file_sha256,

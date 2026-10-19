@@ -9,7 +9,27 @@ describe("conflictFromError", () => {
       current_revision: "r7",
       author: "service",
     });
-    expect(conflictFromError(e)).toEqual({ kind: "stale", revision: "r7", author: "service" });
+    expect(conflictFromError(e)).toEqual({
+      kind: "stale",
+      revision: "r7",
+      author: "service",
+      client: null,
+    });
+  });
+
+  it("reads the client the newer revision's author came through (SPEC §11)", () => {
+    const e = new ApiError("changed", 409, {
+      error: "stale_revision",
+      current_revision: "r7",
+      author: "a@b.c",
+      author_client: "claude-code",
+    });
+    expect(conflictFromError(e)).toEqual({
+      kind: "stale",
+      revision: "r7",
+      author: "a@b.c",
+      client: "claude-code",
+    });
   });
 
   it("treats any other 409 as the post no longer being editable here", () => {
@@ -25,10 +45,15 @@ describe("conflictFromError", () => {
 });
 
 describe("RevisionTracker", () => {
-  const draft = (revision: string, author: string | null = "a@b.c") => ({
+  const draft = (
+    revision: string,
+    author: string | null = "a@b.c",
+    client: string | null = null,
+  ) => ({
     status: "draft",
     revision,
     author,
+    client,
   });
 
   it("is fresh while the newest revision is our own base", () => {
@@ -39,8 +64,8 @@ describe("RevisionTracker", () => {
   it("warns on a newer revision once, then stays quiet about that one", () => {
     const t = new RevisionTracker("r1");
     const c = t.decide(draft("r2", "service"), { saving: false, baseAtRequest: "r1" });
-    expect(c).toEqual({ kind: "stale", revision: "r2", author: "service" });
-    t.noteWarned(c as { kind: "stale"; revision: string; author: string });
+    expect(c).toEqual({ kind: "stale", revision: "r2", author: "service", client: null });
+    t.noteWarned(c as { kind: "stale"; revision: string; author: string; client: null });
     expect(t.decide(draft("r2"), { saving: false, baseAtRequest: "r1" })).toBe("fresh");
     expect(t.decide(draft("r3"), { saving: false, baseAtRequest: "r1" })).toMatchObject({
       kind: "stale",
@@ -59,7 +84,7 @@ describe("RevisionTracker", () => {
     const t = new RevisionTracker("r1");
     expect(
       t.decide(
-        { status: "scheduled", revision: "r1", author: null },
+        { status: "scheduled", revision: "r1", author: null, client: null },
         { saving: false, baseAtRequest: "r1" },
       ),
     ).toEqual({ kind: "locked" });
@@ -67,7 +92,7 @@ describe("RevisionTracker", () => {
 
   it("keep editing adopts the newer revision as the base, so the next save wins", () => {
     const t = new RevisionTracker("r1");
-    t.noteWarned({ kind: "stale", revision: "r2", author: null });
+    t.noteWarned({ kind: "stale", revision: "r2", author: null, client: null });
     t.adoptWarned();
     expect(t.base).toBe("r2");
     expect(t.warnedRevision).toBeNull();

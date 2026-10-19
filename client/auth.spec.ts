@@ -9,7 +9,10 @@ const REFUSED = {
   variable: "APP_ORIGIN",
 };
 
-const SESSION = { principal: { kind: "human", email: "you@example.com" }, auth: { mode: "dev" } };
+const SESSION = {
+  principal: { kind: "human", email: "you@example.com", client: "editor" },
+  auth: { mode: "dev" },
+};
 
 describe("the boot probe", () => {
   let fake: FakeApi;

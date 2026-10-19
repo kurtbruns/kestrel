@@ -4,7 +4,8 @@
  *
  * The rules of consent at the commit live here, where the principal is known: a plan that
  * confirms anyone needs the publisher's attestation, a plan that grows a scheduled send
- * needs a person to acknowledge each one (a service token can't), and the plan the commit
+ * needs a person in the editor to acknowledge each one (a service token can't, nor a person
+ * through any other client, named or not: SPEC §11, Who acted), and the plan the commit
  * applies must hash the same as the one the publisher saw.
  */
 
@@ -27,6 +28,7 @@ import {
   TEMPLATE_TXT,
   type UnsubscribeCauseClaim,
 } from "../../shared/imports";
+import { EDITOR_CLIENT } from "../../shared/who_acted";
 import * as imports from "../db/imports";
 import { getSettings } from "../db/settings";
 import { onFreePlanLimits } from "../env";
@@ -183,10 +185,12 @@ export async function commit(c: RequestContext): Promise<Response> {
     );
   }
   if (p.sendsGrowing.length > 0) {
-    if (principal.kind === "service") {
+    // Held to every act that didn't come through the editor, so a client lifts it only by
+    // naming itself the editor, never by naming nothing (SPEC §11).
+    if (principal.client !== EDITOR_CLIENT) {
       throw refusal(
         "sends_acknowledgement_required",
-        "This import would add people to the audience of a scheduled send, which only a person can acknowledge. Ask the publisher to finish it in the dashboard (Subscribers, Import), choosing the same file: the same plan appears there.",
+        "This import would add people to the audience of a scheduled send, which only a person in the editor can acknowledge. Ask the publisher to finish it in the dashboard (Subscribers, Import), choosing the same file: the same plan appears there.",
         { sends: p.sendsGrowing },
       );
     }

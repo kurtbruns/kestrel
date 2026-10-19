@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { evidenceText, joinedVia, originName } from "./provenance";
+import type { ImportRecord } from "../../shared/imports";
+import { evidenceText, importedBy, joinedVia, originName } from "./provenance";
 
 describe("joinedVia", () => {
   it("reads an imported subscriber by the import, with the origin and method the file claimed (SPEC §7)", () => {
@@ -41,5 +42,27 @@ describe("evidenceText", () => {
     expect(evidenceText('{"signup_ip":"203.0.113.7"}')).toBe('{\n  "signup_ip": "203.0.113.7"\n}');
     expect(evidenceText("not json")).toBe("not json");
     expect(evidenceText(null)).toBeNull();
+  });
+});
+
+describe("importedBy", () => {
+  const record = (principal: ImportRecord["principal"]) => ({ principal }) as ImportRecord;
+
+  it("reads a service token's import as Claude's, for the publisher", () => {
+    expect(importedBy(record({ kind: "service", email: null, client: null }))).toBe(
+      "Claude, for you",
+    );
+  });
+
+  it("reads a person's import by their address, with the client when it wasn't the editor (SPEC §11)", () => {
+    expect(importedBy(record({ kind: "human", email: "you@example.com", client: "editor" }))).toBe(
+      "you@example.com",
+    );
+    expect(
+      importedBy(record({ kind: "human", email: "you@example.com", client: "claude-code" })),
+    ).toBe("you@example.com via Claude Code");
+    expect(importedBy(record({ kind: "human", email: "you@example.com", client: null }))).toBe(
+      "you@example.com via the API",
+    );
   });
 });

@@ -618,3 +618,61 @@ describe("schema (0012_unsubscribe_cause)", () => {
     ).rejects.toThrow(/CHECK/);
   });
 });
+
+describe("schema (0013_who_acted_client)", () => {
+  it("reads every change a person made before it as the editor's, and a service token's as naming no client (SPEC §11)", async () => {
+    // Rows as the previous release wrote them, with no client.
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO posts (id, slug, created_at, updated_at) VALUES ('a', 'one', 0, 0)",
+      ),
+      env.DB.prepare(
+        `INSERT INTO post_revisions (id, post_id, author, created_at)
+         VALUES ('r1', 'a', 'you@example.com', 0), ('r2', 'a', 'service', 1), ('r3', 'a', NULL, 2)`,
+      ),
+      env.DB.prepare(
+        `INSERT INTO imports (id, created_at, principal_kind, principal_email, file_name, file_sha256, plan_hash, counts)
+         VALUES ('i1', 0, 'human', 'you@example.com', 'f', 'h', 'p1', '{}'),
+                ('i2', 0, 'service', NULL, 'f', 'h', 'p2', '{}')`,
+      ),
+    ]);
+    // Its columns already stand here, so only its backfill runs again.
+    const migration = FOLDER.find((m) => m.name === "0013_who_acted_client.sql");
+    const backfill = (migration?.queries ?? []).filter((q) => q.trimStart().startsWith("UPDATE"));
+    expect(backfill).toHaveLength(2);
+    for (const q of backfill) {
+      await env.DB.prepare(q).run();
+    }
+    const { results: revisions } = await env.DB.prepare(
+      "SELECT id, client FROM post_revisions ORDER BY id",
+    ).all();
+    expect(revisions).toEqual([
+      { id: "r1", client: "editor" },
+      { id: "r2", client: null },
+      { id: "r3", client: null },
+    ]);
+    const { results: imports } = await env.DB.prepare(
+      "SELECT id, client FROM imports ORDER BY id",
+    ).all();
+    expect(imports).toEqual([
+      { id: "i1", client: "editor" },
+      { id: "i2", client: null },
+    ]);
+  });
+
+  it("keeps a client a short lowercase name", async () => {
+    await env.DB.prepare(
+      "INSERT INTO posts (id, slug, created_at, updated_at) VALUES ('a', 'one', 0, 0)",
+    ).run();
+    const insert = (client: string) =>
+      env.DB.prepare(
+        "INSERT INTO post_revisions (id, post_id, author, client, created_at) VALUES (?, 'a', 'you@example.com', ?, 0)",
+      )
+        .bind(client, client)
+        .run();
+    await insert("claude-code");
+    await expect(insert("Claude")).rejects.toThrow(/CHECK/);
+    await expect(insert("")).rejects.toThrow(/CHECK/);
+    await expect(insert("x".repeat(33))).rejects.toThrow(/CHECK/);
+  });
+});

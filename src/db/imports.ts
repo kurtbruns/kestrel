@@ -124,6 +124,7 @@ interface ImportRow {
   created_at: number;
   principal_kind: "human" | "service";
   principal_email: string | null;
+  client: string | null;
   attestation_version: number | null;
   file_name: string;
   file_sha256: string;
@@ -136,7 +137,7 @@ function toRecord(row: ImportRow): ImportRecord {
   return {
     id: row.id,
     created_at: row.created_at,
-    principal: { kind: row.principal_kind, email: row.principal_email },
+    principal: { kind: row.principal_kind, email: row.principal_email, client: row.client },
     attestation_version: row.attestation_version,
     file_name: row.file_name,
     file_sha256: row.file_sha256,
@@ -202,6 +203,7 @@ export interface ImportWrites {
   record: Omit<ImportRecord, "counts" | "principal"> & {
     principal_kind: "human" | "service";
     principal_email: string | null;
+    client: string | null;
     counts: OutcomeCounts;
   };
   unsubscribe: { e: string; uat: number | null; c: UnsubscribeCause }[];
@@ -248,15 +250,17 @@ export async function applyImport(
   const statements: D1PreparedStatement[] = [
     db
       .prepare(
-        `INSERT INTO imports (id, created_at, principal_kind, principal_email, attestation_version,
-                              file_name, file_sha256, plan_hash, counts, suppressions_added)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO imports (id, created_at, principal_kind, principal_email, client,
+                              attestation_version, file_name, file_sha256, plan_hash, counts,
+                              suppressions_added)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         r.id,
         now,
         r.principal_kind,
         r.principal_email,
+        r.client,
         r.attestation_version,
         r.file_name,
         r.file_sha256,

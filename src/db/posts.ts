@@ -25,6 +25,7 @@ type Answered =
   | "published_at"
   | "archive_live"
   | "author"
+  | "author_client"
   | "send"
   | "actions";
 
@@ -37,7 +38,19 @@ export interface RevisionRow {
   markdown: string;
   metadata: string; // JSON: { subject, slug }
   author: string | null;
+  client: string | null;
   created_at: number;
+}
+
+/**
+ * Who saved a revision (SPEC §11, Who acted): `author`, a person's email or `service` for a
+ * service token, and `client`, the client a person's request came through as it named itself,
+ * null when it named none and on a service token. A save passes them as its last two
+ * arguments, `client` defaulting to none named.
+ */
+export interface Authorship {
+  author: string | null;
+  client: string | null;
 }
 
 export interface PostInput {
@@ -429,18 +442,18 @@ export function getCurrentRevision(db: D1Database, post: PostRow): Promise<Revis
 export async function currentAuthors(
   db: D1Database,
   posts: Pick<PostRow, "id" | "current_revision">[],
-): Promise<Map<string, string | null>> {
+): Promise<Map<string, Authorship>> {
   const ids = posts.flatMap((p) => (p.current_revision ? [p.current_revision] : []));
   if (ids.length === 0) {
     return new Map();
   }
   const { results } = await db
     .prepare(
-      "SELECT post_id, author FROM post_revisions WHERE id IN (SELECT value FROM json_each(?))",
+      "SELECT post_id, author, client FROM post_revisions WHERE id IN (SELECT value FROM json_each(?))",
     )
     .bind(JSON.stringify(ids))
-    .all<{ post_id: string; author: string | null }>();
-  return new Map(results.map((r) => [r.post_id, r.author]));
+    .all<{ post_id: string } & Authorship>();
+  return new Map(results.map((r) => [r.post_id, { author: r.author, client: r.client }]));
 }
 
 export async function listRevisions(db: D1Database, postId: string): Promise<RevisionRow[]> {
@@ -475,6 +488,7 @@ export async function createPost(
   db: D1Database,
   input: PostInput,
   author: string | null,
+  client: string | null = null,
 ): Promise<{ post: PostRow; revision: RevisionRow }> {
   const now = Date.now();
   const id = newId();
@@ -500,9 +514,9 @@ export async function createPost(
       .bind(id, slug, auto ? 1 : 0, subject, revId, now, now),
     db
       .prepare(
-        "INSERT INTO post_revisions (id, post_id, markdown, metadata, author, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO post_revisions (id, post_id, markdown, metadata, author, client, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
       )
-      .bind(revId, id, markdown, metadata, author, now),
+      .bind(revId, id, markdown, metadata, author, client, now),
   ]);
 
   const post = unwrap(await getPost(db, id), "post");
@@ -526,6 +540,7 @@ export async function updatePost(
   post: PostRow,
   input: PostInput,
   author: string | null,
+  client: string | null = null,
 ): Promise<{ post: PostRow; revision: RevisionRow }> {
   const current = await getCurrentRevision(db, post);
   const now = Date.now();
@@ -546,9 +561,9 @@ export async function updatePost(
   await db.batch([
     db
       .prepare(
-        "INSERT INTO post_revisions (id, post_id, markdown, metadata, author, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO post_revisions (id, post_id, markdown, metadata, author, client, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
       )
-      .bind(revId, post.id, markdown, metadata, author, now),
+      .bind(revId, post.id, markdown, metadata, author, client, now),
     db
       .prepare(
         "UPDATE posts SET slug = ?, slug_auto = ?, subject = ?, current_revision = ?, updated_at = ? WHERE id = ? AND status = 'draft'",

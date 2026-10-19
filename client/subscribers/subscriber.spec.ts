@@ -64,7 +64,7 @@ function delivered(
 const record: ImportRecord = {
   id: "imp1",
   created_at: Date.UTC(2026, 0, 2),
-  principal: { kind: "human", email: "you@example.com" },
+  principal: { kind: "human", email: "you@example.com", client: "editor" },
   attestation_version: 2,
   file_name: "sendy.csv",
   file_sha256: "abc",

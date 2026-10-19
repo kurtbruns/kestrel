@@ -1105,6 +1105,7 @@ function renderInputFor(
     markdown,
     metadata: JSON.stringify({ subject: demoPost.subject, slug: demoPost.slug }),
     author: "seed",
+    client: null,
     created_at: at,
   };
   return { post, revision };

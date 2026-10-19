@@ -20,6 +20,7 @@ const REQUESTS = [
 
 const AUTHENTICATION = [
   "Admin routes need a credential. Once deployed, the Cloudflare Access layer issues it: a person's sign-in for the web editor, or a service token for Claude and other automation, sent as the `CF-Access-Client-Id` and `CF-Access-Client-Secret` headers. On a local instance a dev token stands in, sent as `Authorization: Bearer <token>`. Public routes take no credential. Webhooks are signed by the email provider and verified by the instance.",
+  "A client names itself on every admin request in the `Kestrel-Client` header: one short lowercase word, its parts joined by hyphens, such as `editor` for the web editor or `claude-code` for Claude Code. Who made a change is recorded as the person or the service token, from the credential, plus that name, and read back as `client` or `author_client`. A malformed name is a 400 naming `Kestrel-Client` in `field`; a name the instance doesn't know is recorded as given; with none, the change reads as made through the API. The name grants nothing: what only the web editor may do, acknowledging the sends an import would grow, is refused to every other name and to none. A service token's name is ignored, since the token already names the program.",
 ];
 
 const ERRORS = [
@@ -44,7 +45,7 @@ const ERROR_BODY: ReferenceField[] = [
     name: "field",
     type: "string",
     description:
-      "The body or query field a refusal is about, a dotted path for a nested one (`notifications.to`). Every refusal whose next move is to fix the request carries it when one field is at fault, so a route doesn't list it there; a body it can't read at all, or a fault in the path, names none. A route lists it on any other refusal that carries it (`slug_taken`).",
+      "The body or query field a refusal is about, a dotted path for a nested one (`notifications.to`), or the request header (`Kestrel-Client`). Every refusal whose next move is to fix the request carries it when one field is at fault, so a route doesn't list it there; a body it can't read at all, or a fault in the path, names none. A route lists it on any other refusal that carries it (`slug_taken`).",
   },
   {
     name: "retry_after",

@@ -3,12 +3,10 @@
 // view, for as long as its mount (client/lifecycle.ts).
 
 import type { SettingsResponse } from "../shared/settings";
+import type { WhoamiResponse } from "../shared/who_acted";
 
 /** The boot probe's answer (GET /api/whoami): who we are and which auth mode gates this surface. */
-export interface Session {
-  principal: { kind: "human" | "service"; email?: string; token_id?: string };
-  auth: { mode: "access" | "dev" };
-}
+export type Session = WhoamiResponse;
 
 export interface AppState {
   /** The dev token (local dev only; deployed envs authenticate at the edge). */

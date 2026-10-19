@@ -71,6 +71,7 @@ const draft = (over: Record<string, unknown> = {}): Draft => ({
     email_only: false,
     current_revision: "r1",
     author: "a@b.c",
+    author_client: "editor",
     updated_at: "2026-09-20T10:00:00Z",
     send: null,
     ...over,
@@ -157,10 +158,14 @@ function draftServer(initial = draft(), sendOf?: () => SendView | null) {
     },
     /** Slugs other posts hold. */
     taken: new Set<string>(),
-    /** Another writer saved: the server moves on to a new revision. */
-    elsewhere(author: string): string {
+    /** Another writer saved, through `client` (none named by default): the server moves on to
+     *  a new revision. */
+    elsewhere(author: string, client: string | null = null): string {
       n += 1;
-      state = { ...state, post: { ...state.post, current_revision: `r${n}`, author } };
+      state = {
+        ...state,
+        post: { ...state.post, current_revision: `r${n}`, author, author_client: client },
+      };
       return `r${n}`;
     },
     /** The post's send, or null once canceled. */
@@ -393,6 +398,24 @@ describe("editor view", () => {
     expect(banner.hidden).toBe(false);
     expect(banner.textContent).toMatch(/scheduled elsewhere/);
     expect(document.querySelector("#freshKeep")).toBeNull(); // nothing to keep editing
+  });
+
+  it("names the client another writer came through, and a person in the editor alone (SPEC §11)", async () => {
+    const server = draftServer();
+    await open([{ path: "/api/posts/p1", reply: server.get }]);
+    const banner = $("#freshnessBanner");
+    const who = () => banner.querySelector("strong")?.textContent;
+    server.elsewhere("x@y.z", "claude-code");
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(who()).toBe("x@y.z via Claude Code");
+    $("#freshKeep").click();
+    server.elsewhere("x@y.z");
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(who()).toBe("x@y.z via the API");
+    $("#freshKeep").click();
+    server.elsewhere("x@y.z", "editor");
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(who()).toBe("x@y.z");
   });
 
   it("makes Save draft unavailable while the out-of-date banner is up, pointing at it instead of pretending to save", async () => {

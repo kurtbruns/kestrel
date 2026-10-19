@@ -84,7 +84,7 @@ function committed(over: Partial<ImportCommitResponse> = {}): ImportCommitRespon
     import: {
       id: "imp1",
       created_at: Date.now(),
-      principal: { kind: "human", email: "pub@birds.example" },
+      principal: { kind: "human", email: "pub@birds.example", client: "editor" },
       attestation_version: 1,
       file_name: "list.csv",
       file_sha256: "ab".repeat(32),

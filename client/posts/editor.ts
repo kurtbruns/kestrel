@@ -51,6 +51,7 @@ import { highlightMarkdown } from "../ui/highlight";
 import { type Html, html, setHtml } from "../ui/html";
 import { type IconName, icon } from "../ui/icons";
 import { busy, fieldError, modal, renderError, toast } from "../ui/widgets";
+import { whoActed } from "../who_acted";
 import { activeSend, postAction } from "./actions";
 import { createAutosave } from "./autosave";
 import { DirtyTracker } from "./dirty";
@@ -64,7 +65,7 @@ import {
   settingsChange,
   showSlugRefusal,
 } from "./publishing";
-import { type Author, type Conflict, conflictFromError, RevisionTracker } from "./revisions";
+import { type Conflict, conflictFromError, RevisionTracker } from "./revisions";
 import { previewOpensWebVersion, webVersionHash } from "./web";
 
 const message = describeError;
@@ -871,7 +872,6 @@ export async function renderEditor(
   // adopt: Reload takes the other version, Keep editing keeps yours (your next
   // save overwrites it). Re-arm only on a genuinely newer revision.
   const freshnessEl = $("#freshnessBanner");
-  const friendlyAuthor = (a: Author) => (a === "service" ? "Claude" : a || null);
 
   function clearConflict() {
     conflicted = false;
@@ -894,7 +894,7 @@ export async function renderEditor(
         html`<span><span aria-hidden="true">⚠️</span> This draft was scheduled elsewhere and can no longer be edited here.</span><span class="row"><button type="button" class="ghost" id="freshReload">Reload</button></span>`,
       );
     } else {
-      const who = friendlyAuthor(conflict.author);
+      const who = whoActed(conflict.author, conflict.client);
       setHtml(
         freshnessEl,
         html`<span><span aria-hidden="true">⚠️</span> This draft was changed elsewhere${who ? html`, last edited by <strong>${who}</strong>` : null}. Saving is paused until you choose: Reload to load that version (discards your unsaved edits), or Keep editing to keep yours, and your next save overwrites that version.</span><span class="row"><button type="button" class="ghost" id="freshReload">Reload</button><button type="button" class="ghost" id="freshKeep">Keep editing</button></span>`,
@@ -943,6 +943,7 @@ export async function renderEditor(
             status: fresh.post.status,
             revision: fresh.post.current_revision,
             author: fresh.post.author,
+            client: fresh.post.author_client,
           },
           { saving, baseAtRequest },
         );

@@ -1,6 +1,7 @@
 // Auth on the client: the boot probe, the dev token, the bearer header, the identity chip,
 // and the re-auth wall a dead session lands on.
 
+import { CLIENT_HEADER, EDITOR_CLIENT } from "../shared/who_acted";
 import { accessNotConfigured, showAccessLocked } from "./access_locked";
 import { configRefusal, showConfigProblem } from "./config_problem";
 import { unmount } from "./lifecycle";
@@ -26,11 +27,15 @@ export function setToken(t: string | null | undefined): void {
 }
 
 /**
- * The dev token goes in Authorization; in Access mode there is no token and the session
- * cookie authenticates instead, so no header is sent.
+ * The headers every API call carries: the editor's own name as its client (SPEC §11, Who
+ * acted), and the dev token in Authorization. In Access mode there is no token and the
+ * session cookie authenticates instead, so no Authorization is sent.
  */
 export function authHeaders(): Record<string, string> {
-  return appState.token ? { Authorization: `Bearer ${appState.token}` } : {};
+  return {
+    [CLIENT_HEADER]: EDITOR_CLIENT,
+    ...(appState.token ? { Authorization: `Bearer ${appState.token}` } : {}),
+  };
 }
 
 /**

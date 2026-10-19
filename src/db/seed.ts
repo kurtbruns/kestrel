@@ -182,13 +182,15 @@ export async function insertSubscribers(db: D1Database, rows: SeedSubscriber[]):
   }
 }
 
-/** Insert an import's record, before the subscribers that name it. */
+/** Insert an import's record, before the subscribers that name it: one a person committed in
+ *  the editor. */
 export async function insertImport(db: D1Database, r: SeedImport): Promise<void> {
   await db
     .prepare(
-      `INSERT INTO imports (id, created_at, principal_kind, principal_email, attestation_version,
-                            file_name, file_sha256, plan_hash, counts, suppressions_added)
-       VALUES (?, ?, 'human', ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO imports (id, created_at, principal_kind, principal_email, client,
+                            attestation_version, file_name, file_sha256, plan_hash, counts,
+                            suppressions_added)
+       VALUES (?, ?, 'human', ?, 'editor', ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       r.id,

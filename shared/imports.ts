@@ -978,7 +978,10 @@ export interface ImportCommitRequest extends ImportPlanRequest {
 export interface ImportRecord {
   id: string;
   created_at: number;
-  principal: { kind: "human" | "service"; email: string | null };
+  /** Who committed it (SPEC §11, Who acted): a person by `email`, or a service token with
+   *  none, and `client`, the client a person came through as it named itself, null when it
+   *  named none and on a service token. */
+  principal: { kind: "human" | "service"; email: string | null; client: string | null };
   /** The attestation's version, or null when none was needed. */
   attestation_version: number | null;
   file_name: string;

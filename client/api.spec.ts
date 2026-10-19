@@ -21,6 +21,14 @@ describe("api", () => {
     expect(fake.calls[1]?.headers.get("authorization")).toBe("Bearer t0k");
   });
 
+  it("names the editor as its client on every call, with or without a token (SPEC §11)", async () => {
+    fake = fakeApi([{ path: "/api/posts", reply: () => ({ posts: [] }) }]);
+    await api("/api/posts");
+    setToken("t0k");
+    await apiText("/api/posts");
+    expect(fake.calls.map((c) => c.headers.get("kestrel-client"))).toEqual(["editor", "editor"]);
+  });
+
   it("sends json with its content type, and parses the answer", async () => {
     fake = fakeApi([
       { method: "POST", path: "/api/posts", reply: (req) => ({ echo: req.json() }) },

@@ -38,6 +38,7 @@ import {
   SUPPRESSION_REASONS,
   type SuppressionListResponse,
 } from "../shared/subscribers";
+import type { WhoamiResponse } from "../shared/who_acted";
 import { buildInfo } from "./build";
 import { DELIVERY_VIEWS } from "./db/sends";
 import { SUPPRESSED_FILTERS } from "./db/subscribers";
@@ -285,14 +286,14 @@ export function createRouter({
       resource: "system",
       title: "Get who is signed in",
       summary:
-        "The authenticated principal and the auth mode: how this request signed in (access or dev). A service token's principal carries its Client ID as `token_id`.",
+        "The authenticated principal and the auth mode: how this request signed in (access or dev). A service token's principal carries its Client ID as `token_id`, and a person's the client the request came through as `client`.",
       returns: {
         fields: [
           {
             name: "principal",
-            type: "{ kind, email, token_id }",
+            type: "{ kind, email, token_id, client }",
             description:
-              "`kind` `human`, signed in as `email`, or `service`, a service token as Claude uses, with no `email` and its Client ID as `token_id` when the token names one.",
+              "`kind` `human`, signed in as `email`, or `service`, a service token as Claude uses, with no `email` and its Client ID as `token_id` when the token names one. `client` is the client a person's request came through, as it named itself in `Kestrel-Client` (`editor`, `claude-code`), or null when it named none; a service token's is always null, since the token already names the program.",
           },
           {
             name: "auth.mode",
@@ -302,8 +303,12 @@ export function createRouter({
         ],
       },
       handler: (c) => {
-        const { kind, email, tokenId, via } = unwrap(c.principal, "principal");
-        return json({ principal: { kind, email, token_id: tokenId }, auth: { mode: via } });
+        const { kind, email, tokenId, client, via } = unwrap(c.principal, "principal");
+        const body: WhoamiResponse = {
+          principal: { kind, email, token_id: tokenId, client: client ?? null },
+          auth: { mode: via },
+        };
+        return json(body);
       },
     },
     {
@@ -821,7 +826,14 @@ export function createRouter({
         { code: "base_required", details: ["post"] },
         {
           code: "stale_revision",
-          details: ["current_revision", "updated_at", "author", "post", "markdown"],
+          details: [
+            "current_revision",
+            "updated_at",
+            "author",
+            "author_client",
+            "post",
+            "markdown",
+          ],
         },
         notDraft,
         ...slugRefusals,
@@ -1968,7 +1980,7 @@ export function createRouter({
           name: "acknowledge_sends",
           type: "string[]",
           description:
-            "The id of every send in the plan's `sends_growing`. Only a person can give it: a service token is refused `sends_acknowledgement_required` whatever it sends, and the publisher finishes that import in the dashboard.",
+            "The id of every send in the plan's `sends_growing`. Only a person in the web editor can give it: a service token, or a person through any other client (one whose `Kestrel-Client` isn't `editor`, or that sends none), is refused `sends_acknowledgement_required` whatever it sends, and the publisher finishes that import in the dashboard.",
         },
       ],
       errors: [
@@ -2002,7 +2014,7 @@ export function createRouter({
           import: {
             id: "imp_1",
             created_at: 1768467600000,
-            principal: { kind: "human", email: "you@example.com" },
+            principal: { kind: "human", email: "you@example.com", client: "editor" },
             attestation_version: 1,
             file_name: "subscribers.csv",
             file_sha256: "3b1f…",
@@ -2032,7 +2044,7 @@ export function createRouter({
             name: "import",
             type: "object",
             description:
-              "The record: `id`; `created_at`, when it was committed; `principal`, who committed it (`kind` `human` with their `email`, or `service` with null); `attestation_version`, the attestation's wording, null when no row was confirmed; `file_name` and `file_sha256`; `plan_hash`; `counts`, rows by outcome; and `suppressions_added`.",
+              "The record: `id`; `created_at`, when it was committed; `principal`, who committed it (`kind` `human` with their `email` and the `client` they came through, null when it named none, or `service` with both null); `attestation_version`, the attestation's wording, null when no row was confirmed; `file_name` and `file_sha256`; `plan_hash`; `counts`, rows by outcome; and `suppressions_added`.",
           },
         ],
       },

@@ -24,8 +24,9 @@ import { param } from "../router";
 import { carryingPost, viewPost, viewPosts } from "../services/post_view";
 import { applySettings, readSettingsBody, resolveSettings } from "./post_settings";
 
-function author(c: RequestContext): string | null {
-  return c.principal?.email ?? c.principal?.kind ?? null;
+/** Who is saving: a person's email or `service`, and the client a person came through. */
+function authorship(c: RequestContext): [author: string | null, client: string | null] {
+  return [c.principal?.email ?? c.principal?.kind ?? null, c.principal?.client ?? null];
 }
 
 /** The parsed edit payload, plus the optional base revision for the concurrency check. */
@@ -121,7 +122,7 @@ export async function createPost(c: RequestContext): Promise<Response> {
   // case; one that sends a body is held to the same JSON and field rules as an edit.
   const { input } = await readBody(c, { optional: true });
   const { post, revision } = await slugGuarded(input, () =>
-    posts.createPost(c.env.DB, input, author(c)),
+    posts.createPost(c.env.DB, input, ...authorship(c)),
   );
   const body: PostSavedResponse = {
     post: await answered(c, post),
@@ -208,13 +209,14 @@ export async function updatePost(c: RequestContext): Promise<Response> {
       current_revision: post.current_revision,
       updated_at: post.updated_at,
       author: current?.author ?? null,
+      author_client: current?.client ?? null,
       post: await answered(c, post),
       markdown: current?.markdown ?? "",
     };
     return json(stale, 409, revisionHeaders(post));
   }
   const { post: updated, revision } = await slugGuarded(body.input, () =>
-    posts.updatePost(c.env.DB, post, body.input, author(c)),
+    posts.updatePost(c.env.DB, post, body.input, ...authorship(c)),
   );
   const saved: PostSavedResponse = {
     post: await answered(c, updated),
@@ -243,6 +245,7 @@ export async function listRevisions(c: RequestContext): Promise<Response> {
       n: i + 1,
       id: r.id,
       author: r.author,
+      author_client: r.client,
       created_at: r.created_at,
       is_current: r.id === post.current_revision,
       metadata: JSON.parse(r.metadata),
@@ -268,6 +271,7 @@ export async function getRevision(c: RequestContext): Promise<Response> {
     n,
     id: rev.id,
     author: rev.author,
+    author_client: rev.client,
     created_at: rev.created_at,
     markdown: rev.markdown,
     metadata: JSON.parse(rev.metadata),

@@ -5,6 +5,7 @@
  * The admin credentials are the same dev-signed token the app verifies, so the suite
  * exercises the real "verify token -> principal" path rather than a stub.
  */
+import { CLIENT_HEADER } from "../../shared/who_acted";
 import { mintDevToken } from "../../src/auth/dev_token";
 
 /** The origin specs address the Worker at (`SELF.fetch`). */
@@ -13,15 +14,22 @@ export const base = "https://kestrel.test";
 /** Must match `DEV_AUTH_SECRET` in vitest.config.ts. */
 export const DEV_SECRET = "test-dev-secret";
 
-/** Auth header for admin/authoring requests. Omit `email` for a service principal. */
+/**
+ * Auth headers for admin/authoring requests. Omit `email` for a service principal; `client`
+ * is what the request names itself in `Kestrel-Client`, sent only when given. The default is
+ * a person in the editor, as the editor sends it.
+ */
 export async function adminAuth(
-  opts: { email?: string } = { email: "tester@example.com" },
+  opts: { email?: string; client?: string } = { email: "tester@example.com", client: "editor" },
 ): Promise<Record<string, string>> {
   const token = await mintDevToken(DEV_SECRET, opts.email ? { email: opts.email } : {});
-  return { Authorization: `Bearer ${token}` };
+  return {
+    Authorization: `Bearer ${token}`,
+    ...(opts.client !== undefined ? { [CLIENT_HEADER]: opts.client } : {}),
+  };
 }
 
-/** An admin's headers, minted once per spec file. */
+/** An admin's headers, a person in the editor, minted once per spec file. */
 export const AUTH = await adminAuth();
 
 /** An admin's headers for a JSON body. */

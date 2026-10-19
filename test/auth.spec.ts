@@ -129,7 +129,7 @@ describe("auth on the admin surface", () => {
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      principal: { kind: "human", email: "human@example.com" },
+      principal: { kind: "human", email: "human@example.com", client: null },
       auth: { mode: "dev" },
     });
   });
@@ -140,7 +140,7 @@ describe("auth on the admin surface", () => {
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      principal: { kind: "service", token_id: DEV_TOKEN_ID },
+      principal: { kind: "service", token_id: DEV_TOKEN_ID, client: null },
       auth: { mode: "dev" },
     });
   });
@@ -326,7 +326,7 @@ describe("the auth mode follows how the request signed in", () => {
     const who = await fetchWith(vars, "/api/whoami", { headers });
     expect(who.status).toBe(200);
     expect(await who.json()).toEqual({
-      principal: { kind: "human", email: "you@example.com" },
+      principal: { kind: "human", email: "you@example.com", client: null },
       auth: { mode: "access" },
     });
     const settings = await readJson(await fetchWith(vars, "/api/settings", { headers }));
@@ -336,13 +336,13 @@ describe("the auth mode follows how the request signed in", () => {
       headers: await assertion({ common_name: "e367c0ffee5eb4.access" }),
     });
     expect(await service.json()).toEqual({
-      principal: { kind: "service", token_id: "e367c0ffee5eb4.access" },
+      principal: { kind: "service", token_id: "e367c0ffee5eb4.access", client: null },
       auth: { mode: "access" },
     });
     // One with neither claim is still admitted for now, with no name to give.
     const unidentified = await fetchWith(vars, "/api/whoami", { headers: await assertion({}) });
     expect(await unidentified.json()).toEqual({
-      principal: { kind: "service" },
+      principal: { kind: "service", client: null },
       auth: { mode: "access" },
     });
   });
