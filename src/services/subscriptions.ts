@@ -50,7 +50,7 @@ export async function requestSubscription(
   if (existing?.status === "confirmed") {
     return { kind: "skipped", subscriber: existing, action: "already_confirmed" };
   }
-  if (await subscribers.blocksConfirmation(db, email)) {
+  if (await subscribers.isSuppressed(db, email)) {
     return { kind: "skipped", subscriber: existing, action: "suppressed" };
   }
   // Everything that can fail before the provider is asked happens before the claim, so

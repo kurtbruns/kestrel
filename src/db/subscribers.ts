@@ -2,13 +2,14 @@
 import { normalizeEmail } from "../../shared/email";
 import {
   ERASED_PREFIX,
-  type EraseResponse,
+  SIGNUP_ONLY_CAUSES,
   type SubscribeAction,
   type Subscriber,
   type SubscriberCounts,
   type SubscriberStatus,
   type Suppression,
   type SuppressionReason,
+  type UnsubscribeCause,
 } from "../../shared/subscribers";
 import { newId, newToken } from "../lib/ids";
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
@@ -179,13 +180,11 @@ export async function releaseConfirmation(
  * the `status = 'pending'` guard, so the token is left in place (not cleared) and a
  * double-click still lands on the confirmed page rather than an "invalid link".
  *
- * Confirming also lifts an `erased` suppression on the address (see `ERASED`), and only
- * when this confirm is the one that took effect. Any other suppression is the publisher's
- * to clear and is left alone.
- *
  * The consent is then this app's own (SPEC §7): the subscriber reads as joining through its
  * double opt-in, not through any import that added them pending, and the evidence is the
- * IP the confirmation came from, when the request carried one.
+ * IP the confirmation came from, when the request carried one. It is also what brings back
+ * someone who left, whatever the cause, so the cause goes with it. A suppression on the
+ * address is the publisher's to lift and is left alone.
  */
 export async function confirm(
   db: D1Database,
@@ -207,24 +206,45 @@ export async function confirm(
   ) {
     return null;
   }
-  const confirmedAt = Date.now();
-  await db.batch([
-    db
-      .prepare(
-        "UPDATE subscribers SET status = 'confirmed', confirmed_at = ?, origin = 'kestrel', opt_in = 'double', import_id = NULL, consent_evidence = ? WHERE id = ? AND status = 'pending' AND confirm_token = ?",
-      )
-      .bind(confirmedAt, ip ? JSON.stringify({ confirmed_ip: ip }) : null, row.id, token),
-    db
-      .prepare(
-        "DELETE FROM suppressions WHERE email = ? AND reason = ? AND EXISTS (SELECT 1 FROM subscribers WHERE id = ? AND status = 'confirmed' AND confirmed_at = ?)",
-      )
-      .bind(row.email, ERASED, row.id, confirmedAt),
-  ]);
+  await db
+    .prepare(
+      "UPDATE subscribers SET status = 'confirmed', confirmed_at = ?, origin = 'kestrel', opt_in = 'double', import_id = NULL, consent_evidence = ?, unsubscribe_cause = NULL WHERE id = ? AND status = 'pending' AND confirm_token = ?",
+    )
+    .bind(Date.now(), ip ? JSON.stringify({ confirmed_ip: ip }) : null, row.id, token)
+    .run();
   return getById(db, row.id);
 }
 
-/** Unsubscribe by the durable unsub token — immediate and idempotent (I2). A
- *  confirm token will not resolve here, so it can never be used to unsubscribe. */
+/**
+ * Leave the list (I2), immediate and idempotent: a pending or confirmed subscriber is
+ * unsubscribed with `cause`. One who already left keeps the stronger cause (SPEC §7, Leaving),
+ * and when they left; one pending again after leaving is leaving anew, so the new cause stands.
+ */
+function leaveStatement(
+  db: D1Database,
+  where: string,
+  cause: UnsubscribeCause,
+  now: number,
+  ...binds: unknown[]
+): D1PreparedStatement {
+  // The causes as `strongerCause` ranks them: an erasure over a complaint over the rest.
+  return db
+    .prepare(
+      `UPDATE subscribers SET
+         unsubscribed_at = CASE WHEN status = 'unsubscribed' THEN unsubscribed_at ELSE ?1 END,
+         unsubscribe_cause = CASE
+           WHEN status <> 'unsubscribed' THEN ?2
+           WHEN unsubscribe_cause = 'erased' OR ?2 = 'erased' THEN 'erased'
+           WHEN unsubscribe_cause = 'complaint' OR ?2 = 'complaint' THEN 'complaint'
+           ELSE COALESCE(unsubscribe_cause, ?2) END,
+         status = 'unsubscribed'
+       WHERE ${where}`,
+    )
+    .bind(now, cause, ...binds);
+}
+
+/** Unsubscribe by the durable unsub token, the reader's own act (I2). A confirm token will
+ *  not resolve here, so it can never be used to unsubscribe. */
 export async function unsubscribeByToken(
   db: D1Database,
   token: string,
@@ -236,17 +256,14 @@ export async function unsubscribeByToken(
   if (row.status === "unsubscribed") {
     return row;
   }
-  await db
-    .prepare("UPDATE subscribers SET status = 'unsubscribed', unsubscribed_at = ? WHERE id = ?")
-    .bind(Date.now(), row.id)
-    .run();
+  await leaveStatement(db, "id = ?3", "reader", Date.now(), row.id).run();
   return getById(db, row.id);
 }
 
 /**
- * Unsubscribe by id — the authed admin action, for a request that arrives out
- * of band. Same immediate, idempotent effect as `unsubscribeByToken` (I2);
- * returns null for an unknown id.
+ * Unsubscribe by id, pending or confirmed: the authed admin action, for a request that
+ * arrives out of band. Same immediate, idempotent effect as `unsubscribeByToken` (I2), with
+ * the publisher as its cause; returns null for an unknown id.
  */
 export async function unsubscribeById(db: D1Database, id: string): Promise<SubscriberRow | null> {
   const row = await getById(db, id);
@@ -256,11 +273,54 @@ export async function unsubscribeById(db: D1Database, id: string): Promise<Subsc
   if (row.status === "unsubscribed") {
     return row;
   }
-  await db
-    .prepare("UPDATE subscribers SET status = 'unsubscribed', unsubscribed_at = ? WHERE id = ?")
-    .bind(Date.now(), row.id)
-    .run();
+  await leaveStatement(db, "id = ?3", "publisher", Date.now(), row.id).run();
   return getById(db, row.id);
+}
+
+/** What a complaint did to its address: unsubscribed it, left it on the list because it was
+ *  about mail older than their latest confirmation, or found no subscriber. */
+export type ComplaintOutcome = "unsubscribed" | "late" | "no_subscriber";
+
+/**
+ * A complaint is leaving (SPEC §7): it unsubscribes the address with cause `complaint`, unless
+ * it is about a post whose send (`sendId`) fired before the subscriber's latest confirmation,
+ * which stands. Their latest confirmation is the one recorded here, or for someone an import
+ * confirmed, the import's commit, since no post here is older than it. A complaint that can't
+ * be tied to a send (`sendId` null) applies. An address with no subscriber is left as it is.
+ */
+export async function complain(
+  db: D1Database,
+  email: string,
+  sendId: string | null,
+): Promise<ComplaintOutcome> {
+  const sentAt = "(SELECT fire_at FROM sends WHERE id = ?4)";
+  const res = await leaveStatement(
+    db,
+    `email = ?3 AND NOT (${sentAt} IS NOT NULL AND COALESCE(
+       (SELECT i.created_at FROM imports i WHERE i.id = subscribers.import_id),
+       confirmed_at, ${sentAt}) > ${sentAt})`,
+    "complaint",
+    Date.now(),
+    normalizeEmail(email),
+    sendId,
+  ).run();
+  if ((res.meta.changes ?? 0) > 0) {
+    return "unsubscribed";
+  }
+  return (await getByEmail(db, normalizeEmail(email))) ? "late" : "no_subscriber";
+}
+
+/**
+ * The subscriber an address belongs to when only the person's own sign-up may bring them
+ * back (SPEC §7): unsubscribed by a complaint or an erasure. Null for anyone else.
+ */
+export async function signupOnly(db: D1Database, email: string): Promise<SubscriberRow | null> {
+  const row = await getByEmail(db, email);
+  return row?.status === "unsubscribed" &&
+    row.unsubscribe_cause !== null &&
+    SIGNUP_ONLY_CAUSES.includes(row.unsubscribe_cause)
+    ? row
+    : null;
 }
 
 /** The two orthogonal axes a roster can be narrowed by: consent `status`, and the
@@ -287,7 +347,7 @@ export const SUBSCRIBER_LIST_SPEC: ListSpec = {
 
 // Shared WHERE for the roster list and its matching count, so the page total and the
 // rows on it are filtered identically. Suppression is an overlay on the address, not a
-// status (a bounce or complaint can suppress an address whatever its consent state), so
+// status (a bounce or a block can suppress an address whatever its consent state), so
 // it filters by membership in the suppressions table.
 function subscriberWhere(filter: SubscriberFilter): { clause: string; binds: unknown[] } {
   const where: string[] = [];
@@ -358,8 +418,9 @@ export async function counts(db: D1Database): Promise<Counts> {
     }
   }
   // Suppressed subscribers, whatever their status, so the count is what the roster's
-  // suppression facet shows. An address suppressed with no subscriber (an erasure's marker,
-  // a bounce an import brought for someone it didn't add) is no subscriber, and isn't counted.
+  // suppression facet shows. An address suppressed with no subscriber (a bounce an import
+  // brought for someone it didn't add, a block on an address never on the list) is no
+  // subscriber, and isn't counted.
   const sup = await db
     .prepare(
       "SELECT COUNT(*) AS n FROM subscribers WHERE email IN (SELECT email FROM suppressions)",
@@ -395,24 +456,6 @@ export async function isSuppressed(db: D1Database, email: string): Promise<boole
   return row !== null;
 }
 
-/**
- * The suppression reason that marks an erased person (SPEC §7, Erasing a subscriber): the
- * address is kept only so it is never mailed by accident, and the person may still come
- * back by subscribing again, their own confirmation lifting the marker.
- */
-export const ERASED: SuppressionReason = "erased";
-
-/** The address's suppression reason and when it was set, or null when it has none. */
-export function suppressionOf(
-  db: D1Database,
-  email: string,
-): Promise<Pick<SuppressionRow, "reason" | "created_at"> | null> {
-  return db
-    .prepare("SELECT reason, created_at FROM suppressions WHERE email = ?")
-    .bind(email)
-    .first<Pick<SuppressionRow, "reason" | "created_at">>();
-}
-
 /** The address's suppression whole, as the API answers it, or null when it has none. */
 export async function suppressionRow(
   db: D1Database,
@@ -421,13 +464,11 @@ export async function suppressionRow(
   return (await suppressionsFor(db, [email]))[0] ?? null;
 }
 
-/** What an erasure did, as `EraseResponse` carries it. */
-export type Erasure = EraseResponse["erased"];
-
-/** What `erase` came to: done, no such subscriber (an erased one included), or refused for
- *  now because a send run is handing the address to the provider. */
+/** What `erase` came to: done, with the subscriber as it left them and how many past
+ *  delivery rows it rewrote; no such subscriber; or refused for now because a send run is
+ *  handing the address to the provider. */
 export type EraseOutcome =
-  | { kind: "erased"; erased: Erasure }
+  | { kind: "erased"; subscriber: SubscriberRow; deliveries: number }
   | { kind: "not_found" }
   | { kind: "in_flight" };
 
@@ -442,27 +483,32 @@ function withoutAddress(text: string | null, email: string, placeholder: string)
 }
 
 /**
- * Erase a subscriber (SPEC §7): delete their row, which takes how they joined and the
- * evidence for it along; put one random placeholder, `erased:<hex>`, in place of their
- * address on every past delivery row, so each record still sums to its audience; and keep
- * the address only as an `erased` suppression with no detail. A suppression already there
- * stays as it is (a bounce is still a bounce), and an earlier erasure's marker takes this
- * one's time. A provider's words or message id on a delivery row that name the address get
- * the placeholder in its place too, in whatever case it was written, the rest of the text
- * kept as it was. A real provider's message id is opaque and never matches; the local
- * stand-in's spells out the address, and it is still unique with the placeholder in it.
+ * Erase a subscriber (SPEC §7): unsubscribe them with cause `erased` and strip their row to the
+ * address and when, which takes how they joined and the evidence for it along and discards
+ * both tokens (a fresh unsubscribe token, which no mail carries, stands in for the one every
+ * delivered post's link holds); put one random placeholder, `erased:<hex>`, in place of their
+ * address on every past delivery row, so each record still sums to its audience; and drop the
+ * words from a bounce or block kept on the address, which may name them. A provider's words
+ * or message id on a delivery row that name the address get the placeholder in its place
+ * too, in whatever case it was written, the rest of the text kept as it was. A real
+ * provider's message id is opaque and never matches; the local stand-in's spells out the
+ * address, and it is still unique with the placeholder in it. A subscriber already erased is
+ * answered as they stand, with nothing changed.
  *
  * One batch, so it all lands together or not at all. It is refused (`in_flight`) while a
  * send run holding its lease has one of the address's rows pending or dispatched: that run
  * holds the real address in hand and would write the provider's answer, which may name it,
  * back onto the row. Every write carries that condition, so a run that takes its lease
  * between the check and the batch is still caught. A pending row of a send between runs
- * becomes the placeholder, which no subscriber holds, so the send skips it (I1).
+ * becomes the placeholder, which no subscriber holds, so the send skips it (I2).
  */
 export async function erase(db: D1Database, id: string): Promise<EraseOutcome> {
   const row = await getById(db, id);
   if (!row) {
     return { kind: "not_found" };
+  }
+  if (row.status === "unsubscribed" && row.unsubscribe_cause === "erased") {
+    return { kind: "erased", subscriber: row, deliveries: 0 };
   }
   const email = row.email;
   const now = Date.now();
@@ -496,15 +542,19 @@ export async function erase(db: D1Database, id: string): Promise<EraseOutcome> {
     "NOT EXISTS (SELECT 1 FROM deliveries d JOIN sends s ON s.id = d.send_id WHERE d.email = ?1 AND d.status IN ('pending', 'dispatched') AND s.locked_until >= ?2)";
   const field = (name: string) =>
     `${name} = (SELECT json_extract(value, '$.${name}') FROM json_each(?3) WHERE json_extract(value, '$.id') = deliveries.id)`;
-  const [deleted, , , moved] = await db.batch([
-    db
-      .prepare(`DELETE FROM subscribers WHERE id = ?3 AND email = ?1 AND ${idle}`)
-      .bind(email, now, id),
+  const [stripped, , , moved] = await db.batch([
     db
       .prepare(
-        `INSERT INTO suppressions (email, reason, detail, created_at) SELECT ?1, ?3, NULL, ?2 WHERE ${idle} ON CONFLICT (email) DO UPDATE SET created_at = excluded.created_at, detail = NULL WHERE suppressions.reason = excluded.reason`,
+        `UPDATE subscribers SET status = 'unsubscribed', unsubscribe_cause = 'erased',
+           created_at = ?2, unsubscribed_at = ?2, confirmed_at = NULL, confirm_token = NULL,
+           confirm_sent_at = NULL, confirm_attempt_at = NULL, unsub_token = ?4,
+           origin = 'unknown', opt_in = 'unknown', consent_evidence = NULL, import_id = NULL
+         WHERE id = ?3 AND email = ?1 AND ${idle}`,
       )
-      .bind(email, now, ERASED),
+      .bind(email, now, id, newToken()),
+    db
+      .prepare(`UPDATE suppressions SET detail = NULL WHERE email = ?1 AND ${idle}`)
+      .bind(email, now),
     db
       .prepare(
         `UPDATE deliveries SET ${field("error")}, ${field("event_detail")}, ${field("provider_id")} WHERE id IN (SELECT json_extract(value, '$.id') FROM json_each(?3)) AND email = ?1 AND ${idle}`,
@@ -514,49 +564,42 @@ export async function erase(db: D1Database, id: string): Promise<EraseOutcome> {
       .prepare(`UPDATE deliveries SET email = ?3 WHERE email = ?1 AND ${idle}`)
       .bind(email, now, placeholder),
   ]);
-  if ((deleted?.meta.changes ?? 0) === 0) {
-    return (await getById(db, id)) ? { kind: "in_flight" } : { kind: "not_found" };
+  const after = await getById(db, id);
+  if (!after) {
+    return { kind: "not_found" };
   }
-  const kept = await suppressionOf(db, email);
-  return {
-    kind: "erased",
-    erased: { email, deliveries: moved?.meta.changes ?? 0, suppression: kept?.reason ?? ERASED },
-  };
+  if ((stripped?.meta.changes ?? 0) === 0) {
+    return { kind: "in_flight" };
+  }
+  return { kind: "erased", subscriber: after, deliveries: moved?.meta.changes ?? 0 };
 }
 
-/** Whether a suppression forbids sending this address a confirmation. Every reason does
- *  except `erased`, whose person may subscribe again and whose confirmation lifts it. */
-export async function blocksConfirmation(db: D1Database, email: string): Promise<boolean> {
-  const row = await db
-    .prepare("SELECT 1 FROM suppressions WHERE email = ? AND reason <> ?")
-    .bind(email, ERASED)
-    .first();
-  return row !== null;
-}
-
-/** Suppress an address, stored in its normalized form (trimmed, lowercased) whatever
- *  the caller passes, since the audience filter compares exactly (I1). */
+/**
+ * Suppress an address from the provider's report, stored in its normalized form (trimmed,
+ * lowercased) whatever the caller passes, since the audience filter compares exactly (I1).
+ * One suppression per address, and the first one stands. On an address erased here the
+ * provider's words are left out, since they may name the person (SPEC §7).
+ */
 export async function addSuppression(
   db: D1Database,
   email: string,
   reason: SuppressionReason,
   detail?: string,
 ): Promise<void> {
-  // One suppression per address, and the first one stands, except over an `erased` marker:
-  // a bounce or complaint on an erased address must still stop it being sent confirmations.
   await db
     .prepare(
-      "INSERT INTO suppressions (email, reason, detail, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (email) DO UPDATE SET reason = excluded.reason, detail = excluded.detail, created_at = excluded.created_at WHERE suppressions.reason = ?",
+      `INSERT INTO suppressions (email, reason, detail, created_at)
+       SELECT ?1, ?2, CASE WHEN EXISTS (SELECT 1 FROM subscribers WHERE email = ?1 AND status = 'unsubscribed' AND unsubscribe_cause = 'erased') THEN NULL ELSE ?3 END, ?4
+       ON CONFLICT (email) DO NOTHING`,
     )
-    .bind(normalizeEmail(email), reason, detail ?? null, Date.now(), ERASED)
+    .bind(normalizeEmail(email), reason, detail ?? null, Date.now())
     .run();
 }
 
 /**
- * The publisher's block (SPEC §7): a `manual` suppression. Unlike a bounce or complaint it
- * never replaces a suppression the address already has, an erasure's marker included: the
- * one there says more about the address, and a block over the marker would let clearing the
- * block lift an erasure. Answers the suppression that stands, and whether this added it.
+ * The publisher's block (SPEC §7): a `manual` suppression. Like any suppression it never
+ * replaces one the address already has, since the first one stands. Answers the suppression
+ * that stands, and whether this added it.
  */
 export async function block(
   db: D1Database,
@@ -603,8 +646,7 @@ export async function suppressionsFor(
 /**
  * Lift an address's suppression, the publisher's deliberate act (SPEC §7), only while its
  * reason is still `reason`, so a lift asked for a bounce never lifts another reason that
- * arrived since. The caller decides which reasons the publisher may lift (`PUBLISHER_LIFTS`).
- * Answers whether it lifted.
+ * arrived since. Answers whether it lifted.
  */
 export async function liftSuppression(
   db: D1Database,

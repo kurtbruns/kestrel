@@ -482,7 +482,7 @@ describe("sent record", () => {
     expect(outs.filter((o) => o.hasAttribute("title"))).toEqual([]);
     expect($(".rec-recon").textContent).toBe(
       "All 10 accounted for: 6 delivered, 2 bounced, 1 complained, 1 accepted, awaiting a delivery receipt." +
-        " Hard bounces and spam complaints are suppressed automatically, so those addresses won’t be mailed again." +
+        " Hard bounces are suppressed automatically and spam complaints unsubscribe the reader, so those addresses won’t be mailed again." +
         " A soft bounce is temporary, so it’s counted and the address stays on the list.",
     );
     expect(fake.unhandled).toHaveLength(0);
@@ -497,7 +497,7 @@ describe("sent record", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect($(".rec-recon").textContent).toBe(
       "All 10 accounted for: 9 delivered, 1 complained." +
-        " Hard bounces and spam complaints are suppressed automatically, so those addresses won’t be mailed again.",
+        " Hard bounces are suppressed automatically and spam complaints unsubscribe the reader, so those addresses won’t be mailed again.",
     );
     expect(fake.unhandled).toHaveLength(0);
   });

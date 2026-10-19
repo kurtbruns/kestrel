@@ -1,6 +1,8 @@
 // The subscribers list: the by-status composition and the filterable roster.
 
 import {
+  CAUSE_LABEL,
+  CAUSE_MEANING,
   FLAG_MEANING,
   STATUS_MEANING,
   SUBSCRIBER_ACTIONS,
@@ -13,6 +15,7 @@ import type {
   SubscriberCounts,
   SubscriberListResponse,
   SubscriberStatus,
+  UnsubscribeCause,
 } from "../../shared/subscribers";
 import { api, describeError } from "../api";
 import { $, $$ } from "../ui/dom";
@@ -198,9 +201,8 @@ function wireCountFilters(root: HTMLElement, state: ListState, reload: () => voi
 
 // The inline suppression flag rides next to the email (suppression is a deliverability
 // overlay, not a consent status) and names WHY, which also says whose decision it was:
-// bounced / complaint (the provider's, or the previous service's for an import), blocked
-// (the publisher's), erased (an erasure's marker). Anything unrecognized falls back to a
-// generic label. The pills carry no hover tooltip, which keyboard, screen-reader, and touch
+// bounced (the provider's, or the previous service's for an import) or blocked (the
+// publisher's). Anything unrecognized falls back to a generic label. The pills carry no hover tooltip, which keyboard, screen-reader, and touch
 // users can't reach: the legend under the counts defines each label once, and a
 // subscriber's own detail belongs on their page.
 function flagLabel(s: Subscriber): string {
@@ -225,9 +227,13 @@ function legendRow(term: Html, means: string): Html {
 }
 function legend(): Html {
   const flags = Object.keys(FLAG_MEANING) as SuppressionFlag[];
+  const causes = Object.keys(CAUSE_MEANING) as UnsubscribeCause[];
   return html`<div class="sub-legend" id="subLegend" role="region" aria-labelledby="subLegendToggle" hidden><div class="sub-legend-body">
     <h2>Status</h2>
     <dl>${SUB_STATUSES.map(({ value }) => legendRow(badge(value), STATUS_MEANING[value]))}</dl>
+    <h2>Why they left</h2>
+    <p>Beside an unsubscribed status:</p>
+    <dl>${causes.map((cause) => legendRow(html`<span class="muted">${CAUSE_LABEL[cause]}</span>`, CAUSE_MEANING[cause]))}</dl>
     <h2>Suppressed</h2>
     <p>${SUPPRESSED_MEANING} The red flag beside the address says why:</p>
     <dl>${flags.map((flag) => legendRow(html`<span class="badge suppressed">${flag}</span>`, FLAG_MEANING[flag]))}</dl>
@@ -239,15 +245,17 @@ function legend(): Html {
 }
 
 // A suppressed address keeps its consent status, but the status isn't in effect while the
-// suppression stands, so its badge takes the not-mailed grey (DESIGN §3). An erasure's
-// marker on a pending sign-up is the one exception: the person's own confirmation lifts
-// it, so that pending status is still live. On a confirmed row (an import can put one
-// there) nothing lifts it, so it greys like any other suppression.
+// suppression stands, so its badge takes the not-mailed grey (DESIGN §3). An unsubscribed
+// row says beside its badge why the person left.
 function statusBadge(s: Subscriber): Html {
-  if (!s.suppression || (s.suppression.reason === "erased" && s.status === "pending")) {
-    return badge(s.status);
-  }
-  return html`<span class="badge ${s.status} held">${s.status}</span>`;
+  const status = s.suppression
+    ? html`<span class="badge ${s.status} held">${s.status}</span>`
+    : badge(s.status);
+  const cause =
+    s.status === "unsubscribed" && s.unsubscribe_cause
+      ? html` <span class="muted sub-cause">${CAUSE_LABEL[s.unsubscribe_cause]}</span>`
+      : null;
+  return html`${status}${cause}`;
 }
 
 // An address that has to wrap breaks before its "@", keeping the mailbox and the domain
@@ -294,10 +302,9 @@ function renderSubTable(
       if (!row) {
         return;
       }
-      // Anyone can be viewed and anyone can be erased (SPEC §7); only a confirmed
-      // subscriber has anything to unsubscribe from. An address with no suppression can be
-      // blocked; a block is undone by Unblock, and a bounce by Clear, the weightier act.
-      // Nothing else is lifted by hand.
+      // Anyone can be viewed, and anyone not already erased can be erased (SPEC §7); a
+      // pending or confirmed subscriber can be unsubscribed. An address with no suppression
+      // can be blocked; a block is undone by Unblock, and a bounce by Clear, the weightier act.
       const items: MenuItem[] = [
         {
           label: "View subscriber",
@@ -311,7 +318,7 @@ function renderSubTable(
             ),
         },
       ];
-      if (row.status === "confirmed") {
+      if (row.status !== "unsubscribed") {
         items.push({
           label: SUBSCRIBER_ACTIONS.unsubscribe.label,
           danger: true,
@@ -336,11 +343,13 @@ function renderSubTable(
           onClick: () => confirmClear(row, reload, signal),
         });
       }
-      items.push({
-        label: SUBSCRIBER_ACTIONS.erase.label,
-        danger: true,
-        onClick: () => confirmErase(row, reload, signal),
-      });
+      if (row.unsubscribe_cause !== "erased" || row.status !== "unsubscribed") {
+        items.push({
+          label: SUBSCRIBER_ACTIONS.erase.label,
+          danger: true,
+          onClick: () => confirmErase(row, reload, signal),
+        });
+      }
       openMenu(b, items, signal);
     };
   }

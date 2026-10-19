@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { CAUSE_MEANING } from "../../shared/subscriber_meanings";
 import { appState } from "../state";
 import {
   $,
@@ -87,64 +88,26 @@ describe("addSubscriberModal", () => {
     expect(fake.calls).toHaveLength(0);
   });
 
-  describe("an erased address (SPEC §7)", () => {
-    const refusal = () =>
-      jsonResponse(
-        {
-          error: "erasure_acknowledgement_required",
-          message: "owl@example.com was erased at the person’s request.",
-          erased_at: Date.UTC(2026, 9, 3, 12),
-        },
-        409,
-      );
-
-    it("asks first, and sends the confirmation with the acknowledgement once the publisher agrees", async () => {
-      fake = fakeApi([
-        {
-          method: "POST",
-          path: "/api/subscribers",
-          reply: (req) =>
-            (req.json() as { acknowledge_erasure?: boolean }).acknowledge_erasure === true
-              ? { subscriber: null, action: "created" }
-              : refusal(),
-        },
-      ]);
-      const onDone = vi.fn();
-      addSubscriberModal(onDone, live);
-      typeInto($<HTMLInputElement>("#addEmail"), "owl@example.com");
-      $("#aGo").click();
-      await vi.advanceTimersByTimeAsync(0);
-      // The question stacks over the Add dialog, naming the address.
-      expect(document.querySelectorAll(".modal")).toHaveLength(2);
-      expect($("#eaGo").closest(".modal")?.querySelector("strong")?.textContent).toBe(
-        "owl@example.com",
-      );
-      expect($("#eaGo").closest(".modal")?.textContent).toMatch(/erased at the person’s request/);
-      $("#eaGo").click();
-      await vi.advanceTimersByTimeAsync(0);
-      expect(fake.calls.map((c) => JSON.parse(c.body!))).toEqual([
-        { email: "owl@example.com" },
-        { email: "owl@example.com", acknowledge_erasure: true },
-      ]);
-      expect(document.querySelector(".modal")).toBeNull();
-      expect($("#toasts").textContent).toMatch(/Confirmation sent to owl@example\.com/);
-      expect(onDone).toHaveBeenCalledOnce();
-    });
-
-    it("sends nothing when the publisher cancels, and leaves the Add dialog open", async () => {
-      fake = fakeApi([{ method: "POST", path: "/api/subscribers", reply: refusal }]);
-      const onDone = vi.fn();
-      addSubscriberModal(onDone, live);
-      typeInto($<HTMLInputElement>("#addEmail"), "owl@example.com");
-      $("#aGo").click();
-      await vi.advanceTimersByTimeAsync(0);
-      $("#eaCancel").click();
-      await vi.advanceTimersByTimeAsync(0);
-      expect(fake.calls).toHaveLength(1);
-      expect(document.querySelectorAll(".modal")).toHaveLength(1);
-      expect($<HTMLButtonElement>("#aGo").disabled).toBe(false);
-      expect(onDone).not.toHaveBeenCalled();
-    });
+  it("shows the refusal to add someone who left by a complaint or an erasure as it stands, naming the way back (SPEC §7)", async () => {
+    const message =
+      "owl@example.com reported your email as spam, so only their own sign-up brings them back. Ask them to subscribe through your subscribe page.";
+    fake = fakeApi([
+      {
+        method: "POST",
+        path: "/api/subscribers",
+        reply: () => jsonResponse({ error: "signup_required", message, subscriber: {} }, 409),
+      },
+    ]);
+    const onDone = vi.fn();
+    addSubscriberModal(onDone, live);
+    typeInto($<HTMLInputElement>("#addEmail"), "owl@example.com");
+    $("#aGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    // One call, no second question: the dialog stays, saying why and what to do instead.
+    expect(fake.calls.map((c) => JSON.parse(c.body!))).toEqual([{ email: "owl@example.com" }]);
+    expect(document.querySelectorAll(".modal")).toHaveLength(1);
+    expect($(".modal").textContent).toContain(message);
+    expect(onDone).not.toHaveBeenCalled();
   });
 
   it("takes an address as usual once a provider is set, and on the local stand-in", () => {
@@ -173,6 +136,7 @@ describe("confirmUnsubscribe", () => {
     created_at: 1,
     confirmed_at: 2,
     unsubscribed_at: null,
+    unsubscribe_cause: null,
     origin: "kestrel",
     opt_in: "double" as const,
     consent_evidence: null,
@@ -202,7 +166,15 @@ describe("confirmUnsubscribe", () => {
       {
         method: "POST",
         path: "/api/subscribers/s1/erase",
-        reply: () => ({ erased: { email: "a@b.c", deliveries: 3, suppression: "bounce" } }),
+        reply: () => ({
+          subscriber: {
+            ...sub,
+            status: "unsubscribed",
+            unsubscribe_cause: "erased",
+            suppression: { reason: "bounce", detail: null },
+          },
+          deliveries: 3,
+        }),
       },
     ]);
     const onDone = vi.fn();
@@ -244,6 +216,7 @@ describe("viewSubscriberModal", () => {
     created_at: 1,
     confirmed_at: null,
     unsubscribed_at: 3,
+    unsubscribe_cause: "reader" as const,
     origin: "kestrel",
     opt_in: "double" as const,
     consent_evidence: null,
@@ -299,8 +272,26 @@ describe("viewSubscriberModal", () => {
     expect($(".sub-dl dd").textContent).toBe("Signed up here, never confirmed");
     expect($(".sub-dl").textContent).toContain("None recorded");
     $("#vsClose").click();
-    viewSubscriberModal({ ...signedUp, status: "pending", unsubscribed_at: null }, live);
+    viewSubscriberModal(
+      { ...signedUp, status: "pending", unsubscribed_at: null, unsubscribe_cause: null },
+      live,
+    );
     expect($(".sub-dl dd").textContent).toBe("Signed up here, not confirmed yet");
+    expect(fake.calls).toEqual([]);
+  });
+
+  it("says why someone left, and keeps nothing of how an erased person joined (SPEC §7)", () => {
+    fake = fakeApi([]);
+    viewSubscriberModal(signedUp, live);
+    expect(recordRows()["Why they left"]).toBe(CAUSE_MEANING.reader);
+    $("#vsClose").click();
+    viewSubscriberModal(
+      { ...signedUp, unsubscribe_cause: "erased", origin: "unknown", opt_in: "unknown" },
+      live,
+    );
+    const rows = recordRows();
+    expect(rows["How they joined"]).toBe("Not kept: they were erased");
+    expect(rows["Why they left"]).toBe(CAUSE_MEANING.erased);
     expect(fake.calls).toEqual([]);
   });
 });

@@ -8,8 +8,9 @@
  * an email-only test send to the operator's own address before anything else (as Verify it
  * works has them send, SPEC §5), then an initial import of already-confirmed subscribers backdated before the first post,
  * four completed sends spread over time, and — in between — new confirmations (the
- * list grows) and unsubscribes (the list churns), plus a hard bounce and a spam
- * complaint that become suppressions, and a suppression on each other consent state.
+ * list grows) and unsubscribes (the list churns), plus a hard bounce that becomes a
+ * suppression, a spam complaint that unsubscribes its reader, a block on an unsubscribed and a
+ * pending row, and an erased person who has signed up again.
  * The upshot is that every completed send freezes the audience AS IT WAS at that moment: someone who unsubscribes after post #2 is
  * still recorded as mailed by posts #1–#2, and a later suppression shadows the current
  * audience (confirmed − suppressed = mailable, I1) without rewriting any past send.
@@ -356,6 +357,17 @@ interface BuiltAudience {
   sendTwoEvents: Map<string, DeliveryEvent>;
 }
 
+/** A confirmed subscriber's spam complaint, which unsubscribes them from `at` (SPEC §7). */
+function leaveByComplaint(subs: SeedSubscriber[], email: string, at: number): void {
+  const sub = unwrap(
+    subs.find((s) => s.email === email),
+    "complainer",
+  );
+  sub.status = "unsubscribed";
+  sub.unsubscribed_at = at;
+  sub.unsubscribe_cause = "complaint";
+}
+
 /** A subscriber's status AT A PAST MOMENT `t`, read from the consent timestamps rather
  *  than the final status: confirmed by then, and not yet unsubscribed. */
 function isConfirmedAt(s: SeedSubscriber, t: number): boolean {
@@ -381,11 +393,11 @@ function mailableAt(subs: SeedSubscriber[], sups: SeedSuppression[], t: number):
  * Build the whole audience as a lifecycle: an imported core, a continuous stream of later
  * confirmations (the list keeps growing to today), three churn waves that each unsubscribe in
  * the days after a post lands, a few still-pending sign-ups biased toward the recent past,
- * two suppressions (a bounce and a complaint) drawn from the core so they visibly shadow
- * the current audience, and three more on unsubscribed and pending rows that shadow
- * nothing. The counts are chosen so the mailable audience genuinely fluctuates from send
- * to send (140 → 141 → 142 → 148) and settles at 155 today (157 confirmed, 2 of them
- * suppressed).
+ * a bounce and a complaint drawn from the core so they visibly leave the current audience
+ * (the bounce suppressed, the complaint unsubscribed), two blocks on unsubscribed and pending
+ * rows that shadow nothing, and a pending sign-up from someone erased before. The counts are
+ * chosen so the mailable audience genuinely fluctuates from send to send
+ * (140 → 141 → 142 → 148) and settles at 155 today (156 confirmed, 1 of them suppressed).
  */
 function buildAudience(t: Timeline): BuiltAudience {
   let seq = 0;
@@ -486,11 +498,13 @@ function buildAudience(t: Timeline): BuiltAudience {
     pending.push({ email: make("pending", createdAt, null, null), createdAt });
   }
 
-  // Two core subscribers draw a hard bounce and a spam complaint just after post #2.
-  // Both stay confirmed (suppression is orthogonal to consent, §7) but are suppressed
-  // from then on, so they were mailed by #1 and #2 yet shadowed out of #3, #4, and today.
+  // Two core subscribers draw a hard bounce and a spam complaint just after post #2. The
+  // bounce stays confirmed but suppressed (suppression is orthogonal to consent, §7); the
+  // complaint unsubscribes its reader (§7). Either way they were mailed by #1 and #2 and are
+  // out of #3, #4, and today.
   const bounceEmail = unwrap(coreEmails[3], "core subscriber");
   const complaintEmail = unwrap(coreEmails[9], "core subscriber");
+  leaveByComplaint(subscribers, complaintEmail, t.complaintAt);
   const suppressions: SeedSuppression[] = [
     {
       email: bounceEmail,
@@ -498,22 +512,21 @@ function buildAudience(t: Timeline): BuiltAudience {
       detail: "550 5.1.1 user unknown",
       created_at: t.bounceAt,
     },
-    {
-      email: complaintEmail,
-      reason: "complaint",
-      detail: "abuse report via feedback loop",
-      created_at: t.complaintAt,
-    },
   ];
-  // The other ways an address comes to be suppressed, one each, so the roster shows a
-  // suppression on every consent state. None is on a confirmed subscriber, so the audience
-  // and every past send are as above.
+  // The block, on the other consent states, so the roster shows it on each. Neither is on a
+  // confirmed subscriber, so the audience and every past send are as above.
   //  - An unsubscribed reader the publisher later blocked by hand.
   //  - A pending sign-up blocked by hand before it confirmed.
-  //  - An erased person who has since subscribed again: the do-not-contact marker predates
-  //    the import and so every send (they were never mailed, so no record shows an erased
-  //    recipient), carries no detail, and their own confirmation will lift it (§7).
+  // And an erased person who has since subscribed again: erased before the import, and so
+  // before every send (they were never mailed, so no record shows an erased recipient), and
+  // pending now, still read as having left by an erasure until they confirm (§7).
   const newestPending = unwrap(pending[0], "pending subscriber");
+  const returning = unwrap(
+    subscribers.find((s) => s.email === newestPending.email),
+    "pending subscriber",
+  );
+  returning.unsubscribed_at = t.importAt - 2 * DAY;
+  returning.unsubscribe_cause = "erased";
   const oldestPending = unwrap(pending[PENDING - 1], "pending subscriber");
   const blockedEmail = unwrap(churnEmails[0], "unsubscribed subscriber");
   const blocked = unwrap(
@@ -532,12 +545,6 @@ function buildAudience(t: Timeline): BuiltAudience {
       reason: "manual",
       detail: "Signed up with a role address",
       created_at: oldestPending.createdAt + 6 * HOUR,
-    },
-    {
-      email: newestPending.email,
-      reason: "erased",
-      detail: null,
-      created_at: t.importAt - 2 * DAY,
     },
   );
 
@@ -579,7 +586,7 @@ const SCALE = {
   churn: 0.06, // total unsubscribes, split across three waves, one after each post
   pending: 0.012, // small still-unconfirmed backlog — most sign-ups confirm
   bounceRate: 0.004, // hard bounces (drawn from the core) → suppressions
-  complaintRate: 0.001, // spam complaints (drawn from the core) → suppressions
+  complaintRate: 0.001, // spam complaints (drawn from the core) → unsubscribes
   failureRate: 0.006, // per-send transport failures — do NOT suppress
 };
 
@@ -716,9 +723,9 @@ export function buildScaledAudience(t: Timeline, size: number, rand: () => numbe
     make("pending", Math.round(t.now - u * u * u * (14 * DAY)), null, null);
   }
 
-  // Suppressions: a hard bounce and a spam complaint cohort, both drawn from the core (so
-  // they were mailed by #1 and #2, then shadowed out of #3, #4, and today). Disjoint draws, so
-  // no address is both bounced and complained.
+  // A hard bounce cohort, suppressed, and a spam complaint cohort, unsubscribed by it (§7),
+  // both drawn from the core (so they were mailed by #1 and #2, then out of #3, #4, and
+  // today). Disjoint draws, so no address is both bounced and complained.
   const bounceCount = Math.max(1, Math.round(n * SCALE.bounceRate * jitter(0.3)));
   const complaintCount = Math.max(1, Math.round(n * SCALE.complaintRate * jitter(0.3)));
   const victims = drawDistinct(rand, bounceCount + complaintCount, coreEmails.length);
@@ -740,12 +747,7 @@ export function buildScaledAudience(t: Timeline, size: number, rand: () => numbe
   });
   victims.slice(bounceCount).forEach((idx) => {
     const email = unwrap(coreEmails[idx], "core subscriber");
-    suppressions.push({
-      email,
-      reason: "complaint",
-      detail: "abuse report via feedback loop",
-      created_at: t.complaintAt,
-    });
+    leaveByComplaint(subscribers, email, t.complaintAt);
     sendTwoEvents.set(email, { event: "complained", detail: "abuse", at: t.complaintAt });
   });
 

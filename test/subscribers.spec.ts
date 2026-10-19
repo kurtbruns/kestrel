@@ -118,6 +118,21 @@ async function addConfirmed(email: string): Promise<subs.SubscriberRow> {
   return (await subs.confirm(env.DB, pending.confirm_token!, 0))!;
 }
 
+/** A confirmed subscriber the publisher then erased (SPEC §7). */
+async function addErased(email: string): Promise<subs.SubscriberRow> {
+  const { id } = await addConfirmed(email);
+  const outcome = await subs.erase(env.DB, id);
+  expect(outcome.kind).toBe("erased");
+  return (await subs.getById(env.DB, id))!;
+}
+
+/** A confirmed subscriber who then reported the mail as spam (SPEC §7). */
+async function addComplainer(email: string): Promise<subs.SubscriberRow> {
+  await addConfirmed(email);
+  expect(await subs.complain(env.DB, email, null)).toBe("unsubscribed");
+  return (await subs.getByEmail(env.DB, email))!;
+}
+
 describe("subscribers: double opt-in (I1) and unsubscribe (I2)", () => {
   it("public subscribe creates a pending subscriber and emails a confirmation", async () => {
     const email = uniqueEmail();
@@ -153,6 +168,8 @@ describe("subscribers: double opt-in (I1) and unsubscribe (I2)", () => {
       method: "POST",
     });
     expect(unsub.status).toBe(200);
+    // Kept as the reader's own leaving (SPEC §7, Leaving).
+    expect((await subs.getByEmail(env.DB, email))?.unsubscribe_cause).toBe("reader");
     expect(await subs.audienceEmails(env.DB)).not.toContain(email);
 
     // re-subscribe once the cooldown has passed → pending again (NOT auto-confirmed)
@@ -290,33 +307,28 @@ describe("subscribing: no flood, and no reveal of who is on the list", () => {
     expect((await subs.getByEmail(env.DB, email))?.status).toBe("unsubscribed");
   });
 
-  it("stores a suppression lowercased, and keeps the erased rule across casings", async () => {
+  it("stores a suppression lowercased, and keeps the first one across casings (SPEC §7)", async () => {
     const email = uniqueEmail();
-    await subs.addSuppression(env.DB, email.toUpperCase(), subs.ERASED);
+    await subs.addSuppression(env.DB, email.toUpperCase(), "bounce");
     expect(await subs.isSuppressed(env.DB, email)).toBe(true);
-    await subs.addSuppression(env.DB, ` ${email.toUpperCase()} `, "bounce");
-    await subs.addSuppression(env.DB, email.toUpperCase(), subs.ERASED);
+    await subs.addSuppression(env.DB, ` ${email.toUpperCase()} `, "import_bounce");
     const rows = (await subs.listSuppressions(env.DB)).filter(
       (r) => r.email.toLowerCase() === email,
     );
     expect(rows).toEqual([expect.objectContaining({ email, reason: "bounce" })]);
   });
 
-  it("a bounce or complaint on an erased address replaces the marker and blocks confirmations", async () => {
+  it("a bounce on an erased address stays beside the erasure without the provider's words, and stops the confirmation of their return (SPEC §7)", async () => {
     const email = uniqueEmail();
-    await subs.addSuppression(env.DB, email, subs.ERASED);
-    await subs.addSuppression(env.DB, email, "bounce", "hard bounce");
-    expect((await subs.listSuppressions(env.DB)).find((r) => r.email === email)?.reason).toBe(
-      "bounce",
-    );
+    await addErased(email);
+    await subs.addSuppression(env.DB, email, "bounce", `550 ${email} no such user`);
+    expect(await subs.suppressionRow(env.DB, email)).toMatchObject({
+      reason: "bounce",
+      detail: null,
+    });
     await publicSubscribe(email);
     expect(await confirmationsTo(email)).toBe(0);
-
-    // And the reverse: a later erased marker never overwrites a bounce.
-    await subs.addSuppression(env.DB, email, subs.ERASED);
-    expect((await subs.listSuppressions(env.DB)).find((r) => r.email === email)?.reason).toBe(
-      "bounce",
-    );
+    expect((await subs.getByEmail(env.DB, email))?.unsubscribe_cause).toBe("erased");
   });
 
   it("repeated subscribes inside the cooldown send one confirmation, and keep its link", async () => {
@@ -340,7 +352,7 @@ describe("subscribing: no flood, and no reveal of who is on the list", () => {
   it("a suppressed address is never sent a confirmation", async () => {
     const neverListed = uniqueEmail();
     const leftAndBounced = uniqueEmail();
-    await subs.addSuppression(env.DB, neverListed, "complaint");
+    await subs.addSuppression(env.DB, neverListed, "bounce");
     await addConfirmed(leftAndBounced);
     await subs.unsubscribeById(env.DB, (await subs.getByEmail(env.DB, leftAndBounced))!.id);
     await subs.addSuppression(env.DB, leftAndBounced, "bounce");
@@ -358,17 +370,30 @@ describe("subscribing: no flood, and no reveal of who is on the list", () => {
     expect((await subs.getByEmail(env.DB, leftAndBounced))?.status).toBe("unsubscribed");
   });
 
-  it("an erased address can come back, and its confirmation lifts the marker", async () => {
-    const email = uniqueEmail();
-    await subs.addSuppression(env.DB, email, subs.ERASED);
+  it("someone who left by a complaint or an erasure comes back by their own sign-up and confirmation (SPEC §7)", async () => {
+    for (const [email, cause] of [
+      [uniqueEmail(), "complaint"],
+      [uniqueEmail(), "erased"],
+    ] as const) {
+      await (cause === "erased" ? addErased(email) : addComplainer(email));
+      await ageConfirmation(email, CONFIRM_COOLDOWN_MS);
 
-    await publicSubscribe(email);
-    expect(await confirmationsTo(email)).toBe(1);
-    expect(await subs.isSuppressed(env.DB, email)).toBe(true); // not until they confirm
+      await publicSubscribe(email);
+      expect(await confirmationsTo(email)).toBe(1);
+      // Pending, and still read as having left by that cause, until they confirm.
+      const pending = await subs.getByEmail(env.DB, email);
+      expect([pending?.status, pending?.unsubscribe_cause]).toEqual(["pending", cause]);
+      expect(await subs.audienceEmails(env.DB)).not.toContain(email);
 
-    await confirmEmail(email);
-    expect(await subs.isSuppressed(env.DB, email)).toBe(false);
-    expect(await subs.audienceEmails(env.DB)).toContain(email);
+      await confirmEmail(email);
+      const back = await subs.getByEmail(env.DB, email);
+      expect([back?.status, back?.unsubscribe_cause, back?.origin]).toEqual([
+        "confirmed",
+        null,
+        "kestrel",
+      ]);
+      expect(await subs.audienceEmails(env.DB)).toContain(email);
+    }
   });
 
   it("every state gets the same answer, as JSON and as a page", async () => {
@@ -378,6 +403,7 @@ describe("subscribing: no flood, and no reveal of who is on the list", () => {
     const confirmed = uniqueEmail();
     const unsubscribed = uniqueEmail();
     const suppressed = uniqueEmail();
+    const complained = uniqueEmail();
     const erased = uniqueEmail();
     await addPending(pending);
     await ageConfirmation(pending, CONFIRM_COOLDOWN_MS);
@@ -387,10 +413,20 @@ describe("subscribing: no flood, and no reveal of who is on the list", () => {
     await subs.unsubscribeById(env.DB, (await subs.getByEmail(env.DB, unsubscribed))!.id);
     await ageConfirmation(unsubscribed, CONFIRM_COOLDOWN_MS);
     await addConfirmed(suppressed);
-    await subs.addSuppression(env.DB, suppressed, "complaint");
-    await subs.addSuppression(env.DB, erased, subs.ERASED);
+    await subs.addSuppression(env.DB, suppressed, "bounce");
+    await addComplainer(complained);
+    await addErased(erased);
 
-    const states = [fresh, pending, coolingDown, confirmed, unsubscribed, suppressed, erased];
+    const states = [
+      fresh,
+      pending,
+      coolingDown,
+      confirmed,
+      unsubscribed,
+      suppressed,
+      complained,
+      erased,
+    ];
     const answers = new Set<string>();
     const pages = new Set<string>();
     for (const email of states) {
@@ -666,16 +702,16 @@ describe("suppressions: a client records only its own block (SPEC §7)", () => {
     const email = uniqueEmail();
     const res = await block({ email });
     expect(res.status).toBe(201);
-    expect((await subs.suppressionOf(env.DB, email))?.reason).toBe("manual");
+    expect((await subs.suppressionRow(env.DB, email))?.reason).toBe("manual");
   });
 
-  it("refuses a reason that would claim the provider's or an erasure's decision, storing nothing", async () => {
+  it("refuses a reason that would claim the provider's decision, storing nothing", async () => {
     for (const reason of ["bounce", "complaint", "erased", "import_bounce", "spam"]) {
       const email = uniqueEmail();
       const res = await block({ email, reason });
       expect(res.status).toBe(400);
       expect(await readJson(res)).toMatchObject({ error: "bad_request", field: "reason" });
-      expect(await subs.suppressionOf(env.DB, email)).toBeNull();
+      expect(await subs.suppressionRow(env.DB, email)).toBeNull();
     }
   });
 
@@ -688,7 +724,7 @@ describe("suppressions: a client records only its own block (SPEC §7)", () => {
       suppression: { email, reason: "bounce", detail: "550 no such user" },
       added: false,
     });
-    expect((await subs.suppressionOf(env.DB, email))?.reason).toBe("bounce");
+    expect((await subs.suppressionRow(env.DB, email))?.reason).toBe("bounce");
   });
 
   it("keeps a block already there, its detail included, rather than answering 200 over a changed one", async () => {
@@ -702,13 +738,16 @@ describe("suppressions: a client records only its own block (SPEC §7)", () => {
     });
   });
 
-  it("never blocks over an erasure's marker, so clearing a block can't lift an erasure", async () => {
+  it("blocks an erased address beside its erasure, which lifting the block leaves as it is (SPEC §7)", async () => {
     const email = uniqueEmail();
-    await subs.addSuppression(env.DB, email, "erased");
-    const res = await block({ email });
-    expect(res.status).toBe(200);
-    expect(await readJson(res)).toMatchObject({ suppression: { reason: "erased" }, added: false });
-    expect((await subs.suppressionOf(env.DB, email))?.reason).toBe("erased");
+    await addErased(email);
+    expect((await block({ email })).status).toBe(201);
+    expect(await readJson(await lift({ email, reason: "manual" }))).toEqual({
+      email,
+      lifted: true,
+    });
+    const row = await subs.getByEmail(env.DB, email);
+    expect([row?.status, row?.unsubscribe_cause]).toEqual(["unsubscribed", "erased"]);
   });
 
   it("lifts a block, and a bounce seen here or imported, on the publisher's word", async () => {
@@ -718,30 +757,30 @@ describe("suppressions: a client records only its own block (SPEC §7)", () => {
       const res = await lift({ email: email.toUpperCase(), reason });
       expect(res.status).toBe(200);
       expect(await readJson(res)).toEqual({ email, lifted: true });
-      expect(await subs.suppressionOf(env.DB, email)).toBeNull();
+      expect(await subs.suppressionRow(env.DB, email)).toBeNull();
     }
   });
 
-  it("refuses a reason that isn't the one standing, so a lift for a bounce never lifts another reason that arrived since", async () => {
+  it("refuses a reason that isn't the one standing, so a lift for a block never lifts a bounce that arrived since (SPEC §7)", async () => {
     const email = uniqueEmail();
-    await subs.addSuppression(env.DB, email, "complaint", "abuse report");
-    const res = await lift({ email, reason: "bounce" });
+    await subs.addSuppression(env.DB, email, "bounce", "550 no such user");
+    const res = await lift({ email, reason: "manual" });
     expect(res.status).toBe(409);
     expect(await readJson(res)).toMatchObject({
       error: "suppression_changed",
-      suppression: { email, reason: "complaint", detail: "abuse report" },
+      suppression: { email, reason: "bounce", detail: "550 no such user" },
     });
-    expect((await subs.suppressionOf(env.DB, email))?.reason).toBe("complaint");
+    expect((await subs.suppressionRow(env.DB, email))?.reason).toBe("bounce");
   });
 
-  it("lifts only a block or a bounce, refusing any other reason as the request's, naming the field", async () => {
-    for (const reason of ["complaint", "import_complaint"] as const) {
+  it("lifts only a block or a bounce, refusing a complaint or an erasure as the request's, naming the field (SPEC §7)", async () => {
+    for (const reason of ["complaint", "import_complaint", "erased"]) {
       const email = uniqueEmail();
-      await subs.addSuppression(env.DB, email, reason);
+      await addComplainer(email);
       const res = await lift({ email, reason });
       expect(res.status).toBe(400);
       expect(await readJson(res)).toMatchObject({ error: "bad_request", field: "reason" });
-      expect((await subs.suppressionOf(env.DB, email))?.reason).toBe(reason);
+      expect((await subs.getByEmail(env.DB, email))?.status).toBe("unsubscribed");
     }
     expect(await readJson(await lift({ reason: "manual" }))).toMatchObject({ field: "email" });
     for (const body of [{ email: uniqueEmail() }, { email: uniqueEmail(), reason: "spam" }]) {
@@ -759,20 +798,7 @@ describe("suppressions: a client records only its own block (SPEC §7)", () => {
       headers: AUTH,
     });
     expect(res.status).toBe(404);
-    expect((await subs.suppressionOf(env.DB, email))?.reason).toBe("manual");
-  });
-
-  it("refuses to lift an erasure's marker, which only the person's confirmation lifts", async () => {
-    const email = uniqueEmail();
-    await subs.addSuppression(env.DB, email, "erased");
-    const res = await lift({ email, reason: "erased" });
-    expect(res.status).toBe(409);
-    // It carries the marker as it stands, which the refusal left in place.
-    expect(await readJson(res)).toMatchObject({
-      error: "erasure_marker",
-      suppression: { email, reason: "erased", detail: null },
-    });
-    expect((await subs.suppressionOf(env.DB, email))?.reason).toBe("erased");
+    expect((await subs.suppressionRow(env.DB, email))?.reason).toBe("manual");
   });
 
   it("answers lifted: false for an address with no suppression", async () => {
@@ -796,6 +822,29 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     const second = await subs.unsubscribeById(env.DB, subscriber.id);
     expect(second?.status).toBe("unsubscribed");
     expect(second?.unsubscribed_at).toBe(first?.unsubscribed_at);
+  });
+
+  it("unsubscribes a pending or confirmed subscriber on the publisher's word, keeping that as why they left (SPEC §7)", async () => {
+    const pending = await addPending(uniqueEmail());
+    const confirmed = await addConfirmed(uniqueEmail());
+    for (const { id } of [pending, confirmed]) {
+      const res = await SELF.fetch(`${base}/api/subscribers/${id}/unsubscribe`, {
+        method: "POST",
+        headers: AUTH,
+      });
+      expect(await readJson(res)).toMatchObject({
+        subscriber: { status: "unsubscribed", unsubscribe_cause: "publisher" },
+      });
+    }
+  });
+
+  it("keeps the stronger reason a subscriber already left by: the publisher's unsubscribe never replaces a complaint (SPEC §7)", async () => {
+    const complainer = await addComplainer(uniqueEmail());
+    const again = await subs.unsubscribeById(env.DB, complainer.id);
+    expect([again?.unsubscribe_cause, again?.unsubscribed_at]).toEqual([
+      "complaint",
+      complainer.unsubscribed_at,
+    ]);
   });
 
   it("unsubscribeById returns null for an unknown id", async () => {
@@ -837,7 +886,7 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     const suppressed = `${marker}-b@example.com`;
     await addPending(plain);
     await addPending(suppressed);
-    await subs.addSuppression(env.DB, suppressed, "complaint");
+    await subs.addSuppression(env.DB, suppressed, "manual");
 
     const res = await SELF.fetch(`${base}/api/subscribers?suppressed=only&search=${marker}`, {
       headers: AUTH,
@@ -846,7 +895,7 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     const body = await readJson(res);
     expect(body.subscribers.map((s: any) => s.email)).toEqual([suppressed]);
     // Each row carries its suppression inside it (for the inline flag): why, and the words.
-    expect(body.subscribers[0].suppression).toEqual({ reason: "complaint", detail: null });
+    expect(body.subscribers[0].suppression).toEqual({ reason: "manual", detail: null });
     // The page envelope reflects the filtered total, not the whole table.
     expect(body.page).toMatchObject({ total: 1, offset: 0 });
   });
@@ -863,7 +912,7 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     await env.DB.prepare(
       `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 1001)
        INSERT INTO suppressions (email, reason, detail, created_at)
-       SELECT 'newer-' || i || '@example.com', 'complaint', NULL, ? FROM n`,
+       SELECT 'newer-' || i || '@example.com', 'manual', NULL, ? FROM n`,
     )
       .bind(Date.now())
       .run();
@@ -962,5 +1011,34 @@ describe("the list past what Workers Free suits (SPEC §7)", () => {
       "This list has 1,001 confirmed subscribers, on the Workers Free plan’s limits. Workers Free suits a list of up to about 1,000 subscribers. Past about 5,000, one send can use up the day’s database writes and stop this newsletter until midnight UTC. Move to Workers Paid, or, if the account is on it already, set SUBREQUEST_BUDGET to 10000.",
     );
     expect(await advice(PAID)).toBe(null);
+  });
+});
+
+describe("adding someone who left (SPEC §7, Joining)", () => {
+  it("refuses an address that left by a complaint or an erasure, sending nothing and naming the way back", async () => {
+    for (const make of [addComplainer, addErased]) {
+      const email = uniqueEmail();
+      const before = await make(email);
+      await ageConfirmation(email, CONFIRM_COOLDOWN_MS);
+      const res = await adminAdd(email);
+      expect(res.status).toBe(409);
+      const body = await readJson(res);
+      expect(body).toMatchObject({
+        error: "signup_required",
+        subscriber: { email, status: "unsubscribed", unsubscribe_cause: before.unsubscribe_cause },
+      });
+      expect(body.message).toMatch(/subscribe page/);
+      expect(await confirmationsTo(email)).toBe(0);
+      expect((await subs.getByEmail(env.DB, email))?.status).toBe("unsubscribed");
+    }
+  });
+
+  it("sends a confirmation to someone who left for any other reason, as before", async () => {
+    const email = uniqueEmail();
+    const { id } = await addConfirmed(email);
+    await subs.unsubscribeById(env.DB, id);
+    await ageConfirmation(email, CONFIRM_COOLDOWN_MS);
+    expect(await readJson(await adminAdd(email))).toMatchObject({ action: "resubscribed" });
+    expect(await confirmationsTo(email)).toBe(1);
   });
 });

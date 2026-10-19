@@ -5,23 +5,28 @@
  * transport-agnostic `DeliveryEvent[]`; this service is the ONLY thing that
  * mutates state from those events, so the rule lives in one place:
  *   - every event is recorded on the matching `deliveries` row (observability);
- *   - a HARD bounce or ANY complaint also adds a suppression (spec §6, §10), so
- *     the address is dropped from every future audience (I1/I2).
+ *   - a HARD bounce also adds a suppression (SPEC §10), so the address is dropped from
+ *     every future audience (I1);
+ *   - a complaint unsubscribes its subscriber (SPEC §7), the reader's own act through
+ *     their mail provider, unless it is about a post older than their latest confirmation.
  * Soft (transient) bounces are recorded but never suppress.
  *
- * Each call logs what it applied, aggregated per send (`receipt.applied`, and
- * `suppression.added` when it suppressed), never an address: the counts are the story.
+ * Each call logs what it applied, aggregated per send (`receipt.applied`, then
+ * `suppression.added` when it suppressed and `subscriber.complained` when a complaint
+ * reached a subscriber), never an address: the counts are the story.
  */
 
 import { isErasedPlaceholder } from "../../shared/subscribers";
 import { markDeliveryEvent } from "../db/sends";
-import { addSuppression } from "../db/subscribers";
+import { addSuppression, type ComplaintOutcome, complain } from "../db/subscribers";
 import { log } from "../lib/log";
 import type { DeliveryEvent } from "../providers/types";
 
 export interface ApplyResult {
   applied: number;
   suppressed: number;
+  /** Subscribers a complaint unsubscribed. */
+  unsubscribed: number;
 }
 
 export async function applyDeliveryEvents(
@@ -31,6 +36,7 @@ export async function applyDeliveryEvents(
   const now = Date.now();
   let applied = 0;
   let suppressed = 0;
+  let unsubscribed = 0;
   // Per send (the empty key for events that matched no delivery row), for the log lines.
   const bySend = new Map<
     string,
@@ -41,7 +47,7 @@ export async function applyDeliveryEvents(
       bounced: number;
       complained: number;
       bounce: number;
-      complaint: number;
+      complaint: Record<ComplaintOutcome, number>;
     }
   >();
 
@@ -64,7 +70,7 @@ export async function applyDeliveryEvents(
       bounced: 0,
       complained: 0,
       bounce: 0,
-      complaint: 0,
+      complaint: { unsubscribed: 0, late: 0, no_subscriber: 0 },
     };
     bySend.set(matched.sendId ?? "", tally);
     tally[e.type] += 1;
@@ -76,18 +82,22 @@ export async function applyDeliveryEvents(
 
     // Prefer the matched delivery row's address, the form the list stores; fall back to
     // the event's own when nothing matched (a test send or a confirmation email). An
-    // id-keyed hard bounce or complaint thus still suppresses (I1) rather than slipping
+    // id-keyed hard bounce or complaint thus still acts (I1, I2) rather than slipping
     // through and letting the address be mailed again next post. A row an erasure left holds
-    // a placeholder, not an address, so the event's own address is the one suppressed: a
-    // bounce or complaint replaces the erased marker (SPEC §7), and with no address in the
-    // event there is nothing to suppress.
+    // a placeholder, not an address, so the event's own address is the one acted on, and
+    // with no address in the event there is nothing to act on.
     const email =
       matched.email !== null && !isErasedPlaceholder(matched.email) ? matched.email : e.email;
-    if (email && ((e.type === "bounced" && e.hard) || e.type === "complained")) {
-      const reason = e.type === "bounced" ? "bounce" : "complaint";
-      await addSuppression(db, email, reason, eventDetail(e) ?? undefined);
+    if (email && e.type === "bounced" && e.hard) {
+      await addSuppression(db, email, "bounce", eventDetail(e) ?? undefined);
       suppressed += 1;
-      tally[reason] += 1;
+      tally.bounce += 1;
+    } else if (email && e.type === "complained") {
+      // Dated by the send its delivery belongs to; one matching no delivery (a confirmation
+      // email, or a test) can't be dated, so it applies to whoever holds the address.
+      const outcome = await complain(db, email, matched.sendId);
+      unsubscribed += outcome === "unsubscribed" ? 1 : 0;
+      tally.complaint[outcome] += 1;
     }
   }
 
@@ -101,18 +111,22 @@ export async function applyDeliveryEvents(
       recorded: t.recorded,
       unchanged: t.unchanged,
     });
-    if (t.bounce + t.complaint > 0) {
-      log.info("suppression.added", {
+    if (t.bounce > 0) {
+      log.info("suppression.added", { ...tags, source: "webhook", count: t.bounce });
+    }
+    const c = t.complaint;
+    if (c.unsubscribed + c.late + c.no_subscriber > 0) {
+      log.info("subscriber.complained", {
         ...tags,
-        source: "webhook",
-        count: t.bounce + t.complaint,
-        bounce: t.bounce,
-        complaint: t.complaint,
+        count: c.unsubscribed + c.late + c.no_subscriber,
+        unsubscribed: c.unsubscribed,
+        late: c.late,
+        no_subscriber: c.no_subscriber,
       });
     }
   }
 
-  return { applied, suppressed };
+  return { applied, suppressed, unsubscribed };
 }
 
 function eventDetail(e: DeliveryEvent): string | null {

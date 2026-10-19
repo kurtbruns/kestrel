@@ -12,19 +12,18 @@ const config = () => getConfig(env);
 
 // The seeded publication's shape. The list is imported, grows in a continuous confirmed
 // stream to today, and churns across four completed sends, so the mailable audience
-// fluctuates 140 → 141 → 142 → 148 and settles at 155 today (157 confirmed, 2 of them suppressed). These
+// fluctuates 140 → 141 → 142 → 148 and settles at 155 today (156 confirmed, 1 of them suppressed). These
 // are the numbers the lifecycle produces; they lock the "frozen at send time" behavior, so a
 // regression is obvious.
-const CONFIRMED = 157;
+const CONFIRMED = 156;
 const PENDING = 3;
-// Fifteen readers who left, and the operator's own test address, unsubscribed after the test
-// send as Verify it works has them do.
-const UNSUBSCRIBED = 16;
-// A bounce and a complaint on confirmed subscribers, plus a suppression on each other consent
-// state (an unsubscribed and a pending address blocked by hand, and an erased person who
-// subscribed again), which shadow no one.
-const SUPPRESSED_CONFIRMED = 2;
-const SUPPRESSED = 5;
+// Fifteen readers who left, one reader who complained, and the operator's own test address,
+// unsubscribed after the test send as Verify it works has them do.
+const UNSUBSCRIBED = 17;
+// A bounce on a confirmed subscriber, plus a block on an unsubscribed and a pending address,
+// which shadow no one.
+const SUPPRESSED_CONFIRMED = 1;
+const SUPPRESSED = 3;
 const AUDIENCE_NOW = CONFIRMED - SUPPRESSED_CONFIRMED; // 155
 const SENT_RECIPIENTS = [140, 141, 142, 148]; // oldest → newest
 // Before them, the operator's email-only test send, to their own second address (SPEC §5).
@@ -106,7 +105,7 @@ describe("dev seed (Field Notes dataset)", () => {
     expect(scheduled.recipient_count).toBe(AUDIENCE_NOW);
   });
 
-  it("puts a suppression on every consent state, each reason once or more", async () => {
+  it("puts a suppression on every consent state, and shows each reason for leaving (SPEC §7)", async () => {
     await seedDatabase(env, config());
     const { results } = await env.DB.prepare(
       `SELECT s.status, x.reason, x.detail, x.created_at, s.created_at AS joined
@@ -120,15 +119,22 @@ describe("dev seed (Field Notes dataset)", () => {
     }>();
     expect(results.map((r) => `${r.status}/${r.reason}`)).toEqual([
       "confirmed/bounce",
-      "confirmed/complaint",
-      "pending/erased",
       "pending/manual",
       "unsubscribed/manual",
     ]);
-    // The erasure's marker predates the sign-up that came after it, and holds nothing more.
-    const erased = results.find((r) => r.reason === "erased")!;
-    expect(erased.created_at).toBeLessThan(erased.joined);
-    expect(erased.detail).toBeNull();
+    const { results: causes } = await env.DB.prepare(
+      "SELECT status, unsubscribe_cause AS cause, COUNT(*) AS n FROM subscribers WHERE unsubscribe_cause IS NOT NULL GROUP BY status, cause ORDER BY status, cause",
+    ).all<{ status: string; cause: string; n: number }>();
+    expect(causes.map((r) => `${r.status}/${r.cause}`)).toEqual([
+      "pending/erased",
+      "unsubscribed/complaint",
+      "unsubscribed/reader",
+    ]);
+    // The erased person who signed up again left before the sign-up that came after it.
+    const returning = await env.DB.prepare(
+      "SELECT created_at, unsubscribed_at FROM subscribers WHERE unsubscribe_cause = 'erased'",
+    ).first<{ created_at: number; unsubscribed_at: number }>();
+    expect(returning!.unsubscribed_at).toBeLessThan(returning!.created_at);
     // A block by hand comes after the unsubscribe it follows, and nothing is dated ahead.
     const blocked = await env.DB.prepare(
       `SELECT x.created_at, s.unsubscribed_at FROM suppressions x
@@ -167,12 +173,12 @@ describe("dev seed (Field Notes dataset)", () => {
     const firstEmails = (await deliveriesFor(sent[0]!.id)).map((r) => r.email);
     expect(firstEmails.some((e) => !nowMailable.has(e))).toBe(true);
 
-    // The bounce and complaint on the second post shadow those two confirmed addresses out of
-    // the current audience — yet they remain in its delivery record, carrying the event
-    // that produced their suppression.
+    // The bounce and complaint on the second post take those two addresses out of the current
+    // audience, one suppressed and one unsubscribed, yet they remain in its delivery record,
+    // carrying the event that took them out.
     const secondRows = await deliveriesFor(sent[1]!.id);
     const shadowed = secondRows.filter((r) => r.event === "bounced" || r.event === "complained");
-    expect(shadowed).toHaveLength(SUPPRESSED_CONFIRMED);
+    expect(shadowed).toHaveLength(2);
     for (const r of shadowed) {
       expect(nowMailable.has(r.email)).toBe(false);
     }

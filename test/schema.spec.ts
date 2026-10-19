@@ -303,28 +303,23 @@ describe("schema (0001_init)", () => {
       await delivery("lc1", "erased:0f3a9c2e7b1d4e8f");
     });
 
-    it("admits only the known suppression reasons and delivery events", async () => {
-      for (const reason of [
-        "bounce",
-        "complaint",
-        "manual",
-        "erased",
-        "import_bounce",
-        "import_complaint",
-      ]) {
+    it("admits only the suppression reasons 0012 left, the sender's side, and the known delivery events", async () => {
+      for (const reason of ["bounce", "manual", "import_bounce"]) {
         await env.DB.prepare(
           "INSERT INTO suppressions (email, reason, created_at) VALUES (?, ?, ?)",
         )
           .bind(`${reason}@example.com`, reason, now)
           .run();
       }
-      await expect(
-        env.DB.prepare(
-          "INSERT INTO suppressions (email, reason, created_at) VALUES ('x@example.com', 'spam', ?)",
-        )
-          .bind(now)
-          .run(),
-      ).rejects.toThrow(/CHECK/);
+      for (const reason of ["complaint", "erased", "import_complaint", "spam"]) {
+        await expect(
+          env.DB.prepare(
+            "INSERT INTO suppressions (email, reason, created_at) VALUES ('x@example.com', ?, ?)",
+          )
+            .bind(reason, now)
+            .run(),
+        ).rejects.toThrow(/CHECK/);
+      }
       await aSend("ev1");
       await expect(delivery("ev1", "ev@example.com", "event", ["opened"])).rejects.toThrow(/CHECK/);
     });
@@ -437,5 +432,143 @@ describe("schema (0011_sends_render_warnings)", () => {
       render_warnings: string;
     }>();
     expect(row?.render_warnings).toBe("[]");
+  });
+});
+
+describe("schema (0012_unsubscribe_cause)", () => {
+  it("admits only the five reasons for leaving (SPEC §7)", async () => {
+    const insert = (cause: string) =>
+      env.DB.prepare(
+        "INSERT INTO subscribers (id, email, status, unsub_token, created_at, unsubscribe_cause) VALUES (?, ?, 'unsubscribed', ?, 0, ?)",
+      )
+        .bind(cause, `${cause}@example.com`, `u-${cause}`, cause)
+        .run();
+    for (const cause of ["reader", "publisher", "complaint", "erased", "import"]) {
+      await insert(cause);
+    }
+    await expect(insert("spam")).rejects.toThrow(/CHECK/);
+  });
+
+  it("turns each complaint into an unsubscribe by it and each erasure into an address-only one, keeping bounces and blocks (SPEC §7)", async () => {
+    // The suppressions as they stood before it, in the table's old shape. The live table is
+    // set aside and the migration's own statements run over the old one, which they rebuild.
+    await env.DB.prepare("ALTER TABLE suppressions RENAME TO suppressions_now").run();
+    let migrated = false;
+    try {
+      await env.DB.prepare(
+        `CREATE TABLE suppressions (
+           email TEXT PRIMARY KEY, reason TEXT NOT NULL, detail TEXT, created_at INTEGER NOT NULL
+         ) STRICT`,
+      ).run();
+      await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO subscribers (id, email, status, unsub_token, created_at, confirmed_at, unsubscribed_at,
+                                   origin, opt_in, consent_evidence, confirm_token)
+           VALUES ('1', 'conf-c@x.io', 'confirmed', 'u1', 1, 2, NULL, 'kestrel', 'double', NULL, NULL),
+                  ('2', 'left-c@x.io', 'unsubscribed', 'u2', 1, 2, 5, 'kestrel', 'double', NULL, NULL),
+                  ('3', 'conf-e@x.io', 'confirmed', 'u3', 1, 2, NULL, 'sendy', 'single', '{"ip":"1.2.3.4"}', NULL),
+                  ('4', 'pend-e@x.io', 'pending', 'u4', 7, NULL, NULL, 'kestrel', 'double', NULL, 'c4'),
+                  ('5', 'left@x.io', 'unsubscribed', 'u5', 1, 2, 3, 'kestrel', 'double', NULL, NULL),
+                  ('6', 'back@x.io', 'pending', 'u6', 1, NULL, 3, 'kestrel', 'double', NULL, 'c6'),
+                  ('7', 'conf@x.io', 'confirmed', 'u7', 1, 2, NULL, 'kestrel', 'double', NULL, NULL)`,
+        ),
+        env.DB.prepare(
+          `INSERT INTO suppressions (email, reason, detail, created_at)
+           VALUES ('conf-c@x.io', 'complaint', 'abuse', 10),
+                  ('left-c@x.io', 'import_complaint', 'imported', 11),
+                  ('ghost-c@x.io', 'complaint', NULL, 12),
+                  ('conf-e@x.io', 'erased', NULL, 13),
+                  ('pend-e@x.io', 'erased', NULL, 4),
+                  ('ghost-e@x.io', 'erased', NULL, 14),
+                  ('b@x.io', 'bounce', '550', 15),
+                  ('m@x.io', 'manual', 'by hand', 16),
+                  ('ib@x.io', 'import_bounce', 'imported', 17)`,
+        ),
+      ]);
+      const migration = FOLDER.find((m) => m.name === "0012_unsubscribe_cause.sql");
+      const statements = (migration?.queries ?? []).filter(
+        (q) => !q.startsWith("ALTER TABLE subscribers ADD COLUMN"),
+      );
+      expect(statements.length).toBeGreaterThan(5);
+      for (const q of statements) {
+        await env.DB.prepare(q).run();
+      }
+      migrated = true;
+    } finally {
+      // The table the migration rebuilt is the live one now; had it failed, put the live one
+      // back, so the other tests still have it.
+      if (!migrated) {
+        await env.DB.prepare("DROP TABLE IF EXISTS suppressions").run();
+        await env.DB.prepare("ALTER TABLE suppressions_now RENAME TO suppressions").run();
+      }
+    }
+    await env.DB.prepare("DROP TABLE IF EXISTS suppressions_now").run();
+
+    const { results: subscribers } = await env.DB.prepare(
+      `SELECT email, status, unsubscribe_cause, created_at, confirmed_at, unsubscribed_at, origin,
+              opt_in, consent_evidence, confirm_token
+         FROM subscribers ORDER BY email`,
+    ).all<Record<string, unknown>>();
+    const by = Object.fromEntries(subscribers.map((r) => [r.email, r]));
+    const stripped = {
+      status: "unsubscribed",
+      unsubscribe_cause: "erased",
+      confirmed_at: null,
+      origin: "unknown",
+      opt_in: "unknown",
+      consent_evidence: null,
+      confirm_token: null,
+    };
+    expect(by["conf-c@x.io"]).toMatchObject({
+      status: "unsubscribed",
+      unsubscribe_cause: "complaint",
+      unsubscribed_at: 10,
+    });
+    expect(by["left-c@x.io"]).toMatchObject({
+      status: "unsubscribed",
+      unsubscribe_cause: "complaint",
+      unsubscribed_at: 5,
+    });
+    expect(by["ghost-c@x.io"]).toMatchObject({
+      status: "unsubscribed",
+      unsubscribe_cause: "complaint",
+      created_at: 12,
+      unsubscribed_at: 12,
+      origin: "unknown",
+    });
+    expect(by["conf-e@x.io"]).toMatchObject({ ...stripped, created_at: 13, unsubscribed_at: 13 });
+    expect(by["ghost-e@x.io"]).toMatchObject({ ...stripped, created_at: 14, unsubscribed_at: 14 });
+    expect(by["pend-e@x.io"]).toMatchObject({
+      status: "pending",
+      unsubscribe_cause: "erased",
+      unsubscribed_at: 4,
+      confirm_token: "c4",
+    });
+    expect(by["left@x.io"]).toMatchObject({ unsubscribe_cause: "reader" });
+    expect(by["back@x.io"]).toMatchObject({ status: "pending", unsubscribe_cause: "reader" });
+    expect(by["conf@x.io"]).toMatchObject({ status: "confirmed", unsubscribe_cause: null });
+    // Every token is still its own: an erasure's is a fresh one no mail carries.
+    const { results: tokens } = await env.DB.prepare(
+      "SELECT unsub_token FROM subscribers WHERE email IN ('conf-e@x.io', 'ghost-e@x.io', 'ghost-c@x.io')",
+    ).all<{ unsub_token: string }>();
+    expect(tokens.map((t) => t.unsub_token)).not.toContain("u3");
+    expect(new Set(tokens.map((t) => t.unsub_token)).size).toBe(3);
+
+    expect(
+      (
+        await env.DB.prepare(
+          "SELECT email, reason, detail, created_at FROM suppressions ORDER BY email",
+        ).all()
+      ).results,
+    ).toEqual([
+      { email: "b@x.io", reason: "bounce", detail: "550", created_at: 15 },
+      { email: "ib@x.io", reason: "import_bounce", detail: "imported", created_at: 17 },
+      { email: "m@x.io", reason: "manual", detail: "by hand", created_at: 16 },
+    ]);
+    await expect(
+      env.DB.prepare(
+        "INSERT INTO suppressions (email, reason, created_at) VALUES ('c@x.io', 'complaint', 1)",
+      ).run(),
+    ).rejects.toThrow(/CHECK/);
   });
 });

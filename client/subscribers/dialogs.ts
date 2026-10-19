@@ -3,11 +3,10 @@
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
 import type { OptIn } from "../../shared/imports";
-import { SUPPRESSION_FLAG } from "../../shared/subscriber_meanings";
+import { CAUSE_MEANING, SUPPRESSION_FLAG } from "../../shared/subscriber_meanings";
 import type {
   BlockResponse,
   EraseResponse,
-  ErasureAcknowledgementRequired,
   LiftSuppressionResponse,
   SubscribeAction,
   SubscribeResponse,
@@ -51,24 +50,12 @@ export function addSubscriberModal(onDone: () => void, signal: AbortSignal): voi
         return;
       }
       try {
-        const add = (acknowledge: boolean) =>
-          api<SubscribeResponse>("/api/subscribers", {
-            method: "POST",
-            json: acknowledge ? { email: addr, acknowledge_erasure: true } : { email: addr },
-          });
-        let r: SubscribeResponse;
-        try {
-          r = await add(false);
-        } catch (e) {
-          const erased = erasureRefusal(e);
-          if (!erased) {
-            throw e;
-          }
-          if (!(await confirmErasedAdd(addr, erased.erased_at, signal))) {
-            return;
-          }
-          r = await add(true);
-        }
+        // Someone who left by a complaint or an erasure is refused (`signup_required`), and
+        // the refusal's message, shown as it stands, says to have them subscribe themselves.
+        const r = await api<SubscribeResponse>("/api/subscribers", {
+          method: "POST",
+          json: { email: addr },
+        });
         m.close();
         toast(addedMessage(addr, r.action));
         onDone();
@@ -77,47 +64,6 @@ export function addSubscriberModal(onDone: () => void, signal: AbortSignal): voi
         m.error(describeError(e), e instanceof ApiError && e.field === "email" ? input : undefined);
       }
     });
-}
-
-/** The server's refusal to mail an erased address without the publisher's say-so, or null. */
-function erasureRefusal(e: unknown): ErasureAcknowledgementRequired | null {
-  return e instanceof ApiError && e.status === 409 && e.code === "erasure_acknowledgement_required"
-    ? (e.data as ErasureAcknowledgementRequired)
-    : null;
-}
-
-/**
- * Asked over the Add dialog when the address was erased (SPEC §7): the person may come back,
- * but on their own wish, so the publisher confirms they asked. Resolves true to send the
- * confirmation; false (Cancel, Escape, or leaving the page) leaves the Add dialog as it was.
- */
-function confirmErasedAdd(addr: string, erasedAt: number, signal: AbortSignal): Promise<boolean> {
-  return new Promise((resolve) => {
-    const m = modal(
-      html`<h3>Send to an erased address?</h3><p class="hint"><strong>${addr}</strong> was erased at the person’s request on ${fmt(erasedAt)}. Send a confirmation only if they’ve asked to join again. They rejoin only by confirming it, which lifts the erasure.</p><div class="actions"><button type="button" id="eaCancel">Cancel</button><button type="button" class="primary" id="eaGo">Send confirmation</button></div>`,
-      signal,
-    );
-    // The page is already gone, so the dialog never showed: nothing was confirmed.
-    if (!m.el.isConnected) {
-      resolve(false);
-      return;
-    }
-    let answer = false;
-    $("#eaCancel", m.el).onclick = m.close;
-    $("#eaGo", m.el).onclick = () => {
-      answer = true;
-      m.close();
-    };
-    // However it closes (a button, Escape, the backdrop, the page going), it answers once.
-    const obs = new MutationObserver(() => {
-      if (!m.el.isConnected) {
-        obs.disconnect();
-        resolve(answer);
-      }
-    });
-    obs.observe(document.body, { childList: true });
-    $("#eaCancel", m.el).focus();
-  });
 }
 
 /** What the Add told the admin: a confirmation went, or why none was due. A refused
@@ -148,12 +94,10 @@ const OPT_IN_WORDS: Record<OptIn, string> = {
 };
 
 /**
- * One subscriber, on request: how they joined, when, and the evidence (SPEC §7). It only
- * shows: nothing in it can be changed, since it is the record of how they came to be here.
- */
-/**
- * View subscriber: how they joined and, when the address is suppressed, its flag and the
- * provider's or publisher's words for it, which the list's plain-label pills don't carry.
+ * View subscriber: how they joined, when, and the evidence (SPEC §7), why they left when they
+ * have, and, when the address is suppressed, its flag and the provider's or publisher's words
+ * for it, which the list's plain-label pills don't carry. It only shows: nothing in it can be
+ * changed, since it is the record of how they came to be here.
  */
 export function viewSubscriberModal(
   sub: Subscriber,
@@ -162,10 +106,11 @@ export function viewSubscriberModal(
 ): void {
   const evidence = evidenceText(sub.consent_evidence);
   const imported = sub.import_id !== null;
+  const erased = sub.status === "unsubscribed" && sub.unsubscribe_cause === "erased";
   const m = modal(
     html`<h3 class="sub-title">${sub.email}</h3><p class="hint">${STATUS_WORDS[sub.status]}</p>
     <dl class="sub-dl">
-      <dt>How they joined</dt><dd>${joinedVia(sub) ?? (sub.status === "pending" ? "Signed up here, not confirmed yet" : "Signed up here, never confirmed")}</dd>
+      <dt>How they joined</dt><dd>${erased ? "Not kept: they were erased" : (joinedVia(sub) ?? (sub.status === "pending" ? "Signed up here, not confirmed yet" : "Signed up here, never confirmed"))}</dd>
       ${
         imported
           ? html`<dt>Origin</dt><dd>${originName(sub.origin) ?? "Unknown"}</dd>
@@ -181,6 +126,7 @@ export function viewSubscriberModal(
       }</dd>
       <dt>Confirmed</dt><dd>${fmt(sub.confirmed_at)}</dd>
       ${sub.unsubscribed_at ? html`<dt>Left</dt><dd>${fmt(sub.unsubscribed_at)}</dd>` : null}
+      ${sub.unsubscribe_cause ? html`<dt>Why they left</dt><dd>${CAUSE_MEANING[sub.unsubscribe_cause]}</dd>` : null}
       <dt>Evidence</dt><dd>${evidence ? html`<pre class="sub-evidence">${evidence}</pre>` : "None recorded"}</dd>
       ${suppression ? html`<dt>Suppressed</dt><dd>${suppression.label}${suppression.detail ? html`: ${suppression.detail}` : null}</dd>` : null}
     </dl>
@@ -318,7 +264,7 @@ export function confirmClear(sub: Subscriber, onDone: () => void, signal: AbortS
  */
 export function confirmErase(sub: Subscriber, onDone: () => void, signal: AbortSignal): void {
   const m = modal(
-    html`<h3>Erase this subscriber?</h3><p class="hint">Deletes <strong>${sub.email}</strong> and how they joined, and past sends show an erased recipient in its place. The address is kept only so it’s never mailed again. This can’t be undone. They can still rejoin by subscribing and confirming themselves.</p><div class="actions"><button type="button" id="eCancel">Cancel</button><button type="button" class="danger" id="eGo">Erase</button></div>`,
+    html`<h3>Erase this subscriber?</h3><p class="hint">Unsubscribes <strong>${sub.email}</strong> and deletes how they joined and the evidence for it, and past sends show an erased recipient in its place. Only the address is kept, so it’s never mailed again. This can’t be undone. They can still rejoin by subscribing and confirming themselves, but you can’t add them back.</p><div class="actions"><button type="button" id="eCancel">Cancel</button><button type="button" class="danger" id="eGo">Erase</button></div>`,
     signal,
   );
   const go = $<HTMLButtonElement>("#eGo", m.el);
@@ -341,14 +287,13 @@ export function confirmErase(sub: Subscriber, onDone: () => void, signal: AbortS
 const KEPT_SUPPRESSION: Record<string, string> = {
   bounce: "bounce",
   import_bounce: "bounce",
-  complaint: "complaint",
-  import_complaint: "complaint",
   manual: "block",
 };
 
-/** What the erasure left: the marker, or the bounce, complaint, or block the address had. */
-function erasedMessage({ erased }: EraseResponse): string {
-  return erased.suppression === "erased"
-    ? `Erased ${erased.email}`
-    : `Erased ${erased.email}. Its ${KEPT_SUPPRESSION[erased.suppression] ?? "suppression"} still stands`;
+/** What the erasure left: the address alone, beside any bounce or block it had. */
+function erasedMessage({ subscriber }: EraseResponse): string {
+  const kept = subscriber.suppression;
+  return kept
+    ? `Erased ${subscriber.email}. Its ${KEPT_SUPPRESSION[kept.reason] ?? "suppression"} still stands`
+    : `Erased ${subscriber.email}`;
 }

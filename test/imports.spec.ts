@@ -43,6 +43,15 @@ function csvFile(lines: string[], name = "list.csv") {
   return { name, text: `${[HEADER, ...lines].join("\r\n")}\r\n` };
 }
 
+/** A file in the format's second version: why an unsubscribed row left, in its own column. */
+function csvFile2(lines: string[], name = "list.csv") {
+  const header = "email,status,opt_in,origin,unsubscribe_cause,suppression,format";
+  return {
+    name,
+    text: `${[header, ...lines.map((l) => `${l},${IMPORT_FORMAT}`)].join("\r\n")}\r\n`,
+  };
+}
+
 function plan(body: unknown, headers: Record<string, string> = JSON_AUTH): Promise<Response> {
   return SELF.fetch(`${base}/api/imports/plan`, {
     method: "POST",
@@ -88,7 +97,7 @@ function counts(over: Partial<OutcomeCounts>): OutcomeCounts {
 
 async function subscriberRow(email: string) {
   return env.DB.prepare(
-    "SELECT status, origin, opt_in, consent_evidence, import_id, confirm_token, confirmed_at, unsubscribed_at FROM subscribers WHERE email = ?",
+    "SELECT status, origin, opt_in, consent_evidence, import_id, confirm_token, confirmed_at, unsubscribed_at, unsubscribe_cause FROM subscribers WHERE email = ?",
   )
     .bind(email)
     .first<Record<string, unknown>>();
@@ -109,11 +118,11 @@ async function seedPending(email: string): Promise<void> {
     .run();
 }
 
-async function seedUnsubscribed(email: string): Promise<void> {
+async function seedUnsubscribed(email: string, cause = "reader"): Promise<void> {
   await env.DB.prepare(
-    "INSERT INTO subscribers (id, email, status, unsub_token, created_at, unsubscribed_at) VALUES (?, ?, 'unsubscribed', ?, ?, ?)",
+    "INSERT INTO subscribers (id, email, status, unsub_token, created_at, unsubscribed_at, unsubscribe_cause) VALUES (?, ?, 'unsubscribed', ?, ?, ?, ?)",
   )
-    .bind(`id-${email}`, email, `uns-${email}`, Date.now(), Date.now())
+    .bind(`id-${email}`, email, `uns-${email}`, Date.now(), Date.now(), cause)
     .run();
 }
 
@@ -418,7 +427,7 @@ describe("what an import does to each address (SPEC §7)", () => {
     await seedPending("pending@x.io");
     await seedConfirmed(["native@x.io", "leaving@x.io", "newer@x.io"]);
     await seedUnsubscribed("left@x.io");
-    await subscribers.addSuppression(env.DB, "erased@x.io", "erased");
+    await subscribers.addSuppression(env.DB, "blocked@x.io", "manual");
     const file = csvFile([
       `new@x.io,subscribed,double,sendy,,2024-01-01T00:00:00Z,2024-01-02T00:00:00Z,,,"{""ip"":""1.2.3.4""}"`,
       "pending@x.io,subscribed,single,mailchimp,,,,,,",
@@ -427,7 +436,7 @@ describe("what an import does to each address (SPEC §7)", () => {
       "gone@x.io,unsubscribed,unknown,sendy,,,,2024-05-05T00:00:00Z,,",
       `newer@x.io,unsubscribed,unknown,sendy,,,,${yearAgo},,`,
       "left@x.io,subscribed,double,sendy,,,,,,",
-      "erased@x.io,subscribed,double,sendy,,,,,,",
+      "blocked@x.io,subscribed,double,sendy,,,,,,",
       "bounced@x.io,none,unknown,sendy,bounce,,,,,",
       "maybe@x.io,pending,unknown,sendy,,,,,,",
       "nobody,subscribed,double,sendy,,,,,,",
@@ -483,17 +492,22 @@ describe("what an import does to each address (SPEC §7)", () => {
       opt_in: "double",
       import_id: null,
     });
-    expect(await subscriberRow("leaving@x.io")).toMatchObject({ status: "unsubscribed" });
+    // A row that doesn't say why someone left records them as having left elsewhere.
+    expect(await subscriberRow("leaving@x.io")).toMatchObject({
+      status: "unsubscribed",
+      unsubscribe_cause: "import",
+    });
     expect(await subscriberRow("gone@x.io")).toMatchObject({
       status: "unsubscribed",
+      unsubscribe_cause: "import",
       import_id: id,
       unsubscribed_at: Date.parse("2024-05-05T00:00:00Z"),
     });
     expect(await subscriberRow("newer@x.io")).toMatchObject({ status: "confirmed" });
     expect(await subscriberRow("left@x.io")).toMatchObject({ status: "unsubscribed" });
-    // An erased address listed as subscribed is never added, and its marker survives.
-    expect(await subscriberRow("erased@x.io")).toBeNull();
-    expect(await suppressionOf("erased@x.io")).toBe("erased");
+    // A blocked address listed as subscribed is never added, and its block survives.
+    expect(await subscriberRow("blocked@x.io")).toBeNull();
+    expect(await suppressionOf("blocked@x.io")).toBe("manual");
     expect(await suppressionOf("bounced@x.io")).toBe("import_bounce");
     expect(await subscriberRow("bounced@x.io")).toBeNull();
     expect(await subscriberRow("maybe@x.io")).toBeNull();
@@ -503,7 +517,7 @@ describe("what an import does to each address (SPEC §7)", () => {
 
   it("applies a suppression and a status change on one row, and reports both", async () => {
     await seedConfirmed("a@x.io");
-    const file = csvFile(["a@x.io,unsubscribed,unknown,sendy,complaint,,,,,"]);
+    const file = csvFile(["a@x.io,unsubscribed,unknown,sendy,bounce,,,,,"]);
     const p = await planOk({ file });
     expect(p.counts).toEqual(counts({ unsubscribed: 1 }));
     expect(p.suppressions_added).toBe(1);
@@ -512,31 +526,81 @@ describe("what an import does to each address (SPEC §7)", () => {
     ]);
     await importFile(file);
     expect(await subscriberRow("a@x.io")).toMatchObject({ status: "unsubscribed" });
-    expect(await suppressionOf("a@x.io")).toBe("import_complaint");
+    expect(await suppressionOf("a@x.io")).toBe("import_bounce");
   });
 
   it("never replaces a suppression already here, the first one standing", async () => {
     await subscribers.addSuppression(env.DB, "a@x.io", "manual");
-    const p = await planOk({ file: csvFile(["a@x.io,none,unknown,sendy,complaint,,,,,"]) });
+    const p = await planOk({ file: csvFile(["a@x.io,none,unknown,sendy,bounce,,,,,"]) });
     expect(p.counts).toEqual(counts({ left_out: 1 }));
-    await importFile(csvFile(["a@x.io,none,unknown,sendy,complaint,,,,,"]));
+    await importFile(csvFile(["a@x.io,none,unknown,sendy,bounce,,,,,"]));
     expect(await suppressionOf("a@x.io")).toBe("manual");
   });
 
-  it("replaces an erased marker with a bounce or complaint, so the address is still sent no confirmation", async () => {
-    await subscribers.addSuppression(env.DB, "a@x.io", "erased");
-    await subscribers.addSuppression(env.DB, "b@x.io", "erased");
-    const file = csvFile([
-      "a@x.io,none,unknown,sendy,complaint,,,,,",
-      "b@x.io,subscribed,double,sendy,erased,,,,,",
+  it("records each unsubscribe with the cause the row gives, a complaint adding no suppression (SPEC §7)", async () => {
+    await seedConfirmed(["reader@x.io", "publisher@x.io", "complaint@x.io"]);
+    const file = csvFile2([
+      "reader@x.io,unsubscribed,unknown,sendy,reader,",
+      "publisher@x.io,unsubscribed,unknown,sendy,publisher,",
+      "complaint@x.io,unsubscribed,unknown,sendy,complaint,",
+      "new@x.io,unsubscribed,unknown,sendy,complaint,",
     ]);
     const p = await planOk({ file });
-    expect(p.counts).toEqual(counts({ suppressed: 1, kept_suppressed: 1 }));
+    expect(p.counts).toEqual(counts({ unsubscribed: 3, added_unsubscribed: 1 }));
+    expect(p.suppressions_added).toBe(0);
     await importFile(file);
-    expect(await suppressionOf("a@x.io")).toBe("import_complaint");
-    expect(await subscribers.blocksConfirmation(env.DB, "a@x.io")).toBe(true);
-    expect(await suppressionOf("b@x.io")).toBe("erased");
-    expect(await subscriberRow("b@x.io")).toBeNull();
+    for (const [email, cause] of [
+      ["reader@x.io", "reader"],
+      ["publisher@x.io", "publisher"],
+      ["complaint@x.io", "complaint"],
+      ["new@x.io", "complaint"],
+    ]) {
+      expect(await subscriberRow(email!)).toMatchObject({
+        status: "unsubscribed",
+        unsubscribe_cause: cause,
+      });
+      expect(await suppressionOf(email!)).toBeNull();
+    }
+  });
+
+  it("reads a version 1 complaint, on any status, as the row leaving by it (SPEC §7)", async () => {
+    await seedPending("a@x.io");
+    const file = csvFile([
+      "a@x.io,subscribed,unknown,sendy,complaint,,,,2025-02-02T12:00:00Z,",
+      "b@x.io,none,unknown,sendy,complaint,,,,,",
+    ]);
+    const p = await planOk({ file });
+    expect(p.counts).toEqual(counts({ unsubscribed: 1, added_unsubscribed: 1 }));
+    expect(p.attestation).toBeNull();
+    await importFile(file);
+    expect(await subscriberRow("a@x.io")).toMatchObject({
+      status: "unsubscribed",
+      unsubscribe_cause: "complaint",
+      unsubscribed_at: Date.parse("2025-02-02T12:00:00Z"),
+    });
+    expect(await subscriberRow("b@x.io")).toMatchObject({
+      status: "unsubscribed",
+      unsubscribe_cause: "complaint",
+    });
+    expect(await suppressionOf("a@x.io")).toBeNull();
+  });
+
+  it("keeps the stronger cause for someone already unsubscribed here, as when a person leaves again (SPEC §7)", async () => {
+    await seedUnsubscribed("weaker@x.io", "reader");
+    await seedUnsubscribed("stronger@x.io", "complaint");
+    const file = csvFile2([
+      "weaker@x.io,unsubscribed,unknown,sendy,complaint,",
+      "stronger@x.io,unsubscribed,unknown,sendy,publisher,",
+    ]);
+    const p = await planOk({ file });
+    expect(p.rows).toEqual([
+      { row: 1, email: "weaker@x.io", outcome: "unsubscribed", suppression_added: false },
+      { row: 2, email: "stronger@x.io", outcome: "unchanged", suppression_added: false },
+    ]);
+    const result = await importFile(file);
+    expect(result.differed).toEqual([]);
+    expect(await subscriberRow("weaker@x.io")).toMatchObject({ unsubscribe_cause: "complaint" });
+    expect(await subscriberRow("stronger@x.io")).toMatchObject({ unsubscribe_cause: "complaint" });
   });
 
   it("never confirms a reader who left and was put back to pending by the form (I2)", async () => {
@@ -906,7 +970,7 @@ describe("the list moving between the plan and the commit (SPEC §7)", () => {
     await env.DB.prepare(
       "UPDATE subscribers SET status = 'unsubscribed' WHERE email = 'reader@x.io'",
     ).run();
-    await subscribers.addSuppression(env.DB, "new@x.io", "complaint");
+    await subscribers.addSuppression(env.DB, "new@x.io", "bounce");
 
     const result = await commitImport(env.DB, p, HUMAN, Date.now());
     expect(await subscriberRow("reader@x.io")).toMatchObject({ status: "unsubscribed" });
@@ -1009,7 +1073,7 @@ async function seedAddresses(confirmed: string[], suppressedOnly: string[]): Pro
        SELECT 's-' || value, value, 'confirmed', 'u-' || value, 1, 2 FROM json_each(?)`,
     ).bind(JSON.stringify(confirmed)),
     env.DB.prepare(
-      "INSERT INTO suppressions (email, reason, created_at) SELECT value, 'complaint', 1 FROM json_each(?)",
+      "INSERT INTO suppressions (email, reason, created_at) SELECT value, 'manual', 1 FROM json_each(?)",
     ).bind(JSON.stringify(suppressedOnly)),
   ]);
 }
@@ -1045,15 +1109,19 @@ describe("the export, and the round trip (SPEC §7)", () => {
         "INSERT INTO subscribers (id, email, status, unsub_token, created_at, confirmed_at) VALUES ('2', 'bouncy@x.io', 'confirmed', 'u2', 1, 2)",
       ),
       env.DB.prepare(
-        "INSERT INTO subscribers (id, email, status, unsub_token, created_at, unsubscribed_at) VALUES ('3', 'left@x.io', 'unsubscribed', 'u3', 1, 3)",
+        "INSERT INTO subscribers (id, email, status, unsub_token, created_at, unsubscribed_at, unsubscribe_cause) VALUES ('3', 'left@x.io', 'unsubscribed', 'u3', 1, 3, 'reader')",
       ),
       env.DB.prepare(
         "INSERT INTO subscribers (id, email, status, unsub_token, created_at) VALUES ('4', 'waiting@x.io', 'pending', 'u4', 1)",
       ),
+      env.DB.prepare(
+        "INSERT INTO subscribers (id, email, status, unsub_token, created_at, confirmed_at, unsubscribed_at, unsubscribe_cause) VALUES ('5', 'complainer@x.io', 'unsubscribed', 'u5', 1, 2, 4, 'complaint')",
+      ),
     ]);
     await subscribers.addSuppression(env.DB, "bouncy@x.io", "bounce");
-    await subscribers.addSuppression(env.DB, "complainer@x.io", "complaint");
-    await subscribers.addSuppression(env.DB, "erased@x.io", "erased");
+    await subscribers.addSuppression(env.DB, "blocked@x.io", "manual");
+    await seedConfirmed("erased@x.io");
+    await subscribers.erase(env.DB, "id-erased@x.io");
   }
 
   it("writes the whole list in the format, including suppressed addresses with no subscriber", async () => {
@@ -1072,10 +1140,29 @@ describe("the export, and the round trip (SPEC §7)", () => {
       evidence: '{"confirmed_ip":"203.0.113.7"}',
       suppression: null,
     });
-    expect(byEmail["bouncy@x.io"]).toMatchObject({ status: "subscribed", suppression: "bounce" });
-    expect(byEmail["complainer@x.io"]).toMatchObject({ status: "none", suppression: "complaint" });
-    expect(byEmail["erased@x.io"]).toMatchObject({ status: "none", suppression: "erased" });
+    expect(byEmail["bouncy@x.io"]).toMatchObject({
+      status: "subscribed",
+      unsubscribe_cause: null,
+      suppression: "bounce",
+    });
+    expect(byEmail["blocked@x.io"]).toMatchObject({ status: "none", suppression: "manual" });
+    // Status, why they left, and the suppression each in a column of its own.
+    expect(byEmail["left@x.io"]).toMatchObject({
+      status: "unsubscribed",
+      unsubscribe_cause: "reader",
+      suppression: null,
+    });
+    expect(byEmail["erased@x.io"]).toMatchObject({
+      status: "unsubscribed",
+      unsubscribe_cause: "erased",
+      origin: "unknown",
+      opt_in: "unknown",
+      evidence: null,
+      confirmed_at: null,
+      suppression: null,
+    });
     expect(body.subscribers.map((r) => r.email)).toEqual([
+      "blocked@x.io",
       "bouncy@x.io",
       "complainer@x.io",
       "erased@x.io",
@@ -1085,30 +1172,37 @@ describe("the export, and the round trip (SPEC §7)", () => {
     ]);
   });
 
-  it("imports into a fresh instance with the same states and suppressions, confirmations arriving as imported", async () => {
+  it("imports into a fresh instance with the same states, reasons for leaving, and suppressions, confirmations arriving as imported", async () => {
     await seedList();
     const text = toImportCsv((await exportAll()).flatMap((p) => p.subscribers));
     await resetDatabase();
 
     const result = await importFile({ name: "export.csv", text });
     expect(result.counts).toEqual(
-      counts({ added_confirmed: 2, added_unsubscribed: 1, suppressed: 2, left_out: 1 }),
+      counts({ added_confirmed: 2, added_unsubscribed: 3, suppressed: 1, left_out: 1 }),
     );
     const { results: states } = await env.DB.prepare(
-      "SELECT email, status FROM subscribers ORDER BY email",
+      "SELECT email, status, unsubscribe_cause FROM subscribers ORDER BY email",
     ).all();
     expect(states).toEqual([
-      { email: "bouncy@x.io", status: "confirmed" },
-      { email: "left@x.io", status: "unsubscribed" },
-      { email: "native@x.io", status: "confirmed" },
+      { email: "bouncy@x.io", status: "confirmed", unsubscribe_cause: null },
+      { email: "complainer@x.io", status: "unsubscribed", unsubscribe_cause: "complaint" },
+      { email: "erased@x.io", status: "unsubscribed", unsubscribe_cause: "erased" },
+      { email: "left@x.io", status: "unsubscribed", unsubscribe_cause: "reader" },
+      { email: "native@x.io", status: "confirmed", unsubscribe_cause: null },
     ]);
+    // An erasure arrives with its address alone, naming no import.
+    expect(await subscriberRow("erased@x.io")).toMatchObject({
+      origin: "unknown",
+      import_id: null,
+      consent_evidence: null,
+    });
     const { results: suppressions } = await env.DB.prepare(
       "SELECT email, reason FROM suppressions ORDER BY email",
     ).all();
     expect(suppressions).toEqual([
+      { email: "blocked@x.io", reason: "manual" },
       { email: "bouncy@x.io", reason: "import_bounce" },
-      { email: "complainer@x.io", reason: "import_complaint" },
-      { email: "erased@x.io", reason: "erased" },
     ]);
     expect(await subscriberRow("native@x.io")).toMatchObject({
       origin: "kestrel",

@@ -159,9 +159,9 @@ function computeHealth(live: SendView[], setupSaysNotConnected = false): HealthA
     });
   }
   // No receipts (SPEC §8): a recent send that has heard nothing back for anyone the
-  // provider took, long after dispatch, so its events may not be reaching the app and its
-  // bounces and complaints suppress no one. One line, since one broken destination silences
-  // every send alike.
+  // provider took, long after dispatch, so its events may not be reaching the app, its
+  // bounces suppress no one, and its complaints unsubscribe no one. One line, since one
+  // broken destination silences every send alike.
   const silent = live.flatMap((s) => {
     const c = conditionOf(s, "no_receipts");
     return c ? [{ s, c }] : [];
@@ -173,7 +173,7 @@ function computeHealth(live: SendView[], setupSaysNotConnected = false): HealthA
       text:
         silent.length === 1
           ? html`<a href="#/sent/${firstSilent.s.id}">${firstSilent.s.subject}</a>: ${firstSilent.c.message}`
-          : html`<a href="#/sent">${silent.length} sends</a> have had no delivery receipt long after they went out. The provider's events may not be reaching this app, so its bounces and complaints suppress no one.`,
+          : html`<a href="#/sent">${silent.length} sends</a> have had no delivery receipt long after they went out. The provider's events may not be reaching this app, so its bounces suppress no one and its complaints unsubscribe no one.`,
     });
   }
   if (notConnected && !held.length && !setupSaysNotConnected) {

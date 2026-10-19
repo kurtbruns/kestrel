@@ -29,6 +29,7 @@ const subscriber = (over: Partial<Subscriber>): Subscriber => ({
   created_at: 1,
   confirmed_at: 1,
   unsubscribed_at: null,
+  unsubscribe_cause: null,
   origin: "kestrel",
   opt_in: "double",
   consent_evidence: null,
@@ -129,18 +130,28 @@ describe("subscribers view", () => {
     expect(menuOf("s1")).toEqual(["View subscriber", "Unsubscribe", "Block", "Erase"]);
     // Bounced: already suppressed, so nothing to block; a bounce is cleared, not unblocked.
     expect(menuOf("s2")).toEqual(["View subscriber", "Unsubscribe", "Clear", "Erase"]);
-    expect(menuOf("s3")).toEqual(["View subscriber", "Block", "Erase"]); // pending: nothing to unsubscribe
+    // Pending: they can ask to leave before they ever confirm (SPEC §7).
+    expect(menuOf("s3")).toEqual(["View subscriber", "Unsubscribe", "Block", "Erase"]);
     expect(fake.unhandled).toEqual([]);
   });
 
   it("erases from the row menu after the dialog's confirmation, and reloads the list", async () => {
+    const stripped = subscriber({
+      id: "s3",
+      email: "<script>@b.c",
+      status: "unsubscribed",
+      unsubscribe_cause: "erased",
+      origin: "unknown",
+      opt_in: "unknown",
+      confirmed_at: null,
+    });
     let erased = false;
     fake = fakeApi([
       {
         path: "/api/subscribers",
         reply: () => ({
           counts,
-          subscribers: erased ? subs.filter((s) => s.id !== "s3") : subs,
+          subscribers: erased ? [subs[0], subs[1], stripped] : subs,
           page,
         }),
       },
@@ -149,7 +160,7 @@ describe("subscribers view", () => {
         path: "/api/subscribers/s3/erase",
         reply: () => {
           erased = true;
-          return { erased: { email: "<script>@b.c", deliveries: 0, suppression: "erased" } };
+          return { subscriber: stripped, deliveries: 0 };
         },
       },
     ]);
@@ -160,7 +171,10 @@ describe("subscribers view", () => {
     $("#eGo").click();
     await settle();
     expect($("#toasts").textContent).toMatch(/Erased <script>@b\.c/);
-    expect($$("tr[data-id]")).toHaveLength(2);
+    // Still on the list, unsubscribed by the erasure, and nothing more to erase.
+    expect($("tr[data-id='s3'] td:nth-child(2)").textContent).toBe("unsubscribed erased");
+    $("tr[data-id='s3'] [data-menu]").click();
+    expect($$(".menu .menu-item").map((b) => b.textContent)).toEqual(["View subscriber", "Block"]);
     expect(fake.unhandled).toEqual([]);
   });
 
@@ -380,7 +394,7 @@ describe("subscribers view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("clears a bounce only after a Danger confirmation, and offers nothing on a complaint or an erasure's marker (SPEC §7)", async () => {
+  it("clears a bounce only after a Danger confirmation, and lifts nothing on someone who left by a complaint (SPEC §7)", async () => {
     fake = fakeApi([
       {
         path: "/api/subscribers",
@@ -388,8 +402,8 @@ describe("subscribers view", () => {
           counts,
           subscribers: [
             subs[1],
-            { ...subs[2], suppression: { reason: "import_complaint", detail: null } },
-            { ...subs[0], suppression: { reason: "erased", detail: null } },
+            { ...subs[2], status: "unsubscribed", unsubscribe_cause: "complaint" },
+            { ...subs[0], suppression: { reason: "import_bounce", detail: null } },
           ],
           page,
         }),
@@ -408,8 +422,8 @@ describe("subscribers view", () => {
       document.querySelector<HTMLElement>(".menu-overlay")?.click();
       return items;
     };
-    expect(menuOf("s1")).toEqual(["View subscriber", "Unsubscribe", "Erase"]);
-    expect(menuOf("s3")).toEqual(["View subscriber", "Erase"]);
+    expect(menuOf("s1")).toEqual(["View subscriber", "Unsubscribe", "Clear", "Erase"]);
+    expect(menuOf("s3")).toEqual(["View subscriber", "Block", "Erase"]);
     pick("s2", "Clear");
     expect($(".modal h3").textContent).toBe("Clear this bounce?");
     expect($(".modal .hint").textContent).toBe(
@@ -480,47 +494,52 @@ describe("subscribers view", () => {
     expect(toggle.getAttribute("aria-controls")).toBe("subLegend");
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     expect(legend.hidden).toBe(true);
-    // Each pill as the list draws it (its classes), beside its definition; then each act.
+    // Each pill as the list draws it (its classes), beside its definition; why someone left,
+    // in the words beside an unsubscribed status; then each act.
     const lists = $$("#subLegend dl");
-    expect(lists).toHaveLength(3);
-    const rows = $$("dt", lists[0])
-      .concat($$("dt", lists[1]))
-      .map((dt) => {
+    expect(lists).toHaveLength(4);
+    const pills = (dl: HTMLElement) =>
+      $$("dt", dl).map((dt) => {
         const pill = dt.querySelector(".badge")!;
         return [pill.className, pill.textContent, dt.nextElementSibling!.textContent];
       });
-    expect(rows).toEqual([
+    const terms = (dl: HTMLElement) =>
+      $$("dt", dl).map((dt) => [dt.textContent, dt.nextElementSibling!.textContent]);
+    expect(pills(lists[0]!)).toEqual([
       [
         "badge confirmed",
         "confirmed",
         "Receives your posts. They confirmed here, or opted in at the service you imported them from.",
       ],
       ["badge pending", "pending", "Subscribed but hasn’t clicked the confirmation email."],
-      ["badge unsubscribed", "unsubscribed", "Opted out, themselves or by asking you."],
+      ["badge unsubscribed", "unsubscribed", "Left the list. Why they left is shown beside it."],
+    ]);
+    expect(terms(lists[1]!)).toEqual([
+      ["by their link", "They unsubscribed themselves, from the link or the button in your email."],
+      ["on request", "You unsubscribed them, when they asked you to."],
+      [
+        "complaint",
+        "They reported your email as spam. Only their own sign-up brings them back, so you can’t add them: ask them to subscribe through your subscribe page.",
+      ],
+      [
+        "erased",
+        "You erased them at their request. Only the address is kept, so it isn’t mailed again, and only their own sign-up brings them back.",
+      ],
+      ["left elsewhere", "The list you imported says they left, without saying why."],
+    ]);
+    expect(pills(lists[2]!)).toEqual([
       [
         "badge suppressed",
         "bounced",
-        "Mail to the address failed, here or at the service it was imported from.",
-      ],
-      [
-        "badge suppressed",
-        "complaint",
-        "Marked as spam, here or at the service it was imported from.",
+        "Mail to the address failed, here or at the service it was imported from. You can clear it.",
       ],
       [
         "badge suppressed",
         "blocked",
         "Stopped by hand, by you or at the service it was imported from. You can unblock it.",
       ],
-      [
-        "badge suppressed",
-        "erased",
-        "Erased at their request, then signed up again. Only their confirmation email is sent, and confirming lifts this.",
-      ],
     ]);
-    expect(
-      $$("dt", lists[2]).map((dt) => [dt.textContent, dt.nextElementSibling!.textContent]),
-    ).toEqual([
+    expect(terms(lists[3]!)).toEqual([
       [
         "Unsubscribe",
         "When they ask you to take them off the list. They can rejoin by subscribing again.",
@@ -537,14 +556,19 @@ describe("subscribers view", () => {
         "Clear",
         "When you know a bounce’s cause is gone, such as a reader who tells you their mailbox is fixed. Mail goes again to an address that failed.",
       ],
-      ["Erase", "When they ask you to delete their data. It can’t be undone."],
+      [
+        "Erase",
+        "When they ask you to delete their data. They’re unsubscribed and only their address is kept. It can’t be undone, and they come back only by subscribing themselves.",
+      ],
     ]);
     expect($$("#subLegend h2").map((h) => h.textContent)).toEqual([
       "Status",
+      "Why they left",
       "Suppressed",
       "What you can do",
     ]);
     expect($$("#subLegend p").map((p) => p.textContent)).toEqual([
+      "Beside an unsubscribed status:",
       "The address isn’t sent your posts, whatever its status. The status stays as it was, greyed while the suppression keeps it from taking effect. The red flag beside the address says why:",
     ]);
     toggle.click();
@@ -564,14 +588,16 @@ describe("subscribers view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("names an erased address's flag, for one that subscribed again", async () => {
+  it("says beside an unsubscribed status why they left, and nothing beside one pending again (SPEC §7)", async () => {
     fake = fakeApi([
       {
         path: "/api/subscribers",
         reply: () => ({
           counts,
           subscribers: [
-            { ...subs[2], suppression: { reason: "erased", detail: null }, status: "pending" },
+            { ...subs[0], status: "unsubscribed", unsubscribe_cause: "complaint" },
+            { ...subs[1], status: "unsubscribed", unsubscribe_cause: "erased", suppression: null },
+            { ...subs[2], unsubscribe_cause: "erased", unsubscribed_at: 2 },
           ],
           page,
         }),
@@ -579,23 +605,21 @@ describe("subscribers view", () => {
     ]);
     await mount((r, s) => renderSubscribers(undefined, r, s));
     await settle();
-    const flag = $("tr[data-id='s3'] .row-flag");
-    expect(flag.textContent).toBe("erased");
-    expect(flag.hasAttribute("title")).toBe(false);
-    // Their confirmation lifts the marker, so the pending status is live, not greyed.
+    expect($("tr[data-id='s1'] .sub-cause").textContent).toBe("complaint");
+    expect($("tr[data-id='s2'] .sub-cause").textContent).toBe("erased");
+    // Signed up again after an erasure: pending, and their own confirmation brings them back.
+    expect(document.querySelector("tr[data-id='s3'] .sub-cause")).toBeNull();
     expect($("tr[data-id='s3'] .badge.pending").classList.contains("held")).toBe(false);
+    expect(fake.unhandled).toEqual([]);
   });
 
-  it("flags a bounce or complaint an import brought as bounced or complaint, like one seen here", async () => {
+  it("flags a bounce an import brought as bounced, like one seen here", async () => {
     fake = fakeApi([
       {
         path: "/api/subscribers",
         reply: () => ({
           counts,
-          subscribers: [
-            { ...subs[0], suppression: { reason: "import_bounce", detail: null } },
-            { ...subs[1], suppression: { reason: "import_complaint", detail: null } },
-          ],
+          subscribers: [{ ...subs[0], suppression: { reason: "import_bounce", detail: null } }],
           page,
         }),
       },
@@ -603,25 +627,7 @@ describe("subscribers view", () => {
     await mount((r, s) => renderSubscribers(undefined, r, s));
     await settle();
     expect($("tr[data-id='s1'] .row-flag").textContent).toBe("bounced");
-    expect($("tr[data-id='s2'] .row-flag").textContent).toBe("complaint");
     expect($("tr[data-id='s1'] .badge.confirmed").classList.contains("held")).toBe(true);
-  });
-
-  it("greys a confirmed status under an erasure's marker, which no confirmation lifts", async () => {
-    fake = fakeApi([
-      {
-        path: "/api/subscribers",
-        reply: () => ({
-          counts,
-          subscribers: [{ ...subs[0], suppression: { reason: "erased", detail: null } }],
-          page,
-        }),
-      },
-    ]);
-    await mount((r, s) => renderSubscribers(undefined, r, s));
-    await settle();
-    expect($("tr[data-id='s1'] .badge.confirmed").classList.contains("held")).toBe(true);
-    expect($("tr[data-id='s1'] .badge.confirmed").hasAttribute("title")).toBe(false);
   });
 
   it("points a list with no subscribers (suppressions alone count for none) at the import, and opens the import from the head", async () => {
@@ -793,13 +799,14 @@ describe("subscribers view", () => {
     status: "subscribed",
     opt_in: "double",
     origin: "kestrel",
+    unsubscribe_cause: null,
     suppression: null,
     subscribed_at: "2026-01-02T09:30:00.000Z",
     confirmed_at: "2026-01-02T09:42:00.000Z",
     unsubscribed_at: null,
     suppressed_at: null,
     evidence: null,
-    format: "kestrel-subscribers/1",
+    format: "kestrel-subscribers/2",
     ...over,
   });
 

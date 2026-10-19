@@ -2,7 +2,6 @@ import { createExecutionContext, SELF, waitOnExecutionContext } from "cloudflare
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  IMPORT_LIMITS,
   IMPORT_OUTCOMES,
   type ImportCommitResponse,
   type ImportPlanResponse,
@@ -17,14 +16,13 @@ import * as subs from "../src/db/subscribers";
 import { type AppEnv, getConfig } from "../src/env";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { sweep } from "../src/send/sweep";
-import { commitImport, planImport } from "../src/services/imports";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 
-// Erasing a subscriber (SPEC §7): their data goes, past records still add up, and only a
-// do-not-contact marker is kept, which an import never lifts and the person's own
-// confirmation does.
+// Erasing a subscriber (SPEC §7): they are unsubscribed by it and their record is stripped to
+// the address and when, past records still add up, and nothing brings them back but their
+// own sign-up: not an import, not the publisher's hand.
 
 const PLACEHOLDER = /^erased:[0-9a-f]{16}$/;
 
@@ -42,14 +40,6 @@ async function eraseOk(email: string): Promise<EraseResponse> {
   const res = await erase(row!.id);
   expect(res.status).toBe(200);
   return res.json();
-}
-
-function adminAdd(body: Record<string, unknown>): Promise<Response> {
-  return SELF.fetch(`${base}/api/subscribers`, {
-    method: "POST",
-    headers: JSON_AUTH,
-    body: JSON.stringify(body),
-  });
 }
 
 /** The public form, through the real router, waiting for the work it does after answering. */
@@ -105,11 +95,39 @@ async function everyRow(): Promise<string[]> {
   return lines;
 }
 
+/** A file in the format's first version, which says an erasure as a suppression. */
 function csvFile(lines: string[]): { name: string; text: string } {
   return {
     name: "list.csv",
     text: `${["email,status,opt_in,origin,suppression,subscribed_at,confirmed_at,unsubscribed_at,suppressed_at,evidence", ...lines].join("\r\n")}\r\n`,
   };
+}
+
+/** A file in the format's second version, which says an erasure as why a row left. */
+function csvFile2(lines: string[]): { name: string; text: string } {
+  return {
+    name: "list.csv",
+    text: `${["email,status,opt_in,origin,unsubscribe_cause,suppression,unsubscribed_at,evidence,format", ...lines.map((l) => `${l},kestrel-subscribers/2`)].join("\r\n")}\r\n`,
+  };
+}
+
+/** What an erasure leaves of a subscriber: the address, when, and that they left by it. */
+const STRIPPED = {
+  status: "unsubscribed",
+  unsubscribe_cause: "erased",
+  confirmed_at: null,
+  confirm_token: null,
+  confirm_sent_at: null,
+  confirm_attempt_at: null,
+  origin: "unknown",
+  opt_in: "unknown",
+  consent_evidence: null,
+  import_id: null,
+};
+
+/** The subscriber row as stored, or null. */
+function stored(email: string): Promise<subs.SubscriberRow | null> {
+  return subs.getByEmail(env.DB, email);
 }
 
 /** Plan a file through the API, then commit that plan, attesting and acknowledging what it asks. */
@@ -159,7 +177,7 @@ async function tablesNaming(email: string): Promise<string[]> {
 }
 
 describe("erasing a subscriber (SPEC §7)", () => {
-  it("leaves the address in no table but its one suppression, the import's provenance and evidence included", async () => {
+  it("unsubscribes them and strips their record to the address and when, the import's provenance and evidence included", async () => {
     const email = "ada@example.com";
     await importCsv([
       `${email},subscribed,double,sendy,,2024-01-01T00:00:00Z,2024-01-02T00:00:00Z,,,"{""ip"":""203.0.113.7""}"`,
@@ -174,14 +192,16 @@ describe("erasing a subscriber (SPEC §7)", () => {
     )
       .bind("SMTP; 452 <Ada@Example.com> Mailbox Full", second, email)
       .run();
-    expect((await everyRow()).some((l) => l.toLowerCase().includes(email))).toBe(true);
+    const before = (await stored(email))!;
 
     const body = await eraseOk(email);
 
-    expect(body).toEqual({ erased: { email, deliveries: 2, suppression: "erased" } });
-    expect((await everyRow()).filter((l) => l.toLowerCase().includes(email))).toEqual([
-      `suppressions: ${JSON.stringify({ email, reason: "erased", detail: null, created_at: (await subs.suppressionOf(env.DB, email))!.created_at })}`,
-    ]);
+    expect(body.deliveries).toBe(2);
+    expect(body.subscriber).toMatchObject({ id: before.id, email, ...STRIPPED, suppression: null });
+    expect(body.subscriber.created_at).toBe(body.subscriber.unsubscribed_at);
+    expect(body.subscriber.unsub_token).not.toBe(before.unsub_token);
+    expect(await tablesNaming(email)).toEqual(["subscribers"]);
+    expect((await everyRow()).filter((l) => l.includes("203.0.113.7"))).toEqual([]);
     // One placeholder for the person, the same on every send.
     const { results } = await env.DB.prepare(
       "SELECT DISTINCT email, event_detail FROM deliveries WHERE email <> 'other@example.com' ORDER BY event_detail",
@@ -220,7 +240,7 @@ describe("erasing a subscriber (SPEC §7)", () => {
     ]);
   });
 
-  it("skips a pending recipient of a send in flight once they are erased (I1)", async () => {
+  it("skips a pending recipient of a send in flight once they are erased (I2)", async () => {
     await seedConfirmed(["keep@example.com", "gone@example.com"]);
     const send = await frozenSend(Date.now() - 1000);
     await sends.resolveAudience(env.DB, send.id, Date.now());
@@ -233,6 +253,21 @@ describe("erasing a subscriber (SPEC §7)", () => {
     expect(fakeOutbox().map((m) => m.to)).toEqual(["keep@example.com"]);
   });
 
+  it("discards their tokens, so an unsubscribe link in mail sent before opens the invalid-link page and changes nothing", async () => {
+    const email = "ada@example.com";
+    await seedConfirmed(email);
+    const oldToken = (await stored(email))!.unsub_token;
+    await eraseOk(email);
+    const before = await everyRow();
+
+    const page = await SELF.fetch(`${base}/unsubscribe?token=${oldToken}`);
+    expect(page.status).toBe(400);
+    expect(await page.text()).toMatch(/This link is invalid/);
+    const oneClick = await SELF.fetch(`${base}/unsubscribe?token=${oldToken}`, { method: "POST" });
+    expect(oneClick.status).toBe(400);
+    expect(await everyRow()).toEqual(before);
+  });
+
   it("is not brought back by an import that lists the address as subscribed", async () => {
     const email = "ada@example.com";
     await seedConfirmed(email);
@@ -240,57 +275,71 @@ describe("erasing a subscriber (SPEC §7)", () => {
 
     const result = await importCsv([`${email},subscribed,double,sendy,,,,,,`]);
 
-    expect(result.counts.kept_suppressed).toBe(1);
-    expect(result.counts.added_confirmed).toBe(0);
-    expect(await subs.getByEmail(env.DB, email)).toBeNull();
-    expect((await suppressionOf(email))?.reason).toBe("erased");
+    expect(result.counts).toEqual(counts({ kept_unsubscribed: 1 }));
+    expect(await stored(email)).toMatchObject(STRIPPED);
   });
 
-  it("is brought back by the person's own subscribe and confirmation, which lifts the marker", async () => {
+  it("is brought back by the person's own subscribe and confirmation", async () => {
     const email = "ada@example.com";
     await seedConfirmed(email);
     await eraseOk(email);
 
     expect(await readJson(await publicSubscribe(email))).toEqual({ status: "check_inbox" });
     expect(await confirmationsTo(email)).toBe(1);
-    expect((await suppressionOf(email))?.reason).toBe("erased"); // not until they confirm
-    const token = (await subs.getByEmail(env.DB, email))!.confirm_token!;
+    expect(await subs.audienceEmails(env.DB)).toEqual([]); // not until they confirm
+    const token = (await stored(email))!.confirm_token!;
     await SELF.fetch(`${base}/confirm`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ token }).toString(),
     });
 
-    expect(await suppressionOf(email)).toBeNull();
+    expect(await stored(email)).toMatchObject({
+      status: "confirmed",
+      unsubscribe_cause: null,
+      origin: "kestrel",
+      opt_in: "double",
+    });
     expect(await subs.audienceEmails(env.DB)).toEqual([email]);
   });
 
-  it("keeps a bounce the address already had", async () => {
+  it("keeps a bounce the address already had, without the provider's words", async () => {
     const email = "ada@example.com";
     await seedConfirmed(email);
-    await subs.addSuppression(env.DB, email, "bounce", "Permanent/General");
+    await subs.addSuppression(env.DB, email, "bounce", `550 <${email}> Permanent/General`);
 
     const body = await eraseOk(email);
 
-    expect(body.erased.suppression).toBe("bounce");
-    expect(await suppressionOf(email)).toEqual({
-      email,
-      reason: "bounce",
-      detail: "Permanent/General",
+    expect(body.subscriber).toMatchObject({
+      ...STRIPPED,
+      suppression: { reason: "bounce", detail: null },
     });
-    expect(await subs.getByEmail(env.DB, email)).toBeNull();
+    expect(await suppressionOf(email)).toEqual({ email, reason: "bounce", detail: null });
   });
 
-  it("answers 404 for an id it doesn't know, an erased one included", async () => {
-    await seedConfirmed("ada@example.com");
-    expect((await erase("id-ada@example.com")).status).toBe(200);
-    const again = await erase("id-ada@example.com");
-    expect(again.status).toBe(404);
-    expect((await readJson(again)).error).toBe("not_found");
+  it("erases someone who already left, and answers a repeat with the stripped subscriber, changing nothing", async () => {
+    const email = "ada@example.com";
+    await seedConfirmed(email);
+    await subs.unsubscribeById(env.DB, "id-ada@example.com");
+    expect((await stored(email))?.unsubscribe_cause).toBe("publisher");
+
+    const first = await eraseOk(email);
+    expect(first.subscriber).toMatchObject(STRIPPED);
+    const before = await everyRow();
+
+    const again = await eraseOk(email);
+    expect(again).toEqual({ subscriber: first.subscriber, deliveries: 0 });
+    expect(await everyRow()).toEqual(before);
+  });
+
+  it("answers 404 for an id it doesn't know", async () => {
+    const res = await erase("no-such-id");
+    expect(res.status).toBe(404);
+    expect((await readJson(res)).error).toBe("not_found");
   });
 });
 
-describe("an import after an erasure, whatever status the file gives the address (SPEC §7)", () => {
+describe("an import after an erasure (SPEC §7)", () => {
   const email = "ada@example.com";
 
   beforeEach(async () => {
@@ -312,145 +361,67 @@ describe("an import after an erasure, whatever status the file gives the address
       "unsubscribed",
     ],
   ] as const) {
-    it(`is blocked for ${what}, creating no subscriber and keeping the marker`, async () => {
+    it(`leaves them unsubscribed by the erasure for ${what}, recording nothing the file says about them`, async () => {
       const { plan, result } = await planAndCommit(file, status);
 
-      const blocked = [{ row: 1, email, outcome: "kept_suppressed", suppression_added: false }];
-      expect(plan.counts).toEqual(counts({ kept_suppressed: 1 }));
-      expect(plan.rows).toEqual(blocked);
-      expect(result.counts).toEqual(counts({ kept_suppressed: 1 }));
-      expect(result.rows).toEqual(blocked);
+      const rows = [{ row: 1, email, outcome: "unchanged", suppression_added: false }];
+      expect(plan.counts).toEqual(counts({ unchanged: 1 }));
+      expect(plan.rows).toEqual(rows);
+      expect(result.rows).toEqual(rows);
       expect(result.differed).toEqual([]);
-      expect(await subs.getByEmail(env.DB, email)).toBeNull();
-      expect(await suppressionOf(email)).toEqual({ email, reason: "erased", detail: null });
-      expect(await tablesNaming(email)).toEqual(["suppressions"]);
+      expect(await stored(email)).toMatchObject(STRIPPED);
+      expect(await tablesNaming(email)).toEqual(["subscribers"]);
       expect((await everyRow()).filter((l) => l.includes("203.0.113.7"))).toEqual([]);
     });
   }
 
-  it("still lets the file's own bounce replace the marker, creating no subscriber", async () => {
-    const { plan, result } = await planAndCommit(
+  it("still adds the file's own bounce beside the erasure", async () => {
+    const { result } = await planAndCommit(
       csvFile([`${email},unsubscribed,unknown,sendy,bounce,,,,,`]),
     );
 
-    const blocked = [{ row: 1, email, outcome: "kept_suppressed", suppression_added: true }];
-    expect(plan.counts).toEqual(counts({ kept_suppressed: 1 }));
-    expect(plan.rows).toEqual(blocked);
-    expect(result.rows).toEqual(blocked);
-    expect(result.suppressions_added).toBe(1);
+    expect(result.rows).toEqual([
+      { row: 1, email, outcome: "suppressed", suppression_added: true },
+    ]);
     expect((await suppressionOf(email))?.reason).toBe("import_bounce");
-    expect(await subs.getByEmail(env.DB, email)).toBeNull();
-    expect(await tablesNaming(email)).toEqual(["suppressions"]);
-  });
-
-  it("is caught when the commit applies, for an address erased after the plan", async () => {
-    const other = "grace@example.com";
-    const plan = await planImport(
-      env.DB,
-      { ...csvFile([`${other},unsubscribed,unknown,sendy,,,,,,`]), plainListStatus: null },
-      { maxRows: IMPORT_LIMITS.maxRows, maxRowsReason: null, publication: "Field Notes" },
-    );
-    expect(plan.counts).toEqual(counts({ added_unsubscribed: 1 }));
-    // They subscribe and are erased between the plan and the commit.
-    await seedConfirmed(other);
-    await eraseOk(other);
-
-    const result = await commitImport(
-      env.DB,
-      plan,
-      { kind: "human", email: "publisher@example.com", via: "dev" },
-      Date.now(),
-    );
-
-    expect(result.differed).toEqual([
-      { row: 1, email: other, planned: "added_unsubscribed", applied: "kept_suppressed" },
-    ]);
-    expect(result.counts).toEqual(counts({ kept_suppressed: 1 }));
-    expect(await subs.getByEmail(env.DB, other)).toBeNull();
-    expect((await suppressionOf(other))?.reason).toBe("erased");
-    expect(await tablesNaming(other)).toEqual(["suppressions"]);
-  });
-
-  it("is reported as blocked when the file's own bounce replaces a marker added after the plan", async () => {
-    const other = "grace@example.com";
-    const plan = await planImport(
-      env.DB,
-      { ...csvFile([`${other},unsubscribed,unknown,sendy,bounce,,,,,`]), plainListStatus: null },
-      { maxRows: IMPORT_LIMITS.maxRows, maxRowsReason: null, publication: "Field Notes" },
-    );
-    expect(plan.counts).toEqual(counts({ added_unsubscribed: 1 }));
-    await seedConfirmed(other);
-    await eraseOk(other);
-
-    const result = await commitImport(
-      env.DB,
-      plan,
-      { kind: "human", email: "publisher@example.com", via: "dev" },
-      Date.now(),
-    );
-
-    expect(result.differed).toEqual([
-      { row: 1, email: other, planned: "added_unsubscribed", applied: "kept_suppressed" },
-    ]);
-    expect(result.counts).toEqual(counts({ kept_suppressed: 1 }));
-    expect(result.suppressions_added).toBe(1);
-    expect(await subs.getByEmail(env.DB, other)).toBeNull();
-    expect((await suppressionOf(other))?.reason).toBe("import_bounce");
-    expect(await tablesNaming(other)).toEqual(["suppressions"]);
+    expect(await stored(email)).toMatchObject(STRIPPED);
   });
 });
 
-describe("an import row that itself says the address was erased (SPEC §7)", () => {
+describe("an import row whose person left by an erasure (SPEC §7)", () => {
   const email = "ada@example.com";
+  const evidence = `"{""ip"":""203.0.113.7""}"`;
 
-  for (const [status, outcome] of [
-    ["subscribed", "kept_suppressed"],
-    ["unsubscribed", "kept_suppressed"],
-    ["pending", "suppressed"],
+  for (const [version, file] of [
+    [
+      "kestrel-subscribers/2, as its cause",
+      csvFile2([`${email},unsubscribed,double,sendy,erased,,2024-05-05T00:00:00Z,${evidence}`]),
+    ],
+    [
+      "kestrel-subscribers/1, as a subscribed row's suppression",
+      csvFile([`${email},subscribed,double,sendy,erased,2024-01-01T00:00:00Z,,,,${evidence}`]),
+    ],
+    [
+      "kestrel-subscribers/1, as a pending row's suppression",
+      csvFile([`${email},pending,double,sendy,erased,,,,,${evidence}`]),
+    ],
   ] as const) {
-    it(`adds only the marker for a ${status} row, creating no subscriber`, async () => {
-      const { plan, result } = await planAndCommit(
-        csvFile([
-          `${email},${status},double,sendy,erased,2024-01-01T00:00:00Z,,,,"{""ip"":""203.0.113.7""}"`,
-        ]),
-      );
+    it(`records a new address with the address alone, written in ${version}`, async () => {
+      const { plan, result } = await planAndCommit(file);
 
-      const rows = [{ row: 1, email, outcome, suppression_added: true }];
-      expect(plan.counts).toEqual(counts({ [outcome]: 1 }));
+      const rows = [{ row: 1, email, outcome: "added_unsubscribed", suppression_added: false }];
       expect(plan.rows).toEqual(rows);
-      expect(plan.suppressions_added).toBe(1);
+      expect(plan.suppressions_added).toBe(0);
       expect(plan.attestation).toBeNull();
-      expect(result.counts).toEqual(counts({ [outcome]: 1 }));
       expect(result.rows).toEqual(rows);
-      expect(result.differed).toEqual([]);
-      expect(await subs.getByEmail(env.DB, email)).toBeNull();
-      expect((await suppressionOf(email))?.reason).toBe("erased");
-      expect(await tablesNaming(email)).toEqual(["suppressions"]);
+      expect(await stored(email)).toMatchObject(STRIPPED);
+      expect(await suppressionOf(email)).toBeNull();
       expect((await everyRow()).filter((l) => l.includes("203.0.113.7"))).toEqual([]);
     });
   }
 
-  it("is blocked, keeping the suppression here, for an address already suppressed here", async () => {
-    await subs.addSuppression(env.DB, email, "bounce");
-
-    const { plan, result } = await planAndCommit(
-      csvFile([`${email},unsubscribed,unknown,sendy,erased,,,,,`]),
-    );
-
-    const blocked = [{ row: 1, email, outcome: "kept_suppressed", suppression_added: false }];
-    expect(plan.rows).toEqual(blocked);
-    expect(result.rows).toEqual(blocked);
-    expect(await subs.getByEmail(env.DB, email)).toBeNull();
-    expect((await suppressionOf(email))?.reason).toBe("bounce");
-    expect(await tablesNaming(email)).toEqual(["suppressions"]);
-  });
-});
-
-describe("an import row that says an address on the list was erased (SPEC §7)", () => {
-  const email = "ada@example.com";
-
   async function confirmByLink(): Promise<void> {
-    const token = (await subs.getByEmail(env.DB, email))!.confirm_token!;
+    const token = (await stored(email))!.confirm_token!;
     await SELF.fetch(`${base}/confirm`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -458,52 +429,56 @@ describe("an import row that says an address on the list was erased (SPEC §7)",
     });
   }
 
-  it("never confirms a pending subscriber, only adding the marker their own confirmation lifts", async () => {
-    await publicSubscribe(email);
-    const before = await subs.getByEmail(env.DB, email);
-    expect(before!.status).toBe("pending");
-
-    const { plan, result } = await planAndCommit(
-      csvFile([
-        `${email},subscribed,double,sendy,erased,2024-01-01T00:00:00Z,2024-01-02T00:00:00Z,,,"{""ip"":""203.0.113.7""}"`,
-      ]),
-    );
-
-    const rows = [{ row: 1, email, outcome: "kept_suppressed", suppression_added: true }];
-    expect(plan.rows).toEqual(rows);
-    expect(plan.attestation).toBeNull();
-    expect(result.rows).toEqual(rows);
-    expect(result.differed).toEqual([]);
-    expect(await subs.getByEmail(env.DB, email)).toEqual(before);
-    expect((await suppressionOf(email))?.reason).toBe("erased");
-    expect((await everyRow()).filter((l) => l.includes("203.0.113.7"))).toEqual([]);
-
-    await confirmByLink();
-
-    expect(await suppressionOf(email)).toBeNull();
-    expect(await subs.audienceEmails(env.DB)).toEqual([email]);
-  });
-
-  it("marks a confirmed subscriber erased, which an Erase here keeps and their return lifts", async () => {
-    await importCsv([`${email},subscribed,double,sendy,,,,,,`]);
+  it("unsubscribes and strips a subscriber an import confirmed, whom only their own sign-up brings back", async () => {
+    await importCsv([`${email},subscribed,double,sendy,,,,,,${evidence}`]);
     const result = await importCsv([`${email},subscribed,double,sendy,erased,,,,,`]);
     expect(result.rows).toEqual([
-      { row: 1, email, outcome: "suppressed", suppression_added: true },
+      { row: 1, email, outcome: "unsubscribed", suppression_added: false },
     ]);
-    expect((await subs.getByEmail(env.DB, email))!.status).toBe("confirmed");
-    expect((await suppressionOf(email))?.reason).toBe("erased");
+    expect(await stored(email)).toMatchObject(STRIPPED);
     expect(await subs.audienceEmails(env.DB)).toEqual([]);
 
-    await eraseOk(email);
-    expect(await subs.getByEmail(env.DB, email)).toBeNull();
-    expect((await suppressionOf(email))?.reason).toBe("erased");
+    // Erasing them here changes nothing more.
+    expect((await eraseOk(email)).deliveries).toBe(0);
 
     await publicSubscribe(email);
     expect(await confirmationsTo(email)).toBe(1);
     await confirmByLink();
-
-    expect(await suppressionOf(email)).toBeNull();
     expect(await subs.audienceEmails(env.DB)).toEqual([email]);
+  });
+
+  it("unsubscribes a pending sign-up, whose confirmation link then no longer confirms", async () => {
+    await publicSubscribe(email);
+    const token = (await stored(email))!.confirm_token!;
+
+    const { result } = await planAndCommit(
+      csvFile2([`${email},unsubscribed,unknown,unknown,erased,,,`]),
+    );
+
+    expect(result.rows).toEqual([
+      { row: 1, email, outcome: "unsubscribed", suppression_added: false },
+    ]);
+    expect(await stored(email)).toMatchObject(STRIPPED);
+    const confirm = await SELF.fetch(`${base}/confirm`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token }).toString(),
+    });
+    expect(confirm.status).toBe(400);
+  });
+
+  it("keeps a bounce already here beside it, without its words", async () => {
+    await subs.addSuppression(env.DB, email, "bounce", `550 <${email}> no such user`);
+
+    const { result } = await planAndCommit(
+      csvFile2([`${email},unsubscribed,unknown,sendy,erased,,,`]),
+    );
+
+    expect(result.rows).toEqual([
+      { row: 1, email, outcome: "added_unsubscribed", suppression_added: false },
+    ]);
+    expect(await suppressionOf(email)).toEqual({ email, reason: "bounce", detail: null });
+    expect(await stored(email)).toMatchObject(STRIPPED);
   });
 });
 
@@ -521,36 +496,56 @@ describe("a receipt that lands after an erasure (SPEC §7)", () => {
     return row!;
   }
 
-  for (const [event, reason] of [
-    [
-      { type: "bounced", hard: true, detail: "smtp; 550 5.1.1 <Ada@Example.com> user unknown" },
-      "bounce",
-    ],
-    [{ type: "complained", detail: "abuse report for ada@example.com" }, "complaint"],
-  ] as const) {
-    it(`a ${reason} by message id replaces the marker and writes the address nowhere else`, async () => {
-      const email = "ada@example.com";
-      const row = await erasedAfterSend(email);
+  it("a bounce by message id suppresses the address beside the erasure, writing its words nowhere", async () => {
+    const email = "ada@example.com";
+    const row = await erasedAfterSend(email);
 
-      await applyDeliveryEvents(env.DB, [{ ...event, providerId: row.provider_id, email }]);
+    await applyDeliveryEvents(env.DB, [
+      {
+        type: "bounced",
+        hard: true,
+        detail: "smtp; 550 5.1.1 <Ada@Example.com> user unknown",
+        providerId: row.provider_id,
+        email,
+      },
+    ]);
 
-      expect((await suppressionOf(email))?.reason).toBe(reason);
-      expect(await suppressionOf(row.email)).toBeNull();
-      const delivery = await env.DB.prepare(
-        "SELECT event, event_detail FROM deliveries WHERE email = ?",
-      )
-        .bind(row.email)
-        .first();
-      expect(delivery).toEqual({ event: event.type, event_detail: null });
-      expect(
-        (await everyRow())
-          .filter((l) => l.toLowerCase().includes(email))
-          .map((l) => l.split(":")[0]),
-      ).toEqual(["suppressions"]);
-    });
-  }
+    expect(await suppressionOf(email)).toEqual({ email, reason: "bounce", detail: null });
+    expect(await suppressionOf(row.email)).toBeNull();
+    const delivery = await env.DB.prepare(
+      "SELECT event, event_detail FROM deliveries WHERE email = ?",
+    )
+      .bind(row.email)
+      .first();
+    expect(delivery).toEqual({ event: "bounced", event_detail: null });
+    expect((await tablesNaming(email)).sort()).toEqual(["subscribers", "suppressions"]);
+  });
 
-  it("suppresses nothing new when the receipt carries no address, leaving the marker", async () => {
+  it("a complaint by message id records its outcome without words, and the erasure stands as why they left", async () => {
+    const email = "ada@example.com";
+    const row = await erasedAfterSend(email);
+
+    await applyDeliveryEvents(env.DB, [
+      {
+        type: "complained",
+        detail: "abuse report for ada@example.com",
+        providerId: row.provider_id,
+        email,
+      },
+    ]);
+
+    expect(await stored(email)).toMatchObject(STRIPPED);
+    expect(await suppressionOf(email)).toBeNull();
+    const delivery = await env.DB.prepare(
+      "SELECT event, event_detail FROM deliveries WHERE email = ?",
+    )
+      .bind(row.email)
+      .first();
+    expect(delivery).toEqual({ event: "complained", event_detail: null });
+    expect(await tablesNaming(email)).toEqual(["subscribers"]);
+  });
+
+  it("suppresses nothing when the receipt carries no address", async () => {
     const email = "ada@example.com";
     const row = await erasedAfterSend(email);
 
@@ -558,10 +553,8 @@ describe("a receipt that lands after an erasure (SPEC §7)", () => {
       { type: "bounced", hard: true, providerId: row.provider_id, detail: "550 <ada@example.com>" },
     ]);
 
-    expect((await env.DB.prepare("SELECT email, reason FROM suppressions").all()).results).toEqual([
-      { email, reason: "erased" },
-    ]);
-    expect((await everyRow()).filter((l) => l.includes(email))).toHaveLength(1);
+    expect((await env.DB.prepare("SELECT email FROM suppressions").all()).results).toEqual([]);
+    expect(await tablesNaming(email)).toEqual(["subscribers"]);
   });
 });
 
@@ -604,44 +597,6 @@ describe("erasing someone a send run is handing off (SPEC §7)", () => {
     await inFlight(email, Date.now() - 1000);
 
     expect((await erase("id-ada@example.com")).status).toBe(200);
-    expect((await everyRow()).filter((l) => l.includes(email))).toHaveLength(1);
-  });
-});
-
-describe("adding an erased address by hand (SPEC §7)", () => {
-  it("asks the publisher first, and sends the confirmation once they acknowledge it", async () => {
-    const email = "ada@example.com";
-    await seedConfirmed(email);
-    await eraseOk(email);
-    const erasedAt = (await subs.suppressionOf(env.DB, email))!.created_at;
-
-    const refused = await adminAdd({ email });
-    expect(refused.status).toBe(409);
-    expect(await readJson(refused)).toMatchObject({
-      error: "erasure_acknowledgement_required",
-      erased_at: erasedAt,
-    });
-    expect(await confirmationsTo(email)).toBe(0);
-    expect(await subs.getByEmail(env.DB, email)).toBeNull();
-
-    const sent = await adminAdd({ email, acknowledge_erasure: true });
-    expect(sent.status).toBe(201);
-    expect(await readJson(sent)).toMatchObject({ action: "created" });
-    expect(await confirmationsTo(email)).toBe(1);
-    expect((await suppressionOf(email))?.reason).toBe("erased");
-  });
-
-  it("doesn't ask about an address that wasn't erased, or one whose bounce stands", async () => {
-    expect((await adminAdd({ email: "new@example.com" })).status).toBe(201);
-    await subs.addSuppression(env.DB, "bounced@example.com", "bounce");
-    expect(await readJson(await adminAdd({ email: "bounced@example.com" }))).toMatchObject({
-      action: "suppressed",
-    });
-  });
-
-  it("refuses an acknowledgement that isn't true or false, naming the field", async () => {
-    const res = await adminAdd({ email: "new@example.com", acknowledge_erasure: "yes" });
-    expect(res.status).toBe(400);
-    expect((await readJson(res)).field).toBe("acknowledge_erasure");
+    expect(await tablesNaming(email)).toEqual(["subscribers"]);
   });
 });

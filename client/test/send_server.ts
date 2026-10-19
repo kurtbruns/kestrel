@@ -172,7 +172,7 @@ export const condition = {
     kind: "no_receipts",
     severity: "warn",
     since: null,
-    message: `No delivery receipt has arrived for any of the ${accepted} recipients the provider took, 2 hours after the send went out. The provider's events may not be reaching this app, so its bounces and complaints suppress no one. Check the webhook and the app's error log.`,
+    message: `No delivery receipt has arrived for any of the ${accepted} recipients the provider took, 2 hours after the send went out. The provider's events may not be reaching this app, so its bounces suppress no one and its complaints unsubscribe no one. Check the webhook and the app's error log.`,
     action: null,
     accepted,
   }),

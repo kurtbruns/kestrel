@@ -429,7 +429,7 @@ describe("dashboard", () => {
     });
     await vi.advanceTimersByTimeAsync(60_000);
     expect($$(":scope > div > div", $(".health")).map((d) => d.textContent)).toEqual([
-      "2 sends have had no delivery receipt long after they went out. The provider's events may not be reaching this app, so its bounces and complaints suppress no one.",
+      "2 sends have had no delivery receipt long after they went out. The provider's events may not be reaching this app, so its bounces suppress no one and its complaints unsubscribe no one.",
     ]);
     expect($("a", $(".health")).getAttribute("href")).toBe("#/sent");
   });

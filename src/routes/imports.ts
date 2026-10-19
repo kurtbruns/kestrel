@@ -24,6 +24,7 @@ import {
   type SuppressionClaim,
   TEMPLATE_CSV,
   TEMPLATE_TXT,
+  type UnsubscribeCauseClaim,
 } from "../../shared/imports";
 import * as imports from "../db/imports";
 import { getSettings } from "../db/settings";
@@ -222,9 +223,13 @@ const STATUS_CLAIM: Record<string, ImportStatus> = {
 const SUPPRESSION_CLAIM: Record<string, SuppressionClaim> = {
   bounce: "bounce",
   import_bounce: "bounce",
-  complaint: "complaint",
-  import_complaint: "complaint",
   manual: "manual",
+};
+// Why someone left, in the format's words; having left elsewhere is the format's empty cause.
+const CAUSE_CLAIM: Record<string, UnsubscribeCauseClaim> = {
+  reader: "reader",
+  publisher: "publisher",
+  complaint: "complaint",
   erased: "erased",
 };
 
@@ -284,6 +289,11 @@ export async function exportList(c: RequestContext): Promise<Response> {
     status: r.status === null ? "none" : (STATUS_CLAIM[r.status] ?? "none"),
     opt_in: r.opt_in ?? "unknown",
     origin: r.origin ?? "unknown",
+    // Only an unsubscribed row says why it left: the format takes a cause nowhere else.
+    unsubscribe_cause:
+      r.status === "unsubscribed" && r.unsubscribe_cause !== null
+        ? (CAUSE_CLAIM[r.unsubscribe_cause] ?? null)
+        : null,
     suppression: r.reason === null ? null : (SUPPRESSION_CLAIM[r.reason] ?? "manual"),
     subscribed_at: iso(r.created_at),
     confirmed_at: iso(r.confirmed_at),

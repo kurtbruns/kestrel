@@ -312,7 +312,7 @@ describe("send loop + sweep", () => {
   it("skips a recipient suppressed after audience resolution, at hand-off (SPEC §6, §10)", async () => {
     await leaveAfterResolution((email) =>
       env.DB.prepare(
-        "INSERT INTO suppressions (email, reason, detail, created_at) VALUES (?, 'complaint', 'marked as spam', ?)",
+        "INSERT INTO suppressions (email, reason, detail, created_at) VALUES (?, 'bounce', '550 5.1.1 user unknown', ?)",
       )
         .bind(email, Date.now())
         .run(),

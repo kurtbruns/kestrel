@@ -398,14 +398,14 @@ function outcomeReconHtml(outcomes: DeliveryOutcomes): string {
     parts.push(`${outcomes.dispatched.toLocaleString()} in flight`);
   }
   const reconciled = `All ${total.toLocaleString()} accounted for: ${parts.join(", ")}.`;
-  // The suppression note is scoped to what actually suppresses: hard bounces and complaints,
+  // The note is scoped to what takes an address off the list: hard bounces and complaints,
   // never soft bounces (counted, left on the list, SPEC §8). The aggregate counters don't
   // split soft from hard, so gate on any bounce or complaint and state the rule rather than
   // claim a count; a clean send says nothing about suppression at all. This is where a
   // row's Hard bounce or Soft bounce label is explained (DESIGN §11), so any bounce names both.
   const suppression =
     outcomes.bounced || outcomes.complained
-      ? " Hard bounces and spam complaints are suppressed automatically, so those addresses won’t be mailed again."
+      ? " Hard bounces are suppressed automatically and spam complaints unsubscribe the reader, so those addresses won’t be mailed again."
       : "";
   const soft = outcomes.bounced
     ? " A soft bounce is temporary, so it’s counted and the address stays on the list."

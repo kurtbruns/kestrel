@@ -5,7 +5,7 @@ import apiDoc from "../docs/API.md";
 import { type ReferenceResponse, routeAnchor } from "../shared/reference";
 import { refusalAdvice } from "../shared/sends";
 import {
-  ERASED_MARKER_MEANING,
+  CAUSE_MEANING,
   FLAG_MEANING,
   STATUS_MEANING,
   SUBSCRIBER_ACTIONS,
@@ -136,17 +136,15 @@ describe("API reference is generated from the route registration", () => {
       expect(said(key)).toContain(SUPPRESSED_MEANING);
     }
     // The reasons' meanings are said once, under the suppression, each flag's once.
-    for (const [flag, meaning] of Object.entries(FLAG_MEANING)) {
-      if (flag !== "erased") {
-        expect(said("suppression").split(meaning).length - 1).toBe(1);
-        expect(said("subscriber")).not.toContain(meaning);
-      }
+    for (const meaning of Object.values(FLAG_MEANING)) {
+      expect(said("suppression").split(meaning).length - 1).toBe(1);
+      expect(said("subscriber")).not.toContain(meaning);
     }
-    // The roster shows an erasure's marker only on someone who signed up again; the list of
-    // suppressions holds markers with no subscriber, so it says what a marker is instead.
-    expect(said("subscriber")).toContain(FLAG_MEANING.erased);
-    expect(said("suppression")).toContain(ERASED_MARKER_MEANING);
-    expect(said("suppression")).not.toContain(FLAG_MEANING.erased);
+    // Why someone left is the subscriber's, never a suppression's: each cause said once there.
+    for (const meaning of Object.values(CAUSE_MEANING)) {
+      expect(said("subscriber").split(meaning).length - 1).toBe(1);
+      expect(said("suppression")).not.toContain(meaning);
+    }
     for (const meaning of Object.values(STATUS_MEANING)) {
       expect(said("subscriber")).toContain(meaning);
     }
@@ -160,8 +158,11 @@ describe("API reference is generated from the route registration", () => {
     expect(describe("POST /api/suppressions/lift")).toContain(SUBSCRIBER_ACTIONS.clear.when);
     expect(byKey.get("POST /api/suppressions/lift")?.errors?.map((e) => e.code)).toEqual([
       "suppression_changed",
-      "erasure_marker",
     ]);
+    // An Add refused for someone who left by a complaint or an erasure says the way back.
+    expect(byKey.get("POST /api/subscribers")?.errors?.map((e) => e.code)).toContain(
+      "signup_required",
+    );
   });
 
   it("groups admin, public, and webhook tiers (mirroring app.ts)", () => {
@@ -370,8 +371,7 @@ describe("API reference is generated from the route registration", () => {
       "variable",
       "missing",
       "reason",
-      "erased_at",
-      "acknowledge_erasure",
+      "subscriber",
       "markdown",
     ]);
     const named = new Set(

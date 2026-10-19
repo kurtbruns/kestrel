@@ -6,6 +6,8 @@
  * sends, delivery events — which is exactly why they are seed-only and not part of
  * the normal `db/` write path. Only the fake-provider seed route calls them.
  */
+
+import type { UnsubscribeCause } from "../../shared/subscribers";
 import type { PostStatus } from "./posts";
 import { NEXT_REV, type SendStatus, tombstoneSendsStmt } from "./sends";
 import type { SubscriberStatus } from "./subscribers";
@@ -21,6 +23,8 @@ export interface SeedSubscriber {
   created_at: number;
   confirmed_at: number | null;
   unsubscribed_at: number | null;
+  /** Why they left; absent, `reader` for an unsubscribed row and none otherwise. */
+  unsubscribe_cause?: UnsubscribeCause;
 }
 
 export interface SeedSuppression {
@@ -132,7 +136,7 @@ export async function insertSubscribers(db: D1Database, rows: SeedSubscriber[]):
       group.map((r) =>
         db
           .prepare(
-            "INSERT INTO subscribers (id, email, status, confirm_token, confirm_sent_at, confirm_attempt_at, unsub_token, created_at, confirmed_at, unsubscribed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO subscribers (id, email, status, confirm_token, confirm_sent_at, confirm_attempt_at, unsub_token, created_at, confirmed_at, unsubscribed_at, unsubscribe_cause) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
           )
           .bind(
             r.id,
@@ -145,6 +149,7 @@ export async function insertSubscribers(db: D1Database, rows: SeedSubscriber[]):
             r.created_at,
             r.confirmed_at,
             r.unsubscribed_at,
+            r.unsubscribe_cause ?? (r.status === "unsubscribed" ? "reader" : null),
           ),
       ),
     );

@@ -1,4 +1,4 @@
-// Bringing a list in and taking it out (SPEC §7): the one import format, `kestrel-subscribers/1`,
+// Bringing a list in and taking it out (SPEC §7): the one import format, `kestrel-subscribers/2`,
 // as data (its columns, their values, the plain list's rules, the limits), the reader that
 // turns a file into rows or refuses it by name, the rule that folds an address's repeats into
 // one row, and the wire shapes of the plan, the commit, and the export.
@@ -10,12 +10,21 @@
 
 import { isValidEmail, normalizeEmail } from "./email";
 import { publicationName } from "./publication";
+import { strongerCause, type UnsubscribeCause } from "./subscribers";
 
-/** The format's name and version, written in its `format` column. */
-export const IMPORT_FORMAT = "kestrel-subscribers/1";
+/** The format's first version. */
+export const IMPORT_FORMAT_V1 = "kestrel-subscribers/1";
 
-/** Every version this release reads, oldest first. A file names one or is read as version 1. */
-export const IMPORT_FORMAT_VERSIONS: readonly string[] = [IMPORT_FORMAT];
+/** The format's name and newest version, written in its `format` column. Version 2 adds why an
+ *  unsubscribed row left, and with it a complaint and an erasure leave the suppressions. */
+export const IMPORT_FORMAT = "kestrel-subscribers/2";
+
+/**
+ * Every version this release reads, oldest first. A row that names none is read by both, since
+ * they read every row alike but for what one of them refuses: version 1's complaint and
+ * erasure suppressions, and version 2's `unsubscribe_cause`.
+ */
+export const IMPORT_FORMAT_VERSIONS: readonly string[] = [IMPORT_FORMAT_V1, IMPORT_FORMAT];
 
 /** The consent claim a row makes. `none` is a known address with no claim, carrying a suppression. */
 export const IMPORT_STATUSES = ["subscribed", "pending", "unsubscribed", "none"] as const;
@@ -26,8 +35,17 @@ export const OPT_INS = ["double", "single", "unknown"] as const;
 export type OptIn = (typeof OPT_INS)[number];
 
 /** A suppression a row carries on top of its status. */
-export const SUPPRESSION_CLAIMS = ["bounce", "complaint", "manual", "erased"] as const;
+export const SUPPRESSION_CLAIMS = ["bounce", "manual"] as const;
 export type SuppressionClaim = (typeof SUPPRESSION_CLAIMS)[number];
+
+/** Version 1's suppressions, which a version 1 row may still carry: a complaint or an erasure
+ *  there is read as the row leaving by it (SPEC §7). */
+export const SUPPRESSION_CLAIMS_V1 = ["bounce", "complaint", "manual", "erased"] as const;
+
+/** Why an unsubscribed row left, as the source states it. A row that says nothing left
+ *  elsewhere, and is recorded with the cause `import`. */
+export const UNSUBSCRIBE_CAUSE_CLAIMS = ["reader", "publisher", "complaint", "erased"] as const;
+export type UnsubscribeCauseClaim = (typeof UNSUBSCRIBE_CAUSE_CLAIMS)[number];
 
 /** What a plain list's addresses are, declared in the request; `subscribed` by default. */
 export const PLAIN_LIST_STATUSES = ["subscribed", "unsubscribed", "bounced"] as const;
@@ -107,12 +125,20 @@ export const IMPORT_COLUMNS: readonly ImportColumn[] = [
     meaning: "Where consent was first collected, as the file claims it.",
   },
   {
+    name: "unsubscribe_cause",
+    required: false,
+    values: UNSUBSCRIBE_CAUSE_CLAIMS,
+    takes: "one of the values, or empty; only on an `unsubscribed` row",
+    meaning:
+      "Why the person left: their own unsubscribe (`reader`), the publisher on their request (`publisher`), a complaint about the mail (`complaint`), or an erasure at their request (`erased`), which is recorded with the address alone. Empty when the source doesn’t say, recorded as having left elsewhere. Version 2 only.",
+  },
+  {
     name: "suppression",
     required: false,
     values: SUPPRESSION_CLAIMS,
     takes: "one of the values, or empty",
     meaning:
-      "A suppression on top of `status`: the address bounced, complained, was suppressed by hand, or was erased.",
+      "A suppression on top of `status`, the sender’s side: the address bounced, or was blocked by hand. In version 1 it also took `complaint`, read as an `unsubscribed` row whose cause is `complaint`, and `erased`, read as one whose cause is `erased`.",
   },
   {
     name: "subscribed_at",
@@ -157,7 +183,7 @@ export const IMPORT_COLUMNS: readonly ImportColumn[] = [
     values: IMPORT_FORMAT_VERSIONS,
     takes: "the format’s name and version, or empty",
     meaning:
-      "The version the file is written in. A file without it is read as version 1; a version this release doesn’t know is refused by name.",
+      "The version the row is written in. A row without it may use either version’s values, which every version reads alike; a version this release doesn’t know is refused by name.",
   },
 ];
 
@@ -173,6 +199,9 @@ export interface ImportRow {
   status: ImportStatus;
   opt_in: OptIn;
   origin: string;
+  /** Why an `unsubscribed` row left: the file's cause, or `import` when it gave none. Null on
+   *  any other status. */
+  unsubscribe_cause: UnsubscribeCause | null;
   suppression: SuppressionClaim | null;
   subscribed_at: number | null;
   confirmed_at: number | null;
@@ -269,6 +298,7 @@ function parsePlainList(text: string, declared: PlainListStatus): ParseResult {
       status: declared === "bounced" ? "none" : declared,
       opt_in: "unknown",
       origin: "unknown",
+      unsubscribe_cause: declared === "unsubscribed" ? "import" : null,
       suppression: declared === "bounced" ? "bounce" : null,
       subscribed_at: null,
       confirmed_at: null,
@@ -436,6 +466,7 @@ function parseCsvFile(text: string): ParseResult {
     status: at("status"),
     opt_in: at("opt_in"),
     origin: at("origin"),
+    unsubscribe_cause: at("unsubscribe_cause"),
     suppression: at("suppression"),
     subscribed_at: at("subscribed_at"),
     confirmed_at: at("confirmed_at"),
@@ -498,7 +529,13 @@ function parseCsvFile(text: string): ParseResult {
           { row: r, column: "origin" },
         );
       }
+      // A row naming no version takes either version's values; one naming its version, only
+      // that version's.
+      const v1Only = format === IMPORT_FORMAT_V1;
+      const suppressionValues =
+        format === IMPORT_FORMAT ? SUPPRESSION_CLAIMS : SUPPRESSION_CLAIMS_V1;
       const suppression = cell(idx.suppression);
+      const causeText = cell(idx.unsubscribe_cause);
       const evidenceText = cell(idx.evidence);
       let evidence: string | null = null;
       if (evidenceText !== "") {
@@ -526,19 +563,57 @@ function parseCsvFile(text: string): ParseResult {
       const raw = cell(idx.email);
       const email = normalizeEmail(raw);
       const valid = isValidEmail(email);
+      let status = pick("status", idx.status, IMPORT_STATUSES);
+      const claimed =
+        suppression === "" ? null : pick("suppression", idx.suppression, suppressionValues);
+      let cause: UnsubscribeCause | null = null;
+      if (causeText !== "") {
+        if (v1Only) {
+          return refuse(
+            "invalid_field",
+            `Row ${r}: unsubscribe_cause is part of ${IMPORT_FORMAT}, not the ${IMPORT_FORMAT_V1} its format column names.`,
+            { row: r, column: "unsubscribe_cause" },
+          );
+        }
+        if (claimed === "complaint" || claimed === "erased") {
+          return refuse(
+            "invalid_field",
+            `Row ${r}: a ${claimed} is how someone left, so write it as their unsubscribe_cause, not as a suppression beside one.`,
+            { row: r, column: "suppression", allowed: SUPPRESSION_CLAIMS },
+          );
+        }
+        cause = pick("unsubscribe_cause", idx.unsubscribe_cause, UNSUBSCRIBE_CAUSE_CLAIMS);
+        if (status !== "unsubscribed") {
+          return refuse(
+            "invalid_field",
+            `Row ${r}: unsubscribe_cause says why someone left, so it goes only on an unsubscribed row, not a ${status} one.`,
+            { row: r, column: "unsubscribe_cause" },
+          );
+        }
+      }
+      let unsubscribedAt = instant("unsubscribed_at", idx.unsubscribed_at);
+      const suppressedAt = instant("suppressed_at", idx.suppressed_at);
+      // Version 1's complaint and erasure were suppressions; each is how the person left.
+      if (claimed === "complaint" || claimed === "erased") {
+        cause = status === "unsubscribed" ? strongerCause(cause ?? "import", claimed) : claimed;
+        unsubscribedAt = status === "unsubscribed" ? unsubscribedAt : suppressedAt;
+        status = "unsubscribed";
+      } else if (status === "unsubscribed") {
+        cause ??= "import";
+      }
       rows.push({
         row: r,
         email: valid ? email : raw,
         valid,
-        status: pick("status", idx.status, IMPORT_STATUSES),
+        status,
         opt_in: pick("opt_in", idx.opt_in, OPT_INS),
         origin,
-        suppression:
-          suppression === "" ? null : pick("suppression", idx.suppression, SUPPRESSION_CLAIMS),
+        unsubscribe_cause: cause,
+        suppression: claimed === "complaint" || claimed === "erased" ? null : claimed,
         subscribed_at: instant("subscribed_at", idx.subscribed_at),
         confirmed_at: instant("confirmed_at", idx.confirmed_at),
-        unsubscribed_at: instant("unsubscribed_at", idx.unsubscribed_at),
-        suppressed_at: instant("suppressed_at", idx.suppressed_at),
+        unsubscribed_at: unsubscribedAt,
+        suppressed_at: claimed === "complaint" || claimed === "erased" ? null : suppressedAt,
         evidence,
       });
     } catch (err) {
@@ -558,8 +633,6 @@ const STATUS_RANK: Record<ImportStatus, number> = {
 const SUPPRESSION_RANK: Record<SuppressionClaim, number> = {
   manual: 0,
   bounce: 1,
-  complaint: 2,
-  erased: 3,
 };
 const OPT_IN_STRENGTH: Record<OptIn, number> = { unknown: 0, single: 1, double: 2 };
 
@@ -583,7 +656,8 @@ export interface MergedImport {
 
 /**
  * Fold an address's repeats into one row (SPEC §7): status unsubscribed over subscribed over
- * pending over none; suppression erased over complaint over bounce over manual; the weakest
+ * pending over none; the strongest reason for leaving, an erasure over a complaint over the
+ * first of the rest (`strongerCause`); suppression bounce over manual; the weakest
  * opt-in claim; the earliest consent times and the latest unsubscribe and suppression times;
  * and the evidence and origin of the row whose status won (the first such row on a tie).
  */
@@ -607,6 +681,9 @@ export function mergeRows(rows: readonly ImportRow[]): MergedImport {
       held.status = row.status;
       held.origin = row.origin;
       held.evidence = row.evidence;
+      held.unsubscribe_cause = row.unsubscribe_cause;
+    } else if (held.unsubscribe_cause !== null && row.unsubscribe_cause !== null) {
+      held.unsubscribe_cause = strongerCause(held.unsubscribe_cause, row.unsubscribe_cause);
     }
     if (
       row.suppression !== null &&
@@ -632,6 +709,8 @@ export interface ExportRow {
   status: ImportStatus;
   opt_in: OptIn;
   origin: string;
+  /** Why an unsubscribed row left (`import`, having left elsewhere, is written empty); null on any other status. */
+  unsubscribe_cause: UnsubscribeCauseClaim | null;
   suppression: SuppressionClaim | null;
   subscribed_at: string | null;
   confirmed_at: string | null;
@@ -684,6 +763,7 @@ export const TEMPLATE_ROWS: readonly ExportRow[] = [
     status: "subscribed",
     opt_in: "double",
     origin: "sendy",
+    unsubscribe_cause: null,
     suppression: null,
     subscribed_at: "2024-03-01T09:30:00Z",
     confirmed_at: "2024-03-01T09:42:00Z",
@@ -697,6 +777,7 @@ export const TEMPLATE_ROWS: readonly ExportRow[] = [
     status: "subscribed",
     opt_in: "single",
     origin: "mailchimp",
+    unsubscribe_cause: null,
     suppression: null,
     subscribed_at: "2023-11-12T16:05:00Z",
     confirmed_at: null,
@@ -710,6 +791,7 @@ export const TEMPLATE_ROWS: readonly ExportRow[] = [
     status: "unsubscribed",
     opt_in: "unknown",
     origin: "unknown",
+    unsubscribe_cause: "reader",
     suppression: null,
     subscribed_at: null,
     confirmed_at: null,
@@ -723,6 +805,7 @@ export const TEMPLATE_ROWS: readonly ExportRow[] = [
     status: "none",
     opt_in: "unknown",
     origin: "unknown",
+    unsubscribe_cause: null,
     suppression: "bounce",
     subscribed_at: null,
     confirmed_at: null,
@@ -748,9 +831,8 @@ export const EXAMPLE_TXT_NAME = "kestrel-import-example.txt";
  * What an import does to one address (SPEC §7), after its repeats are folded together. Each
  * is named in one form, the past tense of its effect, so the editor and Claude can relay it
  * as it stands: `added_…` for a new subscriber, `kept_…` where the row's status isn't
- * applied because this list's own record or a suppression wins (for `kept_suppressed`, possibly
- * the file's own erasure), and no "blocked", which means only the publisher's own block. A row that changes its
- * status and adds a suppression reports its status outcome and `suppression_added: true`;
+ * applied because this list's own record or a suppression wins, and no "blocked", which means
+ * only the publisher's own block. A row that changes its status and adds a suppression reports its status outcome and `suppression_added: true`;
  * `suppressed` as the outcome is a row whose only effect is the suppression.
  */
 export const IMPORT_OUTCOMES = [
@@ -771,24 +853,23 @@ export type ImportOutcome = (typeof IMPORT_OUTCOMES)[number];
 
 /** When each outcome applies, for the format route and the reference page. */
 export const IMPORT_OUTCOME_MEANINGS: Record<ImportOutcome, string> = {
-  added_confirmed:
-    "`subscribed`, with no subscriber and no suppression here, and not erased in the file: added as confirmed.",
+  added_confirmed: "`subscribed`, with no subscriber and no suppression here: added as confirmed.",
   confirmed_pending:
-    "`subscribed`, pending here (never confirmed), and not erased in the file: confirmed, and its confirmation link no longer works.",
+    "`subscribed`, pending here (never confirmed): confirmed, and its confirmation link no longer works.",
   unchanged:
     "Already confirmed here, or already in the state the row claims. A subscriber who joined here keeps their own record.",
   unsubscribed:
-    "`unsubscribed`, and confirmed or pending here, with no confirmation here newer than the row’s `unsubscribed_at`: unsubscribed.",
+    "`unsubscribed`, and confirmed or pending here, with no confirmation here newer than the row’s `unsubscribed_at`: unsubscribed, by the row’s cause. Also `unsubscribed` for someone already unsubscribed here whose cause the row’s stronger one replaces (an erasure over a complaint over the rest). A row whose cause is `erased` leaves only the address.",
   added_unsubscribed:
-    "`unsubscribed`, with no subscriber here, and not erased here or in the file: recorded as unsubscribed, so the list remembers they left.",
+    "`unsubscribed`, with no subscriber here: recorded as unsubscribed, by the row’s cause, so the list remembers they left. A row whose cause is `erased` is recorded with its address alone.",
   kept_confirmed_newer:
     "`unsubscribed`, but the reader confirmed here after the source’s `unsubscribed_at`: their newer action stands.",
   kept_unsubscribed:
     "`subscribed`, but unsubscribed here, or pending again after leaving until they confirm here themselves. An unsubscribe here is never reversed (I2).",
   kept_suppressed:
-    "`subscribed`, but the address carries a suppression here, a do-not-contact marker included: never added or confirmed. Also `unsubscribed` for an address whose suppression here is the do-not-contact marker an erasure left, and, for an address erased in the file (its `suppression` is `erased`, which is still added), `subscribed` or `unsubscribed` with no subscriber here, or `subscribed` and pending here, which stays pending: no subscriber is recorded or confirmed, so an import never brings back an erased person’s data.",
+    "`subscribed`, but the address carries a suppression here: never added or confirmed.",
   suppressed:
-    "The row carries a suppression and the address has none here (or only a do-not-contact marker, which a bounce, a complaint, or a manual suppression replaces), and nothing else changes. Applied whatever the row’s `status`.",
+    "The row carries a suppression and the address has none here, and nothing else changes. Applied whatever the row’s `status`.",
   left_out:
     "`pending` or `none` with nothing to apply: counted, never confirmed. An import sends no email.",
   invalid: "The address isn’t valid.",

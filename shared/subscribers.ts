@@ -9,25 +9,45 @@ import type { PageMeta } from "./list";
 export type SubscriberStatus = "pending" | "confirmed" | "unsubscribed";
 
 /**
- * Why an address is suppressed (SPEC §7), which also says whose decision it was: the
- * provider's (`bounce`, `complaint`), the previous service's, brought by an import
- * (`import_bounce`, `import_complaint`), a block by hand (`manual`), the publisher's own or
- * one an import brought from the previous service, or an
- * erasure's do-not-contact marker (`erased`). `subscriber_meanings.ts` says what each means.
+ * Why a subscriber left (SPEC §7), kept while they have left and not confirmed since: their own
+ * unsubscribe link or one-click header (`reader`), the publisher on their request
+ * (`publisher`), a complaint about the mail (`complaint`), an erasure (`erased`), or a list
+ * brought from elsewhere that says they left and not why (`import`).
+ * `subscriber_meanings.ts` says what each means.
  */
-export const SUPPRESSION_REASONS = [
-  "bounce",
-  "complaint",
-  "manual",
-  "erased",
-  "import_bounce",
-  "import_complaint",
-] as const;
-export type SuppressionReason = (typeof SUPPRESSION_REASONS)[number];
+export const UNSUBSCRIBE_CAUSES = ["reader", "publisher", "complaint", "erased", "import"] as const;
+export type UnsubscribeCause = (typeof UNSUBSCRIBE_CAUSES)[number];
 
-/** The reasons the publisher lifts (SPEC §7): their own block (Unblock), and a bounce once its
- *  cause is gone (Clear). */
-export const PUBLISHER_LIFTS: readonly SuppressionReason[] = ["manual", "bounce", "import_bounce"];
+// The causes that carry a rule of their own: an erasure's record is stripped, and a complaint
+// or an erasure keeps the publisher from adding the person back. The rest rank alike.
+const CAUSE_STRENGTH: Record<UnsubscribeCause, number> = {
+  reader: 0,
+  publisher: 0,
+  import: 0,
+  complaint: 1,
+  erased: 2,
+};
+
+/**
+ * The cause that stands when someone who already left leaves again (SPEC §7): the stronger of
+ * the two, an erasure over a complaint over the rest, and among the rest the one already held.
+ */
+export function strongerCause(held: UnsubscribeCause, next: UnsubscribeCause): UnsubscribeCause {
+  return CAUSE_STRENGTH[next] > CAUSE_STRENGTH[held] ? next : held;
+}
+
+/** The causes after which only the person's own sign-up brings them back: the publisher's Add
+ *  is refused (SPEC §7). */
+export const SIGNUP_ONLY_CAUSES: readonly UnsubscribeCause[] = ["complaint", "erased"];
+
+/**
+ * Why an address is suppressed (SPEC §7), always the sender's side, and whose decision it
+ * was: the provider's (`bounce`), the previous service's bounce, brought by an import
+ * (`import_bounce`), or a block (`manual`), the publisher's own or one an import brought.
+ * The publisher lifts each. `subscriber_meanings.ts` says what each means.
+ */
+export const SUPPRESSION_REASONS = ["bounce", "manual", "import_bounce"] as const;
+export type SuppressionReason = (typeof SUPPRESSION_REASONS)[number];
 
 /** One suppressed address: why, the provider's or the publisher's words if any, and since when. */
 export interface Suppression {
@@ -54,15 +74,17 @@ export interface Subscriber {
   confirm_sent_at: number | null;
   /** When a confirmation was last attempted, the per-address cooldown's clock. */
   confirm_attempt_at: number | null;
-  /** Durable per-subscriber token in every delivered mail's unsubscribe link; never rotated (I2). */
+  /** Durable per-subscriber token in every delivered mail's unsubscribe link; never rotated (I2), except that an erasure discards it for one no mail carries. */
   unsub_token: string;
   created_at: number;
   confirmed_at: number | null;
   /** When they last left; kept while they are pending again, so a row that left still reads so until its owner confirms. */
   unsubscribed_at: number | null;
-  /** Where consent was collected (SPEC §7): `kestrel` for this app's own double opt-in, or the source an import claimed. */
+  /** Why they left, while they have left and not confirmed since: on every unsubscribed subscriber, and on a pending one who left and signed up again. Null otherwise. */
+  unsubscribe_cause: UnsubscribeCause | null;
+  /** Where consent was collected (SPEC §7): `kestrel` for this app's own double opt-in, or the source an import claimed; `unknown` once erased. */
   origin: string;
-  /** How consent was collected: this app's is `double`; an import's is what its file claimed. */
+  /** How consent was collected: this app's is `double`; an import's is what its file claimed; `unknown` once erased. */
   opt_in: OptIn;
   /** The proof of consent, as JSON text: an import's evidence verbatim, or the IP a confirmation here came from. */
   consent_evidence: string | null;
@@ -134,24 +156,14 @@ export function isErasedPlaceholder(email: string): boolean {
 }
 
 /**
- * POST /api/subscribers/:id/erase (SPEC §7). The subscriber is gone, so the answer is what
- * was done: the address, which the list now keeps only as a do-not-contact suppression;
- * how many past delivery rows show an erased recipient in its place; and the suppression
- * it is left with, `erased` or a bounce or complaint it already had, which stands.
+ * POST /api/subscribers/:id/erase (SPEC §7): the subscriber as the erasure left them,
+ * unsubscribed by it and holding only the address and when, and how many past delivery rows
+ * this erasure put a placeholder in place of the address on (0 for a repeat, which changes
+ * nothing).
  */
 export interface EraseResponse {
-  erased: { email: string; deliveries: number; suppression: SuppressionReason };
-}
-
-/**
- * POST /api/subscribers refused because the address was erased (SPEC §7): a 409
- * `erasure_acknowledgement_required`, with when it was erased. Sending again with
- * `acknowledge_erasure: true` sends the confirmation; the public form never asks.
- */
-export interface ErasureAcknowledgementRequired {
-  error: "erasure_acknowledgement_required";
-  message: string;
-  erased_at: number;
+  subscriber: Subscriber;
+  deliveries: number;
 }
 
 /** GET /api/suppressions: every suppressed address, newest first. */

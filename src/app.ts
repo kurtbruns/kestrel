@@ -1511,19 +1511,15 @@ export function createRouter({
       title: "Add a subscriber",
       summary: "Add a subscriber via the normal double opt-in (never an auto-confirm).",
       description:
-        "An address that was erased is added only once the publisher confirms the person asked to join again. The confirmation then goes as usual, and the person's own confirming lifts the marker. The public form never asks.",
+        "Someone who left by a complaint (`unsubscribe_cause` `complaint`) or an erasure (`erased`) is never added this way: only their own sign-up through the public subscribe form brings them back, so no mail the publisher starts reaches them first. Anyone else who left gets a confirmation as usual, and only their confirming brings them back.",
       example: { request: { email: "reader@example.com" } },
-      body: [
-        { name: "email", type: "string", required: true, description: "The address to add." },
-        {
-          name: "acknowledge_erasure",
-          type: "boolean",
-          description:
-            "`true` once the publisher confirms that a person whose address was erased asked to join again.",
-        },
-      ],
+      body: [{ name: "email", type: "string", required: true, description: "The address to add." }],
       errors: [
-        { code: "erasure_acknowledgement_required", details: ["erased_at"] },
+        {
+          code: "signup_required",
+          when: "The address left by a complaint or an erasure: ask the person to subscribe through the subscribe page. Nothing is sent.",
+          details: ["subscriber"],
+        },
         {
           ...notConnected,
           when: "No email provider is connected, so the confirmation could not go; nothing is stored.",
@@ -1603,9 +1599,9 @@ export function createRouter({
       access: "admin",
       resource: "subscribers",
       title: "Export the list",
-      summary: "The whole list in the import format (`kestrel-subscribers/1`), a page at a time.",
+      summary: "The whole list in the import format (`kestrel-subscribers/2`), a page at a time.",
       description:
-        "Every subscriber (`confirmed` written as `subscribed`) with how they joined, their evidence, and their suppression, plus every address suppressed with no subscriber (`status: none`). Importing it into another instance carries the list over. Pages run in address order: following `next` until `null` reads every address once, the server setting the page size (1,000 on the Workers Free plan's limits, 10,000 otherwise). For a CSV, write the rows under the format's header once, a value starting `=`, `+`, `-`, or `@` led by a `'` so a spreadsheet won't run it.",
+        "Every subscriber (`confirmed` written as `subscribed`) with how they joined, their evidence, why they left (`unsubscribe_cause`, on an unsubscribed row), and their suppression, plus every address suppressed with no subscriber (`status: none`). Importing it into another instance carries the list over. Pages run in address order: following `next` until `null` reads every address once, the server setting the page size (1,000 on the Workers Free plan's limits, 10,000 otherwise). For a CSV, write the rows under the format's header once, a value starting `=`, `+`, `-`, or `@` led by a `'` so a spreadsheet won't run it.",
       query: [
         {
           name: "after",
@@ -1615,7 +1611,7 @@ export function createRouter({
       ],
       example: {
         response: {
-          format: "kestrel-subscribers/1",
+          format: "kestrel-subscribers/2",
           exported_at: 1768467600000,
           subscribers: [
             {
@@ -1623,13 +1619,14 @@ export function createRouter({
               status: "subscribed",
               opt_in: "double",
               origin: "kestrel",
+              unsubscribe_cause: null,
               suppression: null,
               subscribed_at: "2026-01-02T09:30:00.000Z",
               confirmed_at: "2026-01-02T09:42:00.000Z",
               unsubscribed_at: null,
               suppressed_at: null,
               evidence: '{"confirmed_ip":"203.0.113.7"}',
-              format: "kestrel-subscribers/1",
+              format: "kestrel-subscribers/2",
             },
           ],
           next: "eyJ2IjoxLCJhZnRlciI6ImFkYUBleGFtcGxlLmNvbSIsImF0IjoxNzY4NDY3NjAwMDAwfQ",
@@ -1654,7 +1651,7 @@ export function createRouter({
       resource: "subscribers",
       title: "Unsubscribe a subscriber",
       summary: "Unsubscribe a subscriber at their request.",
-      description: `${SUBSCRIBER_ACTIONS.unsubscribe.when} Immediate and idempotent, as their own unsubscribe link is: it removes consent and never confirms anyone. To stop mailing an address on your own judgment, block it instead (\`POST /api/suppressions\`), which records that the decision was yours.`,
+      description: `${SUBSCRIBER_ACTIONS.unsubscribe.when} Pending or confirmed, immediate and idempotent, as their own unsubscribe link is: it removes consent, records \`unsubscribe_cause\` \`publisher\`, and never confirms anyone. Someone who already left keeps the cause they left by. To stop mailing an address on your own judgment, block it instead (\`POST /api/suppressions\`), which records that the decision was yours.`,
       returns: { object: "subscriber", as: "subscriber" },
       handler: subscriberRoutes.unsubscribe,
     },
@@ -1665,14 +1662,44 @@ export function createRouter({
       resource: "subscribers",
       title: "Erase a subscriber",
       summary:
-        "Erase a subscriber: remove their data and keep only a do-not-contact marker. Can't be undone.",
+        "Erase a subscriber: unsubscribe them and keep only their address, so it's never mailed again. Can't be undone.",
       description:
         `${SUBSCRIBER_ACTIONS.erase.when} Unsubscribing stops the mail and keeps everything; erasing removes what the list knows about them. ` +
-        "One batch: deletes the subscriber's row and evidence, replaces their address on every past delivery row with one placeholder (`erased:` and random hex, so each record still sums to its audience), and suppresses the address as `erased`, unless it already has a bounce, complaint, or block, which it keeps. Answers `erased`: the `email`, how many `deliveries` show the placeholder, and the `suppression` left. Only their own confirmation lifts the marker, never an import, and `POST /api/subscribers` asks for `acknowledge_erasure` first. Nothing of the id is kept, so a repeat answers 404. A later receipt on an erased row keeps its outcome without the provider's words; a bounce or complaint suppresses its address, replacing the marker.",
+        "One batch: unsubscribes them with `unsubscribe_cause` `erased` and strips the subscriber to the address and when (`created_at` and `unsubscribed_at` the time of the erasure; no confirmation, evidence, or import; `origin` and `opt_in` `unknown`; both tokens discarded, so an unsubscribe link in mail already sent matches no one), replaces their address on every past delivery row with one placeholder (`erased:` and random hex, so each record still sums to its audience), and drops the `detail` of a bounce or block kept on the address. Works on someone already unsubscribed too. Answers the `subscriber` as it now stands and how many `deliveries` show the placeholder; a repeat changes nothing and answers `deliveries: 0`. They come back only by subscribing through the public form themselves: `POST /api/subscribers` refuses the address, and an import never reverses an unsubscribe. A later receipt on an erased row keeps its outcome without the provider's words.",
       example: {
         response: {
-          erased: { email: "reader@example.com", deliveries: 12, suppression: "erased" },
+          subscriber: {
+            id: "8b2f6c1e-4d3a-4f0b-9c7e-2a1d5e6f7a80",
+            email: "reader@example.com",
+            status: "unsubscribed",
+            confirm_token: null,
+            confirm_sent_at: null,
+            confirm_attempt_at: null,
+            unsub_token: "c41e9a07d2b85f36e1a4c9d07b3f2e58a6d1c4b97e0f3a25d8c6b1e4f7a09d32",
+            created_at: 1760400000000,
+            confirmed_at: null,
+            unsubscribed_at: 1760400000000,
+            unsubscribe_cause: "erased",
+            origin: "unknown",
+            opt_in: "unknown",
+            consent_evidence: null,
+            import_id: null,
+            suppression: null,
+          },
+          deliveries: 12,
         },
+      },
+      returns: {
+        object: "subscriber",
+        as: "subscriber",
+        fields: [
+          {
+            name: "deliveries",
+            type: "number",
+            description:
+              "How many past delivery rows this erasure put the placeholder on; 0 for a repeat.",
+          },
+        ],
       },
       errors: [
         {
@@ -1694,13 +1721,13 @@ export function createRouter({
       summary:
         "Everything about the import format, from the definition the importer reads with: the files it takes, the columns, the rules, this deployment's limits, the outcomes, and the attestation.",
       description:
-        "Read it before converting a list. The full CSV (`kestrel-subscribers/1`, what the export writes) is preferred, since it carries unsubscribes, bounces, and how each person joined; a plain `.txt` of addresses is the fallback. Another service's export is converted first; nothing is guessed. Split a list larger than `limits` into several imports, each its own plan and commit.",
+        "Read it before converting a list. The full CSV (`kestrel-subscribers/2`, what the export writes; every earlier version still reads) is preferred, since it carries unsubscribes, bounces, and how each person joined; a plain `.txt` of addresses is the fallback. Another service's export is converted first; nothing is guessed. Split a list larger than `limits` into several imports, each its own plan and commit.",
       returns: {
         fields: [
           {
             name: "format",
             type: "string",
-            description: "The format's name, `kestrel-subscribers/1`.",
+            description: "The format's name and newest version, `kestrel-subscribers/2`.",
           },
           {
             name: "versions",
@@ -1903,8 +1930,7 @@ export function createRouter({
         {
           name: "reason",
           type: '"manual"',
-          description:
-            "May be omitted. Any other is a 400: a bounce or complaint is the provider's to report, an erasure's marker Erase's to leave.",
+          description: "May be omitted. Any other is a 400: a bounce is the provider's to report.",
         },
         { name: "detail", type: "string", description: "Why, in the publisher's words." },
       ],
@@ -1930,7 +1956,7 @@ export function createRouter({
       resource: "suppressions",
       title: "Unblock or clear an address",
       summary: "Lift a block or a bounce on the publisher's word, naming the reason it lifts.",
-      description: `The editor's two acts that lift a suppression, each a deliberate, rare act on the publisher's word. "Unblock" lifts a block (\`manual\`): ${SUBSCRIBER_ACTIONS.unblock.when} "Clear" lifts a bounce (\`bounce\` or \`import_bounce\`): ${SUBSCRIBER_ACTIONS.clear.when} No other reason is lifted here, and an erasure's marker is refused. Answers \`lifted: false\` when the address has no suppression, as a repeat after a lift does.`,
+      description: `The editor's two acts that lift a suppression, each a deliberate, rare act on the publisher's word. "Unblock" lifts a block (\`manual\`): ${SUBSCRIBER_ACTIONS.unblock.when} "Clear" lifts a bounce (\`bounce\` or \`import_bounce\`): ${SUBSCRIBER_ACTIONS.clear.when} A complaint or an erasure is not a suppression but how someone left, which only their own sign-up undoes. Answers \`lifted: false\` when the address has no suppression, as a repeat after a lift does.`,
       example: {
         request: { email: "reader@example.com", reason: "bounce" },
         response: { email: "reader@example.com", lifted: true },
@@ -1955,10 +1981,7 @@ export function createRouter({
           },
         ],
       },
-      errors: [
-        { code: "suppression_changed", details: ["suppression"] },
-        { code: "erasure_marker", details: ["suppression"] },
-      ],
+      errors: [{ code: "suppression_changed", details: ["suppression"] }],
       handler: suppressionRoutes.lift,
     },
 
@@ -1972,7 +1995,7 @@ export function createRouter({
       summary:
         "Amazon SNS's subscription handshake and SES's delivery, bounce, and complaint events, each request SNS-signature-verified.",
       description:
-        "The provider's to call, never a client's. An event lands on its send's delivery rows; a hard bounce or a complaint also suppresses the address.",
+        "The provider's to call, never a client's. An event lands on its send's delivery rows; a hard bounce also suppresses the address, and a complaint unsubscribes its subscriber (`unsubscribe_cause` `complaint`) unless it is about a post sent before their latest confirmation.",
       handler: webhookRoutes.ses,
     },
 

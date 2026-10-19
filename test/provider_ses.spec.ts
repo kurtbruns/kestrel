@@ -10,7 +10,13 @@ import { PROVIDER_REQUEST_TIMEOUT_MS, type RenderedEmail } from "../src/provider
 import { SENTTO_SENTINEL, substituteRecipient, UNSUB_SENTINEL } from "../src/render/render";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { SNS_TOPIC_ARN } from "./support/deploy";
-import { deliveryEvent, dueSend, resetDatabase, seedDelivery } from "./support/fixtures";
+import {
+  deliveryEvent,
+  dueSend,
+  resetDatabase,
+  seedConfirmed,
+  seedDelivery,
+} from "./support/fixtures";
 import { base } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
 import { neverAnswers } from "./support/provider_timeout";
@@ -1211,9 +1217,10 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     expect(await deliveryEvent("msg-hard-1")).toBe("bounced");
   });
 
-  it("verifies a complaint notification and auto-suppresses the address", async () => {
+  it("verifies a complaint notification and unsubscribes its reader by it (SPEC §7, §10)", async () => {
     const signer = await makeSigner();
     mockCert(signer);
+    await seedConfirmed("complainer@example.com");
     await seedDelivery("complainer@example.com", "msg-cmp-1");
 
     const envelope = await signEnvelope(
@@ -1224,8 +1231,10 @@ describe("SesProvider.parseWebhook (SNS)", () => {
 
     expect(result.events[0]).toMatchObject({ type: "complained", email: "complainer@example.com" });
     const applied = await applyDeliveryEvents(env.DB, result.events);
-    expect(applied.suppressed).toBe(1);
-    expect(await subscribers.isSuppressed(env.DB, "complainer@example.com")).toBe(true);
+    expect(applied).toEqual({ applied: 1, suppressed: 0, unsubscribed: 1 });
+    expect(await subscribers.isSuppressed(env.DB, "complainer@example.com")).toBe(false);
+    const row = await subscribers.getByEmail(env.DB, "complainer@example.com");
+    expect([row?.status, row?.unsubscribe_cause]).toEqual(["unsubscribed", "complaint"]);
   });
 
   it("records a transient (soft) bounce WITHOUT suppressing", async () => {
@@ -1263,7 +1272,7 @@ describe("SesProvider.parseWebhook (SNS)", () => {
       { type: "delivered", providerId: "msg-dlv-1", email: "arrived@example.com" },
     ]);
     const applied = await applyDeliveryEvents(env.DB, result.events);
-    expect(applied).toEqual({ applied: 1, suppressed: 0 });
+    expect(applied).toEqual({ applied: 1, suppressed: 0, unsubscribed: 0 });
     expect(await deliveryEvent("msg-dlv-1")).toBe("delivered");
     expect(await subscribers.isSuppressed(env.DB, "arrived@example.com")).toBe(false);
   });

@@ -5,6 +5,7 @@ import {
   type ExportRow,
   IMPORT_COLUMNS,
   IMPORT_FORMAT,
+  IMPORT_FORMAT_V1,
   type ImportRow,
   mergeRows,
   type ParseResult,
@@ -37,7 +38,7 @@ const txt = (text: string, status?: "subscribed" | "unsubscribed" | "bounced") =
   parseImportFile({ name: "list.txt", text }, status);
 
 describe("the CSV format (SPEC §7)", () => {
-  it("reads a file without the format column as version 1", () => {
+  it("reads a file without the format column, as every version reads it alike", () => {
     const rows = rowsOf(csv(`${HEADER}\nAda@Example.com ,subscribed,double,sendy\n`));
     expect(rows).toEqual([
       {
@@ -47,6 +48,7 @@ describe("the CSV format (SPEC §7)", () => {
         status: "subscribed",
         opt_in: "double",
         origin: "sendy",
+        unsubscribe_cause: null,
         suppression: null,
         subscribed_at: null,
         confirmed_at: null,
@@ -64,6 +66,48 @@ describe("the CSV format (SPEC §7)", () => {
     expect(rows.map((r) => [r.email, r.status, r.opt_in])).toEqual([
       ["a@x.io", "pending", "single"],
     ]);
+  });
+
+  it("reads why an unsubscribed row left, recording a row that doesn't say as having left elsewhere (SPEC §7)", () => {
+    const rows = rowsOf(
+      csv(
+        `email,status,opt_in,origin,unsubscribe_cause,format\r\na@x.io,unsubscribed,unknown,sendy,erased,${IMPORT_FORMAT}\r\nb@x.io,unsubscribed,unknown,sendy,,${IMPORT_FORMAT}\r\nc@x.io,subscribed,unknown,sendy,,${IMPORT_FORMAT}\r\n`,
+      ),
+    );
+    expect(rows.map((r) => [r.email, r.status, r.unsubscribe_cause])).toEqual([
+      ["a@x.io", "unsubscribed", "erased"],
+      ["b@x.io", "unsubscribed", "import"],
+      ["c@x.io", "subscribed", null],
+    ]);
+  });
+
+  it("reads a version 1 complaint or erasure as the row leaving by it, whatever its status (SPEC §7)", () => {
+    const rows = rowsOf(
+      csv(
+        `${HEADER},suppression,suppressed_at,unsubscribed_at,format\r\na@x.io,subscribed,double,sendy,erased,2025-02-02T12:00:00Z,,${IMPORT_FORMAT_V1}\r\nb@x.io,none,unknown,sendy,complaint,,,\r\nc@x.io,unsubscribed,unknown,sendy,complaint,,2025-01-01T00:00:00Z,\r\n`,
+      ),
+    );
+    expect(
+      rows.map((r) => [r.email, r.status, r.unsubscribe_cause, r.suppression, r.unsubscribed_at]),
+    ).toEqual([
+      ["a@x.io", "unsubscribed", "erased", null, Date.parse("2025-02-02T12:00:00Z")],
+      ["b@x.io", "unsubscribed", "complaint", null, null],
+      ["c@x.io", "unsubscribed", "complaint", null, Date.parse("2025-01-01T00:00:00Z")],
+    ]);
+  });
+
+  it("refuses a cause on a row that didn't leave, a cause in version 1, and a complaint as a suppression in version 2, naming the column", () => {
+    for (const [line, column] of [
+      [`a@x.io,subscribed,double,sendy,erased,,${IMPORT_FORMAT}`, "unsubscribe_cause"],
+      [`a@x.io,unsubscribed,double,sendy,reader,,${IMPORT_FORMAT_V1}`, "unsubscribe_cause"],
+      [`a@x.io,unsubscribed,double,sendy,,complaint,${IMPORT_FORMAT}`, "suppression"],
+      [`a@x.io,unsubscribed,double,sendy,reader,erased,`, "suppression"],
+    ] as const) {
+      const e = errorOf(
+        csv(`email,status,opt_in,origin,unsubscribe_cause,suppression,format\r\n${line}\r\n`),
+      );
+      expect([e.code, e.row, e.column]).toEqual(["invalid_field", 1, column]);
+    }
   });
 
   it("refuses a version it doesn't know, by name", () => {
@@ -246,6 +290,7 @@ describe("merging an address's repeats (SPEC §7)", () => {
     status: "subscribed",
     opt_in: "double",
     origin: "sendy",
+    unsubscribe_cause: null,
     suppression: null,
     subscribed_at: null,
     confirmed_at: null,
@@ -255,7 +300,7 @@ describe("merging an address's repeats (SPEC §7)", () => {
     ...over,
   });
 
-  it("favors leaving, the strongest suppression, the weakest opt-in, and the outer times", () => {
+  it("favors leaving, the stronger suppression, the weakest opt-in, and the outer times", () => {
     const merged = mergeRows([
       row({
         row: 1,
@@ -275,7 +320,8 @@ describe("merging an address's repeats (SPEC §7)", () => {
         origin: "mailchimp",
         subscribed_at: 100,
         unsubscribed_at: 50,
-        suppression: "complaint",
+        unsubscribe_cause: "reader",
+        suppression: "bounce",
         suppressed_at: 9,
         evidence: '{"b":2}',
       }),
@@ -286,7 +332,7 @@ describe("merging an address's repeats (SPEC §7)", () => {
         origin: "other",
         subscribed_at: 200,
         confirmed_at: 7,
-        suppression: "bounce",
+        suppression: "manual",
         evidence: '{"c":3}',
       }),
     ]);
@@ -296,7 +342,8 @@ describe("merging an address's repeats (SPEC §7)", () => {
         status: "unsubscribed",
         opt_in: "single",
         origin: "mailchimp",
-        suppression: "complaint",
+        unsubscribe_cause: "reader",
+        suppression: "bounce",
         subscribed_at: 100,
         confirmed_at: 7,
         unsubscribed_at: 50,
@@ -307,12 +354,23 @@ describe("merging an address's repeats (SPEC §7)", () => {
     expect(merged.repeats.map((r) => r.row)).toEqual([2, 3]);
   });
 
-  it("ranks erased over every other suppression, and unknown as the weakest opt-in", () => {
+  it("keeps the strongest reason for leaving: an erasure, then a complaint, then the first of the rest (SPEC §7)", () => {
+    const left = (r: number, cause: ImportRow["unsubscribe_cause"]) =>
+      row({ row: r, status: "unsubscribed", unsubscribe_cause: cause });
+    const strongest = (...causes: ImportRow["unsubscribe_cause"][]) =>
+      mergeRows(causes.map((c, i) => left(i + 1, c))).rows[0]?.unsubscribe_cause;
+    expect(strongest("reader", "erased", "complaint")).toBe("erased");
+    expect(strongest("import", "complaint", "publisher")).toBe("complaint");
+    expect(strongest("publisher", "reader", "import")).toBe("publisher");
+    expect(strongest("import", "reader")).toBe("import");
+  });
+
+  it("ranks unknown as the weakest opt-in", () => {
     const merged = mergeRows([
-      row({ row: 1, suppression: "erased", opt_in: "single" }),
-      row({ row: 2, suppression: "complaint", opt_in: "unknown" }),
+      row({ row: 1, opt_in: "single" }),
+      row({ row: 2, opt_in: "unknown" }),
     ]);
-    expect(merged.rows[0]).toMatchObject({ suppression: "erased", opt_in: "unknown" });
+    expect(merged.rows[0]).toMatchObject({ opt_in: "unknown" });
   });
 
   it("keeps the first row's origin and evidence when the status ties", () => {
@@ -380,6 +438,7 @@ describe("a page of the export on Workers Free (SPEC §8)", () => {
       status: i % 10 === 0 ? "unsubscribed" : "subscribed",
       opt_in: "double",
       origin: "kestrel",
+      unsubscribe_cause: i % 10 === 0 ? "reader" : null,
       suppression: i % 50 === 0 ? "bounce" : null,
       subscribed_at: "2025-06-01T10:00:00.000Z",
       confirmed_at: "2025-06-01T10:12:00.000Z",

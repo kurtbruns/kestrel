@@ -31,7 +31,8 @@ import {
 } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import {
-  ERASED_MARKER_MEANING,
+  CAUSE_LABEL,
+  CAUSE_MEANING,
   FLAG_MEANING,
   STATUS_MEANING,
   SUPPRESSED_MEANING,
@@ -43,6 +44,7 @@ import type {
   SubscriberStatus,
   Suppression,
   SuppressionReason,
+  UnsubscribeCause,
 } from "../../shared/subscribers";
 import { HALT_BACKOFF_MS, MISSED_THRESHOLD_MS } from "../lib/time";
 
@@ -195,7 +197,7 @@ const CONDITION_KINDS: Record<ConditionKind, ConditionKindDoc> = {
   no_receipts: {
     severity: "`warn`",
     fields: "`accepted`",
-    meaning: `A send finished within ${RECENT_DAYS} days, ${NO_RECEIPTS_AFTER_MS / 60_000} minutes past dispatch, with no receipt for any of its \`accepted\`: the provider's events may not be reaching the webhook, so its bounces and complaints suppress no one.`,
+    meaning: `A send finished within ${RECENT_DAYS} days, ${NO_RECEIPTS_AFTER_MS / 60_000} minutes past dispatch, with no receipt for any of its \`accepted\`: the provider's events may not be reaching the webhook, so its bounces suppress no one and its complaints unsubscribe no one.`,
     remedy:
       "Whoever runs the deployment looks for `webhook.refused` in the logs and checks the provider's event subscription. It clears once any receipt lands.",
   },
@@ -664,30 +666,33 @@ const STATUS_VALUES = (Object.keys(STATUS_MEANING) as SubscriberStatus[]).map((s
   description: STATUS_MEANING[status],
 }));
 
+/** Why a subscriber left, each with the words the editor shows beside the status and what it means. */
+const CAUSE_VALUES = (Object.keys(CAUSE_MEANING) as UnsubscribeCause[]).map((cause) => ({
+  value: cause,
+  description: `Shown as “${CAUSE_LABEL[cause]}”: ${CAUSE_MEANING[cause]}`,
+}));
+
 /**
  * Where each suppression reason comes from, beside the flag the editor shows it as and that
- * flag's meaning in the legend's words: an import's bounce or complaint reads as one seen
- * here, so it names the reason it reads as, and only its source tells the two apart.
+ * flag's meaning in the legend's words: an import's bounce reads as one seen here, so it
+ * names the reason it reads as, and only its source tells the two apart.
  */
 const REASON_SOURCE: Record<SuppressionReason, string> = {
   bounce: "The provider reported a hard bounce here.",
   import_bounce: "An import carried it in from the service the list came from.",
-  complaint: "The provider reported a spam complaint here.",
-  import_complaint: "An import carried it in from the service the list came from.",
   manual: "",
-  erased: "",
 };
 const READS_AS: Partial<Record<SuppressionReason, SuppressionReason>> = {
   import_bounce: "bounce",
-  import_complaint: "complaint",
 };
 
 /** The suppression reasons, each with the flag the editor shows and where it came from. */
 const REASON_VALUES = (Object.keys(SUPPRESSION_FLAG) as SuppressionReason[]).map((reason) => {
   const flag: SuppressionFlag = SUPPRESSION_FLAG[reason];
   const same = READS_AS[reason];
-  const meaning = flag === "erased" ? ERASED_MARKER_MEANING : FLAG_MEANING[flag];
-  const lead = same ? `Shown as ${flag}, as \`${same}\` is.` : `Shown as ${flag}: ${meaning}`;
+  const lead = same
+    ? `Shown as ${flag}, as \`${same}\` is.`
+    : `Shown as ${flag}: ${FLAG_MEANING[flag]}`;
   return { value: reason, description: `${lead} ${REASON_SOURCE[reason]}`.trim() };
 });
 
@@ -704,17 +709,25 @@ const SUBSCRIBER_FIELDS: ReferenceField[] = [
   {
     name: "suppression",
     type: "{ reason, detail } | null",
-    description: `Whether the address is suppressed, null when it isn't: \`reason\`, why and whose decision it was, as a suppression's (Suppressions), and \`detail\`, the provider's words or the publisher's. ${SUPPRESSED_MEANING} On the roster \`erased\` means: ${FLAG_MEANING.erased}`,
+    description: `Whether the address is suppressed, null when it isn't: \`reason\`, why and whose decision it was, as a suppression's (Suppressions), and \`detail\`, the provider's words or the publisher's. ${SUPPRESSED_MEANING}`,
+  },
+  {
+    name: "unsubscribe_cause",
+    type: '"reader" | "publisher" | "complaint" | "erased" | "import" | null',
+    description:
+      "Why they left, while they have left and not confirmed since: on every unsubscribed subscriber, and on a pending one who left and signed up again. Null otherwise. When someone who left leaves again, the stronger cause stands: an erasure, then a complaint, then the first of the rest. An erased subscriber holds only the address and when.",
+    values: CAUSE_VALUES,
   },
   {
     name: "origin",
     type: "string",
-    description: "Where consent was collected: `kestrel`, or the source an import claimed.",
+    description:
+      "Where consent was collected: `kestrel`, or the source an import claimed; `unknown` once erased.",
   },
   {
     name: "opt_in",
     type: '"double" | "single" | "unknown"',
-    description: "How consent was collected: this app's is `double`.",
+    description: "How consent was collected: this app's is `double`; `unknown` once erased.",
   },
   {
     name: "consent_evidence",
@@ -737,7 +750,7 @@ const SUBSCRIBER_FIELDS: ReferenceField[] = [
     name: "confirm_token, unsub_token",
     type: "string",
     description:
-      "The confirmation link's one-shot token (null once spent) and the unsubscribe link's, never rotated.",
+      "The confirmation link's one-shot token (null once spent) and the unsubscribe link's, never rotated except by an erasure, which discards both.",
   },
   {
     name: "confirm_sent_at, confirm_attempt_at",
@@ -921,7 +934,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
     resource: "subscribers",
     title: "The subscriber object",
     description:
-      "An address, its consent, its suppression, and how it joined. Consent status and suppression are separate axes.",
+      "An address, its consent, its suppression, how it joined, and why it left. Consent status and suppression are separate axes: the status is the person's, and the suppression the sender's side.",
     fields: SUBSCRIBER_FIELDS,
     example: {
       id: "sub_1",
@@ -938,13 +951,14 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
       created_at: 1768381200000,
       confirmed_at: 1768381500000,
       unsubscribed_at: null,
+      unsubscribe_cause: null,
       suppression: null,
     } satisfies Subscriber,
   },
   suppression: {
     resource: "suppressions",
     title: "The suppression object",
-    description: `An address that isn't mailed, and why. ${SUPPRESSED_MEANING}`,
+    description: `An address that isn't mailed because of the sender's side, a bounce or a block, and why. ${SUPPRESSED_MEANING} A complaint and an erasure aren't suppressions but how someone left (\`unsubscribe_cause\` on the subscriber).`,
     fields: SUPPRESSION_FIELDS,
     example: {
       email: "reader@example.com",

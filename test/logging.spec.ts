@@ -230,7 +230,7 @@ describe("the send lifecycle in the log", () => {
     ]);
   });
 
-  it("receipts and the suppressions they add are logged per send, as counts", async () => {
+  it("receipts, the suppressions they add, and the complaints are logged per send, as counts (SPEC §12)", async () => {
     await seedConfirmed(AUDIENCE);
     const send = await dueSend();
     await sweep(env);
@@ -261,10 +261,15 @@ describe("the send lifecycle in the log", () => {
         event: "suppression.added",
         sendId: send.id,
         source: "webhook",
-        bounce: 1,
+        count: 1,
       }),
       expect.objectContaining({ event: "receipt.applied", matched: false, complained: 1 }),
-      expect.objectContaining({ event: "suppression.added", matched: false, complaint: 1 }),
+      expect.objectContaining({
+        event: "subscriber.complained",
+        matched: false,
+        count: 1,
+        no_subscriber: 1,
+      }),
     ]);
     expectNoAddress();
     for (const spy of spies) {

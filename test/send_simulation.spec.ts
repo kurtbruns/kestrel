@@ -464,16 +464,17 @@ describe("drainSimulatedWebhooks (delayed synthetic receipts through the real in
     expect(settled).toBe(300);
     expect(row!.c_delivered).toBeGreaterThan(0);
 
-    // The suppression invariant: a HARD bounce or ANY complaint suppresses; a SOFT bounce is
-    // counted (in c_bounced) but must NOT suppress. So suppressions == hard bounces + complaints,
-    // and a soft bounce sits in c_bounced without a matching suppression.
+    // The suppression invariant: a HARD bounce suppresses; a SOFT bounce is counted (in
+    // c_bounced) but must NOT suppress, and a complaint unsubscribes rather than suppresses
+    // (SPEC §7). So suppressions == hard bounces, and a soft bounce sits in c_bounced without
+    // a matching suppression.
     const { hard, soft } = await bounceBreakdown("s-drain");
     expect(hard + soft).toBe(row!.c_bounced);
     expect(soft).toBeGreaterThan(0); // the guaranteed floor ensures the counted-not-suppressed path
     const sup = await env.DB.prepare("SELECT COUNT(*) AS n FROM suppressions").first<{
       n: number;
     }>();
-    expect(sup!.n).toBe(hard + row!.c_complained);
+    expect(sup!.n).toBe(hard);
 
     // Idempotent: a second drain finds nothing left awaiting a receipt.
     expect(await drainSimulatedWebhooks(env, simConfig())).toBe(0);
@@ -498,7 +499,7 @@ describe("drainSimulatedWebhooks (delayed synthetic receipts through the real in
     const sup = await env.DB.prepare("SELECT COUNT(*) AS n FROM suppressions").first<{
       n: number;
     }>();
-    expect(sup!.n).toBe(hard + row!.c_complained);
+    expect(sup!.n).toBe(hard);
   });
 
   it("counts a soft (transient) bounce without suppressing it (SPEC §10)", async () => {

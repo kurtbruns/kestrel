@@ -116,11 +116,15 @@ describe("buildScaledAudience", () => {
     expect(Math.min(...sizes)).toBeGreaterThan(0);
     expect(new Set(sizes).size).toBe(4);
 
-    // Suppressions stay a small fraction of the list (a realistic bounce+complaint rate).
-    expect(built.suppressions.length).toBeGreaterThanOrEqual(2);
+    // Suppressions stay a small fraction of the list (a realistic bounce rate), and the
+    // complaints unsubscribe their readers rather than suppress them (SPEC §7).
+    const complainers = built.subscribers.filter((s) => s.unsubscribe_cause === "complaint");
+    expect(built.suppressions.length).toBeGreaterThanOrEqual(1);
     expect(built.suppressions.length).toBeLessThan(confirmed * 0.02);
-    // The second send's events mirror the suppressions that shadow the current audience.
-    expect(built.sendTwoEvents.size).toBe(built.suppressions.length);
+    expect(complainers.length).toBeGreaterThanOrEqual(1);
+    expect(built.suppressions.every((x) => x.reason === "bounce")).toBe(true);
+    // The second send's events are those bounces and complaints.
+    expect(built.sendTwoEvents.size).toBe(built.suppressions.length + complainers.length);
   });
 
   it("is reproducible for a (size, seed) and varies the churn timing across seeds", () => {
@@ -176,7 +180,7 @@ describe("dev seed — scaled (parametric, DB-backed)", () => {
     expect(loaded.counts.confirmed).toBeGreaterThan(80);
     expect(loaded.counts.confirmed).toBeLessThan(120);
     // The current audience is confirmed − suppressed (SPEC §7), read from the list itself.
-    expect(suppressed).toBeGreaterThanOrEqual(2);
+    expect(suppressed).toBeGreaterThanOrEqual(1);
     expect(loaded.audience).toBe(loaded.counts.confirmed - suppressed);
     expect(summary.audience).toBe(loaded.audience);
 
@@ -216,8 +220,8 @@ describe("dev seed — scaled (parametric, DB-backed)", () => {
   it("leaves the default (unsized) seed unchanged", async () => {
     const summary = await seedDatabase(env, config());
     // The curated list's signature numbers — the two-path contract's default half.
-    expect(summary.subscribers.confirmed).toBe(157);
-    expect(summary.suppressions).toBe(5);
+    expect(summary.subscribers.confirmed).toBe(156);
+    expect(summary.suppressions).toBe(3);
     expect(summary.audience).toBe(155);
   });
 });

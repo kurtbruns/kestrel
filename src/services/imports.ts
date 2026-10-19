@@ -37,9 +37,10 @@ import {
   type PlainListStatus,
   parseImportFile,
 } from "../../shared/imports";
+import { strongerCause } from "../../shared/subscribers";
 import type { ListEntry, ListState } from "../db/imports";
 import * as imports from "../db/imports";
-import { countSubscribers, ERASED } from "../db/subscribers";
+import { countSubscribers } from "../db/subscribers";
 import { onFreePlanLimits } from "../env";
 import { HttpError, refusal } from "../lib/errors";
 import { newId, newTokens } from "../lib/ids";
@@ -121,22 +122,16 @@ const WRITE_OUTCOMES: ReadonlySet<ImportOutcome> = new Set([
  *
  * A pending subscriber who once left counts as unsubscribed: anyone can put an address back
  * to pending through the public form, so only its owner's confirmation undoes the leaving
- * (I2). A suppression here stands, except that an erased marker gives way to any other
- * reason, so a known bounce or complaint still stops the address being sent confirmations.
- * An erased marker with no subscriber behind it also blocks an unsubscribed row: recording
- * the person as unsubscribed would bring back the data the erasure removed. A row that
- * itself says the address was erased never creates a subscriber or confirms a pending one
- * either: it is blocked by its own marker, which it still brings, so a pending subscriber
- * stays pending and only their own confirmation lifts it, as after an erasure here.
+ * (I2). Someone already unsubscribed here takes the row's cause only when it is the stronger
+ * (an erasure over a complaint over the rest), as when a person leaves again. A suppression
+ * here stands: the first one an address gets is the one it keeps.
  */
 export function classify(
   row: ImportRow,
   here: ListEntry | undefined,
   suppressionHere: string | undefined,
 ): { outcome: ImportOutcome; suppressionAdded: boolean } {
-  const suppressionAdded =
-    row.suppression !== null &&
-    (suppressionHere === undefined || (suppressionHere === ERASED && row.suppression !== ERASED));
+  const suppressionAdded = row.suppression !== null && suppressionHere === undefined;
   const leftHere =
     here?.status === "unsubscribed" ||
     (here?.status === "pending" && here.unsubscribed_at !== null);
@@ -162,29 +157,29 @@ export function classify(
       (here.confirmed_at ?? 0) > row.unsubscribed_at;
     outcome =
       here === undefined
-        ? suppressionHere === ERASED
-          ? "kept_suppressed"
-          : "added_unsubscribed"
+        ? "added_unsubscribed"
         : here.status === "unsubscribed"
-          ? "unchanged"
+          ? causeReplaces(here, row)
+            ? "unsubscribed"
+            : "unchanged"
           : confirmedHereSince
             ? "kept_confirmed_newer"
             : "unsubscribed";
   } else {
     outcome = "left_out";
   }
-  if (
-    row.suppression === ERASED &&
-    (outcome === "added_confirmed" ||
-      outcome === "confirmed_pending" ||
-      outcome === "added_unsubscribed")
-  ) {
-    outcome = "kept_suppressed";
-  }
   if (suppressionAdded && (outcome === "unchanged" || outcome === "left_out")) {
     outcome = "suppressed";
   }
   return { outcome, suppressionAdded };
+}
+
+/** Whether an unsubscribed row's cause is stronger than the one a subscriber who already left
+ *  here holds, and so replaces it (SPEC §7). */
+function causeReplaces(here: ListEntry, row: ImportRow): boolean {
+  const held = here.unsubscribe_cause ?? "import";
+  const next = row.unsubscribe_cause ?? "import";
+  return strongerCause(held, next) !== held;
 }
 
 async function sha256Hex(data: string): Promise<string> {
@@ -388,13 +383,11 @@ export function planResponse(plan: Plan): ImportPlanResponse {
   };
 }
 
-// A file's suppression claim as the suppression it becomes here: an imported bounce or
-// complaint is kept apart from one this instance saw.
+// A file's suppression claim as the suppression it becomes here: an imported bounce is kept
+// apart from one this instance saw.
 const SUPPRESSION_REASON = {
   bounce: "import_bounce",
-  complaint: "import_complaint",
   manual: "manual",
-  erased: "erased",
 } as const;
 
 /** The answer to a commit replayed after the first was applied: the record, nothing written now. */
@@ -440,6 +433,7 @@ export async function commitImport(
     confirm: [],
     addConfirmed: [],
     suppress: [],
+    erase: [],
     notice: principal.kind === "service",
   };
   const tokens = newTokens(plan.counts.added_confirmed + plan.counts.added_unsubscribed);
@@ -456,18 +450,23 @@ export async function commitImport(
       writes.addConfirmed.push({ ...consent, id: newId(), tok: token(), uat: null });
     } else if (outcome === "confirmed_pending") {
       writes.confirm.push(consent);
-    } else if (outcome === "unsubscribed") {
-      writes.unsubscribe.push({ e: row.email, uat: row.unsubscribed_at });
-    } else if (outcome === "added_unsubscribed") {
-      // In the unsubscribe too, so an address that subscribed here since the plan still leaves.
-      writes.unsubscribe.push({ e: row.email, uat: row.unsubscribed_at });
-      writes.addUnsubscribed.push({
-        ...consent,
-        cat: row.confirmed_at,
-        id: newId(),
-        tok: token(),
-        uat: row.unsubscribed_at,
-      });
+    } else if (outcome === "unsubscribed" || outcome === "added_unsubscribed") {
+      // An added one in the unsubscribe too, so an address that subscribed here since the plan
+      // still leaves.
+      const cause = row.unsubscribe_cause ?? "import";
+      writes.unsubscribe.push({ e: row.email, uat: row.unsubscribed_at, c: cause });
+      if (outcome === "added_unsubscribed") {
+        // An erasure is recorded with its address alone, whatever else the file says (SPEC §7).
+        const ids = { id: newId(), tok: token(), uat: row.unsubscribed_at, c: cause };
+        writes.addUnsubscribed.push(
+          cause === "erased"
+            ? { ...ids, e: row.email, opt: "unknown", org: "unknown", ev: null, cat: null }
+            : { ...ids, ...consent, cat: row.confirmed_at },
+        );
+      }
+      if (cause === "erased") {
+        writes.erase.push(row.email);
+      }
     }
     if (suppressionAdded && row.suppression !== null) {
       writes.suppress.push({
@@ -517,9 +516,7 @@ export async function commitImport(
     actual.push({ ...p, outcome, suppressionAdded });
   }
   // A planned write the list held back: read the address as it now stands, setting aside a
-  // suppression this import itself just added, and say what that means for it. A new
-  // address held back while this import suppressed it was erased in between: the import's
-  // suppression replaced that marker, which is what held the write back.
+  // suppression this import itself just added, and say what that means for it.
   if (unsettled.length > 0) {
     let state: ListState = { subscribers: new Map(), suppressions: new Map() };
     try {
@@ -535,11 +532,7 @@ export async function commitImport(
       const { outcome } = classify(
         { ...p.row, suppression: null },
         state.subscribers.get(e),
-        applied.suppressed.has(e)
-          ? state.subscribers.has(e)
-            ? undefined
-            : ERASED
-          : state.suppressions.get(e),
+        applied.suppressed.has(e) ? undefined : state.suppressions.get(e),
       );
       // The guard held the write back, so whatever the list would allow now did not happen.
       actual.push({ ...p, outcome: WRITE_OUTCOMES.has(outcome) ? "unchanged" : outcome });

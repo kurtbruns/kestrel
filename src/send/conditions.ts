@@ -199,8 +199,9 @@ export function sendConditions(send: SendSummary, now: number, freePlan: boolean
   }
 
   // Not one receipt for anyone the provider took, an hour after the last was handed off:
-  // the provider's events may not be reaching the app, so its bounces and complaints are
-  // suppressing no one. Said as a possibility, since a send can be this quiet on its own.
+  // the provider's events may not be reaching the app, so its bounces suppress no one and its
+  // complaints unsubscribe no one. Said as a possibility, since a send can be this quiet on
+  // its own.
   const heard = send.c_delivered + send.c_bounced + send.c_complained;
   if (
     send.status === "sent" &&
@@ -214,7 +215,7 @@ export function sendConditions(send: SendSummary, now: number, freePlan: boolean
       kind: "no_receipts",
       severity: "warn",
       since: send.completed_at + NO_RECEIPTS_AFTER_MS,
-      message: `No delivery receipt has arrived for any of the ${plural(send.c_accepted, "recipient")} the provider took, ${plural(Math.round((now - send.completed_at) / 3_600_000) || 1, "hour")} after the send went out. The provider's events may not be reaching this app, so its bounces and complaints suppress no one. Check the webhook and the app's error log.`,
+      message: `No delivery receipt has arrived for any of the ${plural(send.c_accepted, "recipient")} the provider took, ${plural(Math.round((now - send.completed_at) / 3_600_000) || 1, "hour")} after the send went out. The provider's events may not be reaching this app, so its bounces suppress no one and its complaints unsubscribe no one. Check the webhook and the app's error log.`,
       action: null,
       accepted: send.c_accepted,
     });

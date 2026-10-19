@@ -55,10 +55,6 @@ const TRY_AGAIN = {
 } as const satisfies Record<string, Refusal>;
 
 const CONFIRM = {
-  erasure_acknowledgement_required: [
-    409,
-    "Adding an erased address: send `acknowledge_erasure: true` once the person asked to join again.",
-  ],
   attestation_required: [409, "The publisher accepts the `attestation` shown."],
   sends_acknowledgement_required: [
     409,
@@ -77,7 +73,10 @@ const NO_LONGER_APPLIES = {
   window_closed: [409, "The send's fire time has passed."],
   send_canceled: [409, "The send is canceled: schedule the post again instead."],
   not_wedged: [409, "Nothing on the send needs resolving."],
-  erasure_marker: [409, "Lifting an erasure's marker, which only the person's confirmation lifts."],
+  signup_required: [
+    409,
+    "Adding someone who left by a complaint or an erasure: only their own sign-up through the subscribe page brings them back.",
+  ],
 } as const satisfies Record<string, Refusal>;
 
 const FIX_DEPLOYMENT = {

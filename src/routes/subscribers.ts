@@ -4,18 +4,16 @@ import { isValidEmail, normalizeEmail } from "../../shared/email";
 import { freePlanListNotice, pastFreePlanList } from "../../shared/free_plan";
 import type {
   EraseResponse,
-  ErasureAcknowledgementRequired,
   SubscribeResponse,
   SubscriberListResponse,
   SubscriberResponse,
 } from "../../shared/subscribers";
 import * as subscribers from "../db/subscribers";
 import { onFreePlanLimits } from "../env";
-import { fieldError, optBoolean, optString, readJsonObject } from "../lib/body";
+import { fieldError, optString, readJsonObject } from "../lib/body";
 import { HttpError, json, notFound, refusal } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
 import { log } from "../lib/log";
-import { requireConnectedProvider } from "../providers";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { requestSubscription } from "../services/subscriptions";
@@ -23,26 +21,20 @@ import { requestSubscription } from "../services/subscriptions";
 export async function create(c: RequestContext): Promise<Response> {
   const body = await readJsonObject(c);
   const raw = optString(body, "email");
-  const acknowledged = optBoolean(body, "acknowledge_erasure") === true;
   const email = raw === undefined ? "" : normalizeEmail(raw);
   if (!email || !isValidEmail(email)) {
     throw fieldError("email", "Enter a valid email address.");
   }
-  // An erased person may come back, but by their own wish (SPEC §7): the publisher adding
-  // them is asked first. Only here; the public form is the person asking for themselves.
-  if (!acknowledged) {
-    requireConnectedProvider(c.config);
-    const suppression = await subscribers.suppressionOf(c.env.DB, email);
-    if (suppression?.reason === subscribers.ERASED) {
-      const details: Omit<ErasureAcknowledgementRequired, "error" | "message"> = {
-        erased_at: suppression.created_at,
-      };
-      throw refusal(
-        "erasure_acknowledgement_required",
-        `${email} was erased at the person’s request. Send a confirmation only if they have asked to join again; confirming it lifts the erasure. To send it, add acknowledge_erasure: true.`,
-        details,
-      );
-    }
+  // Someone who reported the mail as spam or asked to be erased comes back only by their own
+  // sign-up (SPEC §7), so no mail the publisher starts reaches them first. Only here; the
+  // public form is the person asking for themselves.
+  const leftForGood = await subscribers.signupOnly(c.env.DB, email);
+  if (leftForGood) {
+    throw refusal(
+      "signup_required",
+      `${email} ${leftForGood.unsubscribe_cause === "erased" ? "was erased at their request" : "reported your email as spam"}, so only their own sign-up brings them back. Ask them to subscribe through your subscribe page.`,
+      { subscriber: await subscribers.withSuppression(c.env.DB, leftForGood) },
+    );
   }
   const outcome = await requestSubscription(c, email);
   if (outcome.kind === "failed") {
@@ -129,9 +121,9 @@ export async function unsubscribe(c: RequestContext): Promise<Response> {
 }
 
 /**
- * Authed admin erasure (SPEC §7): the subscriber's row goes, their past delivery rows show
- * an erased recipient, and the address stays only as a do-not-contact suppression. Not
- * undoable, and a repeat finds no subscriber (404), since nothing is kept to know the id by.
+ * Authed admin erasure (SPEC §7): the subscriber is unsubscribed by it and stripped to the
+ * address, and their past delivery rows show an erased recipient. Not undoable; a repeat
+ * answers the subscriber as the first one left them, changing nothing.
  */
 export async function erase(c: RequestContext): Promise<Response> {
   const id = param(c, "id");
@@ -148,7 +140,10 @@ export async function erase(c: RequestContext): Promise<Response> {
       { subscriber: subscriber && (await subscribers.withSuppression(c.env.DB, subscriber)) },
     );
   }
-  log.info("subscriber.erased", { deliveries: outcome.erased.deliveries });
-  const body: EraseResponse = { erased: outcome.erased };
+  log.info("subscriber.erased", { deliveries: outcome.deliveries });
+  const body: EraseResponse = {
+    subscriber: await subscribers.withSuppression(c.env.DB, outcome.subscriber),
+    deliveries: outcome.deliveries,
+  };
   return json(body);
 }
