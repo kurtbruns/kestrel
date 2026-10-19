@@ -97,7 +97,7 @@ The app verifies each login against your team domain, and checks that it was iss
 
 1. Keep the **Access token lifetime** at 15 minutes. A program renews its access token while you use it, so a short lifetime costs nothing.
 
-1. Choose the **Grant session duration**, how long a program's sign-in lasts before you approve it again. It defaults to **Same as session duration**, the session you chose in [section 2](#2-create-the-access-application). Cloudflare recommends one to two weeks for a command-line tool, so Claude Code doesn't ask you to approve every day.
+1. Choose the **Grant session duration**, how long a program's sign-in lasts before you approve it again. It defaults to **Same as session duration**, the session you chose in [section 2](#2-create-the-access-application). Set it to 1 week. Cloudflare recommends one to two weeks for a command-line tool, and a week means Claude Code asks you to approve again once a week, not every day.
 
 1. Save the application.
 
