@@ -64,7 +64,7 @@ async function tokenFor(email: string): Promise<string> {
 // The durable unsubscribe token (never rotated) is what delivered mail embeds.
 async function unsubTokenFor(email: string): Promise<string> {
   const row = await subs.getByEmail(env.DB, email);
-  return row!.unsub_token;
+  return row!.unsub_token!;
 }
 
 /** The confirm page's button: the POST that records consent. */
@@ -129,7 +129,7 @@ async function addErased(email: string): Promise<subs.SubscriberRow> {
 /** A confirmed subscriber who then reported the mail as spam (SPEC §7). */
 async function addComplainer(email: string): Promise<subs.SubscriberRow> {
   await addConfirmed(email);
-  expect(await subs.complain(env.DB, email, null)).toBe("unsubscribed");
+  expect(await subs.complain(env.DB, email)).toBe("unsubscribed");
   return (await subs.getByEmail(env.DB, email))!;
 }
 
@@ -625,9 +625,9 @@ describe("subscribers: admin + suppressions", () => {
     await resetDatabase();
     await seedConfirmed(["c1@example.com", "c2@example.com", "c3@example.com"]);
     await env.DB.prepare(
-      `INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, unsubscribed_at)
-       VALUES ('id-p', 'p@example.com', 'pending', 'cfm-p', 'uns-p', 0, NULL),
-              ('id-u', 'u@example.com', 'unsubscribed', NULL, 'uns-u', 0, 0)`,
+      `INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, unsubscribed_at, unsubscribe_cause)
+       VALUES ('id-p', 'p@example.com', 'pending', 'cfm-p', 'uns-p', 0, NULL, NULL),
+              ('id-u', 'u@example.com', 'unsubscribed', NULL, 'uns-u', 0, 0, 'reader')`,
     ).run();
     await subs.addSuppression(env.DB, "c1@example.com", "manual");
     await subs.addSuppression(env.DB, "elsewhere@example.com", "bounce");

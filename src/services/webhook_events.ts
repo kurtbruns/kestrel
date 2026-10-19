@@ -8,7 +8,7 @@
  *   - a HARD bounce also adds a suppression (SPEC §10), so the address is dropped from
  *     every future audience (I1);
  *   - a complaint unsubscribes its subscriber (SPEC §7), the reader's own act through
- *     their mail provider, unless it is about a post older than their latest confirmation.
+ *     their mail provider, whatever email it was about.
  * Soft (transient) bounces are recorded but never suppress.
  *
  * Each call logs what it applied, aggregated per send (`receipt.applied`, then
@@ -70,7 +70,7 @@ export async function applyDeliveryEvents(
       bounced: 0,
       complained: 0,
       bounce: 0,
-      complaint: { unsubscribed: 0, late: 0, no_subscriber: 0 },
+      complaint: { unsubscribed: 0, no_subscriber: 0 },
     };
     bySend.set(matched.sendId ?? "", tally);
     tally[e.type] += 1;
@@ -93,9 +93,9 @@ export async function applyDeliveryEvents(
       suppressed += 1;
       tally.bounce += 1;
     } else if (email && e.type === "complained") {
-      // Dated by the send its delivery belongs to; one matching no delivery (a confirmation
-      // email, or a test) can't be dated, so it applies to whoever holds the address.
-      const outcome = await complain(db, email, matched.sendId);
+      // One matching no delivery (a confirmation email, or a test) applies to whoever holds
+      // the address, as one about a post does.
+      const outcome = await complain(db, email);
       unsubscribed += outcome === "unsubscribed" ? 1 : 0;
       tally.complaint[outcome] += 1;
     }
@@ -115,12 +115,11 @@ export async function applyDeliveryEvents(
       log.info("suppression.added", { ...tags, source: "webhook", count: t.bounce });
     }
     const c = t.complaint;
-    if (c.unsubscribed + c.late + c.no_subscriber > 0) {
+    if (c.unsubscribed + c.no_subscriber > 0) {
       log.info("subscriber.complained", {
         ...tags,
-        count: c.unsubscribed + c.late + c.no_subscriber,
+        count: c.unsubscribed + c.no_subscriber,
         unsubscribed: c.unsubscribed,
-        late: c.late,
         no_subscriber: c.no_subscriber,
       });
     }

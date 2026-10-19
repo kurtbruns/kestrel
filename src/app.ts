@@ -1665,7 +1665,7 @@ export function createRouter({
         "Erase a subscriber: unsubscribe them and keep only their address, so it's never mailed again. Can't be undone.",
       description:
         `${SUBSCRIBER_ACTIONS.erase.when} Unsubscribing stops the mail and keeps everything; erasing removes what the list knows about them. ` +
-        "One batch: unsubscribes them with `unsubscribe_cause` `erased` and strips the subscriber to the address and when (`created_at` and `unsubscribed_at` the time of the erasure; no confirmation, evidence, or import; `origin` and `opt_in` `unknown`; both tokens discarded, so an unsubscribe link in mail already sent matches no one), replaces their address on every past delivery row with one placeholder (`erased:` and random hex, so each record still sums to its audience), and drops the `detail` of a bounce or block kept on the address. Works on someone already unsubscribed too. Answers the `subscriber` as it now stands and how many `deliveries` show the placeholder; a repeat changes nothing and answers `deliveries: 0`. They come back only by subscribing through the public form themselves: `POST /api/subscribers` refuses the address, and an import never reverses an unsubscribe. A later receipt on an erased row keeps its outcome without the provider's words.",
+        "One batch: unsubscribes them with `unsubscribe_cause` `erased` and strips the subscriber to the address and when (`created_at` and `unsubscribed_at` the time of the erasure; `confirmed_at`, `consent_evidence`, `import_id`, `origin`, `opt_in`, and both tokens null, so an unsubscribe link in mail already sent matches no one), replaces their address on every past delivery row with one placeholder (`erased:` and random hex, so each record still sums to its audience), and drops the `detail` of a bounce or block kept on the address. Works on someone already unsubscribed too. Answers the `subscriber` as it now stands and how many `deliveries` show the placeholder; a repeat changes nothing and answers `deliveries: 0`. They come back only by subscribing through the public form themselves: `POST /api/subscribers` refuses the address, and an import never reverses an unsubscribe. A later receipt on an erased row keeps its outcome without the provider's words.",
       example: {
         response: {
           subscriber: {
@@ -1675,13 +1675,13 @@ export function createRouter({
             confirm_token: null,
             confirm_sent_at: null,
             confirm_attempt_at: null,
-            unsub_token: "c41e9a07d2b85f36e1a4c9d07b3f2e58a6d1c4b97e0f3a25d8c6b1e4f7a09d32",
+            unsub_token: null,
             created_at: 1760400000000,
             confirmed_at: null,
             unsubscribed_at: 1760400000000,
             unsubscribe_cause: "erased",
-            origin: "unknown",
-            opt_in: "unknown",
+            origin: null,
+            opt_in: null,
             consent_evidence: null,
             import_id: null,
             suppression: null,
@@ -1995,7 +1995,7 @@ export function createRouter({
       summary:
         "Amazon SNS's subscription handshake and SES's delivery, bounce, and complaint events, each request SNS-signature-verified.",
       description:
-        "The provider's to call, never a client's. An event lands on its send's delivery rows; a hard bounce also suppresses the address, and a complaint unsubscribes its subscriber (`unsubscribe_cause` `complaint`) unless it is about a post sent before their latest confirmation.",
+        "The provider's to call, never a client's. An event lands on its send's delivery rows; a hard bounce also suppresses the address, and a complaint unsubscribes its subscriber (`unsubscribe_cause` `complaint`), whatever email it was about.",
       handler: webhookRoutes.ses,
     },
 

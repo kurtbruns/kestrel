@@ -321,7 +321,6 @@ describe("applyDeliveryEvents: what it logs", () => {
         matched: true,
         count: 1,
         unsubscribed: 1,
-        late: 0,
         no_subscriber: 0,
       },
     ]);
@@ -351,22 +350,8 @@ describe("a complaint is leaving (SPEC §7, Leaving)", () => {
     expect(await isSuppressed(env.DB, "spam@example.com")).toBe(false);
   });
 
-  it("keeps a reader who confirmed after the post the complaint is about, recording it on that send", async () => {
-    await seedConfirmed("again@example.com");
-    await seedDelivery("again@example.com", "msg-old");
-    await sendFiredAt(Date.now() - DAY);
-
-    const applied = await applyDeliveryEvents(env.DB, [
-      { type: "complained", providerId: "msg-old" },
-    ]);
-
-    expect(applied.unsubscribed).toBe(0);
-    expect(await standing("again@example.com")).toEqual(["confirmed", null]);
-    expect(await deliveryEvent("msg-old")).toBe("complained");
-  });
-
-  it("dates an imported reader's confirmation by the import that brought them, not the file's claim", async () => {
-    // The file says they confirmed long ago, but no post here is older than the import.
+  it("unsubscribes a reader whatever post the complaint is about, one sent before they last confirmed included", async () => {
+    // A reader who confirmed again after the post, here or by an import, still leaves by it.
     const now = Date.now();
     await env.DB.prepare(
       `INSERT INTO imports (id, created_at, principal_kind, file_name, file_sha256, plan_hash, counts)
@@ -374,21 +359,26 @@ describe("a complaint is leaving (SPEC §7, Leaving)", () => {
     )
       .bind(now)
       .run();
-    await seedConfirmed("imported@example.com");
+    await seedConfirmed(["again@example.com", "imported@example.com"]);
     await env.DB.prepare(
-      "UPDATE subscribers SET import_id = 'imp-1', confirmed_at = ? WHERE email = 'imported@example.com'",
-    )
-      .bind(now - 30 * DAY)
-      .run();
-    await seedDelivery("imported@example.com", "msg-before-import");
+      "UPDATE subscribers SET import_id = 'imp-1' WHERE email = 'imported@example.com'",
+    ).run();
+    await seedDelivery("again@example.com", "msg-old");
+    await seedDelivery("imported@example.com", "msg-older");
     await sendFiredAt(now - DAY);
 
-    await applyDeliveryEvents(env.DB, [{ type: "complained", providerId: "msg-before-import" }]);
+    const applied = await applyDeliveryEvents(env.DB, [
+      { type: "complained", providerId: "msg-old" },
+      { type: "complained", providerId: "msg-older" },
+    ]);
 
-    expect(await standing("imported@example.com")).toEqual(["confirmed", null]);
+    expect(applied.unsubscribed).toBe(2);
+    expect(await standing("again@example.com")).toEqual(["unsubscribed", "complaint"]);
+    expect(await standing("imported@example.com")).toEqual(["unsubscribed", "complaint"]);
+    expect(await deliveryEvent("msg-old")).toBe("complained");
   });
 
-  it("applies a complaint that can't be tied to a post, such as one about a confirmation email", async () => {
+  it("applies a complaint that ties to no post, such as one about a confirmation email", async () => {
     await env.DB.prepare(
       "INSERT INTO subscribers (id, email, status, unsub_token, created_at) VALUES ('p1', 'pending@example.com', 'pending', 'u-p1', ?)",
     )

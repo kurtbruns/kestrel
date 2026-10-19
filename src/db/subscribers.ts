@@ -125,7 +125,9 @@ export async function claimConfirmation(
  *
  * `unsubscribed_at` is kept: anyone can put an address back to pending through the public
  * form, so a pending row that once left must still read as having left until its owner
- * confirms. An import reads it, and never confirms such a row (SPEC §7).
+ * confirms. An import reads it, and never confirms such a row (SPEC §7). An erased person
+ * signing up again holds no unsubscribe token or provenance, so they are given a new token
+ * and read as joining here.
  */
 export async function armConfirmation(
   db: D1Database,
@@ -136,9 +138,9 @@ export async function armConfirmation(
 ): Promise<boolean> {
   const res = await db
     .prepare(
-      "UPDATE subscribers SET status = 'pending', confirm_token = ?, confirm_sent_at = ?, confirmed_at = NULL WHERE id = ? AND confirm_attempt_at = ? AND status = ?",
+      "UPDATE subscribers SET status = 'pending', confirm_token = ?, confirm_sent_at = ?, confirmed_at = NULL, unsub_token = COALESCE(unsub_token, ?), origin = COALESCE(origin, 'kestrel'), opt_in = COALESCE(opt_in, 'double') WHERE id = ? AND confirm_attempt_at = ? AND status = ?",
     )
-    .bind(token, claimedAt, id, claimedAt, statusAtClaim)
+    .bind(token, claimedAt, newToken(), id, claimedAt, statusAtClaim)
     .run();
   return (res.meta.changes ?? 0) > 0;
 }
@@ -277,37 +279,18 @@ export async function unsubscribeById(db: D1Database, id: string): Promise<Subsc
   return getById(db, row.id);
 }
 
-/** What a complaint did to its address: unsubscribed it, left it on the list because it was
- *  about mail older than their latest confirmation, or found no subscriber. */
-export type ComplaintOutcome = "unsubscribed" | "late" | "no_subscriber";
+/** What a complaint did to its address: unsubscribed its subscriber, or found none. */
+export type ComplaintOutcome = "unsubscribed" | "no_subscriber";
 
 /**
- * A complaint is leaving (SPEC §7): it unsubscribes the address with cause `complaint`, unless
- * it is about a post whose send (`sendId`) fired before the subscriber's latest confirmation,
- * which stands. Their latest confirmation is the one recorded here, or for someone an import
- * confirmed, the import's commit, since no post here is older than it. A complaint that can't
- * be tied to a send (`sendId` null) applies. An address with no subscriber is left as it is.
+ * A complaint is leaving (SPEC §7): it unsubscribes the address's subscriber with cause
+ * `complaint`, whatever email it was about, keeping a stronger cause one who already left
+ * holds. An address with no subscriber is left as it is.
  */
-export async function complain(
-  db: D1Database,
-  email: string,
-  sendId: string | null,
-): Promise<ComplaintOutcome> {
-  const sentAt = "(SELECT fire_at FROM sends WHERE id = ?4)";
-  const res = await leaveStatement(
-    db,
-    `email = ?3 AND NOT (${sentAt} IS NOT NULL AND COALESCE(
-       (SELECT i.created_at FROM imports i WHERE i.id = subscribers.import_id),
-       confirmed_at, ${sentAt}) > ${sentAt})`,
-    "complaint",
-    Date.now(),
-    normalizeEmail(email),
-    sendId,
-  ).run();
-  if ((res.meta.changes ?? 0) > 0) {
-    return "unsubscribed";
-  }
-  return (await getByEmail(db, normalizeEmail(email))) ? "late" : "no_subscriber";
+export async function complain(db: D1Database, email: string): Promise<ComplaintOutcome> {
+  const address = normalizeEmail(email);
+  const res = await leaveStatement(db, "email = ?3", "complaint", Date.now(), address).run();
+  return (res.meta.changes ?? 0) > 0 ? "unsubscribed" : "no_subscriber";
 }
 
 /**
@@ -485,8 +468,7 @@ function withoutAddress(text: string | null, email: string, placeholder: string)
 /**
  * Erase a subscriber (SPEC §7): unsubscribe them with cause `erased` and strip their row to the
  * address and when, which takes how they joined and the evidence for it along and discards
- * both tokens (a fresh unsubscribe token, which no mail carries, stands in for the one every
- * delivered post's link holds); put one random placeholder, `erased:<hex>`, in place of their
+ * both tokens, so the link in every post they were sent matches no one; put one random placeholder, `erased:<hex>`, in place of their
  * address on every past delivery row, so each record still sums to its audience; and drop the
  * words from a bounce or block kept on the address, which may name them. A provider's words
  * or message id on a delivery row that name the address get the placeholder in its place
@@ -547,11 +529,11 @@ export async function erase(db: D1Database, id: string): Promise<EraseOutcome> {
       .prepare(
         `UPDATE subscribers SET status = 'unsubscribed', unsubscribe_cause = 'erased',
            created_at = ?2, unsubscribed_at = ?2, confirmed_at = NULL, confirm_token = NULL,
-           confirm_sent_at = NULL, confirm_attempt_at = NULL, unsub_token = ?4,
-           origin = 'unknown', opt_in = 'unknown', consent_evidence = NULL, import_id = NULL
+           confirm_sent_at = NULL, confirm_attempt_at = NULL, unsub_token = NULL,
+           origin = NULL, opt_in = NULL, consent_evidence = NULL, import_id = NULL
          WHERE id = ?3 AND email = ?1 AND ${idle}`,
       )
-      .bind(email, now, id, newToken()),
+      .bind(email, now, id),
     db
       .prepare(`UPDATE suppressions SET detail = NULL WHERE email = ?1 AND ${idle}`)
       .bind(email, now),
