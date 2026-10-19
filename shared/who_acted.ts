@@ -15,12 +15,16 @@ export const CLAUDE_CODE_CLIENT = "claude-code";
 /** The longest client name taken: a short word, never a sentence. */
 export const CLIENT_NAME_MAX = 32;
 
+/** A client name's form, as a regular expression's source: lowercase letters and digits,
+ *  in parts joined by single hyphens. */
+export const CLIENT_NAME_PATTERN = "^[a-z0-9]+(?:-[a-z0-9]+)*$";
+
 /**
  * Whether `value` is a well-formed client name: one short lowercase word, its parts joined by
  * single hyphens (`editor`, `claude-code`). A name the app doesn't know is still well formed.
  */
 export function isClientName(value: string): boolean {
-  return value.length <= CLIENT_NAME_MAX && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
+  return value.length <= CLIENT_NAME_MAX && new RegExp(CLIENT_NAME_PATTERN).test(value);
 }
 
 /** GET /api/whoami: who this request signed in as, and how. */

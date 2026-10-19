@@ -1105,7 +1105,8 @@ function renderInputFor(
     markdown,
     metadata: JSON.stringify({ subject: demoPost.subject, slug: demoPost.slug }),
     author: "seed",
-    client: null,
+    // Written as the publisher would write them, in the editor, as the demo import is.
+    client: "editor",
     created_at: at,
   };
   return { post, revision };

@@ -111,6 +111,24 @@ describe("the OpenAPI document is well formed (OpenAPI 3.1)", () => {
     }
   });
 
+  it("declares the optional Kestrel-Client header on every admin route, and on no other (SPEC §11)", () => {
+    for (const d of defs) {
+      const op = doc.paths[openApiPath(d.path)]![d.method.toLowerCase()]!;
+      const headers = (op.parameters ?? []).filter((p) => p.in === "header");
+      if (d.access === "admin") {
+        expect(headers).toEqual([
+          expect.objectContaining({
+            name: "Kestrel-Client",
+            required: false,
+            schema: { type: "string", pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 32 },
+          }),
+        ]);
+      } else {
+        expect(headers).toEqual([]);
+      }
+    }
+  });
+
   it("gives a request body only to a route that takes one, under each type it accepts", () => {
     for (const d of defs) {
       const op = doc.paths[openApiPath(d.path)]![d.method.toLowerCase()]!;

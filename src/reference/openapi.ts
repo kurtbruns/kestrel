@@ -23,6 +23,7 @@ import {
   routeAnchor,
   sharedRefusals,
 } from "../../shared/reference";
+import { CLIENT_HEADER, CLIENT_NAME_MAX, CLIENT_NAME_PATTERN } from "../../shared/who_acted";
 import { REFUSAL_MEANING, type RefusalCode } from "./refusals";
 
 /** A JSON Schema (2020-12, as OpenAPI 3.1 uses it), loose enough to build field by field. */
@@ -37,6 +38,8 @@ export interface Schema {
   allOf?: Schema[];
   $ref?: string;
   format?: string;
+  pattern?: string;
+  maxLength?: number;
   contentMediaType?: string;
   title?: string;
   description?: string;
@@ -59,7 +62,7 @@ export interface OpenApiDocument {
 
 interface Parameter {
   name: string;
-  in: "path" | "query";
+  in: "path" | "query" | "header";
   required: boolean;
   description?: string;
   schema: Schema;
@@ -282,6 +285,16 @@ const SECURITY_SCHEMES = {
   },
 };
 
+/** The header a client names itself in, which every admin route takes and none requires. */
+const CLIENT_PARAMETER: Parameter = {
+  name: CLIENT_HEADER,
+  in: "header",
+  required: false,
+  description:
+    "The program the request came from, in one short lowercase word (`editor`, `claude-code`), recorded beside who made a change. A malformed name is a 400 naming this header; a service token's is ignored.",
+  schema: { type: "string", pattern: CLIENT_NAME_PATTERN, maxLength: CLIENT_NAME_MAX },
+};
+
 const ADMIN_SECURITY: Record<string, string[]>[] = [
   { access_client_id: [], access_client_secret: [] },
   { dev_token: [] },
@@ -308,6 +321,7 @@ function operation(
         schema: q.values && !q.list ? { type: "string", enum: [...q.values] } : { type: "string" },
       }),
     ),
+    ...(r.access === "admin" ? [CLIENT_PARAMETER] : []),
   ];
   const op: Operation = {
     operationId: routeAnchor(r),

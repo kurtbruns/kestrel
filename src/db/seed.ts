@@ -75,6 +75,7 @@ export interface SeedRevision {
   markdown: string;
   metadata: string;
   author: string | null;
+  client: string | null;
   created_at: number;
 }
 
@@ -244,7 +245,7 @@ export async function insertPost(
       ),
     db
       .prepare(
-        "INSERT INTO post_revisions (id, post_id, markdown, metadata, author, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO post_revisions (id, post_id, markdown, metadata, author, client, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
       )
       .bind(
         revision.id,
@@ -252,6 +253,7 @@ export async function insertPost(
         revision.markdown,
         revision.metadata,
         revision.author,
+        revision.client,
         revision.created_at,
       ),
   ]);

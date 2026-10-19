@@ -10,7 +10,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading from 1.13.0.** One database migration, which `npm run sync-migrations` brings in: apply it before you deploy with `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development). `0013_who_acted_client` records the client each revision and import came through. No client was recorded before it, but until now a person reached the API only through the editor, so every revision and import a person made reads as made in the editor, and those rows are rewritten once, which counts against the day's database writes on Workers Free like any other write; a service token's read as naming no client.
+**Upgrading from 1.13.0.** One database migration, which `npm run sync-migrations` brings in: apply it before you deploy with `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development). `0013_who_acted_client` records the client each revision and import came through. No client was recorded before it, and nothing tells a person's change in the editor from one through another program, so every revision and import a person made is read as made in the editor, and those rows are rewritten once, which counts against the day's database writes on Workers Free like any other write; a service token's read as naming no client.
 
 ### Added
 

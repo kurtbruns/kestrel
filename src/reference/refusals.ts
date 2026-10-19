@@ -60,7 +60,7 @@ const CONFIRM = {
   attestation_required: [409, "The publisher accepts the `attestation` shown."],
   sends_acknowledgement_required: [
     409,
-    "Acknowledge the growing `sends`; a service token can't, so a person finishes it.",
+    "Acknowledge the growing `sends`; only a person in the editor can, so they finish it there.",
   ],
   remake_required: [409, "Name the sends the change would re-make, in `remake`."],
 } as const satisfies Record<string, Refusal>;
