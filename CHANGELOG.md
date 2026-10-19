@@ -10,6 +10,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+## [1.13.0] - 2026-10-19
+
 **Upgrading from 1.12.0.** One database migration, which `npm run sync-migrations` brings in: apply it before you deploy with `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development). `0012_unsubscribe_cause` records why each subscriber left and leaves the suppressions only bounces and blocks. Every unsubscribe before it reads as the reader's own, since the record never said otherwise. Each complaint becomes an unsubscribe by a complaint, and an address it held with no subscriber is recorded as one, unsubscribed and holding only the address. Each erasure's marker becomes a subscriber unsubscribed by an erasure, holding only the address and when, except that someone who signed up again after it stays pending, read as having left by the erasure until they confirm. An erasure that found a bounce or a block already on an address left no trace of itself, so that address keeps its suppression alone. It rebuilds the subscribers and suppressions tables, copying every row once, which counts against the day's database writes on Workers Free like any other write. Deploy straight after applying it: until this release is serving, the previous one fails to record a reader's unsubscribe, a confirmation from someone who once left, an erasure, and a complaint report, which the new tables refuse. SES retries a refused report, so complaints arrive once the deploy lands; a reader whose unsubscribe failed meanwhile has to unsubscribe again. Run `npm run check-context` in your instance's repository: this release changes the operator's Claude context, and a copy you've edited is merged by hand. Several API changes can break a script of yours, each listed under Breaking; the table gives every renamed route, field, value, and sort key, old to new. A request that still sends an old name is refused with a 400 naming it, never answered as if it had been read: every API route now refuses a body field, a query parameter, or a filter value it doesn't take, so check a script's requests against the API reference before you deploy.
 
 | Where | Was | Now |
@@ -582,7 +584,8 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
-[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.12.0...HEAD
+[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.13.0...HEAD
+[1.13.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.13.0
 [1.12.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.12.0
 [1.11.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.11.0
 [1.10.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.10.0
