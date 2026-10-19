@@ -1854,8 +1854,10 @@ td a:hover {
 .dash-drafts {
   table-layout: fixed;
 }
+/* Wide enough for the longest "edited <date>", a two-digit day and hour included, with the
+   cell's padding: the fixed layout clips anything wider rather than growing the column. */
 .dash-drafts td.edited {
-  width: 11.5em;
+  width: 15em;
   white-space: nowrap;
 }
 @media (min-width: 721px) {
