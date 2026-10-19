@@ -6975,6 +6975,11 @@ body.has-savebar .content {
 .sub-left-line {
   margin: 0;
 }
+/* Sends is a table, and a table is already a card, so its section is no card of its own:
+   the label sits on the page above it, as the dashboard's sections do. */
+.sub-sends {
+  margin-top: 22px;
+}
 .sub-sends-table .c-out {
   width: 160px;
 }

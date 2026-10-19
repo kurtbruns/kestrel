@@ -81,7 +81,7 @@ export async function renderSubscriber(
     ${erased ? null : joinedSection(sub, record)}
     ${suppressionSection(sub)}
     ${sub.unsubscribe_cause ? leftSection(sub, sends.deliveries) : null}
-    <section class="card sub-sec" aria-labelledby="subSendsTitle">
+    <section class="sub-sec sub-sends" aria-labelledby="subSendsTitle">
       <h2 class="rec-part-title" id="subSendsTitle">Sends</h2>
       <div id="subSends"></div>
       <div id="subMore"></div>
