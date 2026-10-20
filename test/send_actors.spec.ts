@@ -284,3 +284,118 @@ describe("a send records who acted on it (SPEC §6, §11)", () => {
     expect(left?.n).toBe(0);
   });
 });
+
+// Each act lands in the log only with the change it records: the guard each record statement
+// carries is what holds that, in the same batch, after the change. These run a change that the
+// database refuses (the JS checks before the batch never see it), so only the guard stops the act.
+describe("the log records an act only when its change landed (SPEC §6)", () => {
+  const BY: Actor = { kind: "human", email: "you@example.com", client: "editor" };
+  const actsOf = async (sendId: string) =>
+    (
+      await env.DB.prepare("SELECT act, resolution FROM send_acts WHERE send_id = ? ORDER BY id")
+        .bind(sendId)
+        .all<{ act: string; resolution: string | null }>()
+    ).results;
+
+  it("records no reschedule when the window has closed under it", async () => {
+    const send = await frozenSend(Date.now() - 60_000);
+    const now = Date.now();
+    const target = now + 3_600_000;
+    const [res] = await env.DB.batch([
+      sends.rescheduleStmt(env.DB, send.id, target, now),
+      sends.recordActStmt(
+        env.DB,
+        { sendId: send.id, act: "reschedule", at: now, by: BY, fireAt: target },
+        sends.rescheduledTo(send.id, target),
+      ),
+    ]);
+    expect(res?.meta.changes).toBe(0);
+    expect(await actsOf(send.id)).toEqual([]);
+  });
+
+  it("records no cancel when the window has closed under it", async () => {
+    const send = await frozenSend(Date.now() - 60_000);
+    const now = Date.now();
+    const [res] = await env.DB.batch([
+      sends.cancelStmt(env.DB, send.id, now),
+      sends.recordActStmt(
+        env.DB,
+        { sendId: send.id, act: "cancel", at: now, by: BY },
+        sends.canceledAt(send.id, now),
+      ),
+    ]);
+    expect(res?.meta.changes).toBe(0);
+    expect(await actsOf(send.id)).toEqual([]);
+  });
+
+  it("records no schedule when the freeze's insert was refused", async () => {
+    const other = await frozenSend(Date.now() + 3_600_000);
+    await sends.cancelStmt(env.DB, other.id, Date.now()).run(); // its post is free to schedule
+    const now = Date.now();
+    const id = "s-refused";
+    // A settings version that isn't the current one, as when a template save lands mid-freeze.
+    const res = await env.DB.batch([
+      sends.insertScheduledSendStmt(
+        env.DB,
+        {
+          id,
+          post_id: other.post_id,
+          fire_at: now + 3_600_000,
+          recipient_count: 0,
+          rendered_html: "",
+          rendered_text: "",
+          subject: "S",
+          warnings: [],
+        },
+        now,
+        -1,
+      ),
+      sends.recordActStmt(
+        env.DB,
+        { sendId: id, act: "schedule", at: now, by: BY, fireAt: now + 3_600_000 },
+        sends.sendExists(id),
+      ),
+    ]);
+    expect(res[0]?.meta.changes).toBe(0);
+    expect(await actsOf(id)).toEqual([]);
+  });
+
+  it("records one Resolve when two race, though the second held the lease", async () => {
+    const id = await wedged();
+    const a = await sends.acquireLease(env.DB, id, Date.now(), 60_000);
+    expect(a).not.toBeNull();
+    const first = await sends.resolveDispatched(env.DB, id, a ?? "", "unsent", "a", Date.now(), BY);
+    expect(first).toBe(1);
+    await sends.releaseLease(env.DB, id, a ?? "");
+    // The second passed its wedged check before the first settled the rows, and now takes the
+    // lease with nothing left to settle.
+    const b = await sends.acquireLease(env.DB, id, Date.now(), 60_000);
+    expect(b).not.toBeNull();
+    const second = await sends.resolveDispatched(
+      env.DB,
+      id,
+      b ?? "",
+      "accepted",
+      "b",
+      Date.now(),
+      BY,
+    );
+    expect(second).toBe(0);
+    expect(await actsOf(id)).toEqual([{ act: "resolve", resolution: "unsent" }]);
+  });
+
+  it("records no Resolve without the lease", async () => {
+    const id = await wedged();
+    const moved = await sends.resolveDispatched(
+      env.DB,
+      id,
+      "not-the-lease",
+      "unsent",
+      "x",
+      Date.now(),
+      BY,
+    );
+    expect(moved).toBe(0);
+    expect(await actsOf(id)).toEqual([]);
+  });
+});

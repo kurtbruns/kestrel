@@ -4,8 +4,7 @@
 -- who acted (the who-acted shape as JSON: `{"kind":"human","email":…,"client":…}` or
 -- `{"kind":"service","token_id":…,"client":null}`) and when, written in the same batch as the
 -- change it records. A schedule, Send now, or reschedule keeps the fire time it set, and a Resolve
--- the resolution it chose. The send view's latest actor of each act is read from it, and a
--- post's history lists it beside the post's revisions.
+-- the resolution it chose. The send view's latest actor of each act is read from it.
 --
 -- What can't be recovered: no act was recorded before this, so a send made before it has no
 -- rows, and reads as acted on by no one recorded.

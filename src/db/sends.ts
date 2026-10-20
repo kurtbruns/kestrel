@@ -1843,7 +1843,7 @@ export async function openDeliveryCount(db: D1Database, sendId: string): Promise
  * `dispatched` rows, so an already-`accepted` recipient is never disturbed, and it
  * never re-mails anyone (nothing here calls the provider). Only while `lease` holds the
  * send, so no run is waiting on those rows' answers. With `by`, the same batch records the
- * Resolve in the send's log of acts (SPEC §6). Returns rows resolved.
+ * Resolve in the send's log of acts (SPEC §6), when it settled any row. Returns rows resolved.
  */
 export async function resolveDispatched(
   db: D1Database,
@@ -1855,8 +1855,15 @@ export async function resolveDispatched(
   by: Actor | null,
 ): Promise<number> {
   const guard = holdsLease(sendId, lease);
+  // Recorded only when this Resolve settled a row: the rows it moved carry its note and moment.
+  // A second Resolve that took the lease after the first settled them moves none, and records
+  // nothing, though it held the lease.
+  const settled = {
+    sql: `${guard.sql} AND EXISTS (SELECT 1 FROM deliveries WHERE send_id = ? AND status = ? AND error = ? AND updated_at = ?)`,
+    binds: [...guard.binds, sendId, outcome, note, now],
+  };
   const record = by
-    ? [recordActStmt(db, { sendId, act: "resolve", at: now, by, resolution: outcome }, guard)]
+    ? [recordActStmt(db, { sendId, act: "resolve", at: now, by, resolution: outcome }, settled)]
     : [];
   const to: CounterCol = outcome === "unsent" ? "c_unsent" : "c_accepted";
   // One batch, the counter move first so it counts the rows about to move: the two land
