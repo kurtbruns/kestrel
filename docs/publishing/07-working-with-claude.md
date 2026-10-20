@@ -18,6 +18,8 @@ You sign in the way you do for the dashboard, and the terminal says who you're s
 
 The sign-in stays on your computer, not in your repository, and renews itself while you use it. How long it lasts is a setting of your Access application. When it ends, Claude asks you to approve a new one. To sign out on this computer, run `npx kestrel logout`.
 
+The same sign-in lets you call the API from a terminal yourself. `npx kestrel api --list` lists your Kestrel's routes, `npx kestrel api help POST /api/posts` describes one, and `npx kestrel api POST /api/posts -f subject='Spring update'` calls it as you. `npx kestrel api` alone lists its options.
+
 A script that runs with no one there uses a service token instead, as [Connect automation to the API](../guides/01-connect-claude.md) describes. Its changes show as a service token's, never as yours.
 
 ## What to ask Claude

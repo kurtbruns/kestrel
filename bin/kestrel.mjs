@@ -33,6 +33,7 @@ Usage: kestrel <command> [options]
   login <url> [--no-browser]    sign in to a deployed instance as you, in your browser
   logout [url]                  sign out of it on this computer
   api <method> <path> [opts]    call the API as you, via Claude Code (kestrel api for options)
+  api --list | help <m> <path>  list the instance's routes, or describe one
 
   help, --help                  show this
   version, --version            print the installed version`;

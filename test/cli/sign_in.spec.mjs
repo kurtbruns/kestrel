@@ -266,11 +266,13 @@ describe("kestrel api's arguments", () => {
     expect(
       parseApiArgs(["post", "/api/posts", "--data", '{"subject":"Hi"}', "--client=my-script"]),
     ).toEqual({
+      mode: "call",
       method: "POST",
       path: "/api/posts",
       data: '{"subject":"Hi"}',
       client: "my-script",
       forms: [],
+      fields: [],
       local: false,
     });
     expect(
@@ -281,7 +283,7 @@ describe("kestrel api's arguments", () => {
   it("refuses a path without its slash, an unknown option, and a body sent two ways", () => {
     expect(() => parseApiArgs(["GET", "api/posts"])).toThrow(/starts with a slash/);
     expect(() => parseApiArgs(["GET", "/api/posts", "--verbose"])).toThrow(/unknown option/);
-    expect(() => parseApiArgs(["POST", "/x", "--data", "{}", "--form", "a=1"])).toThrow(/not both/);
+    expect(() => parseApiArgs(["POST", "/x", "--data", "{}", "--form", "a=1"])).toThrow(/one way/);
   });
 });
 

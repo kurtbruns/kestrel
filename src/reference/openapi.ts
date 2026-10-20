@@ -395,7 +395,7 @@ function operation(
     };
   }
   op.responses.default = {
-    description: `A refusal any route can give: ${shared.map((c) => `\`${c.code}\` (${c.status})`).join(", ")}.`,
+    description: `A refusal any route can give: ${shared.map((c) => `\`${c.code}\` (${c.status}; next move: ${c.move})`).join(", ")}.`,
     content: { "application/json": { schema: ERROR_REF } },
   };
   return op;

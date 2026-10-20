@@ -183,6 +183,13 @@ describe("the OpenAPI document lists everything the reference does", () => {
     }
   });
 
+  it("names each refusal any route gives with its status and next move, which kestrel api prints", () => {
+    const shared = doc.paths["/api/posts"]!.post!.responses.default!.description;
+    expect(shared).toMatch(/^A refusal any route can give: /);
+    expect(shared).toContain("`unauthorized` (401; next move: Sign in, or stop)");
+    expect(shared).toContain("`unsupported_media_type` (415; next move: Fix the request)");
+  });
+
   it("names the object a route returns, as the route's answer", () => {
     const send = doc.paths["/api/sends/{id}"]!.get!.responses["2XX"]!.content?.["application/json"];
     expect(send?.schema.properties?.send).toEqual({ $ref: "#/components/schemas/send" });
