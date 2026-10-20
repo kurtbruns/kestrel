@@ -33,7 +33,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Breaking
 
-- A Cloudflare Access login that is neither a person (with an email) nor a service token (with its Client ID) is refused with a `401`, where it was admitted as an anonymous service token with full access. The app accepts only the two kinds of Access policy the setup guide describes, an Allow policy on emails and a Service Auth policy on a service token, so another kind added to the application, such as a certificate or device rule, can no longer grant the admin surface to a caller nobody can name. Each refusal logs `auth.unidentified` with the names of the claims it carried (SPEC §11).
+- A Cloudflare Access login that is neither a person (with an email) nor a service token (with its Client ID) is refused with a `401` whose `reason` is `access_unidentified`, where it was admitted as an anonymous service token with full access. The app accepts only the two kinds of Access policy the setup guide describes, an Allow policy on emails and a Service Auth policy on a service token, so another kind added to the application, such as a certificate or device rule, can no longer grant the admin surface to a caller nobody can name. The editor explains the refusal in place of a sign-in, naming those two kinds and offering Sign out, and each refusal logs `auth.unidentified` with the names of the claims it carried (SPEC §11).
 - A commit through the API that would grow a scheduled send's audience is refused `sends_acknowledgement_required` unless it comes through the editor, whoever signed in: a script of yours that commits such an import with your own sign-in now has you finish it in the dashboard, as Claude does (SPEC §7, §11).
 
 ## [1.13.0] - 2026-10-19

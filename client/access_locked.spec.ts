@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ACCESS_GUIDE, accessNotConfigured, showAccessLocked } from "./access_locked";
+import { ACCESS_GUIDE, ACCESS_LOGOUT, showAccessLocked } from "./access_locked";
 import { api } from "./api";
 import { probeSession, setToken } from "./auth";
 import { renderDrafts } from "./posts/drafts";
@@ -16,6 +16,7 @@ import {
 } from "./test/support";
 
 const LOCKED = { error: "unauthorized", reason: "access_not_configured" };
+const UNIDENTIFIED = { error: "unauthorized", reason: "access_unidentified" };
 
 describe("the locked editor, before Access is set up (SPEC §11)", () => {
   let fake: FakeApi | undefined;
@@ -102,20 +103,11 @@ describe("the locked editor, before Access is set up (SPEC §11)", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("reads only an unauthorized body that says access_not_configured", () => {
-    expect(accessNotConfigured(LOCKED)).toBe(true);
-    expect(accessNotConfigured({ error: "unauthorized" })).toBe(false);
-    expect(accessNotConfigured({ error: "forbidden", reason: "access_not_configured" })).toBe(
-      false,
-    );
-    expect(accessNotConfigured(null)).toBe(false);
-  });
-
   it("reloads from its one button", () => {
     const reload = vi.fn();
     vi.spyOn(window, "location", "get").mockReturnValue({ ...location, reload } as Location);
     try {
-      showAccessLocked();
+      showAccessLocked("access_not_configured");
       const buttons = $$("#app .access-wall button");
       expect(buttons).toHaveLength(1);
       expect(buttons[0]!.textContent).toBe("Reload");
@@ -124,5 +116,61 @@ describe("the locked editor, before Access is set up (SPEC §11)", () => {
     } finally {
       vi.restoreAllMocks();
     }
+  });
+});
+
+describe("the locked editor, when Access let in a login that names no one (SPEC §11)", () => {
+  let fake: FakeApi | undefined;
+  afterEach(() => {
+    fake?.restore();
+    fake = undefined;
+    setToken("");
+    resetShell();
+    document.body.classList.remove("signed-out");
+    vi.restoreAllMocks();
+  });
+
+  it("is what the boot probe shows, with the two policies Kestrel accepts and the Access guide", async () => {
+    fake = fakeApi([
+      { path: "/api/dev/token", reply: () => jsonResponse({ error: "not_found" }, 404) },
+      { path: "/api/whoami", reply: () => jsonResponse(UNIDENTIFIED, 401) },
+    ]);
+    expect(await probeSession()).toBeNull();
+    expect(document.body.classList.contains("signed-out")).toBe(true);
+    const wall = $("#app .access-wall");
+    expect(wall.getAttribute("role")).toBe("alert");
+    expect($("h2", wall).textContent).toBe("Access let you in, but didn’t say who you are");
+    expect(wall.textContent).toContain("sent neither an email address nor a service token");
+    expect(wall.textContent).toContain(
+      "an Allow policy on people’s emails, and a Service Auth policy on a service token",
+    );
+    const link = $("a", wall);
+    expect(link.getAttribute("href")).toBe(ACCESS_GUIDE);
+    expect(link.textContent).toContain("Lock the dashboard with Access");
+    expect(wall.textContent).not.toContain("set up Access");
+    expect(wall.textContent).not.toContain("Session expired");
+    expect(document.activeElement).toBe($("h2", wall));
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("takes over from a mounted view whose call is refused the same way", async () => {
+    fake = fakeApi([{ path: "/api/posts", reply: () => jsonResponse(UNIDENTIFIED, 401) }]);
+    const err = await api("/api/posts").catch((e: unknown) => e);
+    expect(err).toMatchObject({ status: 401, data: UNIDENTIFIED });
+    expect($("#app .access-wall h2").textContent).toBe(
+      "Access let you in, but didn’t say who you are",
+    );
+    expect(document.querySelector("#app .reauth-wall")).toBeNull();
+  });
+
+  it("signs out of Access from its one button, so the next sign-in can go another way", () => {
+    const assign = vi.fn();
+    vi.spyOn(window, "location", "get").mockReturnValue({ ...location, assign } as Location);
+    showAccessLocked("access_unidentified");
+    const buttons = $$("#app .access-wall button");
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]!.textContent).toBe("Sign out");
+    buttons[0]!.click();
+    expect(assign).toHaveBeenCalledWith(ACCESS_LOGOUT);
   });
 });

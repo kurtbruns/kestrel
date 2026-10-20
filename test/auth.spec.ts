@@ -63,9 +63,11 @@ describe("Access claims to a principal", () => {
     expect(JSON.stringify(lines())).not.toContain(CLIENT_ID);
   });
 
-  it("refuses a token with neither, and warns with its claim names only (SPEC §11)", () => {
+  it("refuses a token with neither as unidentified, and warns with its claim names only (SPEC §11)", () => {
     const lines = logged();
-    expect(principalFromClaims({ sub: "device-7", iss: "https://team" }, undefined)).toBeNull();
+    expect(principalFromClaims({ sub: "device-7", iss: "https://team" }, undefined)).toBe(
+      "access_unidentified",
+    );
     expect(lines()).toEqual([
       expect.objectContaining({ event: "auth.unidentified", level: "warn", claims: "iss,sub" }),
     ]);
@@ -308,9 +310,24 @@ describe("the auth mode follows how the request signed in", () => {
       principal: { kind: "service", token_id: "e367c0ffee5eb4.access", client: null },
       auth: { mode: "access" },
     });
-    // One with neither claim is refused: some other kind of Access rule admitted it.
+    // One with neither claim is refused, saying why: some other kind of Access policy let
+    // it in, so signing in the same way again can't help.
     const unidentified = await fetchWith(vars, "/api/whoami", { headers: await assertion({}) });
     expect(unidentified.status).toBe(401);
+    expect(await unidentified.json()).toEqual({
+      error: "unauthorized",
+      reason: "access_unidentified",
+    });
+    // A person the allowlist leaves out is a plain 401, with nothing to explain.
+    const outside = await fetchWith(
+      { ...vars, ACCESS_ALLOWED_EMAILS: "you@example.com" },
+      "/api/whoami",
+      {
+        headers: await assertion({ email: "intruder@example.com" }),
+      },
+    );
+    expect(outside.status).toBe(401);
+    expect(await outside.json()).toEqual({ error: "unauthorized" });
   });
 
   // Access issues for the bare host, so a team domain stored as a URL must still verify.

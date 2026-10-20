@@ -53,7 +53,7 @@ Every Access application denies everyone until a policy allows them.
 
 1. Select **Create**.
 
-The app accepts only two kinds of policy on this application. One is an Allow policy on people's emails, like this one. The other is a Service Auth policy on a service token, from [Connect automation to the API](../guides/01-connect-claude.md). A login through any other kind, such as a certificate, a device check, or an identity provider that gives no email, is refused with a `401`.
+The app accepts only two kinds of policy on this application. One is an Allow policy on people's emails, like this one. The other is a Service Auth policy on a service token, from [Connect automation to the API](../guides/01-connect-claude.md). A login through any other kind, such as a certificate, a device check, or an identity provider that gives no email, is refused with a `401`, and the editor says so.
 
 ## 4. Give the app its two values
 
@@ -143,6 +143,6 @@ With Managed OAuth on, a program that asks for a page without signing in gets a 
     {"status":"ok","service":"kestrel"}
     ```
 
-If the editor says the configuration needs a fix, store the secret it names. If Cloudflare lets you in but the editor answers `401`, check the two secrets for a typo, or `ACCESS_ALLOWED_EMAILS` may leave out your address. Check, too, that you signed in through the `Publishers` policy, since the app refuses a login that carries no email.
+If the editor says the configuration needs a fix, store the secret it names. If Cloudflare lets you in but the editor answers `401`, check the two secrets for a typo, or `ACCESS_ALLOWED_EMAILS` may leave out your address. If the editor says Access let you in but didn't say who you are, your login carried no email: sign out, and sign in through the `Publishers` policy.
 
 Next, [connect Amazon SES](04-ses.md).

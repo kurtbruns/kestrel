@@ -11,8 +11,11 @@
  * credential, as the API meets a request's faults in that order (SPEC §11, Who acted).
  * Before Access is set up on a deployment, no request can authenticate at all, and the
  * 401 says so (`reason: "access_not_configured"`) so the editor can tell that apart
- * from a session that ended (SPEC §11).
+ * from a session that ended; so does one whose Access login names neither a person nor
+ * a service token (`reason: "access_unidentified"`), which signing in the same way again
+ * can't fix either (SPEC §11).
  */
+import type { UnauthorizedBody, UnauthorizedReason } from "../../shared/errors";
 import { CLIENT_HEADER, isClientName } from "../../shared/who_acted";
 import type { AppEnv, Config } from "../env";
 import { fieldError } from "../lib/body";
@@ -25,7 +28,7 @@ export async function authenticate(
   req: Request,
   _env: AppEnv,
   config: Config,
-): Promise<Principal | null> {
+): Promise<Principal | "access_unidentified" | null> {
   const jwt = req.headers.get(ACCESS_JWT_HEADER);
   if (jwt) {
     const p = await verifyAccessJwt(jwt, config);
@@ -49,9 +52,10 @@ export async function authenticate(
 /**
  * Why no request can authenticate, when the configuration alone decides it: no Access
  * outside a dev-shaped env leaves no door at all. Null when a door exists and this
- * request simply failed it, which is all a 401 under Access ever says.
+ * request simply failed it, which is all a 401 under Access says unless its login named
+ * no one.
  */
-function lockedReason(config: Config): "access_not_configured" | null {
+function lockedReason(config: Config): Extract<UnauthorizedReason, "access_not_configured"> | null {
   // `getConfig` holds the Access pair to both or neither, so one stands for both.
   return !config.accessTeamDomain && !config.accessAud && !config.devShaped
     ? "access_not_configured"
@@ -61,11 +65,12 @@ function lockedReason(config: Config): "access_not_configured" | null {
 /** Route middleware: require a valid principal or 401. */
 export const requireAuth: Middleware = async (c) => {
   const principal = await authenticate(c.req, c.env, c.config);
-  if (!principal) {
-    const reason = lockedReason(c.config);
-    return json(reason ? { error: "unauthorized", reason } : { error: "unauthorized" }, 401, {
-      "WWW-Authenticate": 'Bearer realm="kestrel"',
-    });
+  if (!principal || principal === "access_unidentified") {
+    const reason = principal ?? lockedReason(c.config);
+    const body: UnauthorizedBody = reason
+      ? { error: "unauthorized", reason }
+      : { error: "unauthorized" };
+    return json(body, 401, { "WWW-Authenticate": 'Bearer realm="kestrel"' });
   }
   const client = c.req.headers.get(CLIENT_HEADER);
   if (client !== null && !isClientName(client)) {

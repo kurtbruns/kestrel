@@ -1,8 +1,9 @@
 // Auth on the client: the boot probe, the dev token, the bearer header, the identity chip,
 // and the re-auth wall a dead session lands on.
 
+import { unauthorizedReason } from "../shared/errors";
 import { CLIENT_HEADER, EDITOR_CLIENT } from "../shared/who_acted";
-import { accessNotConfigured, showAccessLocked } from "./access_locked";
+import { showAccessLocked } from "./access_locked";
 import { configRefusal, showConfigProblem } from "./config_problem";
 import { unmount } from "./lifecycle";
 import { app, identity } from "./shell";
@@ -135,10 +136,11 @@ export async function probeSession(): Promise<Session | null> {
   }
   const data: unknown = res ? await res.json().catch(() => null) : null;
   const refusal = configRefusal(data);
+  const reason = unauthorizedReason(data);
   if (refusal) {
     showConfigProblem(refusal);
-  } else if (accessNotConfigured(data)) {
-    showAccessLocked();
+  } else if (reason) {
+    showAccessLocked(reason);
   } else {
     showReauth();
   }
