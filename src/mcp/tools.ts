@@ -13,9 +13,11 @@
  * a refusal that asks for one comes back as the tool's error, saying what is affected and who can
  * give it.
  *
- * Left out on purpose, so they stay in the editor: settings and template writes, suppressions,
- * Resolve, uploads, reader pages, erasure, and the dev routes. `kestrel_api_read` reaches any
- * other admin read, never a write.
+ * Left out on purpose, so they stay in the editor: settings and template writes, a post's
+ * settings once it is scheduled or sent (`schedule_send` sets the listing only as it schedules),
+ * suppressions, Resolve, uploads, reader pages, erasure, and the dev routes. `kestrel_api_read`
+ * reaches the other admin reads that answer JSON or Markdown, never a write, a dev route, or a
+ * bulk one.
  */
 
 import { dashboardLink } from "../../shared/dashboard_link";

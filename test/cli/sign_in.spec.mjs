@@ -17,7 +17,14 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { accessToken, chooseInstance, parseApiArgs, signedInFetch } from "../../cli/api.mjs";
+import {
+  accessToken,
+  CLIENT_NAME_MAX,
+  CLIENT_NAME_PATTERN,
+  chooseInstance,
+  parseApiArgs,
+  signedInFetch,
+} from "../../cli/api.mjs";
 import {
   configDir,
   credentialsFile,
@@ -42,6 +49,10 @@ import {
   TOKEN_TIMEOUT_MS,
   tokenFields,
 } from "../../cli/oauth.mjs";
+import {
+  CLIENT_NAME_MAX as SERVER_MAX,
+  CLIENT_NAME_PATTERN as SERVER_PATTERN,
+} from "../../shared/who_acted.ts";
 
 const ORIGIN = "https://news.example.com";
 
@@ -280,17 +291,28 @@ describe("kestrel api's arguments", () => {
     ).toEqual(["a=1", "file=@f.png"]);
   });
 
-  it("refuses to name the editor as the client, whatever the case (SPEC §7)", () => {
+  // fetch trims a header value, so " editor\t" would reach the server as the editor's name.
+  it("refuses to name the editor as the client, with or without whitespace around it (SPEC §7)", () => {
     for (const argv of [
       ["POST", "/api/imports/commit", "--client", "editor"],
-      ["POST", "/api/imports/commit", "--client=Editor"],
-      ["--list", "--client", "editor"],
+      ["POST", "/api/imports/commit", "--client", " editor\t"],
+      ["--list", "--client= editor "],
     ]) {
       expect(() => parseApiArgs(argv)).toThrow(/^--client editor is refused: only the editor/);
     }
-    expect(parseApiArgs(["GET", "/api/posts", "--client", "editor-sync"]).client).toBe(
+    expect(parseApiArgs(["GET", "/api/posts", "--client", " editor-sync "]).client).toBe(
       "editor-sync",
     );
+  });
+
+  it("refuses a client name the server would refuse, as the server's rule says", () => {
+    for (const name of ["Editor", "my script", "-x", "a--b", "", "a".repeat(33)]) {
+      expect(() => parseApiArgs(["GET", "/api/posts", "--client", name]), name).toThrow(
+        /^--client takes one short lowercase word/,
+      );
+    }
+    expect(CLIENT_NAME_PATTERN).toBe(SERVER_PATTERN);
+    expect(CLIENT_NAME_MAX).toBe(SERVER_MAX);
   });
 
   it("refuses a path without its slash, an unknown option, and a body sent two ways", () => {
