@@ -39,7 +39,7 @@ const refusals = (...rows) => ({
 const DOC = {
   openapi: "3.1.0",
   info: { title: "Kestrel API", version: "9.9.9", description: "" },
-  tags: [{ name: "Posts" }, { name: "Sends" }, { name: "Archive" }],
+  tags: [{ name: "Posts" }, { name: "Sends" }, { name: "Settings" }, { name: "Archive" }],
   paths: {
     "/api/posts": {
       get: {
@@ -156,6 +156,30 @@ const DOC = {
         },
       },
     },
+    "/api/settings/logo": {
+      post: {
+        summary: "Upload the logo",
+        tags: ["Settings"],
+        "x-kestrel-access": "admin",
+        parameters: [{ name: "remake", in: "query", required: false, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: {
+            "multipart/form-data": {
+              schema: { type: "object", properties: { file: { type: "string" } } },
+            },
+          },
+        },
+        responses: { default: SHARED },
+      },
+      delete: {
+        summary: "Remove the logo",
+        tags: ["Settings"],
+        "x-kestrel-access": "admin",
+        parameters: [{ name: "remake", in: "query", required: false, schema: { type: "string" } }],
+        responses: { default: SHARED },
+      },
+    },
     "/archive": {
       get: {
         summary: "Show the archive",
@@ -201,6 +225,7 @@ describe("reading kestrel api's arguments", () => {
       resource: "sends",
       local: true,
     });
+    expect(parseApiArgs(["--list=sends"])).toMatchObject({ mode: "list", resource: "sends" });
     expect(parseApiArgs(["help"])).toMatchObject({ mode: "list", resource: undefined });
     expect(parseApiArgs(["help", "sends"])).toMatchObject({ mode: "list", resource: "sends" });
     expect(parseApiArgs(["help", "post", "/api/posts"])).toMatchObject({
@@ -211,8 +236,10 @@ describe("reading kestrel api's arguments", () => {
   });
 
   it("refuses a body sent two ways, and a body or field given to --list or help", () => {
-    expect(() => parseApiArgs(["POST", "/x", "--data", "{}", "-f", "a=1"])).toThrow(/one way/);
-    expect(() => parseApiArgs(["POST", "/x", "--form", "a=1", "-F", "a=1"])).toThrow(/one way/);
+    expect(() => parseApiArgs(["POST", "/x", "--data", "{}", "--form", "a=1"])).toThrow(/one way/);
+    expect(() => parseApiArgs(["--local=yes", "--list"])).toThrow(
+      "--local takes no value; to name a server, use --url <url>.",
+    );
     expect(() => parseApiArgs(["--list", "-f", "a=1"])).toThrow(/take no body or fields/);
     expect(() => parseApiArgs(["POST", "/x", "-f"])).toThrow(/-f needs a value/);
     expect(() => parseApiArgs(["POST", "/x", "-x", "1"])).toThrow(/^unknown option -x/);
@@ -236,7 +263,7 @@ describe("listing the instance's routes", () => {
     expect(text).toContain("Follow changes to sends");
     expect(text).not.toContain("Create a post");
     expect(() => listRoutes(DOC, "nope")).toThrow(
-      'This instance has no resource named "nope"; it has posts, sends, archive.',
+      'This instance has no resource named "nope"; it has posts, sends, settings, archive.',
     );
   });
 });
@@ -329,7 +356,7 @@ describe("building a body from -f and -F", () => {
   });
 
   it("lets a declared field with no declared children take any keys, as the router does", () => {
-    expect(buildFields(DOC, post, [F("extra.any=1")]).body).toEqual({ extra: { any: 1 } });
+    expect(buildFields(DOC, post, [F("extra.any=1")]).body).toEqual({ extra: { any: "1" } });
   });
 
   it("refuses a value its type can't take, a field given twice, and [] on a field that isn't a list", () => {
@@ -361,6 +388,15 @@ describe("building a body from -f and -F", () => {
     );
   });
 
+  it("puts a name another method's route takes only as a query parameter in its query string", () => {
+    expect(buildFields(DOC, route("DELETE", "/api/settings/logo"), [f("remake=s_1")])).toEqual({
+      query: [["remake", "s_1"]],
+    });
+    expect(() => buildFields(DOC, route("DELETE", "/api/settings/logo"), [f("logo=x")])).toThrow(
+      /^DELETE \/api\/settings\/logo takes no body\. Its query parameters are 'remake'\./,
+    );
+  });
+
   it("refuses fields for a route that takes no JSON body, saying how to send what it does take", () => {
     expect(() => buildFields(DOC, route("POST", "/api/posts/p_1/images"), [f("a=b")])).toThrow(
       /takes no JSON body; it takes multipart\/form-data, image\/png: send it with --form/,
@@ -370,8 +406,11 @@ describe("building a body from -f and -F", () => {
     );
   });
 
-  it("types a value against a schema with nothing to say as JSON when it parses, else a string", () => {
+  it("types a value against a schema with nothing to say as an object or list when it is one, else the string as given", () => {
     expect(typedValue("[1,2]", {}, "x", DOC)).toEqual([1, 2]);
+    expect(typedValue('{"a":1}', {}, "x", DOC)).toEqual({ a: 1 });
+    expect(typedValue("2026", {}, "x", DOC)).toBe("2026");
+    expect(typedValue("true", {}, "x", DOC)).toBe("true");
     expect(typedValue("plain", {}, "x", DOC)).toBe("plain");
   });
 });
@@ -508,6 +547,48 @@ describe("kestrel api against a signed-in instance", () => {
     );
     await expect(apiCommand(["GET", "/api/posts/p_1"])).rejects.toThrow("exit 1");
     expect(err).toEqual(["kestrel api: HTTP 404 Not Found", "  not_found: post"]);
+  });
+
+  it("sends a query-parameter field beside a form, and refuses a body field beside one", async () => {
+    serve(() => new Response("{}"));
+    await apiCommand(["POST", "/api/settings/logo", "--form", "file=x", "-f", "remake=s_1"]);
+    const sent = calls.find((c) => c.path.startsWith("/api/settings/logo"));
+    expect(sent.path).toBe("/api/settings/logo?remake=s_1");
+    expect(sent.body).toBeInstanceOf(FormData);
+    calls.length = 0;
+    await expect(
+      apiCommand(["POST", "/api/posts", "--data", "{}", "-f", "subject=Hi"]),
+    ).rejects.toThrow("exit 1");
+    expect(calls.map((c) => c.path)).toEqual(["/api/openapi.json"]);
+    expect(err.at(-1)).toBe(
+      "kestrel api: Send the body one way: --data, --form, or -f and -F fields, not two.",
+    );
+  });
+
+  it("says an instance with no OpenAPI document runs an older release", async () => {
+    vi.stubGlobal("fetch", async () => new Response("{}", { status: 404 }));
+    await expect(apiCommand(["--list"])).rejects.toThrow("exit 1");
+    expect(err).toEqual([
+      "kestrel api: This instance serves no /api/openapi.json, so its routes can't be listed or checked: it runs a release older than this CLI's. Send a body with --data instead.",
+    ]);
+  });
+
+  it("reads a loopback instance's document as its dev server's stand-in person, with no sign-in", async () => {
+    vi.stubEnv("KESTREL_URL", "http://localhost:8799");
+    vi.stubGlobal("fetch", async (url, init = {}) => {
+      calls.push({ url: String(url), headers: init.headers });
+      return String(url).includes("/api/dev/token")
+        ? new Response(JSON.stringify({ token: "dev-token", run_id: "run-a" }))
+        : new Response(JSON.stringify(DOC));
+    });
+    await apiCommand(["--list", "sends"]);
+    expect(calls.map((c) => c.url)).toEqual([
+      "http://localhost:8799/api/dev/token?kind=human",
+      "http://localhost:8799/api/openapi.json",
+    ]);
+    expect(calls[1].headers.authorization).toBe("Bearer dev-token");
+    expect(calls[1].headers["kestrel-client"]).toBe("claude-code");
+    expect(out.join("")).toContain("Get a send");
   });
 
   it("writes a -F @file's text into the body", async () => {

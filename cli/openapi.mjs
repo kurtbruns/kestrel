@@ -249,7 +249,7 @@ export function describeRoute(doc, method, path) {
     }
   }
   if (params("query").length) {
-    out.push("", "Query parameters (give them with -f on a GET)");
+    out.push("", "Query parameters (give them with -f or -F)");
     for (const p of params("query")) {
       out.push(`  ${p.name}  ${typeName(p.schema)}${p.required ? ", required" : ""}`);
       if (p.description) {
@@ -380,18 +380,23 @@ function asType(raw, alt) {
  * The JSON value `-F` gives `raw` for a field of `schema`: `true`, `false`, `null`, a number,
  * or JSON for an object or list where the schema takes one, else the string; a string is tried
  * last, so `-F listed=true` is a boolean wherever a boolean is allowed. A field the document
- * types loosely takes JSON when `raw` parses as JSON. A value the schema can't take is refused.
+ * leaves untyped takes JSON only for an object or a list, and is otherwise the string as
+ * given. A value the schema can't take is refused.
  */
 export function typedValue(raw, schema, name, doc) {
   const alts = alternatives(schema, doc).sort(
     (a, b) => Number(a.type === "string") - Number(b.type === "string"),
   );
   if (!alts.length) {
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return raw;
+    // Untyped: an object or a list when it is one, else the string as given, so a loose
+    // field never turns `2026` or `true` into a number or a boolean by surprise.
+    for (const type of ["object", "array"]) {
+      const v = asType(raw, { type });
+      if (v !== NO) {
+        return v;
+      }
     }
+    return raw;
   }
   for (const alt of alts) {
     const v = asType(raw, alt);
@@ -409,10 +414,12 @@ function takes(names) {
 
 /**
  * Build a call's `-f` and `-F` fields (`[{ typed, text }]`, in the order given) into what the
- * route takes: on a GET, its query string; otherwise its JSON body. `name.sub=value` nests,
- * `name[]=value` adds to a list, and `-F name=@file` reads the value from a file. A field the
- * route doesn't declare, one given twice, or a route with no JSON body is refused, naming
- * what it takes. Answers `{ query }` (pairs to append) or `{ body }` (the object).
+ * route takes: on a GET, its query string; otherwise its JSON body, except a name the route
+ * declares as a query parameter and not as a body field, which goes in the query string.
+ * `name.sub=value` nests, `name[]=value` adds to a list, and `-F name=@file` reads the value
+ * from a file. A field the route doesn't declare, one given twice, or a body field for a
+ * route with no JSON body is refused, naming what it takes. Answers `{ query, body }`: the
+ * pairs to append, and the object, absent when no field is a body field.
  */
 export function buildFields(
   doc,
@@ -423,35 +430,48 @@ export function buildFields(
   const label = `${found.method} ${found.path}`;
   const help = `\`kestrel api help ${label}\` describes it.`;
   const given = (typed, raw) => (typed && raw.startsWith("@") ? readFile(raw.slice(1)) : raw);
-  if (found.method === "GET") {
-    const declared = queryParams(found.op);
-    const names = declared.map((p) => p.name);
-    const query = [];
-    for (const { typed, text } of fields) {
-      const [name, raw] = splitField(typed ? "-F" : "-f", text);
-      const param = declared.find((p) => p.name === name);
-      if (!param) {
-        throw new Error(`${name} isn’t a query parameter ${label} takes; ${takes(names)}. ${help}`);
-      }
-      if (query.some(([n]) => n === name)) {
-        throw new Error(`${name} is given more than once; give it once.`);
-      }
-      const value = given(typed, raw);
-      query.push([name, typed ? String(typedValue(value, param.schema, name, doc)) : value]);
+  const declared = queryParams(found.op);
+  const root = found.method === "GET" ? undefined : jsonBody(found.op);
+  const bodyNames = Object.keys(resolve(root, doc).properties ?? {});
+  // A GET's fields are all its query string; on another method, a field the route declares as
+  // a query parameter and not as a body field goes there too, and the rest make the body.
+  const inQuery = (name) =>
+    found.method === "GET" || (declared.some((p) => p.name === name) && !bodyNames.includes(name));
+  const query = [];
+  const bodyFields = [];
+  for (const field of fields) {
+    const [name, raw] = splitField(field.typed ? "-F" : "-f", field.text);
+    if (!inQuery(name)) {
+      bodyFields.push(field);
+      continue;
     }
+    const param = declared.find((p) => p.name === name);
+    if (!param) {
+      const names = declared.map((p) => p.name);
+      throw new Error(`${name} isn’t a query parameter ${label} takes; ${takes(names)}. ${help}`);
+    }
+    if (query.some(([n]) => n === name)) {
+      throw new Error(`${name} is given more than once; give it once.`);
+    }
+    const value = given(field.typed, raw);
+    query.push([name, field.typed ? String(typedValue(value, param.schema, name, doc)) : value]);
+  }
+  if (!bodyFields.length) {
     return { query };
   }
-  const root = jsonBody(found.op);
   if (!root) {
     const types = Object.keys(found.op.requestBody?.content ?? {});
+    const params = declared.length
+      ? ` Its query parameters are ${declared.map((p) => `'${p.name}'`).join(", ")}.`
+      : "";
     throw new Error(
       types.length
-        ? `${label} takes no JSON body; it takes ${types.join(", ")}: send it with ${types.includes("multipart/form-data") ? "--form" : "--data @file --type <type>"}. ${help}`
-        : `${label} takes no body. ${help}`,
+        ? `${label} takes no JSON body; it takes ${types.join(", ")}: send it with ${types.includes("multipart/form-data") ? "--form" : "--data @file --type <type>"}.${params} ${help}`
+        : `${label} takes no body.${params} ${help}`,
     );
   }
   const body = {};
-  for (const { typed, text } of fields) {
+  for (const { typed, text } of bodyFields) {
     const [name, raw] = splitField(typed ? "-F" : "-f", text);
     const list = name.endsWith("[]");
     const parts = (list ? name.slice(0, -2) : name).split(".");
@@ -502,7 +522,7 @@ export function buildFields(
       node[last] = typed ? typedValue(value, schema, key, doc) : value;
     }
   }
-  return { body };
+  return { query, body };
 }
 
 /**

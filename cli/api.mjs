@@ -43,7 +43,8 @@ const USAGE = `Usage: kestrel api <method> <path> [options]
        kestrel api --list [resource]       the instance's routes, or one resource's
        kestrel api help <method> <path>    one route: its fields, refusals, and answer
 
-  -f, --raw-field <name=value>  a body field, as a string; repeatable. On a GET, a query parameter
+  -f, --raw-field <name=value>  a body field, as a string; repeatable. On a GET, or for a name
+                                the route takes only as one, a query parameter
   -F, --field <name=value>      a body field typed by the route's schema (true, 3, null, JSON),
                                 or name=@file for a file's text. name.sub nests; name[] lists
   --data <json|@file|->         the request body: inline, from a file, or from stdin
@@ -55,6 +56,8 @@ const USAGE = `Usage: kestrel api <method> <path> [options]
 
 The routes, fields, and refusals come from the instance's own /api/openapi.json, so they
 match the release it runs. A field the route doesn't take is refused before the request.`;
+
+const ONE_WAY = "Send the body one way: --data, --form, or -f and -F fields, not two.";
 
 // Options that take a value, by the name they are stored under.
 const VALUED = {
@@ -73,7 +76,8 @@ const VALUED = {
  * Read `kestrel api`'s argv. A call is a method and a path, `--form`, `-f`, and `-F`
  * repeatable; `--list [resource]`, `help`, and `help <resource>` list the routes, and
  * `help <method> <path>` describes one. The body is sent one way: `--data`, `--form`, or
- * fields, never two at once, since merging them would leave a reader guessing which won.
+ * fields, never two at once, since merging them would leave a reader guessing which won; a
+ * field that is a query parameter may go beside `--data` or `--form`.
  */
 export function parseApiArgs(argv) {
   const opts = { forms: [], fields: [], local: false, list: false };
@@ -88,6 +92,13 @@ export function parseApiArgs(argv) {
       continue;
     }
     if (name === "local" || name === "list") {
+      // `--list=sends` names its resource as `--list sends` does; --local names nothing.
+      if (eq && name === "local") {
+        throw new SignInError(`--local takes no value; to name a server, use --url <url>.`);
+      }
+      if (eq) {
+        positional.push(eq[2]);
+      }
       opts[name] = true;
       continue;
     }
@@ -132,8 +143,10 @@ export function parseApiArgs(argv) {
   if (!path.startsWith("/")) {
     throw new SignInError(`The path starts with a slash, as in /api/posts.\n\n${USAGE}`);
   }
-  if (bodies.filter(Boolean).length > 1) {
-    throw new SignInError("Send the body one way: --data, --form, or -f and -F fields, not two.");
+  // Fields may go with --data or --form only as query parameters, which apiCommand checks
+  // once it knows where each field goes.
+  if (bodies[0] && bodies[1]) {
+    throw new SignInError(ONE_WAY);
   }
   return { mode: "call", method: method.toUpperCase(), path, ...rest };
 }
@@ -371,9 +384,11 @@ export async function apiCommand(argv) {
         );
       }
       const built = buildFields(doc, found, args.fields);
-      if (built.query) {
-        path = withQuery(path, built.query);
-      } else {
+      path = withQuery(path, built.query);
+      if (built.body && body !== undefined) {
+        throw new SignInError(ONE_WAY);
+      }
+      if (built.body) {
         body = JSON.stringify(built.body);
         headers = { "content-type": "application/json" };
       }

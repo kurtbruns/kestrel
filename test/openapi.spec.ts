@@ -1,6 +1,8 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+// @ts-expect-error cli/ is plain Node with no type declarations.
+import { describeRoute, nextMove } from "../cli/openapi.mjs";
 import { createRouter } from "../src/app";
 import { type AppEnv, getConfig } from "../src/env";
 import { buildReferenceResponse } from "../src/reference";
@@ -13,6 +15,7 @@ import {
   openApiPath,
   type Schema,
 } from "../src/reference/openapi";
+import { REFUSAL_MOVE, type RefusalCode } from "../src/reference/refusals";
 import { AUTH, base } from "./support/http";
 
 // The OpenAPI document is a projection of the same reference the editor and the Markdown read
@@ -279,5 +282,30 @@ describe("/api/openapi.json is served like the rest of the authed admin surface"
     expect(body.openapi).toBe("3.1.0");
     expect(body.servers).toEqual([{ url: base }]);
     expect(body.paths["/api/openapi.json"]!.get!.operationId).toBe("get-openapi-document");
+  });
+});
+
+describe("kestrel api reads this document's refusals (SPEC §11)", () => {
+  // The CLI parses the wording this projection writes; a change to it must fail here, not
+  // silently drop every refusal from `kestrel api help` and its readable refusals.
+  it("finds every route's own refusals, each with its next move", () => {
+    for (const d of ref.groups.flatMap((g) => g.routes)) {
+      const method = d.method.toLowerCase();
+      const path = openApiPath(d.path);
+      const text: string = describeRoute(doc, method, path);
+      const op = doc.paths[path]![method]!;
+      for (const e of d.errors ?? []) {
+        expect(text, `${d.method} ${path} ${e.code}`).toContain(`  ${e.status} ${e.code}: `);
+        expect(nextMove(doc, e.code, op), `${d.method} ${path} ${e.code}`).toBe(
+          REFUSAL_MOVE[e.code as RefusalCode],
+        );
+      }
+    }
+  });
+
+  it("finds the next move on each refusal any route gives", () => {
+    for (const code of ["unauthorized", "unsupported_media_type", "internal_error"] as const) {
+      expect(nextMove(doc, code)).toBe(REFUSAL_MOVE[code]);
+    }
   });
 });
