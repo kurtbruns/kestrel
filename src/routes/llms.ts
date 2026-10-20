@@ -19,10 +19,10 @@ import type { RequestContext, RouteDef } from "../router";
 // The instance's own copies of these pages are gated too, so these point at the project's.
 
 /** Where a publisher learns to sign Claude Code in as themselves, the way an agent comes in. */
-export const SIGN_IN_URL = "https://getkestrel.dev/docs/working-with-claude/#connect-claude-code";
+export const SIGN_IN_URL = "https://getkestrel.dev/docs/connect-claude/#connect-claude-code";
 
 /** Where whoever runs the instance learns to make a service token, for a script. */
-export const CONNECT_CLAUDE_URL = "https://getkestrel.dev/docs/connect-claude/";
+export const AUTOMATION_URL = "https://getkestrel.dev/docs/connect-automation/";
 
 interface Entry {
   title: string;
@@ -117,7 +117,7 @@ export function llmsText({
     "## Signing in",
     "",
     `- [Connect Claude Code](${SIGN_IN_URL}): how a publisher signs Claude Code in as themselves.`,
-    `- [Connect automation to the API](${CONNECT_CLAUDE_URL}): how whoever runs this instance makes a service token for a script.`,
+    `- [Connect automation to the API](${AUTOMATION_URL}): how whoever runs this instance makes a service token for a script.`,
     "",
   ].join("\n");
 }

@@ -1,88 +1,102 @@
-# Connect automation to the API
+# Connect Claude
 
-A script or a scheduled job can call the same API the editor uses, with no one signed in. It uses a Cloudflare Access service token, so its changes show as a service token's, never a person's. Anything it schedules waits out the review window, where the publisher can still cancel it.
+Claude works with the instance through the same API the editor uses, signed in as a person, so it can do what they can do in the dashboard, and nothing more. Its changes show as that person's, via Claude Code or via Claude, and anything it schedules waits out the review window.
 
-Claude doesn't need this. It signs in as the publisher: Claude Code with `kestrel login`, as [Connect Claude Code](../publishing/07-working-with-claude.md#connect-claude-code) describes, and Claude Desktop and claude.ai as a custom connector, as [Connect Claude Desktop or claude.ai](../publishing/07-working-with-claude.md#connect-claude-desktop-or-claudeai) describes, so its changes show as theirs, via Claude. Use a service token only for a program that runs when no one is there.
+In this guide, you pick the way to connect, connect Claude Code, Claude Desktop, or claude.ai, and check that it's signed in as you. If Claude used a service token before, you then move it to signing in.
 
-In this guide, you create a service token, and add a policy for it to your Access application. Then you give the token to your script, check that it works, and point the script at the API reference.
+## Which way to connect
+
+| Where Claude runs | How it connects | Its changes show as |
+| --- | --- | --- |
+| Claude Code, in your terminal | `kestrel login`, signed in as you | you, via Claude Code |
+| Claude Desktop or claude.ai | A custom connector at `/api/mcp`, signed in as you | you, via Claude |
+| A script or job with no one present | A service token, as [Connect automation to the API](02-connect-automation.md) describes | a service token |
+
+Each person connects Claude for themselves, signed in as themselves. Anyone the Access application lets into the editor can connect it, and no one else.
 
 ## Before you begin
 
 You need:
 
-- The dashboard locked with Access, from [Lock the dashboard with Access](../get-started/03-access.md).
-- The script or job that will call the API, and somewhere it keeps secrets.
+- Managed OAuth on for the Access application, from [Turn on Managed OAuth](../get-started/03-access.md#5-turn-on-managed-oauth). For Claude Desktop or claude.ai, that includes Claude's address among its allowed redirect URIs.
+- A deployed instance. Claude Desktop and claude.ai reach it from Anthropic's servers, so a connector can't reach one running on your own computer.
+- For Claude Code, the instance's repository, from [Deploy the app](../get-started/02-deploy.md).
 
-## 1. Create a service token
+## Connect Claude Code
 
-A service token is a Client ID and a Client Secret that a program sends with each request. It carries no email, so the app tells it apart from a person's sign-in.
+`kestrel login` signs Claude Code in as you, in your browser, the way you sign in to the dashboard.
 
-1. In **Zero Trust**, go to **Access controls → Service credentials → Service Tokens**, and select **Create Service Token**.
+1. In the instance's repository, run this with the instance's address:
 
-1. Name it for what will use it, such as `kestrel-automation`, and choose a **Service Token Duration**. A year is a good default.
+    ```bash
+    npx kestrel login https://newsletter.example.com
+    ```
 
-1. Select **Generate token**.
+1. Approve the sign-in in the browser it opens. The terminal then says who you're signed in as.
 
-1. Copy the **Client ID** and the **Client Secret**. Cloudflare shows the secret only once.
+You can also ask Claude to connect, and it runs the same command for you to approve. The sign-in is kept in your user config on this computer, never in the repository.
 
-## 2. Add a policy for the token
+The same sign-in lets you call the API yourself. `npx kestrel api --list` lists the instance's routes, `npx kestrel api help POST /api/posts` describes one, and `npx kestrel api POST /api/posts -f subject='Spring update'` calls it as you. `npx kestrel api` alone lists its options.
 
-Your application lets in only the people its `Publishers` policy names. A token needs a policy of its own, on the same application, because the app accepts only logins issued for that application.
+## Connect Claude Desktop or claude.ai
 
-1. Under **Access controls → Applications**, select **Configure** on the application from [Lock the dashboard with Access](../get-started/03-access.md#2-create-the-access-application).
+Add the instance as a custom connector, with the address of its MCP server, and sign in once.
 
-1. Add a policy:
+1. In Claude, go to **Customize → Connectors**, select **Add**, then **Add custom connector**. On a Team or Enterprise plan, an Owner adds it under **Organization settings → Connectors** instead, and each person then selects **Connect** on it.
 
-    - **Policy name:** `Automation`
-    - **Action:** Service Auth
-    - **Include:** the **Service Token** selector, with your token
+1. Name it, and enter the instance's address followed by `/api/mcp`, exactly: `https://newsletter.example.com/api/mcp`.
 
-1. Save the application.
+1. Under **OAuth client**, choose **Register automatically**.
 
-`ACCESS_ALLOWED_EMAILS` doesn't apply to the token, since it has no email. This policy is the only thing that lets it in.
+1. Select **Add**, then sign in the way you do for the dashboard, and approve the sign-in.
 
-The app accepts only this kind of policy and the `Publishers` one, an Allow policy on emails. A login through any other kind of policy carries neither an email nor a token's Client ID, and the app refuses it with a `401` whose `reason` is `access_unidentified`.
+Every Claude plan can add custom connectors, and the Free plan allows one. Anthropic's [custom connectors guide](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) has the details.
 
-## 3. Give the token to your script
-
-The script sends the two values as headers on every request: `CF-Access-Client-Id` with the Client ID, and `CF-Access-Client-Secret` with the Client Secret.
-
-1. Store the Client ID and the Client Secret where your script reads secrets, such as its environment, your CI's secrets, or a password manager.
-
-1. Have the script send both headers with every request to `https://newsletter.example.com/api/…`.
-
-Never commit the secret to a repository, and never put it in `.claude/settings.json`.
-
-## 4. Point the script at the API
-
-The API reference describes every route: its method and path, the body it takes, its refusals, and an example. The editor's **API** tab shows the same reference.
-
-For a program, the reference is Markdown in two levels: `GET /api/reference.md` is the index, with what every route shares and each route on one line, and `GET /api/reference/<resource>.md` holds one resource's routes in full. The JSON at `GET /api/reference` is the whole reference in one answer, as the editor reads it, and `GET /api/openapi.json` is the same reference as an OpenAPI 3.1 document, for a tool that imports one. The docs are served as Markdown too: `GET /api/docs/publishing.md` lists the publisher's pages, `GET /api/docs/self-hosting.md` this guide's, and each page is at `GET /api/docs/<slug>.md`.
-
-An agent given only your app's address finds these routes too. `GET /llms.txt` is public. It names the publication, its archive and subscribe page, and the reference and docs indexes, and links the ways to sign in.
-
-The reference lists the body types each route takes. Most take JSON, sent with `Content-Type: application/json`. An image upload takes a multipart form, or the image file itself.
-
-A service token is held to everything Claude is, and more. An import it commits is emailed to the publisher, if notifications are set, since no one saw it happen. An import that would grow a scheduled send is refused, until the publisher finishes it in the dashboard.
+The connector gives Claude a short list of tools, each a task such as **Save a draft** or **Schedule a post**, and [Working with Claude](../publishing/07-working-with-claude.md) says what stays in the dashboard. A connector has no instance repository, so the instance's Claude context in `.claude/` doesn't reach it. Kestrel gives it the most important instructions itself when it connects, such as asking before anything that reaches readers.
 
 ## Check it
 
-1. Call `GET /api/whoami` with the two headers. The app answers with a program's identity, not a person's:
+1. For Claude Code, ask who you're signed in as:
 
     ```bash
-    curl -s https://newsletter.example.com/api/whoami \
-      -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
-      -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET"
+    npx kestrel api GET /api/whoami
     ```
 
     ```
-    {"principal":{"kind":"service","token_id":"e367c0ffee5eb4.access","client":null},"auth":{"mode":"access"}}
+    {"principal":{"kind":"human","email":"you@example.com","client":"claude-code"},"auth":{"mode":"access"}}
     ```
 
-    The `token_id` is the Client ID Zero Trust shows beside your token. If it's a different one, the script is using another token.
+    The `email` is yours, and `client` is `claude-code`. If it says you aren't signed in, run `kestrel login` again.
 
-1. Call `GET /api/posts`. It answers with the posts the editor shows.
+1. For Claude Desktop or claude.ai, open the connector under **Customize → Connectors**. It lists Kestrel's tools, such as **Get the publication** and **Save a draft**. Then ask Claude what the publication is called, and it answers with the name the dashboard shows.
 
-1. Open a draft in the editor, and have the script save a change to it. The editor shows that the draft was changed elsewhere, last edited by **a service token**.
+1. Have Claude save a change to a draft, then open the draft in the editor. Its last edit reads as yours, via Claude Code or via Claude.
 
-If the script gets a `401`, a `403`, or a login page, check the policy from section 2, and the token's two values. The policy's action must be Service Auth. Check that the token hasn't expired, too.
+If Claude can't connect, [Troubleshooting](../publishing/06-troubleshooting.md#claude-cant-connect) lists what it reports and the fix.
+
+## Moving from a service token
+
+Before Claude could sign in as a person, it called the API with a service token, often named `kestrel-claude`. Its changes now show as a service token's, never yours, so move Claude Code to signing in.
+
+1. Turn on Managed OAuth, as [Turn on Managed OAuth](../get-started/03-access.md#5-turn-on-managed-oauth) describes, and connect Claude Code, as [above](#connect-claude-code).
+
+1. In the instance's repository, bring in the release's Claude context, which has Claude call the API through `kestrel api` as you:
+
+    ```bash
+    npm run check-context
+    ```
+
+    It compares each file in `.claude/` with the release's, and says what to do for each one, as [Install the release](07-upgrade.md#2-install-the-release) describes. A file you never edited takes the release's with `npm run check-context -- --update`, and one you edited is merged by hand.
+
+1. Remove `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` from the `env` block of `.claude/settings.local.json`, where the earlier guide had you put them, and from anywhere else Claude Code reads its environment.
+
+1. Revoke the token in **Zero Trust**, under **Access controls → Service credentials → Service Tokens**, and remove its policy from the Access application. Or keep both for a script, as [Connect automation to the API](02-connect-automation.md) describes.
+
+## Disconnecting
+
+A sign-in renews itself while you use it, until the Access application's grant session ends. [Turn on Managed OAuth](../get-started/03-access.md#5-turn-on-managed-oauth) sets it, and recommends a week. When it ends, Claude asks you to approve a new sign-in.
+
+- **Claude Code:** run `npx kestrel logout` to forget the sign-in on this computer.
+- **Claude Desktop or claude.ai:** remove the connector under **Customize → Connectors**.
+
+To stop someone connecting at all, remove them from the Access application's `Publishers` policy, as for the dashboard. If you set `ACCESS_ALLOWED_EMAILS`, store the list again without them: the app checks it on every request, so it takes effect at once.

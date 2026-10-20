@@ -5,7 +5,7 @@ import { DEFAULT_MIN_LEAD_MS } from "../shared/sends";
 import { createRouter } from "../src/app";
 import { updateSettings } from "../src/db/settings";
 import { docMarkdown } from "../src/docs";
-import { CONNECT_CLAUDE_URL, llmsText, SIGN_IN_URL } from "../src/routes/llms";
+import { AUTOMATION_URL, llmsText, SIGN_IN_URL } from "../src/routes/llms";
 import { NOT_CONNECTED_DEPLOY } from "./support/deploy";
 import { resetDatabase } from "./support/fixtures";
 import { AUTH, base } from "./support/http";
@@ -98,7 +98,7 @@ describe("/llms.txt from the route manifest", () => {
   it("points an agent at signing in as a person first, and a service token for a script (SPEC §11)", () => {
     expect(linksBySection(text("Marsh Lane")).get("Signing in")).toEqual([
       SIGN_IN_URL,
-      CONNECT_CLAUDE_URL,
+      AUTOMATION_URL,
     ]);
   });
 

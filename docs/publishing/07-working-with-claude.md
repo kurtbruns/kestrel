@@ -2,42 +2,17 @@
 
 Ask Claude in plain words, the way you'd ask a colleague. It works through the same API as the dashboard, signed in as you, so it can do what you can do there, and nothing more. Everything it changes shows in the dashboard as yours, sends included: a post's banner and a send's page say who scheduled, moved, or canceled it, and through which Claude ("Scheduled by you@example.com via Claude Code", or "via Claude" from Claude Desktop and claude.ai).
 
-To set Claude up, [connect Claude Code](#connect-claude-code) in your instance's repository, or [connect Claude Desktop or claude.ai](#connect-claude-desktop-or-claudeai) as a connector, below. Claude reads these same pages from your Kestrel, so it explains things in the words you see here.
+Connect Claude the way that fits where you use it:
 
-## Connect Claude Code
+| Where you use Claude | How it connects | Its changes show as |
+| --- | --- | --- |
+| Claude Code, in your instance's repository | Run `npx kestrel login` with your Kestrel's address, and approve the sign-in in your browser, as [Connect Claude Code](../guides/01-connect-claude.md#connect-claude-code) describes. | you, via Claude Code |
+| Claude Desktop or claude.ai | Add your Kestrel as a custom connector, at its address followed by `/api/mcp`, as [Connect Claude Desktop or claude.ai](../guides/01-connect-claude.md#connect-claude-desktop-or-claudeai) describes. | you, via Claude |
+| A script that runs with no one there | A service token, as [Connect automation to the API](../guides/02-connect-automation.md) describes. | a service token, never you |
 
-Run this in your instance's repository, with your Kestrel's address, and approve the sign-in in the browser it opens:
+**Your Kestrel has to offer this sign-in first,** with Managed OAuth on for its Access application, as [Turn on Managed OAuth](../get-started/03-access.md#5-turn-on-managed-oauth) describes. If Claude says it couldn't connect or sign in, [Claude can't connect](06-troubleshooting.md#claude-cant-connect) has the fix.
 
-```bash
-npx kestrel login https://newsletter.example.com
-```
-
-You sign in the way you do for the dashboard, and the terminal says who you're signed in as. Or ask Claude to connect, and it runs the same command for you to approve.
-
-**Your Kestrel has to offer this sign-in first.** If the command says your Kestrel doesn't offer a sign-in for programs, turn on Managed OAuth, as [Lock the dashboard with Access](../get-started/03-access.md#5-turn-on-managed-oauth) describes.
-
-The sign-in stays on your computer, not in your repository, and renews itself while you use it. How long it lasts is a setting of your Access application. When it ends, Claude asks you to approve a new one. To sign out on this computer, run `npx kestrel logout`.
-
-The same sign-in lets you call the API from a terminal yourself. `npx kestrel api --list` lists your Kestrel's routes, `npx kestrel api help POST /api/posts` describes one, and `npx kestrel api POST /api/posts -f subject='Spring update'` calls it as you. `npx kestrel api` alone lists its options.
-
-## Connect Claude Desktop or claude.ai
-
-Add your Kestrel as a custom connector, with the address of its MCP server, and sign in once:
-
-1. In Claude, go to **Customize → Connectors**, select **Add**, then **Add custom connector**. On a Team or Enterprise plan, an Owner adds it under **Organization settings → Connectors** instead, and you then select **Connect** on it.
-1. Name it, and enter your Kestrel's address followed by `/api/mcp`, exactly: `https://newsletter.example.com/api/mcp`.
-1. Under **OAuth client**, choose **Register automatically**.
-1. Select **Add**, then sign in the way you do for the dashboard, and approve the sign-in.
-
-Every Claude plan can add custom connectors; the Free plan allows one. Anthropic's [custom connectors guide](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) has the details.
-
-**Your Kestrel has to allow Claude's sign-in first.** If Claude says it couldn't connect or the sign-in failed, the Access application needs Managed OAuth on, with Claude's address among its allowed redirect URIs, as [Lock the dashboard with Access](../get-started/03-access.md#5-turn-on-managed-oauth) describes.
-
-Claude reaches your Kestrel from Anthropic's servers, not your computer, so this works only for a deployed instance, never one running on your own computer. Claude sees a short list of tools, each a task such as **Save a draft**, **Send a test email**, or **Schedule a post**, marked as reading or changing something, plus one that reads most of the rest of your Kestrel and changes nothing. Your settings, the email template, changing whether a post is in your archive, or its address, once it's scheduled or sent, blocking an address, resolving a send, uploading images, and erasing a subscriber stay in the dashboard, and Claude tells you when something is yours to finish there. A connector has no instance repository, so your instance's instructions for Claude don't reach it: Kestrel tells it the most important ones itself when it connects, such as asking you before anything that reaches readers.
-
-How long the sign-in lasts is the Access application's grant session, as for Claude Code. To disconnect, remove the connector in Claude.
-
-A script that runs with no one there uses a service token instead, as [Connect automation to the API](../guides/01-connect-claude.md) describes. Its changes show as a service token's, never as yours.
+Claude reads these same pages from your Kestrel, so it explains things in the words you see here. In Claude Desktop and claude.ai, Claude sees a short list of tools, each a task such as **Save a draft**, **Send a test email**, or **Schedule a post**, marked as reading or changing something, plus one that reads most of the rest of your Kestrel and changes nothing. Your settings, the email template, changing whether a post is in your archive, or its address, once it's scheduled or sent, blocking an address, resolving a send, uploading images, and erasing a subscriber stay in the dashboard, and Claude tells you when something is yours to finish there.
 
 ## What to ask Claude
 
