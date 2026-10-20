@@ -41,7 +41,7 @@ Your application lets in only the people its `Publishers` policy names. A token 
 
 `ACCESS_ALLOWED_EMAILS` doesn't apply to the token, since it has no email. This policy is the only thing that lets it in.
 
-The app accepts only this kind of policy and the `Publishers` one, an Allow policy on emails. A login through any other kind of policy carries neither an email nor a token's Client ID, and the app refuses it with a `401` whose `reason` is `access_unidentified`.
+The app accepts only this kind of policy and the `Publishers` one, an Allow policy on emails. A login through any other kind of policy carries neither an email nor a token's Client ID, and the app refuses it with a `401` whose `reason` is `access_unidentified`. A search of the Worker's logs for `auth.unidentified` shows each login it refused, with the names of the claims it carried, so you can tell which policy let it through.
 
 ## 3. Give the token to your script
 

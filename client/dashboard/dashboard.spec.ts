@@ -189,7 +189,7 @@ describe("dashboard", () => {
     expect($(".pub-card .pub-foot a").getAttribute("href")).toBe("/");
     // No revision through Claude Code yet: the guide leads, both links at one weight, each led by its glyph.
     expect($$(".pub-links a").map((a) => a.textContent?.trim())).toEqual([
-      "Connect Claude →",
+      "Working with Claude →",
       "API reference →",
     ]);
     expect($$(".pub-links a svg").length).toBe(2);
@@ -250,7 +250,7 @@ describe("dashboard", () => {
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(0);
     expect(document.querySelector(".conn-status")).toBeNull();
-    expect($(".pub-links a").textContent?.trim()).toBe("Connect Claude →");
+    expect($(".pub-links a").textContent?.trim()).toBe("Working with Claude →");
     expect(fake.unhandled).toEqual([]);
   });
 
@@ -470,7 +470,7 @@ describe("dashboard", () => {
     expect(document.querySelector(".tiles")).toBeNull();
     expect($(".setup-url").textContent).toBe("https://app.birds.example/subscribe");
     expect($(".setup [data-nav='#/settings']").textContent).toBe("Settings");
-    expect($(".pub-links a").textContent?.trim()).toBe("Connect Claude →");
+    expect($(".pub-links a").textContent?.trim()).toBe("Working with Claude →");
     $(".setup [data-act='new-post']").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.calls.find((c) => c.method === "POST")?.body).toBe("{}");

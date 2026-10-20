@@ -569,7 +569,7 @@ function apiConnectCard(connected: boolean): Html {
   }
   return html`<div class="card pub-card">
     <p class="pub-note">Let Claude draft, proofread, and schedule your posts.</p>
-    <div class="pub-foot pub-links"><a href="#/docs/working-with-claude">${icon("article")}Connect Claude →</a><a href="#/api-reference">${icon("code")}API reference →</a></div>
+    <div class="pub-foot pub-links"><a href="#/docs/working-with-claude">${icon("article")}Working with Claude →</a><a href="#/api-reference">${icon("code")}API reference →</a></div>
   </div>`;
 }
 
