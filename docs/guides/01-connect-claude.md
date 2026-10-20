@@ -41,6 +41,8 @@ Your application lets in only the people its `Publishers` policy names. A token 
 
 `ACCESS_ALLOWED_EMAILS` doesn't apply to the token, since it has no email. This policy is the only thing that lets it in.
 
+The app accepts only this kind of policy and the `Publishers` one, an Allow policy on emails. A login through any other kind of policy carries neither an email nor a token's Client ID, and the app refuses it with a `401`.
+
 ## 3. Give the token to your script
 
 The script sends the two values as headers on every request: `CF-Access-Client-Id` with the Client ID, and `CF-Access-Client-Secret` with the Client Secret.
@@ -83,4 +85,4 @@ A service token is held to everything Claude is, and more. An import it commits 
 
 1. Open a draft in the editor, and have the script save a change to it. The editor shows that the draft was changed elsewhere, last edited by **a service token**.
 
-If the script gets a `401`, a `403`, or a login page, check the policy from section 2, and the token's two values. Check that the token hasn't expired, too.
+If the script gets a `401`, a `403`, or a login page, check the policy from section 2, and the token's two values. The policy's action must be Service Auth. Check that the token hasn't expired, too.

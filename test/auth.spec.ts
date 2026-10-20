@@ -63,12 +63,9 @@ describe("Access claims to a principal", () => {
     expect(JSON.stringify(lines())).not.toContain(CLIENT_ID);
   });
 
-  it("still admits a token with neither as an anonymous service, and warns with its claim names", () => {
+  it("refuses a token with neither, and warns with its claim names only (SPEC §11)", () => {
     const lines = logged();
-    expect(principalFromClaims({ sub: "device-7", iss: "https://team" }, undefined)).toEqual({
-      kind: "service",
-      via: "access",
-    });
+    expect(principalFromClaims({ sub: "device-7", iss: "https://team" }, undefined)).toBeNull();
     expect(lines()).toEqual([
       expect.objectContaining({ event: "auth.unidentified", level: "warn", claims: "iss,sub" }),
     ]);
@@ -311,12 +308,9 @@ describe("the auth mode follows how the request signed in", () => {
       principal: { kind: "service", token_id: "e367c0ffee5eb4.access", client: null },
       auth: { mode: "access" },
     });
-    // One with neither claim is still admitted for now, with no name to give.
+    // One with neither claim is refused: some other kind of Access rule admitted it.
     const unidentified = await fetchWith(vars, "/api/whoami", { headers: await assertion({}) });
-    expect(await unidentified.json()).toEqual({
-      principal: { kind: "service", client: null },
-      auth: { mode: "access" },
-    });
+    expect(unidentified.status).toBe(401);
   });
 
   // Access issues for the bare host, so a team domain stored as a URL must still verify.
