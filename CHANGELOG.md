@@ -26,7 +26,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
-- `kestrel login` and `kestrel api` no longer risk losing a sign-in when two commands touch the credentials file at once: every write to it now happens under the lock a refresh holds, a token request gives up after 20 seconds instead of hanging, and a command removes only a lock it still owns.
+- `kestrel login` and `kestrel api` no longer risk losing a sign-in when two commands touch the credentials file at once: every write to it now happens under the lock a refresh holds, a token request gives up after 10 seconds instead of hanging, and a command removes only a lock it still owns.
 
 ### Breaking
 

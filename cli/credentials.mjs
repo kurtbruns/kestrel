@@ -117,7 +117,8 @@ export function writeSignInHeld(origin, entry, env = process.env) {
 }
 
 // How long a lock is waited for, and when one left behind by a crashed process is taken over.
-const LOCK_WAIT_MS = 15_000;
+/** How long a waiter waits for the lock: past the longest a live holder takes (the token request's timeout), under the staleness rule. */
+export const LOCK_WAIT_MS = 25_000;
 /** A lock older than this is taken over; the token request's timeout stays under it, so a live holder never outlasts it. */
 export const LOCK_STALE_MS = 30_000;
 
@@ -147,16 +148,28 @@ export async function withCredentialsLock(fn, env = process.env) {
         throw err;
       }
       let age = 0;
+      let seen;
       try {
+        seen = readFileSync(lock, "utf8");
         age = Date.now() - statSync(lock).mtimeMs;
       } catch {
-        continue; // released between the open and the stat: try again
+        continue; // released between the open and the read: try again
       }
       if (age > LOCK_STALE_MS) {
-        rmSync(lock, { force: true });
+        // Remove it only if it is still the lock we judged stale: another waiter may have
+        // taken it over since, and its fresh lock is not ours to delete.
+        let now;
+        try {
+          now = readFileSync(lock, "utf8");
+        } catch {
+          continue;
+        }
+        if (now === seen) {
+          rmSync(lock, { force: true });
+        }
       } else if (Date.now() > deadline) {
         throw new Error(
-          `Another kestrel command has held ${lock} too long. If none is running, delete it.`,
+          `Another kestrel command has held ${lock} for ${Math.round(LOCK_WAIT_MS / 1000)} seconds. It may still be running; try again in a minute. A lock left by a crashed command clears itself after ${Math.round(LOCK_STALE_MS / 1000)} seconds.`,
         );
       } else {
         await new Promise((resolve) => setTimeout(resolve, 50));

@@ -4,7 +4,15 @@
  * loopback callback that receives the browser's approval. Access itself is stubbed at fetch;
  * the flow against a real Access application is checked by hand on a test instance.
  */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,6 +22,7 @@ import {
   configDir,
   credentialsFile,
   LOCK_STALE_MS,
+  LOCK_WAIT_MS,
   readSignIn,
   readSignIns,
   withCredentialsLock,
@@ -342,6 +351,25 @@ describe("the credentials lock", () => {
     expect(readFileSync(lock, "utf8")).toBe("999:takeover");
   });
 
+  it("takes over a stale lock, and surfaces a timeout while the body is read", async () => {
+    const lock = `${credentialsFile()}.lock`;
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(lock, "1:dead");
+    const old = new Date(Date.now() - LOCK_STALE_MS - 1000);
+    utimesSync(lock, old, old);
+    expect(await withCredentialsLock(async () => "got it")).toBe("got it");
+    expect(() => statSync(lock)).toThrow();
+    vi.stubGlobal("fetch", async (_url, init) => {
+      const res = new Response("{}", { status: 200 });
+      res.json = () =>
+        new Promise((_resolve, reject) => {
+          init.signal.addEventListener("abort", () => reject(init.signal.reason));
+        });
+      return res;
+    });
+    await expect(refreshTokens(stored(-1), 30)).rejects.toThrow(/didn't answer the token request/);
+  });
+
   it("removes its own lock on release, and a later holder gets in", async () => {
     const lock = `${credentialsFile()}.lock`;
     await withCredentialsLock(async () => {
@@ -369,7 +397,8 @@ describe("the credentials lock", () => {
   });
 
   it("gives up on a token request that hangs, well before the lock would go stale", async () => {
-    expect(TOKEN_TIMEOUT_MS).toBeLessThan(LOCK_STALE_MS);
+    expect(TOKEN_TIMEOUT_MS).toBeLessThan(LOCK_WAIT_MS);
+    expect(LOCK_WAIT_MS).toBeLessThan(LOCK_STALE_MS);
     vi.stubGlobal(
       "fetch",
       (_url, init) =>

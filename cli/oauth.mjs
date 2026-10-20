@@ -197,18 +197,26 @@ export function authorizeUrl({ endpoint, clientId, redirectUri, challenge, state
   return url.toString();
 }
 
-/** How long a token request may take. Under the credentials lock's staleness rule (30 s), so a refresh that holds the lock never outlasts it. */
-export const TOKEN_TIMEOUT_MS = 20_000;
+/** How long a token request may take. Under the credentials lock's staleness rule (30 s) and a waiter's patience (25 s), so a refresh that holds the lock never outlasts either. */
+export const TOKEN_TIMEOUT_MS = 10_000;
 
 /** POST a form to the token endpoint, answering its JSON, or throwing with its words. */
 async function tokenRequest(endpoint, form, timeoutMs = TOKEN_TIMEOUT_MS) {
   let res;
+  let body;
   try {
     res = await fetch(endpoint, {
       signal: AbortSignal.timeout(timeoutMs),
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
       body: new URLSearchParams(form).toString(),
+    });
+    // The timeout covers reading the body too; only an unreadable body is let go.
+    body = await res.json().catch((err) => {
+      if (err?.name === "TimeoutError") {
+        throw err;
+      }
+      return {};
     });
   } catch (err) {
     if (err?.name === "TimeoutError") {
@@ -218,7 +226,6 @@ async function tokenRequest(endpoint, form, timeoutMs = TOKEN_TIMEOUT_MS) {
     }
     throw new SignInError(`Couldn't reach ${new URL(endpoint).origin}: ${errText(err)}`);
   }
-  const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     const error = new SignInError(
       `Access refused the token request (${res.status}${body.error ? `: ${body.error}` : ""}${body.error_description ? `, ${body.error_description}` : ""}).`,
