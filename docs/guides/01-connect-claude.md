@@ -36,7 +36,7 @@ You need:
 
 You can also ask Claude to connect, and it runs the same command for you to approve. The sign-in is kept in your user config on this computer, never in the repository.
 
-The same sign-in lets you call the API yourself. `npx kestrel api --list` lists the instance's routes, `npx kestrel api help POST /api/posts` describes one, and `npx kestrel api POST /api/posts -f subject='Spring update'` calls it as you. `npx kestrel api` alone lists its options.
+The same sign-in lets you call the API yourself. `npx kestrel api --list` lists the instance's routes, `npx kestrel api help POST /api/posts` describes one, and `npx kestrel api POST /api/posts -f subject='Spring update'` calls it as you. `npx kestrel api` alone lists its options. A script of your own can name itself with `--client`, such as `--client my-script`, so its changes read "via my-script". `kestrel api` refuses `--client editor`, since only the editor names itself the editor.
 
 ## Connect Claude Desktop or claude.ai
 
@@ -52,7 +52,7 @@ Add the instance as a custom connector, with the address of its MCP server, and 
 
 Every Claude plan can add custom connectors, and the Free plan allows one. Anthropic's [custom connectors guide](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) has the details.
 
-The connector gives Claude a short list of tools, each a task such as **Save a draft** or **Schedule a post**, and [Working with Claude](../publishing/07-working-with-claude.md) says what stays in the dashboard. A connector has no instance repository, so the instance's Claude context in `.claude/` doesn't reach it. Kestrel gives it the most important instructions itself when it connects, such as asking before anything that reaches readers.
+The connector gives Claude a short list of tools, each a task such as **Save a draft** or **Schedule a post**, and [Working with Claude](../publishing/07-working-with-claude.md) says what stays in the dashboard. A connector has no instance repository, so the instance's Claude context in `.claude/` doesn't reach it. Kestrel gives it the most important instructions itself when it connects, such as asking before anything that reaches readers, offering a test once a post is scheduled, and sending tests only to an inbox the publisher owns.
 
 ## Check it
 
