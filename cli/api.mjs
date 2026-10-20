@@ -14,7 +14,7 @@
  */
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
-import { readSignIn, readSignIns, withCredentialsLock, writeSignIn } from "./credentials.mjs";
+import { readSignIn, readSignIns, withCredentialsLock, writeSignInHeld } from "./credentials.mjs";
 import { devTarget } from "./dev-api.mjs";
 import {
   DEFAULT_CLIENT,
@@ -175,7 +175,7 @@ export async function accessToken(origin, { force = false, env = process.env } =
     }
     try {
       const fields = tokenFields(await refreshTokens(now), now);
-      writeSignIn(origin, { ...now, ...fields }, env);
+      writeSignInHeld(origin, { ...now, ...fields }, env);
       return fields.access_token;
     } catch (err) {
       if (err instanceof SignInError && err.oauthError === "invalid_grant") {

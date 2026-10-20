@@ -18,8 +18,11 @@
  *
  * A refresh token may be single-use, and Claude Code runs commands side by side, so a refresh
  * happens under a lock file beside the credentials: whoever waited reads the token the other
- * stored rather than spending the same refresh token twice.
+ * stored rather than spending the same refresh token twice. Every write to the file happens
+ * under that lock too, since a write reads the whole file and puts it back, and two at once
+ * would lose one entry's change.
  */
+import { randomBytes } from "node:crypto";
 import {
   chmodSync,
   closeSync,
@@ -84,8 +87,17 @@ export function readSignIn(origin, env = process.env) {
   return readSignIns(env)[origin];
 }
 
-/** Store (or, with undefined, forget) the sign-in for one origin, leaving the others. */
+/**
+ * Store (or, with undefined, forget) the sign-in for one origin, leaving the others. Takes
+ * the credentials lock, so call it outside `withCredentialsLock`; inside one, use
+ * `writeSignInHeld`.
+ */
 export function writeSignIn(origin, entry, env = process.env) {
+  return withCredentialsLock(() => writeSignInHeld(origin, entry, env), env);
+}
+
+/** `writeSignIn` for a caller already inside `withCredentialsLock`, which taking it again would deadlock. */
+export function writeSignInHeld(origin, entry, env = process.env) {
   const instances = { ...readSignIns(env) };
   if (entry === undefined) {
     delete instances[origin];
@@ -106,20 +118,30 @@ export function writeSignIn(origin, entry, env = process.env) {
 
 // How long a lock is waited for, and when one left behind by a crashed process is taken over.
 const LOCK_WAIT_MS = 15_000;
-const LOCK_STALE_MS = 30_000;
+/** A lock older than this is taken over; the token request's timeout stays under it, so a live holder never outlasts it. */
+export const LOCK_STALE_MS = 30_000;
 
 /**
  * Run `fn` holding the credentials lock, so only one process refreshes at a time. A lock
- * older than any refresh takes is a crashed process's, and is taken over.
+ * older than any refresh takes is a crashed process's, and is taken over. The lock file holds
+ * its owner's token, and the release removes the file only while it still holds that token,
+ * so a holder that outlived the staleness rule never deletes the lock of whoever took over.
  */
 export async function withCredentialsLock(fn, env = process.env) {
   mkdirSync(configDir(env), { recursive: true, mode: 0o700 });
   const lock = `${credentialsFile(env)}.lock`;
   const deadline = Date.now() + LOCK_WAIT_MS;
-  let fd;
-  while (fd === undefined) {
+  const token = `${process.pid}:${randomBytes(8).toString("hex")}`;
+  let held = false;
+  while (!held) {
     try {
-      fd = openSync(lock, "wx", 0o600);
+      const fd = openSync(lock, "wx", 0o600);
+      try {
+        writeFileSync(fd, token);
+      } finally {
+        closeSync(fd);
+      }
+      held = true;
     } catch (err) {
       if (err?.code !== "EEXIST") {
         throw err;
@@ -144,7 +166,14 @@ export async function withCredentialsLock(fn, env = process.env) {
   try {
     return await fn();
   } finally {
-    closeSync(fd);
-    rmSync(lock, { force: true });
+    let owner;
+    try {
+      owner = readFileSync(lock, "utf8");
+    } catch {
+      // already gone: nothing of ours to remove
+    }
+    if (owner === token) {
+      rmSync(lock, { force: true });
+    }
   }
 }

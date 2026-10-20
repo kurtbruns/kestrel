@@ -197,16 +197,25 @@ export function authorizeUrl({ endpoint, clientId, redirectUri, challenge, state
   return url.toString();
 }
 
+/** How long a token request may take. Under the credentials lock's staleness rule (30 s), so a refresh that holds the lock never outlasts it. */
+export const TOKEN_TIMEOUT_MS = 20_000;
+
 /** POST a form to the token endpoint, answering its JSON, or throwing with its words. */
-async function tokenRequest(endpoint, form) {
+async function tokenRequest(endpoint, form, timeoutMs = TOKEN_TIMEOUT_MS) {
   let res;
   try {
     res = await fetch(endpoint, {
+      signal: AbortSignal.timeout(timeoutMs),
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
       body: new URLSearchParams(form).toString(),
     });
   } catch (err) {
+    if (err?.name === "TimeoutError") {
+      throw new SignInError(
+        `${new URL(endpoint).origin} didn't answer the token request within ${timeoutMs / 1000} seconds. Try again.`,
+      );
+    }
     throw new SignInError(`Couldn't reach ${new URL(endpoint).origin}: ${errText(err)}`);
   }
   const body = await res.json().catch(() => ({}));
@@ -221,28 +230,36 @@ async function tokenRequest(endpoint, form) {
 }
 
 /** Trade the browser's authorization code for tokens. */
-export function exchangeCode(entry, { code, verifier }) {
-  return tokenRequest(entry.token_endpoint, {
-    grant_type: "authorization_code",
-    code,
-    code_verifier: verifier,
-    client_id: entry.client_id,
-    redirect_uri: entry.redirect_uri,
-    resource: entry.resource,
-  });
+export function exchangeCode(entry, { code, verifier }, timeoutMs) {
+  return tokenRequest(
+    entry.token_endpoint,
+    {
+      grant_type: "authorization_code",
+      code,
+      code_verifier: verifier,
+      client_id: entry.client_id,
+      redirect_uri: entry.redirect_uri,
+      resource: entry.resource,
+    },
+    timeoutMs,
+  );
 }
 
 /** A new access token from the stored refresh token. Access checks its policies again. */
-export function refreshTokens(entry) {
+export function refreshTokens(entry, timeoutMs) {
   if (!entry.refresh_token) {
     throw new SignInError("This sign-in can't be renewed. Run `npx kestrel login <url>` again.");
   }
-  return tokenRequest(entry.token_endpoint, {
-    grant_type: "refresh_token",
-    refresh_token: entry.refresh_token,
-    client_id: entry.client_id,
-    resource: entry.resource,
-  });
+  return tokenRequest(
+    entry.token_endpoint,
+    {
+      grant_type: "refresh_token",
+      refresh_token: entry.refresh_token,
+      client_id: entry.client_id,
+      resource: entry.resource,
+    },
+    timeoutMs,
+  );
 }
 
 /** Revoke the stored refresh token, best effort: forgetting it locally is what logout owes. */

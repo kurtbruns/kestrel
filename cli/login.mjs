@@ -81,7 +81,7 @@ export async function signIn(origin, { browser }) {
     }
     const code = await listener.code;
     const fields = tokenFields(await exchangeCode(entry, { code, verifier }));
-    writeSignIn(origin, { ...entry, ...fields });
+    await writeSignIn(origin, { ...entry, ...fields });
   } finally {
     listener.close();
   }
@@ -138,7 +138,7 @@ export async function logoutCommand(argv) {
       throw new SignInError(`You aren't signed in to ${origin}.`);
     }
     const revoked = await revokeTokens(entry);
-    writeSignIn(origin, undefined);
+    await writeSignIn(origin, undefined);
     console.log(
       revoked
         ? `Signed out of ${origin}, and Access revoked the sign-in.`
