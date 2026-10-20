@@ -267,7 +267,7 @@ export async function renderEditor(
       <div class="actions-bar">
         ${
           locked
-            ? html`<div class="row"><span class="test-hint" id="testHint" hidden>Not tested yet</span><button type="button" class="secondary" id="testBtn">${icon("send")}<span>Send test email</span></button></div>`
+            ? html`<div class="row test-row"><span class="test-hint" id="testHint" hidden>Not tested yet</span><button type="button" class="secondary" id="testBtn">${icon("send")}<span>Send test email</span></button></div>`
             : html`<div class="row">
                  <button type="button" class="ghost" id="saveBtn">Save draft</button>
                  <span class="save-status" id="saveStatus" aria-live="polite"></span>

@@ -2937,6 +2937,9 @@ body.web-mode .content {
   font-size: 13px;
   color: var(--muted);
 }
+.test-row {
+  gap: 1rem;
+}
 .save-status {
   display: inline-flex;
   align-items: center;
