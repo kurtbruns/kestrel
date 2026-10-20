@@ -244,6 +244,7 @@ describe("editor view", () => {
     restoreHidden();
     vi.restoreAllMocks();
     vi.useRealTimers();
+    appState.session = null;
   });
 
   // The editor mounted the way the router mounts it; `handle()` is what the router sees.
@@ -636,28 +637,44 @@ describe("editor view", () => {
     }
   });
 
-  it("names who scheduled the send under its time, and who moved it when that happens elsewhere (SPEC §11)", async () => {
+  const YOU = { kind: "human", email: "you@example.com", client: "editor" } as const;
+  const VIA_CLAUDE = JSON.stringify({ ...YOU, client: "claude-code" });
+  const signedIn = () => {
+    appState.session = { principal: YOU, auth: { mode: "dev" } };
+  };
+
+  it("names no one on the banner when the latest act on the send was yours in the editor (DESIGN §4)", async () => {
+    signedIn();
+    const linked = scheduledPost(Date.now() + 3_600_000);
+    linked.sends.edit("s1", { scheduled_by: VIA_CLAUDE, rescheduled_by: JSON.stringify(YOU) });
+    await open(linked.routes);
+    expect($("#schedBy").hidden).toBe(true);
+    expect($(".banner-scheduled").textContent).not.toMatch(/by you@example\.com/);
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
+  it("names the latest act on the banner once it came through another client, and follows it (SPEC §11)", async () => {
+    signedIn();
+    const linked = scheduledPost(Date.now() + 3_600_000);
+    linked.sends.edit("s1", { scheduled_by: JSON.stringify(YOU) });
+    await open(linked.routes);
+    expect($("#schedBy").hidden).toBe(true);
+
+    linked.sends.edit("s1", { fire_at: Date.now() + 2 * 3_600_000, rescheduled_by: VIA_CLAUDE });
+    await vi.advanceTimersByTimeAsync(60_000); // within one idle read
+    expect($("#schedBy").hidden).toBe(false);
+    expect($("#schedBy").textContent).toBe("Rescheduled by you@example.com via Claude Code");
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
+  it("names a send a service token scheduled, by the token's name", async () => {
+    signedIn();
     const linked = scheduledPost(Date.now() + 3_600_000);
     linked.sends.edit("s1", {
-      scheduled_by: JSON.stringify({ kind: "human", email: "you@example.com", client: "editor" }),
+      scheduled_by: JSON.stringify({ kind: "service", token_id: "ci.access", client: null }),
     });
     await open(linked.routes);
-    expect($("#schedBy").hidden).toBe(false);
-    expect($("#schedBy").textContent).toBe("Scheduled by you@example.com");
-
-    linked.sends.edit("s1", {
-      fire_at: Date.now() + 2 * 3_600_000,
-      rescheduled_by: JSON.stringify({
-        kind: "human",
-        email: "you@example.com",
-        client: "claude-code",
-      }),
-    });
-    await vi.advanceTimersByTimeAsync(60_000); // within one idle read
-    expect($("#schedBy").textContent).toBe(
-      "Scheduled by you@example.com · rescheduled by you@example.com via Claude Code",
-    );
-    expect(fake.unhandled).toHaveLength(0);
+    expect($("#schedBy").textContent).toBe("Scheduled by the service token ci.access");
   });
 
   it("names no one under the time of a send none is recorded on", async () => {

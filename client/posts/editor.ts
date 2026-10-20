@@ -35,6 +35,7 @@ import { at, every, mount, onAbort, poll, type ViewHandle } from "../lifecycle";
 import { followSend, readSendsNow, type StageChange } from "../send_state";
 import { openRescheduleModal } from "../sends/dialogs";
 import { can, conditionOf, has } from "../sends/progress";
+import { appState } from "../state";
 import { $, $$ } from "../ui/dom";
 import { EMAIL_FRAME_SANDBOX, openLinksInNewTab } from "../ui/email_frame";
 import {
@@ -51,7 +52,7 @@ import { highlightMarkdown } from "../ui/highlight";
 import { type Html, html, setHtml } from "../ui/html";
 import { type IconName, icon } from "../ui/icons";
 import { busy, fieldError, modal, renderError, toast } from "../ui/widgets";
-import { sendActedBy, whoActed } from "../who_acted";
+import { bannerActedBy, whoActed } from "../who_acted";
 import { activeSend, postAction } from "./actions";
 import { createAutosave } from "./autosave";
 import { DirtyTracker } from "./dirty";
@@ -186,6 +187,7 @@ export async function renderEditor(
     }
   }
   const { post, markdown } = data;
+  const you = appState.session?.principal ?? null;
   // The post's publishing settings as stored (SPEC §4, §5): whether it is included in the
   // archive, and its archive address. Neither is part of the email, so both change while the
   // post is scheduled too, through Post settings, and a dialog's edits reach them only on Save,
@@ -1041,8 +1043,9 @@ export async function renderEditor(
     const dailyWritesEl = $("#schedDailyWrites");
     const byEl = $("#schedBy");
     const paintConditions = () => {
-      // Who scheduled it and who last moved it (SPEC §11), once the send's own read says.
-      const by = sendActedBy(current);
+      // Who last acted on it (SPEC §11), once the send's own read says, and only when someone
+      // other than you in the editor did (DESIGN §4): the send that needs noticing.
+      const by = bannerActedBy(current, you);
       byEl.hidden = by === null;
       byEl.textContent = by ?? "";
       const remade = conditionOf(current, "remade");

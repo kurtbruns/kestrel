@@ -66,3 +66,36 @@ export function sendActedBy(
   const line = parts.join(" · ");
   return line ? line.charAt(0).toUpperCase() + line.slice(1) : null;
 }
+
+/** Whether `actor` is `you` working in the editor, the one actor the editor never needs to name:
+ *  the person signed in here, through the editor. */
+export function isYouInEditor(actor: Actor, you: Actor | null): boolean {
+  return (
+    actor.kind === "human" &&
+    you?.kind === "human" &&
+    actor.email === you.email &&
+    actor.client === EDITOR_CLIENT
+  );
+}
+
+/**
+ * Who last acted on a scheduled send, as its banner shows it (DESIGN §4, §10): the latest act,
+ * a move when there was one and otherwise the schedule ("Rescheduled by you@example.com via Claude
+ * Code"), and only when someone other than you in the editor took it (Claude Code, a script, a
+ * service token, or another person). Nothing when you did, which you already know, or when none
+ * is recorded. The send's page shows every act.
+ */
+export function bannerActedBy(
+  send: Partial<Pick<SendView, "scheduled_by" | "rescheduled_by">>,
+  you: Actor | null,
+): string | null {
+  const latest = send.rescheduled_by
+    ? { verb: "Rescheduled", actor: send.rescheduled_by }
+    : send.scheduled_by
+      ? { verb: "Scheduled", actor: send.scheduled_by }
+      : null;
+  if (!latest || isYouInEditor(latest.actor, you)) {
+    return null;
+  }
+  return `${latest.verb} by ${actorLabel(latest.actor)}`;
+}

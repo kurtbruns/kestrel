@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actorLabel, sendActedBy, whoActed } from "./who_acted";
+import { actorLabel, bannerActedBy, sendActedBy, whoActed } from "./who_acted";
 
 describe("whoActed (SPEC §11, Who acted)", () => {
   it("shows a person in the editor alone", () => {
@@ -72,5 +72,35 @@ describe("sendActedBy (SPEC §6, §11)", () => {
       }),
     ).toBeNull();
     expect(sendActedBy({})).toBeNull();
+  });
+});
+
+describe("bannerActedBy (DESIGN §4, §10)", () => {
+  const you = { kind: "human", email: "you@example.com", client: "editor" } as const;
+  const viaClaude = { ...you, client: "claude-code" } as const;
+
+  it("names the latest act alone: a reschedule when there was one, else the schedule", () => {
+    expect(bannerActedBy({ scheduled_by: you, rescheduled_by: viaClaude }, you)).toBe(
+      "Rescheduled by you@example.com via Claude Code",
+    );
+    expect(bannerActedBy({ scheduled_by: viaClaude, rescheduled_by: null }, you)).toBe(
+      "Scheduled by you@example.com via Claude Code",
+    );
+    expect(
+      bannerActedBy({ scheduled_by: { kind: "service", token_id: "t", client: null } }, you),
+    ).toBe("Scheduled by the service token t");
+    expect(bannerActedBy({ scheduled_by: { ...you, email: "them@example.com" } }, you)).toBe(
+      "Scheduled by them@example.com",
+    );
+  });
+
+  it("says nothing when the latest act was yours in the editor, or none is recorded", () => {
+    expect(bannerActedBy({ scheduled_by: viaClaude, rescheduled_by: you }, you)).toBeNull();
+    expect(bannerActedBy({ scheduled_by: you }, you)).toBeNull();
+    expect(bannerActedBy({}, you)).toBeNull();
+  });
+
+  it("names the latest act when no one is signed in to compare with", () => {
+    expect(bannerActedBy({ scheduled_by: you }, null)).toBe("Scheduled by you@example.com");
   });
 });
