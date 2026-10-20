@@ -309,3 +309,17 @@ describe("kestrel api reads this document's refusals (SPEC §11)", () => {
     }
   });
 });
+
+// SPEC §11: a 401 that signing in again can't fix says why, so a generated client can read it.
+describe("the refusal schema", () => {
+  it("names a 401's reason, and every 401 meets it with a message", async () => {
+    const error = doc.components.schemas.error!;
+    expect(error.required).toEqual(["error", "message"]);
+    expect(error.properties?.reason).toMatchObject({
+      enum: ["access_not_configured", "access_unidentified"],
+    });
+    const res = await SELF.fetch(`${base}/api/whoami`);
+    expect(res.status).toBe(401);
+    expect(Object.keys((await res.json()) as object).sort()).toEqual(["error", "message"]);
+  });
+});

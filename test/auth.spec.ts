@@ -260,6 +260,14 @@ describe("dev credential is inert in a deployed-shaped env", () => {
 // Before Access is set up on a deployment, no admin request can authenticate, and the 401
 // says so, so the editor can show that state rather than a session that ended (SPEC §11).
 // Under a configured Access, or in local development, a 401 says nothing more.
+// Every 401 carries words to show, as any refusal does; one signing in again can't fix says why.
+const PLAIN_401 = { error: "unauthorized", message: expect.stringMatching(/^Sign in: /) };
+const NOT_CONFIGURED = {
+  error: "unauthorized",
+  reason: "access_not_configured",
+  message: expect.stringContaining("No Cloudflare Access is set up"),
+};
+
 describe("the admin 401 says when no Access is configured", () => {
   const ACCESS = { ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com", ACCESS_AUD: "aud-tag" };
 
@@ -269,10 +277,7 @@ describe("the admin 401 says when no Access is configured", () => {
       for (const path of ["/api/whoami", "/api/settings", "/api/posts"]) {
         const res = await fetchWith(vars, path);
         expect(res.status, `${name} ${path}`).toBe(401);
-        expect(await res.json(), `${name} ${path}`).toEqual({
-          error: "unauthorized",
-          reason: "access_not_configured",
-        });
+        expect(await res.json(), `${name} ${path}`).toEqual(NOT_CONFIGURED);
       }
     }
     // A credential the deployment can't honor is answered the same way: there is no door.
@@ -280,23 +285,23 @@ describe("the admin 401 says when no Access is configured", () => {
     const bearer = await fetchWith(SES_DEPLOY, "/api/whoami", {
       headers: { Authorization: `Bearer ${token}` },
     });
-    expect(await bearer.json()).toEqual({ error: "unauthorized", reason: "access_not_configured" });
+    expect(await bearer.json()).toEqual(NOT_CONFIGURED);
   });
 
   it("stays a plain 401 once Access is configured", async () => {
     const res = await fetchWith({ ...SES_DEPLOY, ...ACCESS }, "/api/whoami");
     expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: "unauthorized" });
+    expect(await res.json()).toEqual(PLAIN_401);
   });
 
   it("stays a plain 401 in a dev-shaped env, with or without the dev secret", async () => {
     const res = await SELF.fetch(`${base}/api/whoami`);
     expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: "unauthorized" });
+    expect(await res.json()).toEqual(PLAIN_401);
     // Local dev missing `.dev.vars`: Access is not what it lacks.
     const noSecret = await fetchWith({ DEV_AUTH_SECRET: "" }, "/api/whoami");
     expect(noSecret.status).toBe(401);
-    expect(await noSecret.json()).toEqual({ error: "unauthorized" });
+    expect(await noSecret.json()).toEqual(PLAIN_401);
   });
 });
 
@@ -334,6 +339,18 @@ describe("the auth mode follows how the request signed in", () => {
     expect(await unidentified.json()).toEqual({
       error: "unauthorized",
       reason: "access_unidentified",
+      message: expect.stringContaining("neither an email address nor a service token"),
+    });
+    // The MCP connector's one route says the same, so its client can show why.
+    const mcp = await fetchWith(vars, "/api/mcp", {
+      method: "POST",
+      headers: { ...(await assertion({})), "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }),
+    });
+    expect(mcp.status).toBe(401);
+    expect(await mcp.json()).toMatchObject({
+      error: "unauthorized",
+      reason: "access_unidentified",
     });
     // A person the allowlist leaves out is a plain 401, with nothing to explain.
     const outside = await fetchWith(
@@ -344,7 +361,7 @@ describe("the auth mode follows how the request signed in", () => {
       },
     );
     expect(outside.status).toBe(401);
-    expect(await outside.json()).toEqual({ error: "unauthorized" });
+    expect(await outside.json()).toEqual(PLAIN_401);
   });
 
   // Access issues for the bare host, so a team domain stored as a URL must still verify.

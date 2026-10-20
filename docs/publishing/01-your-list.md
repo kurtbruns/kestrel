@@ -111,7 +111,7 @@ An import happens in two steps. Planning shows what the import would do to every
 The commit needs two things from you when they apply:
 
 - **Your attestation,** when anyone would be confirmed: "Everyone I'm importing as subscribed opted in to receive [your publication]. This isn't a purchased, rented, or scraped list." It is kept with the import, with who gave it and when. An import that only unsubscribes or suppresses needs none.
-- **Each send that would grow,** acknowledged by a person. A post goes to the list as it stands when it fires. So an import can add to the audience of a scheduled send, or of one that has just fired and not yet fixed its audience. Claude can attest for you, but only you in the editor can acknowledge a growing send, so you finish that import in the dashboard.
+- **Each send that would grow,** acknowledged by a person. A post goes to the list as it stands when it fires. So an import can add to the audience of a scheduled send, or of one that has just fired and not yet fixed its audience. Claude can attest for you, but only you in the editor can acknowledge a growing send, and Claude never speaks as the editor, so you finish that import in the dashboard.
 
 If another import is committed after you plan, plan again. If your list changes between the plan and the commit in any other way, such as a reader unsubscribing, the commit still goes ahead. Every write checks the list as it stands, and the answer reports any row that turned out differently.
 

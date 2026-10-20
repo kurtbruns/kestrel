@@ -26,6 +26,7 @@ import {
   SignInError,
   tokenFields,
 } from "./oauth.mjs";
+import { unauthorizedMove } from "./openapi.mjs";
 
 /** Open `url` in the person's browser, best effort: the URL is printed either way. */
 function openBrowser(url) {
@@ -88,8 +89,11 @@ export async function signIn(origin, { browser }) {
   const res = await signedInFetch(origin, PROTECTED_PATH, { client: DEFAULT_CLIENT });
   const body = await res.json().catch(() => null);
   if (!res.ok) {
+    const move = unauthorizedMove(body);
     throw new SignInError(
-      `Signed in to Access, but ${origin}${PROTECTED_PATH} answered ${res.status}${body?.message ? `: ${body.message}` : ""}.`,
+      move
+        ? `Signed in to Access, but ${origin}${PROTECTED_PATH} answered ${res.status} (${body.reason}). ${move}.`
+        : `Signed in to Access, but ${origin}${PROTECTED_PATH} answered ${res.status}${body?.message ? `: ${body.message}` : ""}.`,
     );
   }
   return body?.principal;

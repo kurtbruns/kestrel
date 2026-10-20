@@ -280,6 +280,19 @@ describe("kestrel api's arguments", () => {
     ).toEqual(["a=1", "file=@f.png"]);
   });
 
+  it("refuses to name the editor as the client, whatever the case (SPEC §7)", () => {
+    for (const argv of [
+      ["POST", "/api/imports/commit", "--client", "editor"],
+      ["POST", "/api/imports/commit", "--client=Editor"],
+      ["--list", "--client", "editor"],
+    ]) {
+      expect(() => parseApiArgs(argv)).toThrow(/^--client editor is refused: only the editor/);
+    }
+    expect(parseApiArgs(["GET", "/api/posts", "--client", "editor-sync"]).client).toBe(
+      "editor-sync",
+    );
+  });
+
   it("refuses a path without its slash, an unknown option, and a body sent two ways", () => {
     expect(() => parseApiArgs(["GET", "api/posts"])).toThrow(/starts with a slash/);
     expect(() => parseApiArgs(["GET", "/api/posts", "--verbose"])).toThrow(/unknown option/);
@@ -416,8 +429,11 @@ describe("kestrel login's sign-in", () => {
   const AS = "https://team.cloudflareaccess.com";
   const realFetch = globalThis.fetch;
 
+  const WHOAMI = () =>
+    json({ principal: { kind: "human", email: "you@example.com", client: "claude-code" } });
+
   /** Access and the instance, stubbed by URL; the loopback callback stays real. */
-  function stubAccess() {
+  function stubAccess(whoami = WHOAMI) {
     const calls = [];
     vi.stubGlobal("fetch", async (url, init = {}) => {
       const u = String(url);
@@ -447,9 +463,7 @@ describe("kestrel login's sign-in", () => {
         return json({ access_token: "oauth:a", expires_in: 900, refresh_token: "r" });
       }
       if (u === `${ORIGIN}/api/whoami`) {
-        return json({
-          principal: { kind: "human", email: "you@example.com", client: "claude-code" },
-        });
+        return whoami();
       }
       throw new Error(`unexpected fetch ${u}`);
     });
@@ -525,6 +539,29 @@ describe("kestrel login's sign-in", () => {
     expect(calls.some((c) => c.url === `${AS}/register`)).toBe(false);
     const form = new URLSearchParams(String(calls.find((c) => c.url === `${AS}/token`)?.init.body));
     expect(form.get("client_id")).toBe("client-kept");
+  });
+
+  // SPEC §11: an Access login that names no one is refused with a reason, and signing in
+  // again the same way can't help, so the CLI says what to change instead.
+  it("says the Access policy needs changing on access_unidentified, never to sign in again", async () => {
+    stubAccess(() =>
+      json({ error: "unauthorized", reason: "access_unidentified", message: "…" }, 401),
+    );
+    approveWhenAsked();
+    const refused = await signIn(ORIGIN, { browser: false }).catch((e) => e);
+    expect(refused.message).toMatch(
+      /^Signed in to Access, but https:\/\/news\.example\.com\/api\/whoami answered 401 \(access_unidentified\)\. Access let you in but sent neither an email address nor a service token/,
+    );
+    expect(refused.message).toContain("Lock the dashboard with Access");
+    expect(refused.message).not.toContain("kestrel login");
+  });
+
+  it("relays the instance's words on any other refusal", async () => {
+    stubAccess(() => json({ error: "unauthorized", message: "Sign in: no credential." }, 401));
+    approveWhenAsked();
+    await expect(signIn(ORIGIN, { browser: false })).rejects.toThrow(
+      `Signed in to Access, but ${ORIGIN}/api/whoami answered 401: Sign in: no credential.`,
+    );
   });
 });
 

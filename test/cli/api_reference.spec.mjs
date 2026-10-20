@@ -438,6 +438,34 @@ describe("a refusal, readable", () => {
     expect(nextMove(DOC, "never_heard_of_it")).toBeUndefined();
   });
 
+  // SPEC §11: a 401 signing in again can't fix says why, and its move is outside the API.
+  it("gives a 401's reason, and for one signing in can't fix, what to change instead", () => {
+    const unidentified = describeRefusal(
+      { error: "unauthorized", reason: "access_unidentified", message: "Access sent no one." },
+      { doc: DOC },
+    );
+    expect(unidentified.slice(0, 2)).toEqual([
+      "unauthorized: Access sent no one.",
+      "reason: access_unidentified",
+    ]);
+    expect(unidentified[2]).toMatch(
+      /^next move: Access let you in but sent neither an email address nor a service token, .* logging in again the same way gets the same answer\. .*Lock the dashboard with Access \(https:\/\/getkestrel\.dev\/docs\/access\/\)\.$/,
+    );
+    expect(unidentified).toHaveLength(3);
+
+    // An older instance sends the reason with no message; the move stands on the reason.
+    const locked = describeRefusal(
+      { error: "unauthorized", reason: "access_not_configured" },
+      { doc: DOC },
+    );
+    expect(locked.slice(0, 2)).toEqual(["unauthorized", "reason: access_not_configured"]);
+    expect(locked[2]).toMatch(/^next move: The instance has no Cloudflare Access in front of it/);
+
+    expect(
+      describeRefusal({ error: "unauthorized", message: "Sign in: no credential." }, { doc: DOC }),
+    ).toEqual(["unauthorized: Sign in: no credential.", "next move: Sign in, or stop."]);
+  });
+
   it("is nothing for a body that isn't a refusal", () => {
     expect(describeRefusal({ post: {} }, { doc: DOC })).toBeUndefined();
     expect(describeRefusal("text", { doc: DOC })).toBeUndefined();

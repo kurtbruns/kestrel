@@ -615,7 +615,7 @@ export const TOOL_DEFS: ToolDef[] = [
     name: "send_test",
     title: "Send a test email",
     description:
-      "Email a test of the post to one address through the same path as a real send. Once the post is scheduled, the test is the frozen copy that will fire. Use the test recipients from get_publication unless the publisher names another.",
+      'Email a test of the post to one address through the same path as a real send. Once the post is scheduled, the test is the frozen copy that will fire, so test after scheduling: only that test settles "Not tested yet". Send it to one of the test recipients from get_publication or an address the publisher gives as theirs, and ask before sending one anywhere else.',
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     routes: [TEST_POST],
     args: { id: pick(TEST_POST, "path", "id"), to: pick(TEST_POST, "body", "to") },
@@ -641,7 +641,7 @@ export const TOOL_DEFS: ToolDef[] = [
     name: "schedule_send",
     title: "Schedule a post",
     description:
-      "Schedule the post's send at `fire_at`, or, with no `fire_at`, for the soonest it can go: one minimum lead out (the editor's Send now). Either way it waits out the review window, cancelable until it fires. Only when the publisher asks, after telling them whether the post goes in the public archive (`email_only`). Then send a test and tell them when it fires and how to cancel.",
+      "Schedule the post's send at `fire_at`, or, with no `fire_at`, for the soonest it can go: one minimum lead out (the editor's Send now). Either way it waits out the review window, cancelable until it fires. Only when the publisher asks, after telling them whether the post goes in the public archive (`email_only`). Then offer a test of the scheduled send, the frozen copy that will fire, and tell them when it fires and how to cancel; if the test shows a problem, cancel, fix the draft, and schedule again.",
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     routes: [SCHEDULE_POST, SEND_NOW],
     args: {

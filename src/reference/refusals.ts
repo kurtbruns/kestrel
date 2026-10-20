@@ -92,7 +92,10 @@ const FIX_DEPLOYMENT = {
 } as const satisfies Record<string, Refusal>;
 
 const SIGN_IN = {
-  unauthorized: [401, "No credential, or one the deployment can't verify."],
+  unauthorized: [
+    401,
+    "No credential, or one the deployment can't verify; `reason` says when signing in again can't help.",
+  ],
   forbidden: [403, "A credential this route doesn't take."],
   cross_site_request: [403, "A write another site's page sent with the publisher's session."],
 } as const satisfies Record<string, Refusal>;

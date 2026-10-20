@@ -62,14 +62,25 @@ function lockedReason(config: Config): Extract<UnauthorizedReason, "access_not_c
     : null;
 }
 
+const SIGN_IN_MESSAGE =
+  "Sign in: this request carries no credential, or one this deployment can't verify.";
+
+// What a 401 that signing in again can't fix says, in the words the editor's wall uses.
+const UNAUTHORIZED_MESSAGE: Record<UnauthorizedReason, string> = {
+  access_not_configured:
+    "No Cloudflare Access is set up in front of this deployment, so no request can sign in until it is. The guide Lock the dashboard with Access sets it up.",
+  access_unidentified:
+    "Cloudflare Access let this sign-in through but sent neither an email address nor a service token, so Kestrel can't tell who is asking. Signing in the same way again gets the same answer: Kestrel takes an Allow policy on people's emails or a Service Auth policy on a service token, as the guide Lock the dashboard with Access says.",
+};
+
 /** Route middleware: require a valid principal or 401. */
 export const requireAuth: Middleware = async (c) => {
   const principal = await authenticate(c.req, c.env, c.config);
   if (!principal || principal === "access_unidentified") {
     const reason = principal ?? lockedReason(c.config);
     const body: UnauthorizedBody = reason
-      ? { error: "unauthorized", reason }
-      : { error: "unauthorized" };
+      ? { error: "unauthorized", message: UNAUTHORIZED_MESSAGE[reason], reason }
+      : { error: "unauthorized", message: SIGN_IN_MESSAGE };
     return json(body, 401, { "WWW-Authenticate": 'Bearer realm="kestrel"' });
   }
   const client = c.req.headers.get(CLIENT_HEADER);

@@ -518,7 +518,7 @@ describe("API reference is generated from the route registration", () => {
       /^## Errors\n[\s\S]*?\| Refusal \| Meaning \| Next move \|[\s\S]*?^## Lists and paging$/m,
     );
     expect(index).toContain(
-      "| 401 `unauthorized` | No credential, or one the deployment can't verify. | Sign in, or stop |",
+      "| 401 `unauthorized` | No credential, or one the deployment can't verify; `reason` says when signing in again can't help. | Sign in, or stop |",
     );
     expect(index).not.toContain("`stale_revision`");
   });

@@ -525,6 +525,24 @@ export function buildFields(
   return { query, body };
 }
 
+const ACCESS_GUIDE = "Lock the dashboard with Access (https://getkestrel.dev/docs/access/)";
+
+// A 401 that signing in again can't fix says why in `reason`, and its next move is outside
+// the API, so the CLI's own words replace "Sign in, or stop". They stand on the reason alone,
+// since an older instance sends it with no message.
+const UNAUTHORIZED_MOVE = {
+  access_unidentified: `Access let you in but sent neither an email address nor a service token, so Kestrel can't tell who is asking, and logging in again the same way gets the same answer. Its Access application needs an Allow policy on people's emails, or a Service Auth policy on a service token: see ${ACCESS_GUIDE}`,
+  access_not_configured: `The instance has no Cloudflare Access in front of it yet, so no one can sign in until it does: see ${ACCESS_GUIDE}`,
+};
+
+/** What to do about a 401's `reason`, or undefined when the body gives none this CLI knows. */
+export function unauthorizedMove(body) {
+  const reason = body?.error === "unauthorized" ? body.reason : undefined;
+  return typeof reason === "string" && Object.hasOwn(UNAUTHORIZED_MOVE, reason)
+    ? UNAUTHORIZED_MOVE[reason]
+    : undefined;
+}
+
 /**
  * A refusal's body, readable: its code and message, the field it names, and its next move from
  * the document when there is one. Undefined when the body isn't a Kestrel refusal.
@@ -533,14 +551,17 @@ export function describeRefusal(body, { doc, op } = {}) {
   if (!body || typeof body !== "object" || typeof body.error !== "string") {
     return undefined;
   }
-  const lines = [`${body.error}: ${body.message ?? ""}`.trim()];
+  const lines = [body.message ? `${body.error}: ${body.message}` : body.error];
   if (typeof body.field === "string") {
     lines.push(`field: ${body.field}`);
+  }
+  if (typeof body.reason === "string") {
+    lines.push(`reason: ${body.reason}`);
   }
   if (typeof body.retry_after === "number") {
     lines.push(`retry after: ${new Date(body.retry_after).toISOString()}`);
   }
-  const move = doc ? nextMove(doc, body.error, op) : undefined;
+  const move = unauthorizedMove(body) ?? (doc ? nextMove(doc, body.error, op) : undefined);
   if (move) {
     lines.push(`next move: ${move}.`);
   }

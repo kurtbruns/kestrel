@@ -48,6 +48,12 @@ const ERROR_BODY: ReferenceField[] = [
       "The body or query field a refusal is about, a dotted path for a nested one (`notifications.to`), or the request header (`Kestrel-Client`). Every refusal whose next move is to fix the request carries it when one field is at fault, so a route doesn't list it there; a body it can't read at all, or a fault in the path, names none. A route lists it on any other refusal that carries it (`slug_taken`).",
   },
   {
+    name: "reason",
+    type: '"access_not_configured" | "access_unidentified"',
+    description:
+      "On `unauthorized` only, when signing in again can't help: `access_not_configured`, the deployment has no Cloudflare Access yet, so no request can sign in; `access_unidentified`, Access let the sign-in through but sent neither a person's email nor a service token, so its Access policies need changing. Any other 401 carries none.",
+  },
+  {
     name: "retry_after",
     type: "epoch ms",
     description: "When waiting is the remedy: when to try again.",

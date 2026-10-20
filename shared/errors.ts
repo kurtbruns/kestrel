@@ -8,7 +8,7 @@ export interface ApiErrorBody {
   /** The machine-readable code, such as `bad_request` or `fire_at_too_soon`. */
   error: string;
   /** The server's words for it. Absent on an unexpected 500, which has none to give, and on
-   *  a few bare refusals (an unauthenticated 401, an unknown route's 404). */
+   *  a few bare refusals (an unknown route's 404). */
   message?: string;
   /** The request field the refusal is about, dotted for a nested one (`publication.name`). */
   field?: string;
@@ -26,6 +26,7 @@ export type UnauthorizedReason = "access_not_configured" | "access_unidentified"
 /** An admin 401's body: `unauthorized`, with a `reason` only when signing in again can't help. */
 export interface UnauthorizedBody {
   error: "unauthorized";
+  message: string;
   reason?: UnauthorizedReason;
 }
 

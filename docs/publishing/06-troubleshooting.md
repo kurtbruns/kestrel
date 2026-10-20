@@ -101,7 +101,7 @@ With an address set, Kestrel emails you:
 - when your provider refuses your account or a send, or no provider is connected
 - when the SES sandbox refuses a signup's confirmation, at most once a day
 - when a send stops going out with nothing to explain it, waits for you to resolve it, or misses its time
-- when Claude imports a list for you
+- when a service token imports a list, since no one saw it happen (an import you make yourself, or through Claude, sends nothing)
 
 Each links to the page it's about, and is sent once while the problem lasts. A bounce spike shows on the dashboard but isn't emailed. **Send a test notification** checks that one arrives.
 

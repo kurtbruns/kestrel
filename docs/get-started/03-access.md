@@ -122,7 +122,7 @@ With Managed OAuth on, a program that asks for a page without signing in gets a 
 1. In the same window, open `https://newsletter.example.com/api/whoami`. It shows you as a signed-in person, verified through Access:
 
     ```
-    {"principal":{"kind":"human","email":"you@example.com"},"auth":{"mode":"access"}}
+    {"principal":{"kind":"human","email":"you@example.com","client":null},"auth":{"mode":"access"}}
     ```
 
 1. If you turned on Managed OAuth, a request with no sign-in names where a program signs in:
