@@ -73,6 +73,22 @@ describe("Access claims to a principal", () => {
     ]);
     expect(JSON.stringify(lines())).not.toContain("device-7");
   });
+
+  it("reads an empty claim as no claim: an empty common_name names no token, an empty email no person (SPEC §11)", () => {
+    const lines = logged();
+    expect(principalFromClaims({ common_name: "", sub: "" }, undefined)).toBe(
+      "access_unidentified",
+    );
+    expect(principalFromClaims({ email: "", common_name: "x.access" }, undefined)).toEqual({
+      kind: "service",
+      tokenId: "x.access",
+      via: "access",
+    });
+    expect(lines()).toEqual([
+      expect.objectContaining({ event: "auth.service", claims: "common_name,email" }),
+      expect.objectContaining({ event: "auth.unidentified", claims: "common_name,sub" }),
+    ]);
+  });
 });
 
 describe("auth on the admin surface", () => {
@@ -314,6 +330,7 @@ describe("the auth mode follows how the request signed in", () => {
     // it in, so signing in the same way again can't help.
     const unidentified = await fetchWith(vars, "/api/whoami", { headers: await assertion({}) });
     expect(unidentified.status).toBe(401);
+    expect(unidentified.headers.get("WWW-Authenticate")).toBe('Bearer realm="kestrel"');
     expect(await unidentified.json()).toEqual({
       error: "unauthorized",
       reason: "access_unidentified",
