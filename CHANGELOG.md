@@ -20,6 +20,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- The scheduled banner is quieter: "No test of this email has been sent yet" is now a muted "Not tested yet" beside Send test email, the button that settles it (SPEC §8).
 - A service token now means automation, never Claude: the editor shows its changes as "a service token" (and an import's as "a service token", not "Claude, for you"), the publisher's email about an import a service token commits names the token rather than Claude, and the dashboard says Claude is connected once a post's current revision came through Claude Code. Service tokens keep working as before. The Connect Claude guide is now Connect automation to the API, for scripts, and `/llms.txt` and the API reference point an agent to `kestrel login` first (SPEC §11).
 - The operator's Claude context (`template/claude/CLAUDE.md`) has Claude call the API through `kestrel api` instead of curl with a service token's headers, deployed and locally, and run `kestrel login` with the person when they aren't signed in, so Claude's work is recorded as the person's, via Claude Code, rather than a service token's. It also tells Claude never to use a service token in its environment for the person's work. Run `npm run check-context` to bring it in.
 

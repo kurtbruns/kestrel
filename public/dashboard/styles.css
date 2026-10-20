@@ -2932,6 +2932,11 @@ body.web-mode .content {
    each state too, so the cue survives a reader who can't tell the dot's color. The
    "unsaved" cue reads the same amber as the shared save bar so both save models feel
    like one app. :empty (locked posts, which can't autosave) collapses it out. */
+/* A scheduled send never tested, said quietly beside the control that settles it (SPEC §8). */
+.test-hint {
+  font-size: 13px;
+  color: var(--muted);
+}
 .save-status {
   display: inline-flex;
   align-items: center;

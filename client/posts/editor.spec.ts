@@ -708,18 +708,19 @@ describe("editor view", () => {
     expect(fake.unhandled).toHaveLength(0);
   });
 
-  it("says on the banner that no test has been sent, until one is (SPEC §8)", async () => {
+  it("says quietly beside Send test email that no test has been sent, until one is (SPEC §8)", async () => {
     const linked = scheduledPost();
     await open(linked.routes);
-    expect($("#schedUntested").hidden).toBe(false);
-    expect($("#schedUntestedMsg").textContent).toBe(
-      "No test of this email has been sent yet. Send yourself a test to check what will go out.",
-    );
+    expect($("#testHint").hidden).toBe(false);
+    expect($("#testHint").textContent).toBe("Not tested yet");
+    expect($("#testHint").nextElementSibling?.id).toBe("testBtn");
+    // Not on the banner, which keeps the notes that change what happens to the send.
+    expect($(".banner-scheduled").textContent).not.toMatch(/test/i);
     expect($("#schedRemade").hidden).toBe(true);
 
     linked.sends.edit("s1", { tested_at: Date.now() }); // a test lands, here or from Claude
     await vi.advanceTimersByTimeAsync(60_000);
-    expect($("#schedUntested").hidden).toBe(true);
+    expect($("#testHint").hidden).toBe(true);
     expect(fake.unhandled).toHaveLength(0);
   });
 
