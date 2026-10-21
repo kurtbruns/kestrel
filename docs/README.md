@@ -16,8 +16,8 @@ Follow these steps, from an empty repository to a live newsletter. Each one ends
 
 Each one stands on its own. Pick the ones you need.
 
-- [Connect Claude](guides/01-connect-claude.md)
-- [Connect automation to the API](guides/02-connect-automation.md)
+- [Allow Claude to connect](guides/01-allow-claude.md)
+- [Give a script access to the API](guides/02-script-access.md)
 - [Notifications through Cloudflare's email](guides/03-notifications.md)
 - [Rate-limit the subscribe form](guides/05-rate-limit.md)
 - [As your list grows](guides/09-as-your-list-grows.md)

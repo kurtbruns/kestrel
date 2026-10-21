@@ -17,6 +17,7 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
       "publishing/set-up-your-publication/write-a-post",
       "publishing/set-up-your-publication/share-your-subscribe-link",
       "publishing/go-further/email-template",
+      "publishing/go-further/connect-claude",
       "publishing/go-further/working-with-claude",
       "publishing/rules-and-troubleshooting/sending-rules",
       "publishing/rules-and-troubleshooting/troubleshooting",
@@ -25,8 +26,8 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
       "self-hosting/get-started/ses",
       "self-hosting/get-started/verify",
       "self-hosting/get-started/go-live",
-      "self-hosting/guides/connect-claude",
-      "self-hosting/guides/connect-automation",
+      "self-hosting/guides/allow-claude",
+      "self-hosting/guides/script-access",
       "self-hosting/guides/notifications",
       "self-hosting/guides/rate-limit",
       "self-hosting/guides/as-your-list-grows",
@@ -130,8 +131,8 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
     expect(docs.find((d) => d.slug === "your-list")?.html).toContain(
       'href="#/docs/as-your-list-grows"',
     );
-    expect(docs.find((d) => d.slug === "working-with-claude")?.html).toContain(
-      'href="#/docs/connect-claude/connect-claude-code"',
+    expect(docs.find((d) => d.slug === "connect-claude")?.html).toContain(
+      'href="#/docs/allow-claude/3-optional-sign-claude-code-in-from-the-instances-repository"',
     );
   });
 

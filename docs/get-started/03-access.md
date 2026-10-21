@@ -53,7 +53,7 @@ Every Access application denies everyone until a policy allows them.
 
 1. Select **Create**.
 
-The app accepts only two kinds of policy on this application. One is an Allow policy on people's emails, like this one. The other is a Service Auth policy on a service token, from [Connect automation to the API](../guides/02-connect-automation.md). A login through any other kind, such as a certificate, a device check, or an identity provider that gives no email, is refused with a `401`, and the editor says so.
+The app accepts only two kinds of policy on this application. One is an Allow policy on people's emails, like this one. The other is a Service Auth policy on a service token, from [Give a script access to the API](../guides/02-script-access.md). A login through any other kind, such as a certificate, a device check, or an identity provider that gives no email, is refused with a `401`, and the editor says so.
 
 ## 4. Give the app its two values
 
@@ -85,33 +85,7 @@ The app verifies each login against your team domain, and checks that it was iss
 
     Without it, the app lets in anyone your Access policy allows.
 
-## 5. Turn on Managed OAuth
-
-**(Optional, recommended)** Managed OAuth lets a program sign in as you, the way the editor does in your browser. `kestrel login` uses it to connect Claude Code, and Claude Desktop and claude.ai use it to connect as a custom connector, so Claude works as you, and its changes show as yours, via Claude Code or via Claude. Without it, Claude can't sign in, and only a service token reaches the API. Cloudflare marks Managed OAuth as beta, and its [Managed OAuth](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/) page describes it.
-
-1. In **Zero Trust**, go to **Access controls → Applications**, and select **Edit** on your application.
-
-1. On the **Additional settings** tab, select the **OAuth** filter, and find **Managed OAuth (Beta)**.
-
-1. Turn on **Managed OAuth**.
-
-1. Turn on **Allow localhost clients** and **Allow loopback clients**. `kestrel login` receives your approval on your own computer, at a `127.0.0.1` address.
-
-1. Under **Allowed redirect URIs**, add Claude's sign-in address, so Claude Desktop and claude.ai can connect:
-
-    ```
-    https://claude.ai/api/mcp/auth_callback
-    ```
-
-    Claude registers itself with Access when the publisher adds the connector, and Access accepts it only with an address listed here. Leave it out if no one will connect Claude Desktop or claude.ai.
-
-1. Keep the **Access token lifetime** at 15 minutes. A program renews its access token while you use it, so a short lifetime costs nothing.
-
-1. Choose the **Grant session duration**, how long a program's sign-in lasts before you approve it again. It defaults to **Same as session duration**, the session you chose in [section 2](#2-create-the-access-application). Set it to 1 week. Cloudflare recommends one to two weeks for a command-line tool, and a week means Claude Code asks you to approve again once a week, not every day.
-
-1. Save the application.
-
-With Managed OAuth on, a program that asks for a page without signing in gets a `401` that tells it how to sign in, instead of Cloudflare's login page. A browser still gets the login page. Once the instance is live, [Connect Claude](../guides/01-connect-claude.md) connects Claude with it.
+Claude connects through this same application, signed in as a person, once Managed OAuth is on. That's optional, and [Allow Claude to connect](../guides/01-allow-claude.md) covers it whenever you're ready.
 
 ## Check it
 
@@ -124,14 +98,6 @@ With Managed OAuth on, a program that asks for a page without signing in gets a 
     ```
     {"principal":{"kind":"human","email":"you@example.com","client":null},"auth":{"mode":"access"}}
     ```
-
-1. If you turned on Managed OAuth, a request with no sign-in names where a program signs in:
-
-    ```bash
-    curl -si https://newsletter.example.com/api/whoami
-    ```
-
-    It answers `401`, and its `www-authenticate` line starts with `Bearer` and names `resource_metadata`. Without Managed OAuth, Cloudflare answers with a redirect to its login page instead. The MCP server at `https://newsletter.example.com/api/mcp` answers the same way, since the `api` path covers it.
 
 1. The public pages still need no login:
 

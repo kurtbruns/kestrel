@@ -18,11 +18,11 @@ import type { RequestContext, RouteDef } from "../router";
 
 // The instance's own copies of these pages are gated too, so these point at the project's.
 
-/** Where a publisher learns to sign Claude Code in as themselves, the way an agent comes in. */
-export const SIGN_IN_URL = "https://getkestrel.dev/docs/connect-claude/#connect-claude-code";
+/** Where a publisher learns to connect Claude to the instance's MCP server, signed in as themselves. */
+export const SIGN_IN_URL = "https://getkestrel.dev/docs/connect-claude/";
 
 /** Where whoever runs the instance learns to make a service token, for a script. */
-export const AUTOMATION_URL = "https://getkestrel.dev/docs/connect-automation/";
+export const AUTOMATION_URL = "https://getkestrel.dev/docs/script-access/";
 
 interface Entry {
   title: string;
@@ -110,14 +110,14 @@ export function llmsText({
     "",
     "## Behind Cloudflare Access",
     "",
-    "Sign in as the person you work for: `npx kestrel login <this instance's address>` signs in through Cloudflare Access in their browser, and `npx kestrel api <method> <path>` then calls these routes as them. A script that runs with no one present sends a Cloudflare Access service token with every request instead, as the `CF-Access-Client-Id` and `CF-Access-Client-Secret` headers. Without a credential, the request is refused.",
+    "Sign in as the person you work for, through Cloudflare Access in their browser. An MCP client connects to `/api/mcp` and signs in with OAuth. In this instance's repository, `npx -p @kurtbruns/kestrel kestrel login <this instance's address>` signs Claude Code in instead, and `npx -p @kurtbruns/kestrel kestrel api <method> <path>` then calls these routes as them. A script that runs with no one present sends a Cloudflare Access service token with every request instead, as the `CF-Access-Client-Id` and `CF-Access-Client-Secret` headers. Without a credential, the request is refused.",
     "",
     ...tier("admin"),
     "",
     "## Signing in",
     "",
-    `- [Connect Claude Code](${SIGN_IN_URL}): how a publisher signs Claude Code in as themselves.`,
-    `- [Connect automation to the API](${AUTOMATION_URL}): how whoever runs this instance makes a service token for a script.`,
+    `- [Connect Claude](${SIGN_IN_URL}): how a publisher connects Claude to this instance as themselves.`,
+    `- [Give a script access to the API](${AUTOMATION_URL}): how whoever runs this instance makes a service token for a script.`,
     "",
   ].join("\n");
 }

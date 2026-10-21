@@ -22,8 +22,8 @@ Open the editor at http://localhost:8787/dashboard/. Email goes to a stand-in th
 | `npm run seed`, `npm run reset` | Loads the demo publication into the local app, or empties it |
 | `npm run sync-migrations` | Copies the installed release's migrations into `migrations/` |
 | `npm run check-context` | Compares the Claude files in `.claude/` with the installed release's |
-| `npx kestrel login <url>` | Signs Claude Code in to the deployed instance as you, in your browser |
-| `npx kestrel api <method> <path>` | Calls the API as you, via Claude Code (`--local` for the local app); `--list` lists the routes and `help <method> <path>` describes one |
+| `npx -p @kurtbruns/kestrel kestrel login <url>` | Signs Claude Code in to the deployed instance as you, in your browser |
+| `npx -p @kurtbruns/kestrel kestrel api <method> <path>` | Calls the API as you, via Claude Code (`--local` for the local app); `--list` lists the routes and `help <method> <path>` describes one |
 | `npx wrangler deploy --env production` | Deploys the instance |
 | `npx wrangler d1 migrations apply DB --remote --env production` | Applies new migrations to the production database |
 

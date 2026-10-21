@@ -147,7 +147,7 @@ export async function discover(origin) {
   }
   if (!server.registration_endpoint) {
     throw new SignInError(
-      `${issuer} offers no client registration. Turn on Managed OAuth for the instance's Access application, as the Access guide's Managed OAuth step says.`,
+      `${issuer} offers no client registration. Turn on Managed OAuth for the instance's Access application, as the guide Allow Claude to connect says.`,
     );
   }
   return {
