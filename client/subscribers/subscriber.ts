@@ -12,6 +12,7 @@ import type {
   UnsubscribeCause,
 } from "../../shared/subscribers";
 import { api, describeError } from "../api";
+import { setTitle } from "../lifecycle";
 import { deliveryOutcome } from "../sends/outcome";
 import { $, $$ } from "../ui/dom";
 import { fmt } from "../ui/format";
@@ -36,6 +37,7 @@ export async function renderSubscriber(
   root: HTMLElement,
   signal: AbortSignal,
 ): Promise<void> {
+  setTitle(signal, "Subscriber");
   setHtml(root, html`${BACK}<p class="muted">Loading…</p>`);
   // The route's segment is the server's id, but it reaches an API path only encoded.
   const path = `/api/subscribers/${encodeURIComponent(id)}`;

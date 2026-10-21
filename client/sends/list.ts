@@ -12,7 +12,7 @@ import {
   notConnectedWarning,
   providerNotConnected,
 } from "../deployment";
-import { mount } from "../lifecycle";
+import { mount, setTitle } from "../lifecycle";
 import {
   followSends,
   readSendsNow,
@@ -65,6 +65,7 @@ function windowControls(s: SendView) {
 }
 
 export async function renderSent(root: HTMLElement, signal: AbortSignal): Promise<void> {
+  setTitle(signal, "Sent");
   // The dispatch side: the still-cancelable Scheduled queue on top, then the frozen Sent
   // records. The table is sent-only, so it carries no status column or filter; default
   // sort = fire desc so the "When" header shows its arrow from the start.

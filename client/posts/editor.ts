@@ -31,7 +31,7 @@ import {
   tooSoonText,
   withNoProviderNote,
 } from "../deployment";
-import { at, every, mount, onAbort, poll, type ViewHandle } from "../lifecycle";
+import { at, every, mount, onAbort, poll, setTitle, type ViewHandle } from "../lifecycle";
 import { followSend, readSendsNow, type StageChange } from "../send_state";
 import { openRescheduleModal } from "../sends/dialogs";
 import { can, conditionOf, has } from "../sends/progress";
@@ -135,6 +135,7 @@ export async function renderEditor(
       handOff("#/drafts");
     }
   };
+  setTitle(signal, "Draft");
   setHtml(root, html`<p class="muted">Loading…</p>`);
   let data: PostResponse;
   // A scheduled post's send, as the send routes report it: the banner's countdown and
@@ -282,6 +283,11 @@ export async function renderEditor(
   );
 
   const subjectEl = $<HTMLInputElement>("#f-subject");
+  // The tab carries the subject, kept to the field as it is typed, so a post open beside
+  // others is the one its tab names, and its stage (a cancel re-mounts the editor).
+  const stage = scheduled ? "Scheduled" : "Draft";
+  const nameTab = () => setTitle(signal, subjectEl.value || "Untitled", stage);
+  nameTab();
   const ta = $<HTMLTextAreaElement>("#f-markdown");
   const toolbarEl = $(".toolbar", root);
   const previewFrame = $<HTMLIFrameElement>("#previewFrame");
@@ -417,6 +423,7 @@ export async function renderEditor(
   // Schedule click if the field is still empty (see validateSubject).
   if (!locked) {
     subjectEl.addEventListener("input", () => {
+      nameTab();
       if (subjectEl.value.trim() !== "") {
         clearSubjectError();
       }

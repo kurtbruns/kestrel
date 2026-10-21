@@ -17,7 +17,7 @@ import type {
 } from "../../shared/reference";
 import { concretePath, routeAnchor, sharedRefusals } from "../../shared/reference";
 import { api, describeError } from "../api";
-import { mount } from "../lifecycle";
+import { mount, setTitle } from "../lifecycle";
 import { appState } from "../state";
 import { codeBlock, copyFace, wireCopy } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
@@ -573,6 +573,7 @@ export async function renderReference(
   signal: AbortSignal,
   anchor?: string,
 ): Promise<void> {
+  setTitle(signal, "API reference");
   setHtml(
     root,
     roomShell(

@@ -12,7 +12,7 @@ import {
 } from "../../shared/settings";
 import { api, describeError } from "../api";
 import { notConnectedTestLine, providerNotConnected, withNoProviderNote } from "../deployment";
-import { mount } from "../lifecycle";
+import { mount, setTitle } from "../lifecycle";
 import { appState } from "../state";
 import { copyFace, copyWith } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
@@ -446,6 +446,7 @@ interface TemplateSaved {
  * not in Settings, so each surface has a single, unambiguous save.
  */
 export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Promise<void> {
+  setTitle(signal, "Template");
   setHtml(
     root,
     html`<div class="tpl-page"><div class="page-head"><div class="page-head-row"><h1>Email template</h1><span id="tplInUse"></span></div><p class="set-lede set-page-lede">The template controls the look and feel of the emails you send. You write it as HTML with a <code>&lt;style&gt;</code> block and <code>{{ variables }}</code> Kestrel fills in; your post’s Markdown is rendered into <code>{{ .Post.Body }}</code>.<span id="tplWait"></span></p></div><div id="tplBody" class="muted">Loading…</div></div>`,

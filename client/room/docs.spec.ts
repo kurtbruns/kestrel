@@ -197,6 +197,19 @@ describe("docs room", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("names the tab for the set's index, then for the doc open", async () => {
+    fake = fakeApi([]);
+    await mount((r, s) => renderDocs("self-hosting", r, s));
+    expect(document.title).toBe("Self-hosting - Docs - Kestrel");
+    await mount((r, s) => renderDocs("verify", r, s));
+    expect(document.title).toBe("Verify - Docs - Kestrel");
+    // A stale link heals to the index, and the tab says so.
+    vi.spyOn(history, "replaceState").mockImplementation(() => {});
+    await mount((r, s) => renderDocs("gone", r, s));
+    expect(document.title).toBe("Publishing - Docs - Kestrel");
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("links only the project site when the build knows no repository", async () => {
     fake = fakeApi([]);
     appState.appConfig = config("");

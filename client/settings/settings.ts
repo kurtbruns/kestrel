@@ -13,7 +13,7 @@ import type {
 } from "../../shared/settings";
 import { ApiError, api } from "../api";
 import { renderSidebarBrand } from "../brand";
-import { mount } from "../lifecycle";
+import { mount, setTitle } from "../lifecycle";
 import { appState } from "../state";
 import { $ } from "../ui/dom";
 import { type Html, html, setHtml } from "../ui/html";
@@ -63,6 +63,7 @@ const sameCopy = (a: ConfirmationEmailCopy, b: ConfirmationEmailCopy) =>
   a.reassurance === b.reassurance;
 
 export async function renderSettings(root: HTMLElement, signal: AbortSignal): Promise<void> {
+  setTitle(signal, "Settings");
   setHtml(
     root,
     html`<div class="settings"><div class="page-head"><h1>Settings</h1><p class="set-lede set-page-lede">Your publication’s identity, the ways readers subscribe and the pages they land on, the email each post is sent inside, and where Kestrel tells you about your sends. Facts set when Kestrel was deployed come last, read-only.</p></div><div id="settingsBody" class="muted">Loading…</div></div>`,

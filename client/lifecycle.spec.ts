@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { every, mount, mounted, onAbort, poll, unmount } from "./lifecycle";
+import { every, mount, mounted, onAbort, poll, setTitle, unmount } from "./lifecycle";
 import { $, $$, resetShell } from "./test/support";
 
 describe("lifecycle", () => {
@@ -73,6 +73,24 @@ describe("lifecycle", () => {
     await mount(() => undefined);
     await expect(cutOff).resolves.toBeUndefined();
     await expect(mount(() => Promise.reject(new Error("boom")))).rejects.toThrow("boom");
+  });
+
+  it("setTitle: names the tab most specific first, and each mount and unmount gives the app's title back", async () => {
+    let first: AbortSignal | null = null;
+    await mount((_root, signal) => {
+      first = signal;
+      setTitle(signal, "Welcome", "", "Draft");
+    });
+    expect(document.title).toBe("Welcome - Draft - Kestrel");
+    await mount(() => {});
+    expect(document.title).toBe("Kestrel");
+    // A view that has left names nothing, so a late read can't retitle the view after it.
+    setTitle(first!, "Stale");
+    expect(document.title).toBe("Kestrel");
+    await mount((_root, signal) => setTitle(signal, "Sent"));
+    expect(document.title).toBe("Sent - Kestrel");
+    unmount();
+    expect(document.title).toBe("Kestrel");
   });
 
   it("every: runs on the interval until the signal aborts", () => {

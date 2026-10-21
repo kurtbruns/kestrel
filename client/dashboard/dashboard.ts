@@ -15,7 +15,7 @@ import {
   heldWhenFiresHtml,
   providerNotConnected,
 } from "../deployment";
-import { mount } from "../lifecycle";
+import { mount, setTitle } from "../lifecycle";
 import { createNewPost } from "../posts/drafts";
 import { followSends, type SendStage, type SendsUpdate, stageOf } from "../send_state";
 import {
@@ -212,6 +212,7 @@ interface Tile {
 }
 
 export async function renderDashboard(view: HTMLElement, signal: AbortSignal): Promise<void> {
+  setTitle(signal, "Dashboard");
   const remount = () => {
     if (!signal.aborted) {
       mount(renderDashboard); // never over wherever the reader went since

@@ -54,6 +54,8 @@ The sidebar is full width on a wide window, an icon rail on a mid-size one, and 
 
 The editor, the web version, the docs, and the walls hide the sidebar: writing wants the full width, the web version is a page of its own, the docs are about Kestrel rather than the publication, and a wall stands alone.
 
+The browser tab names the screen open, most specific first and ending in Kestrel, so a tab among others, a bookmark, or a history entry says where it leads: "Subscribers - Kestrel", a post by its subject and stage ("Welcome - Draft - Kestrel" or "Welcome - Scheduled - Kestrel", kept to the subject as it is typed), a send's page by its subject under Sent, and a doc by its title under Docs. A screen still loading shows its room's name until it has read what it shows. Nothing in the title changes with a send's progress.
+
 ### Screens
 
 | Screen | Route | What it answers |
