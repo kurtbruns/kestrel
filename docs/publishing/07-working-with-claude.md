@@ -4,7 +4,7 @@ Ask Claude in plain words, the way you'd ask a colleague. It works through the s
 
 To set Claude up, add your Kestrel as a connector in Claude Desktop, claude.ai, or Claude Code, as [Connect Claude](08-connect-claude.md) describes.
 
-Claude reads these same pages from your Kestrel, so it explains things in the words you see here. Through the connector, Claude sees a short list of tools, each a task such as **Save a draft**, **Send a test email**, or **Schedule a post**, marked as reading or changing something, plus one that reads most of the rest of your Kestrel and changes nothing. Uploading images, your logo, and erasing a subscriber stay in the dashboard, and Claude tells you when something is yours to finish there.
+Claude reads these same pages from your Kestrel, so it explains things in the words you see here. Through the connector, Claude sees a short list of tools, each a task such as **Save a draft**, **Send a test email**, or **Schedule a post**, marked as reading or changing something, plus one that reads most of the rest of your Kestrel and changes nothing. A few things stay in the dashboard, as [Which to use](08-connect-claude.md#which-to-use) says, and Claude tells you when something is yours to finish there.
 
 ## What to ask Claude
 
@@ -44,4 +44,4 @@ Some steps the app lets Claude take for you, so asking you first is one of those
 - deleting a draft;
 - clearing a bounce.
 
-Each of these is recorded as yours, via Claude Code or via Claude.
+An import's record says you made it via Claude Code, or via Claude.
