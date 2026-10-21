@@ -284,9 +284,8 @@ export async function renderEditor(
 
   const subjectEl = $<HTMLInputElement>("#f-subject");
   // The tab carries the subject, kept to the field as it is typed, so a post open beside
-  // others is the one its tab names, and its stage (a cancel re-mounts the editor).
-  const stage = scheduled ? "Scheduled" : "Draft";
-  const nameTab = () => setTitle(signal, subjectEl.value || "Untitled", stage);
+  // others is the one its tab names.
+  const nameTab = () => setTitle(signal, subjectEl.value || "Untitled");
   nameTab();
   const ta = $<HTMLTextAreaElement>("#f-markdown");
   const toolbarEl = $(".toolbar", root);

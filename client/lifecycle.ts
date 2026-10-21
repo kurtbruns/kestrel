@@ -34,19 +34,19 @@ export type View = (root: HTMLElement, signal: AbortSignal) => Offered | Promise
 let controller: AbortController | null = null;
 let handle: ViewHandle | null = null;
 
-// The tab's title when no view names one, and the last part of every title a view names, so
-// a tab among others says which app it is.
+// The tab's title when no view names one, and what follows every title a view names, so a
+// tab among others says which app it is.
 const APP_TITLE = "Kestrel";
 
 /**
- * Name the browser tab for the view `signal` belongs to: `parts`, most specific first, then
- * the app's name ("Welcome - Draft - Kestrel"); empty parts drop out. A view that has
- * already left names nothing, so a read that resolves late never retitles the view after
- * it. mount() puts the app's title back for each view, so no view restores it.
+ * Name the browser tab for the view `signal` belongs to: its one title, then the app's name
+ * ("Welcome - Kestrel"). A view that has already left names nothing, so a read that
+ * resolves late never retitles the view after it. mount() puts the app's title back for
+ * each view, so no view restores it.
  */
-export function setTitle(signal: AbortSignal, ...parts: string[]): void {
+export function setTitle(signal: AbortSignal, title: string): void {
   if (!signal.aborted) {
-    document.title = [...parts.filter((p) => p.trim() !== ""), APP_TITLE].join(" - ");
+    document.title = title.trim() ? `${title} - ${APP_TITLE}` : APP_TITLE;
   }
 }
 

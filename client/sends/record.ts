@@ -66,7 +66,7 @@ export async function renderSentRecord(
     return; // navigated away while loading: the redirect below must not hijack that
   }
   const { send } = data;
-  setTitle(signal, send.subject || "Untitled", "Sent");
+  setTitle(signal, send.subject || "Untitled");
 
   // A scheduled send is still cancel-to-edit: its home is the editor, not this record. The
   // editor takes this page's history entry, so Back goes where the reader came from, never

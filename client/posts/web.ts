@@ -134,7 +134,9 @@ export async function renderWebVersion(
         return;
       }
       openLinksInNewTab(page);
-      setTitle(signal, page.title, "Web version");
+      // Named apart from the editor's tab, which carries the subject alone and is often
+      // open beside this one.
+      setTitle(signal, page.title ? `${page.title} (web version)` : "Web version");
       // The frame is as tall as the post, so the window scrolls the page and the strip
       // above goes up with it rather than staying pinned. Measured on the body, which is
       // content-sized, and kept fitted as fonts, images, and the window's width change it.

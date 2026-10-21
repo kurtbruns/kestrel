@@ -59,7 +59,7 @@ interface ChosenFile {
 }
 
 export async function renderImport(root: HTMLElement, signal: AbortSignal): Promise<void> {
-  setTitle(signal, "Import", "Subscribers");
+  setTitle(signal, "Import subscribers");
   setHtml(
     root,
     html`<div class="imp">

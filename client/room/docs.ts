@@ -107,7 +107,7 @@ function renderDocsIndex(
   docs: DocFragment[],
   signal: AbortSignal,
 ): void {
-  setTitle(signal, landing.name, "Docs");
+  setTitle(signal, `${landing.name} docs`);
   const card = (d: DocFragment, n: number | null): Html => {
     const desc = docDescription(d);
     return html`<li><a class="doc-card" href="#/docs/${d.slug}">${n === null ? null : html`<span class="doc-card-n">${String(n).padStart(2, "0")}</span>`}<span class="doc-card-main"><span class="doc-card-t">${d.title} <span class="doc-card-go" aria-hidden="true">→</span></span>${desc ? html`<span class="doc-card-d">${desc}</span>` : null}</span></a></li>`;
@@ -217,7 +217,7 @@ function renderDocPage(
     }
     return;
   }
-  setTitle(signal, cur.title, "Docs");
+  setTitle(signal, cur.title);
   // Prev/Next stay within the doc's section: the main path ends at its last step rather than
   // running on into the guides after it, which are picked from, not read in order.
   const siblings = docs.filter((d) => d.set === cur.set && d.section === cur.section);

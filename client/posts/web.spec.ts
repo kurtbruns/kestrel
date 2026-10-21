@@ -172,7 +172,7 @@ describe("web version", () => {
     const click = new MouseEvent("click", { bubbles: true, cancelable: true });
     jump!.dispatchEvent(click);
     expect(click.defaultPrevented).toBe(true);
-    expect(document.title).toBe("Herons - Web version - Kestrel");
+    expect(document.title).toBe("Herons (web version) - Kestrel");
   });
 
   it("still shows the page, with a bar that names no stage or address, when the post can't be read", async () => {
@@ -212,7 +212,7 @@ describe("web version", () => {
     ]);
     await mount((r, s) => renderWebVersion("p1", r, s));
     await settle();
-    expect(document.title).toBe("Herons - Web version - Kestrel");
+    expect(document.title).toBe("Herons (web version) - Kestrel");
     unmount();
     expect(document.title).toBe("Kestrel");
   });

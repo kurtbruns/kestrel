@@ -75,13 +75,13 @@ describe("lifecycle", () => {
     await expect(mount(() => Promise.reject(new Error("boom")))).rejects.toThrow("boom");
   });
 
-  it("setTitle: names the tab most specific first, and each mount and unmount gives the app's title back", async () => {
+  it("setTitle: names the tab for the view, and each mount and unmount gives the app's title back", async () => {
     let first: AbortSignal | null = null;
     await mount((_root, signal) => {
       first = signal;
-      setTitle(signal, "Welcome", "", "Draft");
+      setTitle(signal, "Welcome");
     });
-    expect(document.title).toBe("Welcome - Draft - Kestrel");
+    expect(document.title).toBe("Welcome - Kestrel");
     await mount(() => {});
     expect(document.title).toBe("Kestrel");
     // A view that has left names nothing, so a late read can't retitle the view after it.
