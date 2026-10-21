@@ -465,9 +465,9 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
 
   it("resolves a stuck send only with the resolution the call names, never a default (SPEC §12)", async () => {
     const id = await wedgedSend();
-    const tool = (await listTools()).find((t) => t.name === "resolve_send");
-    expect(tool?.inputSchema.required).toEqual(["id", "resolution"]);
-    const resolution = (tool?.inputSchema.properties as Record<string, Record<string, unknown>>)
+    const tool = (await listTools()).find((t) => t.name === "resolve_send")!;
+    expect(tool.inputSchema.required).toEqual(["id", "resolution"]);
+    const resolution = (tool.inputSchema.properties as Record<string, Record<string, unknown>>)
       .resolution;
     expect(resolution).not.toHaveProperty("default");
     expect(resolution?.description).toContain("never choose it yourself");
@@ -558,6 +558,22 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
     const template = await callTool("update_settings", { email_template: "<p>x</p>" });
     expect(template.text).toBe(
       "`email_template` isn't an argument update_settings takes; it takes `publication`, `test_recipients`, `notifications`, `confirmation_email`, `remake`.",
+    );
+  });
+
+  it("tells Claude to send `remake` only with the ids a refusal listed for the publisher, never ids read beforehand (SPEC §11)", async () => {
+    const tools = await listTools();
+    for (const name of ["update_settings", "update_template"]) {
+      const t = tools.find((x) => x.name === name)!;
+      expect(t.description, name).toContain("Save without `remake`");
+      expect(t.description, name).not.toContain("in_use");
+      const remake = (t.inputSchema.properties as Record<string, { description: string }>).remake;
+      expect(remake?.description, name).toMatch(
+        /Leave it out of a first save\. Send it only on a call after a remake_required refusal, with the ids that refusal listed, once you have shown the publisher those sends and they said yes in this chat; never ids read beforehand\.$/,
+      );
+    }
+    expect(MCP_INSTRUCTIONS).toContain(
+      "send `remake` with the refusal's ids only after they say yes, never ids read beforehand",
     );
   });
 
