@@ -27,7 +27,7 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
       "self-hosting/get-started/verify",
       "self-hosting/get-started/go-live",
       "self-hosting/guides/allow-claude",
-      "self-hosting/guides/script-access",
+      "self-hosting/guides/automate",
       "self-hosting/guides/notifications",
       "self-hosting/guides/rate-limit",
       "self-hosting/guides/as-your-list-grows",
@@ -132,7 +132,7 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
       'href="#/docs/as-your-list-grows"',
     );
     expect(docs.find((d) => d.slug === "connect-claude")?.html).toContain(
-      'href="#/docs/allow-claude/3-optional-sign-claude-code-in-from-the-instances-repository"',
+      'href="#/docs/allow-claude"',
     );
   });
 

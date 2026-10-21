@@ -53,7 +53,7 @@ Every Access application denies everyone until a policy allows them.
 
 1. Select **Create**.
 
-The app accepts only two kinds of policy on this application. One is an Allow policy on people's emails, like this one. The other is a Service Auth policy on a service token, from [Give a script access to the API](../guides/02-script-access.md). A login through any other kind, such as a certificate, a device check, or an identity provider that gives no email, is refused with a `401`, and the editor says so.
+The app accepts only two kinds of policy on this application. One is an Allow policy on people's emails, like this one. The other is a Service Auth policy on a service token, from [Automate with a service token](../guides/02-automate.md). A login through any other kind, such as a certificate, a device check, or an identity provider that gives no email, is refused with a `401`, and the editor says so.
 
 ## 4. Give the app its two values
 

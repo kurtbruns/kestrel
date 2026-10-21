@@ -28,7 +28,7 @@ import ses from "../../docs/get-started/04-ses.md";
 import verify from "../../docs/get-started/05-verify.md";
 import goLive from "../../docs/get-started/06-go-live.md";
 import allowClaude from "../../docs/guides/01-allow-claude.md";
-import scriptAccess from "../../docs/guides/02-script-access.md";
+import automate from "../../docs/guides/02-automate.md";
 import notifications from "../../docs/guides/03-notifications.md";
 import rateLimit from "../../docs/guides/05-rate-limit.md";
 import upgrade from "../../docs/guides/07-upgrade.md";
@@ -75,7 +75,7 @@ const PAGES: Record<string, string> = {
   "get-started/05-verify.md": verify,
   "get-started/06-go-live.md": goLive,
   "guides/01-allow-claude.md": allowClaude,
-  "guides/02-script-access.md": scriptAccess,
+  "guides/02-automate.md": automate,
   "guides/03-notifications.md": notifications,
   "guides/05-rate-limit.md": rateLimit,
   "guides/07-upgrade.md": upgrade,

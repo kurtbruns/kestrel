@@ -1,4 +1,4 @@
-# Give a script access to the API
+# Automate with a service token
 
 A script or a scheduled job can call the same API the editor uses, with no one signed in. It uses a Cloudflare Access service token, so its changes show as a service token's, never a person's. Anything it schedules waits out the review window, where the publisher can still cancel it.
 

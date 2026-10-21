@@ -22,7 +22,7 @@ import type { RequestContext, RouteDef } from "../router";
 export const SIGN_IN_URL = "https://getkestrel.dev/docs/connect-claude/";
 
 /** Where whoever runs the instance learns to make a service token, for a script. */
-export const AUTOMATION_URL = "https://getkestrel.dev/docs/script-access/";
+export const AUTOMATION_URL = "https://getkestrel.dev/docs/automate/";
 
 interface Entry {
   title: string;
@@ -117,7 +117,7 @@ export function llmsText({
     "## Signing in",
     "",
     `- [Connect Claude](${SIGN_IN_URL}): how a publisher connects Claude to this instance as themselves.`,
-    `- [Give a script access to the API](${AUTOMATION_URL}): how whoever runs this instance makes a service token for a script.`,
+    `- [Automate with a service token](${AUTOMATION_URL}): how whoever runs this instance makes a service token for a script.`,
     "",
   ].join("\n");
 }
