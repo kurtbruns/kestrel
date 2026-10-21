@@ -1,8 +1,8 @@
 # Allow Claude to connect
 
-Claude works with the instance through the same API the editor uses, signed in as a person through the Access application. It can do what that person can do in the dashboard, and nothing more. Its changes show as theirs, via Claude or via Claude Code, and anything it schedules waits out the review window.
+Connecting Claude to the instance lets the publisher draft, test, and schedule posts by asking for them in Claude. Claude works through the same API as the dashboard, and its changes show as the publisher's, via Claude.
 
-For Claude to sign in, the Access application needs Cloudflare's Managed OAuth turned on. In this guide, you turn it on, allow the addresses Claude signs in from, and choose how long a sign-in lasts. Then you send the publisher the address they connect to, and check it.
+In this guide, you turn on Cloudflare's Managed OAuth for the Access application that locks the dashboard, then connect Claude, or send the publisher the address to connect to.
 
 ## How Claude connects
 
