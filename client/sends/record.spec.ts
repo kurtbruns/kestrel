@@ -123,6 +123,16 @@ describe("sent record", () => {
     expect($(".rec-people-table").textContent).not.toContain("erased:");
   });
 
+  it("names the tab for the send's subject", async () => {
+    fake = fakeApi([
+      ...sentSend().routes,
+      { path: "/api/sends/x1/deliveries", reply: () => ({ deliveries: [], view: "all", page }) },
+    ]);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.title).toBe("Owls - Kestrel");
+  });
+
   it("renders the frozen record: tiles, the reconciliation line, and every recipient first", async () => {
     fake = fakeApi([
       ...sentSend().routes,

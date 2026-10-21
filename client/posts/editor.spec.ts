@@ -270,6 +270,18 @@ describe("editor view", () => {
     expect(handle().dirty()).toBe(false);
   });
 
+  it("names the tab for the subject, kept to the field as it is typed, and Untitled while it is blank", async () => {
+    await open([{ path: "/api/posts/p1", reply: () => draft() }]);
+    expect(document.title).toBe("Owls - Kestrel");
+    const subject = $<HTMLInputElement>("#f-subject");
+    typeInto(subject, "Herons");
+    expect(document.title).toBe("Herons - Kestrel");
+    typeInto(subject, "   ");
+    expect(document.title).toBe("Untitled - Kestrel");
+    typeInto(subject, "");
+    expect(document.title).toBe("Untitled - Kestrel");
+  });
+
   it("marks an edit dirty, then autosaves it after the idle pause with the base revision", async () => {
     const server = draftServer();
     await open([

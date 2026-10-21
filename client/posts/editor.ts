@@ -285,7 +285,7 @@ export async function renderEditor(
   const subjectEl = $<HTMLInputElement>("#f-subject");
   // The tab carries the subject, kept to the field as it is typed, so a post open beside
   // others is the one its tab names.
-  const nameTab = () => setTitle(signal, subjectEl.value || "Untitled");
+  const nameTab = () => setTitle(signal, subjectEl.value.trim() || "Untitled");
   nameTab();
   const ta = $<HTMLTextAreaElement>("#f-markdown");
   const toolbarEl = $(".toolbar", root);

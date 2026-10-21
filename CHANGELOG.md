@@ -23,7 +23,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
-- The browser tab now names the screen you're on, such as "Subscribers - Kestrel", a post or send by its subject, and a doc by its title, instead of "Kestrel" on every screen, so tabs, bookmarks, and history entries say where they lead. The web version's tab reads "<subject> (web version) - Kestrel".
+- The browser tab now names the screen you're on, such as "Subscribers - Kestrel", a post or send by its subject, and a doc by its title, instead of "Kestrel" on every screen, so tabs, bookmarks, and history entries say where they lead. The web version's tab adds "(web version)" after the subject, so it reads apart from the editor's.
 - Every admin `401` now carries a `message`, as every other refusal does, and the API reference and OpenAPI document describe its `reason`, which says when signing in again can't help (SPEC §11).
 - The scheduled banner is quieter: "No test of this email has been sent yet" is now a muted "Not tested yet" beside Send test email, the button that settles it (SPEC §8).
 - A service token now means automation, never Claude: the editor shows its changes as "a service token" (and an import's as "a service token", not "Claude, for you"), the publisher's email about an import a service token commits names the token rather than Claude, and the dashboard says Claude is connected once a post's current revision came through Claude Code. Service tokens keep working as before. The Connect Claude guide is now Connect automation to the API, for scripts, and `/llms.txt` and the API reference point an agent to `kestrel login` first (SPEC §11).

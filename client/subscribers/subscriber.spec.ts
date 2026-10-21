@@ -107,6 +107,15 @@ describe("the subscriber page (SPEC §8, DESIGN §3)", () => {
   });
   afterEach(() => fake?.restore());
 
+  it("names the tab Subscriber, never the address, which would land in browser history", async () => {
+    fake = serve(subscriber());
+    await mount((r, s) => renderSubscriber("s1", r, s));
+    await settle();
+    expect($("h1.sub-title").textContent).toBe("reader@b.c");
+    expect(document.title).toBe("Subscriber - Kestrel");
+    expect(document.title).not.toContain("reader@b.c");
+  });
+
   it("is titled with the address and its status pill, and shows how they joined here (SPEC §7)", async () => {
     fake = serve(subscriber());
     await mount((r, s) => renderSubscriber("s1", r, s));
