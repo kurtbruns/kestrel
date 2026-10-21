@@ -22,7 +22,7 @@ import {
 import { buildReferenceResponse } from "../src/reference";
 import { openApiDocument } from "../src/reference/openapi";
 import { accessDeployment } from "./support/access";
-import { frozenSend, resetDatabase, wedgedSend } from "./support/fixtures";
+import { frozenSend, resetDatabase, tpl, wedgedSend } from "./support/fixtures";
 import { adminAuth, base, JSON_AUTH, readJson } from "./support/http";
 import { allowErrorLogs } from "./support/log";
 import { fetchWith } from "./support/worker_env";
@@ -116,6 +116,7 @@ describe("the tools are a curated set over the API's routes (SPEC §11)", () => 
       "block_address",
       "lift_suppression",
       "update_settings",
+      "update_template",
       "test_notifications",
       "kestrel_api_read",
     ]);
@@ -164,6 +165,10 @@ describe("the tools are a curated set over the API's routes (SPEC §11)", () => 
       openWorldHint: false,
     });
     expect(byName.get("update_settings")).toMatchObject({
+      destructiveHint: true,
+      openWorldHint: false,
+    });
+    expect(byName.get("update_template")).toMatchObject({
       destructiveHint: true,
       openWorldHint: false,
     });
@@ -556,6 +561,34 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
     );
   });
 
+  it("saves the template only through its own tool, re-making a scheduled send only on a second call that names it (SPEC §9, I5)", async () => {
+    expect(await callOk("update_template", { email_template: tpl("v1") })).toMatchObject({
+      saved: true,
+      remade: [],
+    });
+    const post = (await callOk("save_draft", { subject: "Waxwings", markdown: "x" })).post;
+    const send = (await callOk("schedule_send", { id: post.id, fire_at: inHours(2) })).send;
+    const refused = await callTool("update_template", { email_template: tpl("v2") });
+    expect(refused.isError).toBe(true);
+    const lines = refused.text.split("\n");
+    expect(lines[0]).toMatch(/^Refused: HTTP 409 remake_required\. /);
+    expect(lines[3]).toBe(`- "Waxwings", firing ${send.fire_at} (${send.id}).`);
+    const template = async () =>
+      JSON.parse((await callTool("kestrel_api_read", { path: "/api/settings" })).text).settings
+        .email_template;
+    expect(await template()).toBe(tpl("v1"));
+    const saved = await callOk("update_template", { email_template: tpl("v2"), remake: [send.id] });
+    expect(saved.remade.map((s: { id: string }) => s.id)).toEqual([send.id]);
+    expect(await template()).toBe(tpl("v2"));
+    const broken = await callTool("update_template", { email_template: "<div>no body</div>" });
+    expect(broken.isError).toBe(true);
+    expect(broken.text).toMatch(/\nFix: `email_template`\.$/);
+    const identity = await callTool("update_template", { publication: { name: "N" } });
+    expect(identity.text).toBe(
+      "`publication` isn't an argument update_template takes; it takes `email_template`, `remake`.",
+    );
+  });
+
   it("plans an import before committing, and never gives the attestation for the person", async () => {
     const file = { name: "l.txt", text: "a@x.io\n" };
     const plan = await callOk("import_subscribers", { file });
@@ -698,6 +731,12 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
 });
 
 describe("what a tool answers stays small and whole", () => {
+  it("keeps the whole tool list under 25 KB, so growing it is a decision", async () => {
+    const res = await rpc("tools/list", {}, await adminAuth(PERSON));
+    const size = new TextEncoder().encode(await res.text()).length;
+    expect(size).toBeLessThan(25 * 1024);
+  });
+
   it("cuts a long Markdown answer at a line, or at the limit when no line ends before it", () => {
     const lines = `${"a".repeat(100)}\n`.repeat(1000);
     const atLine = markdown(lines).content[0]?.text ?? "";

@@ -13,8 +13,8 @@
  * a refusal that asks for one comes back as the tool's error, saying what is affected and who can
  * give it.
  *
- * Left out on purpose, so they stay in the editor: template writes, the logo,
- * uploads, reader pages, erasure, and the dev routes. `kestrel_api_read`
+ * Left out on purpose, so they stay in the editor: the logo, uploads, reader pages, erasure, and
+ * the dev routes. `kestrel_api_read`
  * reaches the other admin reads that answer JSON or Markdown, never a write, a dev route, or a
  * bulk one.
  */
@@ -1028,6 +1028,31 @@ export const TOOL_DEFS: ToolDef[] = [
           address: r.settings.publication.address,
         },
         confirmation_email: r.settings.confirmation_email,
+        warnings: r.warnings,
+        remade: remadeBrief(r),
+        editor: api.editor("/settings"),
+      });
+    },
+  },
+  {
+    name: "update_template",
+    title: "Update the email template",
+    description:
+      "Replace the email template's HTML. Read it first, with the scheduled sends a save would re-make, through kestrel_api_read of /api/settings (`settings.email_template`, `in_use`), and edit it as it stands. Only on the publisher's word, and see `remake`. A template missing the unsubscribe link or the body is refused, naming the field. After a save, offer a send_test of a draft, which renders through the saved template (preview_post sends nothing), and of each send in `remade`. For the identity or addresses, use update_settings.",
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    routes: [SAVE_SETTINGS],
+    args: {
+      email_template: pick(SAVE_SETTINGS, "body", "email_template", { required: true }),
+      remake: pick(SAVE_SETTINGS, "body", "remake", { note: REMAKE_NOTE }),
+    },
+    async run(api, args) {
+      const a = await api.call(SAVE_SETTINGS, { body: only(args, ["email_template", "remake"]) });
+      if (!a.ok) {
+        return settingsRefused(a);
+      }
+      const r = a.body as SettingsSavedResponse;
+      return data({
+        saved: true,
         warnings: r.warnings,
         remade: remadeBrief(r),
         editor: api.editor("/settings"),
