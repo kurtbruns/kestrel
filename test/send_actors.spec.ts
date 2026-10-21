@@ -5,7 +5,7 @@ import type { SendView } from "../shared/sends";
 import type { Actor } from "../shared/who_acted";
 import { DEV_TOKEN_ID } from "../src/auth/dev_token";
 import * as sends from "../src/db/sends";
-import { frozenSend, resetDatabase } from "./support/fixtures";
+import { frozenSend, resetDatabase, wedgedSend } from "./support/fixtures";
 import { adminAuth, base, readJson } from "./support/http";
 
 // Who acted on a send (SPEC §6, §11): each act that changes a send records the person or the
@@ -84,23 +84,6 @@ async function scheduled(who: Who): Promise<string> {
   return (await readJson(res)).send.id;
 }
 
-/** A send wedged on one recipient the provider never answered for, its id. */
-async function wedged(): Promise<string> {
-  const send = await frozenSend(Date.now() - 1000);
-  await env.DB.prepare(
-    "INSERT INTO deliveries (send_id, email, status, attempts, updated_at) VALUES (?, 'a@example.com', 'dispatched', 0, ?)",
-  )
-    .bind(send.id, Date.now())
-    .run();
-  await env.DB.prepare(
-    "UPDATE sends SET status = 'sending', started_at = ?, audience_resolved_at = ? WHERE id = ?",
-  )
-    .bind(Date.now(), Date.now(), send.id)
-    .run();
-  await sends.recomputeSendCounters(env.DB, send.id);
-  return send.id;
-}
-
 describe("a send records who acted on it (SPEC §6, §11)", () => {
   for (const who of EVERYONE) {
     it(`records ${who.name} as who scheduled it, and answers it on the schedule`, async () => {
@@ -149,7 +132,7 @@ describe("a send records who acted on it (SPEC §6, §11)", () => {
     });
 
     it(`records ${who.name} as who resolved it while wedged`, async () => {
-      const id = await wedged();
+      const id = await wedgedSend();
       const res = await call(who, "POST", `/api/sends/${id}/resolve`, { resolution: "unsent" });
       expect(res.status).toBe(200);
       expect((await readJson(res)).send.resolved_by).toEqual(who.actor);
@@ -264,7 +247,7 @@ describe("a send records who acted on it (SPEC §6, §11)", () => {
   it("tells a Send now apart from a schedule in the log, and a Resolve by its resolution", async () => {
     const res = await call(CLAUDE_CODE, "POST", `/api/posts/${await draft()}/send`);
     const sent = (await readJson(res)).send;
-    const wedgedId = await wedged();
+    const wedgedId = await wedgedSend();
     await call(SERVICE, "POST", `/api/sends/${wedgedId}/resolve`, { resolution: "accepted" });
     const { results } = await env.DB.prepare(
       "SELECT send_id, act, fire_at, resolution FROM send_acts ORDER BY id",
@@ -361,7 +344,7 @@ describe("the log records an act only when its change landed (SPEC §6)", () => 
   });
 
   it("records one Resolve when two race, though the second held the lease", async () => {
-    const id = await wedged();
+    const id = await wedgedSend();
     const a = await sends.acquireLease(env.DB, id, Date.now(), 60_000);
     expect(a).not.toBeNull();
     const first = await sends.resolveDispatched(env.DB, id, a ?? "", "unsent", "a", Date.now(), BY);
@@ -385,7 +368,7 @@ describe("the log records an act only when its change landed (SPEC §6)", () => 
   });
 
   it("records no Resolve without the lease", async () => {
-    const id = await wedged();
+    const id = await wedgedSend();
     const moved = await sends.resolveDispatched(
       env.DB,
       id,

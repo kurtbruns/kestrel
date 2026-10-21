@@ -14,7 +14,7 @@
  * give it.
  *
  * Left out on purpose, so they stay in the editor: settings and template writes,
- * suppressions, Resolve, uploads, reader pages, erasure, and the dev routes. `kestrel_api_read`
+ * uploads, reader pages, erasure, and the dev routes. `kestrel_api_read`
  * reaches the other admin reads that answer JSON or Markdown, never a write, a dev route, or a
  * bulk one.
  */
@@ -34,6 +34,7 @@ import type {
 } from "../../shared/posts";
 import { concretePath } from "../../shared/reference";
 import type {
+  ResolveResponse,
   ScheduleResponse,
   SendActionResponse,
   SendListResponse,
@@ -42,10 +43,13 @@ import type {
 } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import type {
+  BlockResponse,
+  LiftSuppressionResponse,
   SubscribeResponse,
   Subscriber,
   SubscriberListResponse,
   SubscriberResponse,
+  Suppression,
 } from "../../shared/subscribers";
 import { CLAUDE_CLIENT, CLIENT_HEADER, type WhoamiResponse } from "../../shared/who_acted";
 import { ACCESS_JWT_HEADER } from "../auth/access";
@@ -292,6 +296,10 @@ function subscriberBrief(s: Subscriber) {
   };
 }
 
+function suppressionBrief(s: Suppression) {
+  return { email: s.email, reason: s.reason, detail: s.detail, created_at: iso(s.created_at) };
+}
+
 /** The next page's offset, or null on the last. */
 function nextOffset(page: { total: number; limit: number; offset: number }): number | null {
   return page.offset + page.limit < page.total ? page.offset + page.limit : null;
@@ -323,10 +331,13 @@ const LIST_SENDS = route("GET", "/api/sends");
 const GET_SEND = route("GET", "/api/sends/:id");
 const RESCHEDULE_SEND = route("POST", "/api/sends/:id/reschedule");
 const CANCEL_SEND = route("POST", "/api/sends/:id/cancel");
+const RESOLVE_SEND = route("POST", "/api/sends/:id/resolve");
 const LIST_SUBSCRIBERS = route("GET", "/api/subscribers");
 const ADD_SUBSCRIBER = route("POST", "/api/subscribers");
 const GET_SUBSCRIBER = route("GET", "/api/subscribers/:id");
 const UNSUBSCRIBE = route("POST", "/api/subscribers/:id/unsubscribe");
+const BLOCK = route("POST", "/api/suppressions");
+const LIFT = route("POST", "/api/suppressions/lift");
 const PLAN_IMPORT = route("POST", "/api/imports/plan");
 const COMMIT_IMPORT = route("POST", "/api/imports");
 const WHOAMI = route("GET", "/api/whoami");
@@ -766,6 +777,29 @@ export const TOOL_DEFS: ToolDef[] = [
     },
   },
   {
+    name: "resolve_send",
+    title: "Resolve a stuck send",
+    description:
+      "Settle a wedged send's recipients the provider never answered for, and finish the send; it mails no one. Only on the publisher's choice: relay the `wedged` condition's message from get_send, offer the editor's two answers, Assume not sent (`unsent`, so those readers get the next post) and Assume sent (`accepted`, recorded as sent), and call with the one they pick in this chat. Never choose it yourself.",
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    routes: [RESOLVE_SEND],
+    args: {
+      id: pick(RESOLVE_SEND, "path", "id"),
+      resolution: pick(RESOLVE_SEND, "body", "resolution"),
+    },
+    async run(api, args) {
+      const a = await api.call(RESOLVE_SEND, {
+        params: { id: args.id },
+        body: only(args, ["resolution"]),
+      });
+      if (!a.ok) {
+        return refused(a);
+      }
+      const r = a.body as ResolveResponse;
+      return data({ send: sendBrief(r.send), resolved: r.resolved, completed: r.completed });
+    },
+  },
+  {
     name: "import_subscribers",
     title: "Import subscribers",
     description:
@@ -857,7 +891,7 @@ export const TOOL_DEFS: ToolDef[] = [
     name: "unsubscribe_subscriber",
     title: "Unsubscribe a subscriber",
     description:
-      "Unsubscribe someone who asked to leave, as their own unsubscribe link does. Only they undo it, by subscribing again. To stop mailing an address on the publisher's own judgment, they block it in the dashboard instead.",
+      "Unsubscribe someone who asked to leave, as their own unsubscribe link does. Only they undo it, by subscribing again. To stop mailing an address on the publisher's own judgment, use block_address instead; to erase someone's data, the publisher does it in the dashboard.",
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     routes: [UNSUBSCRIBE],
     args: { id: pick(UNSUBSCRIBE, "path", "id") },
@@ -867,6 +901,47 @@ export const TOOL_DEFS: ToolDef[] = [
         return refused(a);
       }
       return data({ subscriber: subscriberBrief((a.body as SubscriberResponse).subscriber) });
+    },
+  },
+  {
+    name: "block_address",
+    title: "Block an address",
+    description:
+      "Stop mailing an address on the publisher's own decision, whether or not it is on the list; it changes no one's consent, and lift_suppression undoes it. Only an address the publisher names. If the person asked to leave, use unsubscribe_subscriber instead; to erase someone's data, the publisher does it in the dashboard.",
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    routes: [BLOCK],
+    args: { email: pick(BLOCK, "body", "email"), detail: pick(BLOCK, "body", "detail") },
+    async run(api, args) {
+      const a = await api.call(BLOCK, { body: only(args, ["email", "detail"]) });
+      if (!a.ok) {
+        return refused(a);
+      }
+      const r = a.body as BlockResponse;
+      return data({ suppression: suppressionBrief(r.suppression), added: r.added });
+    },
+  },
+  {
+    name: "lift_suppression",
+    title: "Unblock or clear an address",
+    description:
+      "Unblock a blocked address (`manual`) or clear a bounce (`bounce`, `import_bounce`), so mail goes to it again, scheduled sends included. Only an address the publisher names, with the `reason` its suppression shows (get_subscriber, or kestrel_api_read of /api/suppressions). Clear a bounce only when the publisher says the problem is gone, and confirm first: it lets mail go to an address that failed. A complaint or an erasure is how someone left, not a suppression, and nothing lifts it.",
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    routes: [LIFT],
+    args: { email: pick(LIFT, "body", "email"), reason: pick(LIFT, "body", "reason") },
+    async run(api, args) {
+      const a = await api.call(LIFT, { body: only(args, ["email", "reason"]) });
+      if (!a.ok) {
+        const body = isObject(a.body) ? a.body : {};
+        if (body.error === "suppression_changed" && isObject(body.suppression)) {
+          const now = suppressionBrief(body.suppression as unknown as Suppression);
+          return refused(a, [
+            `It stands now as \`${now.reason}\`${now.detail ? ` ("${now.detail}")` : ""}, since ${now.created_at}.`,
+            "Tell the publisher what stands now, and lift it only if they ask again, naming that reason.",
+          ]);
+        }
+        return refused(a);
+      }
+      return data(a.body as LiftSuppressionResponse);
     },
   },
 ];

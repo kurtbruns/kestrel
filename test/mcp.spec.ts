@@ -22,7 +22,7 @@ import {
 import { buildReferenceResponse } from "../src/reference";
 import { openApiDocument } from "../src/reference/openapi";
 import { accessDeployment } from "./support/access";
-import { resetDatabase } from "./support/fixtures";
+import { resetDatabase, wedgedSend } from "./support/fixtures";
 import { adminAuth, base, JSON_AUTH, readJson } from "./support/http";
 import { allowErrorLogs } from "./support/log";
 import { fetchWith } from "./support/worker_env";
@@ -109,9 +109,12 @@ describe("the tools are a curated set over the API's routes (SPEC §11)", () => 
       "schedule_send",
       "reschedule_send",
       "cancel_send",
+      "resolve_send",
       "import_subscribers",
       "add_subscriber",
       "unsubscribe_subscriber",
+      "block_address",
+      "lift_suppression",
       "kestrel_api_read",
     ]);
   });
@@ -145,6 +148,18 @@ describe("the tools are a curated set over the API's routes (SPEC §11)", () => 
     expect(byName.get("add_subscriber")).toMatchObject({
       destructiveHint: false,
       openWorldHint: true,
+    });
+    expect(byName.get("resolve_send")).toMatchObject({
+      destructiveHint: true,
+      openWorldHint: false,
+    });
+    expect(byName.get("block_address")).toMatchObject({
+      destructiveHint: false,
+      openWorldHint: false,
+    });
+    expect(byName.get("lift_suppression")).toMatchObject({
+      destructiveHint: true,
+      openWorldHint: false,
     });
   });
 
@@ -408,6 +423,50 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
       subscriber: { email: "new@x.io", status: "pending", receives_posts: false },
     });
     expect((await callOk("add_subscriber", { email: "new@x.io" })).action).toBe("recently_sent");
+  });
+
+  it("blocks an address, and lifts only the suppression the publisher named, saying what stands when it changed", async () => {
+    const blocked = await callOk("block_address", { email: "b@x.io", detail: "Our own test" });
+    expect(blocked).toMatchObject({
+      added: true,
+      suppression: { email: "b@x.io", reason: "manual", detail: "Our own test" },
+    });
+    const wrong = await callTool("lift_suppression", { email: "b@x.io", reason: "bounce" });
+    expect(wrong.isError).toBe(true);
+    const lines = wrong.text.split("\n");
+    expect(lines[0]).toMatch(/^Refused: HTTP 409 suppression_changed\. /);
+    expect(lines[1]).toBe("Next move: Read again, then decide.");
+    expect(lines[2]).toBe(
+      `It stands now as \`manual\` ("Our own test"), since ${blocked.suppression.created_at}.`,
+    );
+    expect(lines[3]).toBe(
+      "Tell the publisher what stands now, and lift it only if they ask again, naming that reason.",
+    );
+    expect(await callOk("lift_suppression", { email: "b@x.io", reason: "manual" })).toEqual({
+      email: "b@x.io",
+      lifted: true,
+    });
+  });
+
+  it("resolves a stuck send only with the resolution the call names, never a default (SPEC §12)", async () => {
+    const id = await wedgedSend();
+    const tool = (await listTools()).find((t) => t.name === "resolve_send");
+    expect(tool?.inputSchema.required).toEqual(["id", "resolution"]);
+    const resolution = (tool?.inputSchema.properties as Record<string, Record<string, unknown>>)
+      .resolution;
+    expect(resolution).not.toHaveProperty("default");
+    expect(resolution?.description).toContain("never choose it yourself");
+    const none = await callTool("resolve_send", { id });
+    expect(none.isError).toBe(true);
+    expect(none.text).toMatch(/^Refused: HTTP 400 bad_request\..*\nFix: `resolution`\.$/s);
+    expect((await callOk("get_send", { id })).send.resolved_by).toBeNull();
+    const done = await callOk("resolve_send", { id, resolution: "unsent" });
+    expect(done).toMatchObject({ resolved: 1, completed: true });
+    expect((await callOk("get_send", { id })).send.resolved_by).toEqual({
+      kind: "human",
+      email: "you@example.com",
+      client: "claude",
+    });
   });
 
   it("plans an import before committing, and never gives the attestation for the person", async () => {

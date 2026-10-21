@@ -1,6 +1,7 @@
 /**
  * The Worker suite's shared fixtures: an empty database, confirmed readers, a frozen send,
- * the sweep's tick, a send's row set by hand, a delivery for a receipt to land on, and a
+ * a send wedged on a recipient, the sweep's tick, a send's row set by hand, a delivery for a
+ * receipt to land on, and a
  * template a spec can tell apart from another. One copy, so a schema change (a new table, a new NOT NULL column)
  * is made here once rather than in every spec that seeds a reader or clears a table.
  *
@@ -12,6 +13,7 @@ import { env } from "cloudflare:workers";
 import type { Actor } from "../../shared/who_acted";
 import * as posts from "../../src/db/posts";
 import type { SendRow } from "../../src/db/sends";
+import * as sends from "../../src/db/sends";
 import { BRANDING_LOGO_KEY } from "../../src/db/settings";
 import type { AppEnv } from "../../src/env";
 import { getConfig } from "../../src/env";
@@ -71,6 +73,23 @@ export async function frozenSend(
 ): Promise<SendRow> {
   const { post } = await posts.createPost(env.DB, { subject, markdown }, "test");
   return freeze(env, getConfig(env), post, fireAt);
+}
+
+/** A send wedged on one recipient the provider never answered for (SPEC §12), its id. */
+export async function wedgedSend(): Promise<string> {
+  const send = await dueSend();
+  await env.DB.prepare(
+    "INSERT INTO deliveries (send_id, email, status, attempts, updated_at) VALUES (?, 'a@example.com', 'dispatched', 0, ?)",
+  )
+    .bind(send.id, Date.now())
+    .run();
+  await env.DB.prepare(
+    "UPDATE sends SET status = 'sending', started_at = ?, audience_resolved_at = ? WHERE id = ?",
+  )
+    .bind(Date.now(), Date.now(), send.id)
+    .run();
+  await sends.recomputeSendCounters(env.DB, send.id);
+  return send.id;
 }
 
 /** A send already due: its fire time a second past, so the next sweep starts it. */
