@@ -13,8 +13,7 @@
  * a refusal that asks for one comes back as the tool's error, saying what is affected and who can
  * give it.
  *
- * Left out on purpose, so they stay in the editor: settings and template writes, a post's
- * settings once it is scheduled or sent (`schedule_send` sets the listing only as it schedules),
+ * Left out on purpose, so they stay in the editor: settings and template writes,
  * suppressions, Resolve, uploads, reader pages, erasure, and the dev routes. `kestrel_api_read`
  * reaches the other admin reads that answer JSON or Markdown, never a write, a dev route, or a
  * bulk one.
@@ -28,6 +27,7 @@ import type {
   PostListResponse,
   PostResponse,
   PostSavedResponse,
+  PostSettingsResponse,
   PreviewResponse,
   StaleRevisionError,
   TestSendResponse,
@@ -42,6 +42,7 @@ import type {
 } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import type {
+  SubscribeResponse,
   Subscriber,
   SubscriberListResponse,
   SubscriberResponse,
@@ -312,6 +313,8 @@ const LIST_POSTS = route("GET", "/api/posts");
 const GET_POST = route("GET", "/api/posts/:id");
 const CREATE_POST = route("POST", "/api/posts");
 const UPDATE_POST = route("PUT", "/api/posts/:id");
+const DELETE_POST = route("DELETE", "/api/posts/:id");
+const POST_SETTINGS = route("PUT", "/api/posts/:id/settings");
 const PREVIEW_POST = route("GET", "/api/posts/:id/preview.json");
 const TEST_POST = route("POST", "/api/posts/:id/test");
 const SCHEDULE_POST = route("POST", "/api/posts/:id/schedule");
@@ -321,6 +324,7 @@ const GET_SEND = route("GET", "/api/sends/:id");
 const RESCHEDULE_SEND = route("POST", "/api/sends/:id/reschedule");
 const CANCEL_SEND = route("POST", "/api/sends/:id/cancel");
 const LIST_SUBSCRIBERS = route("GET", "/api/subscribers");
+const ADD_SUBSCRIBER = route("POST", "/api/subscribers");
 const GET_SUBSCRIBER = route("GET", "/api/subscribers/:id");
 const UNSUBSCRIBE = route("POST", "/api/subscribers/:id/unsubscribe");
 const PLAN_IMPORT = route("POST", "/api/imports/plan");
@@ -614,6 +618,52 @@ export const TOOL_DEFS: ToolDef[] = [
     },
   },
   {
+    name: "change_post_settings",
+    title: "Change a post's listing or address",
+    description:
+      "Change whether a post is in the public archive (`email_only`) or its archive address (`slug`, `slug_auto`), in any state, a sent post's included. It never changes the email or a send's time: the time is reschedule_send, and the editor's Edit schedule is both, so change what the publisher names and ask when it isn't clear. Only when the publisher asks. On a sent post, confirm first: email only takes its archive page down, so links people shared stop working, and listing it puts it on the public web. On slug_taken, ask which address they want rather than picking one.",
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    routes: [POST_SETTINGS],
+    args: {
+      id: pick(POST_SETTINGS, "path", "id"),
+      email_only: pick(POST_SETTINGS, "body", "email_only"),
+      slug: pick(POST_SETTINGS, "body", "slug"),
+      slug_auto: pick(POST_SETTINGS, "body", "slug_auto"),
+    },
+    async run(api, args) {
+      const a = await api.call(POST_SETTINGS, {
+        params: { id: args.id },
+        body: only(args, ["email_only", "slug", "slug_auto"]),
+      });
+      if (!a.ok) {
+        return refused(a);
+      }
+      const r = a.body as PostSettingsResponse;
+      return data({
+        post: postFull(r.post),
+        changed: r.changed,
+        subject_slug_held: r.subject_slug_held,
+        editor: api.editor(`/edit/${encodeURIComponent(r.post.id)}`),
+      });
+    },
+  },
+  {
+    name: "delete_draft",
+    title: "Delete a draft",
+    description:
+      "Delete a draft for good, with its revisions and its images: nothing brings it back. Only a draft the publisher names, and only once you've named its subject back to them, said its versions and images go too, and they've said yes. A scheduled or sent post is refused.",
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    routes: [DELETE_POST],
+    args: { id: pick(DELETE_POST, "path", "id") },
+    async run(api, args) {
+      const a = await api.call(DELETE_POST, { params: { id: args.id } });
+      if (!a.ok) {
+        return refused(a);
+      }
+      return data({ deleted: true, id: args.id });
+    },
+  },
+  {
     name: "send_test",
     title: "Send a test email",
     description:
@@ -679,7 +729,7 @@ export const TOOL_DEFS: ToolDef[] = [
     name: "reschedule_send",
     title: "Reschedule a send",
     description:
-      "Move a scheduled send's fire time, within its review window and no sooner than the minimum lead. The email stays exactly as scheduled.",
+      "Move a scheduled send's fire time, within its review window and no sooner than the minimum lead. The email stays exactly as scheduled. The editor's Edit schedule is both this and change_post_settings: change what the publisher names, and ask when it isn't clear.",
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     routes: [RESCHEDULE_SEND],
     args: {
@@ -780,6 +830,26 @@ export const TOOL_DEFS: ToolDef[] = [
         suppressions_added: r.suppressions_added,
         differed: r.differed.slice(0, TOOL_PAGE),
         replayed: r.replayed,
+      });
+    },
+  },
+  {
+    name: "add_subscriber",
+    title: "Add a subscriber",
+    description:
+      "Add one address the publisher names, by double opt-in: it emails the address a confirmation, and they join only once they confirm it. Never add anyone the publisher didn't name; a list goes through import_subscribers. Tell them what `action` says it did. On signup_required (they left by a complaint or an erasure), relay that the person has to subscribe through the subscribe page themselves.",
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    routes: [ADD_SUBSCRIBER],
+    args: { email: pick(ADD_SUBSCRIBER, "body", "email") },
+    async run(api, args) {
+      const a = await api.call(ADD_SUBSCRIBER, { body: only(args, ["email"]) });
+      if (!a.ok) {
+        return refused(a);
+      }
+      const r = a.body as SubscribeResponse;
+      return data({
+        action: r.action,
+        subscriber: r.subscriber ? subscriberBrief(r.subscriber) : null,
       });
     },
   },

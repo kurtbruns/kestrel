@@ -103,11 +103,14 @@ describe("the tools are a curated set over the API's routes (SPEC §11)", () => 
       "get_subscriber",
       "get_publication",
       "save_draft",
+      "change_post_settings",
+      "delete_draft",
       "send_test",
       "schedule_send",
       "reschedule_send",
       "cancel_send",
       "import_subscribers",
+      "add_subscriber",
       "unsubscribe_subscriber",
       "kestrel_api_read",
     ]);
@@ -131,6 +134,18 @@ describe("the tools are a curated set over the API's routes (SPEC §11)", () => 
       openWorldHint: true,
     });
     expect(byName.get("save_draft")).toMatchObject({ destructiveHint: false });
+    expect(byName.get("change_post_settings")).toMatchObject({
+      destructiveHint: true,
+      openWorldHint: false,
+    });
+    expect(byName.get("delete_draft")).toMatchObject({
+      destructiveHint: true,
+      openWorldHint: false,
+    });
+    expect(byName.get("add_subscriber")).toMatchObject({
+      destructiveHint: false,
+      openWorldHint: true,
+    });
   });
 
   it("wraps only routes the manifest registers on the authoring API, a read only GETs", () => {
@@ -352,6 +367,47 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
     expect(now.send.status).toBe("scheduled");
     const listed = await callOk("list_sends", { status: "scheduled" });
     expect(listed.sends.map((s: { id: string }) => s.id)).toEqual([now.send.id]);
+  });
+
+  it("changes a post's listing and address, in any state, and says when an address is taken", async () => {
+    const other = (await callOk("save_draft", { subject: "Taken" })).post;
+    const post = (await callOk("save_draft", { subject: "Mine", markdown: "x" })).post;
+    const listed = await callOk("change_post_settings", {
+      id: post.id,
+      email_only: true,
+      slug: "my-own",
+    });
+    expect(listed).toMatchObject({ changed: true, post: { email_only: true, slug: "my-own" } });
+    const taken = await callTool("change_post_settings", { id: post.id, slug: other.slug });
+    expect(taken.isError).toBe(true);
+    expect(taken.text).toMatch(/^Refused: HTTP 409 slug_taken\. /);
+    expect(taken.text).toContain("Next move: Read again, then decide.");
+    await callOk("schedule_send", { id: post.id, fire_at: inHours(2) });
+    const scheduled = await callOk("change_post_settings", { id: post.id, email_only: false });
+    expect(scheduled.post).toMatchObject({ status: "scheduled", email_only: false });
+  });
+
+  it("deletes a draft, and never a scheduled post", async () => {
+    const draft = (await callOk("save_draft", { subject: "Gone" })).post;
+    expect(await callOk("delete_draft", { id: draft.id })).toEqual({ deleted: true, id: draft.id });
+    expect((await callTool("get_post", { id: draft.id })).text).toMatch(
+      /^Refused: HTTP 404 not_found\./,
+    );
+    const kept = (await callOk("save_draft", { subject: "Kept", markdown: "x" })).post;
+    await callOk("schedule_send", { id: kept.id, fire_at: inHours(2) });
+    const refused = await callTool("delete_draft", { id: kept.id });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toMatch(/^Refused: HTTP 409 post_not_draft\. /);
+    expect((await callOk("get_post", { id: kept.id })).post.status).toBe("scheduled");
+  });
+
+  it("adds a subscriber by double opt-in, pending until they confirm (SPEC §7)", async () => {
+    const added = await callOk("add_subscriber", { email: "new@x.io" });
+    expect(added).toMatchObject({
+      action: "created",
+      subscriber: { email: "new@x.io", status: "pending", receives_posts: false },
+    });
+    expect((await callOk("add_subscriber", { email: "new@x.io" })).action).toBe("recently_sent");
   });
 
   it("plans an import before committing, and never gives the attestation for the person", async () => {
