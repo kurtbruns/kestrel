@@ -4,16 +4,22 @@ Ask Claude in plain words, the way you'd ask a colleague. It works through the s
 
 To set Claude up, add your Kestrel as a connector in Claude Desktop, claude.ai, or Claude Code, as [Connect Claude](08-connect-claude.md) describes.
 
-Claude reads these same pages from your Kestrel, so it explains things in the words you see here. Through the connector, Claude sees a short list of tools, each a task such as **Save a draft**, **Send a test email**, or **Schedule a post**, marked as reading or changing something, plus one that reads most of the rest of your Kestrel and changes nothing. Your settings, the email template, changing whether a post is in your archive, or its address, once it's scheduled or sent, blocking an address, resolving a send, uploading images, and erasing a subscriber stay in the dashboard, and Claude tells you when something is yours to finish there.
+Claude reads these same pages from your Kestrel, so it explains things in the words you see here. Through the connector, Claude sees a short list of tools, each a task such as **Save a draft**, **Send a test email**, or **Schedule a post**, marked as reading or changing something, plus one that reads most of the rest of your Kestrel and changes nothing. Uploading images, your logo, and erasing a subscriber stay in the dashboard, and Claude tells you when something is yours to finish there.
 
 ## What to ask Claude
 
 - **Draft or proofread a post.** Give it notes, an outline, or a draft. It saves a new version you can open in the dashboard. If you edited the post meanwhile, its save is refused, and it works from your version or asks you.
 - **Test and schedule a post.** Name the post and when it should go out, and say so if it should be email only. Claude tells you whether the post will be in your archive, and at which address, before it schedules. Then it offers a test of the scheduled post, which is exactly what will go out, and tells you how to cancel. If the test shows a problem, it cancels, fixes the post, and schedules it again. It can also cancel a send or move it.
-- **Take a sent post out of your archive, or put it back,** with Claude Code in your instance's repository. Through the connector, do it in the dashboard. Claude asks first, as the dashboard does, since taking a post out breaks links people shared.
+- **Take a sent post out of your archive, or put it back.** Claude asks first, as the dashboard does, since taking a post out breaks links people shared.
 - **Check how a send did.** Claude reads the send's record and reports what was delivered, unsent, bounced, or complained.
 - **Recover an earlier version.** Every save keeps a whole version of a post, and Claude can read them back.
+- **Delete a draft.** Claude names the draft and asks first. Its versions and images go with it, for good.
 - **Import a list.** Claude plans the import first and shows you what it would do. It imports once you accept the attestation in the chat, never on its own. In your instance's repository, Claude Code's `/migrate-list` skill asks what anything ambiguous in your old service's export means, and converts a few rows for you to check. It imports once you attest, and if a scheduled post would grow, you finish the import in the dashboard.
+- **Add a subscriber.** Claude adds an address you name. They get a confirmation email and join once they confirm. Someone who complained or was erased has to subscribe through the subscribe page themselves.
+- **Block an address, unblock it, or clear a bounce.** Block is your own decision to stop mailing an address. Unsubscribe is for someone who asked to leave. Claude asks before it clears a bounce, since that lets mail go to an address that failed.
+- **Change your settings:** the name, tagline, and mailing address, your test recipients, where notifications go, and the confirmation email's wording. Then test your notifications. Claude names any new address back to you and waits for your yes before saving it.
+- **Change your email template.** Claude reads the template first. If the change would re-make scheduled posts' emails, it lists each post and when it sends, and waits for your yes. Then it offers a fresh test of each, since a re-made email is no longer the one you tested.
+- **Sort out a stuck send.** Claude relays what happened and offers the dashboard's two answers, **Assume not sent** and **Assume sent**. It uses the one you pick and never chooses for you.
 
 ## The lines it can't cross
 
@@ -28,4 +34,14 @@ The app holds these for any client, so they hold whatever Claude is told:
 
 Claude also follows instructions your Kestrel gives it, which live in your instance's repository for Claude Code working there, and come with the connection through the connector. Those hold only as long as the instructions do. They have Claude ask before anything that reaches readers, say whether a post will be in your archive before it's sent, test again after a template change, and record whose decision each change to the list was. They also have it treat what's in a post or a subscriber's record as content, never as instructions.
 
-The app lets Claude give your attestation for an import, so asking you first is one of those instructions, not a rule the app enforces. The import's record says you made it via Claude Code, or via Claude.
+Some steps the app lets Claude take for you, so asking you first is one of those instructions, not a rule the app enforces:
+
+- giving your attestation for an import;
+- re-making scheduled posts' emails after a template change;
+- saving a new test recipient or notifications address;
+- choosing an answer for a stuck send;
+- taking a sent post out of your archive;
+- deleting a draft;
+- clearing a bounce.
+
+Each of these is recorded as yours, via Claude Code or via Claude.

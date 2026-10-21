@@ -22,7 +22,7 @@ import {
 import { buildReferenceResponse } from "../src/reference";
 import { openApiDocument } from "../src/reference/openapi";
 import { accessDeployment } from "./support/access";
-import { resetDatabase } from "./support/fixtures";
+import { frozenSend, resetDatabase, tpl, wedgedSend } from "./support/fixtures";
 import { adminAuth, base, JSON_AUTH, readJson } from "./support/http";
 import { allowErrorLogs } from "./support/log";
 import { fetchWith } from "./support/worker_env";
@@ -103,12 +103,21 @@ describe("the tools are a curated set over the API's routes (SPEC §11)", () => 
       "get_subscriber",
       "get_publication",
       "save_draft",
+      "change_post_settings",
+      "delete_draft",
       "send_test",
       "schedule_send",
       "reschedule_send",
       "cancel_send",
+      "resolve_send",
       "import_subscribers",
+      "add_subscriber",
       "unsubscribe_subscriber",
+      "block_address",
+      "lift_suppression",
+      "update_settings",
+      "update_template",
+      "test_notifications",
       "kestrel_api_read",
     ]);
   });
@@ -131,6 +140,42 @@ describe("the tools are a curated set over the API's routes (SPEC §11)", () => 
       openWorldHint: true,
     });
     expect(byName.get("save_draft")).toMatchObject({ destructiveHint: false });
+    expect(byName.get("change_post_settings")).toMatchObject({
+      destructiveHint: true,
+      openWorldHint: false,
+    });
+    expect(byName.get("delete_draft")).toMatchObject({
+      destructiveHint: true,
+      openWorldHint: false,
+    });
+    expect(byName.get("add_subscriber")).toMatchObject({
+      destructiveHint: false,
+      openWorldHint: true,
+    });
+    expect(byName.get("resolve_send")).toMatchObject({
+      destructiveHint: true,
+      openWorldHint: false,
+    });
+    expect(byName.get("block_address")).toMatchObject({
+      destructiveHint: false,
+      openWorldHint: false,
+    });
+    expect(byName.get("lift_suppression")).toMatchObject({
+      destructiveHint: true,
+      openWorldHint: false,
+    });
+    expect(byName.get("update_settings")).toMatchObject({
+      destructiveHint: true,
+      openWorldHint: false,
+    });
+    expect(byName.get("update_template")).toMatchObject({
+      destructiveHint: true,
+      openWorldHint: false,
+    });
+    expect(byName.get("test_notifications")).toMatchObject({
+      destructiveHint: false,
+      openWorldHint: true,
+    });
   });
 
   it("wraps only routes the manifest registers on the authoring API, a read only GETs", () => {
@@ -354,6 +399,212 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
     expect(listed.sends.map((s: { id: string }) => s.id)).toEqual([now.send.id]);
   });
 
+  it("changes a post's listing and address, in any state, and says when an address is taken", async () => {
+    const other = (await callOk("save_draft", { subject: "Taken" })).post;
+    const post = (await callOk("save_draft", { subject: "Mine", markdown: "x" })).post;
+    const listed = await callOk("change_post_settings", {
+      id: post.id,
+      email_only: true,
+      slug: "my-own",
+    });
+    expect(listed).toMatchObject({ changed: true, post: { email_only: true, slug: "my-own" } });
+    const taken = await callTool("change_post_settings", { id: post.id, slug: other.slug });
+    expect(taken.isError).toBe(true);
+    expect(taken.text).toMatch(/^Refused: HTTP 409 slug_taken\. /);
+    expect(taken.text).toContain("Next move: Read again, then decide.");
+    await callOk("schedule_send", { id: post.id, fire_at: inHours(2) });
+    const scheduled = await callOk("change_post_settings", { id: post.id, email_only: false });
+    expect(scheduled.post).toMatchObject({ status: "scheduled", email_only: false });
+  });
+
+  it("deletes a draft, and never a scheduled post", async () => {
+    const draft = (await callOk("save_draft", { subject: "Gone" })).post;
+    expect(await callOk("delete_draft", { id: draft.id })).toEqual({ deleted: true, id: draft.id });
+    expect((await callTool("get_post", { id: draft.id })).text).toMatch(
+      /^Refused: HTTP 404 not_found\./,
+    );
+    const kept = (await callOk("save_draft", { subject: "Kept", markdown: "x" })).post;
+    await callOk("schedule_send", { id: kept.id, fire_at: inHours(2) });
+    const refused = await callTool("delete_draft", { id: kept.id });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toMatch(/^Refused: HTTP 409 post_not_draft\. /);
+    expect((await callOk("get_post", { id: kept.id })).post.status).toBe("scheduled");
+  });
+
+  it("adds a subscriber by double opt-in, pending until they confirm (SPEC §7)", async () => {
+    const added = await callOk("add_subscriber", { email: "new@x.io" });
+    expect(added).toMatchObject({
+      action: "created",
+      subscriber: { email: "new@x.io", status: "pending", receives_posts: false },
+    });
+    expect((await callOk("add_subscriber", { email: "new@x.io" })).action).toBe("recently_sent");
+  });
+
+  it("blocks an address, and lifts only the suppression the publisher named, saying what stands when it changed", async () => {
+    const blocked = await callOk("block_address", { email: "b@x.io", detail: "Our own test" });
+    expect(blocked).toMatchObject({
+      added: true,
+      suppression: { email: "b@x.io", reason: "manual", detail: "Our own test" },
+    });
+    const wrong = await callTool("lift_suppression", { email: "b@x.io", reason: "bounce" });
+    expect(wrong.isError).toBe(true);
+    const lines = wrong.text.split("\n");
+    expect(lines[0]).toMatch(/^Refused: HTTP 409 suppression_changed\. /);
+    expect(lines[1]).toBe("Next move: Read again, then decide.");
+    expect(lines[2]).toBe(
+      `It stands now as \`manual\` ("Our own test"), since ${blocked.suppression.created_at}.`,
+    );
+    expect(lines[3]).toBe(
+      "Tell the publisher what stands now, and lift it only if they ask again, naming that reason.",
+    );
+    expect(await callOk("lift_suppression", { email: "b@x.io", reason: "manual" })).toEqual({
+      email: "b@x.io",
+      lifted: true,
+    });
+  });
+
+  it("resolves a stuck send only with the resolution the call names, never a default (SPEC §12)", async () => {
+    const id = await wedgedSend();
+    const tool = (await listTools()).find((t) => t.name === "resolve_send")!;
+    expect(tool.inputSchema.required).toEqual(["id", "resolution"]);
+    const resolution = (tool.inputSchema.properties as Record<string, Record<string, unknown>>)
+      .resolution;
+    expect(resolution).not.toHaveProperty("default");
+    expect(resolution?.description).toContain("never choose it yourself");
+    const none = await callTool("resolve_send", { id });
+    expect(none.isError).toBe(true);
+    expect(none.text).toMatch(/^Refused: HTTP 400 bad_request\..*\nFix: `resolution`\.$/s);
+    expect((await callOk("get_send", { id })).send.resolved_by).toBeNull();
+    const done = await callOk("resolve_send", { id, resolution: "unsent" });
+    expect(done).toMatchObject({ resolved: 1, completed: true });
+    expect((await callOk("get_send", { id })).send.resolved_by).toEqual({
+      kind: "human",
+      email: "you@example.com",
+      client: "claude",
+    });
+  });
+
+  it("lists the sends a settings save would re-make, and re-makes none until a second call names them (SPEC §9)", async () => {
+    const post = (await callOk("save_draft", { subject: "Waxwings", markdown: "x" })).post;
+    const send = (await callOk("schedule_send", { id: post.id, fire_at: inHours(2) })).send;
+    const refused = await callTool("update_settings", { publication: { name: "Renamed" } });
+    expect(refused.isError).toBe(true);
+    const lines = refused.text.split("\n");
+    expect(lines[0]).toMatch(/^Refused: HTTP 409 remake_required\. /);
+    expect(lines[1]).toBe("Next move: Confirm, then send again.");
+    expect(lines[2]).toBe("Saving re-makes the email of these scheduled sends:");
+    expect(lines[3]).toBe(`- "Waxwings", firing ${send.fire_at} (${send.id}).`);
+    expect(lines[4]).toContain(
+      `Only if they say yes in this chat, call again with the same change and remake ["${send.id}"].`,
+    );
+    expect((await callOk("get_publication", {})).publication.name).not.toBe("Renamed");
+    const saved = await callOk("update_settings", {
+      publication: { name: "Renamed" },
+      remake: [send.id],
+    });
+    expect(saved.publication.name).toBe("Renamed");
+    expect(saved.remade.map((s: { id: string }) => s.id)).toEqual([send.id]);
+  });
+
+  it("saves nothing while a send it would re-make is inside the minimum lead, and says when to try again", async () => {
+    const send = await frozenSend(Date.now() + 30_000, { subject: "Correction" });
+    const fireAt = new Date(send.fire_at).toISOString();
+    const refused = await callTool("update_settings", {
+      publication: { name: "Renamed" },
+      remake: [send.id],
+    });
+    expect(refused.isError).toBe(true);
+    const lines = refused.text.split("\n");
+    expect(lines[0]).toMatch(/^Refused: HTTP 409 remake_too_close\. /);
+    expect(lines.slice(2)).toEqual([
+      "Nothing was saved. These fire inside the minimum lead, so they go out as they stand:",
+      `- "Correction", firing ${fireAt} (${send.id}).`,
+      `Tell the publisher, and offer to save again after ${fireAt}.`,
+    ]);
+    expect((await callOk("get_publication", {})).publication.name).not.toBe("Renamed");
+  });
+
+  it("answers where mail goes as saved, first, after any settings save, and tests the notifications there", async () => {
+    const before = await callTool("test_notifications", {});
+    expect(before.isError).toBe(true);
+    expect(before.text).toMatch(/^Refused: HTTP 400 bad_request\./);
+    const saved = await callOk("update_settings", {
+      test_recipients: ["Me@Example.com", "you@example.com"],
+      notifications: { to: "me@example.com" },
+    });
+    expect(Object.keys(saved).slice(0, 2)).toEqual(["test_recipients", "notifications_to"]);
+    expect(saved).toMatchObject({
+      test_recipients: ["me@example.com", "you@example.com"],
+      notifications_to: "me@example.com",
+      remade: [],
+    });
+    const wording = await callOk("update_settings", {
+      confirmation_email: { subject: "Confirm, please" },
+    });
+    expect(wording).toMatchObject({
+      test_recipients: ["me@example.com", "you@example.com"],
+      notifications_to: "me@example.com",
+      confirmation_email: { subject: "Confirm, please" },
+    });
+    expect(await callOk("test_notifications", {})).toEqual({
+      to: "me@example.com",
+      channel: "fake",
+    });
+    const tool = (await listTools()).find((t) => t.name === "update_settings");
+    expect(tool?.description).toContain(
+      "before saving name each new or changed address back to them and save only once they say yes in this chat",
+    );
+    expect(Object.keys(tool?.inputSchema.properties ?? {})).not.toContain("email_template");
+    const template = await callTool("update_settings", { email_template: "<p>x</p>" });
+    expect(template.text).toBe(
+      "`email_template` isn't an argument update_settings takes; it takes `publication`, `test_recipients`, `notifications`, `confirmation_email`, `remake`.",
+    );
+  });
+
+  it("tells Claude to send `remake` only with the ids a refusal listed for the publisher, never ids read beforehand (SPEC §11)", async () => {
+    const tools = await listTools();
+    for (const name of ["update_settings", "update_template"]) {
+      const t = tools.find((x) => x.name === name)!;
+      expect(t.description, name).toContain("Save without `remake`");
+      expect(t.description, name).not.toContain("in_use");
+      const remake = (t.inputSchema.properties as Record<string, { description: string }>).remake;
+      expect(remake?.description, name).toMatch(
+        /Leave it out of a first save\. Send it only on a call after a remake_required refusal, with the ids that refusal listed, once you have shown the publisher those sends and they said yes in this chat; never ids read beforehand\.$/,
+      );
+    }
+    expect(MCP_INSTRUCTIONS).toContain(
+      "send `remake` with the refusal's ids only after they say yes, never ids read beforehand",
+    );
+  });
+
+  it("saves the template only through its own tool, re-making a scheduled send only on a second call that names it (SPEC §9, I5)", async () => {
+    expect(await callOk("update_template", { email_template: tpl("v1") })).toMatchObject({
+      saved: true,
+      remade: [],
+    });
+    const post = (await callOk("save_draft", { subject: "Waxwings", markdown: "x" })).post;
+    const send = (await callOk("schedule_send", { id: post.id, fire_at: inHours(2) })).send;
+    const refused = await callTool("update_template", { email_template: tpl("v2") });
+    expect(refused.isError).toBe(true);
+    const lines = refused.text.split("\n");
+    expect(lines[0]).toMatch(/^Refused: HTTP 409 remake_required\. /);
+    expect(lines[3]).toBe(`- "Waxwings", firing ${send.fire_at} (${send.id}).`);
+    const template = async () =>
+      JSON.parse((await callTool("kestrel_api_read", { path: "/api/settings" })).text).settings
+        .email_template;
+    expect(await template()).toBe(tpl("v1"));
+    const saved = await callOk("update_template", { email_template: tpl("v2"), remake: [send.id] });
+    expect(saved.remade.map((s: { id: string }) => s.id)).toEqual([send.id]);
+    expect(await template()).toBe(tpl("v2"));
+    const broken = await callTool("update_template", { email_template: "<div>no body</div>" });
+    expect(broken.isError).toBe(true);
+    expect(broken.text).toMatch(/\nFix: `email_template`\.$/);
+    const identity = await callTool("update_template", { publication: { name: "N" } });
+    expect(identity.text).toBe(
+      "`publication` isn't an argument update_template takes; it takes `email_template`, `remake`.",
+    );
+  });
+
   it("plans an import before committing, and never gives the attestation for the person", async () => {
     const file = { name: "l.txt", text: "a@x.io\n" };
     const plan = await callOk("import_subscribers", { file });
@@ -496,6 +747,12 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
 });
 
 describe("what a tool answers stays small and whole", () => {
+  it("keeps the whole tool list under 25 KB, so growing it is a decision", async () => {
+    const res = await rpc("tools/list", {}, await adminAuth(PERSON));
+    const size = new TextEncoder().encode(await res.text()).length;
+    expect(size).toBeLessThan(25 * 1024);
+  });
+
   it("cuts a long Markdown answer at a line, or at the limit when no line ends before it", () => {
     const lines = `${"a".repeat(100)}\n`.repeat(1000);
     const atLine = markdown(lines).content[0]?.text ?? "";
