@@ -17,7 +17,7 @@ import {
   TEMPLATE_TXT,
 } from "../../shared/imports";
 import { ApiError, api, apiFile, describeError } from "../api";
-import { mount } from "../lifecycle";
+import { mount, setTitle } from "../lifecycle";
 import { codeBlock, wireCopy } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
 import { saveFile } from "../ui/download";
@@ -59,6 +59,7 @@ interface ChosenFile {
 }
 
 export async function renderImport(root: HTMLElement, signal: AbortSignal): Promise<void> {
+  setTitle(signal, "Import subscribers");
   setHtml(
     root,
     html`<div class="imp">

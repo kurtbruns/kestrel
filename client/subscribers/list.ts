@@ -14,6 +14,7 @@ import type {
   SubscriberStatus,
 } from "../../shared/subscribers";
 import { api, describeError } from "../api";
+import { setTitle } from "../lifecycle";
 import { $, $$ } from "../ui/dom";
 import { saveFile } from "../ui/download";
 import { fmt } from "../ui/format";
@@ -58,6 +59,7 @@ export async function renderSubscribers(
   root: HTMLElement,
   signal: AbortSignal,
 ): Promise<void> {
+  setTitle(signal, "Subscribers");
   const state: ListState = {
     status: "",
     search: "",

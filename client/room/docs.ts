@@ -8,7 +8,7 @@ import {
   headingAnchors,
 } from "../../shared/docs";
 import { api, describeError } from "../api";
-import { mount } from "../lifecycle";
+import { mount, setTitle } from "../lifecycle";
 import { appState } from "../state";
 import { $, $$ } from "../ui/dom";
 import { type Html, html, setHtml, unsafeHtml } from "../ui/html";
@@ -50,6 +50,7 @@ export async function renderDocs(
   signal: AbortSignal,
   anchor?: string,
 ): Promise<void> {
+  setTitle(signal, "Docs");
   setHtml(
     root,
     roomShell("docs", null, html`<div class="docs-index"><p class="muted">Loading…</p></div>`),
@@ -76,9 +77,9 @@ export async function renderDocs(
   }
   const set = slug ? sets.find((s) => s.id === slug) : first;
   if (set) {
-    renderDocsIndex(root, set, sets, docs);
+    renderDocsIndex(root, set, sets, docs, signal);
   } else if (slug) {
-    renderDocPage(root, sets, docs, slug, anchor ? decodeAnchor(anchor) : undefined);
+    renderDocPage(root, sets, docs, slug, signal, anchor ? decodeAnchor(anchor) : undefined);
   }
 }
 
@@ -104,7 +105,9 @@ function renderDocsIndex(
   landing: DocSet,
   sets: DocSet[],
   docs: DocFragment[],
+  signal: AbortSignal,
 ): void {
+  setTitle(signal, `${landing.name} docs`);
   const card = (d: DocFragment, n: number | null): Html => {
     const desc = docDescription(d);
     return html`<li><a class="doc-card" href="#/docs/${d.slug}">${n === null ? null : html`<span class="doc-card-n">${String(n).padStart(2, "0")}</span>`}<span class="doc-card-main"><span class="doc-card-t">${d.title} <span class="doc-card-go" aria-hidden="true">→</span></span>${desc ? html`<span class="doc-card-d">${desc}</span>` : null}</span></a></li>`;
@@ -198,6 +201,7 @@ function renderDocPage(
   sets: DocSet[],
   docs: DocFragment[],
   slug: string,
+  signal: AbortSignal,
   anchor?: string,
 ): void {
   const at = docs.findIndex((d) => d.slug === slug);
@@ -209,10 +213,11 @@ function renderDocPage(
     toast(`No doc named “${slug}”, so here’s the index.`);
     history.replaceState(history.state, "", "#/docs");
     if (first) {
-      renderDocsIndex(root, first, sets, docs);
+      renderDocsIndex(root, first, sets, docs, signal);
     }
     return;
   }
+  setTitle(signal, cur.title);
   // Prev/Next stay within the doc's section: the main path ends at its last step rather than
   // running on into the guides after it, which are picked from, not read in order.
   const siblings = docs.filter((d) => d.set === cur.set && d.section === cur.section);

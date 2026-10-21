@@ -34,17 +34,35 @@ export type View = (root: HTMLElement, signal: AbortSignal) => Offered | Promise
 let controller: AbortController | null = null;
 let handle: ViewHandle | null = null;
 
+// The tab's title when no view names one, and what follows every title a view names, so a
+// tab among others says which app it is.
+const APP_TITLE = "Kestrel";
+
+/**
+ * Name the browser tab for the view `signal` belongs to: its one title, then the app's name
+ * ("Welcome - Kestrel"). A view that has already left names nothing, so a read that
+ * resolves late never retitles the view after it. mount() puts the app's title back for
+ * each view, so no view restores it.
+ */
+export function setTitle(signal: AbortSignal, title: string): void {
+  if (!signal.aborted) {
+    document.title = title.trim() ? `${title} - ${APP_TITLE}` : APP_TITLE;
+  }
+}
+
 /**
  * Tear the mounted view down and mount `view` in its place. The previous view's signal
  * aborts first, then a fresh root replaces its markup, so a stale continuation (a read
  * that resolved after the abort) paints into a detached element and nobody sees it. A
  * view re-enters itself the same way (a reload, a retry): the same abort, a fresh root.
+ * The tab goes back to the app's title, for the view to name itself (setTitle).
  */
 export function mount(view: View): Promise<void> {
   controller?.abort();
   handle = null;
   const c = new AbortController();
   controller = c;
+  document.title = APP_TITLE;
   const root = document.createElement("div");
   root.className = "view";
   app.replaceChildren(root);
@@ -77,6 +95,7 @@ export function unmount(): void {
   controller?.abort();
   controller = null;
   handle = null;
+  document.title = APP_TITLE;
   app.replaceChildren();
 }
 

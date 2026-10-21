@@ -15,7 +15,7 @@ import { isSendOwnHalt } from "../../shared/sends";
 import { isErasedPlaceholder } from "../../shared/subscribers";
 import { ApiError, api, apiFile, describeError } from "../api";
 import { heldAdviceHtml, noEmailProvider, providerNotConnected } from "../deployment";
-import { every, mount } from "../lifecycle";
+import { every, mount, setTitle } from "../lifecycle";
 import { mountSettingsForm, type Publishing, publishingOf, shortUrl } from "../posts/publishing";
 import { followSend, readSendsNow } from "../send_state";
 import { copyFace, copyWith } from "../ui/copy";
@@ -53,6 +53,7 @@ export async function renderSentRecord(
       mount((r, s) => renderSentRecord(id, r, s)); // never over wherever the reader went since
     }
   };
+  setTitle(signal, "Sent");
   setHtml(root, html`<p class="muted">Loading…</p>`);
   let data: SendResponse;
   try {
@@ -65,6 +66,7 @@ export async function renderSentRecord(
     return; // navigated away while loading: the redirect below must not hijack that
   }
   const { send } = data;
+  setTitle(signal, send.subject || "Untitled");
 
   // A scheduled send is still cancel-to-edit: its home is the editor, not this record. The
   // editor takes this page's history entry, so Back goes where the reader came from, never

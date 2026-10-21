@@ -3,7 +3,7 @@
 import type { PostListResponse, PostSavedResponse, SendRef } from "../../shared/posts";
 import type { SendView } from "../../shared/sends";
 import { api, describeError } from "../api";
-import { mount } from "../lifecycle";
+import { mount, setTitle } from "../lifecycle";
 import { followSends } from "../send_state";
 import { titleWithLabel } from "../sends/progress";
 import { $, $$ } from "../ui/dom";
@@ -47,6 +47,7 @@ export function createNewPost(btn: HTMLButtonElement): Promise<void> {
 }
 
 export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Promise<void> {
+  setTitle(signal, "Drafts");
   // Default sort left empty so the server keeps its scheduled-first order until the
   // reader clicks a column header.
   const state: ListState = {

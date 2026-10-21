@@ -172,7 +172,7 @@ describe("web version", () => {
     const click = new MouseEvent("click", { bubbles: true, cancelable: true });
     jump!.dispatchEvent(click);
     expect(click.defaultPrevented).toBe(true);
-    expect(document.title).toBe("Web version · Herons");
+    expect(document.title).toBe("Herons (web version) - Kestrel");
   });
 
   it("still shows the page, with a bar that names no stage or address, when the post can't be read", async () => {
@@ -206,14 +206,13 @@ describe("web version", () => {
 
   it("names the tab for the page, and gives the app's title back when it leaves", async () => {
     location.hash = "#/web/post/p1";
-    document.title = "Kestrel";
     fake = fakeApi([
       { path: "/api/posts/p1/web", reply: htmlReply },
       { path: "/api/posts/p1", reply: postReply("draft") },
     ]);
     await mount((r, s) => renderWebVersion("p1", r, s));
     await settle();
-    expect(document.title).toMatch(/^Web version/);
+    expect(document.title).toBe("Herons (web version) - Kestrel");
     unmount();
     expect(document.title).toBe("Kestrel");
   });
