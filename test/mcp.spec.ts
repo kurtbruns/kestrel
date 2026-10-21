@@ -22,7 +22,7 @@ import {
 import { buildReferenceResponse } from "../src/reference";
 import { openApiDocument } from "../src/reference/openapi";
 import { accessDeployment } from "./support/access";
-import { resetDatabase, wedgedSend } from "./support/fixtures";
+import { frozenSend, resetDatabase, wedgedSend } from "./support/fixtures";
 import { adminAuth, base, JSON_AUTH, readJson } from "./support/http";
 import { allowErrorLogs } from "./support/log";
 import { fetchWith } from "./support/worker_env";
@@ -115,6 +115,8 @@ describe("the tools are a curated set over the API's routes (SPEC §11)", () => 
       "unsubscribe_subscriber",
       "block_address",
       "lift_suppression",
+      "update_settings",
+      "test_notifications",
       "kestrel_api_read",
     ]);
   });
@@ -160,6 +162,14 @@ describe("the tools are a curated set over the API's routes (SPEC §11)", () => 
     expect(byName.get("lift_suppression")).toMatchObject({
       destructiveHint: true,
       openWorldHint: false,
+    });
+    expect(byName.get("update_settings")).toMatchObject({
+      destructiveHint: true,
+      openWorldHint: false,
+    });
+    expect(byName.get("test_notifications")).toMatchObject({
+      destructiveHint: false,
+      openWorldHint: true,
     });
   });
 
@@ -467,6 +477,83 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
       email: "you@example.com",
       client: "claude",
     });
+  });
+
+  it("lists the sends a settings save would re-make, and re-makes none until a second call names them (SPEC §9)", async () => {
+    const post = (await callOk("save_draft", { subject: "Waxwings", markdown: "x" })).post;
+    const send = (await callOk("schedule_send", { id: post.id, fire_at: inHours(2) })).send;
+    const refused = await callTool("update_settings", { publication: { name: "Renamed" } });
+    expect(refused.isError).toBe(true);
+    const lines = refused.text.split("\n");
+    expect(lines[0]).toMatch(/^Refused: HTTP 409 remake_required\. /);
+    expect(lines[1]).toBe("Next move: Confirm, then send again.");
+    expect(lines[2]).toBe("Saving re-makes the email of these scheduled sends:");
+    expect(lines[3]).toBe(`- "Waxwings", firing ${send.fire_at} (${send.id}).`);
+    expect(lines[4]).toContain(
+      `Only if they say yes in this chat, call again with the same change and remake ["${send.id}"].`,
+    );
+    expect((await callOk("get_publication", {})).publication.name).not.toBe("Renamed");
+    const saved = await callOk("update_settings", {
+      publication: { name: "Renamed" },
+      remake: [send.id],
+    });
+    expect(saved.publication.name).toBe("Renamed");
+    expect(saved.remade.map((s: { id: string }) => s.id)).toEqual([send.id]);
+  });
+
+  it("saves nothing while a send it would re-make is inside the minimum lead, and says when to try again", async () => {
+    const send = await frozenSend(Date.now() + 30_000, { subject: "Correction" });
+    const fireAt = new Date(send.fire_at).toISOString();
+    const refused = await callTool("update_settings", {
+      publication: { name: "Renamed" },
+      remake: [send.id],
+    });
+    expect(refused.isError).toBe(true);
+    const lines = refused.text.split("\n");
+    expect(lines[0]).toMatch(/^Refused: HTTP 409 remake_too_close\. /);
+    expect(lines.slice(2)).toEqual([
+      "Nothing was saved. These fire inside the minimum lead, so they go out as they stand:",
+      `- "Correction", firing ${fireAt} (${send.id}).`,
+      `Tell the publisher, and offer to save again after ${fireAt}.`,
+    ]);
+    expect((await callOk("get_publication", {})).publication.name).not.toBe("Renamed");
+  });
+
+  it("answers where mail goes as saved, first, after any settings save, and tests the notifications there", async () => {
+    const before = await callTool("test_notifications", {});
+    expect(before.isError).toBe(true);
+    expect(before.text).toMatch(/^Refused: HTTP 400 bad_request\./);
+    const saved = await callOk("update_settings", {
+      test_recipients: ["Me@Example.com", "you@example.com"],
+      notifications: { to: "me@example.com" },
+    });
+    expect(Object.keys(saved).slice(0, 2)).toEqual(["test_recipients", "notifications_to"]);
+    expect(saved).toMatchObject({
+      test_recipients: ["me@example.com", "you@example.com"],
+      notifications_to: "me@example.com",
+      remade: [],
+    });
+    const wording = await callOk("update_settings", {
+      confirmation_email: { subject: "Confirm, please" },
+    });
+    expect(wording).toMatchObject({
+      test_recipients: ["me@example.com", "you@example.com"],
+      notifications_to: "me@example.com",
+      confirmation_email: { subject: "Confirm, please" },
+    });
+    expect(await callOk("test_notifications", {})).toEqual({
+      to: "me@example.com",
+      channel: "fake",
+    });
+    const tool = (await listTools()).find((t) => t.name === "update_settings");
+    expect(tool?.description).toContain(
+      "before saving name each new or changed address back to them and save only once they say yes in this chat",
+    );
+    expect(Object.keys(tool?.inputSchema.properties ?? {})).not.toContain("email_template");
+    const template = await callTool("update_settings", { email_template: "<p>x</p>" });
+    expect(template.text).toBe(
+      "`email_template` isn't an argument update_settings takes; it takes `publication`, `test_recipients`, `notifications`, `confirmation_email`, `remake`.",
+    );
   });
 
   it("plans an import before committing, and never gives the attestation for the person", async () => {
