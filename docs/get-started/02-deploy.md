@@ -63,7 +63,7 @@ Your instance's repository holds its configuration, its database migrations, and
     npm run dev
     ```
 
-    Open http://localhost:8787/dashboard/, and run `npm run seed` in a second terminal to load a demo publication. Email goes to a stand-in, so nothing reaches a real inbox. Stop the server with <kbd>Ctrl</kbd>+<kbd>C</kbd> when you're done.
+    Open http://localhost:8787/dashboard/, and run `npm run seed` in a second terminal to load a demo publication. Email goes to a stand-in, so nothing reaches a real inbox. Press Ctrl+C to stop the server when you're done.
 
 ## 2. Sign in to Cloudflare
 
