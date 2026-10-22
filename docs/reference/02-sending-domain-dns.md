@@ -58,8 +58,8 @@ DMARC tells an inbox what to do with mail that fails both SPF and DKIM, and asks
 _dmarc.send.example.com.  TXT  "v=DMARC1; p=none; rua=mailto:dmarc@example.com"
 ```
 
-- **`p=none`** is monitor mode. Inboxes report on failing mail, but deliver it as usual.
-- **`rua`** is where reports go. They arrive as attachments, usually one a day from each inbox provider.
+- `p=none` is monitor mode. Inboxes report on failing mail, but deliver it as usual.
+- `rua` is where reports go. They arrive as attachments, usually one a day from each inbox provider.
 
 Leave alignment relaxed, the default, with no `aspf=s` or `adkim=s`. With a custom MAIL FROM domain, your return path is a subdomain of your sending name, so strict SPF alignment would fail.
 

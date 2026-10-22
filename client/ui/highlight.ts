@@ -1,8 +1,8 @@
 // Syntax highlighting for the template editor (HTML/CSS with template tokens), the post
-// composer (Markdown), and the API reference's examples (JSON and a curl command). String
-// assembly by nature: the source is escaped first, then the escaped text is decorated with
-// spans, so the result is vouched for as markup at the boundary rather than built with the
-// html tag.
+// composer (Markdown), and the code examples in the API reference and the docs (JSON, JSONC,
+// and shell). String assembly by nature: the source is escaped first, then the escaped text
+// is decorated with spans, so the result is vouched for as markup at the boundary rather than
+// built with the html tag.
 
 import { escapeHtml as esc, type Html, unsafeHtml } from "./html";
 
@@ -147,20 +147,24 @@ export function highlightMarkdown(src: string): Html {
   );
 }
 
-// --- API reference examples ---
+// --- code examples (the API reference and the docs) ---
 // One pass over the raw JSON text: each token is escaped and wrapped, and the whitespace
-// between tokens is escaped as it stands, so nothing is decorated twice.
+// between tokens is escaped as it stands, so nothing is decorated twice. A `//` or `/* */`
+// comment (JSONC, as in wrangler.jsonc) is one token too, so a `//` inside a string, already
+// consumed by then, is never read as one.
 const JSON_TOKEN =
-  /("(?:\\.|[^"\\])*")(\s*:)?|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|\b(true|false|null)\b|([{}[\],])/g;
-/** A value as pretty-printed JSON (two-space indent), highlighted on the shared syntax palette. */
-export function highlightJson(value: unknown): Html {
-  const src = JSON.stringify(value, null, 2) ?? "";
+  /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\\n])*")(\s*:)?|(?<![\w.-])(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)(?![\w.])|\b(true|false|null)\b|([{}[\],])/g;
+/** JSON or JSONC source text, highlighted on the shared syntax palette. Anything that is not
+ *  a token (a placeholder like `…`) is kept as text. */
+export function highlightJsonText(src: string): Html {
   let out = "";
   let last = 0;
   for (const m of src.matchAll(JSON_TOKEN)) {
     out += esc(src.slice(last, m.index));
-    const [whole, str, colon, num, lit] = m;
-    if (str !== undefined) {
+    const [whole, comment, str, colon, num, lit] = m;
+    if (comment !== undefined) {
+      out += `<span class="cx-punct">${esc(comment)}</span>`;
+    } else if (str !== undefined) {
       out += colon
         ? `<span class="cx-prop">${esc(str)}</span><span class="cx-punct">${esc(colon)}</span>`
         : `<span class="cx-str">${esc(str)}</span>`;
@@ -175,12 +179,65 @@ export function highlightJson(value: unknown): Html {
   }
   return unsafeHtml(out + esc(src.slice(last)));
 }
-/** A curl command with the command, its flags, and the shell variables to fill in marked. */
-export function highlightCurl(src: string): Html {
-  return unsafeHtml(
-    esc(src)
-      .replace(/^curl\b/, '<span class="cx-tag">curl</span>')
-      .replace(/(^|\s)(-[A-Za-z])\b/g, '$1<span class="cx-num">$2</span>')
-      .replace(/\$[A-Z_]+/g, '<span class="cx-var">$&</span>'),
-  );
+/** A value as pretty-printed JSON (two-space indent), highlighted on the shared syntax palette. */
+export function highlightJson(value: unknown): Html {
+  return highlightJsonText(JSON.stringify(value, null, 2) ?? "");
+}
+
+// A shell command line, read the way a reader scans one: the command each line (or each
+// part of a pipeline) runs, its flags, the variables to fill in, quoted strings, comments,
+// and the backslash that continues a command onto the next line. A light pass, not a shell
+// parser: it never expands anything, and an alternative it doesn't know stays plain.
+const SHELL_TOKEN =
+  /(\\\n)|(\\[\s\S])|('[^']*')|("(?:\\[\s\S]|[^"\\])*")|(\$\{?[A-Za-z_]\w*\}?)|(&&|\|\||[|;])|(\n)|(#[^\n]*)|([^\s'"$|&;\\]+)/g;
+const SHELL_VAR = /\$\{?[A-Za-z_]\w*\}?/g;
+/** A shell (`bash`) block with each command, its flags, variables, strings, comments, and
+ *  line continuations marked. */
+export function highlightShell(src: string): Html {
+  let out = "";
+  let last = 0;
+  // Whether the next word is a command: at the start of a line that doesn't continue the one
+  // before, and after `&&`, `||`, `|`, or `;`.
+  let command = true;
+  for (const m of src.matchAll(SHELL_TOKEN)) {
+    out += esc(src.slice(last, m.index));
+    const [whole, cont, escaped, single, double, variable, op, newline, comment, word] = m;
+    if (cont !== undefined) {
+      out += `<span class="cx-punct">\\</span>\n`;
+    } else if (escaped !== undefined) {
+      out += esc(escaped);
+    } else if (single !== undefined) {
+      out += `<span class="cx-str">${esc(single)}</span>`;
+      command = false;
+    } else if (double !== undefined) {
+      // Double quotes expand a variable, so one inside is still marked.
+      out += `<span class="cx-str">${esc(double).replace(SHELL_VAR, '<span class="cx-var">$&</span>')}</span>`;
+      command = false;
+    } else if (variable !== undefined) {
+      out += `<span class="cx-var">${variable}</span>`;
+      command = false;
+    } else if (op !== undefined) {
+      out += `<span class="cx-punct">${esc(op)}</span>`;
+      command = true;
+    } else if (newline !== undefined) {
+      out += "\n";
+      command = true;
+    } else if (comment !== undefined) {
+      out += `<span class="cx-punct">${esc(comment)}</span>`;
+    } else if (word !== undefined) {
+      if (command && /^[A-Za-z_]\w*=/.test(word)) {
+        // An assignment before the command (`PORT=8788 npm run dev`) leaves the command next.
+        out += esc(word);
+      } else if (command) {
+        out += `<span class="cx-tag">${esc(word)}</span>`;
+        command = false;
+      } else if (word.startsWith("-")) {
+        out += `<span class="cx-num">${esc(word)}</span>`;
+      } else {
+        out += esc(word);
+      }
+    }
+    last = m.index + whole.length;
+  }
+  return unsafeHtml(out + esc(src.slice(last)));
 }

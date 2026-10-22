@@ -88,6 +88,9 @@
   /* Code surface — inline `code` chip and the fenced-block band. A hair off the editor well
      (--syntax-bg), lighter than the neutral --chip, so code reads as code without a heavy box. */
   --syntax-code-bg: #f2f2f4;
+  /* A doc's inline `code`: a maroon ink on the --chip surface, so a name in a sentence reads
+     apart from the prose around it and from a link's blue. */
+  --code-inline-fg: #9b2c2c;
   /* HTTP method badges in the API reference (DESIGN §8). A self-contained palette like
      --syntax-*: verb colors are a naming convention, not feedback or lifecycle, so they
      borrow no semantic scale. The badge tints each over a wash of itself (.api-method). */
@@ -161,6 +164,7 @@
     --syntax-emphasis: #f472b6;
     --syntax-quote: #f0a86a;
     --syntax-code-bg: #26262b;
+    --code-inline-fg: #f07a7a;
     --method-get: #4ade80;
     --method-post: #60a5fa;
     --method-put: #fbbf24;
@@ -3928,52 +3932,28 @@ textarea.is-invalid {
 .doc code {
   font-family: var(--mono);
   font-size: 13px;
-  background: var(--bg);
+  color: var(--code-inline-fg);
+  background: var(--chip);
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 1px 5px;
 }
-.doc pre {
-  position: relative;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 14px 16px;
-  overflow-x: auto;
-  line-height: 1.5;
+/* Bold in a doc sits between semibold and bold, the weight of its headings: the browser's
+   `bolder` makes it 700, which outweighs the headings (650) on the system font. */
+.doc strong {
+  font-weight: 650;
 }
+/* Code in a bold lead-in keeps its own weight: the chip already sets it apart. */
+.doc strong code {
+  font-weight: normal;
+}
+/* The inline-code chip above stays off the code in a block. */
 .doc pre code {
+  color: inherit;
   background: none;
   border: 0;
   padding: 0;
-}
-/* Copy button on code blocks — revealed on hover (always shown on touch). */
-.code-copy {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  font: 11px var(--mono);
-  padding: 3px 8px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  background: var(--card);
-  color: var(--muted);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s;
-}
-.doc pre:hover .code-copy,
-.code-copy:focus-visible {
-  opacity: 1;
-}
-.code-copy:hover {
-  color: var(--fg);
-  border-color: var(--muted);
-}
-@media (hover: none) {
-  .code-copy {
-    opacity: 1;
-  }
+  font-size: inherit;
 }
 /* Previous / Next pager at the foot of a doc — the sequential path, with titles. Two
    bordered cards; a missing neighbour keeps its side empty so the lone card stays put. */
@@ -4367,9 +4347,7 @@ a.api-self:focus-visible svg {
 button.copy-btn.api-copy-path {
   padding: 3px 5px;
 }
-button.copy-btn.api-copy-path span:empty {
-  display: none;
-}
+
 .api-op-body {
   display: grid;
   gap: 4px 28px;
@@ -4945,6 +4923,10 @@ button.copy-btn:hover {
 button.copy-btn:active {
   transform: none;
 }
+/* A Copy that is its glyph alone (no word) takes no gap for the word. */
+button.copy-btn span:empty {
+  display: none;
+}
 button.copy-btn svg {
   width: 14px;
   height: 14px;
@@ -4971,6 +4953,39 @@ button.copied svg {
   margin: 0;
   padding: 4px 6px 4px 12px;
   border-bottom: 1px solid var(--line);
+}
+/* A bare code block (a doc's): the same raised card with no label line, the code beside a
+   Copy that is its glyph alone, level with the first line, so a one-line command reads as
+   one quiet row. */
+.code-bare {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 6px 0 0;
+}
+.code-bare pre {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow-x: auto;
+  padding: 11px 0 11px 14px;
+  font: 13px / 1.5 var(--mono);
+}
+.code-bare > button.copy-btn {
+  flex: none;
+  margin-top: 8px;
+  padding: 5px;
+}
+.code-bare > button.copy-btn svg {
+  width: 16px;
+  height: 16px;
+}
+/* A doc's code block is spaced like a paragraph. */
+.doc .code-bare {
+  margin: 14px 0;
 }
 .code-block pre {
   margin: 0;

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { $, resetShell, stubClipboard } from "../test/support";
-import { codeBlock, copyButton, copyFace, copyWith, wireCopy } from "./copy";
+import { bareCodeBlock, codeBlock, copyButton, copyFace, copyWith, wireCopy } from "./copy";
 import { html, setHtml } from "./html";
 
 describe("copy (DESIGN §7)", () => {
@@ -34,6 +34,23 @@ describe("copy (DESIGN §7)", () => {
     await vi.advanceTimersByTimeAsync(1500);
     expect(b.getAttribute("aria-label")).toBe("Copy curl");
     expect(b.classList.contains("copied")).toBe(false);
+  });
+
+  it("puts a bare block's Copy beside the code as its glyph alone, through the check and back", async () => {
+    const writeText = stubClipboard();
+    setHtml(root, bareCodeBlock(html`<b>npm</b> test`, "npm test"));
+    wireCopy(root);
+    expect(root.querySelector(".block-head")).toBeNull();
+    const b = $<HTMLButtonElement>(".code-bare > pre + .copy-btn", root);
+    expect($("span", b).textContent).toBe("");
+    b.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(writeText).toHaveBeenCalledWith("npm test");
+    expect(b.classList.contains("copied")).toBe(true);
+    expect($("span", b).textContent).toBe("");
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(b.getAttribute("aria-label")).toBe("Copy");
+    expect($("span", b).textContent).toBe("");
   });
 
   it("keeps a button's own word through the check and back", async () => {

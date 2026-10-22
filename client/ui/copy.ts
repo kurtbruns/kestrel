@@ -1,6 +1,7 @@
 // Copying text out of the app, one way everywhere (DESIGN §7): a quiet Copy and its glyph,
 // which says it worked where it sits, the glyph turning to a check for a moment while the
-// word stays, never with a toast. A code block wears it on its label line (`codeBlock`);
+// word stays, never with a toast. A code block wears it on its label line (`codeBlock`), or
+// as the glyph alone beside a bare block (`bareCodeBlock`);
 // a single value (an address) wears it beside the value; either copies the plain text.
 
 import { type Html, html, setHtml } from "./html";
@@ -26,6 +27,12 @@ export function copyButton(text: string, label: string): Html {
  *  block's markup (highlighted, say); `raw` is what the clipboard gets. */
 export function codeBlock(label: string, code: Html, raw: string): Html {
   return html`<div class="block code-block"><div class="block-head"><span class="block-label">${label}</span>${copyButton(raw, `Copy ${label}`)}</div><pre><code>${code}</code></pre></div>`;
+}
+
+/** A code block with no label line: the code, and Copy as its glyph alone beside it. For
+ *  prose that has already said what the block is (a doc's command, its expected output). */
+export function bareCodeBlock(code: Html, raw: string): Html {
+  return html`<div class="code-bare"><pre><code>${code}</code></pre><button type="button" class="copy-btn" data-copy="${raw}" data-copy-word="" aria-label="Copy" title="Copy">${copyFace(false, "")}</button></div>`;
 }
 
 const pending = new WeakMap<HTMLElement, { label: string; timer: number }>();
