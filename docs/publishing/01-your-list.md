@@ -26,7 +26,7 @@ grace@example.com,subscribed,single,mailchimp,
 edsger@example.com,unsubscribed,unknown,unknown,
 ```
 
-[The file format](01-your-list.md#the-file-format), below, describes every column. If you use Claude Code with your instance, it can do the conversion for you, as [Working with Claude](07-working-with-claude.md) describes.
+[The file format](01-your-list.md#the-file-format), below, describes every column. Claude can do the conversion for you, once you [connect it](08-connect-claude.md). In your Kestrel's repository, Claude Code's `/migrate-list` skill asks what anything ambiguous in your old service's export means, and converts a few rows for you to check.
 
 ## 3. Import it
 

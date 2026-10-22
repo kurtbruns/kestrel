@@ -38,7 +38,6 @@ import sendingRules from "../../docs/publishing/02-sending-rules.md";
 import nameYourPublication from "../../docs/publishing/03-name-your-publication.md";
 import writeAPost from "../../docs/publishing/04-write-a-post.md";
 import troubleshooting from "../../docs/publishing/06-troubleshooting.md";
-import workingWithClaude from "../../docs/publishing/07-working-with-claude.md";
 import connectClaude from "../../docs/publishing/08-connect-claude.md";
 import shareYourSubscribeLink from "../../docs/publishing/09-share-your-subscribe-link.md";
 import checkYourSetup from "../../docs/publishing/10-check-your-setup.md";
@@ -64,7 +63,6 @@ const PAGES: Record<string, string> = {
   "publishing/03-name-your-publication.md": nameYourPublication,
   "publishing/04-write-a-post.md": writeAPost,
   "publishing/06-troubleshooting.md": troubleshooting,
-  "publishing/07-working-with-claude.md": workingWithClaude,
   "publishing/08-connect-claude.md": connectClaude,
   "publishing/11-email-template.md": emailTemplate,
   "publishing/09-share-your-subscribe-link.md": shareYourSubscribeLink,
@@ -301,6 +299,7 @@ const FORMER_SLUGS = new Map([
   ["scheduling-and-sending", "write-a-post"],
   ["after-a-send", "troubleshooting"],
   ["try-locally", "deploy"],
+  ["working-with-claude", "connect-claude"],
 ]);
 
 /** A doc's Markdown for an agent to read (SPEC §11): a page by its slug or a former slug, or a

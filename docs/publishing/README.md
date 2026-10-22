@@ -18,7 +18,6 @@ Things you choose to do once you're running.
 
 - [Edit your email template](11-email-template.md)
 - [Connect Claude](08-connect-claude.md)
-- [Working with Claude](07-working-with-claude.md)
 
 ## Rules and troubleshooting
 

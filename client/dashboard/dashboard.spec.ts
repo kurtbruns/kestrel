@@ -244,7 +244,7 @@ describe("dashboard", () => {
     expect($(".conn-status").textContent).toBe("Claude is connected.");
     expect($$(".pub-links a").map((a) => a.getAttribute("href"))).toEqual([
       "#/api-reference",
-      "#/docs/working-with-claude",
+      "#/docs/connect-claude/working-with-claude",
     ]);
     expect(fake.unhandled).toEqual([]);
   });

@@ -796,16 +796,16 @@ describe("the publisher's docs are resources", () => {
   it("lists the publishing pages, and reads one as Markdown", async () => {
     const auth = await adminAuth(PERSON);
     const list = (await readJson(await rpc("resources/list", {}, auth))).result.resources;
-    const page = list.find((r: { name: string }) => r.name === "working-with-claude");
+    const page = list.find((r: { name: string }) => r.name === "connect-claude");
     expect(page).toEqual({
-      uri: "kestrel://docs/working-with-claude",
-      name: "working-with-claude",
-      title: "Working with Claude",
+      uri: "kestrel://docs/connect-claude",
+      name: "connect-claude",
+      title: "Connect Claude",
       mimeType: "text/markdown",
     });
     expect(list.some((r: { name: string }) => r.name === "access")).toBe(false);
     const read = (await readJson(await rpc("resources/read", { uri: page.uri }, auth))).result;
-    expect(read.contents[0].text).toMatch(/^# Working with Claude/);
+    expect(read.contents[0].text).toMatch(/^# Connect Claude/);
     const none = await readJson(await rpc("resources/read", { uri: "kestrel://docs/nope" }, auth));
     expect(none.error.code).toBe(-32002);
   });
