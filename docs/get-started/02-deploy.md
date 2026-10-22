@@ -85,7 +85,7 @@ Every command from here on acts on your Cloudflare account through the Wrangler 
 
 ## 3. Create the database and the image bucket
 
-Each command creates the resource and writes its id or name into the `production` block of `wrangler.jsonc`, under the binding the app already uses, so there's nothing to copy.
+Each command creates the resource and writes it into the `production` block of `wrangler.jsonc`, under the binding the app already uses. Name `--env production` on each one, or Wrangler writes to the top level, which is local development.
 
 1. Create the database:
 
@@ -93,19 +93,13 @@ Each command creates the resource and writes its id or name into the `production
     npx wrangler d1 create kestrel-production --env production --binding DB --update-config
     ```
 
-    It prints the new database's settings, then a snippet it says to add to your configuration. Wrangler has already added it: it fills in the `database_id` of the production `DB` binding with the database's real id, in place of `REPLACE_WITH_PRODUCTION_D1_ID`, so there's nothing to paste.
-
 1. Create the bucket for images:
 
     ```bash
     npx wrangler r2 bucket create kestrel-media-production --env production --binding MEDIA --update-config
     ```
 
-    It prints a snippet to add to your configuration too. There's nothing to paste here either: the production `MEDIA` binding already names this bucket, so it stays as it is.
-
-Wrangler rewrites the whole of `wrangler.jsonc` in its own layout when it saves: tabs, and one value per line. Your comments and settings stay; only the spacing changes.
-
-Name `--env production` on every Wrangler command that creates or binds a resource. Without it, Wrangler writes to the top level, which is local development.
+Each prints a snippet to add to your configuration. `--update-config` has already added it, so there's nothing to paste. Wrangler also rewrites `wrangler.jsonc` in its own layout, with tabs and one value per line, and your settings stay.
 
 ## 4. Configure production
 
@@ -146,19 +140,17 @@ Name `--env production` on every Wrangler command that creates or binds a resour
     - `ARCHIVE_BASE_PATH` is permanent once the first post goes out. Every post sent carries its `/archive/…` link, and changing the prefix later breaks the links already mailed. Keep `/archive` unless you have a reason not to.
     - `FROM_ADDRESS` is the address every email comes from. Keep it on your sending hostname, and set `SENDING_DOMAIN` to the part after the `@`.
 
-    Change every `example.com` value, the route included, even before you connect a provider. The app checks its settings but can't see the route: it refuses to run while `APP_ORIGIN`, `SENDING_DOMAIN`, or `FROM_ADDRESS`, or `ARCHIVE_ORIGIN` or `MEDIA_PUBLIC_BASE` if you set them, is still on `example.com`, since its links and the address your email comes from would name a domain that isn't yours.
+    Change every `example.com` value, the route included. The app refuses to run while any of its settings still names `example.com`.
 
     Every other setting has a working default. [Configuration](../reference/01-configuration.md) lists them all, and what the app refuses.
 
-1. Check the file. This regenerates the binding types, and fails if the configuration doesn't parse:
+1. Check the file. It fails if the configuration doesn't parse:
 
     ```bash
     npm run typecheck
     ```
 
-    Wrangler prints the binding types it generated and ends with a reminder to run it again whenever you change `wrangler.jsonc`. The type check that follows prints nothing when it passes.
-
-1. Commit your settings and push them to your repository. An upgrade changes only the release your instance runs, so your settings stay as they are:
+1. Commit your settings and push them to your repository:
 
     ```bash
     git commit -am "Configure production"
