@@ -147,7 +147,7 @@ A subscriber an import confirmed is **confirmed**, like anyone who confirmed in 
 
 ### Limits in detail
 
-- **Rows:** up to 10,000 in one import. On the free Workers plan's limits it's 1,000, since that plan's processing time per request can't plan and commit more. [`SUBREQUEST_BUDGET`](../reference/01-configuration.md#subrequest_budget) tells Kestrel which plan it's on.
+- **Rows:** up to 10,000 in one import. On the free Workers plan's limits it's 1,000, since that plan's processing time per request can't plan and commit more. A [deployment setting](../reference/01-configuration.md#subrequest_budget) tells Kestrel which plan it's on.
 - **Size:** an import request of at most 10 MB, and at most 500 bytes of `evidence` a row.
 - **The free Workers plan:** it suits a list of up to about 1,000 subscribers. Past about 5,000, one send can use up the day's database writes and stop the newsletter until midnight UTC. An import's plan recommends Workers Paid when it would leave more than 1,000 confirmed subscribers, and the Dashboard and the Subscribers screen say the same while the list is past it. A scheduled post to more than 5,000 recipients warns before it's scheduled, and its banner repeats the warning while it's scheduled. None of these stops anything. [As your list grows](../guides/09-as-your-list-grows.md) has the numbers behind them.
 
