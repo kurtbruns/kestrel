@@ -99,7 +99,7 @@ Each command creates the resource and writes it into the `production` block of `
     npx wrangler r2 bucket create kestrel-media-production --env production --binding MEDIA --update-config
     ```
 
-Each prints a snippet to add to your configuration. `--update-config` has already added it, so there's nothing to paste. Wrangler also rewrites `wrangler.jsonc` in its own layout, with tabs and one value per line, and your settings stay.
+Each prints a snippet to add to your configuration. There's nothing to paste: `--update-config` has filled in the database's id, and the `MEDIA` binding already names the bucket. Wrangler also rewrites `wrangler.jsonc` in its own layout, with tabs and one value per line, and your settings stay.
 
 ## 4. Configure production
 
