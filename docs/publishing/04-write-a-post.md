@@ -1,69 +1,32 @@
 # Write and send a post
 
-You write a post in Markdown, test it, and schedule it. Scheduling locks the post and makes the exact email that will go out. Then you send yourself a test of that copy, so the email you tested is the one your list receives.
+Write in Markdown, schedule it, then send yourself a test. Scheduling makes the exact email your list will get, so the test you send is what goes out.
 
 **New post**, on the Dashboard or under **Drafts**, opens a draft.
 
-## Writing
+## Write
 
-Kestrel's editor is a Markdown editor. You write a post in Markdown, the way you would for a static site generator or with an AI assistant. Kestrel places it in your [email template](11-email-template.md). The same Markdown makes the email and the post's archive page, so you never format a post twice. **Preview** shows the email as it will look, and Kestrel saves as you type.
+The editor takes Markdown, and Kestrel saves as you type. The same Markdown becomes the email, in your [email template](11-email-template.md), and the post's page in your archive. **Preview** shows the email.
 
-A few things to know as you write:
-
-- **A blank line starts a new paragraph.** In an email, a single line break doesn't.
-- **The opening lines** are the preview a mail client shows beside the subject.
-- **Images** go in by paste or drop, and Kestrel inserts a reference by file name, such as `![cover.jpg](cover.jpg)`. Replace the words in brackets with a short description. PNG, JPEG, WebP, or GIF, up to 5 MB each.
-- **Where it will go** is in **Post settings**, at the top right: whether it's in your archive, and its address, such as `newsletter.example.com/archive/spring-update`, whose slug follows the subject (below).
-
-## Test it
-
-**Send test email** sends the real email, through the same template and code as the send, to the addresses you name. **Settings → Default test recipients** fills them in for you. Nobody on your list gets anything, nothing appears in your archive, and a test's unsubscribe link unsubscribes no one.
-
-Mail clients each draw email a little differently, so trust a test over **Preview**, especially for tables, code, and HTML. A test needs an email provider, which [Connect Amazon SES](../get-started/04-ses.md) sets up.
+- A blank line starts a new paragraph.
+- The opening lines are the preview a mail client shows beside the subject.
+- Paste or drop an image to add it: PNG, JPEG, WebP, or GIF, up to 5 MB.
 
 ## Schedule and send
 
-Choose **Schedule** at the foot of the editor, pick a time under **Send at**, and confirm. The time must be at least the minimum lead away: five minutes, unless your instance [sets a different lead](../reference/01-configuration.md#vars). Neither the dashboard nor Claude can shorten it. Times are to the minute, and one with seconds rounds up.
+Choose **Schedule**, pick a time under **Send at**, and confirm. The time must be at least five minutes away by default, or the lead whoever runs your instance set. That's your window to catch a mistake, and you can cancel or move the send until then. **Send now** sends after the same wait.
 
-Scheduling makes the email once, from the post, your template, and your publication's details as they are at that moment. That frozen copy is what goes out, and it's also the post's page in your archive. So the post is locked, and **Preview** and **Send test email** show the frozen copy.
+**Then send yourself a test.** Scheduling locks the post and makes its email, so **Send test email** now sends exactly what your list receives. **Settings → Default test recipients** fills in the addresses. A test needs an email provider, which [Connect Amazon SES](../get-started/04-ses.md) sets up.
 
-**Send yourself a test now.** It's the copy your list receives, and the time until the send is your window to catch a mistake, including one Claude made.
+To change the post, choose **Cancel** on its banner, and it's a draft again. **Edit schedule** moves the time without unlocking it.
 
-Changing your template, or a publication detail it shows, re-makes the email of every scheduled post, with the same content and send time. Kestrel asks before it saves, and each re-made post then asks you to send a new test. A change is refused while a post is within the minimum lead of its send time, and Kestrel says when to try again. Posts already sending or sent never change.
+At the send time, the post goes to your confirmed subscribers, and its page goes up in your archive. Watch it go out under **Sent**. If a send needs you, its page says so, and [Troubleshooting](06-troubleshooting.md) covers each case.
 
-**Send now →**, under the time picker, is for a post you've already reviewed. It still waits out the window, scheduling the post for the minimum lead from now.
+## Post settings
 
-### Post settings
+**Post settings**, at the top right of the editor, holds two choices you can change until the post sends:
 
-**Post settings**, at the top right of the editor, holds two choices. Neither is part of the email, so both stay open while the post is scheduled. Nothing changes until you select **Save**.
+- **Include in archive.** Uncheck it to send the post as email only, for a correction or a short notice. It stays off your archive and home page.
+- **Archive address.** It follows the subject until you type your own. It's fixed once the post sends.
 
-**Include in archive** is checked unless you uncheck it. Unchecked, the post goes to your list as usual but is sent as email only: it stays off your public archive and your home page, and its archive address shows nothing. Use that for a post meant for the inbox: a correction to an earlier email, a short-lived notice, or a test. The editor marks such a post **Email only**.
-
-**Archive address** is where the post's page will be in your archive. Only the last part, the slug, is yours to type; it follows the subject until you do. Each post's address is its own: if you type one another post has, or one with spaces or capitals, Kestrel says so and keeps the address as it was. If another post already has the address your subject would give, Kestrel adds a number (`spring-update-2`) and tells you, so you can choose another. The address is fixed once the post starts sending.
-
-The Schedule, Send now, and Edit schedule dialogs show the same settings under the time, so you can still change them there. A change made in a dialog applies when you schedule, send, or save, and canceling leaves the post as it was. Once a post is scheduled, its banner names where it's going.
-
-Every email links its web version through the post's own **unlisted link**, which never changes. It opens the archive page while the post is in your archive, and the page itself while it's email only. Anyone with the email can open it, but nothing lists it, and search engines are asked not to.
-
-A sent post's page under **Sent** shows its address with **Remove from archive…** or **Add to archive…**. Both ask first. Removing a post takes its archive address down, so links people shared stop working, but the address stays the post's: add it back and those links work again. Neither changes what was sent.
-
-### Changing your mind
-
-**Cancel**, on the post's banner or its card under **Sent**, makes the post a draft again at once. Edit it, test again, and schedule it again. **Edit schedule** changes the send time, whether the post is in your archive, or both, without unlocking the post, and your tests still count. You can do either until the send time.
-
-### Who receives it
-
-A post goes to your list as it stands when it sends: every confirmed subscriber, except addresses that bounced or were blocked. A reader who complained has been unsubscribed, so isn't on it. Someone who confirms while it's scheduled receives it. Someone who unsubscribes before their email is handed to your provider doesn't, even partway through the send.
-
-So a recipient count shown before the send is a snapshot. An import that adds subscribers while a post is scheduled adds them to its audience too, and asks you first ([Bring your existing list](01-your-list.md#3-import-it)).
-
-### Warnings when you schedule
-
-- **No email provider connected.** The Schedule dialog can't schedule until one is connected ([Connect Amazon SES](../get-started/04-ses.md)). If the provider goes after a post is scheduled, the post is held, stays cancelable, and goes out once one is connected.
-- **Daily database writes.** On Cloudflare's free Workers plan, a send to more than about 5,000 recipients may use up the day's writes. The dialog warns you without stopping you, as [Bring your existing list](01-your-list.md#limits) explains.
-
-### When it sends
-
-At the send time, the post moves to its send page under **Sent**, where you can watch it go out. From then it can't be edited, canceled, or moved. Its page goes up at the same moment, showing exactly the copy that was sent, so every email's "view in browser" link works. Whatever interrupts a send, such as your provider's daily quota running out, it waits and resumes where it stopped. No reader gets the same post twice.
-
-If a send needs your attention, the send page and the dashboard say so. [Troubleshooting](06-troubleshooting.md) covers each case.
+After a post sends, its page under **Sent** can take it out of your archive or put it back.

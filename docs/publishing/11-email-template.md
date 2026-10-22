@@ -33,4 +33,4 @@ A variable is replaced with its value in each email. Type it exactly as shown, o
 
 **Send test email** on the **Template** page sends a sample post through your saved template, so you see it in a real inbox. With unsaved edits, the button reads **Save & send test**, since a test always uses the saved template.
 
-A change to the template re-makes the email of every scheduled post, as [Schedule and send](04-write-a-post.md#schedule-and-send) describes.
+A change to the template, or to a publication detail it shows, re-makes the email of every scheduled post, with the same content and send time. Kestrel asks before it saves, and each re-made post then asks you to send a new test. A change is refused while a post is within its last few minutes before sending. Posts already sending or sent never change.
