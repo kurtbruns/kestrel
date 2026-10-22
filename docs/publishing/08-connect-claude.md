@@ -1,27 +1,30 @@
 # Connect Claude
 
-Add your Kestrel to Claude as a connector, at your Kestrel's address followed by `/api/mcp`, such as `https://newsletter.example.com/api/mcp`. You sign in once, the way you do for the dashboard, and Claude then works as you, through the same API as the dashboard. What it changes shows as yours, via Claude.
+Connect Claude to your Kestrel, and you can publish by asking for it: Claude drafts, tests, and schedules posts as you, and its changes show as yours.
 
-**Your Kestrel has to allow this first,** with Managed OAuth on for its Access application, as [Allow Claude to connect](../guides/01-allow-claude.md) describes.
+**Your Kestrel instance has to allow this first,** with Managed OAuth on for its Access application, as [Allow Claude to connect](../guides/01-allow-claude.md) describes.
 
-## Which to use
+How you connect depends on where you talk to Claude:
 
-Through the connector, in Claude Desktop, claude.ai, or Claude Code, Claude can do almost everything you do in the dashboard. Uploading images and the logo, and erasing a subscriber, stay in the dashboard, and Claude tells you when something is yours to finish there.
-
-If you also work in your Kestrel's repository, Claude Code can [connect from the repository](#claude-code-in-your-kestrels-repository) instead. It then reaches the whole API, images included, and follows your Kestrel's own instructions for Claude.
+- **In Claude Desktop or claude.ai,** add your Kestrel as a connector.
+- **In Claude Code,** add the same connector, or sign in with the Kestrel CLI for the whole API.
 
 ## Claude Desktop or claude.ai
 
 1. In Claude, go to **Customize → Connectors**, select **Add**, then **Add custom connector**.
-1. Name it, and enter your Kestrel's address followed by `/api/mcp`, exactly.
+1. Name it, and enter your Kestrel's address followed by `/api/mcp`, such as `https://newsletter.example.com/api/mcp`.
 1. Under **OAuth client**, choose **Register automatically**.
 1. Select **Add**, then sign in the way you do for the dashboard, and approve the sign-in.
 
 On a Team or Enterprise plan, an Owner of your Claude organization adds the connector under **Organization settings → Connectors** instead, and you then select **Connect** on it. Anthropic's [custom connectors guide](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) has the details.
 
+Through the connector, Claude can do almost everything you do in the dashboard. Uploading images and the logo, and erasing a subscriber, stay in the dashboard, and Claude tells you when something is yours to finish there.
+
 To check it works, ask Claude what your publication is called.
 
 ## Claude Code
+
+### With the connector
 
 Add the same connector to Claude Code from a terminal:
 
@@ -29,23 +32,23 @@ Add the same connector to Claude Code from a terminal:
 claude mcp add --transport http --scope user kestrel https://newsletter.example.com/api/mcp
 ```
 
-Then start Claude Code, run `/mcp`, choose **kestrel**, and select **Authenticate**. Your browser opens, and you sign in the way you do for the dashboard. With `--scope user`, the connector is there in every folder you open Claude Code in. Anthropic's [Claude Code MCP guide](https://code.claude.com/docs/en/mcp) has the details.
+Then start Claude Code, run `/mcp`, choose **kestrel**, and select **Authenticate**. Your browser opens, and you sign in the way you do for the dashboard. With `--scope user`, the connector is there in every folder you open Claude Code in, with the same tools as in Claude Desktop and claude.ai. Anthropic's [Claude Code MCP guide](https://code.claude.com/docs/en/mcp) has the details.
 
-## Claude Code in your Kestrel's repository
+### With the Kestrel CLI
 
-In your Kestrel's repository, `kestrel login` signs Claude Code in as you for the whole API. Its changes show as yours, via Claude Code.
+The Kestrel CLI signs Claude Code in as you for the whole API, images included, the way `gh` works with GitHub. Its changes show as yours, via Claude Code.
 
-1. In the repository, run this with your Kestrel's address:
+1. Run this with your Kestrel's address:
 
     ```bash
     npx -p @kurtbruns/kestrel kestrel login https://newsletter.example.com
     ```
 
-    Name the package as this command does. An unrelated npm package is called `kestrel`, so a bare `npx kestrel` outside the repository would run it instead.
+    Name the package as this command does. An unrelated npm package is called `kestrel`, so a bare `npx kestrel` outside your Kestrel's repository would run it instead.
 
 1. Approve the sign-in in the browser it opens. The terminal then says who you're signed in as.
 
-You can also ask Claude Code to connect, and it runs the same command for you to approve. The sign-in is kept on your computer, never in the repository.
+The sign-in is kept on your computer. Opened in your Kestrel's repository, Claude Code also follows your Kestrel's own instructions for Claude, and can sign in for you when you ask it to connect.
 
 ## How long a sign-in lasts
 
