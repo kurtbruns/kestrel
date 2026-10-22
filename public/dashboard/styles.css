@@ -3933,47 +3933,16 @@ textarea.is-invalid {
   border-radius: 4px;
   padding: 1px 5px;
 }
-.doc pre {
-  position: relative;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 14px 16px;
-  overflow-x: auto;
-  line-height: 1.5;
+/* A doc's code block is the shared code card (.code-block, ui/copy.ts), spaced like a
+   paragraph; the inline-code chip above stays off the code inside it. */
+.doc .code-block {
+  margin: 14px 0;
 }
 .doc pre code {
   background: none;
   border: 0;
   padding: 0;
-}
-/* Copy button on code blocks — revealed on hover (always shown on touch). */
-.code-copy {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  font: 11px var(--mono);
-  padding: 3px 8px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  background: var(--card);
-  color: var(--muted);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s;
-}
-.doc pre:hover .code-copy,
-.code-copy:focus-visible {
-  opacity: 1;
-}
-.code-copy:hover {
-  color: var(--fg);
-  border-color: var(--muted);
-}
-@media (hover: none) {
-  .code-copy {
-    opacity: 1;
-  }
+  font-size: inherit;
 }
 /* Previous / Next pager at the foot of a doc — the sequential path, with titles. Two
    bordered cards; a missing neighbour keeps its side empty so the lone card stays put. */
@@ -4971,6 +4940,10 @@ button.copied svg {
   margin: 0;
   padding: 4px 6px 4px 12px;
   border-bottom: 1px solid var(--line);
+}
+/* A block with no label (a doc's fence that names no language) keeps its Copy on the right. */
+.code-block > .block-head > .copy-btn:only-child {
+  margin-left: auto;
 }
 .code-block pre {
   margin: 0;

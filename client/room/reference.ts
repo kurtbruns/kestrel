@@ -21,7 +21,7 @@ import { mount, setTitle } from "../lifecycle";
 import { appState } from "../state";
 import { codeBlock, copyFace, wireCopy } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
-import { highlightCurl, highlightJson } from "../ui/highlight";
+import { highlightJson, highlightShell } from "../ui/highlight";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { inline, prose } from "../ui/prose";
@@ -46,7 +46,7 @@ function apiExample(label: string, value: unknown): Html | null {
 /** The route as a curl command on this instance, with the credential its tier needs. */
 function apiCurl(r: ReferenceEntry): Html | null {
   const cmd = curlCommand(r, location.origin, appState.session?.auth.mode ?? "dev");
-  return cmd === null ? null : codeBlock("curl", highlightCurl(cmd), cmd);
+  return cmd === null ? null : codeBlock("curl", highlightShell(cmd), cmd);
 }
 /** A name or code that may break only where its words join, after each `_`, `.`, or `/`. */
 function breakable(name: string): Html {

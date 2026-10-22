@@ -317,6 +317,8 @@ The docs and the API reference share one room with its own bar (back to the dash
 
 An index lists its sections in order. Each set opens with a numbered section of steps taken in order (Publishing's Set up your publication, which follows the dashboard's first-run checklist of that name, and Self-hosting's Get started), and every other section is picked from. A doc's eyebrow names its set and links back to that set's index, so the set always sits in the one slot over the title, and the rail holds only the doc's own headings. Previous and Next stay within a section, so the main path ends at its last step.
 
+A doc's code block wears the API reference's card: the fence's language as its label when it names one (`bash`, `json`, `jsonc`), Copy on every block, and `bash` and JSON highlighted on the same palette. A fence that names no language (expected output, a value to paste, a DNS record) keeps the card's head with only Copy on it and stays plain, never guessed at. The highlighting is the editor's, over the Markdown as written, so the docs and the Markdown served to Claude carry no markup for it.
+
 **API reference** is read as a document, not looked up in a table: each route stands complete where it appears, with its prose and its examples side by side, in quiet rows, divided by hairlines rather than boxed, that a reader scans by eye. Claude reads the same reference as Markdown.
 
 - **Introduction.** Under its title, what the page is: every endpoint this instance serves, the one API the web editor and Claude both call, always matching the version it runs, and the base URL. It is the rail's first entry, which goes back to the very top.
@@ -507,7 +509,7 @@ The roles differ by fill, border, and weight, **never by height**: every labelle
 
 - **Toggles and tabs** (**Edit | Preview**, **Styled | Plain**, **Desktop | Phone**, **All | Delivered | Failures**, **Full list | Plain list**) switch what you're looking at; they never commit an act. A plain list's **Subscribed | Unsubscribed | Bounced** is one too: it changes what the plan shows, and planning writes nothing. So are the Subscribers summary's counts, each choosing its slice of the list. The small pill toggles mark the pressed segment in the Secondary palette, and a section's main toggle is a step more prominent than one that only changes a preview's width.
 - **The text link** (`linkbtn`) is an act styled as a link, for a choice that must read as clearly demoted below even Ghost: Send now → in the Schedule dialog. Use a real role anywhere a demotion isn't the point.
-- **Copy** is a utility on a value, not an act on the publication: the word and a glyph that turns to a check for a moment when the copy lands. It says it worked where it sits, never with a toast, unless the browser refuses the clipboard. The docs' code blocks still carry an older word-only button that reads "Copied".
+- **Copy** is a utility on a value, not an act on the publication: the word and a glyph that turns to a check for a moment when the copy lands. It says it worked where it sits, never with a toast, unless the browser refuses the clipboard. The docs' code blocks wear the same card as the API reference's examples.
 - **Mockups** of reader controls (the embeddable form's Subscribe button) are inert and unfocusable, filled with the reader's ink rather than any role's color, because they show the reader's chrome rather than offer an act.
 
 ---

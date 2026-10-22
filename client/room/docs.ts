@@ -10,7 +10,9 @@ import {
 import { api, describeError } from "../api";
 import { mount, setTitle } from "../lifecycle";
 import { appState } from "../state";
+import { codeBlock, wireCopy } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
+import { highlightJsonText, highlightShell } from "../ui/highlight";
 import { type Html, html, setHtml, unsafeHtml } from "../ui/html";
 import { renderError, toast } from "../ui/widgets";
 import { roomShell } from "./shell";
@@ -42,6 +44,22 @@ function docDescription(doc: DocFragment): string {
     return `${text.slice(0, MAX).replace(/[\s.,;:]+\S*$/, "")}…`;
   }
   return leadsIn ? `${text}…` : text;
+}
+
+/** A doc's rendered `<pre>` as the shared code card. Only the languages the docs use and the
+ *  highlighter knows are colored; a fence that names none stays plain, never guessed at. */
+function docCodeBlock(pre: HTMLPreElement): Html {
+  const code = pre.querySelector("code");
+  const lang = code?.className.match(/(?:^|\s)language-(\S+)/)?.[1] ?? null;
+  // Marked ends every fence's text with a newline, which the card shouldn't show or copy.
+  const raw = (code ?? pre).textContent?.replace(/\n$/, "") ?? "";
+  const markup =
+    lang === "bash" || lang === "sh" || lang === "shell"
+      ? highlightShell(raw)
+      : lang === "json" || lang === "jsonc"
+        ? highlightJsonText(raw)
+        : html`${raw}`;
+  return codeBlock(lang, markup, raw);
 }
 
 export async function renderDocs(
@@ -364,27 +382,14 @@ function renderDocPage(
     a.rel = "noopener";
   }
 
-  // Copy buttons on the guide's shell / DNS code blocks.
-  for (const pre of $$<HTMLPreElement>("pre", mainEl)) {
-    pre.classList.add("has-copy");
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "code-copy";
-    btn.textContent = "Copy";
-    btn.addEventListener("click", async () => {
-      const code = pre.querySelector("code");
-      try {
-        await navigator.clipboard.writeText((code || pre).innerText);
-        btn.textContent = "Copied";
-        setTimeout(() => {
-          btn.textContent = "Copy";
-        }, 1500);
-      } catch {
-        toast("Couldn’t copy to clipboard");
-      }
-    });
-    pre.appendChild(btn);
+  // Each code block wears the API reference's card (DESIGN §7): the fence's language as its
+  // label, when it names one, and Copy of its plain text on every block.
+  for (const pre of $$<HTMLPreElement>("pre", sec)) {
+    const card = document.createElement("div");
+    setHtml(card, docCodeBlock(pre));
+    pre.replaceWith(...card.childNodes);
   }
+  wireCopy(mainEl);
 
   // Scroll-spy: the active section is the last heading scrolled above a line just under the
   // sticky room bar; at the bottom the last heading wins so a short final section still

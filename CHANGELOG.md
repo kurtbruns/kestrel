@@ -24,6 +24,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- The Docs tab's code blocks wear the API reference's card: the language as a label when the block names one, Copy on every block with the same check when it lands, and shell commands and JSON highlighted.
 - The browser tab now names the screen you're on, such as "Subscribers - Kestrel", a post or send by its subject, and a doc by its title, instead of "Kestrel" on every screen, so tabs, bookmarks, and history entries say where they lead. The web version's tab adds "(web version)" after the subject, so it reads apart from the editor's.
 - Every admin `401` now carries a `message`, as every other refusal does, and the API reference and OpenAPI document describe its `reason`, which says when signing in again can't help (SPEC §11).
 - The scheduled banner is quieter: "No test of this email has been sent yet" is now a muted "Not tested yet" beside Send test email, the button that settles it (SPEC §8).

@@ -22,10 +22,14 @@ export function copyButton(text: string, label: string): Html {
   return html`<button type="button" class="copy-btn" data-copy="${text}" aria-label="${label}">${copyFace()}</button>`;
 }
 
-/** A labelled code block with a Copy of its plain text on the label line. `code` is the
- *  block's markup (highlighted, say); `raw` is what the clipboard gets. */
-export function codeBlock(label: string, code: Html, raw: string): Html {
-  return html`<div class="block code-block"><div class="block-head"><span class="block-label">${label}</span>${copyButton(raw, `Copy ${label}`)}</div><pre><code>${code}</code></pre></div>`;
+/** A code block with a Copy of its plain text on its label line. `code` is the block's
+ *  markup (highlighted, say); `raw` is what the clipboard gets. A block with no `label` (a
+ *  doc's fence that names no language) keeps the line, with only the Copy on it. */
+export function codeBlock(label: string | null, code: Html, raw: string): Html {
+  const head = label
+    ? html`<span class="block-label">${label}</span>${copyButton(raw, `Copy ${label}`)}`
+    : copyButton(raw, "Copy code");
+  return html`<div class="block code-block"><div class="block-head">${head}</div><pre><code>${code}</code></pre></div>`;
 }
 
 const pending = new WeakMap<HTMLElement, { label: string; timer: number }>();
