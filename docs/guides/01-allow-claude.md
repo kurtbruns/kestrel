@@ -4,7 +4,7 @@ Connecting Claude to the instance lets the publisher draft, test, and schedule p
 
 In this guide, you turn on Cloudflare's Managed OAuth for the Access application that locks the dashboard, then connect Claude, or send the publisher the address to connect to.
 
-A script or job that runs with no one present doesn't use this. It uses a service token, as [Automate with a service token](02-automate.md) describes.
+To run a script or scheduled job with no one present, use a service token instead, as [Automate with a service token](02-automate.md) describes.
 
 ## Before you begin
 
