@@ -124,7 +124,7 @@ Leave them unset to keep everything on the app's own hostname.
 
 The sender of notifications through Cloudflare's email.
 
-- Default: `Kestrel <kestrel@` followed by the app's hostname and `>`.
+- Default: `kestrel@` on the app's hostname, named Kestrel, such as `Kestrel <kestrel@newsletter.example.com>`.
 
 It's used only with the `NOTIFY` binding, and must be an address on a domain set up for Cloudflare's email. Without the binding, notifications come from `FROM_ADDRESS`, through your email provider.
 
