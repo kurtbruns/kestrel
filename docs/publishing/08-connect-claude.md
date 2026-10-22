@@ -18,8 +18,6 @@ How you connect depends on where you talk to Claude:
 
 On a Team or Enterprise plan, an Owner of your Claude organization adds the connector under **Organization settings → Connectors** instead, and you then select **Connect** on it. Anthropic's [custom connectors guide](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) has the details.
 
-Through the connector, Claude can do almost everything you do in the dashboard. Uploading images and the logo, and erasing a subscriber, stay in the dashboard, and Claude tells you when something is yours to finish there.
-
 To check it works, ask Claude what your publication is called.
 
 ## Claude Code
