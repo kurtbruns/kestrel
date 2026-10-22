@@ -7,7 +7,7 @@ Connecting Claude to Kestrel lets you publish by asking Claude. It drafts, tests
 How you connect depends on where you talk to Claude:
 
 - **In Claude Desktop or claude.ai,** add Kestrel as a connector.
-- **In Claude Code,** add Kestrel as a connector, or sign in with the Kestrel CLI to use the whole API.
+- **In Claude Code,** add Kestrel as a connector, or sign in with the Kestrel CLI to use the API directly.
 
 ## Claude Desktop or claude.ai
 
@@ -34,11 +34,7 @@ Claude Code can use the same connector as Claude Desktop and claude.ai. To reach
 
 1. Approve the sign-in in the browser that opens. The terminal then says who you're signed in as.
 
-Claude Code then calls Kestrel's API as you, the way `gh` calls GitHub, and its changes show as yours, via Claude Code. The sign-in stays on your computer.
-
-Run Claude Code in your instance's repository when you can. There it also follows your instance's instructions for Claude, and can sign in for you when you ask it to connect.
-
-Type the command as shown. An unrelated npm package is named `kestrel`, so a bare `npx kestrel` outside the repository runs that package instead.
+Claude Code then calls Kestrel's API as you, the way `gh` calls GitHub, and its changes show as yours, via Claude Code. The sign-in stays on your computer. In your instance's repository, Claude Code also follows its instructions for Claude.
 
 ## How long a sign-in lasts
 
