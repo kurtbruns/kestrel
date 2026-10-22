@@ -58,7 +58,7 @@ To disconnect, remove the connector: under **Customize → Connectors** in Claud
 Ask Claude in plain words, the way you'd ask a colleague, and ask it what it can do: it knows its tools, and reads these pages from your Kestrel. For example:
 
 - "Proofread my draft titled 'First frost' and schedule it to go out Friday at 7am."
-- "How did last week's post do?"
+- "Add jack@example.com to the list."
 - "Import the subscribers in this CSV from my old newsletter."
 
 Whatever Claude is asked, your Kestrel holds these for any client:
