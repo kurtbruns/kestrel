@@ -20,4 +20,4 @@ Open your subscribe page from **Settings → Ways to subscribe**, subscribe with
 
 Under **Settings → Notifications**, fill in **Send notifications to**, save, and choose **Send a test notification**. Kestrel then emails you when a send finishes or needs you, as [Notifications](06-troubleshooting.md#notifications) lists.
 
-If you're bringing a list of more than about 1,000 subscribers, [Bring your existing list](01-your-list.md#limits) says when to upgrade Cloudflare's Workers plan first.
+**If you're bringing more than about 1,000 subscribers, upgrade to Cloudflare's Workers Paid plan before you import.** [Bring your existing list](01-your-list.md#limits) explains why.
