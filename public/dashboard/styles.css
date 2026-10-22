@@ -3938,6 +3938,11 @@ textarea.is-invalid {
   border-radius: 4px;
   padding: 1px 5px;
 }
+/* Bold in a doc sits between semibold and bold, the weight of its headings: the browser's
+   `bolder` makes it 700, which outweighs the headings (650) on the system font. */
+.doc strong {
+  font-weight: 650;
+}
 /* Code in a bold lead-in keeps its own weight: the chip already sets it apart. */
 .doc strong code {
   font-weight: normal;
