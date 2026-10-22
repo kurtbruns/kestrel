@@ -4,7 +4,7 @@ These pages get you publishing in the dashboard, and cover the decisions to make
 
 ## Set up your publication
 
-These are the steps to set up your publication. Skip Bring your existing list if you're starting fresh.
+These are the steps to set up your publication. If you're starting without a list, skip importing one.
 
 1. [Name your publication](03-name-your-publication.md)
 1. [Check your setup](10-check-your-setup.md)
