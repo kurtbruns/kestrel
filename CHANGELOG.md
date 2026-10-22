@@ -24,7 +24,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
-- The Configuration reference gives each setting one entry: what it is, its default, and what the app refuses, then anything more it needs explained, in place of summary tables and a separate list of refusals. The editor's page about a refused setting now links each secret, `APP_ORIGIN`, and `AWS_REGION` to its own entry.
+- The Configuration reference opens with the whole `production` block, then lists each setting once, by name, with whether it's required, its default, and what the app refuses, in place of summary tables and a separate list of refusals.
 - The Docs tab's code blocks are quieter cards with a Copy icon beside the code, which turns to a check when the copy lands, and shell commands and JSON are highlighted. Inline code in the docs is maroon on a darker chip. The copy icon is redrawn everywhere with its two pages evenly offset.
 - The browser tab now names the screen you're on, such as "Subscribers - Kestrel", a post or send by its subject, and a doc by its title, instead of "Kestrel" on every screen, so tabs, bookmarks, and history entries say where they lead. The web version's tab adds "(web version)" after the subject, so it reads apart from the editor's.
 - Every admin `401` now carries a `message`, as every other refusal does, and the API reference and OpenAPI document describe its `reason`, which says when signing in again can't help (SPEC §11).

@@ -10,7 +10,7 @@ SES caps how many emails your account sends a day, and how many a second. A send
 
 1. Ask AWS for a higher daily quota and a maximum send rate of 50, as AWS's [Increasing your Amazon SES sending quotas](https://docs.aws.amazon.com/ses/latest/dg/manage-sending-quotas-request-increase.html) describes.
 
-1. When AWS grants it, the SES **Account dashboard** shows your new rate. In `wrangler.jsonc`, set the `production` block's `SES_MAX_SEND_RATE` to match, as [Configuration](../reference/01-configuration.md#send-rate) describes.
+1. When AWS grants it, the SES **Account dashboard** shows your new rate. In `wrangler.jsonc`, set the `production` block's `SES_MAX_SEND_RATE` to match, as [Configuration](../reference/01-configuration.md#vars) describes.
 
 1. Commit the change, and push it:
 
@@ -33,7 +33,7 @@ It's recommended to upgrade from about 1,000 subscribers. Past that, the Dashboa
 
 1. Upgrade your Cloudflare account to the $5 [Workers Paid plan](https://developers.cloudflare.com/workers/platform/pricing/), which has no daily limit on writes.
 
-1. In `wrangler.jsonc`, add `"SUBREQUEST_BUDGET": "10000"` to the `production` block's `vars`. It tells the app it's on Workers Paid, so each minute sends far more. [Configuration](../reference/01-configuration.md#request-budget) describes `SUBREQUEST_BUDGET`.
+1. In `wrangler.jsonc`, add `"SUBREQUEST_BUDGET": "10000"` to the `production` block's `vars`. It tells the app it's on Workers Paid, so each minute sends far more. [Configuration](../reference/01-configuration.md#vars) describes `SUBREQUEST_BUDGET`.
 
 1. Commit the change, and push it:
 

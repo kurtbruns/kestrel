@@ -42,28 +42,29 @@ export function configRefusal(data: unknown): ConfigRefusal | null {
  */
 export const CONFIGURATION_REFERENCE = "https://getkestrel.dev/docs/configuration/";
 
-/** Each variable's heading in the Configuration reference, by its GitHub-style anchor. */
+/** Each variable's section in the Configuration reference, by its GitHub-style anchor: Vars or
+ *  Secrets, where the variable leads its own entry. */
 export const REFERENCE_ANCHORS: Readonly<Record<string, string>> = {
-  PROVIDER: "email-provider",
-  ALLOW_FAKE_PROVIDER: "email-provider",
-  APP_ORIGIN: "app-address",
-  AWS_REGION: "ses-region",
-  FROM_ADDRESS: "from-address-and-sending-domain",
-  SENDING_DOMAIN: "from-address-and-sending-domain",
-  ARCHIVE_BASE_PATH: "archive-path",
-  SES_MAX_SEND_RATE: "send-rate",
-  SUBREQUEST_BUDGET: "request-budget",
-  MIN_LEAD_SECONDS: "minimum-lead",
-  ARCHIVE_ORIGIN: "archive-and-image-addresses",
-  MEDIA_PUBLIC_BASE: "archive-and-image-addresses",
-  NOTIFY_FROM: "notifications-sender",
-  ACCESS_TEAM_DOMAIN: "access-team-domain-and-audience-tag",
-  ACCESS_AUD: "access-team-domain-and-audience-tag",
-  ACCESS_ALLOWED_EMAILS: "allowed-emails",
-  AWS_ACCESS_KEY_ID: "aws-access-key",
-  AWS_SECRET_ACCESS_KEY: "aws-access-key",
-  SNS_TOPIC_ARN: "sns-topic",
-  SES_CONFIGURATION_SET: "configuration-set",
+  PROVIDER: "vars",
+  ALLOW_FAKE_PROVIDER: "vars",
+  APP_ORIGIN: "vars",
+  AWS_REGION: "vars",
+  FROM_ADDRESS: "vars",
+  SENDING_DOMAIN: "vars",
+  ARCHIVE_BASE_PATH: "vars",
+  SES_MAX_SEND_RATE: "vars",
+  SUBREQUEST_BUDGET: "vars",
+  MIN_LEAD_SECONDS: "vars",
+  ARCHIVE_ORIGIN: "vars",
+  MEDIA_PUBLIC_BASE: "vars",
+  NOTIFY_FROM: "vars",
+  ACCESS_TEAM_DOMAIN: "secrets",
+  ACCESS_AUD: "secrets",
+  ACCESS_ALLOWED_EMAILS: "secrets",
+  AWS_ACCESS_KEY_ID: "secrets",
+  AWS_SECRET_ACCESS_KEY: "secrets",
+  SNS_TOPIC_ARN: "secrets",
+  SES_CONFIGURATION_SET: "secrets",
   SIMULATE_SENDS: "what-the-app-refuses",
 };
 

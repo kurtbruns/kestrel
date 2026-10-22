@@ -23,7 +23,7 @@ Mail clients each draw email a little differently, so trust a test over **Previe
 
 ## Schedule and send
 
-Choose **Schedule** at the foot of the editor, pick a time under **Send at**, and confirm. The time must be at least the minimum lead away: five minutes, unless your deployment [sets a different lead](../reference/01-configuration.md#minimum-lead). Neither the dashboard nor Claude can shorten it. Times are to the minute, and one with seconds rounds up.
+Choose **Schedule** at the foot of the editor, pick a time under **Send at**, and confirm. The time must be at least the minimum lead away: five minutes, unless your deployment [sets a different lead](../reference/01-configuration.md#vars). Neither the dashboard nor Claude can shorten it. Times are to the minute, and one with seconds rounds up.
 
 Scheduling makes the email once, from the post, your template, and your publication's details as they are at that moment. That frozen copy is what goes out, and it's also the post's page in your archive. So the post is locked, and **Preview** and **Send test email** show the frozen copy.
 

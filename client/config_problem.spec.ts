@@ -63,9 +63,7 @@ describe("the refused-configuration wall (SPEC §9)", () => {
     // The server's words name the variable, so the wall shows them as they are.
     expect($(".config-wall-problem", wall).textContent).toBe(REFUSED.message);
     // Where to fix it is the reference's job, for a deployment and local development alike.
-    expect($("a", wall).getAttribute("href")).toBe(
-      `${CONFIGURATION_REFERENCE}#access-team-domain-and-audience-tag`,
-    );
+    expect($("a", wall).getAttribute("href")).toBe(`${CONFIGURATION_REFERENCE}#secrets`);
     expect(wall.textContent).not.toContain("secret put");
     expect(wall.textContent).not.toContain(".dev.vars");
     // Focus lands on the wall, so a screen reader starts there.
@@ -73,11 +71,11 @@ describe("the refused-configuration wall (SPEC §9)", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("links a var to its own heading in the reference", () => {
+  it("links a var to the reference's Vars section, where it leads its own entry", () => {
     showConfigProblem({ variable: "APP_ORIGIN", message: "APP_ORIGIN is not set" });
     const wall = $("#app .config-wall");
     expect($(".config-wall-problem", wall).textContent).toBe("APP_ORIGIN is not set");
-    expect($("a", wall).getAttribute("href")).toBe(`${CONFIGURATION_REFERENCE}#app-address`);
+    expect($("a", wall).getAttribute("href")).toBe(`${CONFIGURATION_REFERENCE}#vars`);
   });
 
   it("draws the wall once, however many calls in flight it fails", async () => {
@@ -168,6 +166,20 @@ describe("the refused-configuration wall (SPEC §9)", () => {
   it("links each variable to a part of the Configuration reference that covers it", () => {
     for (const [variable, anchor] of Object.entries(REFERENCE_ANCHORS)) {
       expect(HEADINGS.has(anchor), `${variable} → #${anchor}`).toBe(true);
+      if (anchor === "what-the-app-refuses") {
+        continue;
+      }
+      // The variable leads an entry in the section it links to, where a search finds it.
+      const start = reference
+        .split("\n")
+        .findIndex((line) => /^## /.test(line) && githubSlug(line.slice(3)) === anchor);
+      const section = reference.split("\n").slice(start + 1);
+      const end = section.findIndex((line) => /^## /.test(line));
+      const entries = section.slice(0, end).filter((line) => line.startsWith("- `"));
+      expect(
+        entries.some((line) => line.includes(`\`${variable}\``)),
+        `${variable} in #${anchor}`,
+      ).toBe(true);
     }
     // A setting with no heading of its own is named in the list of what the app refuses.
     const refusals = reference.slice(reference.indexOf("## What the app refuses"));
