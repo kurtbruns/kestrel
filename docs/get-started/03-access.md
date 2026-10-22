@@ -2,7 +2,7 @@
 
 Cloudflare Access puts a login in front of the editor and the API. Kestrel checks every request against that login as well, so a path left out of Access stays locked. The public pages readers see stay public.
 
-In this guide, you set up Cloudflare Zero Trust, create one Access application that covers the editor and the API, and allow yourself in. Then you give the app two values from that application, optionally let Claude sign in as you, and check that the login works.
+In this guide, you set up Cloudflare Zero Trust, create one Access application that covers the editor and the API, and allow yourself in. Then you give the app two values from that application, and check that the login works. Later, [Allow Claude to connect](../guides/01-allow-claude.md) lets Claude use this same application.
 
 ## 1. Set up Zero Trust
 
@@ -49,9 +49,9 @@ Every Access application denies everyone until a policy allows them.
     - **Action:** Allow
     - **Include:** the **Emails** selector, with your email address
 
-1. Keep the login method a new Zero Trust organization starts with, Cloudflare's own: you enter your email, and confirm the sign-in from the message Cloudflare sends to it. By default it admits only members of your Cloudflare account, so the email in your `Publishers` policy should be one. To let someone sign in another way, such as a one-time code by email, add it under **Zero Trust → Integrations → Identity providers** first.
-
 1. Select **Create**.
+
+Cloudflare's own login is on by default, and admits members of your Cloudflare account, so the email in your `Publishers` policy should be one. To let someone sign in another way, such as a one-time code by email, add it under **Zero Trust → Integrations → Identity providers**.
 
 The app accepts only two kinds of policy on this application. One is an Allow policy on people's emails, like this one. The other is a Service Auth policy on a service token, from [Automate with a service token](../guides/02-automate.md). A login through any other kind, such as a certificate, a device check, or an identity provider that gives no email, is refused with a `401`, and the editor says so.
 
@@ -59,11 +59,11 @@ The app accepts only two kinds of policy on this application. One is an Allow po
 
 The app verifies each login against your team domain, and checks that it was issued for this application.
 
-1. Find your team domain under **Zero Trust → Settings**. It looks like `YOUR_TEAM.cloudflareaccess.com`. It belongs to your Zero Trust organization, not to this application, so every application in your account shares it. It's also where a signed-out visit to `https://newsletter.example.com/dashboard/` now takes you.
+1. Find your team domain under **Zero Trust → Settings**. It looks like `YOUR_TEAM.cloudflareaccess.com`.
 
 1. Find the application's audience tag. Under **Access controls → Applications**, select **Configure** on your application. On the **Additional settings** tab, copy the **Application Audience (AUD) Tag**.
 
-1. Store the team domain as a secret. The command prompts you for the value. Enter the hostname alone, without `https://`. If you paste it with `https://` or a trailing slash, the app drops them. Anything else that isn't a hostname is refused, naming `ACCESS_TEAM_DOMAIN`:
+1. Store the team domain as a secret. The command prompts you for the value. Enter the hostname alone, without `https://`:
 
     ```bash
     npx wrangler secret put ACCESS_TEAM_DOMAIN --env production
@@ -75,7 +75,7 @@ The app verifies each login against your team domain, and checks that it was iss
     npx wrangler secret put ACCESS_AUD --env production
     ```
 
-    A secret takes effect as soon as you store it, with no redeploy. The app needs both values. While only one is stored, it refuses its configuration and names the missing one: the editor says so, `/health` answers `500` with `"variable":"ACCESS_AUD"`, and the public pages say the newsletter is temporarily unavailable. Storing the second clears it.
+    A secret takes effect as soon as you store it, with no redeploy.
 
 1. **(Optional, recommended)** Limit the editor to named people. The Access policy decides who can sign in. This list keeps that true if the policy is widened later, for another app or by mistake. Enter a comma-separated list of email addresses at the prompt:
 
@@ -84,8 +84,6 @@ The app verifies each login against your team domain, and checks that it was iss
     ```
 
     Without it, the app lets in anyone your Access policy allows.
-
-Claude connects through this same application, signed in as a person, once Managed OAuth is on. That's optional, and [Allow Claude to connect](../guides/01-allow-claude.md) covers it whenever you're ready.
 
 ## Check it
 
@@ -109,6 +107,6 @@ Claude connects through this same application, signed in as a person, once Manag
     {"status":"ok","service":"kestrel"}
     ```
 
-If the editor says the configuration needs a fix, store the secret it names. If Cloudflare lets you in but the editor answers `401`, check the two secrets for a typo, or `ACCESS_ALLOWED_EMAILS` may leave out your address. If the editor says Access let you in but didn't say who you are, your login carried no email: sign out, and sign in through the `Publishers` policy.
+If the editor says the configuration needs a fix, store the secret it names. The app needs both values, so while only one is stored, `/health` answers `500` naming the other, and the public pages say the newsletter is temporarily unavailable. If Cloudflare lets you in but the editor answers `401`, check the two secrets for a typo, or `ACCESS_ALLOWED_EMAILS` may leave out your address. If the editor says Access let you in but didn't say who you are, your login carried no email: sign out, and sign in through the `Publishers` policy.
 
 Next, [connect Amazon SES](04-ses.md).
