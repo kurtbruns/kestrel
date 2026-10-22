@@ -1,6 +1,6 @@
 # Automate with a service token
 
-A script or scheduled job can call the same API the editor uses, with no one signed in, such as a job that drafts a weekly digest, or a sync from another tool. It signs in with a Cloudflare Access service token, and its changes show as made by a service token, not by a person.
+A service token lets a script or scheduled job call the API, such as a job that drafts a weekly digest. Kestrel labels these changes **a service token**, rather than with a person's name.
 
 In this guide, you create a service token, allow it in through the Access application, give it to your script, and check that it works. To connect Claude as yourself instead, follow [Allow Claude to connect](01-allow-claude.md).
 
@@ -76,14 +76,6 @@ The script sends the two values as headers on every request: `CF-Access-Client-I
 1. Open a draft in the editor, and have the script save a change to it. The editor shows that the draft was changed elsewhere, last edited by **a service token**.
 
 If the script gets a `401`, a `403`, or a login page, check the policy from section 2, and the token's two values. The policy's action must be Service Auth, since the app refuses a login through any other kind of policy with a `401` whose `reason` is `access_unidentified`. Check that the token hasn't expired, too.
-
-## What a script can and can't do
-
-A script reaches the same API as the editor, and the app holds it to the same rules as anyone, plus two of its own:
-
-- **Anything it schedules waits out the review window,** where the publisher can still cancel it.
-- **An import it commits is emailed to the publisher,** if notifications are set, since no one saw it happen.
-- **An import that would grow a scheduled send is refused,** until the publisher finishes it in the dashboard.
 
 ## Renew or revoke a token
 
