@@ -252,7 +252,7 @@ describe("docs room", () => {
     // The spy ran once: a document with no layout reads as scrolled to the bottom, where
     // the last heading wins so a short final section still highlights.
     expect($("#tocOnPage .toc-sub.on").textContent).toBe("What you get");
-    expect($$(".code-block", main)).toHaveLength(2);
+    expect($$(".code-bare", main)).toHaveLength(2);
   });
 
   it("shows Previous and Next around a middle doc, and jumps within the doc from the rail, naming the section in the address", async () => {
@@ -293,12 +293,13 @@ describe("docs room", () => {
     expect(top).toHaveBeenCalledWith(0, 0);
   });
 
-  it("gives a fenced block the reference's card: its language as the label, highlighted, and Copy of its plain text", async () => {
+  it("shows a fenced block bare, highlighted by its language, with Copy of its plain text beside it", async () => {
     fake = fakeApi([]);
     const writeText = stubClipboard();
     await mount((r, s) => renderDocs("overview", r, s));
-    const block = $$(".doc .code-block")[0]!;
-    expect($(".block-label", block).textContent).toBe("bash");
+    const block = $$(".doc .code-bare")[0]!;
+    // No label line: the prose around a doc's block already says what it is.
+    expect(block.querySelector(".block-label, .block-head")).toBeNull();
     // The text is the fence's, without marked's closing newline, and the markup in it is text.
     const code = $("pre code", block);
     expect(code.textContent).toBe("npx kestrel dev --port $PORT # <local>");
@@ -306,22 +307,23 @@ describe("docs room", () => {
     expect($(".cx-tag", code).textContent).toBe("npx");
     expect($$(".cx-num", code).map((s) => s.textContent)).toEqual(["--port"]);
     expect($(".cx-var", code).textContent).toBe("$PORT");
-    const copy = $<HTMLButtonElement>(".copy-btn", block);
-    expect(copy.getAttribute("aria-label")).toBe("Copy bash");
+    const copy = $<HTMLButtonElement>("pre + .copy-btn", block);
+    expect($("span", copy).textContent).toBe("");
+    expect(copy.getAttribute("aria-label")).toBe("Copy");
     copy.click();
     await settle();
     expect(writeText).toHaveBeenCalledWith("npx kestrel dev --port $PORT # <local>");
     expect(copy.getAttribute("aria-label")).toBe("Copied");
+    expect($("span", copy).textContent).toBe("");
   });
 
-  it("leaves a block whose fence names no language unlabelled and plain, with Copy still on it", async () => {
+  it("leaves a block whose fence names no language plain, never guessing one, with Copy still on it", async () => {
     fake = fakeApi([]);
     const writeText = stubClipboard();
     await mount((r, s) => renderDocs("overview", r, s));
-    const block = $$(".doc .code-block")[1]!;
-    expect(block.querySelector(".block-label")).toBeNull();
+    const block = $$(".doc .code-bare")[1]!;
     expect($("pre code", block).children).toHaveLength(0);
-    $<HTMLButtonElement>(".block-head > .copy-btn", block).click();
+    $<HTMLButtonElement>("pre + .copy-btn", block).click();
     await settle();
     expect(writeText).toHaveBeenCalledWith("10 inbound-smtp.us-east-1.amazonaws.com");
   });

@@ -3933,9 +3933,9 @@ textarea.is-invalid {
   border-radius: 4px;
   padding: 1px 5px;
 }
-/* A doc's code block is the shared code card (.code-block, ui/copy.ts), spaced like a
+/* A doc's code block is the bare code card (.code-bare, ui/copy.ts), spaced like a
    paragraph; the inline-code chip above stays off the code inside it. */
-.doc .code-block {
+.doc .code-bare {
   margin: 14px 0;
 }
 .doc pre code {
@@ -4336,9 +4336,7 @@ a.api-self:focus-visible svg {
 button.copy-btn.api-copy-path {
   padding: 3px 5px;
 }
-button.copy-btn.api-copy-path span:empty {
-  display: none;
-}
+
 .api-op-body {
   display: grid;
   gap: 4px 28px;
@@ -4914,6 +4912,10 @@ button.copy-btn:hover {
 button.copy-btn:active {
   transform: none;
 }
+/* A Copy that is its glyph alone (no word) takes no gap for the word. */
+button.copy-btn span:empty {
+  display: none;
+}
 button.copy-btn svg {
   width: 14px;
   height: 14px;
@@ -4941,9 +4943,34 @@ button.copied svg {
   padding: 4px 6px 4px 12px;
   border-bottom: 1px solid var(--line);
 }
-/* A block with no label (a doc's fence that names no language) keeps its Copy on the right. */
-.code-block > .block-head > .copy-btn:only-child {
-  margin-left: auto;
+/* A bare code block (a doc's): the same raised card with no label line, the code beside a
+   Copy that is its glyph alone, level with the first line, so a one-line command reads as
+   one quiet row. */
+.code-bare {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 6px 0 0;
+}
+.code-bare pre {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow-x: auto;
+  padding: 11px 0 11px 14px;
+  font: 13px / 1.5 var(--mono);
+}
+.code-bare > button.copy-btn {
+  flex: none;
+  margin-top: 8px;
+  padding: 5px;
+}
+.code-bare > button.copy-btn svg {
+  width: 16px;
+  height: 16px;
 }
 .code-block pre {
   margin: 0;

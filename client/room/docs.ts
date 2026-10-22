@@ -10,7 +10,7 @@ import {
 import { api, describeError } from "../api";
 import { mount, setTitle } from "../lifecycle";
 import { appState } from "../state";
-import { codeBlock, wireCopy } from "../ui/copy";
+import { bareCodeBlock, wireCopy } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
 import { highlightJsonText, highlightShell } from "../ui/highlight";
 import { type Html, html, setHtml, unsafeHtml } from "../ui/html";
@@ -46,8 +46,8 @@ function docDescription(doc: DocFragment): string {
   return leadsIn ? `${text}…` : text;
 }
 
-/** A doc's rendered `<pre>` as the shared code card. Only the languages the docs use and the
- *  highlighter knows are colored; a fence that names none stays plain, never guessed at. */
+/** A doc's rendered `<pre>` as a bare code block. The fence's language picks the highlighter,
+ *  for the languages the docs use; a fence that names none stays plain, never guessed at. */
 function docCodeBlock(pre: HTMLPreElement): Html {
   const code = pre.querySelector("code");
   const lang = code?.className.match(/(?:^|\s)language-(\S+)/)?.[1] ?? null;
@@ -59,7 +59,7 @@ function docCodeBlock(pre: HTMLPreElement): Html {
       : lang === "json" || lang === "jsonc"
         ? highlightJsonText(raw)
         : html`${raw}`;
-  return codeBlock(lang, markup, raw);
+  return bareCodeBlock(markup, raw);
 }
 
 export async function renderDocs(
@@ -382,8 +382,8 @@ function renderDocPage(
     a.rel = "noopener";
   }
 
-  // Each code block wears the API reference's card (DESIGN §7): the fence's language as its
-  // label, when it names one, and Copy of its plain text on every block.
+  // Each code block is a bare card with Copy of its plain text beside the code (DESIGN §7).
+  // The prose around it already says what it is, so it carries no label line.
   for (const pre of $$<HTMLPreElement>("pre", sec)) {
     const card = document.createElement("div");
     setHtml(card, docCodeBlock(pre));
