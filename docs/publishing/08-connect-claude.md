@@ -2,7 +2,7 @@
 
 Add your Kestrel to Claude as a connector, at your Kestrel's address followed by `/api/mcp`, such as `https://newsletter.example.com/api/mcp`. You sign in once, the way you do for the dashboard, and Claude then works as you, through the same API as the dashboard. What it changes shows as yours, via Claude.
 
-**Your Kestrel has to allow this first,** with Managed OAuth on for its Access application, as [Allow Claude to connect](../guides/01-allow-claude.md) describes. If Claude says it couldn't connect or sign in, [Claude can't connect](06-troubleshooting.md#claude-cant-connect) has the fix.
+**Your Kestrel has to allow this first,** with Managed OAuth on for its Access application, as [Allow Claude to connect](../guides/01-allow-claude.md) describes.
 
 ## Which to use
 
