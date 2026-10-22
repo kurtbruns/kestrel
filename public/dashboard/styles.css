@@ -3942,11 +3942,7 @@ textarea.is-invalid {
 .doc strong code {
   font-weight: normal;
 }
-/* A doc's code block is the bare code card (.code-bare, ui/copy.ts), spaced like a
-   paragraph; the inline-code chip above stays off the code inside it. */
-.doc .code-bare {
-  margin: 14px 0;
-}
+/* The inline-code chip above stays off the code in a block. */
 .doc pre code {
   color: inherit;
   background: none;
@@ -4981,6 +4977,10 @@ button.copied svg {
 .code-bare > button.copy-btn svg {
   width: 16px;
   height: 16px;
+}
+/* A doc's code block is spaced like a paragraph. */
+.doc .code-bare {
+  margin: 14px 0;
 }
 .code-block pre {
   margin: 0;
