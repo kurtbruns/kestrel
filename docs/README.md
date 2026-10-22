@@ -4,7 +4,7 @@ These pages cover deploying and running your own Kestrel, from an empty reposito
 
 ## Get started
 
-Follow these steps, from an empty repository to a live newsletter. Each one ends with a check, so you know it worked before you move on.
+These are the steps to deploy a Kestrel instance and get it ready to send. Each one ends with a check, so you know it worked before you move on.
 
 1. [Deploy the app](get-started/02-deploy.md)
 1. [Lock the dashboard with Access](get-started/03-access.md)
