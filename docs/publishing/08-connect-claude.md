@@ -59,4 +59,4 @@ Whatever Claude is asked, Kestrel holds these for any client:
 - **No one's edit is overwritten.** A save based on an older version is refused.
 - **Only you can let an import grow a scheduled send,** in the dashboard.
 
-Claude also asks you first before anything that reaches readers, before accepting an import's attestation for you, and before deleting a draft, clearing a bounce, or re-making a scheduled post's email. That comes from Kestrel's instructions to Claude, not a rule the app enforces. A post's banner and a send's page say who acted and through which Claude, such as "Scheduled by you@example.com via Claude".
+Changes Claude makes show in the dashboard as yours, such as "Scheduled by you@example.com via Claude".
