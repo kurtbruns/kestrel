@@ -12,7 +12,7 @@ How you connect depends on where you talk to Claude:
 ## Claude Desktop or claude.ai
 
 1. In Claude, go to **Customize → Connectors**, select **Add**, then **Add custom connector**.
-1. Name it, and enter your instance's address followed by `/api/mcp`, such as `https://newsletter.example.com/api/mcp`.
+1. Name it, and enter your publication's address followed by `/api/mcp`, such as `https://newsletter.example.com/api/mcp`.
 1. Under **OAuth client**, choose **Register automatically**.
 1. Select **Add**, then sign in the way you do for the dashboard, and approve the sign-in.
 
@@ -26,7 +26,7 @@ To check it works, ask Claude what your publication is called.
 
 Claude Code can use the same connector as Claude Desktop and claude.ai. To reach the whole API instead, images included, sign Claude Code in with the Kestrel CLI:
 
-1. Run this, with your instance's address:
+1. Run this, with your publication's address:
 
     ```bash
     npx -p @kurtbruns/kestrel kestrel login https://newsletter.example.com

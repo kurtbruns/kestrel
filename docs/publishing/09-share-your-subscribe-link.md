@@ -1,6 +1,6 @@
 # Share your subscribe link
 
-Your publication's subscribe page is at `/subscribe` on your Kestrel's address, such as `https://newsletter.example.com/subscribe`. Copy it from the dashboard's checklist or **Settings → Ways to subscribe**, and share it wherever your readers are. A reader joins only once they confirm by email.
+Your publication's subscribe page is at `/subscribe` on your publication's address, such as `https://newsletter.example.com/subscribe`. Copy it from the dashboard's checklist or **Settings → Ways to subscribe**, and share it wherever your readers are. A reader joins only once they confirm by email.
 
 **Signups open only once an email provider is connected.** Until then, the page says the newsletter isn't taking subscribers yet, and the dashboard says so too. You can share the link anyway, and it opens once email is connected ([Connect Amazon SES](../get-started/04-ses.md)).
 

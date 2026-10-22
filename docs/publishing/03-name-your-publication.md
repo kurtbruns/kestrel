@@ -1,6 +1,6 @@
 # Name your publication
 
-Give your newsletter a name and a look before your first post. Set the name, tagline, and logo under **Settings → Publication identity**. They appear in every email your template prints them in, on the public pages readers see, and in the confirmation email new subscribers get.
+Give your publication a name and a look before your first post. Set the name, tagline, and logo under **Settings → Publication identity**. They appear in every email your template prints them in, on the public pages readers see, and in the confirmation email new subscribers get.
 
 All three are optional, and you can change them at any time. How they appear in each email comes from your email template, which you can [edit](11-email-template.md).
 
