@@ -4,7 +4,7 @@ These pages get you publishing in the dashboard, and cover the decisions to make
 
 ## Set up your publication
 
-The steps to set up a new publication, in the order the dashboard's setup checklist lists them. Once you've started a post, they stay on the dashboard as **Finish setting up** until you publish your first post, one that goes to your subscribers and onto your site. That's the fourth step.
+These are the steps to set up your publication. Skip Bring your existing list if you're starting fresh.
 
 1. [Name your publication](03-name-your-publication.md)
 1. [Check your setup](10-check-your-setup.md)
