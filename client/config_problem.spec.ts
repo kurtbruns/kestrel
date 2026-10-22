@@ -64,7 +64,7 @@ describe("the refused-configuration wall (SPEC §9)", () => {
     expect($(".config-wall-problem", wall).textContent).toBe(REFUSED.message);
     // Where to fix it is the reference's job, for a deployment and local development alike.
     expect($("a", wall).getAttribute("href")).toBe(
-      `${CONFIGURATION_REFERENCE}#access_team_domain-and-access_aud`,
+      `${CONFIGURATION_REFERENCE}#access-team-domain-and-audience-tag`,
     );
     expect(wall.textContent).not.toContain("secret put");
     expect(wall.textContent).not.toContain(".dev.vars");
@@ -77,7 +77,7 @@ describe("the refused-configuration wall (SPEC §9)", () => {
     showConfigProblem({ variable: "APP_ORIGIN", message: "APP_ORIGIN is not set" });
     const wall = $("#app .config-wall");
     expect($(".config-wall-problem", wall).textContent).toBe("APP_ORIGIN is not set");
-    expect($("a", wall).getAttribute("href")).toBe(`${CONFIGURATION_REFERENCE}#app_origin`);
+    expect($("a", wall).getAttribute("href")).toBe(`${CONFIGURATION_REFERENCE}#app-address`);
   });
 
   it("draws the wall once, however many calls in flight it fails", async () => {
