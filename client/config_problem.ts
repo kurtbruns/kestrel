@@ -42,13 +42,12 @@ export function configRefusal(data: unknown): ConfigRefusal | null {
  */
 export const CONFIGURATION_REFERENCE = "https://getkestrel.dev/docs/configuration/";
 
-/** Each variable's heading in the Configuration reference, by its GitHub-style anchor; a
- *  secret's is the Secrets table. */
+/** Each variable's heading in the Configuration reference, by its GitHub-style anchor. */
 export const REFERENCE_ANCHORS: Readonly<Record<string, string>> = {
   PROVIDER: "provider",
   ALLOW_FAKE_PROVIDER: "provider",
-  APP_ORIGIN: "vars",
-  AWS_REGION: "vars",
+  APP_ORIGIN: "app_origin",
+  AWS_REGION: "aws_region",
   FROM_ADDRESS: "from_address-and-sending_domain",
   SENDING_DOMAIN: "from_address-and-sending_domain",
   ARCHIVE_BASE_PATH: "archive_base_path",
@@ -58,13 +57,13 @@ export const REFERENCE_ANCHORS: Readonly<Record<string, string>> = {
   ARCHIVE_ORIGIN: "archive_origin-and-media_public_base",
   MEDIA_PUBLIC_BASE: "archive_origin-and-media_public_base",
   NOTIFY_FROM: "notify_from",
-  ACCESS_TEAM_DOMAIN: "secrets",
-  ACCESS_AUD: "secrets",
-  ACCESS_ALLOWED_EMAILS: "secrets",
-  AWS_ACCESS_KEY_ID: "secrets",
-  AWS_SECRET_ACCESS_KEY: "secrets",
-  SNS_TOPIC_ARN: "secrets",
-  SES_CONFIGURATION_SET: "secrets",
+  ACCESS_TEAM_DOMAIN: "access_team_domain-and-access_aud",
+  ACCESS_AUD: "access_team_domain-and-access_aud",
+  ACCESS_ALLOWED_EMAILS: "access_allowed_emails",
+  AWS_ACCESS_KEY_ID: "aws_access_key_id-and-aws_secret_access_key",
+  AWS_SECRET_ACCESS_KEY: "aws_access_key_id-and-aws_secret_access_key",
+  SNS_TOPIC_ARN: "sns_topic_arn",
+  SES_CONFIGURATION_SET: "ses_configuration_set",
   SIMULATE_SENDS: "what-the-app-refuses",
 };
 
