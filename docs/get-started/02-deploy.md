@@ -111,11 +111,16 @@ Name `--env production` on every Wrangler command that creates or binds a resour
 
 `wrangler.jsonc` holds two sets of settings. The top level is for local development, so leave it alone. The `production` block under `env` is yours to fill in.
 
-1. Open `wrangler.jsonc` and change the values marked here in the `production` block. It's shown compactly here; in your file, after section 3, each value is on its own line:
+1. Open `wrangler.jsonc` and change the values marked here in the `production` block. Only the settings you change are shown; leave the others as they are:
 
     ```jsonc
     "production": {
-      "routes": [{ "pattern": "newsletter.example.com", "custom_domain": true }], // ← your app's hostname
+      "routes": [
+        {
+          "pattern": "newsletter.example.com", // ← your app's hostname
+          "custom_domain": true
+        }
+      ],
       "d1_databases": [
         {
           "binding": "DB",
@@ -136,10 +141,10 @@ Name `--env production` on every Wrangler command that creates or binds a resour
 
     What each one does:
 
-    - **`routes`** puts the app on your hostname when you deploy. Cloudflare creates the DNS record and the certificate. Your domain must be in the same Cloudflare account, and the hostname can't already have a CNAME record; delete one if it does. The block also turns off the `workers.dev` addresses, so the app answers only on your hostname.
-    - **`PROVIDER` stays empty.** [Connect Amazon SES](04-ses.md) sets it. Until then the app runs without an email provider: posts can be written and previewed, but scheduling, test emails, and signups are refused. Never set it to `fake`, the top level's value, even when a wrangler warning suggests copying it: `fake` delivers nothing, and the app refuses it on your hostname.
-    - **`ARCHIVE_BASE_PATH`** is permanent once the first post goes out. Every post sent carries its `/archive/…` link, and changing the prefix later breaks the links already mailed. Keep `/archive` unless you have a reason not to.
-    - **`FROM_ADDRESS`** is the address every email comes from. Keep it on your sending hostname, and set `SENDING_DOMAIN` to the part after the `@`.
+    - `routes` puts the app on your hostname when you deploy. Cloudflare creates the DNS record and the certificate. Your domain must be in the same Cloudflare account, and the hostname can't already have a CNAME record; delete one if it does. The block also turns off the `workers.dev` addresses, so the app answers only on your hostname.
+    - `PROVIDER` stays empty until [Connect Amazon SES](04-ses.md) sets it. Until then the app runs without an email provider: posts can be written and previewed, but scheduling, test emails, and signups are refused. Never set it to `fake`, the top level's value, even when a wrangler warning suggests copying it: `fake` delivers nothing, and the app refuses it on your hostname.
+    - `ARCHIVE_BASE_PATH` is permanent once the first post goes out. Every post sent carries its `/archive/…` link, and changing the prefix later breaks the links already mailed. Keep `/archive` unless you have a reason not to.
+    - `FROM_ADDRESS` is the address every email comes from. Keep it on your sending hostname, and set `SENDING_DOMAIN` to the part after the `@`.
 
     Change every `example.com` value, the route included, even before you connect a provider. The app checks its settings but can't see the route: it refuses to run while `APP_ORIGIN`, `SENDING_DOMAIN`, or `FROM_ADDRESS`, or `ARCHIVE_ORIGIN` or `MEDIA_PUBLIC_BASE` if you set them, is still on `example.com`, since its links and the address your email comes from would name a domain that isn't yours.
 

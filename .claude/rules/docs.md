@@ -82,6 +82,7 @@ A setup guide page, after Linode's guides:
 ## Commands, output, and placeholders
 
 - Commands in `bash` fences, one task per block. Expected output in a plain fence right after, when its text is stable; otherwise describe it in words. Never invent exact output.
+- Code is never bold. A list that explains settings or values leads each item with the code alone (`` - `routes` puts the app… ``); its chip already sets it apart.
 - Placeholders: the example names (`example.com`, `newsletter.example.com`, `send.example.com`); UPPER_SNAKE such as `YOUR_USERNAME` for values only the reader knows; `REPLACE_WITH_…` for ids pasted into config.
 - Optional steps start with **(Optional)**.
 - Notes and callouts sparingly, and only for what isn't needed to succeed.
