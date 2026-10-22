@@ -1,10 +1,8 @@
 # Automate with a service token
 
-A script or a scheduled job can call the same API the editor uses, with no one signed in. It uses a Cloudflare Access service token, so its changes show as a service token's, never a person's. Anything it schedules waits out the review window, where the publisher can still cancel it.
+A script or scheduled job can call the same API the editor uses, with no one signed in, such as a job that drafts a weekly digest, or a sync from another tool. It signs in with a Cloudflare Access service token, and its changes show as made by a service token, not by a person.
 
-Claude doesn't need this. It signs in as a person, as [Allow Claude to connect](01-allow-claude.md) describes, so its changes show as theirs, via Claude. Use a service token only for a program that runs when no one is there.
-
-In this guide, you create a service token, and add a policy for it to your Access application. Then you give the token to your script, check that it works, and point the script at the API reference.
+In this guide, you create a service token, allow it in through the Access application, give it to your script, and check that it works. To connect Claude as yourself instead, follow [Allow Claude to connect](01-allow-claude.md).
 
 ## Before you begin
 
@@ -25,9 +23,9 @@ A service token is a Client ID and a Client Secret that a program sends with eac
 
 1. Copy the **Client ID** and the **Client Secret**. Cloudflare shows the secret only once.
 
-## 2. Add a policy for the token
+## 2. Allow the token in
 
-Your application lets in only the people its `Publishers` policy names. A token needs a policy of its own, on the same application, because the app accepts only logins issued for that application.
+The application lets in only the people its `Publishers` policy names, so the token needs a policy of its own on the same application.
 
 1. Under **Access controls → Applications**, select **Configure** on the application from [Lock the dashboard with Access](../get-started/03-access.md#2-create-the-access-application).
 
@@ -39,31 +37,23 @@ Your application lets in only the people its `Publishers` policy names. A token 
 
 1. Save the application.
 
-`ACCESS_ALLOWED_EMAILS` doesn't apply to the token, since it has no email. This policy is the only thing that lets it in.
-
-The app accepts only this kind of policy and the `Publishers` one, an Allow policy on emails. A login through any other kind of policy carries neither an email nor a token's Client ID, and the app refuses it with a `401` whose `reason` is `access_unidentified`. A search of the Worker's logs for `auth.unidentified` shows each login it refused, with the names of the claims it carried, so you can tell which policy let it through.
+This policy is the only thing that lets the token in. `ACCESS_ALLOWED_EMAILS` doesn't apply to it, since it has no email.
 
 ## 3. Give the token to your script
 
 The script sends the two values as headers on every request: `CF-Access-Client-Id` with the Client ID, and `CF-Access-Client-Secret` with the Client Secret.
 
-1. Store the Client ID and the Client Secret where your script reads secrets, such as its environment, your CI's secrets, or a password manager.
+1. Store the Client ID and the Client Secret where your script reads secrets, such as its environment, your CI's secrets, or a password manager. Never commit the secret to a repository.
 
-1. Have the script send both headers with every request to `https://newsletter.example.com/api/…`.
+1. Have the script send both headers with every request to `https://newsletter.example.com/api/…`. For example, this request saves a new draft:
 
-Never commit the secret to a repository, and never put it in `.claude/settings.json`.
-
-## 4. Point the script at the API
-
-The API reference describes every route: its method and path, the body it takes, its refusals, and an example. The editor's **API** tab shows the same reference.
-
-For a program, the reference is Markdown in two levels: `GET /api/reference.md` is the index, with what every route shares and each route on one line, and `GET /api/reference/<resource>.md` holds one resource's routes in full. The JSON at `GET /api/reference` is the whole reference in one answer, as the editor reads it, and `GET /api/openapi.json` is the same reference as an OpenAPI 3.1 document, for a tool that imports one. The docs are served as Markdown too: `GET /api/docs/publishing.md` lists the publisher's pages, `GET /api/docs/self-hosting.md` this guide's, and each page is at `GET /api/docs/<slug>.md`.
-
-An agent given only your app's address finds these routes too. `GET /llms.txt` is public. It names the publication, its archive and subscribe page, and the reference and docs indexes, and links the ways to sign in.
-
-The reference lists the body types each route takes. Most take JSON, sent with `Content-Type: application/json`. An image upload takes a multipart form, or the image file itself.
-
-A service token is held to everything Claude is, and more. An import it commits is emailed to the publisher, if notifications are set, since no one saw it happen. An import that would grow a scheduled send is refused, until the publisher finishes it in the dashboard.
+    ```bash
+    curl -s https://newsletter.example.com/api/posts \
+      -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+      -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
+      -H "Content-Type: application/json" \
+      -d '{"subject":"Weekly digest","markdown":"# This week\n\nThree things worth reading."}'
+    ```
 
 ## Check it
 
@@ -85,4 +75,22 @@ A service token is held to everything Claude is, and more. An import it commits 
 
 1. Open a draft in the editor, and have the script save a change to it. The editor shows that the draft was changed elsewhere, last edited by **a service token**.
 
-If the script gets a `401`, a `403`, or a login page, check the policy from section 2, and the token's two values. The policy's action must be Service Auth. Check that the token hasn't expired, too.
+If the script gets a `401`, a `403`, or a login page, check the policy from section 2, and the token's two values. The policy's action must be Service Auth, since the app refuses a login through any other kind of policy with a `401` whose `reason` is `access_unidentified`. Check that the token hasn't expired, too.
+
+## What a script can and can't do
+
+A script reaches the same API as the editor, and the app holds it to the same rules as anyone, plus two of its own:
+
+- **Anything it schedules waits out the review window,** where the publisher can still cancel it.
+- **An import it commits is emailed to the publisher,** if notifications are set, since no one saw it happen.
+- **An import that would grow a scheduled send is refused,** until the publisher finishes it in the dashboard.
+
+## Renew or revoke a token
+
+A service token stops working when its duration ends. Before then, extend it on the token under **Access controls → Service credentials → Service Tokens**, or create a new token, add it to the `Automation` policy, give it to the script, and then delete the old one.
+
+To stop a script at once, delete its token there. Its next request is refused.
+
+## More information
+
+The API reference describes every route: its method and path, the body it takes, its refusals, and an example. The editor's **API** tab shows it, and a program reads it as Markdown: `GET /api/reference.md` is the index, and `GET /api/reference/<resource>.md` holds one resource's routes in full. `GET /api/openapi.json` is the same reference as an OpenAPI 3.1 document, for a tool that imports one.
