@@ -26,12 +26,13 @@
   // ---------------------------------------------------------------------------
 
   // A bare `wrangler deploy` of this config would put the dev app, with its dev sign-in, on
-  // a public address. With workers.dev and preview URLs off and no route, it answers on
-  // none (SPEC, Trusted, not guarded). Neither affects `wrangler dev`.
+  // a public address and run its send sweep on whatever database it is bound to. With
+  // workers.dev and preview URLs off, no route, and no schedule, it answers on none and never
+  // sweeps (SPEC, Trusted, not guarded). None of these affects `wrangler dev`, where
+  // cli/sweep-ticker.mjs runs the sweep on its own clock.
   "workers_dev": false,
   "preview_urls": false,
-
-  "triggers": { "crons": ["* * * * *"] },
+  "triggers": { "crons": [] },
 
   // Editor SPA (the admin app lives under /dashboard), served from the generated tree
   // that scripts/build-client.mjs emits from public/ + client/ — never from public/

@@ -1,8 +1,8 @@
 /*
  * The local send sweep, on production's schedule, and the simulated receipts on theirs.
  *
- * Deployed, a Cron Trigger (`* * * * *` in wrangler.jsonc) runs the send sweep once a
- * minute, on the minute: it fires due sends and resumes interrupted and halted ones.
+ * Deployed, a Cron Trigger (`* * * * *` in an instance's `production`) runs the send sweep
+ * once a minute, on the minute: it fires due sends and resumes interrupted and halted ones.
  * `wrangler dev` never fires a cron on its own; it only exposes a URL that runs the
  * scheduled handler once. Without something calling it, a local send scheduled for 10:05 is
  * never sent and a paused send never resumes.
@@ -23,7 +23,7 @@
 const SCHEDULED_PATH = "/cdn-cgi/local/scheduled";
 const MINUTE = 60_000;
 
-/** The deployed sweep's cron (wrangler.jsonc's trigger). */
+/** The deployed sweep's cron (the `production` trigger in template/wrangler.jsonc). */
 const SWEEP_CRON = "* * * * *";
 
 /** The cron value the Worker reads as "settle simulated receipts only": `RECEIPTS_CRON` in
