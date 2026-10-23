@@ -10,6 +10,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Breaking
+
+- The app no longer logs `auth.service` on every request a service token makes: Cloudflare's own request and Access logs already record each one. Instead, the log lines for a publisher's actions (`send.canceled`, `send.rescheduled`, `subscriber.erased`, a block's `suppression.added`, and `import.committed`) say who took it, as `principal` (`human` or `service`) and, for a person, `client` (`editor`, `claude-code`, `claude`, or the name a script gives), never the email or the token. A filter or alert on `auth.service` finds nothing from this release on; filter on `principal` equal to `service` for what automation changed (SPEC §12).
+
 ## [1.15.1] - 2026-10-23
 
 ### Changed

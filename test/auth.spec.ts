@@ -45,7 +45,7 @@ describe("Access claims to a principal", () => {
     expect(lines()).toEqual([]);
   });
 
-  it("reads a common_name as a service token named by its Client ID, logging claim names only", () => {
+  it("reads a common_name as a service token named by its Client ID, logging nothing (SPEC §12)", () => {
     const lines = logged();
     const payload = { common_name: CLIENT_ID, sub: "", iss: "https://team", aud: ["aud-tag"] };
     expect(principalFromClaims(payload, ["you@example.com"])).toEqual({
@@ -53,14 +53,7 @@ describe("Access claims to a principal", () => {
       tokenId: CLIENT_ID,
       via: "access",
     });
-    expect(lines()).toEqual([
-      expect.objectContaining({
-        event: "auth.service",
-        level: "info",
-        claims: "aud,common_name,iss,sub",
-      }),
-    ]);
-    expect(JSON.stringify(lines())).not.toContain(CLIENT_ID);
+    expect(lines()).toEqual([]);
   });
 
   it("refuses a token with neither as unidentified, and warns with its claim names only (SPEC §11)", () => {
@@ -85,7 +78,6 @@ describe("Access claims to a principal", () => {
       via: "access",
     });
     expect(lines()).toEqual([
-      expect.objectContaining({ event: "auth.service", claims: "common_name,email" }),
       expect.objectContaining({ event: "auth.unidentified", claims: "common_name,sub" }),
     ]);
   });

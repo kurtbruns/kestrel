@@ -70,8 +70,7 @@ export const LOG_EVENTS = {
   "subscriber.complained": "info",
   "subscriber.erased": "info",
   "import.incomplete": "error",
-  // Who is calling (SPEC §11).
-  "auth.service": "info",
+  // A sign-in Access let through that names neither a person nor a service token (SPEC §11).
   "auth.unidentified": "warn",
   // A tool call through the MCP server, with the status its route answered (SPEC §11).
   "mcp.call": "info",
@@ -175,6 +174,19 @@ export const log = {
   warn: (event: LogEventAt<"warn">, fields: LogFields = {}): void => emit("warn", event, fields),
   info: (event: LogEventAt<"info">, fields: LogFields = {}): void => emit("info", event, fields),
 };
+
+/**
+ * Who took an action, as the action's line carries it (SPEC §12): `principal`, the kind
+ * (`human` or `service`), and `client`, the client a person came through, absent on a service
+ * token. Never the email or the token's Client ID: the record keeps who acted (SPEC §11), and
+ * a line only has to answer what automation, or Claude, changed, each as one filter.
+ */
+export function whoActed(by: { kind: "human" | "service"; client?: string | null }): {
+  principal: "human" | "service";
+  client?: string;
+} {
+  return { principal: by.kind, client: by.kind === "human" ? (by.client ?? undefined) : undefined };
+}
 
 /** An error's message as a field value (scrubbed like any string on the way out). */
 export function errorText(err: unknown): string {
