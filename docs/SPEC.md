@@ -109,7 +109,7 @@ Subject is deliberately the primary field. For an email that is what the reader 
 
 Every save writes a revision holding the whole post as saved, so every earlier version reads back as it was written. The editor and Claude, or two tabs, can have one draft open at once, so a save names the revision it was made from, and one made from a revision the post has since moved past is refused rather than overwriting the newer one: the refusal carries the post as it stands and who wrote its newer revision, so no one's words are lost without their knowing.
 
-Images are uploaded to the post they belong to and referenced by name in its Markdown; the render resolves each name to the image's address, so the publisher never handles an upload URL.
+Images are uploaded to the post they belong to and referenced by name in its Markdown; the render resolves each name to the image's address, so the publisher never handles an upload URL. A reference by an image's full address on this instance is checked as a name is: the preview says to use the name when the image is this post's, and warns that it isn't on this post when it's another post's or has been deleted, since deleting either would break the sent email and its archive page. An image on another host is the publisher's own and passes through unchecked.
 
 ### Slugs
 

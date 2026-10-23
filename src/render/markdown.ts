@@ -24,8 +24,16 @@ export function markdownToHtml(md: string, ctx: MarkdownContext): string {
             `The image “${href}” has no alt text. Describe it between the square brackets.`,
           );
         }
-        const { url, image } = resolveImageSrc(href, ctx.images, ctx.mediaBase);
-        if (!image && !/^https?:\/\//i.test(url)) {
+        const { url, image, ownMedia } = resolveImageSrc(href, ctx.images, ctx.mediaBase);
+        if (image && ownMedia) {
+          ctx.warnings.push(
+            `The image “${href}” should be referenced as “${image.filename}”. Use its file name, not its address.`,
+          );
+        } else if (!image && ownMedia) {
+          ctx.warnings.push(
+            `The image “${href}” isn’t on this post. Upload it to this post and reference it by its file name.`,
+          );
+        } else if (!image && !/^https?:\/\//i.test(url)) {
           ctx.warnings.push(
             `The image “${href}” isn’t on this post. Upload it, or check the file name.`,
           );

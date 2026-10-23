@@ -10,6 +10,14 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Changed
+
+- The operator's Claude context (`.claude/CLAUDE.md`) says how to put images in a post: upload each from a file on disk, since a pasted image isn't one, and reference it by its filename with alt text, never by the upload's URL, which can leave a sent post with a broken image. Merge it into your instance's copy; `kestrel check-context` shows the change.
+
+### Fixed
+
+- An image referenced by its full address on your instance, as an upload answers it, is now checked like one referenced by name: the preview, test, and schedule say to use the file name, and warn when the image is another post's or has been deleted, instead of staying silent while the sent email carried a broken image (SPEC §4).
+
 ## [1.15.1] - 2026-10-23
 
 ### Changed

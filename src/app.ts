@@ -992,7 +992,7 @@ export function createRouter({
       title: "Upload an image",
       summary: "Upload an image to a draft, as a form or the raw bytes.",
       description:
-        "The post's Markdown references the image by the `filename` the response gives, `![a short description](cover.jpg)`, and the render resolves that name to the stored image.",
+        "The post's Markdown references the image by the `filename` the response gives, `![a short description](cover.jpg)`, never by its `url`, and the render resolves that name to the stored image. A reference by `url` warns in the preview. Uploading the same `filename` again replaces the image.",
       query: [
         {
           name: "filename",

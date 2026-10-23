@@ -133,6 +133,49 @@ describe("render (the single render path)", async () => {
     ]);
   });
 
+  it("checks an image referenced by its full address on this instance like a name, and says to use the name (SPEC §4)", async () => {
+    const result = await render(
+      {
+        post: post(),
+        revision: revision("![A cat](https://media.example/posts/p1/cat.png)"),
+        images: [image()],
+      },
+      config,
+    );
+    expect(result.html).toContain('src="https://media.example/posts/p1/cat.png"');
+    expect(result.html).toContain('width="600" height="300"');
+    expect(result.warnings).toEqual([
+      "The image “https://media.example/posts/p1/cat.png” should be referenced as “cat.png”. Use its file name, not its address.",
+    ]);
+  });
+
+  it("flags an image addressed on this instance that isn't this post's: deleted, or another post's (SPEC §4)", async () => {
+    for (const href of [
+      "https://media.example/posts/p1/gone.png",
+      "https://media.example/posts/p2/cat.png",
+    ]) {
+      const result = await render(
+        { post: post(), revision: revision(`![A cat](${href})`), images: [image()] },
+        config,
+      );
+      expect(result.html).toContain(`src="${href}"`);
+      expect(result.warnings).toEqual([
+        `The image “${href}” isn’t on this post. Upload it to this post and reference it by its file name.`,
+      ]);
+    }
+  });
+
+  it("passes an image on another host through untouched, with no warning", async () => {
+    const href = "https://elsewhere.example/posts/p1/cat.png";
+    const result = await render(
+      { post: post(), revision: revision(`![A cat](${href})`), images: [image()] },
+      config,
+    );
+    expect(result.html).toContain(`src="${href}"`);
+    expect(result.html).toContain(`src="${href}" alt="A cat" style=`); // no size: not ours
+    expect(result.warnings).toEqual([]);
+  });
+
   it("prints the mailing address in the built-in template's footer only when one is set (SPEC §9)", async () => {
     const input = { post: post(), revision: revision("body"), images: [] };
     const addressLine = (html: string) =>

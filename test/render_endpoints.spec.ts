@@ -257,6 +257,39 @@ describe("preview + test endpoints", () => {
     expect([repeat.idempotent, repeat.warnings]).toEqual([true, [missing]]);
   });
 
+  it("warns on an image referenced by its upload URL, and again once that image is deleted (SPEC §4)", async () => {
+    const id = await draftWithImage("By URL");
+    const listed = await readJson(
+      await SELF.fetch(`${base}/api/posts/${id}/images`, { headers: AUTH }),
+    );
+    const url: string = listed.images[0].url;
+    const rev = await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH }));
+    const saved = await SELF.fetch(`${base}/api/posts/${id}`, {
+      method: "PUT",
+      headers: JSON_AUTH,
+      body: JSON.stringify({
+        markdown: `# Hi\n\n![A cat](${url})`,
+        base_revision: rev.post.current_revision,
+      }),
+    });
+    expect(saved.status).toBe(200);
+    const warnings = async () =>
+      (await readJson(await SELF.fetch(`${base}/api/posts/${id}/preview.json`, { headers: AUTH })))
+        .warnings;
+    expect(await warnings()).toEqual([
+      `The image “${url}” should be referenced as “cat.png”. Use its file name, not its address.`,
+    ]);
+
+    const deleted = await SELF.fetch(`${base}/api/posts/${id}/images/cat.png`, {
+      method: "DELETE",
+      headers: AUTH,
+    });
+    expect(deleted.status).toBe(200);
+    expect(await warnings()).toEqual([
+      `The image “${url}” isn’t on this post. Upload it to this post and reference it by its file name.`,
+    ]);
+  });
+
   it("a draft's test and preview are a live render (frozen: false)", async () => {
     const id = await draftWithImage("Live");
     const action = await readJson(
