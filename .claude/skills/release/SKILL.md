@@ -48,13 +48,11 @@ git push origin vX.Y.Z
 awk '/^## \[X.Y.Z\]/{f=1;next} /^## \[|^\[.*\]: /{f=0} f' CHANGELOG.md | gh release create vX.Y.Z --verify-tag --title "kestrel vX.Y.Z" --notes-file -
 ```
 
-Push that tag alone, never `--tags`. For the first release that publishes `kestrel`, stop after the push: the maintainer publishes it by hand from the tag before the GitHub release is created (`.claude/rules/release.md`, Publishing to npm, step 1), then adds its trusted publisher. The notes are the changelog section verbatim. `--verify-tag` refuses to run before the tag is on the remote, so the release can't mint its own tag at the wrong commit. Check that `gh release view vX.Y.Z` shows the section.
+Push that tag alone, never `--tags`. The notes are the changelog section verbatim. `--verify-tag` refuses to run before the tag is on the remote, so the release can't mint its own tag at the wrong commit. Check that `gh release view vX.Y.Z` shows the section.
 
 ## 4. npm
 
 Publishing the release runs `.github/workflows/publish.yml`. Watch that run (`gh run watch <id> --exit-status`), then confirm with `npm view @kurtbruns/kestrel version` and `npm view kestrel version`. For a few minutes after a green run, npm can still report the previous version: when the run's log shows `+ @kurtbruns/kestrel@X.Y.Z` and `+ kestrel@X.Y.Z`, wait and check again. Never publish by hand to make up for the delay.
-
-The first release that publishes `kestrel` ends with its one-time step in `.claude/rules/release.md` (Publishing to npm): check `npm owner ls kestrel` lists the maintainer alone, then hand the maintainer the `npm deprecate kestrel@0.0.1 …` command there to run. Skip it once `npm view kestrel@0.0.1 deprecated` answers the message.
 
 ## 5. Site and demo
 

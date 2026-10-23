@@ -16,7 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { handoff, INSTANCE_COMMANDS, instanceBin } from "../../packages/kestrel/lib/handoff.mjs";
+import { findInstance, handoff, INSTANCE_COMMANDS } from "../../packages/kestrel/lib/handoff.mjs";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const CLIENT = join(ROOT, "packages", "kestrel");
@@ -52,7 +52,7 @@ describe("handing an instance command to @kurtbruns/kestrel", () => {
     const bin = installInstancePackage();
     mkdirSync(join(dir, "src"));
     for (const at of [dir, join(dir, "src")]) {
-      expect(instanceBin(at)).toBe(bin);
+      expect(findInstance(at)?.bin).toBe(bin);
       expect(handoff("seed", ["--size", "10k"], { dir: at, version: "9.9.9" })).toEqual({
         cmd: process.execPath,
         args: [bin, "seed", "--size", "10k"],
@@ -78,8 +78,14 @@ describe("handing an instance command to @kurtbruns/kestrel", () => {
       args: ["--yes", "--package=@kurtbruns/kestrel@9.9.9", "--", "kestrel", "init", "site"],
       shell: false,
     });
-    const windows = handoff("init", [], { dir, version: "9.9.9", env: {}, platform: "win32" });
-    expect(windows).toMatchObject({ cmd: "npx.cmd", shell: true });
+    // On Windows the shell gets one command line, so a name with a space stays one argument.
+    expect(
+      handoff("init", ["My Site"], { dir, version: "9.9.9", env: {}, platform: "win32" }),
+    ).toEqual({
+      cmd: 'npx.cmd --yes --package=@kurtbruns/kestrel@9.9.9 -- kestrel init "My Site"',
+      args: [],
+      shell: true,
+    });
     const packed = handoff("init", [], {
       dir,
       version: "9.9.9",
@@ -87,6 +93,18 @@ describe("handing an instance command to @kurtbruns/kestrel", () => {
       platform: "linux",
     });
     expect(packed.args[1]).toBe("--package=/tmp/kurtbruns-kestrel-9.9.9.tgz");
+  });
+
+  it("refuses an install with no kestrel command rather than calling it missing or fetching another", () => {
+    const bin = installInstancePackage();
+    const manifest = join(dir, "node_modules", "@kurtbruns", "kestrel", "package.json");
+    writeFileSync(manifest, JSON.stringify({ ...readJson(manifest), bin: undefined }));
+    expect(findInstance(dir)).toEqual({ root: join(bin, "..", ".."), bin: undefined });
+    for (const command of ["init", "dev"]) {
+      const plan = handoff(command, [], { dir, version: "9.9.9", env: {} });
+      expect(plan.cmd).toBeUndefined();
+      expect(plan.refuse).toContain("has no kestrel command");
+    }
   });
 
   it("refuses every other instance command where none is installed, saying where it runs", () => {
@@ -112,10 +130,15 @@ describe("the client package", () => {
     for (const folder of ["bin", "lib"]) {
       for (const file of readdirSync(join(CLIENT, folder))) {
         const source = readFileSync(join(CLIENT, folder, file), "utf8");
-        const specifiers = [...source.matchAll(/(?:from|import\()\s*"([^"]+)"/g)].map((m) => m[1]);
+        const specifiers = [
+          ...source.matchAll(/(?:\bfrom|\bimport\s*\(?)\s*["'`]([^"'`]+)["'`]/g),
+        ].map((m) => m[1]);
+        // A module in lib/ reaches its siblings only; bin/ reaches into lib/. Nothing else is
+        // in the client's tarball, or in the copy of lib/ the instance package ships.
+        const own = folder === "lib" ? /^\.\/[\w-]+\.mjs$/ : /^\.\.\/lib\/[\w-]+\.mjs$/;
         for (const specifier of specifiers) {
           expect(
-            specifier.startsWith("node:") || /^\.\.?\/(lib\/)?[\w-]+\.mjs$/.test(specifier),
+            specifier.startsWith("node:") || own.test(specifier),
             `${folder}/${file} imports ${specifier}`,
           ).toBe(true);
         }

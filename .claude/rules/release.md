@@ -27,15 +27,9 @@ Releases publish through npm's trusted publishing: npmjs.com trusts `publish.yml
 
 Set up once for each package, by the maintainer, since npm configures a trusted publisher only for a package that already exists:
 
-1. Publish the first version by hand from its release tag, after pushing the tag and before creating the GitHub release: `npm login`, then `npm publish` in a clean checkout of the tag (`npm ci` first; `prepare` builds the package). The workflow that the GitHub release then runs finds the version on npm and leaves it alone. `kestrel` existed before Kestrel took the name, and its first version from Kestrel is published by hand the same way, from the same checkout: `npm publish` in `packages/kestrel`, after `@kurtbruns/kestrel` (whose release the client's `init` fetches) is on npm.
+1. Publish the first version by hand from its release tag, after pushing the tag and before creating the GitHub release: `npm login`, then `npm publish` in a clean checkout of the tag (`npm ci` first; `prepare` builds the package), in the package's own directory (`packages/kestrel` for the client, after the instance package). The workflow that the GitHub release then runs finds the version on npm and leaves it alone.
 2. Make the workflow the publisher, on npmjs.com under the package's **Settings → Trusted Publisher** (GitHub Actions; user `kurtbruns`, repository `kestrel`, workflow `publish.yml`), or with `npm trust github <package> --file publish.yml --repo kurtbruns/kestrel --allow-publish` (npm 11.15 or later, two-factor authentication on).
 3. Under **Settings → Publishing access**, choose **Require two-factor authentication and disallow tokens**, so only the workflow (or the maintainer with two-factor) can publish.
-
-`kestrel` also needs, once, after the first release publishes it: `npm owner ls kestrel` lists the maintainer alone, and `kestrel@0.0.1`, the name's previous owners' unrelated "Node.js client for Kestrel", is deprecated so anyone who has it learns the name changed hands:
-
-```bash
-npm deprecate kestrel@0.0.1 "kestrel is now the command-line client for Kestrel, the self-hosted newsletter app (https://getkestrel.dev). 0.0.1 is an unrelated earlier package; install kestrel@latest."
-```
 
 ## What the site and the demo rely on
 

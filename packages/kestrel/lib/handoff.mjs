@@ -13,6 +13,7 @@
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { constants } from "node:os";
 import { dirname, join } from "node:path";
 
 /** The package that holds the instance commands. */
@@ -29,19 +30,26 @@ export const INSTANCE_COMMANDS = [
 ];
 
 /**
- * The path of the instance package's `kestrel` script as installed for `dir` (or a directory
- * above it), or undefined when none is.
+ * The instance package as installed for `dir` (or a directory above it): `{ root, bin }`, with
+ * `bin` the path of its `kestrel` script, or undefined when the install has none; or undefined
+ * when no install is found.
  */
-export function instanceBin(dir = process.cwd()) {
+export function findInstance(dir = process.cwd()) {
   let manifest;
   try {
     manifest = createRequire(join(dir, "package.json")).resolve(`${INSTANCE_PACKAGE}/package.json`);
   } catch {
     return undefined;
   }
+  const root = dirname(manifest);
   const { bin } = JSON.parse(readFileSync(manifest, "utf8"));
   const script = typeof bin === "string" ? bin : bin?.kestrel;
-  return script ? join(dirname(manifest), script) : undefined;
+  return { root, bin: script ? join(root, script) : undefined };
+}
+
+/** One argument for cmd.exe, which splits on spaces and reads its own metacharacters. */
+function quoteForCmd(arg) {
+  return /^[\w@=./:\\-]+$/.test(arg) ? arg : `"${arg.replace(/"/g, '""')}"`;
 }
 
 /**
@@ -55,30 +63,39 @@ export function handoff(
   argv,
   { dir = process.cwd(), version, env = process.env, platform = process.platform } = {},
 ) {
-  const bin = instanceBin(dir);
-  if (bin) {
-    return { cmd: process.execPath, args: [bin, command, ...argv], shell: false };
+  const found = findInstance(dir);
+  if (found?.bin) {
+    return { cmd: process.execPath, args: [found.bin, command, ...argv], shell: false };
+  }
+  if (found) {
+    return {
+      refuse: `the ${INSTANCE_PACKAGE} installed at ${found.root} has no kestrel command, so it can't run \`kestrel ${command}\`. Reinstall it with \`npm install\`.`,
+    };
   }
   if (command === "init") {
     const spec = env.KESTREL_INSTANCE_PACKAGE || `${INSTANCE_PACKAGE}@${version}`;
-    // npx is a .cmd script on Windows, which Node spawns only through a shell.
-    const windows = platform === "win32";
-    return {
-      cmd: windows ? "npx.cmd" : "npx",
-      args: ["--yes", `--package=${spec}`, "--", "kestrel", command, ...argv],
-      shell: windows,
-    };
+    const args = ["--yes", `--package=${spec}`, "--", "kestrel", command, ...argv];
+    // npx is a .cmd script on Windows, which Node spawns only through a shell, and a shell
+    // splits what it is given: so it gets one command line, each argument quoted for cmd.exe.
+    if (platform === "win32") {
+      return { cmd: ["npx.cmd", ...args].map(quoteForCmd).join(" "), args: [], shell: true };
+    }
+    return { cmd: "npx", args, shell: false };
   }
   return {
     refuse: `\`kestrel ${command}\` runs in an instance's repository, with ${INSTANCE_PACKAGE} installed, and none is installed here. Run it in your instance's repository after \`npm install\`, or write a new instance with \`npx kestrel init\`.`,
   };
 }
 
+// The signals passed on to the child when they are sent to this process alone.
+const FORWARDED = ["SIGTERM", "SIGHUP", "SIGQUIT"];
+
 /**
  * Run instance `command` through the instance package, with the terminal attached, and exit
  * as it does. A Ctrl-C reaches the child from the terminal itself, so this process only waits
- * for it to finish (`kestrel dev` stops its server on the way out); a signal sent to this
- * process alone is passed on.
+ * for it to finish (`kestrel dev` stops its server on the way out); another signal sent to
+ * this process alone is passed on. A child ended by a signal exits 128 plus its number, as a
+ * shell reports it.
  */
 export function runInstanceCommand(command, argv, version) {
   const plan = handoff(command, argv, { version });
@@ -88,12 +105,14 @@ export function runInstanceCommand(command, argv, version) {
   }
   const child = spawn(plan.cmd, plan.args, { stdio: "inherit", shell: plan.shell });
   process.on("SIGINT", () => {});
-  process.on("SIGTERM", () => child.kill("SIGTERM"));
+  for (const signal of FORWARDED) {
+    process.on(signal, () => child.kill(signal));
+  }
   child.on("error", (err) => {
     console.error(`kestrel: could not run ${INSTANCE_PACKAGE}: ${err.message}`);
     process.exit(1);
   });
   child.on("exit", (code, signal) => {
-    process.exit(code ?? (signal ? 1 : 0));
+    process.exit(code ?? (signal ? 128 + (constants.signals[signal] ?? 0) : 0));
   });
 }
