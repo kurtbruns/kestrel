@@ -6,7 +6,7 @@
  * settings), so this needs the dev server up. It shows the first-run dashboard and setup
  * checklist an operator meets when they deploy. The target is found as for seed.
  */
-import { callApi, devTarget, fail } from "./dev-api.mjs";
+import { callApi, devTarget, fail } from "../packages/kestrel/lib/dev-api.mjs";
 
 /** `kestrel reset [port|url]`. */
 export async function resetCommand(argv) {

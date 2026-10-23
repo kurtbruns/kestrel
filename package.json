@@ -30,6 +30,7 @@
     "dist/public/",
     "bin/",
     "cli/",
+    "packages/kestrel/lib/",
     "template/",
     "demo/",
     "migrations/",

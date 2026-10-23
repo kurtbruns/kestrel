@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { seedDemo } from "../cli/seed.mjs";
+import { triggerSweep } from "../cli/sweep-ticker.mjs";
 /*
  * Simulate a send on the local dev server: `npm run simulate-send -- --in 90s`.
  *
@@ -25,9 +27,7 @@
  * The target is found as for the seed: this worktree's own dev server, proven by its run ID,
  * or a server named deliberately with a URL or port argument.
  */
-import { callApi, devTarget, fail, parseArgs } from "../cli/dev-api.mjs";
-import { seedDemo } from "../cli/seed.mjs";
-import { triggerSweep } from "../cli/sweep-ticker.mjs";
+import { callApi, devTarget, fail, parseArgs } from "../packages/kestrel/lib/dev-api.mjs";
 
 const TAG = "simulate-send";
 /** The demo's scheduled post (`demo/posts/5-a-quick-note.md`): the one a demo send moves when it can. */

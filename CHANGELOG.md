@@ -10,6 +10,12 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+**Upgrading from 1.14.0.** Nothing to add: your instance keeps running every `kestrel` command, `login` and `api` included, from the `@kurtbruns/kestrel` it already installs, which ships the client too. Don't add `kestrel` as a dependency, since its `kestrel` command would collide with that one. `npx -p @kurtbruns/kestrel kestrel …` keeps working, and `npx kestrel …` now does the same from any folder.
+
+### Changed
+
+- The Kestrel CLI runs from anywhere as `npx kestrel …`: the unscoped `kestrel` package on npm is now Kestrel's own client, so `npx kestrel login <url>`, `npx kestrel api …`, and `npx kestrel logout` work outside your instance's repository, without naming `@kurtbruns/kestrel`. `npx kestrel init` writes a new instance from the `@kurtbruns/kestrel` release of the same version, and `dev`, `seed`, `reset`, `sync-migrations`, and `check-context` run from the instance's own install, with the same names and flags. The docs, the instance's README, and `/llms.txt` use the short form again. `kestrel@0.0.1`, an unrelated package that held the name before, is deprecated.
+
 ## [1.14.0] - 2026-10-22
 
 **Upgrading from 1.13.0.** Two database migrations, which `npm run sync-migrations` brings in: apply them before you deploy with `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development). `0013_who_acted_client` records the client each revision and import came through. No client was recorded before it, and nothing tells a person's change in the editor from one through another program, so every revision and import a person made is read as made in the editor, and those rows are rewritten once, which counts against the day's database writes on Workers Free like any other write; a service token's read as naming no client. `0014_send_acts` adds a record of every act on a send: who scheduled it, moved it, canceled it, or resolved it, and when. It rewrites nothing: a send made before it reads as acted on by no one recorded.

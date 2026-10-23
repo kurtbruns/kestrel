@@ -4,8 +4,8 @@
  *
  * The person approves the sign-in in their browser, through the same Access policy the
  * editor's sign-in passes, so Claude Code working through `kestrel api` afterwards is that
- * person, not a token of its own (SPEC §11). The OAuth steps are cli/oauth.mjs, and where
- * the result is kept is cli/credentials.mjs.
+ * person, not a token of its own (SPEC §11). The OAuth steps are packages/kestrel/lib/oauth.mjs, and where
+ * the result is kept is packages/kestrel/lib/credentials.mjs.
  */
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";

@@ -11,7 +11,7 @@
  * Access has nothing to say about it. Then: dynamic client registration (RFC 7591) for a
  * public client on a loopback redirect (RFC 8252), the authorization code flow with PKCE
  * (S256), and the protected resource named in every token request (RFC 8707). Plain Node,
- * no dependency, as everything in cli/ is.
+ * no dependency, as the whole client is.
  */
 import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";

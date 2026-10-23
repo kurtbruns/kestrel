@@ -1,9 +1,11 @@
-# Publish @kurtbruns/kestrel to npm when a GitHub release is published. Cutting a release
-# (the `release` skill) ends with `gh release create`, which triggers this: the
-# package that instances install is built from that release's tag, and nothing else publishes.
+# Publish Kestrel's two packages to npm when a GitHub release is published: @kurtbruns/kestrel,
+# the package instances install, and the unscoped `kestrel`, the client (packages/kestrel).
+# Cutting a release (the `release` skill) ends with `gh release create`, which triggers this:
+# both are built from that release's tag at its one version, and nothing else publishes. The
+# instance package goes first, since the client's `init` fetches it at the client's version.
 #
 # It authenticates through npm's trusted publishing: npm trusts this workflow file in this
-# repository (configured on the package's settings on npmjs.com), GitHub issues a short-lived
+# repository (configured on each package's settings on npmjs.com), GitHub issues a short-lived
 # OIDC token for the run, and no npm token is stored anywhere. Publishing from a public
 # repository this way also attaches provenance, so npmjs.com shows the commit and workflow
 # run each version was built by.
@@ -38,17 +40,19 @@ jobs:
           registry-url: https://registry.npmjs.org
       # Trusted publishing needs npm 11.5.1 or later, newer than some Node 24 releases bundle.
       - run: npm install -g npm@11
-      # The tag names the version package.json carries, so the release page, the build stamp,
-      # and the version on npm are one number.
+      # The tag names the version both package.json files carry, so the release page, the build
+      # stamp, and the versions on npm are one number.
       - name: Check the tag matches package.json
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
-          version="v$(node -p 'require("./package.json").version')"
-          if [ "$TAG" != "$version" ]; then
-            echo "::error::release tag $TAG does not match package.json $version"
-            exit 1
-          fi
+          for dir in . packages/kestrel; do
+            version="v$(node -p "require('./$dir/package.json').version")"
+            if [ "$TAG" != "$version" ]; then
+              echo "::error::release tag $TAG does not match $dir/package.json $version"
+              exit 1
+            fi
+          done
       # The `prepare` script builds the package (the stamp, the Worker bundle, the editor).
       - run: npm ci
       - run: npm run typecheck
@@ -61,17 +65,21 @@ jobs:
       # the same as finding it.
       - name: Publish
         run: |
-          name="$(node -p 'require("./package.json").name')"
-          version="$(node -p 'require("./package.json").version')"
-          if npm view "$name@$version" version --prefer-online >/dev/null 2>&1; then
-            echo "::notice::$name@$version is already on npm; nothing to publish"
-            exit 0
-          fi
-          status=0
-          npm publish > publish.log 2>&1 || status=$?
-          cat publish.log
-          if [ "$status" -ne 0 ] && grep -q "cannot publish over the previously published versions" publish.log; then
-            echo "::notice::$name@$version is already on npm; nothing to publish"
-            exit 0
-          fi
-          exit "$status"
+          publish() {
+            name="$(node -p "require('./$1/package.json').name")"
+            version="$(node -p "require('./$1/package.json').version")"
+            if npm view "$name@$version" version --prefer-online >/dev/null 2>&1; then
+              echo "::notice::$name@$version is already on npm; nothing to publish"
+              return 0
+            fi
+            status=0
+            (cd "$1" && npm publish) > publish.log 2>&1 || status=$?
+            cat publish.log
+            if [ "$status" -ne 0 ] && grep -q "cannot publish over the previously published versions" publish.log; then
+              echo "::notice::$name@$version is already on npm; nothing to publish"
+              return 0
+            fi
+            return "$status"
+          }
+          publish .
+          publish packages/kestrel

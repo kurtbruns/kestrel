@@ -7,7 +7,11 @@
  * use one implementation.
  *
  * Every command acts on the directory it runs in, except the sign-in: login, logout, and api
- * act as the person at this computer, whose sign-ins are theirs rather than a folder's.
+ * act as the person at this computer, whose sign-ins are theirs rather than a folder's. Those
+ * three are Kestrel's client, published on its own as the unscoped `kestrel` (packages/kestrel),
+ * which runs from anywhere and hands the instance commands back to this package. This package
+ * ships the client's source too, so an instance runs every command from its own install and
+ * never needs the client as a second dependency, whose `kestrel` would collide with this one.
  * Seed and reset work only against a local dev server, whose dev routes exist nowhere else.
  */
 import { readFileSync } from "node:fs";
@@ -60,13 +64,13 @@ switch (command) {
     await (await import("../cli/reset.mjs")).resetCommand(argv);
     break;
   case "login":
-    await (await import("../cli/login.mjs")).loginCommand(argv);
+    await (await import("../packages/kestrel/lib/login.mjs")).loginCommand(argv);
     break;
   case "logout":
-    await (await import("../cli/login.mjs")).logoutCommand(argv);
+    await (await import("../packages/kestrel/lib/login.mjs")).logoutCommand(argv);
     break;
   case "api":
-    await (await import("../cli/api.mjs")).apiCommand(argv);
+    await (await import("../packages/kestrel/lib/api.mjs")).apiCommand(argv);
     break;
   case "version":
   case "--version":

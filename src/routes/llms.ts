@@ -110,7 +110,7 @@ export function llmsText({
     "",
     "## Behind Cloudflare Access",
     "",
-    "Sign in as the person you work for, through Cloudflare Access in their browser. An MCP client connects to `/api/mcp` and signs in with OAuth. In this instance's repository, `npx -p @kurtbruns/kestrel kestrel login <this instance's address>` signs Claude Code in instead, and `npx -p @kurtbruns/kestrel kestrel api <method> <path>` then calls these routes as them. A script that runs with no one present sends a Cloudflare Access service token with every request instead, as the `CF-Access-Client-Id` and `CF-Access-Client-Secret` headers. Without a credential, the request is refused.",
+    "Sign in as the person you work for, through Cloudflare Access in their browser. An MCP client connects to `/api/mcp` and signs in with OAuth. `npx kestrel login <this instance's address>` signs Claude Code in instead, and `npx kestrel api <method> <path>` then calls these routes as them. A script that runs with no one present sends a Cloudflare Access service token with every request instead, as the `CF-Access-Client-Id` and `CF-Access-Client-Secret` headers. Without a credential, the request is refused.",
     "",
     ...tier("admin"),
     "",

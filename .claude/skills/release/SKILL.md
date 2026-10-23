@@ -1,6 +1,6 @@
 ---
 name: release
-description: Cut a Kestrel release and carry it through to the npm package, getkestrel.dev, and the live demo. Reviews [Unreleased], opens the release PR, tags the merge, publishes the GitHub release, confirms npm, then moves both downstream pins and checks them live. Use when the maintainer asks to cut, ship, or tag a release ("cut 1.14.0", "release what's on main").
+description: Cut a Kestrel release and carry it through to the npm packages, getkestrel.dev, and the live demo. Reviews [Unreleased], opens the release PR, tags the merge, publishes the GitHub release, confirms npm, then moves both downstream pins and checks them live. Use when the maintainer asks to cut, ship, or tag a release ("cut 1.14.0", "release what's on main").
 disable-model-invocation: true
 argument-hint: "[version]"
 ---
@@ -13,7 +13,7 @@ When to cut and how to number it are `.claude/rules/release.md`. This is the pro
 - [ ] 1. [Unreleased] reviewed against main
 - [ ] 2. Release PR gated, approved, merged
 - [ ] 3. Tag pushed, GitHub release published
-- [ ] 4. npm serves the version
+- [ ] 4. npm serves the version, for both packages
 - [ ] 5. Site and demo PRs open, CI green, merged
 - [ ] 6. Site and demo live on the version
 ```
@@ -33,7 +33,7 @@ Fix a gap in its own PR first, or ask the maintainer when the fix is a decision.
 On a branch off `origin/main`:
 
 1. Rename `## [Unreleased]` to `## [X.Y.Z] - <today>`, and add a fresh, empty `## [Unreleased]` above it that keeps the HTML comment hint.
-2. `npm version X.Y.Z --no-git-tag-version` (bumps `package.json` and `package-lock.json` together, no commit, no tag).
+2. `npm version X.Y.Z --no-git-tag-version` (bumps `package.json` and `package-lock.json` together, no commit, no tag), then the client's to match: `npm version X.Y.Z --no-git-tag-version --prefix packages/kestrel`. The two packages always carry one version.
 3. At the bottom of `CHANGELOG.md`, point `[Unreleased]` at `compare/vX.Y.Z...HEAD` and add `[X.Y.Z]: …/releases/tag/vX.Y.Z`.
 4. Run the gate: `npm test`, `npm run typecheck`, `npm run check:package`, `npm run check`.
 5. Open a PR titled "Release X.Y.Z", and merge it as `.claude/CLAUDE.md` says (Issues and pull requests).
@@ -52,7 +52,9 @@ Push that tag alone, never `--tags`. The notes are the changelog section verbati
 
 ## 4. npm
 
-Publishing the release runs `.github/workflows/publish.yml`. Watch that run (`gh run watch <id> --exit-status`), then confirm with `npm view @kurtbruns/kestrel version`. For a few minutes after a green run, npm can still report the previous version: when the run's log ends `+ @kurtbruns/kestrel@X.Y.Z`, wait and check again. Never publish by hand to make up for the delay.
+Publishing the release runs `.github/workflows/publish.yml`. Watch that run (`gh run watch <id> --exit-status`), then confirm with `npm view @kurtbruns/kestrel version` and `npm view kestrel version`. For a few minutes after a green run, npm can still report the previous version: when the run's log shows `+ @kurtbruns/kestrel@X.Y.Z` and `+ kestrel@X.Y.Z`, wait and check again. Never publish by hand to make up for the delay.
+
+The first release that publishes `kestrel` ends with its one-time step in `.claude/rules/release.md` (Publishing to npm): check `npm owner ls kestrel` lists the maintainer alone, then hand the maintainer the `npm deprecate kestrel@0.0.1 …` command there to run. Skip it once `npm view kestrel@0.0.1 deprecated` answers the message.
 
 ## 5. Site and demo
 

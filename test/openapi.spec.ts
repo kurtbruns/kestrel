@@ -2,7 +2,7 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error cli/ is plain Node with no type declarations.
-import { describeRoute, nextMove } from "../cli/openapi.mjs";
+import { describeRoute, nextMove } from "../packages/kestrel/lib/openapi.mjs";
 import { createRouter } from "../src/app";
 import { type AppEnv, getConfig } from "../src/env";
 import { buildReferenceResponse } from "../src/reference";

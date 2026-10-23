@@ -8,9 +8,13 @@
  * is actually serving. The token comes from the dev-only `/api/dev/token` route, which
  * exists only on a local dev server (fake transport, no Access, a loopback origin).
  *
+ * It lives in the client package, beside `kestrel api`, because `kestrel api --local` finds and
+ * signs in to the dev server the same way; the instance package's seed and reset import it
+ * from the copy of the client it ships, so the two never disagree about the record.
+ *
  * Seed and reset wipe the database of the server they reach, so a target they find for
  * themselves must prove it is this directory's: the port `kestrel dev` recorded here, and a
- * server there that reports the run ID recorded with it (cli/dev-server.mjs). A target the
+ * server there that reports the run ID recorded with it (packages/kestrel/lib/dev-server.mjs). A target the
  * caller names, a port or URL argument, is their choice and is used as given. `PORT` names
  * nothing here: a shell can carry it without the caller meaning anything by it, and a
  * target that wipes a database has to be named on purpose.

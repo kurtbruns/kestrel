@@ -3,14 +3,18 @@
  * Prove the npm package works from an instance repository, the way an operator consumes it.
  *
  * Packs this repository as `npm publish` would (the `prepare` build included), checks the
- * tarball holds what an instance needs and none of Kestrel's source, then scaffolds a scratch
- * instance with the package's own `kestrel init` and installs the tarball into it, which on
+ * tarball holds what an instance needs and none of Kestrel's source, and packs the client
+ * (packages/kestrel, published as the unscoped `kestrel`), checking it holds only its own
+ * files. Then it scaffolds a scratch instance with the client's `kestrel init`, which fetches the
+ * packed instance package through npx as it fetches the release from npm, and installs the
+ * tarball into it, which on
  * npm 12 must block no dependency's install script. In that instance it runs the scaffold's typecheck (`wrangler types` and `tsc`), `tsc` again with
  * Kestrel's declaration checked too, and a `wrangler deploy --dry-run` that bundles the Worker
  * from node_modules; applies the migrations init copied to a local database; and checks that
- * `kestrel check-context` finds every context file current. Last it runs the instance: `npm
- * run dev` must answer its health check and serve the editor, and `kestrel seed` must load the
- * demo through it. The instance installs the
+ * the client's `kestrel check-context`, handed to that install, finds every context file
+ * current. Last it runs the instance: `npm run dev` must answer its health check and serve the
+ * editor, `kestrel seed` must load the demo through it, and the client's `kestrel api --local`
+ * must read it back. The instance installs the
  * wrangler and TypeScript versions this repository uses, so a failure here is the package's,
  * not a newer tool's.
  *
@@ -48,6 +52,7 @@ const REQUIRED = [
   "dist/public/dashboard/app.js",
   "bin/kestrel.mjs",
   "cli/dev.mjs",
+  "packages/kestrel/lib/api.mjs",
   "template/wrangler.jsonc",
   "template/claude/CLAUDE.md",
   ".dev.vars.example",
@@ -113,14 +118,48 @@ if (missing.length > 0 || leaked.length > 0) {
 }
 console.log(`[check-package] ${packed.filename}: ${files.length} files, ${packed.size} bytes`);
 
-// --- A scratch instance, scaffolded by the package's own init ------------------------------
-// init runs from the tarball unpacked beside the instance, as `npx @kurtbruns/kestrel init`
-// runs it from npm's cache.
-const unpacked = join(work, "unpacked");
-mkdirSync(unpacked);
-step("tar", ["-xzf", join(work, packed.filename), "-C", unpacked], work);
+// The client is its own package with no build: it ships its command and modules, and nothing
+// a client run from anywhere has no use for.
+const clientPackText = execFileSync("npm", ["pack", "--json", "--pack-destination", work], {
+  cwd: join(ROOT, "packages", "kestrel"),
+  encoding: "utf8",
+  stdio: ["ignore", "pipe", "inherit"],
+});
+const clientPackOutput = JSON.parse(clientPackText.slice(clientPackText.search(/^[[{]$/m)));
+const clientPacked = Array.isArray(clientPackOutput)
+  ? clientPackOutput[0]
+  : Object.values(clientPackOutput)[0];
+const clientFiles = clientPacked.files.map((f) => f.path);
+const CLIENT_FILES = /^(package\.json|README\.md|LICENSE|bin\/kestrel\.mjs|lib\/[\w-]+\.mjs)$/;
+const clientStray = clientFiles.filter((f) => !CLIENT_FILES.test(f));
+if (!clientFiles.includes("bin/kestrel.mjs") || clientStray.length > 0) {
+  fail(`the client package holds ${clientFiles.join(", ")}`);
+}
+if (!clientFiles.every((f) => !f.startsWith("lib/") || files.includes(`packages/kestrel/${f}`))) {
+  fail("the instance package doesn't ship every module of the client");
+}
+console.log(
+  `[check-package] ${clientPacked.filename}: ${clientFiles.length} files, ${clientPacked.size} bytes`,
+);
+const client = join(work, "client");
+mkdirSync(client);
+step("tar", ["-xzf", join(work, clientPacked.filename), "-C", client], work);
+const clientBin = join(client, "package", "bin", "kestrel.mjs");
+
+// --- A scratch instance, scaffolded by the client's init -----------------------------------
+// `npx kestrel init` runs the client, which finds no instance package installed and fetches
+// one through npx; the packed tarball stands in for the release npm doesn't have yet.
+const tarball = join(work, packed.filename);
 const instance = join(work, "instance");
-step(process.execPath, [join(unpacked, "package", "bin", "kestrel.mjs"), "init", instance], work);
+console.log(`[check-package] $ kestrel init ${instance} (the client, fetching ${packed.filename})`);
+const init = spawnSync(process.execPath, [clientBin, "init", instance], {
+  cwd: work,
+  env: { ...process.env, KESTREL_INSTANCE_PACKAGE: tarball },
+  stdio: "inherit",
+});
+if (init.status !== 0) {
+  fail(`the client's kestrel init exited ${init.status}`);
+}
 
 // init wrote every file an instance starts with, under its instance name, and nothing under a
 // shipped name.
@@ -165,7 +204,6 @@ for (const key of ["compatibility_date", "compatibility_flags"]) {
 // source, so npm 12 would also hold back the package's own `prepare` (its build, which an
 // operator's registry install never runs). The scratch instance denies it under the key npm
 // gives a tarball, its `file:` path, which an operator's instance has no need to.
-const tarball = join(work, packed.filename);
 const instancePkgPath = join(instance, "package.json");
 const instancePkg = JSON.parse(readFileSync(instancePkgPath, "utf8"));
 instancePkg.allowScripts = { ...instancePkg.allowScripts, [`file:${tarball}`]: false };
@@ -223,8 +261,9 @@ if (shipped.some((f) => !synced.includes(f))) {
 step("npx", ["--no", "--", "wrangler", "d1", "migrations", "apply", "DB", "--local"]);
 step("npm", ["run", "sync-migrations"]);
 
-// Each context file's header matches its content: a fresh instance has nothing to update.
-const context = spawnSync("npx", ["--no", "--", "kestrel", "check-context"], {
+// Each context file's header matches its content: a fresh instance has nothing to update. The
+// client runs it, handing it to the instance's install.
+const context = spawnSync(process.execPath, [clientBin, "check-context"], {
   cwd: instance,
   encoding: "utf8",
 });
@@ -276,15 +315,35 @@ const seeded = health
       encoding: "utf8",
     })
   : null;
+// The client reaches the same server as its stand-in person, through the record `kestrel dev`
+// left, and reads back the posts seed made.
+const listed =
+  seeded?.status === 0
+    ? spawnSync(process.execPath, [clientBin, "api", "GET", "/api/posts", "--local"], {
+        cwd: instance,
+        encoding: "utf8",
+      })
+    : null;
+let posts = null;
+try {
+  posts = JSON.parse(listed?.stdout ?? "");
+} catch {
+  /* reported below */
+}
 stopDev();
 if (health?.status !== "ok" || dashboard !== 200 || seeded?.status !== 0) {
   fail(
     `the instance's dev server: health ${JSON.stringify(health)}, /dashboard/ ${dashboard}, seed ${seeded?.status}\n${seeded?.stderr ?? ""}${devLog.slice(-2000)}`,
   );
 }
+if (listed?.status !== 0 || !posts) {
+  fail(
+    `the client's kestrel api --local exited ${listed?.status}\n${listed?.stdout}${listed?.stderr}`,
+  );
+}
 
 console.log(
-  "[check-package] ok: the packed package scaffolds an instance that typechecks, bundles, migrates, runs, and checks its context",
+  "[check-package] ok: the packed client scaffolds an instance from the packed package that typechecks, bundles, migrates, runs, checks its context, and answers the client",
 );
 if (!keep) {
   rmSync(work, { recursive: true, force: true });

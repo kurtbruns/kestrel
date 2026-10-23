@@ -17,7 +17,7 @@
  *
  * What the API is comes from the instance itself: `--list` and `help` read its OpenAPI
  * document through the same sign-in, as `-f` and `-F` do to build a body and refuse a field
- * the route doesn't take (cli/openapi.mjs). It is read fresh each time it is needed, not
+ * the route doesn't take (packages/kestrel/lib/openapi.mjs). It is read fresh each time it is needed, not
  * cached, so it can never describe a release the instance no longer runs.
  */
 import { readFileSync } from "node:fs";

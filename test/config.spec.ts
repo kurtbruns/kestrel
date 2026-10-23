@@ -670,7 +670,7 @@ describe("the dev routes exist only in local development", () => {
   });
 
   // The CLI's seed and reset check this ID against the record `kestrel dev` left in their
-  // directory before wiping a database (cli/dev-api.mjs).
+  // directory before wiping a database (packages/kestrel/lib/dev-api.mjs).
   it("reports the run ID kestrel dev gave the server beside the token, and none without one", async () => {
     const withId = await fetchWith({ DEV_RUN_ID: "run-1234" }, "/api/dev/token?kind=service");
     expect(await withId.json()).toMatchObject({ kind: "service", run_id: "run-1234" });

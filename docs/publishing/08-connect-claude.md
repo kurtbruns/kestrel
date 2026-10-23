@@ -27,7 +27,7 @@ Claude Code can use the same connector as Claude Desktop and claude.ai. To reach
 1. Run this, with your publication's address:
 
     ```bash
-    npx -p @kurtbruns/kestrel kestrel login https://newsletter.example.com
+    npx kestrel login https://newsletter.example.com
     ```
 
 1. Approve the sign-in in the browser that opens. The terminal then says who you're signed in as.
@@ -38,7 +38,7 @@ The sign-in stays on your computer. Opened in your instance's repository, Claude
 
 The sign-in renews itself while you use Claude, until your instance's grant session ends, a week if it follows the setup guide. Then Claude asks you to approve a new one.
 
-To disconnect, remove the connector under **Customize → Connectors**. To sign out of the Kestrel CLI, run `npx -p @kurtbruns/kestrel kestrel logout`.
+To disconnect, remove the connector under **Customize → Connectors**. To sign out of the Kestrel CLI, run `npx kestrel logout`.
 
 ## Working with Claude
 

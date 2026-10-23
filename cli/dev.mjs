@@ -15,7 +15,7 @@
  * `--port`. This reads PORT and forwards it as `--port`. With no PORT it prefers 8787 and
  * falls back to a free port, so a second server still starts. The resolved port drives the
  * origin overrides, so the absolute URLs an email carries point at the server actually bound,
- * and is recorded with an ID made up for this run (cli/dev-server.mjs), which the Worker is
+ * and is recorded with an ID made up for this run (packages/kestrel/lib/dev-server.mjs), which the Worker is
  * handed too, so seed and reset find this server and can tell it from another directory's.
  *
  * A fresh local database. A new checkout or worktree has an empty `.wrangler/state`, so every
@@ -37,7 +37,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
-import { clearDevServer, newDevRunId, writeDevServer } from "./dev-server.mjs";
+import {
+  clearDevServer,
+  newDevRunId,
+  writeDevServer,
+} from "../packages/kestrel/lib/dev-server.mjs";
 import { startSweepTicker } from "./sweep-ticker.mjs";
 import { captureWrangler, runWrangler, spawnWrangler } from "./wrangler.mjs";
 

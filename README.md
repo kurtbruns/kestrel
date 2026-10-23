@@ -13,7 +13,7 @@ You can run Kestrel on your own computer to look around, with [Node.js](https://
 In an empty folder, write a new instance and install it:
 
 ```bash
-npx @kurtbruns/kestrel init
+npx kestrel init
 npm install
 ```
 

@@ -37,7 +37,7 @@ Your instance's repository holds its configuration, its database migrations, and
     ```bash
     git clone https://github.com/YOUR_USERNAME/newsletter.git
     cd newsletter
-    npx @kurtbruns/kestrel init
+    npx kestrel init
     ```
 
     This writes the instance's files: `wrangler.jsonc` for its settings, `package.json` with the release it runs, the release's database migrations, and a starting point for Claude Code in `.claude/`. The instance's `README.md` lists its commands.

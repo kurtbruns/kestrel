@@ -1,5 +1,5 @@
 /*
- * Which dev server seed and reset may act on (cli/dev-api.mjs). They wipe the database of the
+ * Which dev server seed and reset may act on (packages/kestrel/lib/dev-api.mjs). They wipe the database of the
  * server they reach, so a target found implicitly must prove it is this directory's, and one
  * the caller names is used as given. Plain Node: cli/ is plain Node, and so is its suite.
  */
@@ -7,8 +7,12 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { chooseTarget, ownsServer } from "../../cli/dev-api.mjs";
-import { clearDevServer, readDevServer, writeDevServer } from "../../cli/dev-server.mjs";
+import { chooseTarget, ownsServer } from "../../packages/kestrel/lib/dev-api.mjs";
+import {
+  clearDevServer,
+  readDevServer,
+  writeDevServer,
+} from "../../packages/kestrel/lib/dev-server.mjs";
 
 const record = { port: "8794", id: "run-a" };
 

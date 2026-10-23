@@ -7,7 +7,7 @@ paths:
 
 # Releases
 
-A release starts in this repository and reaches three places beyond it: the npm package that instances install, the docs on getkestrel.dev, and the live demo at demo.getkestrel.dev. The package publishes itself from the tag. The site and the demo each pin a release and move only by a PR that moves the pin, so a release isn't finished until both have. The maintainer decides when to cut one, and the `release` skill (`/release`) carries it through all three. What goes in `CHANGELOG.md`, and how each line is written, is `.claude/rules/changelog.md`.
+A release starts in this repository and reaches three places beyond it: the two npm packages (`@kurtbruns/kestrel`, which instances install, and the unscoped `kestrel`, the client in `packages/kestrel/`, which anyone runs with `npx kestrel`), the docs on getkestrel.dev, and the live demo at demo.getkestrel.dev. The packages publish themselves from the tag. The site and the demo each pin a release and move only by a PR that moves the pin, so a release isn't finished until both have. The maintainer decides when to cut one, and the `release` skill (`/release`) carries it through all three. What goes in `CHANGELOG.md`, and how each line is written, is `.claude/rules/changelog.md`.
 
 ## When
 
@@ -23,13 +23,19 @@ Pick the number against the last tag. Versions are `MAJOR.RELEASE.PATCH`, not se
 
 ## Publishing to npm
 
-Releases publish through npm's trusted publishing: npmjs.com trusts `publish.yml` in this repository, each run gets a short-lived OIDC token, and no npm token is stored anywhere. Provenance comes with it, so each version on npmjs.com links to the commit and run that built it. The workflow refuses a tag that doesn't match `package.json`. Nothing else publishes; a publish by hand is only for the setup below.
+Releases publish through npm's trusted publishing: npmjs.com trusts `publish.yml` in this repository, each run gets a short-lived OIDC token, and no npm token is stored anywhere. Provenance comes with it, so each version on npmjs.com links to the commit and run that built it. Both packages carry one version, the release's: the workflow refuses a tag that doesn't match either `package.json`, and a spec holds the two equal. It publishes the instance package first, since the client's `init` fetches `@kurtbruns/kestrel` at the client's own version. Nothing else publishes; a publish by hand is only for the setup below.
 
-Set up once, by the maintainer, since npm configures a trusted publisher only for a package that already exists:
+Set up once for each package, by the maintainer, since npm configures a trusted publisher only for a package that already exists:
 
-1. Publish the first version by hand from its release tag, after pushing the tag and before creating the GitHub release: `npm login`, then `npm publish` in a clean checkout of the tag (`npm ci` first; `prepare` builds the package). The workflow that the GitHub release then runs finds the version on npm and leaves it alone.
-2. Make the workflow the publisher, on npmjs.com under the package's **Settings → Trusted Publisher** (GitHub Actions; user `kurtbruns`, repository `kestrel`, workflow `publish.yml`), or with `npm trust github @kurtbruns/kestrel --file publish.yml --repo kurtbruns/kestrel --allow-publish` (npm 11.15 or later, two-factor authentication on).
+1. Publish the first version by hand from its release tag (`@kurtbruns/kestrel` only: `kestrel` already exists on npm, from its previous owners), after pushing the tag and before creating the GitHub release: `npm login`, then `npm publish` in a clean checkout of the tag (`npm ci` first; `prepare` builds the package). The workflow that the GitHub release then runs finds the version on npm and leaves it alone.
+2. Make the workflow the publisher, on npmjs.com under the package's **Settings → Trusted Publisher** (GitHub Actions; user `kurtbruns`, repository `kestrel`, workflow `publish.yml`), or with `npm trust github <package> --file publish.yml --repo kurtbruns/kestrel --allow-publish` (npm 11.15 or later, two-factor authentication on).
 3. Under **Settings → Publishing access**, choose **Require two-factor authentication and disallow tokens**, so only the workflow (or the maintainer with two-factor) can publish.
+
+`kestrel` also needs, once, after the first release publishes it: `npm owner ls kestrel` lists the maintainer alone, and `kestrel@0.0.1`, the name's previous owners' unrelated "Node.js client for Kestrel", is deprecated so anyone who has it learns the name changed hands:
+
+```bash
+npm deprecate kestrel@0.0.1 "kestrel is now the command-line client for Kestrel, the self-hosted newsletter app (https://getkestrel.dev). 0.0.1 is an unrelated earlier package; install kestrel@latest."
+```
 
 ## What the site and the demo rely on
 

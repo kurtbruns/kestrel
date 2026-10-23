@@ -1,5 +1,5 @@
 /*
- * What `kestrel api` reads from an instance's OpenAPI document (cli/openapi.mjs): the routes
+ * What `kestrel api` reads from an instance's OpenAPI document (packages/kestrel/lib/openapi.mjs): the routes
  * it lists and describes, the body or query string `-f` and `-F` build, the field it refuses
  * before the request as the router would, and a refusal printed readably beside its raw body.
  * The document is a stub written in the shapes the Worker's projection uses
@@ -9,8 +9,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { apiCommand, parseApiArgs } from "../../cli/api.mjs";
-import { writeSignIn } from "../../cli/credentials.mjs";
+import { apiCommand, parseApiArgs } from "../../packages/kestrel/lib/api.mjs";
+import { writeSignIn } from "../../packages/kestrel/lib/credentials.mjs";
 import {
   buildFields,
   describeRefusal,
@@ -19,7 +19,7 @@ import {
   listRoutes,
   nextMove,
   typedValue,
-} from "../../cli/openapi.mjs";
+} from "../../packages/kestrel/lib/openapi.mjs";
 
 const ORIGIN = "https://news.example.com";
 

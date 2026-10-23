@@ -1,5 +1,5 @@
 /*
- * The record of this directory's dev server, shared between `kestrel dev` (cli/dev.mjs) and
+ * The record of this directory's dev server, shared between `kestrel dev` (cli/dev.mjs in @kurtbruns/kestrel) and
  * the seed and reset commands: the port it bound and the ID of that run.
  *
  * Why this exists: seed and reset wipe the database of whichever server they reach, and more
@@ -12,7 +12,7 @@
  * stopped can name a port another directory's server now holds. So `kestrel dev` makes up an ID
  * for each run, records it here with the port, and hands it to the Worker (the `DEV_RUN_ID`
  * var), which reports it beside the dev token. Seed and reset with no target given go only to
- * the recorded port, and only when the server there reports this record's ID (cli/dev-api.mjs).
+ * the recorded port, and only when the server there reports this record's ID (packages/kestrel/lib/dev-api.mjs).
  *
  * Scope: the file lives under `.wrangler/`, which is gitignored and per-directory (each worktree
  * has its own `.wrangler/state`), so the record is scoped to this directory and never committed.

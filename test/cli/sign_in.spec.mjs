@@ -24,7 +24,7 @@ import {
   chooseInstance,
   parseApiArgs,
   signedInFetch,
-} from "../../cli/api.mjs";
+} from "../../packages/kestrel/lib/api.mjs";
 import {
   configDir,
   credentialsFile,
@@ -34,8 +34,8 @@ import {
   readSignIns,
   withCredentialsLock,
   writeSignIn,
-} from "../../cli/credentials.mjs";
-import { signIn } from "../../cli/login.mjs";
+} from "../../packages/kestrel/lib/credentials.mjs";
+import { signIn } from "../../packages/kestrel/lib/login.mjs";
 import {
   authorizeUrl,
   discover,
@@ -48,7 +48,7 @@ import {
   SignInError,
   TOKEN_TIMEOUT_MS,
   tokenFields,
-} from "../../cli/oauth.mjs";
+} from "../../packages/kestrel/lib/oauth.mjs";
 import {
   CLIENT_NAME_MAX as SERVER_MAX,
   CLIENT_NAME_PATTERN as SERVER_PATTERN,

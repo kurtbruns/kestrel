@@ -1,0 +1,26 @@
+{
+  "name": "kestrel",
+  "version": "1.14.0",
+  "type": "module",
+  "description": "The command-line client for Kestrel, the self-hosted newsletter app: sign in to an instance and call its API as you, from anywhere.",
+  "license": "MIT",
+  "homepage": "https://getkestrel.dev",
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kurtbruns/kestrel.git",
+    "directory": "packages/kestrel"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "kestrel": "bin/kestrel.mjs"
+  },
+  "files": [
+    "bin/",
+    "lib/"
+  ]
+}

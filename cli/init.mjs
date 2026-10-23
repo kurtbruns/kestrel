@@ -1,7 +1,8 @@
 /*
  * `kestrel init [dir]`: write a new instance repository from the scaffold this release ships.
  *
- * Run as `npx @kurtbruns/kestrel init` in an empty repository. The scaffold lives in
+ * Run as `npx kestrel init` in an empty repository: the client (packages/kestrel) fetches this
+ * package at its own version and hands init to it. The scaffold lives in
  * `template/` and ships in the package, so a new instance always matches the release that
  * creates it. It writes the instance's package.json (pinning this exact release), its
  * wrangler config and one-line Worker entry, `.dev.vars.example`, the Claude context with its

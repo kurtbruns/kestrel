@@ -11,9 +11,9 @@
  *
  * With no target given, it goes only to the dev server `kestrel dev` recorded in this
  * directory, and only when that server reports the run ID recorded with it, so it never wipes
- * another directory's database (cli/dev-api.mjs, cli/dev-server.mjs); with none recorded it
+ * another directory's database (packages/kestrel/lib/dev-api.mjs, packages/kestrel/lib/dev-server.mjs); with none recorded it
  * refuses rather than guess a port. A URL or port argument names a server deliberately, and
- * is used as given; `PORT` names nothing here (cli/dev-api.mjs says why). Scale the demo list
+ * is used as given; `PORT` names nothing here (packages/kestrel/lib/dev-api.mjs says why). Scale the demo list
  * with `--size` (100 / 1k / 10k / 100k, an approximate target) and pin the seeded PRNG with
  * `--seed`. Without `--size`, the curated story-shaped list (~155 subscribers) loads.
  */
@@ -21,7 +21,7 @@ import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { devTarget, fail, parseArgs } from "./dev-api.mjs";
+import { devTarget, fail, parseArgs } from "../packages/kestrel/lib/dev-api.mjs";
 
 // The demo ships beside the CLI, in this repository and in the package.
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
