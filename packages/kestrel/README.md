@@ -14,4 +14,4 @@ To start a new instance, run `npx kestrel init` in an empty folder. It writes th
 
 The setup guide and the publisher's docs are at [getkestrel.dev](https://getkestrel.dev). Kestrel's source is at [github.com/kurtbruns/kestrel](https://github.com/kurtbruns/kestrel).
 
-`kestrel@0.0.1` is an unrelated earlier project, whose authors handed the name over to Kestrel.
+Thanks to Mihai (matomesc) and Shane (vandesm14) for passing on the kestrel name. `kestrel@0.0.1` is their earlier, unrelated project.
