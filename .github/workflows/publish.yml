@@ -90,13 +90,16 @@ jobs:
       contents: read
       id-token: write # the OIDC token npm's trusted publishing exchanges for a publish
     steps:
-      - uses: actions/setup-node@v4
+      # Actions in this job are pinned by commit, since they run where the OIDC token can be
+      # minted; a moved tag can't change them.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-      # Trusted publishing needs npm 11.5.1 or later, newer than some Node 24 releases bundle.
-      - run: npm install -g npm@11
-      - uses: actions/download-artifact@v4
+      # Trusted publishing needs npm 11.5.1 or later, newer than some Node 24 releases bundle;
+      # an exact version, so the npm that holds the token changes only by a commit here.
+      - run: npm install -g npm@11.21.1
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: tarballs
           path: tarballs
@@ -104,14 +107,21 @@ jobs:
       # alone: npm never lets a version be published twice. The registry can take a while to
       # show a version just published by hand, so npm's own refusal to publish over it counts
       # the same as finding it. The name and version are read from the package.json inside the
-      # tarball, the manifest npm publishes.
+      # tarball, the manifest npm publishes, and a version other than the release tag's is
+      # refused, so a compromised `build` can't publish any other version.
       - name: Publish
+        env:
+          TAG: ${{ github.event.release.tag_name }}
         run: |
           publish() {
             tarball="$1"
             manifest="$(tar -xOzf "$tarball" package/package.json)"
             name="$(node -p 'JSON.parse(process.argv[1]).name' "$manifest")"
             version="$(node -p 'JSON.parse(process.argv[1]).version' "$manifest")"
+            if [ "v$version" != "$TAG" ]; then
+              echo "::error::$tarball carries $name@$version, not the release tag $TAG"
+              return 1
+            fi
             if npm view "$name@$version" version --prefer-online >/dev/null 2>&1; then
               echo "::notice::$name@$version is already on npm; nothing to publish"
               return 0
