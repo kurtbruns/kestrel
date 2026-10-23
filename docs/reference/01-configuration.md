@@ -176,7 +176,7 @@ Wrangler doesn't carry bindings or vars over from the top level of `wrangler.jso
 
 - `observability` optional
 
-    Workers Logs, where the app's log lines land. On in the template. Every invocation is logged, with no sampling, since sampling could drop the one minute that reports a stuck or missed send.
+    Workers Logs, where the app's log lines land. On in the template. Every invocation is logged, with no sampling, since sampling could drop the one minute that reports a stuck or missed send. Leave `head_sampling_rate` at its default of 1. On Workers Free the logs stop for the rest of the day once Cloudflare's daily allowance is spent (SPEC §12).
 
 - `DB` required
 

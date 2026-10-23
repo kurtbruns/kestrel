@@ -14,6 +14,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- The setup guide's logs section says how long Cloudflare keeps logs (three days on Free, seven on Paid), that a search over a long range returns a sample of the lines, and that from December 1 a Free account stops keeping new logs for the rest of the day once its daily allowance is spent, which SPEC §12 now notes beside "never sampled".
 - Kestrel now needs wrangler 4.152.0 or later, which carries fixes for security advisories in the local runtime it bundles. A new instance starts on it, and installing this release moves an existing instance's wrangler up on its own, with no change to its `package.json`.
 
 ## [1.15.0] - 2026-10-23
