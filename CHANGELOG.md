@@ -10,6 +10,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Changed
+
+- The setup guide's logs section says how long Cloudflare keeps logs, that in our testing a search over a long range returned only a sample of the lines, and that a Free account stops keeping new logs for the rest of the day once its daily limit is spent (200,000 events a day, and from December 1 a 0.5 GB allowance shared with traces).
+
 ## [1.15.1] - 2026-10-23
 
 ### Changed

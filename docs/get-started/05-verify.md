@@ -92,7 +92,7 @@ If the bounce address has no flag, or the complaint address is still pending, SE
 
 ## 7. Read the logs
 
-The app writes a log line for each thing it does, and Cloudflare keeps them for a few days. Nothing else tells you if the once-a-minute schedule that sends posts stops, so it's worth knowing where to look.
+The app writes a log line for each thing it does, and Cloudflare keeps them for a few days: three on the Free plan until December 1, 2026, and seven after that and on Paid. Nothing else tells you if the once-a-minute schedule that sends posts stops, so it's worth knowing where to look.
 
 1. In the Cloudflare dashboard, go to **Workers & Pages**, select `kestrel-production`, and select **Observability**.
 
@@ -101,6 +101,8 @@ The app writes a log line for each thing it does, and Cloudflare keeps them for 
 1. Filter on `event` equal to `send.completed`. Your send from section 4 is there.
 
 1. Filter on `level` equal to `error`. A healthy instance shows nothing.
+
+Two limits of Cloudflare's logs are worth knowing. In our testing, a search over a long time range returned only a sample of the matching lines, with estimated counts, while a window of a few hours returned every line, so narrow the range to follow one send by its `sendId`. And on the Free plan, Cloudflare stops keeping new logs once the day's limit is spent, until 00:00 UTC, so a very large send can leave the rest of that day unlogged. The limit is 200,000 log events a day until December 1, 2026, and 0.5 GB a day after that; the Paid plan keeps going and bills the excess. [Cloudflare's pricing page](https://developers.cloudflare.com/observability/pricing/) has the current numbers.
 
 ## 8. Check that SES can send to anyone
 
