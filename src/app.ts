@@ -20,6 +20,7 @@
 
 import { UNLISTED_PATH } from "../shared/archive_url";
 import { FREE_PLAN_LIST } from "../shared/free_plan";
+import type { ImageUploadResponse } from "../shared/images";
 import { IMPORT_LIMITS } from "../shared/imports";
 import { SORT_DIRS } from "../shared/list";
 import { POST_STATUSES } from "../shared/posts";
@@ -992,7 +993,7 @@ export function createRouter({
       title: "Upload an image",
       summary: "Upload an image to a draft, as a form or the raw bytes.",
       description:
-        "The post's Markdown references the image by the `filename` the response gives, `![a short description](cover.jpg)`, and the render resolves that name to the stored image.",
+        "The post's Markdown references the image by the `filename` the response gives, `![a short description](cover.jpg)`, never by its `url`, and the render resolves that name to the stored image. A reference by `url` warns in the preview. Uploading the same `filename` again replaces the image.",
       query: [
         {
           name: "filename",
@@ -1023,6 +1024,17 @@ export function createRouter({
               "`{ filename, content_type, width, height, url }`: `filename` is the name the post's Markdown references it by, `![a short description](filename)`.",
           },
         ],
+      },
+      example: {
+        response: {
+          image: {
+            filename: "cover.jpg",
+            content_type: "image/jpeg",
+            width: 1200,
+            height: 800,
+            url: "https://newsletter.example.com/media/posts/p_abc123/cover.jpg",
+          },
+        } satisfies ImageUploadResponse,
       },
       handler: imageRoutes.uploadImage,
     },
