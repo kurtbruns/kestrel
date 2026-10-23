@@ -9,6 +9,15 @@
 # OIDC token for the run, and no npm token is stored anywhere. Publishing from a public
 # repository this way also attaches provenance, so npmjs.com shows the commit and workflow
 # run each version was built by.
+#
+# Two jobs, so the code that can mint that token is as little as possible. `build` runs
+# everything that executes code from dependencies (the install, the gate, the pack) and has no
+# `id-token` permission, so a compromised dev dependency has no token to take. `publish` holds
+# the permission and runs nothing from the repository: no checkout, no install, no scripts. It
+# publishes the two tarballs `build` packed, and npm runs no lifecycle script for a tarball.
+# Its provenance still names this release's commit and workflow run, since npm builds the
+# statement from the run's GITHUB_* environment, not from a checkout. Caching stays off in
+# both (setup-node caches only when given `cache`), so nothing a past run left feeds a release.
 name: Publish to npm
 
 on:
@@ -17,29 +26,28 @@ on:
 
 permissions:
   contents: read
-  id-token: write # the OIDC token npm's trusted publishing exchanges for a publish
 
 concurrency:
   group: publish
   cancel-in-progress: false
 
 jobs:
-  publish:
-    name: publish
+  build:
+    name: build
     # Kestrel's versions have no prereleases; a release marked as one is not published.
     if: ${{ !github.event.release.prerelease }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
-      # Trusted publishing needs npm 11.5.1 or later, newer than some Node 24 releases bundle.
-      - run: npm install -g npm@11
       # The tag names the version both package.json files carry, so the release page, the build
       # stamp, and the versions on npm are one number.
       - name: Check the tag matches package.json
@@ -59,21 +67,67 @@ jobs:
       - run: npm test
       - run: npm run ci
       - run: npm run check:package
+      # `npm pack` runs `prepare` again, so the tarball holds a build of exactly this tree.
+      - name: Pack both packages
+        run: |
+          mkdir tarballs
+          npm pack --pack-destination tarballs
+          npm pack ./packages/kestrel --pack-destination tarballs
+          ls -l tarballs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tarballs
+          path: tarballs/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: publish
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # the OIDC token npm's trusted publishing exchanges for a publish
+    steps:
+      # Actions in this job are pinned by commit, since they run where the OIDC token can be
+      # minted; a moved tag can't change them.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or later, newer than some Node 24 releases bundle;
+      # an exact version, so the npm that holds the token changes only by a commit here.
+      - run: npm install -g npm@11.21.1
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: tarballs
+          path: tarballs
       # A version already on npm (the first, which is published by hand, or a re-run) is left
       # alone: npm never lets a version be published twice. The registry can take a while to
       # show a version just published by hand, so npm's own refusal to publish over it counts
-      # the same as finding it.
+      # the same as finding it. The name and version are read from the package.json inside the
+      # tarball, the manifest npm publishes, and a version other than the release tag's is
+      # refused, so a compromised `build` can't publish any other version.
       - name: Publish
+        env:
+          TAG: ${{ github.event.release.tag_name }}
         run: |
           publish() {
-            name="$(node -p "require('./$1/package.json').name")"
-            version="$(node -p "require('./$1/package.json').version")"
+            tarball="$1"
+            manifest="$(tar -xOzf "$tarball" package/package.json)"
+            name="$(node -p 'JSON.parse(process.argv[1]).name' "$manifest")"
+            version="$(node -p 'JSON.parse(process.argv[1]).version' "$manifest")"
+            if [ "v$version" != "$TAG" ]; then
+              echo "::error::$tarball carries $name@$version, not the release tag $TAG"
+              return 1
+            fi
             if npm view "$name@$version" version --prefer-online >/dev/null 2>&1; then
               echo "::notice::$name@$version is already on npm; nothing to publish"
               return 0
             fi
             status=0
-            (cd "$1" && npm publish) > publish.log 2>&1 || status=$?
+            npm publish "$tarball" > publish.log 2>&1 || status=$?
             cat publish.log
             if [ "$status" -ne 0 ] && grep -q "cannot publish over the previously published versions" publish.log; then
               echo "::notice::$name@$version is already on npm; nothing to publish"
@@ -81,5 +135,7 @@ jobs:
             fi
             return "$status"
           }
-          publish .
-          publish packages/kestrel
+          shopt -s failglob
+          # Instance package first: the client's `init` fetches it at the client's version.
+          publish tarballs/kurtbruns-kestrel-*.tgz
+          publish tarballs/kestrel-*.tgz

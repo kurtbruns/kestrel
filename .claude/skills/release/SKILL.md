@@ -52,7 +52,7 @@ Push that tag alone, never `--tags`. The notes are the changelog section verbati
 
 ## 4. npm
 
-Publishing the release runs `.github/workflows/publish.yml`. Watch that run (`gh run watch <id> --exit-status`), then confirm with `npm view @kurtbruns/kestrel version` and `npm view kestrel version`. For a few minutes after a green run, npm can still report the previous version: when the run's log shows `+ @kurtbruns/kestrel@X.Y.Z` and `+ kestrel@X.Y.Z`, wait and check again. Never publish by hand to make up for the delay.
+Publishing the release runs `.github/workflows/publish.yml`, as two jobs: `build` (the gate and both tarballs) and then `publish`. Watch that run (`gh run watch <id> --exit-status`). A failure in `build` published nothing; one in `publish` is safe to re-run (`gh run rerun <id> --failed`), since it skips a version already on npm. That reuses the run's tarballs, kept 7 days; after that, re-run the whole workflow (`gh run rerun <id>`), which rebuilds them from the tag. Then confirm with `npm view @kurtbruns/kestrel version` and `npm view kestrel version`. For a few minutes after a green run, npm can still report the previous version: when the run's log shows `+ @kurtbruns/kestrel@X.Y.Z` and `+ kestrel@X.Y.Z`, wait and check again. Never publish by hand to make up for the delay.
 
 ## 5. Site and demo
 
