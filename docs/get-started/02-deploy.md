@@ -175,6 +175,14 @@ npx wrangler deploy --env production
 
 This deploys the release your instance runs, with your settings. The output ends with the hostname the app now answers on. Deploying also registers the once-a-minute schedule that sends posts, which you can see under the Worker's **Triggers** tab in the Cloudflare dashboard.
 
+Always name `--env production`, here and on every wrangler command that stores a secret. Without it, wrangler uses the top level, which is local development. A deploy then creates a second Worker named `kestrel`, which runs with an email stand-in that delivers nothing and a sign-in meant only for your machine. The top level turns off every address it could answer on and the schedule that sends posts, so no one can reach it and it never sends, but it does nothing useful. If you deployed without `--env production`, remove that Worker and deploy again with it:
+
+```bash
+npx wrangler delete --name kestrel
+```
+
+Leave the top level's `"workers_dev": false`, `"preview_urls": false`, and `"triggers": { "crons": [] }` as they are, and never add a route there: they are what keep a deploy like that inert. Keep the empty `crons` rather than deleting the line, since only an empty list clears a schedule an earlier deploy left.
+
 ## Check it
 
 1. The app answers on your hostname. A new hostname can take a few minutes to get its certificate.

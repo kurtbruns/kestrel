@@ -48,8 +48,6 @@
     "seed": "node bin/kestrel.mjs seed",
     "reset": "node bin/kestrel.mjs reset",
     "simulate-send": "node scripts/simulate-send.mjs",
-    "predeploy": "node scripts/stamp-version.mjs",
-    "deploy": "node scripts/require-env.mjs deploy",
     "types": "wrangler types",
     "typecheck": "node scripts/stamp-version.mjs --if-changed && wrangler types && tsc --noEmit && tsc --noEmit -p client",
     "client:build": "node scripts/build-client.mjs",
@@ -65,7 +63,6 @@
     "check": "biome check --write .",
     "ci": "biome ci .",
     "migrate:local": "wrangler d1 migrations apply DB --local",
-    "migrate:remote": "node scripts/require-env.mjs d1 migrations apply DB --remote",
     "check:package": "node scripts/check-package.mjs"
   },
   "dependencies": {

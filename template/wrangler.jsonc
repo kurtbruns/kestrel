@@ -19,9 +19,16 @@
   // start while an origin or a sending setting is still on example.com, provider or not.
   // ---------------------------------------------------------------------------
 
-  // The send sweep, once a minute. `npm run dev` runs it locally, where wrangler never
-  // fires a cron.
-  "triggers": { "crons": ["* * * * *"] },
+  // Deploy only with `--env production`. A wrangler command without it acts on this
+  // development config, which runs the stand-in transport and the local sign-in. These lines
+  // keep a deploy of it inert: no address it answers on, and no schedule, so its send sweep
+  // never runs, whatever database it is bound to. Leave them as they are, the empty `crons`
+  // included: deleting it instead would leave a schedule from an earlier deploy running.
+  // `npm run dev` runs the sweep locally on its own clock, and `production` below declares
+  // its schedule.
+  "workers_dev": false,
+  "preview_urls": false,
+  "triggers": { "crons": [] },
 
   // The editor, built by the release. Requests with no file fall through to the Worker.
   "assets": {

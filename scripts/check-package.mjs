@@ -10,7 +10,9 @@
  * tarball into it, which on
  * npm 12 must block no dependency's install script. In that instance it runs the scaffold's typecheck (`wrangler types` and `tsc`), `tsc` again with
  * Kestrel's declaration checked too, and a `wrangler deploy --dry-run` that bundles the Worker
- * from node_modules; applies the migrations init copied to a local database; and checks that
+ * from node_modules; checks that the config's top level, deployed without `--env`, would answer
+ * on no address and run no schedule; applies the migrations init copied to a local database;
+ * and checks that
  * the client's `kestrel check-context`, handed to that install, finds every context file
  * current. Last it runs the instance: `npm run dev` must answer its health check and serve the
  * editor, `kestrel seed` must load the demo through it, and the client's `kestrel api --local`
@@ -32,10 +34,11 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const keep = process.argv.includes("--keep");
@@ -251,6 +254,39 @@ if (!existsSync(join(instance, "node_modules", "@types", "node"))) {
 // Again without skipLibCheck, so Kestrel's own declaration is checked too.
 step("npx", ["--no", "--", "tsc", "--skipLibCheck", "false"]);
 step("npx", ["--no", "--", "wrangler", "deploy", "--dry-run", "--outdir", "bundle"]);
+
+// A wrangler command without `--env production` takes the top level, which is development (the
+// fake transport, the local sign-in), so a deploy of it must stay inert: no address to answer
+// on and no schedule to sweep on (SPEC, Trusted, not guarded), while production keeps its
+// sweep. The cron list must be present and empty, not just absent: wrangler clears a Worker's
+// schedule only when it is given a list, so a missing one leaves an earlier bare deploy's
+// cron running. Read as the instance's own wrangler resolves the file, and this repository's too.
+const wrangler = await import(
+  pathToFileURL(createRequire(instancePkgPath).resolve("wrangler")).href
+);
+for (const [name, file] of [
+  ["template/wrangler.jsonc", join(instance, "wrangler.jsonc")],
+  ["wrangler.jsonc", join(ROOT, "wrangler.jsonc")],
+]) {
+  const top = wrangler.unstable_readConfig({ config: file });
+  const live = [
+    top.workers_dev !== false && "workers_dev",
+    top.preview_urls !== false && "preview_urls",
+    (top.route || top.routes?.length) && "a route",
+    !(Array.isArray(top.triggers?.crons) && top.triggers.crons.length === 0) &&
+      "a cron list that isn't present and empty",
+  ].filter(Boolean);
+  if (live.length > 0) {
+    fail(`${name}'s top level would run if deployed without --env: ${live.join(", ")}`);
+  }
+}
+const production = wrangler.unstable_readConfig({
+  config: join(instance, "wrangler.jsonc"),
+  env: "production",
+});
+if (!production.triggers?.crons?.includes("* * * * *")) {
+  fail("template/wrangler.jsonc's production env has no once-a-minute cron for the send sweep");
+}
 
 // init copied every migration the release ships, and they apply to a local database.
 const shipped = readdirSync(join(ROOT, "migrations")).filter((f) => f.endsWith(".sql"));
