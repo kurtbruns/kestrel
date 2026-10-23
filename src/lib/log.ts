@@ -167,7 +167,8 @@ function emit(level: LogLevel, event: string, fields: LogFields): void {
  *   - `error`: something could mail a person twice (I4), a send that should have gone out
  *     has not (missed, stuck, wedged), or a failure nothing else handled. Worth a look.
  *   - `warn`: the app is waiting something out that it recovers from on its own (a halt,
- *     a refusal, a lost lease, a notification to retry), but a person may want to know.
+ *     a refusal, a lost lease, a notification to retry), but a person may want to know; and
+ *     a person's manual call on recipients whose fate was unknown (Resolve).
  *   - `info`: the ordinary lifecycle, and the counts of work done.
  * Work over many recipients is one line of counts, never a line each.
  */
