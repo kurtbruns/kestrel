@@ -258,7 +258,9 @@ step("npx", ["--no", "--", "wrangler", "deploy", "--dry-run", "--outdir", "bundl
 // A wrangler command without `--env production` takes the top level, which is development (the
 // fake transport, the local sign-in), so a deploy of it must stay inert: no address to answer
 // on and no schedule to sweep on (SPEC, Trusted, not guarded), while production keeps its
-// sweep. Read as the instance's own wrangler resolves the file, and this repository's too.
+// sweep. The cron list must be present and empty, not just absent: wrangler clears a Worker's
+// schedule only when it is given a list, so a missing one leaves an earlier bare deploy's
+// cron running. Read as the instance's own wrangler resolves the file, and this repository's too.
 const wrangler = await import(
   pathToFileURL(createRequire(instancePkgPath).resolve("wrangler")).href
 );
@@ -271,7 +273,8 @@ for (const [name, file] of [
     top.workers_dev !== false && "workers_dev",
     top.preview_urls !== false && "preview_urls",
     (top.route || top.routes?.length) && "a route",
-    top.triggers?.crons?.length && "a cron",
+    !(Array.isArray(top.triggers?.crons) && top.triggers.crons.length === 0) &&
+      "a cron list that isn't present and empty",
   ].filter(Boolean);
   if (live.length > 0) {
     fail(`${name}'s top level would run if deployed without --env: ${live.join(", ")}`);
