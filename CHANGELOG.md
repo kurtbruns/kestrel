@@ -10,6 +10,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Changed
+
+- Kestrel now needs wrangler 4.152.0 or later, which carries fixes for security advisories in the local runtime it bundles. A new instance starts on it, and installing this release moves an existing instance's wrangler up on its own, with no change to its `package.json`.
+
 ## [1.15.0] - 2026-10-23
 
 **Upgrading from 1.14.0.** Nothing to add: your instance keeps running every `kestrel` command, `login` and `api` included, from the `@kurtbruns/kestrel` it already installs, which ships the client too. Don't add `kestrel` as a dependency, since its `kestrel` command would collide with that one. `npx -p @kurtbruns/kestrel kestrel …` keeps working, and `npx kestrel …` now does the same from any folder.

@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import type { D1Migration } from "@cloudflare/vitest-pool-workers";
+import type { D1Migration } from "@cloudflare/vitest-plugin";
 import { beforeEach, describe, expect, it } from "vitest";
 import { SHIPPED_MIGRATIONS } from "../src/db/migrations";
 import { resetDatabase } from "./support/fixtures";

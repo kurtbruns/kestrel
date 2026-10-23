@@ -20,7 +20,7 @@ npm run dev                         # wrangler dev on http://localhost:8787 (edi
 npm run seed                        # load the demo publication (resets the local database); --size 10k to scale the list
 npm run simulate-send -- --in 90s   # schedule a demo send through the API and print its watch URL (seeds an empty database first)
 
-npm test                            # Vitest suite, run inside workerd (@cloudflare/vitest-pool-workers)
+npm test                            # Vitest suite, run inside workerd (@cloudflare/vitest-plugin)
 npm run test:watch                  # watch mode
 npm run typecheck                   # stamps the build (if changed), wrangler types (which also emits dist/), then tsc for both programs
 npm run check                       # biome check --write . (format + organize imports + lint, applies safe fixes)
