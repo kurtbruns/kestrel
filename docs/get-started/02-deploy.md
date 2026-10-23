@@ -181,7 +181,7 @@ Always name `--env production`, here and on every wrangler command that stores a
 npx wrangler delete --name kestrel
 ```
 
-Leave the top level's `"workers_dev": false`, `"preview_urls": false`, and empty `crons` as they are, and never add a route there: they are what keep a deploy like that inert.
+Leave the top level's `"workers_dev": false`, `"preview_urls": false`, and `"triggers": { "crons": [] }` as they are, and never add a route there: they are what keep a deploy like that inert. Keep the empty `crons` rather than deleting the line, since only an empty list clears a schedule an earlier deploy left.
 
 ## Check it
 
