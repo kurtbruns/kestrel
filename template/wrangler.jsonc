@@ -19,6 +19,12 @@
   // start while an origin or a sending setting is still on example.com, provider or not.
   // ---------------------------------------------------------------------------
 
+  // Deploy only with `--env production`. A wrangler command without it acts on this
+  // development config, and these two lines make a deploy of it answer on no address, since
+  // it would run the stand-in transport and the local sign-in. Leave them off.
+  "workers_dev": false,
+  "preview_urls": false,
+
   // The send sweep, once a minute. `npm run dev` runs it locally, where wrangler never
   // fires a cron.
   "triggers": { "crons": ["* * * * *"] },

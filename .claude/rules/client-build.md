@@ -21,15 +21,15 @@ paths:
 
 ## Production and dev builds
 
-- The production build is the default and what a deploy gets: minified, with `__DEV__` false, so dev-only code compiles out.
+- The production build is the default and what the package ships: minified, with `__DEV__` false, so dev-only code compiles out.
 - The dev build is readable, with `__DEV__` true. Ask for it with `--dev` or `KESTREL_CLIENT_DEV=1`; `scripts/dev.mjs` sets the variable for every builder it starts, including wrangler's `build.command`, which takes no flag.
 - Declare a new build constant in `client/globals.d.ts`.
 - Both link a sourcemap: readable stack traces from a deployed editor are worth the file, and it sits behind Access with the rest of `/dashboard`.
 
 ## Where the build runs
 
-- `npm run dev` watches `client/` and `public/`. Wrangler's `build.command` runs the build too, so a bare `wrangler deploy` never ships a stale tree, and `watch_dir` leaves `client/` out so `wrangler dev` does not build twice.
-- `pretest` runs the build with `--check` (in memory, nothing written), and the build exits at once when `wrangler types` runs it, so a gate run beside `npm run dev` never overwrites the dev build. Only `npm run client:build` or a deploy writes the production build.
+- `npm run dev` watches `client/` and `public/`. Wrangler's `build.command` runs the build too, so `wrangler dev` never serves a stale tree, and `watch_dir` leaves `client/` out so `wrangler dev` does not build twice.
+- `pretest` runs the build with `--check` (in memory, nothing written), and the build exits at once when `wrangler types` runs it, so a gate run beside `npm run dev` never overwrites the dev build. Only `npm run client:build` or the package build writes the production build.
 
 ## Live reload in the dev build
 
