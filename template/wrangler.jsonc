@@ -20,14 +20,13 @@
   // ---------------------------------------------------------------------------
 
   // Deploy only with `--env production`. A wrangler command without it acts on this
-  // development config, and these two lines make a deploy of it answer on no address, since
-  // it would run the stand-in transport and the local sign-in. Leave them off.
+  // development config, which runs the stand-in transport and the local sign-in. These lines
+  // keep a deploy of it inert: no address it answers on, and no schedule, so its send sweep
+  // never runs, whatever database it is bound to. Leave them as they are. `npm run dev` runs
+  // the sweep locally on its own clock, and `production` below declares its schedule.
   "workers_dev": false,
   "preview_urls": false,
-
-  // The send sweep, once a minute. `npm run dev` runs it locally, where wrangler never
-  // fires a cron.
-  "triggers": { "crons": ["* * * * *"] },
+  "triggers": { "crons": [] },
 
   // The editor, built by the release. Requests with no file fall through to the Worker.
   "assets": {

@@ -10,12 +10,12 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading from 1.15.1.** Add `"workers_dev": false` and `"preview_urls": false` to the top level of your instance's `wrangler.jsonc`, outside `env`, as a new instance now has, so a deploy without `--env production` answers on no address. Run `npm run check-context` in your instance's repository: this release changes the operator's Claude context, and a copy you've edited is merged by hand.
+**Upgrading from 1.15.1.** At the top level of your instance's `wrangler.jsonc`, outside `env`, add `"workers_dev": false` and `"preview_urls": false`, and change `triggers` to `{ "crons": [] }`, as a new instance now has, so a deploy without `--env production` answers on no address and never runs the send sweep. Keep the `* * * * *` cron in `production`'s own `triggers`. Run `npm run check-context` in your instance's repository: this release changes the operator's Claude context, and a copy you've edited is merged by hand.
 
 ### Changed
 
-- A new instance's development settings now answer on no address if deployed by mistake, without `--env production`, so a deploy that forgets it can't put the email stand-in and the local sign-in on a public address. The setup guide's Deploy step says how to remove such a deploy.
-- A safety caution in the instance's Claude context: never deploy or store a secret without `--env production`, keep the top level's addresses off, and how to remove a deploy that went out without it, with the person's agreement.
+- A new instance's development settings now answer on no address and run no schedule if deployed by mistake, without `--env production`, so a deploy that forgets it can't put the email stand-in and the local sign-in on a public address, or run the send sweep through the stand-in. The setup guide's Deploy step says how to remove such a deploy.
+- A safety caution in the instance's Claude context: never deploy or store a secret without `--env production`, keep the top level's addresses and schedule off, and how to remove a deploy that went out without it, with the person's agreement.
 
 ## [1.15.1] - 2026-10-23
 
