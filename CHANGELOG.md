@@ -10,6 +10,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+## [1.15.0] - 2026-10-23
+
 **Upgrading from 1.14.0.** Nothing to add: your instance keeps running every `kestrel` command, `login` and `api` included, from the `@kurtbruns/kestrel` it already installs, which ships the client too. Don't add `kestrel` as a dependency, since its `kestrel` command would collide with that one. `npx -p @kurtbruns/kestrel kestrel …` keeps working, and `npx kestrel …` now does the same from any folder.
 
 ### Changed
@@ -623,7 +625,8 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
-[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.14.0...HEAD
+[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.15.0...HEAD
+[1.15.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.15.0
 [1.14.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.14.0
 [1.13.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.13.0
 [1.12.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.12.0
