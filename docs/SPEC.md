@@ -563,7 +563,7 @@ Beside the record, the app keeps a **log** that explains it. The record decides 
 
 The level carries the meaning: **error** for anything that threatens a send going out at most once to each person (I4), or a send that should have gone out and has not (the missed fire time and the send in flight too long, above), and for any failure nothing else handled; **warn** for a halt or a refusal the app is waiting out; **info** for the ordinary lifecycle. Every event and its level are listed once, in the code that writes the log, so a line can't name an event that isn't listed or carry another level.
 
-The app never samples its own log, but the platform that stores it can fall short of that. A search over a long range shows only a sample of the lines, though every line is stored, and a hosting plan with a daily limit on logs stops keeping them for the rest of the day once the limit is spent. The log only explains, so neither changes a send, its record, or what the publisher is told, and the setup guide says how to read the log despite them.
+The app never samples its own log, but what the platform keeps, or returns for a search, can be less than every line. Since the log only explains, that never changes a send, its record, or what the publisher is told, and the setup guide says how to read the log despite it.
 
 ---
 

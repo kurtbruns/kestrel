@@ -10,11 +10,14 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Changed
+
+- The setup guide's logs section says how long Cloudflare keeps logs, that in our testing a search over a long range returned only a sample of the lines, and that a Free account stops keeping new logs for the rest of the day once its daily limit is spent (200,000 events a day, and from December 1 a 0.5 GB allowance shared with traces).
+
 ## [1.15.1] - 2026-10-23
 
 ### Changed
 
-- The setup guide's logs section says how long Cloudflare keeps logs (three days on Free, seven on Paid), that a search over a long range returns a sample of the lines, and that from December 1 a Free account stops keeping new logs for the rest of the day once its daily allowance is spent, which SPEC §12 now notes beside "never sampled".
 - Kestrel now needs wrangler 4.152.0 or later, which carries fixes for security advisories in the local runtime it bundles. A new instance starts on it, and installing this release moves an existing instance's wrangler up on its own, with no change to its `package.json`.
 
 ## [1.15.0] - 2026-10-23
