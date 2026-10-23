@@ -32,6 +32,7 @@ export const LOG_EVENTS = {
   "sweep.tick": "info",
   "sweep.error": "error",
   // A send's lifecycle (SPEC §6, §12).
+  "send.scheduled": "info",
   "send.fired": "info",
   "send.batch": "info",
   "send.resumed": "info",
@@ -39,6 +40,7 @@ export const LOG_EVENTS = {
   "send.canceled": "info",
   "send.rescheduled": "info",
   "send.halted": "warn",
+  "send.resolved": "warn",
   "send.lease_lost": "warn",
   "send.ambiguous": "error",
   "send.wedged": "error",
@@ -72,7 +74,7 @@ export const LOG_EVENTS = {
   "import.incomplete": "error",
   // A sign-in Access let through that names neither a person nor a service token (SPEC §11).
   "auth.unidentified": "warn",
-  // A tool call through the MCP server, with the status its route answered (SPEC §11).
+  // A tool call through the MCP server, and the refusal code of one that failed (SPEC §11).
   "mcp.call": "info",
   // Configuration and the schema (SPEC §9).
   "schema.unchecked": "warn",

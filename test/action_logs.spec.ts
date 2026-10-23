@@ -1,7 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { DEV_TOKEN_ID } from "../src/auth/dev_token";
-import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
+import { frozenSend, resetDatabase, seedConfirmed, wedgedSend } from "./support/fixtures";
 import { adminAuth, base, readJson } from "./support/http";
 import { type LoggedLine, logged } from "./support/log";
 
@@ -76,6 +76,45 @@ function expectWho(line: LoggedLine | undefined, who: Who): void {
 
 describe("an action's line says who took it (SPEC §12)", () => {
   for (const who of EVERYONE) {
+    for (const [act, path, body] of [
+      ["schedule", "schedule", { fire_at: new Date(Date.now() + 3_600_000).toISOString() }],
+      ["send_now", "send", undefined],
+    ] as const) {
+      it(`a ${act} by ${who.name}`, async () => {
+        const draft = await call(who, "POST", "/api/posts", { subject: "S", markdown: "# Hi" });
+        const postId: string = (await readJson(draft)).post.id;
+        const res = await call(who, "POST", `/api/posts/${postId}/${path}`, body);
+        expect(res.status).toBe(201);
+        const sent = (await readJson(res)).send;
+        const [line] = lines("send.scheduled");
+        expect(line).toMatchObject({
+          level: "info",
+          sendId: sent.id,
+          postId,
+          act,
+          fireAt: new Date(sent.fire_at).toISOString(),
+        });
+        expectWho(line, who);
+      });
+    }
+
+    it(`a Resolve by ${who.name}`, async () => {
+      const id = await wedgedSend();
+      const res = await call(who, "POST", `/api/sends/${id}/resolve`, { resolution: "unsent" });
+      expect(res.status).toBe(200);
+      const { resolved, completed } = await readJson(res);
+      const [line] = lines("send.resolved");
+      expect(line).toMatchObject({
+        level: "warn",
+        sendId: id,
+        resolution: "unsent",
+        resolved,
+        completed,
+      });
+      expect(resolved).toBeGreaterThan(0);
+      expectWho(line, who);
+    });
+
     it(`a reschedule by ${who.name}`, async () => {
       const send = await frozenSend(Date.now() + 3_600_000);
       const fire_at = new Date(Date.now() + 7_200_000).toISOString();
