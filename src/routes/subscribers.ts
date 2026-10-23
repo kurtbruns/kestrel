@@ -16,8 +16,9 @@ import { onFreePlanLimits } from "../env";
 import { fieldError, optString, readJsonObject } from "../lib/body";
 import { HttpError, json, notFound, refusal } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
-import { log } from "../lib/log";
+import { log, whoActed } from "../lib/log";
 import { decodePageCursor, encodePageCursor } from "../lib/page_cursor";
+import { unwrap } from "../lib/unwrap";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { viewSends } from "../send/describe";
@@ -193,7 +194,13 @@ export async function erase(c: RequestContext): Promise<Response> {
       { subscriber: subscriber && (await subscribers.withSuppression(c.env.DB, subscriber)) },
     );
   }
-  log.info("subscriber.erased", { deliveries: outcome.deliveries });
+  // A repeat that changed nothing is no action, so it logs none.
+  if (!outcome.unchanged) {
+    log.info("subscriber.erased", {
+      deliveries: outcome.deliveries,
+      ...whoActed(unwrap(c.principal, "principal")),
+    });
+  }
   const body: EraseResponse = {
     subscriber: await subscribers.withSuppression(c.env.DB, outcome.subscriber),
     deliveries: outcome.deliveries,

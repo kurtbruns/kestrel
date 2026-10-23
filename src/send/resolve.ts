@@ -33,6 +33,7 @@ import type { Actor } from "../../shared/who_acted";
 import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
 import { notFound, refusal } from "../lib/errors";
+import { log, whoActed } from "../lib/log";
 import { LEASE_TTL_MS } from "../lib/time";
 import { sendAsItStands } from "./describe";
 import { isWedged } from "./wedged";
@@ -122,6 +123,15 @@ export async function resolveStuckSend(
   } else {
     await sends.releaseLease(env.DB, sendId, lease);
   }
+  // At warn: a person's manual call on recipients whose fate was unknown (SPEC §12's level rule).
+  log.warn("send.resolved", {
+    sendId,
+    postId: send.post_id,
+    resolution: outcome,
+    resolved,
+    completed,
+    ...whoActed(by),
+  });
 
   return { resolved, completed };
 }

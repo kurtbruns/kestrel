@@ -38,6 +38,7 @@ import {
   pathRequest,
   type RouteRef,
   readAnswer,
+  refusalCodeOf,
   routeRequest,
   type ToolRoute,
   undeclaredField,
@@ -262,12 +263,15 @@ async function call(
   args: unknown,
 ): Promise<ToolResult> {
   if (args !== undefined && !isObject(args)) {
-    return { content: [{ type: "text", text: "arguments must be an object" }], isError: true };
+    return logged(t, {
+      content: [{ type: "text", text: "arguments must be an object" }],
+      isError: true,
+    });
   }
   const given = args ?? {};
   const stray = unknownArgs(t, given);
   if (stray) {
-    return { content: [{ type: "text", text: stray }], isError: true };
+    return logged(t, { content: [{ type: "text", text: stray }], isError: true });
   }
   const api: Api = {
     async call(r, parts = {}) {
@@ -305,6 +309,12 @@ async function call(
       isError: true,
     };
   }
-  log.info("mcp.call", { tool: t.tool.name, error: out.isError });
+  return logged(t, out);
+}
+
+/** A call's one line, with the code of the route refusal a failed call shows: a code, never its
+ *  message or a value, so failed calls can be filtered without raising the level (SPEC §12). */
+function logged(t: ToolRoute, out: ToolResult): ToolResult {
+  log.info("mcp.call", { tool: t.tool.name, error: out.isError, code: refusalCodeOf(out) });
   return out;
 }

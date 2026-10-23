@@ -47,7 +47,7 @@ import { audienceCount } from "../db/subscribers";
 import type { AppEnv, Config } from "../env";
 import { badRequest, notFound, refusal } from "../lib/errors";
 import { newId } from "../lib/ids";
-import { log } from "../lib/log";
+import { log, whoActed } from "../lib/log";
 import { slugRefusal } from "../lib/slug_refusals";
 import { unwrap } from "../lib/unwrap";
 import { render } from "../render/render";
@@ -226,6 +226,13 @@ export async function freeze(
       throw err;
     }
     if ((results[0]?.meta.changes ?? 0) > 0) {
+      log.info("send.scheduled", {
+        sendId: id,
+        postId: post.id,
+        fireAt: new Date(fireAt).toISOString(),
+        act: recorded?.act,
+        ...(recorded ? whoActed(recorded.by) : {}),
+      });
       return unwrap(await getSend(env.DB, id), "send");
     }
   }
@@ -335,6 +342,7 @@ export async function reschedule(
     postId: send.post_id,
     fireAt: new Date(target).toISOString(),
     movedMs: target - send.fire_at,
+    ...(by ? whoActed(by) : {}),
   });
   return { send: unwrap(await getSend(env.DB, sendId), "send"), changed: true };
 }
@@ -374,6 +382,6 @@ export async function cancel(
     // It changed between the read and the write: answer for what it is now.
     return cancel(env, sendId, by);
   }
-  log.info("send.canceled", { sendId, postId: send.post_id });
+  log.info("send.canceled", { sendId, postId: send.post_id, ...(by ? whoActed(by) : {}) });
   return { send: unwrap(await getSend(env.DB, sendId), "send"), changed: true };
 }

@@ -62,6 +62,10 @@ describe("the send lifecycle in the log", () => {
   it("a send through the sweep logs fired, batch, completed in order under its sendId, and no address", async () => {
     await seedConfirmed(AUDIENCE);
     const send = await dueSend();
+    // Only the tick's own lines: scheduling the send came before it.
+    for (const spy of spies) {
+      spy.mockClear();
+    }
 
     await withRun("tick-1", () => sweep(env));
 
@@ -123,6 +127,7 @@ describe("the send lifecycle in the log", () => {
     await sweep(env);
 
     expect(eventsFor(send.id)).toEqual([
+      "send.scheduled",
       "send.fired",
       "send.batch",
       "send.halted",
@@ -214,7 +219,7 @@ describe("the send lifecycle in the log", () => {
 
     await runSend(env, send.id);
 
-    expect(eventsFor(send.id)).toEqual(["send.fired", "send.lease_lost"]);
+    expect(eventsFor(send.id)).toEqual(["send.scheduled", "send.fired", "send.lease_lost"]);
     expect(lines().find((l) => l.event === "send.lease_lost")).toMatchObject({ level: "warn" });
   });
 
@@ -279,10 +284,11 @@ describe("the send lifecycle in the log", () => {
     }
   });
 
-  it("a cancel is logged against the send", async () => {
+  it("a schedule and its cancel are logged against the send", async () => {
     const send = await frozenSend(Date.now() + 600_000);
     await cancel(env, send.id);
     expect(lines()).toEqual([
+      expect.objectContaining({ event: "send.scheduled", sendId: send.id, postId: send.post_id }),
       expect.objectContaining({ event: "send.canceled", sendId: send.id, postId: send.post_id }),
     ]);
   });

@@ -24,7 +24,7 @@ import { openApiDocument } from "../src/reference/openapi";
 import { accessDeployment } from "./support/access";
 import { frozenSend, resetDatabase, tpl, wedgedSend } from "./support/fixtures";
 import { adminAuth, base, JSON_AUTH, readJson } from "./support/http";
-import { allowErrorLogs } from "./support/log";
+import { allowErrorLogs, logged } from "./support/log";
 import { fetchWith } from "./support/worker_env";
 
 // The MCP server (SPEC §11): Claude Desktop and claude.ai reach the instance as a connector,
@@ -952,5 +952,43 @@ describe("the server's door (SPEC §11)", () => {
       -32602,
     );
     expect((await readJson(await rpc("ping", {}, auth))).result).toEqual({});
+  });
+});
+
+describe("each tool call is one line, a failed one with its refusal code (SPEC §12)", () => {
+  it("logs a call its arguments refuse before it runs, as failed with no code", async () => {
+    const spies = [vi.spyOn(console, "log"), vi.spyOn(console, "warn"), vi.spyOn(console, "error")];
+    expect((await callTool("get_send", { id: "x", nope: 1 })).isError).toBe(true);
+    expect(logged(...spies).filter((l) => l.event === "mcp.call")).toEqual([
+      { event: "mcp.call", level: "info", run: expect.any(String), tool: "get_send", error: true },
+    ]);
+  });
+
+  it("logs mcp.call at info, with the code of the refusal that failed it and never its message", async () => {
+    const spies = [vi.spyOn(console, "log"), vi.spyOn(console, "warn"), vi.spyOn(console, "error")];
+    const post = (await callOk("save_draft", { subject: "Soon", markdown: "x" })).post;
+    const tooSoon = await callTool("schedule_send", {
+      id: post.id,
+      fire_at: new Date(Date.now() + 1000).toISOString(),
+    });
+    expect(tooSoon.isError).toBe(true);
+    const calls = logged(...spies).filter((l) => l.event === "mcp.call");
+    expect(calls).toEqual([
+      {
+        event: "mcp.call",
+        level: "info",
+        run: expect.any(String),
+        tool: "save_draft",
+        error: false,
+      },
+      {
+        event: "mcp.call",
+        level: "info",
+        run: expect.any(String),
+        tool: "schedule_send",
+        error: true,
+        code: "fire_at_too_soon",
+      },
+    ]);
   });
 });

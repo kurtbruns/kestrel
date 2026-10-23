@@ -68,8 +68,8 @@ export async function verifyAccessJwt(
 /**
  * Map a verified Access token's claims to a principal, `null` for a human the allowlist
  * refuses, or `access_unidentified` for a token that is neither a person nor a service
- * token. A service call, and an unidentified one, logs the names of the claims it carried, never
- * their values, since a Client ID is half of the token's credential.
+ * token. An unidentified one logs the names of the claims it carried, never their values, since
+ * a Client ID is half of a service token's credential.
  */
 export function principalFromClaims(
   payload: JWTPayload,
@@ -79,16 +79,14 @@ export function principalFromClaims(
   if (email) {
     return isHumanAllowed(email, allowed) ? { kind: "human", email, via: "access" } : null;
   }
-  const claims = Object.keys(payload).sort().join(",");
   // A service token carries its Client ID in `common_name`, already authorized by the
   // app's Service Auth policy.
   const tokenId = typeof payload.common_name === "string" ? payload.common_name : undefined;
   if (tokenId) {
-    log.info("auth.service", { claims });
     return { kind: "service", tokenId, via: "access" };
   }
   // Neither a person nor a service token: some other kind of Access rule admitted it.
   // Refused, and warned about so the operator can find which rule.
-  log.warn("auth.unidentified", { claims });
+  log.warn("auth.unidentified", { claims: Object.keys(payload).sort().join(",") });
   return "access_unidentified";
 }

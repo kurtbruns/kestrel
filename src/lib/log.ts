@@ -32,6 +32,7 @@ export const LOG_EVENTS = {
   "sweep.tick": "info",
   "sweep.error": "error",
   // A send's lifecycle (SPEC §6, §12).
+  "send.scheduled": "info",
   "send.fired": "info",
   "send.batch": "info",
   "send.resumed": "info",
@@ -39,6 +40,7 @@ export const LOG_EVENTS = {
   "send.canceled": "info",
   "send.rescheduled": "info",
   "send.halted": "warn",
+  "send.resolved": "warn",
   "send.lease_lost": "warn",
   "send.ambiguous": "error",
   "send.wedged": "error",
@@ -70,10 +72,9 @@ export const LOG_EVENTS = {
   "subscriber.complained": "info",
   "subscriber.erased": "info",
   "import.incomplete": "error",
-  // Who is calling (SPEC §11).
-  "auth.service": "info",
+  // A sign-in Access let through that names neither a person nor a service token (SPEC §11).
   "auth.unidentified": "warn",
-  // A tool call through the MCP server, with the status its route answered (SPEC §11).
+  // A tool call through the MCP server, and the refusal code of one that failed (SPEC §11).
   "mcp.call": "info",
   // Configuration and the schema (SPEC §9).
   "schema.unchecked": "warn",
@@ -166,7 +167,8 @@ function emit(level: LogLevel, event: string, fields: LogFields): void {
  *   - `error`: something could mail a person twice (I4), a send that should have gone out
  *     has not (missed, stuck, wedged), or a failure nothing else handled. Worth a look.
  *   - `warn`: the app is waiting something out that it recovers from on its own (a halt,
- *     a refusal, a lost lease, a notification to retry), but a person may want to know.
+ *     a refusal, a lost lease, a notification to retry), but a person may want to know; and
+ *     a person's manual call on recipients whose fate was unknown (Resolve).
  *   - `info`: the ordinary lifecycle, and the counts of work done.
  * Work over many recipients is one line of counts, never a line each.
  */
@@ -175,6 +177,19 @@ export const log = {
   warn: (event: LogEventAt<"warn">, fields: LogFields = {}): void => emit("warn", event, fields),
   info: (event: LogEventAt<"info">, fields: LogFields = {}): void => emit("info", event, fields),
 };
+
+/**
+ * Who took an action, as the action's line carries it (SPEC §12): `principal`, the kind
+ * (`human` or `service`), and `client`, the client a person came through, absent on a service
+ * token. Never the email or the token's Client ID: the record keeps who acted (SPEC §11), and
+ * a line only has to answer what automation, or Claude, changed, each as one filter.
+ */
+export function whoActed(by: { kind: "human" | "service"; client?: string | null }): {
+  principal: "human" | "service";
+  client?: string;
+} {
+  return { principal: by.kind, client: by.kind === "human" ? (by.client ?? undefined) : undefined };
+}
 
 /** An error's message as a field value (scrubbed like any string on the way out). */
 export function errorText(err: unknown): string {

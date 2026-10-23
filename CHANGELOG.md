@@ -10,6 +10,14 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Added
+
+- Two new log lines: `send.scheduled` (info) for each schedule and Send now, with `act` saying which, and `send.resolved` (warn) for each Resolve of a wedged send, with the resolution and how many recipients it settled. A failed `mcp.call` now carries `code`, the refusal code of the route that turned it down, so failed tool calls can be filtered (SPEC §12).
+
+### Breaking
+
+- The app no longer logs `auth.service` on every request a service token makes, since Cloudflare's own request and Access logs already record each one. Instead every log line for a publisher's action, the new `send.scheduled` and `send.resolved` included, says who took it: `principal` (`human` or `service`) and, for a person, `client` (`editor`, `claude-code`, `claude`, or the name a script gives), never the email or the token (SPEC §12).
+
 ## [1.15.1] - 2026-10-23
 
 ### Changed

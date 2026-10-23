@@ -100,6 +100,10 @@ The app writes a log line for each thing it does, and Cloudflare keeps them for 
 
 1. Filter on `event` equal to `send.completed`. Your send from section 4 is there.
 
+1. Filter on `event` equal to `send.scheduled`. Your two sends from section 4 are there, each with `act` equal to `send_now`, `principal` equal to `human`, and `client` equal to `editor`, and `send.canceled` shows the one you canceled. Each line that records an action, such as `send.canceled` or `import.committed`, says who took it the same way: `principal` is `human` for a person or `service` for a service token, and `client` names the program a person used. A service token's lines have no `client`, and neither does a person's through a program that doesn't name itself.
+
+1. Filter on `principal` equal to `service` to see what automation changed. On a new instance it finds nothing. Filter on `client` equal to `claude` or `claude-code` to see what Claude changed.
+
 1. Filter on `level` equal to `error`. A healthy instance shows nothing.
 
 ## 8. Check that SES can send to anyone
