@@ -42,7 +42,7 @@ import {
   readJsonObject,
 } from "../lib/body";
 import { badRequest, HttpError, json, notFound, refusal } from "../lib/errors";
-import { log } from "../lib/log";
+import { log, whoActed } from "../lib/log";
 import { decodePageCursor, encodePageCursor } from "../lib/page_cursor";
 import { param, type RequestContext } from "../router";
 import {
@@ -210,7 +210,7 @@ export async function commit(c: RequestContext): Promise<Response> {
   }
   log.info("import.committed", {
     importId: result.import.id,
-    principal: principal.kind,
+    ...whoActed(principal),
     rows: p.rowCount,
     confirmed: result.counts.added_confirmed + result.counts.confirmed_pending,
     unsubscribed:

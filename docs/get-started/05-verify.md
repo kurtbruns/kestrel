@@ -100,6 +100,8 @@ The app writes a log line for each thing it does, and Cloudflare keeps them for 
 
 1. Filter on `event` equal to `send.completed`. Your send from section 4 is there.
 
+1. Filter on `principal` equal to `service` to see what automation changed, or `client` equal to `claude` or `claude-code` to see what Claude changed. Each line that records an action, such as `send.canceled` or `import.committed`, carries both fields.
+
 1. Filter on `level` equal to `error`. A healthy instance shows nothing.
 
 ## 8. Check that SES can send to anyone

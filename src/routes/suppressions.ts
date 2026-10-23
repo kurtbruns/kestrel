@@ -15,7 +15,8 @@ import * as subscribers from "../db/subscribers";
 import { fieldError, oneOf, optString, readJsonObject } from "../lib/body";
 import { json, refusal } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
-import { log } from "../lib/log";
+import { log, whoActed } from "../lib/log";
+import { unwrap } from "../lib/unwrap";
 import type { RequestContext } from "../router";
 
 export async function list(c: RequestContext): Promise<Response> {
@@ -53,7 +54,11 @@ export async function add(c: RequestContext): Promise<Response> {
   const out: BlockResponse = await subscribers.block(c.env.DB, email, detail);
   if (out.added) {
     // Neither the address nor the detail, which is the publisher's own free text.
-    log.info("suppression.added", { source: "manual", count: 1 });
+    log.info("suppression.added", {
+      source: "manual",
+      count: 1,
+      ...whoActed(unwrap(c.principal, "principal")),
+    });
   }
   return json(out, out.added ? 201 : 200);
 }
