@@ -48,7 +48,7 @@ git push origin vX.Y.Z
 awk '/^## \[X.Y.Z\]/{f=1;next} /^## \[|^\[.*\]: /{f=0} f' CHANGELOG.md | gh release create vX.Y.Z --verify-tag --title "kestrel vX.Y.Z" --notes-file -
 ```
 
-Push that tag alone, never `--tags`. The notes are the changelog section verbatim. `--verify-tag` refuses to run before the tag is on the remote, so the release can't mint its own tag at the wrong commit. Check that `gh release view vX.Y.Z` shows the section.
+Push that tag alone, never `--tags`. For the first release that publishes `kestrel`, stop after the push: the maintainer publishes it by hand from the tag before the GitHub release is created (`.claude/rules/release.md`, Publishing to npm, step 1), then adds its trusted publisher. The notes are the changelog section verbatim. `--verify-tag` refuses to run before the tag is on the remote, so the release can't mint its own tag at the wrong commit. Check that `gh release view vX.Y.Z` shows the section.
 
 ## 4. npm
 
