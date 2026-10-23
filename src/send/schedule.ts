@@ -226,6 +226,13 @@ export async function freeze(
       throw err;
     }
     if ((results[0]?.meta.changes ?? 0) > 0) {
+      log.info("send.scheduled", {
+        sendId: id,
+        postId: post.id,
+        fireAt: new Date(fireAt).toISOString(),
+        act: recorded?.act,
+        ...(recorded ? whoActed(recorded.by) : {}),
+      });
       return unwrap(await getSend(env.DB, id), "send");
     }
   }

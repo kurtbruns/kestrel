@@ -30,6 +30,7 @@ import { openApiDocument } from "../reference/openapi";
 import type { RequestContext, Router } from "../router";
 import { MCP_INSTRUCTIONS } from "./instructions";
 import {
+  type Answer,
   API_READ_NAME,
   type Api,
   curatedTools,
@@ -269,6 +270,16 @@ async function call(
   if (stray) {
     return { content: [{ type: "text", text: stray }], isError: true };
   }
+  // The code of the last refusal a route answered, which a failed call's line carries: a code,
+  // never the message or a value, so failed calls can be filtered without raising the level.
+  let refusedWith: string | undefined;
+  const noted = (a: Answer): Answer => {
+    const code = (a.body as { error?: unknown } | null)?.error;
+    if (!a.ok && typeof code === "string") {
+      refusedWith = code;
+    }
+    return a;
+  };
   const api: Api = {
     async call(r, parts = {}) {
       if (!allows(t, r)) {
@@ -278,7 +289,7 @@ async function call(
       if (stray) {
         throw new Error(`${t.def.name} sends ${stray} to ${r.method} ${r.path}, undeclared`);
       }
-      return through(c, router, r, parts);
+      return noted(await through(c, router, r, parts));
     },
     async read(path) {
       if (t.def.name !== API_READ_NAME) {
@@ -286,7 +297,7 @@ async function call(
       }
       const res = await router.handle(pathRequest(path, c.url.origin, c.req.headers), c.env, c.ctx);
       const type = mediaType(res);
-      return { ...(await readAnswer(res)), type };
+      return { ...noted(await readAnswer(res)), type };
     },
     editor: (page) => editorLink(c.config.appOrigin, page),
   };
@@ -305,6 +316,10 @@ async function call(
       isError: true,
     };
   }
-  log.info("mcp.call", { tool: t.tool.name, error: out.isError });
+  log.info("mcp.call", {
+    tool: t.tool.name,
+    error: out.isError,
+    code: out.isError ? refusedWith : undefined,
+  });
   return out;
 }
