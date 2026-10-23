@@ -202,6 +202,15 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+// The refusal code behind each tool error `refused` made, kept beside the result rather than in
+// it, so the server's log line names the refusal the tool showed and the wire carries nothing new.
+const refusalCodes = new WeakMap<ToolResult, string>();
+
+/** The code of the route refusal a tool error shows, when it shows one. */
+export function refusalCodeOf(result: ToolResult): string | undefined {
+  return refusalCodes.get(result);
+}
+
 /**
  * A route's refusal as a tool error: its status, code, and words, the next move the reference
  * gives the code, the field at fault, then what the tool adds (`lines`), such as what a
@@ -220,7 +229,11 @@ export function refused(a: Answer, lines: string[] = []): ToolResult {
   if (typeof body.field === "string") {
     out.push(`Fix: \`${body.field}\`.`);
   }
-  return text([...out, ...lines].join("\n"), true);
+  const result = text([...out, ...lines].join("\n"), true);
+  if (code) {
+    refusalCodes.set(result, code);
+  }
+  return result;
 }
 
 // --- what a chat reads of each object ---

@@ -956,6 +956,14 @@ describe("the server's door (SPEC §11)", () => {
 });
 
 describe("each tool call is one line, a failed one with its refusal code (SPEC §12)", () => {
+  it("logs a call its arguments refuse before it runs, as failed with no code", async () => {
+    const spies = [vi.spyOn(console, "log"), vi.spyOn(console, "warn"), vi.spyOn(console, "error")];
+    expect((await callTool("get_send", { id: "x", nope: 1 })).isError).toBe(true);
+    expect(logged(...spies).filter((l) => l.event === "mcp.call")).toEqual([
+      { event: "mcp.call", level: "info", run: expect.any(String), tool: "get_send", error: true },
+    ]);
+  });
+
   it("logs mcp.call at info, with the code of the refusal that failed it and never its message", async () => {
     const spies = [vi.spyOn(console, "log"), vi.spyOn(console, "warn"), vi.spyOn(console, "error")];
     const post = (await callOk("save_draft", { subject: "Soon", markdown: "x" })).post;

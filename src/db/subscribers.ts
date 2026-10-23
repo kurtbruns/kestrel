@@ -477,7 +477,13 @@ export async function suppressionRow(
  *  delivery rows it rewrote; no such subscriber; or refused for now because a send run is
  *  handing the address to the provider. */
 export type EraseOutcome =
-  | { kind: "erased"; subscriber: SubscriberRow; deliveries: number }
+  | {
+      kind: "erased";
+      subscriber: SubscriberRow;
+      deliveries: number;
+      /** Nothing changed: the subscriber was already erased and no delivery row still named them. */
+      unchanged: boolean;
+    }
   | { kind: "not_found" }
   | { kind: "in_flight" };
 
@@ -517,6 +523,7 @@ export async function erase(db: D1Database, id: string): Promise<EraseOutcome> {
       deliveries: moved
         .slice(deliveries.rewrite.length)
         .reduce((n, r) => n + (r.meta.changes ?? 0), 0),
+      unchanged: moved.every((r) => (r.meta.changes ?? 0) === 0),
     };
   }
   const idle = idleFor("?1", "?2");
@@ -548,6 +555,7 @@ export async function erase(db: D1Database, id: string): Promise<EraseOutcome> {
     kind: "erased",
     subscriber: after,
     deliveries: moved.reduce((n, r) => n + (r.meta.changes ?? 0), 0),
+    unchanged: false,
   };
 }
 

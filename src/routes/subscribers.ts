@@ -194,10 +194,13 @@ export async function erase(c: RequestContext): Promise<Response> {
       { subscriber: subscriber && (await subscribers.withSuppression(c.env.DB, subscriber)) },
     );
   }
-  log.info("subscriber.erased", {
-    deliveries: outcome.deliveries,
-    ...whoActed(unwrap(c.principal, "principal")),
-  });
+  // A repeat that changed nothing is no action, so it logs none.
+  if (!outcome.unchanged) {
+    log.info("subscriber.erased", {
+      deliveries: outcome.deliveries,
+      ...whoActed(unwrap(c.principal, "principal")),
+    });
+  }
   const body: EraseResponse = {
     subscriber: await subscribers.withSuppression(c.env.DB, outcome.subscriber),
     deliveries: outcome.deliveries,

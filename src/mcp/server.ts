@@ -30,7 +30,6 @@ import { openApiDocument } from "../reference/openapi";
 import type { RequestContext, Router } from "../router";
 import { MCP_INSTRUCTIONS } from "./instructions";
 import {
-  type Answer,
   API_READ_NAME,
   type Api,
   curatedTools,
@@ -39,6 +38,7 @@ import {
   pathRequest,
   type RouteRef,
   readAnswer,
+  refusalCodeOf,
   routeRequest,
   type ToolRoute,
   undeclaredField,
@@ -263,23 +263,16 @@ async function call(
   args: unknown,
 ): Promise<ToolResult> {
   if (args !== undefined && !isObject(args)) {
-    return { content: [{ type: "text", text: "arguments must be an object" }], isError: true };
+    return logged(t, {
+      content: [{ type: "text", text: "arguments must be an object" }],
+      isError: true,
+    });
   }
   const given = args ?? {};
   const stray = unknownArgs(t, given);
   if (stray) {
-    return { content: [{ type: "text", text: stray }], isError: true };
+    return logged(t, { content: [{ type: "text", text: stray }], isError: true });
   }
-  // The code of the last refusal a route answered, which a failed call's line carries: a code,
-  // never the message or a value, so failed calls can be filtered without raising the level.
-  let refusedWith: string | undefined;
-  const noted = (a: Answer): Answer => {
-    const code = (a.body as { error?: unknown } | null)?.error;
-    if (!a.ok && typeof code === "string") {
-      refusedWith = code;
-    }
-    return a;
-  };
   const api: Api = {
     async call(r, parts = {}) {
       if (!allows(t, r)) {
@@ -289,7 +282,7 @@ async function call(
       if (stray) {
         throw new Error(`${t.def.name} sends ${stray} to ${r.method} ${r.path}, undeclared`);
       }
-      return noted(await through(c, router, r, parts));
+      return through(c, router, r, parts);
     },
     async read(path) {
       if (t.def.name !== API_READ_NAME) {
@@ -297,7 +290,7 @@ async function call(
       }
       const res = await router.handle(pathRequest(path, c.url.origin, c.req.headers), c.env, c.ctx);
       const type = mediaType(res);
-      return { ...noted(await readAnswer(res)), type };
+      return { ...(await readAnswer(res)), type };
     },
     editor: (page) => editorLink(c.config.appOrigin, page),
   };
@@ -316,10 +309,12 @@ async function call(
       isError: true,
     };
   }
-  log.info("mcp.call", {
-    tool: t.tool.name,
-    error: out.isError,
-    code: out.isError ? refusedWith : undefined,
-  });
+  return logged(t, out);
+}
+
+/** A call's one line, with the code of the route refusal a failed call shows: a code, never its
+ *  message or a value, so failed calls can be filtered without raising the level (SPEC §12). */
+function logged(t: ToolRoute, out: ToolResult): ToolResult {
+  log.info("mcp.call", { tool: t.tool.name, error: out.isError, code: refusalCodeOf(out) });
   return out;
 }

@@ -1,9 +1,11 @@
 import { SELF } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { DEV_TOKEN_ID } from "../src/auth/dev_token";
+import { accessDeployment } from "./support/access";
 import { frozenSend, resetDatabase, seedConfirmed, wedgedSend } from "./support/fixtures";
 import { adminAuth, base, readJson } from "./support/http";
 import { type LoggedLine, logged } from "./support/log";
+import { fetchWith } from "./support/worker_env";
 
 // Who acted, on the lines that log an action (SPEC §12): the principal's kind and the client a
 // person came through, so what automation changed is one filter on `principal` and what Claude
@@ -175,14 +177,19 @@ describe("an action's line says who took it (SPEC §12)", () => {
     await call(who, "POST", `/api/sends/${send.id}/cancel`);
     await call(who, "POST", "/api/suppressions", { email: "spam@example.net" });
     await call(who, "POST", "/api/suppressions", { email: "spam@example.net" });
+    await seedConfirmed("ada@example.com");
+    expect((await call(who, "POST", "/api/subscribers/id-ada@example.com/erase")).status).toBe(200);
+    expect((await call(who, "POST", "/api/subscribers/id-ada@example.com/erase")).status).toBe(200);
     expect(lines("send.canceled")).toHaveLength(1);
     expect(lines("suppression.added")).toHaveLength(1);
+    expect(lines("subscriber.erased")).toHaveLength(1);
   });
 
-  it("a service token's reads log nothing about who called (SPEC §12)", async () => {
-    const service = EVERYONE[3]!;
-    expect((await call(service, "GET", "/api/whoami")).status).toBe(200);
-    expect((await call(service, "GET", "/api/posts")).status).toBe(200);
+  it("a service token's reads through Access log nothing about who called (SPEC §12)", async () => {
+    const { vars, assertion } = await accessDeployment();
+    const headers = await assertion({ common_name: "e367c0ffee5eb4.access" });
+    expect((await fetchWith(vars, "/api/whoami", { headers })).status).toBe(200);
+    expect((await fetchWith(vars, "/api/posts", { headers })).status).toBe(200);
     expect(logged(...spies)).toEqual([]);
   });
 });

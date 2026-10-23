@@ -123,7 +123,7 @@ export async function resolveStuckSend(
   } else {
     await sends.releaseLease(env.DB, sendId, lease);
   }
-  // At warn, since it is the one manual call on recipients whose fate was unknown (SPEC §12).
+  // At warn: a person's manual call on recipients whose fate was unknown (SPEC §12's level rule).
   log.warn("send.resolved", {
     sendId,
     postId: send.post_id,
