@@ -10,6 +10,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+## [1.17.0] - 2026-10-26
+
 ### Changed
 
 - The setup guide's Connect Amazon SES page is rewritten for a newcomer. It stores each secret as soon as its value exists, makes the custom MAIL FROM domain a regular step, and checks that the From address has no inbox before forwarding it. The section on switching an instance that already sends is gone, and its caution moves to Configuration's `PROVIDER`. Its sections are renumbered, so a bookmark to one now lands at the page's top. Verify it works, Deploy the app, and Lock the dashboard with Access are tightened to match, and Verify's Send now steps follow the editor's order.
@@ -659,7 +661,8 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
-[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.16.0...HEAD
+[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.17.0...HEAD
+[1.17.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.17.0
 [1.16.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.16.0
 [1.15.1]: https://github.com/kurtbruns/kestrel/releases/tag/v1.15.1
 [1.15.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.15.0
