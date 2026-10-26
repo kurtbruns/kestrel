@@ -35,6 +35,7 @@ const TABLES = [
   "subscribers",
   "imports",
   "settings",
+  "provider_account",
 ];
 
 /** Empty every table, so a test starts from the schema alone whatever ran before it. */

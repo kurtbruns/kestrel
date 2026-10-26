@@ -850,7 +850,7 @@ async function confirmSubscription(subscribeUrl: string | undefined): Promise<bo
  * in the `x-amzn-ErrorType` header (`Type:namespace-url`), and the body may carry only
  * the message, so the header is the fallback when the body names no type.
  */
-function parseSesError(
+export function parseSesError(
   text: string,
   headerType: string | null = null,
 ): { type: string; message: string } {

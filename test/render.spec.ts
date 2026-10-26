@@ -27,6 +27,7 @@ const config: Config = {
   fromAddress: "News <news@send.example>",
   awsRegion: "us-east-1",
   sesMaxSendRate: 14,
+  sesMaxSendRateSetting: null,
   devMode: false,
   devShaped: false,
   simulation: null,

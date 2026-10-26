@@ -118,7 +118,7 @@ SES reports bounces and complaints through Amazon Simple Notification Service (S
 
 ## 5. Create the app's AWS key
 
-The app sends through an AWS Identity and Access Management (IAM) user whose key can only send email. That limits the harm if the key ever leaks.
+The app sends through an AWS Identity and Access Management (IAM) user whose key can only send email and read the account's sending status. That limits the harm if the key ever leaks. Reading the status lets the app show whether SES is still in the sandbox, take its send rate from the account, and warn when bounces and complaints can't reach it.
 
 1. In the [IAM console](https://console.aws.amazon.com/iam/), go to **Users**, and choose **Create user**. Name it `kestrel-sender`, and leave console access off.
 
@@ -132,7 +132,12 @@ The app sends through an AWS Identity and Access Management (IAM) user whose key
       "Statement": [
         {
           "Effect": "Allow",
-          "Action": ["ses:SendEmail", "ses:SendBulkEmail"],
+          "Action": [
+            "ses:SendEmail",
+            "ses:SendBulkEmail",
+            "ses:GetAccount",
+            "ses:GetEmailIdentity"
+          ],
           "Resource": "*"
         }
       ]
@@ -163,7 +168,7 @@ The app sends through an AWS Identity and Access Management (IAM) user whose key
 
 Until now the app has run with no email provider connected, refusing to send. Setting `PROVIDER` to `ses` connects SES, with the secrets you stored in sections 4 and 5. If a required one is missing, the app refuses to run until you store it, and `/health` names it.
 
-1. In `wrangler.jsonc`, edit the `production` block's `vars`. Change `PROVIDER` to `ses` (it's `""` on a new instance; add it if your block has none), and add `SES_MAX_SEND_RATE`. Change `AWS_REGION` to your region's code from section 1. Your other values stay as they are. The block ends up like this:
+1. In `wrangler.jsonc`, edit the `production` block's `vars`. Change `PROVIDER` to `ses` (it's `""` on a new instance; add it if your block has none). Change `AWS_REGION` to your region's code from section 1. Your other values stay as they are. The block ends up like this:
 
     ```jsonc
     "vars": {
@@ -172,14 +177,13 @@ Until now the app has run with no email provider connected, refusing to send. Se
       "ARCHIVE_BASE_PATH": "/archive",
       "SENDING_DOMAIN": "send.example.com",
       "FROM_ADDRESS": "Newsletter <newsletter@send.example.com>",
-      "AWS_REGION": "us-east-1",     // ← change: your region's code
-      "SES_MAX_SEND_RATE": "1"       // ← new: your maximum send rate; 1 in the sandbox
+      "AWS_REGION": "us-east-1"      // ← change: your region's code
     }
     ```
 
     On Workers Paid, also add `"SUBREQUEST_BUDGET": "10000"`, the plan's limit, so each minute sends more. Leave it out on Workers Free, which suits a list of up to about 1,000 subscribers. [As your list grows](../guides/09-as-your-list-grows.md) says why.
 
-    When AWS grants production access, set `SES_MAX_SEND_RATE` to the maximum send rate on the **Account dashboard**, and deploy again. The app keeps to that rate, so SES doesn't throttle your send.
+    The app reads its send rate from your SES account, so there's nothing to change when AWS grants production access. **Settings → Email sender** shows the rate and where it comes from.
 
 1. Commit the change, and push it:
 

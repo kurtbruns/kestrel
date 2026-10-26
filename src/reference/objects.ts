@@ -9,6 +9,7 @@
 import { DAILY_WRITES_SEND_RECIPIENTS, FREE_PLAN_LIST } from "../../shared/free_plan";
 import type { ImportPlanResponse } from "../../shared/imports";
 import type { Post, RevisionResponse } from "../../shared/posts";
+import type { ProviderStatusView } from "../../shared/provider";
 import type {
   ObjectKey,
   ReferenceField,
@@ -188,7 +189,7 @@ const CONDITION_KINDS: Record<ConditionKind, ConditionKindDoc> = {
     meaning:
       "An outage or a rate limit on the provider's side; the send waits, retried at `retry_at`. No one is marked unsent.",
     remedy:
-      "Nothing, while `info`: it retries on its own. At `warn` the deployment asks for more a second than the account allows: whoever runs it sets `SES_MAX_SEND_RATE` to the account's maximum send rate, and deploys.",
+      "Nothing, while `info`: it retries on its own. At `warn` the deployment asks for more a second than the account allows: whoever runs it sets `SES_MAX_SEND_RATE` to the account's maximum send rate, or removes it and lets the app read that rate (`ses:GetAccount`), and deploys.",
   },
   bounce_spike: {
     severity: "`warn`",
@@ -237,7 +238,7 @@ const HALT_CAUSES: Record<HaltCause, { reason: HaltReason; meaning: string }> = 
   rate_limit: {
     reason: "unavailable",
     meaning:
-      "The provider refused for its sending rate; once it keeps happening, `SES_MAX_SEND_RATE` is set above the account's maximum.",
+      "The provider refused for its sending rate; once it keeps happening, the deployment asks for more a second than the account's maximum (`SES_MAX_SEND_RATE` set above it, or an account rate the app can't read).",
   },
   credentials: {
     reason: "account",
@@ -947,6 +948,68 @@ const SETTINGS_FIELDS: ReferenceField[] = [
   },
 ];
 
+const PROVIDER_FIELDS: ReferenceField[] = [
+  {
+    name: "provider",
+    type: '"ses" | "fake" | "none"',
+    description:
+      "The provider the deployment sends through, as `deployment.provider` on the settings.",
+  },
+  {
+    name: "state",
+    type: '"not_connected" | "sandbox" | "production" | "unknown"',
+    description:
+      "`sandbox`: SES mails only addresses verified in SES, so signups from anyone else fail and a send holds for them; don't share the subscribe link yet. `production`: anyone can be mailed. `unknown`: the app couldn't learn which; ask the publisher. Never an error.",
+  },
+  {
+    name: "unknown_reason",
+    type: '"permission" | "unreachable" | "not_checked" | "stand_in" | null',
+    description:
+      "Why `state` is `unknown`: the AWS key isn't allowed `ses:GetAccount` (`permission`), asking got no usable answer (`unreachable`), the app hasn't asked yet (`not_checked`), or local development's stand-in has no account (`stand_in`).",
+  },
+  {
+    name: "review",
+    type: '"pending" | "granted" | "denied" | "failed" | null',
+    description:
+      "AWS's review of the latest request for production access: under review, granted, denied, or not received (`failed`, so request it again). Null when none was made.",
+  },
+  {
+    name: "review_case",
+    type: "string | null",
+    description: "The AWS Support case holding AWS's reply to the request.",
+  },
+  {
+    name: "send_rate",
+    type: '{ value, source: "account" | "setting" | "default" } | null',
+    description:
+      "The messages a second a send keeps to: the lower of the account's own rate and `SES_MAX_SEND_RATE`, whichever is known, else Kestrel's default, and which it came from. Null without SES.",
+  },
+  {
+    name: "account",
+    type: "object | null",
+    description:
+      "What the account said about itself: `max_send_rate`, `max_24_hour_send` (null when unlimited), `sent_last_24_hours`, `enforcement` (`healthy`, `probation` while AWS reviews its bounce or complaint rate, `shutdown` while AWS has paused it), and `sending_enabled`. Null until it has answered.",
+  },
+  {
+    name: "configuration_set",
+    type: '{ name, source: "setting" | "identity" | "none" } | null',
+    description:
+      "The configuration set SES files bounces and complaints under: `SES_CONFIGURATION_SET`, the sending identity's default, or `none`, when they never reach the app. Null when the app couldn't read the identity.",
+  },
+  {
+    name: "warnings",
+    type: "object[]",
+    description:
+      "Each `{ code, severity, message, docs }` worth a look, in words to show as they come; `docs` names the page `slug` and heading `anchor` that fix it. `bounces_not_routed`: no configuration set applies.",
+  },
+  {
+    name: "checked_at",
+    type: "number | null",
+    description:
+      "When the account last answered. The app asks about every ten minutes while nothing is sending, so a grant shows within about that.",
+  },
+];
+
 /**
  * Every object, in the order the reference lists them. A Record, so a new `ObjectKey` fails to
  * compile until it is described.
@@ -1120,6 +1183,31 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
       },
       notification_status: { last_sent: null, last_failure: null },
     } satisfies Abridged<SettingsResponse>,
+  },
+  provider: {
+    resource: "settings",
+    title: "The provider object",
+    description:
+      "The email provider's connection: where it stands, what the provider's account says about itself, and what's worth a look. Read-only, from what the app last observed, never deploy configuration or a secret.",
+    fields: PROVIDER_FIELDS,
+    example: {
+      provider: "ses",
+      state: "sandbox",
+      unknown_reason: null,
+      review: "pending",
+      review_case: "1234567890",
+      send_rate: { value: 1, source: "account" },
+      account: {
+        max_send_rate: 1,
+        max_24_hour_send: 200,
+        sent_last_24_hours: 3,
+        enforcement: "healthy",
+        sending_enabled: true,
+      },
+      configuration_set: { name: "kestrel-mail", source: "setting" },
+      warnings: [],
+      checked_at: 1768467600000,
+    } satisfies ProviderStatusView,
   },
 };
 

@@ -14,6 +14,7 @@ import type {
 import { ApiError, api } from "../api";
 import { renderSidebarBrand } from "../brand";
 import { mount, setTitle } from "../lifecycle";
+import { readProviderStatus } from "../provider_status";
 import { appState } from "../state";
 import { $ } from "../ui/dom";
 import { type Html, html, setHtml } from "../ui/html";
@@ -76,6 +77,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     renderError(body, message(e), () => mount(renderSettings));
     return;
   }
+  const provider = await readProviderStatus(data.deployment.provider, signal);
   const s = data.settings;
   const p = s.publication;
   const ce = s.confirmation_email;
@@ -116,6 +118,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
   let refreshReaderPages = () => {};
   const page: SettingsPage = {
     data,
+    provider,
     state,
     saved: () => baseline,
     fromDisplay,

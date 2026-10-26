@@ -78,7 +78,8 @@ export type ObjectKey =
   | "subscriber"
   | "suppression"
   | "import_plan"
-  | "settings";
+  | "settings"
+  | "provider";
 
 /**
  * A table an object carries beside its fields, for a field whose values each have more to say

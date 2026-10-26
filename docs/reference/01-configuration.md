@@ -84,9 +84,9 @@ Vars go in the environment block's `vars`. Every value is a string.
 
 - `SES_MAX_SEND_RATE` optional
 
-    Your SES account's maximum send rate, in messages a second. Default: `14`, a common starting rate, not your account's. Refused unless it's a whole number above zero.
+    A cap on the send rate, in messages a second. Usually left unset: the app reads your SES account's maximum send rate itself, about every ten minutes while nothing is sending, and keeps to the lower of the two when both are known. Without either, it sends at `14`, a common starting rate, not your account's. Refused unless it's a whole number above zero. **Settings → Email sender** shows the rate a send keeps to, and where it comes from.
 
-    The app sends SES one request a second, the most SES takes, and each request carries one second of this rate, up to 50 recipients. Set it to the maximum send rate on your SES **Account dashboard**: `1` in the sandbox, and whatever AWS grants after that. To send faster, ask AWS to raise that rate to 50 before you move to Workers Paid: on Workers Free, a rate of 50 sends nearly four times as many recipients a minute as 14, and a higher rate adds nothing there. A rate set too high only means SES throttles some requests. Those recipients wait for the next minute, and no one is mailed twice.
+    The app sends SES one request a second, the most SES takes, and each request carries one second of the rate, up to 50 recipients. Set this only to send slower than your account allows, or when the app's key can't read the account (it needs `ses:GetAccount`). To send faster, ask AWS to raise that rate to 50 before you move to Workers Paid: on Workers Free, a rate of 50 sends nearly four times as many recipients a minute as 14, and a higher rate adds nothing there. A rate set too high only means SES throttles some requests. Those recipients wait for the next minute, and no one is mailed twice.
 
 - `SUBREQUEST_BUDGET` optional
 

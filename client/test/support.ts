@@ -5,6 +5,7 @@
 // send server over it is `send_server.ts`. Imported by specs only; never part of the bundle.
 
 import { vi } from "vitest";
+import type { ProviderStatusView } from "../../shared/provider";
 import type { SendActorsRow, SendSummary } from "../../shared/sends";
 import type { DeploymentView, SettingsResponse, SettingsView } from "../../shared/settings";
 import { unmount } from "../lifecycle";
@@ -183,6 +184,23 @@ export function stubClipboard() {
  * transport, with a template the server would take and nothing scheduled. `settings` and
  * `deployment` merge field by field over those defaults; the rest replaces.
  */
+/** GET /api/provider for SES, as an account that hasn't answered yet unless `over` says otherwise. */
+export function providerStatus(over: Partial<ProviderStatusView> = {}): ProviderStatusView {
+  return {
+    provider: "ses",
+    state: "unknown",
+    unknown_reason: "not_checked",
+    review: null,
+    review_case: null,
+    send_rate: { value: 14, source: "default" },
+    account: null,
+    configuration_set: null,
+    warnings: [],
+    checked_at: null,
+    ...over,
+  };
+}
+
 export function settingsResponse(
   over: {
     settings?: Partial<SettingsView>;

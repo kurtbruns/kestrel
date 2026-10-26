@@ -60,6 +60,7 @@ import * as imageRoutes from "./routes/images";
 import * as importRoutes from "./routes/imports";
 import * as llmsRoutes from "./routes/llms";
 import * as postRoutes from "./routes/posts";
+import * as providerRoutes from "./routes/provider";
 import * as publicRoutes from "./routes/public";
 import * as readerPageRoutes from "./routes/reader_pages";
 import * as renderRoutes from "./routes/render_actions";
@@ -536,6 +537,19 @@ export function createRouter({
         "Runtime preferences, a read-only reflection of deploy config (no secrets), and `in_use`: the scheduled sends a template or identity change would re-make.",
       returns: { object: "settings" },
       handler: settingsRoutes.get,
+    },
+    {
+      method: "GET",
+      path: "/api/provider",
+      access: "admin",
+      resource: "settings",
+      title: "Get the provider's connection",
+      summary:
+        "Where the email provider's connection stands (`not_connected`, `sandbox`, `production`, or `unknown`), what its account last said about itself, and any warning, in words to show as they come.",
+      description:
+        "Read-only and never a secret. It reads what the app last observed: while no send is going out, the app asks SES about its account about every ten minutes, so a grant of production access shows within about that. An AWS key without `ses:GetAccount` reads as `unknown`, never as an error.",
+      returns: { object: "provider" },
+      handler: providerRoutes.get,
     },
     {
       method: "PUT",

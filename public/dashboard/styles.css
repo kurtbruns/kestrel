@@ -5338,6 +5338,16 @@ button.set-field-remove {
   color: var(--ok-fg);
   border-color: var(--ok-line);
 }
+/* SES still in its sandbox: worth a look, so amber (DESIGN §8). */
+.set-pill.warn {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border-color: var(--warn-line);
+}
+/* Words in the settings reflection that are worth a look: the sandbox's limit, a denied review, a warning. */
+.settings .set-warn {
+  color: var(--warn-fg);
+}
 /* A notification channel that has stopped delivering: the one red in the settings reflection. */
 .set-pill.danger {
   background: var(--danger-bg);

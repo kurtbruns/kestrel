@@ -10,6 +10,7 @@ import {
   fakeApi,
   jsonResponse,
   mount,
+  providerStatus,
   resetShell,
   sendSummary,
   settingsResponse,
@@ -95,8 +96,14 @@ describe("settings view", () => {
   const readerPageReads = () =>
     fake.calls.filter((c) => c.url.pathname.startsWith("/api/reader-pages/")).length;
 
+  // On SES, the provider's connection is read beside the settings: not answered yet, unless a
+  // spec's own route says otherwise.
   async function open(routes: FakeRoute[] = [{ path: "/api/settings", reply: () => response() }]) {
-    fake = fakeApi([...routes, readerPage]);
+    fake = fakeApi([
+      ...routes,
+      readerPage,
+      { path: "/api/provider", reply: () => providerStatus() },
+    ]);
     await mount(renderSettings);
     await vi.advanceTimersByTimeAsync(0);
   }
@@ -983,5 +990,115 @@ describe("settings view", () => {
     $("[data-retry]").click();
     await vi.advanceTimersByTimeAsync(0);
     expect($<HTMLInputElement>("#setName").value).toBe("Birds Weekly");
+  });
+  // SPEC §9: on SES, the Email provider row says where the connection stands (GET /api/provider).
+  describe("the SES connection", () => {
+    const withStatus = (over: Parameters<typeof providerStatus>[0]) =>
+      open([
+        { path: "/api/settings", reply: () => response() },
+        { path: "/api/provider", reply: () => providerStatus(over) },
+      ]);
+    const account = {
+      max_send_rate: 1,
+      max_24_hour_send: 200,
+      sent_last_24_hours: 0,
+      enforcement: "healthy",
+      sending_enabled: true,
+    } as const;
+
+    it("names the sandbox, what it limits, and the step that asks AWS to lift it", async () => {
+      await withStatus({
+        state: "sandbox",
+        unknown_reason: null,
+        account,
+        send_rate: { value: 1, source: "account" },
+      });
+      expect($("#providerState").textContent).toBe("Sandbox");
+      expect($("#providerState").classList.contains("warn")).toBe(true);
+      expect($("#providerReview").textContent).toBe(
+        "It mails only addresses verified in SES, up to 200 a day. Request production access",
+      );
+      expect($<HTMLAnchorElement>("#providerReview a").getAttribute("href")).toBe(
+        "#/docs/verify/3-request-production-access",
+      );
+      expect($("#sendRate").textContent).toBe(
+        "1 email a second, up to 200 a day (from your SES account)",
+      );
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("says AWS is reviewing the request, or that it denied it with its case", async () => {
+      await withStatus({ state: "sandbox", unknown_reason: null, review: "pending", account });
+      expect($("#providerReview").textContent).toBe(
+        "AWS is reviewing your request for production access. Until then, it mails only addresses verified in SES, up to 200 a day.",
+      );
+      unmount();
+      fake.restore();
+      await withStatus({
+        state: "sandbox",
+        unknown_reason: null,
+        review: "denied",
+        review_case: "1234567890",
+        account,
+      });
+      expect($("#providerReview").textContent).toBe(
+        "AWS denied production access. Its reply is in AWS Support, case 1234567890. What AWS asks for",
+      );
+    });
+
+    it("marks production green, with the account's rate", async () => {
+      await withStatus({
+        state: "production",
+        unknown_reason: null,
+        account: { ...account, max_send_rate: 14, max_24_hour_send: 50_000 },
+        send_rate: { value: 14, source: "account" },
+      });
+      expect($("#providerState").textContent).toBe("Production");
+      expect($("#providerState").classList.contains("ok")).toBe(true);
+      expect(document.querySelector("#providerReview")).toBeNull();
+      expect($("#sendRate").textContent).toBe(
+        "14 emails a second, up to 50,000 a day (from your SES account)",
+      );
+    });
+
+    it("says only Amazon SES while the app can't tell, and where the rate comes from", async () => {
+      await withStatus({
+        unknown_reason: "permission",
+        send_rate: { value: 1, source: "setting" },
+      });
+      expect($("#providerValue").textContent?.trim()).toBe("Amazon SES");
+      expect(document.querySelector("#providerState")).toBeNull();
+      expect($("#sendRate").textContent).toBe("1 email a second (set by SES_MAX_SEND_RATE)");
+    });
+
+    it("shows each warning in the server's words, linking the step that fixes it", async () => {
+      await withStatus({
+        warnings: [
+          {
+            code: "bounces_not_routed",
+            severity: "warn",
+            message: "Bounces and complaints won’t reach Kestrel.",
+            docs: { slug: "ses", anchor: "4-send-bounces-and-complaints-to-the-app" },
+          },
+        ],
+      });
+      expect($("#providerValue .set-warn").textContent).toBe(
+        "Bounces and complaints won’t reach Kestrel. Send bounces and complaints to the app",
+      );
+      expect($<HTMLAnchorElement>("#providerValue .set-warn a").getAttribute("href")).toBe(
+        "#/docs/ses/4-send-bounces-and-complaints-to-the-app",
+      );
+    });
+
+    it("never reads the connection off SES", async () => {
+      await open([
+        {
+          path: "/api/settings",
+          reply: () => settingsResponse({ deployment: { provider: "fake" } }),
+        },
+      ]);
+      expect(fake.calls.some((c) => c.url.pathname === "/api/provider")).toBe(false);
+      expect(document.querySelector("#sendRate")).toBeNull();
+    });
   });
 });

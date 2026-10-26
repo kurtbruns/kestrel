@@ -54,7 +54,7 @@ A new SES account sends only to the addresses you've verified, up to 200 emails 
 
     Leave the other fields as they are.
 
-1. Check the acknowledgement, and select **Submit request**. AWS Support answers by email, and may ask how you collect addresses and handle bounces.
+1. Check the acknowledgement, and select **Submit request**. AWS Support answers by email, and may ask how you collect addresses and handle bounces. Within about ten minutes, the app's **Settings → Email sender** says AWS is reviewing your request, and it says when AWS grants or denies it.
 
 If AWS asks for more detail, or denies the request, reply in the support case, or open a new request from the **Account dashboard**. Say how Kestrel handles the list:
 
@@ -134,11 +134,9 @@ To follow one send, narrow the time range and filter on its `sendId`, since a lo
 
 Section 3 asked AWS for production access. Until AWS grants it, the sandbox mails only your verified addresses, so check it before you go live.
 
-1. In SES, open the **Account dashboard** in the region the app sends from. It no longer says your account is in the sandbox, and it shows your daily quota and maximum send rate.
+1. In the editor, open **Settings → Email sender**. The email provider reads **Production**, and **Send rate** shows your account's maximum send rate and daily quota, "from your SES account".
 
-1. Check that `SES_MAX_SEND_RATE` in `wrangler.jsonc` matches that rate, and that you deployed after setting it, as [Connect Amazon SES](04-ses.md#6-set-the-provider-and-deploy) describes.
-
-If the dashboard still says sandbox, AWS hasn't answered yet. Come back to this section when it does, and check the email AWS Support sends for questions.
+1. If it still reads **Sandbox**, AWS hasn't granted access yet. Come back to this section when it does, and check the email AWS Support sends for questions. If it reads only "Amazon SES", the app can't read the account: check that the `kestrel-send-email` policy allows `ses:GetAccount`, as [Connect Amazon SES](04-ses.md#5-create-the-apps-aws-key) shows, and look again in ten minutes. The SES **Account dashboard** shows the same facts.
 
 ## 10. Clean up the test subscribers
 

@@ -2,6 +2,7 @@
 // setup steps (the first-run checklist, then the Finish setting up card), and quick actions.
 
 import type { Post, PostListResponse } from "../../shared/posts";
+import type { ProviderStatusView } from "../../shared/provider";
 import type { SendListResponse, SendView } from "../../shared/sends";
 import type { DeploymentView } from "../../shared/settings";
 import type { SubscriberCounts, SubscriberListResponse } from "../../shared/subscribers";
@@ -17,6 +18,14 @@ import {
 } from "../deployment";
 import { mount, setTitle } from "../lifecycle";
 import { createNewPost } from "../posts/drafts";
+import {
+  inSandbox,
+  PRODUCTION_ACCESS_HREF,
+  productionAccessHint,
+  readProviderStatus,
+  sandboxHealthHtml,
+  warningHtml,
+} from "../provider_status";
 import { followSends, type SendStage, type SendsUpdate, stageOf } from "../send_state";
 import {
   activeRowHtml,
@@ -40,8 +49,8 @@ import { icon } from "../ui/icons";
 import { badge, renderError } from "../ui/widgets";
 
 // The post-login landing and the brand's target (the default route). Built entirely
-// from existing authed endpoints — GET /api/posts, /sends, /subscribers, and the cached
-// /api/settings — so it adds no surface and can't touch an invariant. It answers
+// from existing authed endpoints — GET /api/posts, /sends, /subscribers, the cached
+// /api/settings, and on SES /api/provider — so it adds no surface and can't touch an invariant. It answers
 // SPEC §8's questions at a glance: is anything wrong, who's on the list, what's
 // scheduled, what went out, and what's still in progress.
 
@@ -62,8 +71,16 @@ interface HealthAlert {
 // standing state with no time, read from the deployment reflection, gone once one is set.
 // When that state is holding a send, the two are said as one red line instead of two.
 // While the Finish setting up card carries its Connect Amazon SES step, the card says the
-// not-connected state and the amber line is left out, so it is said once (DESIGN §3).
-function computeHealth(live: SendView[], setupSaysNotConnected = false): HealthAlert[] {
+// not-connected state and the amber line is left out, so it is said once (DESIGN §3). The
+// provider's connection adds the others with no send behind them: each warning the server
+// gives (GET /api/provider), in its words, and SES still in the sandbox, left out while the
+// setup card's production-access step says it.
+function computeHealth(
+  live: SendView[],
+  setupSaysNotConnected = false,
+  provider: ProviderStatusView | null = null,
+  setupSaysSandbox = false,
+): HealthAlert[] {
   const alerts: HealthAlert[] = [];
   // Missed only past the server's tolerance: an ordinary slow tick is never a miss (§12).
   const missed = live.filter((s) => has(s, "missed"));
@@ -183,6 +200,18 @@ function computeHealth(live: SendView[], setupSaysNotConnected = false): HealthA
       text: html`<span class="dash-not-connected">No email provider connected, so nothing can be sent yet. ${connectProviderLink()} to start sending.</span>`,
     });
   }
+  for (const w of provider?.warnings ?? []) {
+    alerts.push({
+      level: "amber",
+      text: html`<span class="dash-provider-warning">${warningHtml(w)}</span>`,
+    });
+  }
+  if (inSandbox(provider) && !setupSaysSandbox) {
+    alerts.push({
+      level: "amber",
+      text: html`<span class="dash-sandbox">${sandboxHealthHtml()}</span>`,
+    });
+  }
   return alerts;
 }
 
@@ -224,15 +253,18 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   let first: SendListResponse;
   let counts: SubscriberCounts;
   let workersPlanAdvice: string | null;
+  let provider: ProviderStatusView | null;
   try {
     // The health line scans every send and the archive-link slug map needs every post,
     // so ask for a full window rather than the list default (50). Subscribers is only
     // read for its (filter-independent) counts, so its row limit doesn't matter.
-    const [p, s, subs] = await Promise.all([
+    const [p, s, subs, prov] = await Promise.all([
       api<PostListResponse>("/api/posts?limit=200", { signal }),
       api<SendListResponse>("/api/sends?limit=200", { signal }),
       api<SubscriberListResponse>("/api/subscribers", { signal }),
+      readProviderStatus(appState.appConfig?.deployment.provider, signal),
     ]);
+    provider = prov;
     posts = p.posts;
     first = s;
     counts = subs.counts;
@@ -267,7 +299,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       root,
       html`<div class="dash-head"><div><h1>${pub.name}</h1>${
         pub.tagline ? html`<p class="muted dash-tagline">${pub.tagline}</p>` : null
-      }<p class="muted">Let’s get your first post out the door.</p></div></div>${setupStepsHtml(pub, deployment, setupProgress(), "checklist")}<section class="dash-section"><h2>API access</h2>${apiConnectCard(false)}</section>`,
+      }<p class="muted">Let’s get your first post out the door.</p></div></div>${setupStepsHtml(pub, deployment, setupProgress(), "checklist", provider)}<section class="dash-section"><h2>API access</h2>${apiConnectCard(false)}</section>`,
     );
     wireDashActions(root, remount, signal);
     return;
@@ -277,9 +309,16 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   // the archive published, is done, so the step's check and the card ending are one moment.
   const setupOpen = () => !archived();
   const setupCardHtml = () =>
-    setupOpen() ? setupStepsHtml(pub, deployment, setupProgress(), "card") : html``;
+    setupOpen() ? setupStepsHtml(pub, deployment, setupProgress(), "card", provider) : html``;
   const healthNow = () =>
-    healthHtml(computeHealth(sendsNow(sends, reported), setupOpen() && providerNotConnected()));
+    healthHtml(
+      computeHealth(
+        sendsNow(sends, reported),
+        setupOpen() && providerNotConnected(),
+        provider,
+        setupOpen(),
+      ),
+    );
 
   // Each tile deep-links into the roster pre-filtered on its criterion
   // (#/subscribers/<filter>), so a count is a way in, not just a number.
@@ -606,9 +645,11 @@ function setupStepsHtml(
   deployment: DeploymentView | null,
   progress: SetupProgress,
   layout: "checklist" | "card",
+  provider: ProviderStatusView | null = null,
 ): Html {
   const subscribeUrl = `${deployment?.app_origin || location.origin}/subscribe`;
   const notConnected = providerNotConnected();
+  const ses = !notConnected && deployment?.provider === "ses";
   const { onList } = progress;
   const done = (yes: boolean) => (yes ? " setup-done" : "");
   return html`<div class="card setup${layout === "card" ? " setup-card" : ""}">
@@ -621,6 +662,11 @@ function setupStepsHtml(
           : html`<li class="setup-check"><div class="setup-step-main"><strong>Check your setup</strong><span class="muted">Send yourself a test, and see how Kestrel tells you when something needs attention.</span></div><button data-nav="#/docs/check-your-setup">Docs</button></li>`
       }
       ${
+        ses
+          ? html`<li class="setup-access${done(provider?.state === "production")}"><div class="setup-step-main"><strong>Request production access</strong><span class="muted">${productionAccessHint(provider)}</span></div><button data-nav="${PRODUCTION_ACCESS_HREF}">Docs</button></li>`
+          : null
+      }
+      ${
         onList
           ? html`<li class="setup-done setup-list"><div class="setup-step-main"><strong>Bring your existing list</strong><span class="muted">${onList.toLocaleString()} ${onList === 1 ? "subscriber" : "subscribers"} on your list.</span></div><button data-nav="#/subscribers">Subscribers</button></li>`
           : html`<li class="setup-list"><div class="setup-step-main"><strong>Bring your existing list</strong><span class="muted">Import the subscribers you have on another service, with the consent they gave there. Skip this if you’re starting fresh.</span></div><button data-nav="#/subscribers/import">Import</button></li>`
@@ -629,7 +675,7 @@ function setupStepsHtml(
       ${
         notConnected
           ? html`<li class="setup-subscribe"><div class="setup-step-main"><strong>Share your subscribe link</strong><span class="muted">Signups open once an email provider is connected; until then the page says they aren’t open yet.</span></div></li>`
-          : html`<li class="setup-subscribe"><div class="setup-step-main"><strong>Share your subscribe link</strong><code class="setup-url">${subscribeUrl}</code></div><button type="button" data-copy="${subscribeUrl}" aria-label="Copy the subscribe link">${copyFace()}</button></li>`
+          : html`<li class="setup-subscribe"><div class="setup-step-main"><strong>Share your subscribe link</strong>${inSandbox(provider) ? html`<span class="muted">Share it once AWS grants production access: until then, signups from anyone not verified in SES fail.</span>` : null}<code class="setup-url">${subscribeUrl}</code></div><button type="button" data-copy="${subscribeUrl}" aria-label="Copy the subscribe link">${copyFace()}</button></li>`
       }
     </ol>
   </div>`;

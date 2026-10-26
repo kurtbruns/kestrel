@@ -11,6 +11,7 @@ import {
   type FakeRoute,
   fakeApi,
   mount,
+  providerStatus,
   resetShell,
   sendSummary,
   settingsResponse,
@@ -639,12 +640,15 @@ describe("dashboard", () => {
     it("shows neither once a provider is set, nor on local development's stand-in", async () => {
       for (const provider of ["ses", "fake"] as const) {
         withProvider(provider);
-        fake = world([], sendServer(), none);
+        const status: FakeRoute[] = [{ path: "/api/provider", reply: () => providerStatus() }];
+        fake = world([], sendServer(), none, status);
         await mount(renderDashboard);
         await vi.advanceTimersByTimeAsync(0);
         expect(steps(), provider).toEqual([
           "Name your publication",
           "Check your setup",
+          // Only SES has an account whose sandbox AWS reviews (SPEC §9).
+          ...(provider === "ses" ? ["Request production access"] : []),
           "Bring your existing list",
           "Publish your first post",
           "Share your subscribe link",
@@ -654,7 +658,7 @@ describe("dashboard", () => {
         expect($(".setup-check button").dataset.nav, provider).toBe("#/docs/check-your-setup");
         unmount();
         fake.restore();
-        fake = world([post()], sendServer([scheduled()]), counts);
+        fake = world([post()], sendServer([scheduled()]), counts, status);
         await mount(renderDashboard);
         await vi.advanceTimersByTimeAsync(0);
         expect(document.querySelector(".dash-not-connected"), provider).toBeNull();
@@ -1030,5 +1034,108 @@ describe("dashboard", () => {
     // Said on the button, not in a toast.
     expect($(".pub-card [data-copy]").getAttribute("aria-label")).toBe("Copied");
     expect($("#toasts").textContent).toBe("");
+  });
+  // SPEC §9: on SES, the dashboard says where the connection stands, from GET /api/provider.
+  describe("the SES connection", () => {
+    const onSes = (status: Parameters<typeof providerStatus>[0]): FakeRoute[] => {
+      const c = config();
+      c.deployment = { ...c.deployment, provider: "ses" };
+      appState.appConfig = c;
+      return [{ path: "/api/provider", reply: () => providerStatus(status) }];
+    };
+    const sandbox = { state: "sandbox", unknown_reason: null } as const;
+
+    it("asks for production access as a setup step, says where AWS's review stands, and holds the subscribe link until it's granted", async () => {
+      fake = world([], sendServer(), none, onSes({ ...sandbox, review: "pending" }));
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect($(".setup-access").classList.contains("setup-done")).toBe(false);
+      expect($(".setup-access .muted").textContent).toBe(
+        "AWS is reviewing your request. Until then, SES mails only addresses verified in SES.",
+      );
+      expect($(".setup-access button").dataset.nav).toBe(
+        "#/docs/verify/3-request-production-access",
+      );
+      expect($(".setup-subscribe .muted").textContent).toBe(
+        "Share it once AWS grants production access: until then, signups from anyone not verified in SES fail.",
+      );
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("checks the step off once AWS grants production access", async () => {
+      fake = world([], sendServer(), none, onSes({ state: "production", unknown_reason: null }));
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect($(".setup-access").classList.contains("setup-done")).toBe(true);
+      expect(document.querySelector(".setup-subscribe .muted")).toBeNull();
+    });
+
+    it("never checks the step off while the app can't tell, nor says it's in the sandbox", async () => {
+      fake = world([], sendServer(), none, onSes({ unknown_reason: "permission" }));
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect($(".setup-access").classList.contains("setup-done")).toBe(false);
+      expect($(".setup-access .muted").textContent).toBe(
+        "Ask once a test email has arrived. Kestrel can’t read your SES account, so the SES console’s account dashboard says whether AWS granted it.",
+      );
+      expect(document.querySelector(".setup-subscribe .muted")).toBeNull();
+    });
+
+    it("says what the sandbox limits before any request is made", async () => {
+      fake = world([], sendServer(), none, onSes(sandbox));
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect($(".setup-access .muted").textContent).toBe(
+        "SES mails only addresses verified in SES until AWS grants it. Ask once a test email has arrived.",
+      );
+    });
+
+    it("raises an amber line for the sandbox once setup is done, and one for each warning, in the server's words", async () => {
+      const warning = {
+        code: "bounces_not_routed",
+        severity: "warn",
+        message: "Bounces and complaints won’t reach Kestrel.",
+        docs: { slug: "ses", anchor: "4-send-bounces-and-complaints-to-the-app" },
+      } as const;
+      fake = world(
+        [post()],
+        sendServer([send()]),
+        counts,
+        onSes({ ...sandbox, warnings: [warning] }),
+      );
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect($("#dashHealth .health").classList.contains("amber")).toBe(true);
+      expect($(".dash-sandbox").textContent).toBe(
+        "Amazon SES is still in the sandbox, so it mails only addresses verified in SES. Request production access",
+      );
+      expect($(".dash-provider-warning").textContent).toBe(
+        "Bounces and complaints won’t reach Kestrel. Send bounces and complaints to the app",
+      );
+      expect($<HTMLAnchorElement>(".dash-provider-warning a").getAttribute("href")).toBe(
+        "#/docs/ses/4-send-bounces-and-complaints-to-the-app",
+      );
+    });
+
+    it("leaves the sandbox line to the setup card while the card says it", async () => {
+      fake = world([post()], sendServer(), counts, onSes(sandbox));
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(document.querySelector(".setup-access")).not.toBeNull();
+      expect(document.querySelector(".dash-sandbox")).toBeNull();
+    });
+
+    it("shows the dashboard as before when the connection can't be read", async () => {
+      const c = config();
+      c.deployment = { ...c.deployment, provider: "ses" };
+      appState.appConfig = c;
+      fake = world([post()], sendServer([send()]), counts, [
+        { path: "/api/provider", reply: () => new Response("down", { status: 500 }) },
+      ]);
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect($(".dash-head h1").textContent).toBe("Birds Weekly");
+      expect(document.querySelector("#dashHealth .health")).toBeNull();
+    });
   });
 });

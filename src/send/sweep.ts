@@ -1,5 +1,5 @@
 /**
- * The reconciling sweep — runs once a minute from scheduled(). Four jobs:
+ * The reconciling sweep — runs once a minute from scheduled(). Five jobs:
  *   1. fire due sends (and loudly flag any that missed their fire time), after a halted
  *      send whose retry is due has asked the provider, so a send fired this tick joins a
  *      halt that still stands instead of starting it over (SPEC §12),
@@ -7,7 +7,12 @@
  *      no run can move until Resolve (`WEDGED_SEND`),
  *   3. flag anomalies (sends in flight too long with nothing handed off, wedged sends
  *      awaiting Resolve),
- *   4. notify the publisher of sends that went out or ran into a problem (`notify/notify.ts`).
+ *   4. notify the publisher of sends that went out or ran into a problem (`notify/notify.ts`),
+ *   5. on a tick that sent nothing, ask the provider about its account when the last answer
+ *      is old (`services/provider_status.ts`), with what notifying left of the budget.
+ *
+ * The sends a tick runs keep to the account's own send rate once that check has read it
+ * (`sesSendRate`), read at most once a tick and only when there is a send to run.
  *
  * A missed fire is still delivered — the render is frozen, so lateness is a
  * timeliness problem, not a correctness one — but it is never silent (§12).
@@ -35,6 +40,7 @@ import { HALT_RETRY_SLACK_MS, MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "..
 import { NOTIFY_RESERVE, notifyPublisher } from "../notify/notify";
 import { getProvider } from "../providers";
 import { drainSimulatedWebhooks } from "../providers/simulate";
+import { accountForPacing, refreshProviderAccount, sesSendRate } from "../services/provider_status";
 import { Budget, metered } from "./budget";
 import { MIN_RUN_COST, runSend } from "./loop";
 import { SendWindow } from "./pace";
@@ -80,6 +86,23 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
   const budget = new Budget(whole.limit - held, whole.queryLimit - held);
   const db = metered(env.DB, budget);
   const window = new SendWindow(getProvider(config, env).maxRequestRate);
+  // The send rate this tick's sends keep to, read the first time a send runs. A read that
+  // fails paces by the deployment's own rate instead, so reading the account never stops a
+  // send (SPEC §9).
+  let rate: Promise<number | undefined> | undefined;
+  const sendRate = (): Promise<number | undefined> => {
+    rate ??=
+      config.provider === "ses"
+        ? accountForPacing(db, config).then(
+            (a) => sesSendRate(config, a).value,
+            (err: unknown) => {
+              log.warn("provider.pacing_unread", { error: errorText(err) });
+              return config.sesMaxSendRate;
+            },
+          )
+        : Promise.resolve(undefined);
+    return rate;
+  };
 
   // Sends left mid-flight whose lease has expired, and halted ones whose next retry is due.
   // Read first, so a halt's due retry can run before anything else this tick.
@@ -90,7 +113,7 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
     }
     handled.add(s.id);
     tick.resumable += 1;
-    await safeRun(env, s.id, budget, window);
+    await safeRun(env, s.id, budget, window, await sendRate());
   };
 
   // 1) A halted send whose retry is due asks the provider first. A halt is the account's or
@@ -112,7 +135,7 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
     }
     handled.add(s.id);
     tick.due += 1;
-    await safeRun(env, s.id, budget, window);
+    await safeRun(env, s.id, budget, window, await sendRate());
   }
 
   // 3) The rest: interrupted sends whose lease has expired, while the budget has room for
@@ -138,16 +161,24 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
 
   // 5) Tell the publisher: the reserve plus whatever the sends left. Last, and caught, so a
   // notification can never delay or break a send.
+  const rest = new Budget(
+    NOTIFY_RESERVE + Math.max(0, budget.left),
+    NOTIFY_RESERVE + Math.max(0, budget.queriesLeft),
+  );
   try {
-    await notifyPublisher(
-      env,
-      new Budget(
-        NOTIFY_RESERVE + Math.max(0, budget.left),
-        NOTIFY_RESERVE + Math.max(0, budget.queriesLeft),
-      ),
-    );
+    await notifyPublisher(env, rest);
   } catch (err) {
     log.error("notify.error", { error: errorText(err) });
+  }
+
+  // 6) Ask the provider about its account, only on a tick that sent nothing, so its requests
+  // never meet a send's, and caught, so a failed check never fails the tick.
+  if (tick.due === 0 && tick.resumable === 0) {
+    try {
+      await refreshProviderAccount(env, config, rest, now);
+    } catch (err) {
+      log.error("provider.account_error", { error: errorText(err) });
+    }
   }
 
   // Dev-only: feed any now-due synthetic delivery webhooks through the real ingest, so
@@ -161,9 +192,10 @@ async function safeRun(
   sendId: string,
   budget: Budget,
   window: SendWindow,
+  sendRate: number | undefined,
 ): Promise<void> {
   try {
-    await runSend(env, sendId, budget, window);
+    await runSend(env, sendId, budget, window, sendRate);
   } catch (err) {
     // One bad send must not stop the sweep; it will be retried next tick.
     log.error("send.error", { sendId, error: errorText(err) });

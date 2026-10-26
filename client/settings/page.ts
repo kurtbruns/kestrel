@@ -2,6 +2,7 @@
 // baseline, the hooks a section answers so one save bar can commit them all, and the head
 // every section wears.
 
+import type { ProviderStatusView } from "../../shared/provider";
 import type { ConfirmationEmailCopy, SettingsResponse, SettingsView } from "../../shared/settings";
 import { describeError } from "../api";
 import { type Html, html } from "../ui/html";
@@ -28,6 +29,8 @@ export interface SettingsFormState extends SettingsBaseline {
  *  page when that state changes. */
 export interface SettingsPage {
   data: SettingsResponse;
+  /** The provider's connection (GET /api/provider), or null without SES or when the read failed. */
+  provider: ProviderStatusView | null;
   state: SettingsFormState;
   /** The state as last saved: what Discard returns to, and what a test is sent from. */
   saved(): SettingsBaseline;

@@ -32,6 +32,7 @@ import type {
   StaleRevisionError,
   TestSendResponse,
 } from "../../shared/posts";
+import type { ProviderStatusView } from "../../shared/provider";
 import { concretePath } from "../../shared/reference";
 import type {
   ResolveResponse,
@@ -397,6 +398,7 @@ const COMMIT_IMPORT = route("POST", "/api/imports");
 const WHOAMI = route("GET", "/api/whoami");
 const VERSION = route("GET", "/api/version");
 const SETTINGS = route("GET", "/api/settings");
+const PROVIDER = route("GET", "/api/provider");
 const SAVE_SETTINGS = route("PUT", "/api/settings");
 const TEST_NOTIFICATIONS = route("POST", "/api/settings/notifications/test");
 
@@ -601,9 +603,9 @@ export const TOOL_DEFS: ToolDef[] = [
     name: "get_publication",
     title: "Get the publication",
     description:
-      "Who you are signed in as, the running version, the publication's name and identity, the test recipients, where notifications go, the email provider and minimum lead, the scheduled sends, and the list's counts. Read it first.",
+      "Who you are signed in as, the running version, the publication's name and identity, the test recipients, where notifications go, the email provider, whether it's still in the SES sandbox (`connection`), and the minimum lead, the scheduled sends, and the list's counts. Read it first.",
     annotations: READ,
-    routes: [WHOAMI, VERSION, SETTINGS, LIST_SUBSCRIBERS],
+    routes: [WHOAMI, VERSION, SETTINGS, PROVIDER, LIST_SUBSCRIBERS],
     args: {},
     fixed: [{ route: LIST_SUBSCRIBERS, in: "query", field: "limit" }],
     async run(api) {
@@ -612,12 +614,20 @@ export const TOOL_DEFS: ToolDef[] = [
         api.call(VERSION),
         api.call(SETTINGS),
         api.call(LIST_SUBSCRIBERS, { query: { limit: 1 } }),
+        api.call(PROVIDER),
       ]);
       const failed = answers.find((a) => !a.ok);
       if (failed) {
         return refused(failed);
       }
-      const [who, version, settings, list] = answers as [Answer, Answer, Answer, Answer];
+      const [who, version, settings, list, provider] = answers as [
+        Answer,
+        Answer,
+        Answer,
+        Answer,
+        Answer,
+      ];
+      const p = provider.body as ProviderStatusView;
       const s = settings.body as SettingsResponse;
       const d = s.deployment;
       return data({
@@ -632,6 +642,11 @@ export const TOOL_DEFS: ToolDef[] = [
           from_address: d.from_address,
           min_lead_minutes: d.min_lead_ms / 60_000,
           free_plan_limits: d.free_plan_limits,
+          connection: {
+            state: p.state,
+            review: p.review,
+            warnings: p.warnings.map((w) => w.message),
+          },
         },
         subscribers: (list.body as SubscriberListResponse).counts,
         scheduled_sends: s.in_use.sends.slice(0, TOOL_PAGE).map(sendBrief),

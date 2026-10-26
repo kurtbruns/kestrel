@@ -683,7 +683,10 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
       "from_address",
       "min_lead_minutes",
       "free_plan_limits",
+      "connection",
     ]);
+    // Whether SES is still in its sandbox (SPEC §9); the suite's stand-in has no account.
+    expect(pub.deployment.connection).toEqual({ state: "unknown", review: null, warnings: [] });
     expect(pub.scheduled_sends).toEqual([]);
   });
 

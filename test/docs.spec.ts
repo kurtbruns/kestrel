@@ -159,6 +159,12 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
     }
     // The scan reads the editor's source, so it finds the link Settings makes under the From
     // address; finding none would mean the scan reads nothing.
+    // And the step Settings and the dashboard send the publisher to for production access.
+    expect(links).toContainEqual([
+      "../client/provider_status.ts",
+      "verify",
+      "3-request-production-access",
+    ]);
     expect(links).toContainEqual([
       "../client/settings/deploy.ts",
       "ses",

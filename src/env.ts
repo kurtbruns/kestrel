@@ -162,12 +162,17 @@ export interface Config {
   /** AWS region for SES. */
   awsRegion: string;
   /**
-   * The SES account's maximum send rate, in messages a second, which sizes the SES adapter's
-   * batches, sent one a second: going over it is a throttle, which halts the send for at
-   * least a minute. Defaults to 14, a common starting rate that AWS does not promise any
-   * account; the SES sandbox allows 1, and the account dashboard shows the account's own.
+   * The SES send rate, in messages a second, which sizes the SES adapter's batches, sent one
+   * a second: going over the account's own is a throttle, which halts the send for at least a
+   * minute. `SES_MAX_SEND_RATE`, else 14, a common starting rate that AWS does not promise any
+   * account. A send keeps to the account's own rate in its place once the account check has
+   * read it (`sesSendRate`), and to the lower of the two when both are known.
    */
   sesMaxSendRate: number;
+  /** `SES_MAX_SEND_RATE` as set, or null when unset: a cap on the account's own rate (SPEC §12). */
+  sesMaxSendRateSetting: number | null;
+  /** `SES_CONFIGURATION_SET`, or undefined when unset. */
+  sesConfigurationSet?: string;
   /** Cloudflare Access: both set, enabling JWT validation, or neither (one alone is refused). */
   accessTeamDomain?: string;
   accessAud?: string;
@@ -324,6 +329,7 @@ export function getConfig(env: AppEnv): Config {
   // simulation nor the not-connected preview can engage there whatever the var says.
   const local = devShaped ? readSimulateSends(env.SIMULATE_SENDS) : null;
   const notConnectedPreview = local === "not-connected";
+  const sesMaxSendRateSetting = readPositiveInt("SES_MAX_SEND_RATE", env.SES_MAX_SEND_RATE);
   // The preview runs as a deployment with no provider and no `NOTIFY` binding does: the
   // provider channel, over the not-connected adapter, which carries nothing.
   const notifyChannel: NotifyChannel = notConnectedPreview
@@ -344,8 +350,9 @@ export function getConfig(env: AppEnv): Config {
     sendingDomain: env.SENDING_DOMAIN,
     fromAddress: env.FROM_ADDRESS,
     awsRegion: env.AWS_REGION,
-    sesMaxSendRate:
-      readPositiveInt("SES_MAX_SEND_RATE", env.SES_MAX_SEND_RATE) ?? DEFAULT_SES_MAX_SEND_RATE,
+    sesMaxSendRate: sesMaxSendRateSetting ?? DEFAULT_SES_MAX_SEND_RATE,
+    sesMaxSendRateSetting: sesMaxSendRateSetting ?? null,
+    sesConfigurationSet: orUndefined(env.SES_CONFIGURATION_SET?.trim()),
     accessTeamDomain,
     accessAud,
     accessAllowedEmails: parseEmailList(env.ACCESS_ALLOWED_EMAILS),

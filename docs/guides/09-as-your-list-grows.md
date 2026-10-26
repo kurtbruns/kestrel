@@ -10,20 +10,7 @@ SES caps how many emails your account sends a day, and how many a second. A send
 
 1. Ask AWS for a higher daily quota and a maximum send rate of 50, as AWS's [Increasing your Amazon SES sending quotas](https://docs.aws.amazon.com/ses/latest/dg/manage-sending-quotas-request-increase.html) describes.
 
-1. When AWS grants it, the SES **Account dashboard** shows your new rate. In `wrangler.jsonc`, set the `production` block's `SES_MAX_SEND_RATE` to match, as [Configuration](../reference/01-configuration.md#vars) describes.
-
-1. Commit the change, and push it:
-
-    ```bash
-    git commit -am "Match the SES send rate"
-    git push
-    ```
-
-1. Deploy:
-
-    ```bash
-    npx wrangler deploy --env production
-    ```
+1. When AWS grants it, the app takes the new rate from your account within about ten minutes, and **Settings → Email sender** shows it under **Send rate**. If `SES_MAX_SEND_RATE` is set in `wrangler.jsonc`, the app keeps to the lower of the two, so remove it or raise it to match, then deploy, as [Configuration](../reference/01-configuration.md#vars) describes.
 
 ## 2. Upgrade to Workers Paid
 
@@ -61,6 +48,6 @@ Over years, one more limit can matter: on the free plan, one [D1 database](https
 
 ## Check it
 
-1. The SES **Account dashboard** shows the maximum send rate you set in `SES_MAX_SEND_RATE`.
+1. **Settings → Email sender** shows your new maximum send rate under **Send rate**, "from your SES account".
 
 1. On Workers Paid, the import screen under **Subscribers → Import** reads "CSV or .txt, up to 10,000 rows."

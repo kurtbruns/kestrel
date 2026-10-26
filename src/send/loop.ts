@@ -120,6 +120,7 @@ export async function runSend(
   sendId: string,
   budget: Budget = new Budget(getConfig(env).subrequestBudget),
   window?: SendWindow,
+  sendRate?: number,
 ): Promise<SendLoopResult> {
   const empty: SendLoopResult = {
     sendId,
@@ -141,7 +142,9 @@ export async function runSend(
     return empty;
   }
 
-  const config = getConfig(env);
+  // The account's own send rate in place of the configured one, when the sweep read it.
+  const deployed = getConfig(env);
+  const config = sendRate === undefined ? deployed : { ...deployed, sesMaxSendRate: sendRate };
   const provider = getProvider(config, env);
   const now = Date.now();
 

@@ -136,7 +136,8 @@ export function refusalAdvice(cause: HaltCause | null): string {
  * How many rate-limit halts in a row, with nothing taken between them, mark a throttle the
  * deployment causes itself (SPEC §12): a burst clears within a second and every retry after
  * the first is minutes out, so a provider that still refuses the first request of each retry
- * is being asked for more a second than the account allows (SES_MAX_SEND_RATE above it).
+ * is being asked for more a second than the account allows (SES_MAX_SEND_RATE above it, or
+ * the account's rate lowered since the app last read it).
  */
 export const SELF_THROTTLE_HALTS = 3;
 
@@ -183,7 +184,7 @@ export function unavailableMessage(
   send: Pick<Send, "halt_reason" | "halt_cause" | "halt_retries" | "halt_error">,
 ): string {
   if (isSelfThrottled(send)) {
-    return `The provider keeps refusing for its sending rate: ${sentence(send.halt_error)} A burst clears within a second, and this has refused the first request of ${send.halt_retries} retries in a row, minutes apart, so the deployment is asking for more a second than the account allows. Whoever runs the deployment sets SES_MAX_SEND_RATE to the maximum send rate on the SES console’s account dashboard (1 a second in the sandbox), and deploys. The send retries on its own meanwhile, and no one has been marked unsent because of this.`;
+    return `The provider keeps refusing for its sending rate: ${sentence(send.halt_error)} A burst clears within a second, and this has refused the first request of ${send.halt_retries} retries in a row, minutes apart, so the deployment is asking for more a second than the account allows. Whoever runs the deployment sets SES_MAX_SEND_RATE to the maximum send rate on the SES console’s account dashboard, or removes it and lets the app read that rate by allowing its AWS key ses:GetAccount, and deploys. The send retries on its own meanwhile, and no one has been marked unsent because of this.`;
   }
   return `The provider is unavailable: ${sentence(send.halt_error)} The send retries on its own, spaced out the longer this lasts, and no one has been marked unsent because of this.`;
 }
