@@ -92,7 +92,7 @@ If the bounce address has no flag, or the complaint address is still pending, SE
 
 ## 7. Read the logs
 
-The app writes a log line for each thing it does, and Cloudflare keeps them for a few days. Nothing else tells you if the once-a-minute schedule that sends posts stops, so it's worth knowing where to look.
+The app writes a log line for each thing it does, and Cloudflare keeps them for a few days, depending on your plan. Nothing else tells you if the once-a-minute schedule that sends posts stops, so it's worth knowing where to look.
 
 1. In the Cloudflare dashboard, go to **Workers & Pages**, select `kestrel-production`, and select **Observability**.
 
@@ -105,6 +105,8 @@ The app writes a log line for each thing it does, and Cloudflare keeps them for 
 1. Filter on `principal` equal to `service` to see what automation changed. On a new instance it finds nothing. Filter on `client` equal to `claude` or `claude-code` to see what Claude changed.
 
 1. Filter on `level` equal to `error`. A healthy instance shows nothing.
+
+If you search a long time range, Cloudflare may show only a sample of the matching lines. To follow one send, narrow the range to a few hours and filter on its `sendId`. On the Free plan, Cloudflare stops keeping logs for the rest of the day once the day's allowance is used up, so a very large send can leave the rest of that day unlogged. [Cloudflare's pricing page](https://developers.cloudflare.com/observability/pricing/) has the current limits and how long each plan keeps logs.
 
 ## 8. Check that SES can send to anyone
 

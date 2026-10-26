@@ -176,7 +176,7 @@ Wrangler doesn't carry bindings or vars over from the top level of `wrangler.jso
 
 - `observability` optional
 
-    Workers Logs, where the app's log lines land. On in the template. Every invocation is logged, with no sampling, since sampling could drop the one minute that reports a stuck or missed send.
+    Workers Logs, where the app's log lines land. On in the template. Kestrel sets no sampling, since sampling could drop the one minute that reports a stuck or missed send, so leave `head_sampling_rate` at its default of 1. Cloudflare's own daily limit on the Free plan can still stop new logs for the rest of the day, as [Read the logs](../get-started/05-verify.md#7-read-the-logs) describes.
 
 - `DB` required
 

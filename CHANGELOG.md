@@ -21,6 +21,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - The operator's Claude context (`.claude/CLAUDE.md`) says how to put images in a post: upload each from a file on disk, since a pasted image isn't one, and reference it by its filename with alt text, never by the upload's URL, which can leave a sent post with a broken image. Merge it into your instance's copy; `kestrel check-context` shows the change.
 - A new instance's development settings now answer on no address and run no schedule if deployed by mistake, without `--env production`, so a deploy that forgets it can't put the email stand-in and the local sign-in on a public address, or run the send sweep through the stand-in. The setup guide's Deploy step says how to remove such a deploy.
 - A safety caution in the instance's Claude context: never deploy or store a secret without `--env production`, keep the top level's addresses and schedule off, and how to remove a deploy that went out without it, with the person's agreement.
+- The setup guide's logs section now says that a search over a long range may show only a sample of the lines, how to narrow it to follow one send, and that on the Free plan a very large send can leave the rest of the day unlogged once Cloudflare's daily allowance is used up.
 
 ### Fixed
 
