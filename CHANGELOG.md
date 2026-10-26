@@ -13,6 +13,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Changed
 
 - The setup guide's Connect Amazon SES page is rewritten for a newcomer. It stores each secret as soon as its value exists, makes the custom MAIL FROM domain a regular step, and checks that the From address has no inbox before forwarding it. The section on switching an instance that already sends is gone, and its caution moves to Configuration's `PROVIDER`. Its sections are renumbered, so a bookmark to one now lands at the page's top. Verify it works, Deploy the app, and Lock the dashboard with Access are tightened to match, and Verify's Send now steps follow the editor's order.
+- The Troubleshooting docs page is organized around what you'd ask (a send is held, a reader never got a post, someone may have been mailed twice) instead of listing each on-screen message, since the screen already says each fix. It keeps the fixes made outside Kestrel, in Amazon SES or Cloudflare, and the decisions that are yours.
 
 ## [1.16.0] - 2026-10-26
 

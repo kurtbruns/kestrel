@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import troubleshooting from "../docs/publishing/06-troubleshooting.md";
 import publishingIndex from "../docs/publishing/README.md";
 import selfHostingIndex from "../docs/README.md";
 import { type DocsResponse, headingAnchors } from "../shared/docs";
@@ -165,6 +166,38 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
   });
 });
 
+describe("Troubleshooting quotes the app's own words", () => {
+  it("finds every quote and bold label the page shows as the app's words in the app's source", () => {
+    // The page points at what the screen says rather than restating it, so what it does quote
+    // (a message in "…", a label in bold) has to stay the app's words when the app changes.
+    const words = appWordsIn(troubleshooting);
+    const source = Object.values(appSources).map(plainQuotes).join("\n");
+    for (const w of words) {
+      expect(
+        source.includes(w),
+        `"${w}" is not in client/, shared/, src/, or the kestrel client`,
+      ).toBe(true);
+    }
+    // A quote and a label it names, so a scan that finds nothing can't pass.
+    expect(words).toContain("Assume not sent");
+    expect(words).toContain("via the API");
+  });
+
+  it("reads a quote and a bold label as the app's words, and a bold sentence as the page's own", () => {
+    const md = [
+      '**Lead in, the page\'s own.** Under **Settings → Notifications**, the line says "it’s held".',
+      '`code "skipped"` and [a link](06-x.md#"skipped") and **Claude\'s changes read "via the API".**',
+      "```\n**Fenced**\n```",
+    ].join("\n");
+    expect(appWordsIn(md).sort()).toEqual([
+      "Notifications",
+      "Settings",
+      "it's held",
+      "via the API",
+    ]);
+  });
+});
+
 describe("each doc as Markdown, for an agent (docMarkdown)", () => {
   it("serves a page's Markdown with its links pointed at the other docs' Markdown", () => {
     const md = docMarkdown("your-list") ?? "";
@@ -228,6 +261,43 @@ const editorSources = import.meta.glob<string>(["../client/**/*.ts", "!../client
   import: "default",
   eager: true,
 });
+
+// Every module whose words reach a publisher: the editor, the shared wire text, the Worker's
+// messages (a send's conditions, a test's answer), and the kestrel client's. Specs and the
+// editor's test server, which fakes messages, are left out.
+const appSources = import.meta.glob<string>(
+  [
+    "../client/**/*.ts",
+    "../shared/**/*.ts",
+    "../src/**/*.ts",
+    "../packages/kestrel/lib/**/*.mjs",
+    "!../**/*.spec.ts",
+    "!../client/test/**",
+  ],
+  { query: "?raw", import: "default", eager: true },
+);
+
+// Typographic quotes and apostrophes as plain ones, since the app's source writes `’` and
+// the docs write `'`.
+function plainQuotes(text: string): string {
+  return text.replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
+}
+
+/** What a page quotes as the app's words: each "…" quote, and each bold label, a bold
+ *  `A → B` path naming each part. A bold phrase ending in a full stop is a sentence of the
+ *  page's own, a lead-in or a decision, and code and link targets are never the app's words. */
+function appWordsIn(md: string): string[] {
+  const prose = plainQuotes(md)
+    .replace(/^(```|~~~)[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, "")
+    .replace(/`[^`\n]+`/g, "")
+    .replace(/\]\([^)\s]*\)/g, "]");
+  const quotes = [...prose.matchAll(/"([^"\n]+)"/g)].map(([, q]) => q as string);
+  const labels = [...prose.matchAll(/\*\*([^*\n]+)\*\*/g)]
+    .map(([, b]) => (b as string).trim())
+    .filter((b) => !/[.!?]"?$/.test(b))
+    .flatMap((b) => b.split(" → "));
+  return [...new Set([...quotes, ...labels])];
+}
 
 /** A doc's heading anchors as the editor names them, from the fragment's heading text. */
 function anchorsIn(fragment: string): string[] {

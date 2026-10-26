@@ -1,82 +1,51 @@
 # Troubleshooting
 
-When a send needs you, its page and the dashboard's health block say so in a red or amber line. Red needs you to act, and amber is worth a look. Find the line's words below for what it means and what to do.
+When something needs you, Kestrel says so where you'll look: in a line on the send's page, under **Sent**, and at the top of the dashboard. Red needs you to act, and amber is worth a look. The line says what happened, what to do, and who does it. This page covers what the screen can't: the fixes made outside Kestrel, and the decisions that are yours.
 
 **Set a notifications address, so a problem reaches you without your watching.** Set it under **Settings → Notifications**, in **Send notifications to**. With none set, Kestrel emails you nothing. [Notifications](06-troubleshooting.md#notifications), below, lists what you're told.
 
-## A send is waiting or held
+## A send is held or waiting
 
-A problem with your email provider never marks anyone unsent. The send waits where it is, and carries on from there once the problem clears. "No one has been marked unsent because of this" means this problem: readers whose own email failed earlier stay unsent.
+Nothing is lost. A problem with your email provider never marks anyone unsent or mails anyone twice: the send waits where it is, and carries on by itself once the problem clears. Any other post that comes due meanwhile waits with it. The send's line names the fix, and when that fix is outside Kestrel, it's one of these, made by whoever runs your instance:
 
-- **"The provider is refusing the account".** Your provider won't take mail from your account, and its own words follow, with the fix and who makes it. The fix is almost always in your Amazon SES account or your instance, made by whoever runs it. [What SES refuses, and the fix](#what-ses-refuses-and-the-fix), below, lists each one. Any other post that comes due meanwhile waits with it, without asking SES, and you're told once. While a quota frees up a few at a time, or while the SES sandbox takes only your verified addresses, SES takes some readers on each retry and refuses the rest: those it takes are sent, and the line stays, with the time it began, until SES takes everyone it's asked to.
-- **"The provider is refusing this send".** SES refuses this post's email itself, or a batch of it as invalid, rather than your account. Its words follow. Other posts go out as usual. If SES's words name a reader's address, remove that subscriber: the send skips them and carries on at its next retry. If SES refuses the email itself, the email can't change once its send has started, so whoever runs your instance asks AWS Support why, quoting SES's words.
-- **"No email provider is connected".** The send is held until one is connected ([Connect Amazon SES](../get-started/04-ses.md)), and goes out once it is.
-- **"The provider is unavailable".** An outage or a rate limit on the provider's side. The send reads **Backing off** and says when it next retries, spacing its retries out up to an hour apart while the outage lasts, so there's nothing to do. Any other post that comes due meanwhile waits with it.
-- **"The provider keeps refusing for its sending rate".** An amber line. SES has refused the first request of several retries in a row for its sending rate, which a short burst never does, so Kestrel is set to send faster than your SES account allows. Whoever runs your instance sets `SES_MAX_SEND_RATE` to the **Maximum send rate** on the SES console's **Account dashboard** (1 a second in the sandbox), and deploys, as [Connect Amazon SES](../get-started/04-ses.md#7-set-the-provider-and-deploy) describes. The send retries on its own meanwhile.
-- **"Nothing has gone out for …".** A send has handed off no one for half an hour, with no retry or provider problem to explain it. The part of Kestrel that sends has stopped or keeps failing on this send, or another send going out at the same time is taking all of its turn. A large send going out slowly never shows this. If another send is going out, this one picks up once it finishes. Read the app's logs, as [Read the logs](../get-started/05-verify.md#7-read-the-logs) describes, and check the Worker's trigger, as [Configuration](../reference/01-configuration.md#bindings-and-triggers) describes. The send carries on from where it stopped once it runs again, mailing no one twice.
-- **"The fire time passed … and the send has not started".** The Cloudflare Cron Trigger that starts sends on time isn't running. The send goes out as soon as it runs again. Check the Worker's trigger, as [Configuration](../reference/01-configuration.md#bindings-and-triggers) describes.
-- **"The provider never answered for …".** Rarely, Kestrel can't tell whether your provider took some emails, and sending again could mail those readers twice. **Resolve…** on the send's page asks you to decide. **Assume not sent** is the safe default: those readers may miss this post, but get your next one. Choose **Assume sent** only when you know they got it.
+- **Amazon SES refuses your account or the send.** The line carries SES's words and the fix, almost always in the SES console. [Connect Amazon SES](../get-started/04-ses.md) sets up each piece SES checks: production access, the sending domain, the AWS key, and the configuration set. While SES takes some readers and refuses the rest, as while a daily quota frees up, those it takes are sent, and the line stays until it takes everyone.
+- **SES keeps refusing for its sending rate.** Kestrel is set to send faster than your SES account allows. Set `SES_MAX_SEND_RATE` to the maximum send rate on the SES console's account dashboard (1 a second in the sandbox), and deploy, as [Connect Amazon SES](../get-started/04-ses.md#7-set-the-provider-and-deploy) describes.
+- **No email provider is connected.** Connect one, as [Connect Amazon SES](../get-started/04-ses.md) describes, and the send goes out at its next retry.
+- **A send missed its time, or nothing has gone out for a while.** The part of Kestrel that sends has stopped, or keeps failing on this send. Check the Worker's Cron Trigger, as [Configuration](../reference/01-configuration.md#bindings-and-triggers) describes, and read the app's logs, as [Read the logs](../get-started/05-verify.md#7-read-the-logs) describes. If another send is going out at the same time, this one may only be waiting its turn.
 
-## Before a send
+## Someone was mailed twice, or not at all
 
-- **A test says "The provider refused it".** Your provider didn't take the test, and its own words follow, with the fix where Kestrel knows it. Sending again gets the same answer until that's fixed. While Amazon SES is in its sandbox, it sends only to addresses verified in SES, so verify the address you test with in the SES console, or request production access, as [Connect Amazon SES](../get-started/04-ses.md#4-request-production-access) describes. Words about the account, such as a key or the sending domain, point at the same fix as [a send the provider refuses](06-troubleshooting.md#a-send-is-waiting-or-held).
-- **A test says "The provider didn't answer, so the test may have arrived".** Kestrel can't tell whether your provider took it. Check the inbox before you send again, since a second test may arrive twice.
-- **"The template or publication details changed this email's look after your last test".** Send a new test of the post, since your last one no longer shows what goes out.
-- **The daily database writes warning.** On Cloudflare's free Workers plan, a send to more than about 5,000 recipients may use up the day's writes, and then the app stops working until midnight UTC. [Bring your existing list](01-your-list.md#limits) explains the limit, and when to upgrade to Workers Paid.
-- **"Workers Free suits a list of up to about 1,000 subscribers".** Your list is past what the free plan suits. Upgrade to Workers Paid ([As your list grows](../guides/09-as-your-list-grows.md)). If the account is on Workers Paid already, set `SUBREQUEST_BUDGET` to `10000` so Kestrel knows, and the notice goes.
+Kestrel never mails a reader twice on its own. When it can't tell whether your provider took some emails, it stops and asks you: the send's page shows **Resolve…**. Choose **Assume not sent** unless you know otherwise, since it's the safe default: those readers may miss this post, but get your next one. Choose **Assume sent** only when you know they got it, such as from a reader who tells you so. Either choice mails no one.
 
-## Reading a send's record
-
-A send's page becomes its permanent record once it finishes. Its counts cover everyone the send went to:
-
-| Count | What it means |
-| --- | --- |
-| **Delivered** | Your provider confirmed the email reached the reader's mail server. |
-| **Bounced** | The receiving server turned the email away. |
-| **Complained** | The reader marked the email as spam. |
-| **Unsent** | Kestrel couldn't hand the email to your provider. |
-
-Delivered always means confirmed, not just accepted by your provider. Confirmations can lag by days, so counts keep rising after a send finishes. Some emails are never confirmed at all, so a send can read **Settling** for good, which is normal, as long as some receipts have come.
-
-**"No delivery receipt has arrived for any of …".** An hour after a send went out, Kestrel has heard back about none of its readers. Your provider's reports probably aren't reaching Kestrel, so its bounces suppress no one and its complaints unsubscribe no one, and your next post mails those addresses again. Look for `webhook.refused` errors in the app's logs, as [Read the logs](../get-started/05-verify.md#7-read-the-logs) describes. It names the SNS topic that reached Kestrel and the one it expects. Then check the subscription in [Connect Amazon SES](../get-started/04-ses.md#8-subscribe-the-app-to-the-topic). The line goes as soon as a receipt arrives.
-
-**Unsent recipients** are still on your list, and get your next post. A recipient is unsent when their own email kept failing, or their address isn't one SES accepts, with the provider's words on the row, or when you chose **Assume not sent**.
-
-### What SES refuses, and the fix
-
-When SES refuses your account or a send, the red line carries SES's words and the fix. Almost every fix is made by whoever runs your instance, in the SES console or its settings.
-
-| SES says | What it means | The fix |
-| --- | --- | --- |
-| Email address is not verified, naming a reader | The SES account is still in the sandbox, which mails only verified addresses. | Request production access on the SES console's **Account dashboard**, as [Connect Amazon SES](../get-started/04-ses.md#4-request-production-access) describes. Signups fail until then, and you're emailed about it once a day. |
-| Email address is not verified, naming your From address or its domain | The sending identity isn't verified in this SES region. | Verify the From address or its domain in SES, in the region your instance sends from. |
-| Mail FROM domain is not verified | SES can't read the custom MAIL FROM domain's MX record. | Check that record in DNS, or set the identity's **Behavior on MX failure** to use the default MAIL FROM domain. |
-| Daily message quota exceeded | The 24-hour sending quota is spent. It frees up on its own. | In the sandbox (200 a day), request production access. Otherwise, ask AWS for a higher quota, as [As your list grows](../guides/09-as-your-list-grows.md) describes. |
-| Sending paused (account) | AWS paused the account under review, or sending was turned off by hand. | Follow AWS's email to the AWS account's address, or turn sending back on. |
-| Sending paused (configuration set) | Sending is turned off on the configuration set, by hand or by an alarm. | Turn sending back on for that set. |
-| Account suspended | AWS shut down the account's sending. | Only AWS can lift it: open a case with AWS Support. |
-| An access key, signature, or permission error | Your instance's SES key is wrong, expired, or lacks permission. | Replace the key, or give it `ses:SendEmail` and `ses:SendBulkEmail`. |
-| A subscription is needed (OptInRequired) | The AWS account isn't signed up for SES. | Enable SES for the account, or settle its activation or billing with AWS. |
-| Configuration set does not exist | `SES_CONFIGURATION_SET` names a set that isn't in this region. | Fix the name, or create the set. |
-| Sending pool not found | The configuration set uses a dedicated IP pool that doesn't exist. | Pick an existing pool in the set's sending options, or remove it. |
-| The message was rejected | SES refuses this email itself. | Ask AWS Support why. Other posts go out as usual. |
-| The request is invalid | SES refused a batch of this send. | If SES's words name a reader's address, remove that subscriber. |
-
-A server error from SES may come after SES already took the emails, so Kestrel never sends that batch again: its readers wait for **Resolve…**, as for "The provider never answered for …".
+A reader recorded as **Unsent** is still on your list and gets your next post. A send never mails them again: their own email kept failing, SES won't take their address, or you chose **Assume not sent**.
 
 ## A reader says they never got a post
 
 Under **Subscribers**, search for their address and open their row. Their page lists every send they were in, newest first, with what happened on each: **Delivered**, a bounce, a complaint, **Unsent** with your email provider's words, or **Skipped** because they had unsubscribed or were suppressed by then. Each send links to its record. The page also shows how they joined, any bounce or block on the address with the provider's words or yours, and why they left, if they did. If they aren't on the list, or are still **pending**, they never confirmed, and only confirmed subscribers are sent your posts.
 
+## A send still reads Settling
+
+That's normal. **Delivered** counts only the emails your provider confirmed reached the reader's mail server, and confirmations can lag by days, so the counts keep rising after a send finishes. Some are never confirmed at all, so a send can read **Settling** for good, as long as some receipts have come.
+
+When none come, the send's page says so an hour after it went out. Your provider's reports aren't reaching Kestrel, so its bounces suppress no one and its complaints unsubscribe no one, and your next post mails those addresses again. Look for `webhook.refused` errors in the app's logs, as [Read the logs](../get-started/05-verify.md#7-read-the-logs) describes: each names the SNS topic that reached Kestrel and the one it expects. Then check the subscription, as [Connect Amazon SES](../get-started/04-ses.md#8-subscribe-the-app-to-the-topic) describes.
+
+## A test doesn't arrive
+
+While Amazon SES is in its sandbox, it mails only addresses verified in SES. Verify the address you test with in the SES console, or request production access, as [Connect Amazon SES](../get-started/04-ses.md#4-request-production-access) describes. When the test's line says the provider didn't answer, check the inbox before you send it again, since the first may have arrived. A test SES refuses for your account has the same fix as [a send it refuses](06-troubleshooting.md#a-send-is-held-or-waiting).
+
+## Your list outgrows Workers Free
+
+Upgrade the Cloudflare account to Workers Paid, and set `SUBREQUEST_BUDGET` so Kestrel sends faster, as [As your list grows](../guides/09-as-your-list-grows.md) describes. Kestrel warns you before a send that could use up the free plan's daily database writes, which stops the app until midnight UTC. [Bring your existing list](01-your-list.md#limits) explains the limits.
+
 ## Bounces and complaints
 
 Kestrel acts on these for you, so a bad address can't keep hurting your sending reputation:
 
-- **A hard bounce** means the address can't receive mail. Kestrel never mails it again.
-- **A soft bounce** is temporary, such as a full mailbox. The address stays on your list.
-- **A complaint** means the reader marked your email as spam. Kestrel unsubscribes them, whichever email they reported, and their page, opened from their row, says they left by a complaint.
+- A hard bounce means the address can't receive mail. Kestrel never mails it again.
+- A soft bounce is temporary, such as a full mailbox. The address stays on your list.
+- A complaint means the reader marked your email as spam. Kestrel unsubscribes them, whichever email they reported, and their page, opened from their row, says they left by a complaint.
 
-Under **Subscribers**, a bounced address keeps its status and carries a label saying why, and its page, opened from its row, gives your email provider's words for the bounce and when it happened. When a recent send's bounces reach about 5% of its recipients, the dashboard warns you. That's about the rate at which email providers start to review a sender, so check the addresses on its record.
+Under **Subscribers**, a bounced address keeps its status and carries a label saying why, and its page gives your email provider's words for the bounce and when it happened. When a recent send's bounces reach about 5% of its recipients, the dashboard warns you. That's about the rate at which email providers start to review a sender, so check the addresses on its record.
 
 ### Lifting a suppression
 
@@ -84,25 +53,17 @@ Lift one only when you know the address works again, such as a reader who tells 
 
 ## An import is refused
 
-Kestrel refuses a file it can't read with certainty, and says what's wrong and where. Nothing on your list changes.
-
-- **Not in the format.** The file isn't a Kestrel CSV or a plain list. Convert it first, with Claude or by hand.
-- **A column or value the format doesn't take,** named with its row and column. Fix it in the file, or move a column of your old service's into `evidence`.
-- **Too many rows** for one import. Split the file.
-- **Too large.** An import takes up to 10 MB.
-
-[The file format](01-your-list.md#the-file-format) describes what each column takes.
+Nothing on your list changes. Kestrel refuses a file it can't read with certainty, and names the row and column it couldn't. Fix the file and import it again: convert a file in another format first, with Claude or by hand, move a column of your old service's into `evidence`, and split a file of more than 10 MB or too many rows. [The file format](01-your-list.md#the-file-format) describes what each column takes.
 
 ## Claude can't connect
 
-[Connect Claude](08-connect-claude.md) covers connecting it. When that fails, find what Claude or the dashboard says:
+Most failures are in your instance's Cloudflare Access setup, made by whoever runs your instance. [Connect Claude](08-connect-claude.md) covers connecting it. When that fails:
 
 - **Claude says it couldn't connect, or the sign-in failed.** Your instance's Access application needs Managed OAuth set up as [Turn on Managed OAuth](../guides/01-allow-claude.md#1-turn-on-managed-oauth) describes, including Claude's sign-in address for Claude Desktop and claude.ai. Check that the connector's address is your publication's address followed by `/api/mcp`, and that your instance is deployed, not running on your own computer.
 - `kestrel login` says your instance "doesn't offer a sign-in for programs". Managed OAuth is off. Turn it on, as the same section describes.
-- `kestrel login` or `kestrel api` reports a `401`. Access signed you in, but Kestrel refused the sign-in. If you set `ACCESS_ALLOWED_EMAILS`, check that it includes the address you signed in with. If `kestrel login` names `access_unidentified` after the `401`, or `kestrel api` prints `reason: access_unidentified`, it's the next problem: both then say that Access sent neither an email address nor a service token. If `kestrel api` says your sign-in has ended, sign in again as [Connect Claude](08-connect-claude.md#claude-code) describes.
-- **"Access let you in, but didn't say who you are".** The editor shows this, and the API refuses with a `401` whose `reason` is `access_unidentified`, when your login carried neither an email nor a service token. Some other kind of Access policy let it through, such as a certificate or device rule, or a login method that gives no email. Kestrel accepts only an Allow policy on people's emails and a Service Auth policy on a service token. Sign out, then sign in through the `Publishers` policy. Whoever runs your instance removes the other policy from its Access application, or changes it to one of those two kinds.
-- **Claude's changes read "via the API".** A request made with your sign-in named no client, such as one from Claude calling the API some way other than `kestrel api`, which names Claude Code. Your instance's instructions for Claude Code have it use `kestrel api`, once they're brought up to date, as [Install the release](../guides/07-upgrade.md#2-install-the-release) describes. Changes reading "a service token" mean Claude still uses one, and [Connect Claude](08-connect-claude.md#claude-code) signs it in as you instead.
-- A script gets a `401` whose `reason` is `access_unidentified`. Access let the script in through a policy Kestrel doesn't accept. It needs a service token under a Service Auth policy, as [Allow the token in](../guides/02-automate.md#2-allow-the-token-in) describes.
+- `kestrel login` or `kestrel api` reports a `401`. Access signed you in, but Kestrel refused the sign-in. If you set `ACCESS_ALLOWED_EMAILS`, check that it includes the address you signed in with. If either names `access_unidentified`, it's the next problem. If `kestrel api` says your sign-in has ended, sign in again as [Connect Claude](08-connect-claude.md#claude-code) describes.
+- **"Access let you in, but didn't say who you are".** Your login carried neither an email nor a service token, because some other kind of Access policy let it through, such as a certificate or device rule, or a login method that gives no email. Kestrel accepts only an Allow policy on people's emails and a Service Auth policy on a service token. Sign out, then sign in through the `Publishers` policy. Whoever runs your instance removes the other policy from its Access application, or changes it to one of those two kinds. A script that gets this needs a service token under a Service Auth policy, as [Allow the token in](../guides/02-automate.md#2-allow-the-token-in) describes.
+- **Claude's changes read "via the API".** Claude called the API some way other than `kestrel api`, which names Claude Code. Your instance's instructions for Claude Code have it use `kestrel api` once they're brought up to date, as [Install the release](../guides/07-upgrade.md#2-install-the-release) describes. Changes reading "a service token" mean Claude still uses one, and [Connect Claude](08-connect-claude.md#claude-code) signs it in as you instead.
 
 ## Notifications
 
