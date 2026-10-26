@@ -2,7 +2,7 @@
 
 This page checks your instance end to end with real email, while the list is empty and every email goes only to you. You confirm that inboxes trust your mail, that posts look right in a mail client, and that bounces, complaints, and unsubscribes reach the app.
 
-In this guide, you send yourself a test email, reply to it, and check that it passes authentication. Then you ask AWS for production access, and test in the sandbox while it reviews: you set up notifications, send a real post to yourself as a subscriber, and unsubscribe. Finally, you check that bounces and complaints reach the app, read the app's logs, check that SES can send to anyone, and clean up the test subscribers.
+In this guide, you send yourself a test email, reply to it, and check that it passes authentication. Then you ask AWS for production access. While AWS reviews it, you set up notifications, send a real post to yourself as a subscriber, and unsubscribe. Finally, you check that bounces and complaints reach the app, read the app's logs, check that SES can send to anyone, and clean up the test subscribers.
 
 ## Before you begin
 
@@ -39,7 +39,7 @@ If a check fails, compare your DNS records with the ones in [Connect Amazon SES]
 
 ## 3. Request production access
 
-A new SES account sends only to the addresses you've verified, up to 200 emails a day and one a second. Production access lifts those limits, once AWS reviews the account. Ask now: the app is connected, a test email has passed authentication, and the publication's website shows a working subscribe form for AWS to review. Every other section on this page works in the sandbox, so continue while you wait.
+A new SES account sends only to the addresses you've verified, up to 200 emails a day and one a second. Production access lifts those limits, once AWS reviews the account. Ask now: the app is connected, a test email has passed authentication, and the publication's website shows a live subscribe form. A signup there gets its confirmation email only once AWS grants access, AWS's own included. Every other section on this page works in the sandbox, so continue while you wait.
 
 1. Name the publication, since AWS may visit its website to review the request. In the editor, open **Settings → Publication identity**, and enter the name and tagline, or ask the publisher for them. On a new instance with no posts, the tagline is the only line on the home page that says what the newsletter is about. Both can change later.
 

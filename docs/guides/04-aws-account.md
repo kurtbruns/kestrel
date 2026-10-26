@@ -1,8 +1,8 @@
 # Create an AWS account for your newsletter
 
-Kestrel sends the newsletter's email through Amazon SES, which runs in an Amazon Web Services (AWS) account. This guide creates that account, so it's ready when you reach [Connect Amazon SES](../get-started/04-ses.md). It's worth doing before you start Get started, since sign-up asks for things you may need time to set up, such as an email address that receives mail.
+Kestrel sends the newsletter's email through Amazon SES, which runs in an Amazon Web Services (AWS) account. This guide creates that account, so it's ready when you reach [Connect Amazon SES](../get-started/04-ses.md). Do it before you start Get started. Sign-up asks for things that can take time to set up, such as an email address that receives mail.
 
-Create one account for each publication. SES keeps the sandbox, sending quotas, verified identities, and suppression list separately for each account and region, and AWS can pause an account's sending, so publications that share an account share each other's problems. To run several, [AWS Organizations](https://docs.aws.amazon.com/organizations/latest/userguide/orgs_introduction.html) keeps their accounts under one bill. Keep its management account apart, with no newsletter in it.
+Create one account for each publication. SES keeps the sandbox, sending quotas, verified identities, and suppression list separately for each account and region. AWS can also pause an account's sending, so publications that share an account share each other's problems. To run several, [AWS Organizations](https://docs.aws.amazon.com/organizations/latest/userguide/orgs_introduction.html) keeps their accounts under one bill. Keep its management account apart, with no newsletter in it.
 
 In this guide, you choose the account's email address, sign up, and secure the account's root user. Then you set a monthly budget, so AWS emails you if the account ever costs more than you expect.
 
@@ -21,7 +21,7 @@ The address you sign up with belongs to the account's root user, the identity th
 
 ## 2. Sign up
 
-AWS may offer two ways to sign up. Choose **Sign up for AWS (advanced)**. The other way, **Sign up for AWS (new)**, makes an account with no root user, chooses its region from your address, and its console differs from the one this guide describes. AWS's [Compare sign-up options](https://docs.aws.amazon.com/accounts/latest/reference/sign-up-for-aws.html) explains both.
+AWS may offer two ways to sign up. Choose **Sign up for AWS (advanced)**. The other way, **Sign up for AWS (new)**, makes an account with no root user, and chooses its region from your address. Its console differs from the one this guide describes. AWS's [Compare sign-up options](https://docs.aws.amazon.com/accounts/latest/reference/sign-up-for-aws.html) explains both.
 
 1. Open [Sign up for AWS](https://signin.aws.amazon.com/signup?request_type=register). If it offers a choice, select **Sign up for AWS (advanced)**.
 

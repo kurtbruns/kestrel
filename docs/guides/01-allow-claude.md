@@ -57,7 +57,7 @@ If you're the publisher, connect now, as [Connect Claude](../publishing/08-conne
 
 ## Who can connect
 
-Anyone the `Publishers` policy lets into the dashboard can connect Claude, since they sign in the same way. To stop someone connecting, remove them from that policy. If you set `ACCESS_ALLOWED_EMAILS`, store the list again without them: the app checks it on every request, so it takes effect at once.
+Anyone the Access application's Allow policy lets into the dashboard can connect Claude, since they sign in the same way. To stop someone connecting, remove them from that policy. If you set `ACCESS_ALLOWED_EMAILS`, store the list again without them: the app checks it on every request, so it takes effect at once.
 
 ## Check it
 

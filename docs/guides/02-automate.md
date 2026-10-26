@@ -25,7 +25,7 @@ A service token is a Client ID and a Client Secret that a program sends with eac
 
 ## 2. Allow the token in
 
-The application lets in only the people its `Publishers` policy names, so the token needs a policy of its own on the same application.
+The application lets in only the people its Allow policy names, so the token needs a policy of its own on the same application.
 
 1. Under **Access controls → Applications**, select **Configure** on the application from [Lock the dashboard with Access](../get-started/03-access.md#2-create-the-access-application).
 

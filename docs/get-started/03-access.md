@@ -2,7 +2,7 @@
 
 Cloudflare Access puts a login in front of the editor and the API. Kestrel checks every request against that login as well, so a path left out of Access stays locked. The public pages readers see stay public.
 
-In this guide, you set up Cloudflare Zero Trust, create one Access application that covers the editor and the API, and allow yourself in, all on one form. Then you give the app two values from that application, and check that the login works.
+In this guide, you set up Cloudflare Zero Trust, create one Access application that covers the editor and the API, and allow yourself in. The application and its policy share one form. Then you give the app two values from that application, and check that the login works.
 
 ## 1. Set up Zero Trust
 
@@ -49,15 +49,15 @@ Every Access application denies everyone until a policy allows them. The policy 
 
 1. Further down the form, under **Access policies**, create a new policy:
 
-    - **Policy name:** `Publishers`
+    - **Policy name:** the publication's name and `publishers`, such as `Example publishers`
     - **Action:** Allow
     - **Include:** the **Emails** selector, with your email address
 
-    Make a new policy for each publication, even if the form offers one you already have. A policy shared between applications lets everyone it allows into all of them, so someone you add for another app would get into this editor too. If your account has other Access applications, name this one for the publication, such as `Example publishers`.
+    Make a new policy for each publication, even if the form offers one you already have. A shared policy lets everyone it allows into every application that uses it. Someone you add for another app would get into this editor too.
 
-1. Save the policy, and then the application.
+1. Save the policy, and then select **Create** to save the application.
 
-Cloudflare's own login is on by default, and admits members of your Cloudflare account, so the email in your `Publishers` policy should be one. To let someone sign in another way, such as a one-time code by email, add it under **Zero Trust → Integrations → Identity providers**.
+Cloudflare's own login is on by default, and admits members of your Cloudflare account, so the email in the policy you made should be one. To let someone sign in another way, such as a one-time code by email, add it under **Zero Trust → Integrations → Identity providers**.
 
 ## 4. Give the app its two values
 
@@ -115,7 +115,7 @@ If a check fails:
 
 - **The editor says the configuration needs a fix.** Store the secret it names. While only one of the two is stored, `/health` answers `500` naming the other, and the public pages say the newsletter is temporarily unavailable.
 - **Cloudflare lets you in, but the editor answers `401`.** Check the two secrets for a typo, and that `ACCESS_ALLOWED_EMAILS`, if you set it, includes your address.
-- **The editor says Access let you in but didn't say who you are.** Your login carried no email, which happens through a kind of policy the app doesn't accept, such as a device check. Sign out, and sign in through the `Publishers` policy.
+- **The editor says Access let you in but didn't say who you are.** Your login carried no email, which happens through a kind of policy the app doesn't accept, such as a device check. Sign out, and sign in through the policy you made in section 3.
 
 [Troubleshooting](../publishing/06-troubleshooting.md#cloudflare-wont-save-the-access-application) covers an error when you save the application, and what can go wrong once the app is running.
 

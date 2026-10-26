@@ -2,7 +2,7 @@
 
 This page connects the app to Amazon Simple Email Service (Amazon SES), which delivers the newsletter's email. A new SES account starts in a sandbox, where it can send only to addresses you've verified, until AWS reviews it. This page connects the app in the sandbox. [Verify it works](05-verify.md) then sends a test email and asks AWS for production access, so AWS reviews a site that already works.
 
-In this guide, you verify your sending hostname with a custom MAIL FROM domain, add a DMARC record, and verify two addresses of your own to test with. You then route bounces and complaints to the app, give it an AWS key, and deploy it with SES connected. Last, you forward readers' replies to the publisher's inbox.
+In this guide, you verify your sending hostname with a custom MAIL FROM domain, and add a DMARC record. You verify two addresses of your own to test with. You then route bounces and complaints to the app, give it an AWS key, and deploy it with SES connected. Last, you forward readers' replies to the publisher's inbox.
 
 ## Before you begin
 
@@ -31,12 +31,12 @@ The same form sets a custom MAIL FROM domain. By default, SES sends with its own
 
 1. Add all five to your domain's DNS records in Cloudflare, with their proxy status set to **DNS only**. SES can't read a proxied record, so check each one's status. You can import them in one go, or add them by hand:
 
-    - **Import them.** Copy this into a text file, with the three DKIM tokens SES lists in place of `REPLACE_WITH_TOKEN_1` to `REPLACE_WITH_TOKEN_3`, and your region's code in place of `us-east-1`. In the Cloudflare dashboard, open your domain's **DNS → Records**, select **Import and Export**, and import the file with **Proxy imported DNS records** unchecked. SES's own **Download .csv record set** is in a format Cloudflare doesn't import.
+    - **Import them.** Copy this into a text file. Replace each `REPLACE_WITH_NAME_…` and `REPLACE_WITH_VALUE_…` with a DKIM record's name and value, exactly as SES lists them, and keep the dot after each. Replace `us-east-1` with your region's code. In the Cloudflare dashboard, open your domain's **DNS → Records**, select **Import and Export**, and import the file with **Proxy imported DNS records** unchecked. SES's own **Download .csv record set** is in a format Cloudflare doesn't import.
 
         ```
-        REPLACE_WITH_TOKEN_1._domainkey.send.example.com. 3600 IN CNAME REPLACE_WITH_TOKEN_1.dkim.amazonses.com.
-        REPLACE_WITH_TOKEN_2._domainkey.send.example.com. 3600 IN CNAME REPLACE_WITH_TOKEN_2.dkim.amazonses.com.
-        REPLACE_WITH_TOKEN_3._domainkey.send.example.com. 3600 IN CNAME REPLACE_WITH_TOKEN_3.dkim.amazonses.com.
+        REPLACE_WITH_NAME_1. 3600 IN CNAME REPLACE_WITH_VALUE_1.
+        REPLACE_WITH_NAME_2. 3600 IN CNAME REPLACE_WITH_VALUE_2.
+        REPLACE_WITH_NAME_3. 3600 IN CNAME REPLACE_WITH_VALUE_3.
         bounce.send.example.com. 3600 IN MX 10 feedback-smtp.us-east-1.amazonses.com.
         bounce.send.example.com. 3600 IN TXT "v=spf1 include:amazonses.com ~all"
         ```

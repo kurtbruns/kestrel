@@ -4,7 +4,7 @@ These pages cover deploying and running your own Kestrel, from an empty reposito
 
 ## Get started
 
-These are the steps to deploy a Kestrel instance and get it ready to send. Each one ends with a check, so you know it worked before you move on. Start your AWS account early, with Create an AWS account for your newsletter, the first of the [Guides](#guides): Connect Amazon SES needs it, and signing up asks for an email address that already receives mail.
+These are the steps to deploy a Kestrel instance and get it ready to send. Each one ends with a check, so you know it worked before you move on. Create your AWS account early, with the first of the [Guides](#guides). Connect Amazon SES needs it, and signing up needs an email address that already receives mail.
 
 1. [Deploy the app](get-started/02-deploy.md)
 1. [Lock the dashboard with Access](get-started/03-access.md)

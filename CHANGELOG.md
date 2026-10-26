@@ -19,6 +19,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - Until a post is listed, the home page is the subscribe form itself, with its line saying each signup is confirmed by email. A first visitor, or AWS reviewing the site for SES production access, sees how joining works without a click.
 - Name your publication now suggests a tagline that says what the newsletter covers and how often it goes out.
 - The setup guide asks AWS for SES production access later, in Verify it works once a test email passes authentication, so AWS's reviewer finds a working subscribe form. Connect Amazon SES now sets the custom MAIL FROM domain on the Create identity form, so all five DNS records go to Cloudflare in one trip, with a zone file to import, and verifies your two test addresses in its own section. Its sections and Verify's are renumbered, so a bookmark to one now lands at the page's top. Deploy the app and Lock the dashboard with Access gain the run-through's fixes, such as the empty private hostname row that stops Access saving, and each Get started page's checks link Troubleshooting.
+- The operator's Claude context now points to Verify it works for SES production access, where it's requested and checked, instead of a Go live section that doesn't exist. Merge it into an edited copy by hand.
 
 ### Fixed
 
