@@ -137,5 +137,6 @@ jobs:
           }
           shopt -s failglob
           # Instance package first: the client's `init` fetches it at the client's version.
-          publish tarballs/kurtbruns-kestrel-*.tgz
-          publish tarballs/kestrel-*.tgz
+          # Each path starts with `./`: npm reads a bare `tarballs/<file>` as a GitHub repository.
+          publish ./tarballs/kurtbruns-kestrel-*.tgz
+          publish ./tarballs/kestrel-*.tgz
