@@ -1,48 +1,51 @@
 # Connect Amazon SES
 
-This page connects the app to Amazon Simple Email Service (Amazon SES), which delivers the newsletter's email. A new SES account starts in a sandbox, where it can send only to addresses you've verified, until AWS reviews it. This page requests that review early, so you can test in the sandbox while you wait.
+This page connects the app to Amazon Simple Email Service (Amazon SES), which delivers the newsletter's email. A new SES account starts in a sandbox, where it can send only to addresses you've verified, until AWS reviews it. This page connects the app in the sandbox. [Verify it works](05-verify.md) then sends a test email and asks AWS for production access, so AWS reviews a site that already works.
 
-In this guide, you verify your sending hostname, set a custom MAIL FROM domain, add a DMARC record, and request production access. You then route bounces and complaints to the app, give it an AWS key, and deploy it with SES connected. Last, you forward readers' replies to the publisher's inbox.
+In this guide, you verify your sending hostname with a custom MAIL FROM domain, add a DMARC record, and verify two addresses of your own to test with. You then route bounces and complaints to the app, give it an AWS key, and deploy it with SES connected. Last, you forward readers' replies to the publisher's inbox.
 
 ## Before you begin
 
-- An [AWS account](https://portal.aws.amazon.com/billing/signup), if you haven't created one already.
+- An AWS account. [Create an AWS account for your newsletter](../guides/04-aws-account.md) covers signing up, if you haven't yet.
 - The publisher's inbox, for readers' replies.
 
 ## 1. Verify your sending hostname
 
 SES sends only from an identity you've verified. Verifying the whole hostname lets any address on it send, and sets up DKIM, which lets inboxes trust your mail.
 
-1. Open the [SES console](https://console.aws.amazon.com/ses/), and choose a region near you in the menu at the top right. SES keeps identities, quotas, and the sandbox separately in each region, so do every step on this page in this one. A few newer regions must be [enabled for your account](https://docs.aws.amazon.com/accounts/latest/reference/manage-acct-regions.html) first.
+The same form sets a custom MAIL FROM domain. By default, SES sends with its own return path, so Gmail shows your mail as "mailed-by `amazonses.com`", and only DKIM ties it to your domain. A custom MAIL FROM domain puts your hostname there too, so SPF also passes for your domain. Your mail then still passes DMARC, the check section 2 sets up, if DKIM ever fails. It also meets Gmail's bulk-sender rule to set up SPF for your domain.
 
-1. Note the region's code, such as `eu-west-1`. The menu shows only its name, such as Europe (Ireland), and [Amazon SES endpoints](https://docs.aws.amazon.com/general/latest/gr/ses.html) lists each code beside its name. Later steps use this code.
+1. Open the [SES console](https://console.aws.amazon.com/ses/), and then choose a region near you in the region menu at the top right. SES keeps identities, quotas, and the sandbox separately in each region, so do every step on this page in this one. On every AWS page, go by that menu, not the page's address. Open SES before you choose, since a page for a global service, such as IAM or Billing, has no region to choose. A few newer regions must be [enabled for your account](https://docs.aws.amazon.com/accounts/latest/reference/manage-acct-regions.html) first.
+
+1. Note the region's code, such as `eu-west-1`. The menu shows it beside the region's name, such as Europe (Ireland), and [Amazon SES endpoints](https://docs.aws.amazon.com/general/latest/gr/ses.html) lists each one too. Later steps use this code.
 
 1. Under **Configuration**, choose **Identities**, then **Create identity**.
 
-1. Select **Domain**, and enter `send.example.com`. Keep the default DKIM settings, **Easy DKIM** with a 2048-bit key, and choose **Create identity**.
+1. Select **Domain**, and enter `send.example.com`. Leave **Assign a default configuration set** and **Assign to a tenant** unchecked. Section 4 makes the configuration set, and makes it the default then.
 
-1. On the identity's **Authentication** tab, expand **Publish DNS records**. It lists three CNAME records.
+1. Select **Use a custom MAIL FROM domain**. In **MAIL FROM domain**, enter `bounce`; the form shows `.send.example.com` after it. For **Behavior on MX failure**, keep **Use default MAIL FROM domain**.
 
-1. In the Cloudflare dashboard, add each record to your domain's DNS records, exactly as SES lists it, with its proxy status set to **DNS only**. Cloudflare adds your domain to the name, so each name ends in `._domainkey.send`.
+1. Expand **Advanced DKIM settings**, and select **Easy DKIM**. Keep **RSA_2048_BIT** as the key length. Choose **Create identity**.
 
-1. Wait until SES shows **DKIM configuration** as **Successful** and **Identity status** as **Verified**.
+1. The identity opens on its **Authentication** tab, which lists five DNS records to publish. Under DKIM, three CNAME records. Under **Custom MAIL FROM domain**, expand **Publish DNS records** for an MX record and a TXT record.
 
-## 2. Set a custom MAIL FROM domain
+1. Add all five to your domain's DNS records in Cloudflare, with their proxy status set to **DNS only**. SES can't read a proxied record, so check each one's status. You can import them in one go, or add them by hand:
 
-By default, SES sends with its own return path, so Gmail shows your mail as "mailed-by `amazonses.com`", and only DKIM ties it to your domain. A custom MAIL FROM domain puts your hostname there too, so SPF also passes for your domain. Your mail then still passes DMARC, the check section 3 sets up, if DKIM ever fails. It also meets Gmail's bulk-sender rule to set up SPF for your domain.
+    - **Import them.** Copy this into a text file, with the three DKIM tokens SES lists in place of `REPLACE_WITH_TOKEN_1` to `REPLACE_WITH_TOKEN_3`, and your region's code in place of `us-east-1`. In the Cloudflare dashboard, open your domain's **DNS → Records**, select **Import and Export**, and import the file with **Proxy imported DNS records** unchecked. SES's own **Download .csv record set** is in a format Cloudflare doesn't import.
 
-1. In SES, open the `send.example.com` identity. Under **Custom MAIL FROM domain**, choose **Edit**.
+        ```
+        REPLACE_WITH_TOKEN_1._domainkey.send.example.com. 3600 IN CNAME REPLACE_WITH_TOKEN_1.dkim.amazonses.com.
+        REPLACE_WITH_TOKEN_2._domainkey.send.example.com. 3600 IN CNAME REPLACE_WITH_TOKEN_2.dkim.amazonses.com.
+        REPLACE_WITH_TOKEN_3._domainkey.send.example.com. 3600 IN CNAME REPLACE_WITH_TOKEN_3.dkim.amazonses.com.
+        bounce.send.example.com. 3600 IN MX 10 feedback-smtp.us-east-1.amazonses.com.
+        bounce.send.example.com. 3600 IN TXT "v=spf1 include:amazonses.com ~all"
+        ```
 
-1. Select **Use a custom MAIL FROM domain**, and enter `bounce.send.example.com`. For **Behavior on MX failure**, keep **Use default MAIL FROM domain**. Choose **Save changes**.
+    - **Add them by hand.** Add each record exactly as SES lists it. Cloudflare adds your domain to the name, so each DKIM name ends in `._domainkey.send`, and the MAIL FROM records are named `bounce.send`.
 
-1. In Cloudflare, add the two records SES lists, with your region's code in place of `us-east-1`:
+1. Wait until SES shows **Identity status** as **Verified**, and both **DKIM configuration** and **MAIL FROM configuration** as **Successful**.
 
-    - **Type:** `MX`, **Name:** `bounce.send`, **Mail server:** `feedback-smtp.us-east-1.amazonses.com`, **Priority:** `10`
-    - **Type:** `TXT`, **Name:** `bounce.send`, **Content:** `v=spf1 include:amazonses.com ~all`
-
-1. Wait until SES shows the MAIL FROM domain's status as successful.
-
-## 3. Add a DMARC record
+## 2. Add a DMARC record
 
 DMARC tells inboxes what to do with mail that fails its checks, and sends you reports about it. SES doesn't add this record, so you add it yourself. It starts in monitor mode, which reports without blocking anything.
 
@@ -52,39 +55,21 @@ DMARC tells inboxes what to do with mail that fails its checks, and sends you re
     - **Name:** `_dmarc.send`
     - **Content:** `v=DMARC1; p=none; rua=mailto:dmarc@example.com`
 
-1. Replace `dmarc@example.com` with an address that receives mail. Reports arrive there as attachments.
+1. Replace `dmarc@example.com` with an address on your own domain that receives mail, such as one forwarded to your inbox with Cloudflare Email Routing. Reports arrive there as attachments. An address on another domain, such as a Gmail address, gets no reports unless that domain publishes a record allowing them, which Gmail doesn't.
 
 [Sending-domain DNS](../reference/02-sending-domain-dns.md#dmarc-publish-a-policy-and-collect-reports) explains each record, and when to tighten DMARC.
 
-## 4. Request production access
+## 3. Verify your test addresses
 
-A new SES account starts in the sandbox: it sends only to addresses you've verified, up to 200 emails a day and one a second. Ask AWS to lift those limits now, and test while you wait.
+A new SES account starts in the sandbox: it sends only to addresses you've verified, up to 200 emails a day and one a second. The test emails in [Verify it works](05-verify.md) go to two addresses of your own, so verify those now. Verify it works asks AWS for production access, once a test email has arrived.
 
-1. Name the publication, since AWS may visit its website to review the request. In the editor, open **Settings → Publication identity**, and enter the name and tagline, or ask the publisher for them.
+1. Choose two addresses you own, such as a personal address and a work address. Verify it works uses both.
 
-1. In SES, open the **Account dashboard**, select **View Get set up page**, and then **Request production access**.
+1. For each, under **Identities**, choose **Create identity**, select **Email address**, and enter it. Choose **Create identity**.
 
-1. Fill in the request:
+1. Open the email AWS sends to each address, and follow its link. The identity's status changes to **Verified**.
 
-    - **Mail type:** Marketing
-    - **Website URL:** `https://newsletter.example.com/`
-
-    Leave the other fields as they are.
-
-1. Check the acknowledgement, and select **Submit request**. AWS Support answers by email, and may ask how you collect addresses and handle bounces.
-
-1. Verify two addresses you own, such as a personal address and a work address, so the sandbox lets you mail them. Your test emails go to these. For each, under **Identities**, choose **Create identity**, select **Email address**, and follow the link in the email AWS sends.
-
-If AWS asks for more detail, or denies the request, reply in the support case, or open a new request from the **Account dashboard**. Say how Kestrel handles the list:
-
-- Signups use double opt-in: each subscriber confirms by email before joining the list.
-- Every post offers one-click unsubscribe.
-- Bounces and complaints reach the app, and it stops mailing those addresses automatically.
-- How many subscribers the newsletter expects, and how often it sends.
-
-In the meantime, continue with the rest of this guide.
-
-## 5. Send bounces and complaints to the app
+## 4. Send bounces and complaints to the app
 
 SES reports bounces and complaints through Amazon Simple Notification Service (SNS), which delivers them to the app. The app then stops mailing an address that bounced or complained. A configuration set says which events SES reports, and an SNS topic carries them.
 
@@ -98,7 +83,7 @@ SES reports bounces and complaints through Amazon Simple Notification Service (S
 
 1. Make the set your hostname's default, so SES reports on every email sent from it. Open the `send.example.com` identity, and choose the **Configuration set** tab. Under **Default configuration set**, choose **Edit**, select `kestrel-mail`, and save.
 
-1. Open the topic in the [SNS console](https://console.aws.amazon.com/sns/), and find its ARN. It looks like `arn:aws:sns:us-east-1:111122223333:kestrel-events`, where `us-east-1` is your region's code and `111122223333` is your account ID.
+1. Open the topic in the [SNS console](https://console.aws.amazon.com/sns/), in the same region, and find its ARN. It looks like `arn:aws:sns:us-east-1:111122223333:kestrel-events`, where `us-east-1` is your region's code and `111122223333` is your account ID.
 
 1. Let SES publish to the topic. Choose **Edit**, expand **Access policy**, and add this statement to the `Statement` list:
 
@@ -131,7 +116,7 @@ SES reports bounces and complaints through Amazon Simple Notification Service (S
     npx wrangler secret put SES_CONFIGURATION_SET --env production
     ```
 
-## 6. Create the app's AWS key
+## 5. Create the app's AWS key
 
 The app sends through an AWS Identity and Access Management (IAM) user whose key can only send email. That limits the harm if the key ever leaks.
 
@@ -174,9 +159,9 @@ The app sends through an AWS Identity and Access Management (IAM) user whose key
     npx wrangler secret put AWS_SECRET_ACCESS_KEY --env production
     ```
 
-## 7. Set the provider and deploy
+## 6. Set the provider and deploy
 
-Until now the app has run with no email provider connected, refusing to send. Setting `PROVIDER` to `ses` connects SES, with the secrets you stored in sections 5 and 6. If a required one is missing, the app refuses to run until you store it, and `/health` names it.
+Until now the app has run with no email provider connected, refusing to send. Setting `PROVIDER` to `ses` connects SES, with the secrets you stored in sections 4 and 5. If a required one is missing, the app refuses to run until you store it, and `/health` names it.
 
 1. In `wrangler.jsonc`, edit the `production` block's `vars`. Change `PROVIDER` to `ses` (it's `""` on a new instance; add it if your block has none), and add `SES_MAX_SEND_RATE`. Change `AWS_REGION` to your region's code from section 1. Your other values stay as they are. The block ends up like this:
 
@@ -209,7 +194,7 @@ Until now the app has run with no email provider connected, refusing to send. Se
     npx wrangler deploy --env production
     ```
 
-## 8. Subscribe the app to the topic
+## 7. Subscribe the app to the topic
 
 SNS delivers events only to a subscriber that has confirmed. The app confirms on its own, once it checks that the request came from your topic.
 
@@ -225,7 +210,7 @@ SNS delivers events only to a subscriber that has confirmed. The app confirms on
 
 1. Reload the subscription. Its status changes to **Confirmed**, with nothing for you to click.
 
-    If it stays **Pending confirmation**, check that your Access application covers only `/dashboard` and `/api`, that `SNS_TOPIC_ARN` matches the topic's ARN, and that section 7's deploy finished. A mismatched ARN shows in the app's logs as a `webhook.refused` error naming both. Then request confirmation again from the topic's subscriptions. SNS doesn't let you delete a pending subscription, and removes it on its own after 48 hours.
+    If it stays **Pending confirmation**, check that your Access application covers only `/dashboard` and `/api`, that `SNS_TOPIC_ARN` matches the topic's ARN, and that section 6's deploy finished. A mismatched ARN shows in the app's logs as a `webhook.refused` error naming both. Then request confirmation again from the topic's subscriptions. SNS doesn't let you delete a pending subscription, and removes it on its own after 48 hours.
 
 1. Give SNS longer to retry. By default it retries a failed delivery 3 times over about a minute, then discards the event, so a bounce that arrives mid-deploy is lost. Open the topic, choose **Edit**, and expand **Delivery retry policy (HTTP/S)**. Turn off the default policy, set these values, and choose **Save changes**:
 
@@ -243,7 +228,7 @@ SNS delivers events only to a subscriber that has confirmed. The app confirms on
 
 1. **(Optional)** Keep what SNS still can't deliver. On the subscription, choose **Edit**, and set a **Redrive policy (dead-letter queue)** to an SQS queue of your own. SNS then moves an event there instead of discarding it. [Amazon SNS dead-letter queues](https://docs.aws.amazon.com/sns/latest/dg/sns-dead-letter-queues.html) covers the queue and its permissions.
 
-## 9. Receive replies at your From address
+## 8. Receive replies at your From address
 
 Replies to a post go to your From address, `newsletter@send.example.com`, which has no inbox yet, so they bounce. This section forwards that address to the publisher's inbox with Cloudflare Email Routing. Forwarding only receives mail, so it doesn't change how SES sends.
 
@@ -295,7 +280,7 @@ Out-of-office and other automatic replies reach the publisher's inbox too. Bounc
 
 1. The SNS subscription shows **Confirmed**.
 
-1. Your From address receives mail. This lists Cloudflare's three `route` mail servers, or your own mail host's if you skipped section 9's forwarding:
+1. Your From address receives mail. This lists Cloudflare's three `route` mail servers, or your own mail host's if you skipped section 8's forwarding:
 
     ```bash
     dig +short MX send.example.com
@@ -305,6 +290,8 @@ Out-of-office and other automatic replies reach the publisher's inbox too. Bounc
 
 1. In a browser, `https://newsletter.example.com/subscribe` shows the subscribe form, where it said signups aren't open yet.
 
-The test emails in the next step prove the rest, including a reply. In the sandbox, they go only to the addresses you verified in section 4, and to the SES test addresses that page lists. SES charges for each email it sends, test emails included, as [Amazon SES pricing](https://aws.amazon.com/ses/pricing/) lists.
+The test emails in the next step prove the rest, including a reply, and then it asks AWS for production access. In the sandbox, they go only to the addresses you verified in section 3, and to the SES test addresses that page lists. SES charges for each email it sends, test emails included, as [Amazon SES pricing](https://aws.amazon.com/ses/pricing/) lists.
+
+If the app refuses to send once it's running, [Troubleshooting](../publishing/06-troubleshooting.md) says what each refusal means and where it's fixed.
 
 Next, [verify it works](05-verify.md).

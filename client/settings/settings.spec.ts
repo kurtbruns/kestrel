@@ -194,7 +194,7 @@ describe("settings view", () => {
     );
     expect(note.textContent).toBe("Readers’ replies go to this address. Forward it to your inbox.");
     expect($<HTMLAnchorElement>("a", note).getAttribute("href")).toBe(
-      "#/docs/ses/9-receive-replies-at-your-from-address",
+      "#/docs/ses/8-receive-replies-at-your-from-address",
     );
     // An explanation, not a state: the app can't see the forwarding, so nothing reads as a warning.
     expect(note.classList.contains("amber")).toBe(false);

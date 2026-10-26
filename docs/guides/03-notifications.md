@@ -8,7 +8,7 @@ In this guide, you turn on Cloudflare's email for your app's hostname, and verif
 
 You need:
 
-- The notifications address saved, from [Verify it works](../get-started/05-verify.md#3-set-up-notifications).
+- The notifications address saved, from [Verify it works](../get-started/05-verify.md#4-set-up-notifications).
 - Your domain's DNS on Cloudflare, as for the rest of the app.
 
 ## 1. Turn on Email Routing for your app's hostname
@@ -21,7 +21,7 @@ Cloudflare's email sends only from a domain set up with Email Routing. Use your 
 
 1. Cloudflare adds MX, SPF, and DKIM records for `newsletter.example.com`, and locks them. Wait until they show as added.
 
-Avoid turning on Email Routing for a domain that already receives mail elsewhere, such as `example.com` with Google Workspace. Email Routing takes over that domain's MX records. Don't send notifications from `send.example.com` either, since your email provider sends from it. Email Routing there to forward readers' replies, as [Connect Amazon SES](../get-started/04-ses.md#9-receive-replies-at-your-from-address) sets up, is fine, since it only receives.
+Avoid turning on Email Routing for a domain that already receives mail elsewhere, such as `example.com` with Google Workspace. Email Routing takes over that domain's MX records. Don't send notifications from `send.example.com` either, since your email provider sends from it. Email Routing there to forward readers' replies, as [Connect Amazon SES](../get-started/04-ses.md#8-receive-replies-at-your-from-address) sets up, is fine, since it only receives.
 
 ## 2. Verify the notifications address
 
@@ -82,7 +82,7 @@ If the test isn't delivered, **Last notification** shows Cloudflare's reason, su
 
 ## What notifications don't cover
 
-- **The schedule stopping.** The same once-a-minute schedule that sends posts also notices problems. If the schedule itself stops, nothing tells you. [Read the logs](../get-started/05-verify.md#7-read-the-logs) to check that `sweep.tick` still arrives every minute.
+- **The schedule stopping.** The same once-a-minute schedule that sends posts also notices problems. If the schedule itself stops, nothing tells you. [Read the logs](../get-started/05-verify.md#8-read-the-logs) to check that `sweep.tick` still arrives every minute.
 - **A notification that can't get through.** The app tries each one up to five times, a minute apart. A failure shows under **Settings → Notifications**, and in the logs as `notify.failed`.
 - **Problems while no address is set.** With the address blank, the app sends nothing, and saves nothing up for later.
 

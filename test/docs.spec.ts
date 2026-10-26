@@ -26,6 +26,7 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
       "self-hosting/get-started/ses",
       "self-hosting/get-started/verify",
       "self-hosting/get-started/go-live",
+      "self-hosting/guides/aws-account",
       "self-hosting/guides/allow-claude",
       "self-hosting/guides/automate",
       "self-hosting/guides/notifications",
@@ -161,7 +162,7 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
     expect(links).toContainEqual([
       "../client/settings/deploy.ts",
       "ses",
-      "9-receive-replies-at-your-from-address",
+      "8-receive-replies-at-your-from-address",
     ]);
   });
 });

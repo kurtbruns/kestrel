@@ -2,11 +2,11 @@
 
 This page checks your instance end to end with real email, while the list is empty and every email goes only to you. You confirm that inboxes trust your mail, that posts look right in a mail client, and that bounces, complaints, and unsubscribes reach the app.
 
-In this guide, you send yourself a test email, reply to it, and check that it passes authentication. Then you set up notifications, send a real post to yourself as a subscriber, and unsubscribe. Finally, you check that bounces and complaints reach the app, read the app's logs, check that SES can send to anyone, and clean up the test subscribers.
+In this guide, you send yourself a test email, reply to it, and check that it passes authentication. Then you ask AWS for production access, and test in the sandbox while it reviews: you set up notifications, send a real post to yourself as a subscriber, and unsubscribe. Finally, you check that bounces and complaints reach the app, read the app's logs, check that SES can send to anyone, and clean up the test subscribers.
 
 ## Before you begin
 
-- The two addresses you verified in SES in [Connect Amazon SES](04-ses.md#4-request-production-access). Some steps use both.
+- The two addresses you verified in SES in [Connect Amazon SES](04-ses.md#3-verify-your-test-addresses). Some steps use both.
 - A Gmail address, or another mail client that shows a message's original source and an **Unsubscribe** button.
 
 ## 1. Send yourself a test email
@@ -17,9 +17,9 @@ A test email goes through the same code as a real send. If the test looks right,
 
 1. Select **Send test email**, enter your address, and send it.
 
-1. Open the email. It arrives in your inbox, not in spam, the image loads, and the subject reads as you wrote it. Its links work, but a test email unsubscribes no one; section 5 unsubscribes for real.
+1. Open the email. It arrives in your inbox, not in spam, the image loads, and the subject reads as you wrote it. Its links work, but a test email unsubscribes no one; section 6 unsubscribes for real.
 
-1. Send a test email to your second address, not the publisher's inbox, and reply to it from there, as a reader would. The reply arrives in the publisher's inbox, the one you chose in [Connect Amazon SES](04-ses.md#9-receive-replies-at-your-from-address), or in your From address's own mailbox if you skipped forwarding. If it bounces, check the routing rule and the destination address there.
+1. Send a test email to your second address, not the publisher's inbox, and reply to it from there, as a reader would. The reply arrives in the publisher's inbox, the one you chose in [Connect Amazon SES](04-ses.md#8-receive-replies-at-your-from-address), or in your From address's own mailbox if you skipped forwarding. If it bounces, check the routing rule and the destination address there.
 
 ## 2. Check that it passes authentication
 
@@ -33,11 +33,37 @@ Inboxes trust mail that passes DKIM and DMARC for the domain it's from. Passing 
     - `dmarc=pass` for `send.example.com`
     - `spf=pass`, for a hostname under `send.example.com`
 
-    If SPF passes for `amazonses.com` instead, SES couldn't read your custom MAIL FROM domain's MX record, and used its own. DMARC still passes, but check the records from [Connect Amazon SES](04-ses.md#2-set-a-custom-mail-from-domain).
+    If SPF passes for `amazonses.com` instead, SES couldn't read your custom MAIL FROM domain's MX record, and used its own. DMARC still passes, but check the MAIL FROM records from [Connect Amazon SES](04-ses.md#1-verify-your-sending-hostname).
 
 If a check fails, compare your DNS records with the ones in [Connect Amazon SES](04-ses.md#1-verify-your-sending-hostname). [Sending-domain DNS](../reference/02-sending-domain-dns.md#verify-alignment) explains each result.
 
-## 3. Set up notifications
+## 3. Request production access
+
+A new SES account sends only to the addresses you've verified, up to 200 emails a day and one a second. Production access lifts those limits, once AWS reviews the account. Ask now: the app is connected, a test email has passed authentication, and the publication's website shows a working subscribe form for AWS to review. Every other section on this page works in the sandbox, so continue while you wait.
+
+1. Name the publication, since AWS may visit its website to review the request. In the editor, open **Settings → Publication identity**, and enter the name and tagline, or ask the publisher for them. On a new instance with no posts, the tagline is the only line on the home page that says what the newsletter is about. Both can change later.
+
+1. If the newsletter will mainly sell something, add a mailing address there too, with **Add a mailing address**. [When to provide a mailing address](../publishing/03-name-your-publication.md#when-to-provide-a-mailing-address) explains when US law asks for one.
+
+1. In SES, in the region the app sends from, open the **Account dashboard**, select **View Get set up page**, and then **Request production access**.
+
+1. Fill in the request:
+
+    - **Mail type:** Marketing
+    - **Website URL:** `https://newsletter.example.com/`
+
+    Leave the other fields as they are.
+
+1. Check the acknowledgement, and select **Submit request**. AWS Support answers by email, and may ask how you collect addresses and handle bounces.
+
+If AWS asks for more detail, or denies the request, reply in the support case, or open a new request from the **Account dashboard**. Say how Kestrel handles the list:
+
+- Signups use double opt-in: each subscriber confirms by email before joining the list.
+- Every post offers one-click unsubscribe.
+- Bounces and complaints reach the app, and it stops mailing those addresses automatically. Section 7 shows it working.
+- How many subscribers the newsletter expects, and how often it sends.
+
+## 4. Set up notifications
 
 Kestrel emails the notifications address when a send finishes, and right away when one runs into a problem.
 
@@ -49,7 +75,7 @@ Kestrel emails the notifications address when a send finishes, and right away wh
 
 Use your own address to test. If you're not the publisher, they set theirs in [Check your setup](../publishing/10-check-your-setup.md).
 
-## 4. Send a real post to yourself
+## 5. Send a real post to yourself
 
 This is a real send, to a list of one. It proves the whole path: subscribing, confirming, scheduling, and sending.
 
@@ -65,15 +91,15 @@ This is a real send, to a list of one. It proves the whole path: subscribing, co
 
 1. When the send finishes, the post arrives at your second address. A notification arrives at your first, with the subject `Sent:` and the post's title.
 
-## 5. Unsubscribe
+## 6. Unsubscribe
 
 Every email carries an unsubscribe link, and a header that lets mail clients show their own **Unsubscribe** button. Both work in one step, with no login.
 
-1. Open the post from section 4 in your mail client. It shows an **Unsubscribe** button next to the sender.
+1. Open the post from section 5 in your mail client. It shows an **Unsubscribe** button next to the sender.
 
 1. Select it. In the editor, **Subscribers** shows the address as **Unsubscribed**, and later sends leave it out.
 
-## 6. Check that bounces and complaints come back
+## 7. Check that bounces and complaints come back
 
 When an address bounces or marks your mail as spam, SES tells the app through SNS. The app then stops mailing that address: a bounce suppresses it, and a complaint unsubscribes it. SES has test addresses that act out each case without reaching a real person, and the sandbox lets you mail them.
 
@@ -86,9 +112,9 @@ When an address bounces or marks your mail as spam, SES tells the app through SN
 
 1. In the editor, **Subscribers** lists the bounce address as **Pending** with a **bounced** flag, and the complaint address as **Unsubscribed**. Open its row: its page says it left by a complaint. The app mails neither again.
 
-If the bounce address has no flag, or the complaint address is still pending, SES's events aren't reaching the app. Check the configuration set in [Send bounces and complaints to the app](04-ses.md#5-send-bounces-and-complaints-to-the-app), and the subscription in [Subscribe the app to the topic](04-ses.md#8-subscribe-the-app-to-the-topic).
+If the bounce address has no flag, or the complaint address is still pending, SES's events aren't reaching the app. Check the configuration set in [Send bounces and complaints to the app](04-ses.md#4-send-bounces-and-complaints-to-the-app), and the subscription in [Subscribe the app to the topic](04-ses.md#7-subscribe-the-app-to-the-topic).
 
-## 7. Read the logs
+## 8. Read the logs
 
 The app writes a log line for each thing it does, and Cloudflare keeps them for a few days, depending on your plan. Nothing else tells you if the once-a-minute schedule that sends posts stops, so it's worth knowing where to look.
 
@@ -96,25 +122,25 @@ The app writes a log line for each thing it does, and Cloudflare keeps them for 
 
 1. Filter on `event` equal to `sweep.tick`. A line arrives every minute.
 
-1. Filter on `event` equal to `send.completed`. Your send from section 4 is there.
+1. Filter on `event` equal to `send.completed`. Your send from section 5 is there.
 
-1. Filter on `event` equal to `send.scheduled`. Your two sends from section 4 are there, and `send.canceled` shows the one you canceled. Each line that records an action says who took it. Its `principal` is `human` or `service`, and its `client` names the program a person used, such as `editor`.
+1. Filter on `event` equal to `send.scheduled`. Your two sends from section 5 are there, and `send.canceled` shows the one you canceled. Each line that records an action says who took it. Its `principal` is `human` or `service`, and its `client` names the program a person used, such as `editor`.
 
 1. Filter on `level` equal to `error`. A healthy instance shows nothing.
 
 To follow one send, narrow the time range and filter on its `sendId`, since a long range may show only a sample. On the Free plan, Cloudflare stops keeping logs for the rest of the day once its daily allowance is used, as [its pricing page](https://developers.cloudflare.com/observability/pricing/) describes.
 
-## 8. Check that SES can send to anyone
+## 9. Check that SES can send to anyone
 
-[Connect Amazon SES](04-ses.md#4-request-production-access) asked AWS for production access. Until AWS grants it, the sandbox mails only your verified addresses, so check it before you go live.
+Section 3 asked AWS for production access. Until AWS grants it, the sandbox mails only your verified addresses, so check it before you go live.
 
 1. In SES, open the **Account dashboard** in the region the app sends from. It no longer says your account is in the sandbox, and it shows your daily quota and maximum send rate.
 
-1. Check that `SES_MAX_SEND_RATE` in `wrangler.jsonc` matches that rate, and that you deployed after setting it, as [Connect Amazon SES](04-ses.md#7-set-the-provider-and-deploy) describes.
+1. Check that `SES_MAX_SEND_RATE` in `wrangler.jsonc` matches that rate, and that you deployed after setting it, as [Connect Amazon SES](04-ses.md#6-set-the-provider-and-deploy) describes.
 
-If the dashboard still says sandbox, AWS hasn't answered yet. Every other section works in the sandbox, so come back to this one when it does.
+If the dashboard still says sandbox, AWS hasn't answered yet. Come back to this section when it does, and check the email AWS Support sends for questions.
 
-## 9. Clean up the test subscribers
+## 10. Clean up the test subscribers
 
 The checks leave test addresses on the list. Erase them, so the publisher starts with only real readers.
 
@@ -126,6 +152,6 @@ The checks leave test addresses on the list. Erase them, so the publisher starts
 
 Erasing keeps only the address, so it's never mailed again, but the person can subscribe again through the subscribe page. Erasing your own address doesn't lock you out.
 
-When every section gives the result it describes, your instance is ready for subscribers.
+When every section gives the result it describes, your instance is ready for subscribers. If one doesn't once the app is running, [Troubleshooting](../publishing/06-troubleshooting.md) says what the app's messages mean and where each is fixed.
 
 Next, [go live](06-go-live.md).

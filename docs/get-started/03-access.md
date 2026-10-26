@@ -2,7 +2,7 @@
 
 Cloudflare Access puts a login in front of the editor and the API. Kestrel checks every request against that login as well, so a path left out of Access stays locked. The public pages readers see stay public.
 
-In this guide, you set up Cloudflare Zero Trust, create one Access application that covers the editor and the API, and allow yourself in. Then you give the app two values from that application, and check that the login works.
+In this guide, you set up Cloudflare Zero Trust, create one Access application that covers the editor and the API, and allow yourself in, all on one form. Then you give the app two values from that application, and check that the login works.
 
 ## 1. Set up Zero Trust
 
@@ -10,13 +10,13 @@ Access is part of Cloudflare Zero Trust. Your account needs a Zero Trust organiz
 
 1. In the [Cloudflare dashboard](https://dash.cloudflare.com/), select **Zero Trust**.
 
-1. Choose a team name. It becomes your team domain, `YOUR_TEAM.cloudflareaccess.com`, where your login page lives.
+1. Choose a team name. It becomes your team domain, `YOUR_TEAM.cloudflareaccess.com`, where your login page lives. The team domain belongs to your whole Cloudflare account, and every app you put behind Access shares it. It's public too, since it shows in the login page's address. So choose a name for yourself or your organization, not for this newsletter. You can rename it later, but then you store it again in every instance, and update any identity provider you've added.
 
 1. Choose a plan. The Free plan covers a newsletter's editors. Cloudflare asks for payment details even on the Free plan, and doesn't charge them.
 
 ## 2. Create the Access application
 
-The editor lives under `/dashboard`, and the API under `/api`. One application covers both, so they share one login.
+The editor lives under `/dashboard`, and the API under `/api`. One application covers both, so they share one login. This section and the next fill in one form, which you save at the end of the next section.
 
 1. In **Zero Trust**, go to **Access controls → Applications**, and select **Create new application**.
 
@@ -37,19 +37,25 @@ The editor lives under `/dashboard`, and the API under `/api`. One application c
 
     Each path covers everything under it. Leave every other path out. The home page, the archive, subscribing, unsubscribing, images, and your email provider's webhooks must stay public.
 
-1. **(Optional)** Choose how long a sign-in lasts. The application's session duration defaults to 24 hours, so everyone signs in again each day. You can set anything from immediately to one month, as Cloudflare's [session management](https://developers.cloudflare.com/cloudflare-one/access-controls/access-settings/session-management/) describes. A longer session suits a publisher on their own computer, and a shorter one is safer on a shared one.
+1. Add only these two public hostnames. If the form also shows an empty private hostname or IP row, remove it, or saving fails with an error naming `use_clientless_isolation_app_launcher_url`.
+
+1. Name the application after your app's hostname, `newsletter.example.com`. Cloudflare suggests a name made from the subdomain, which won't tell two newsletters apart.
+
+1. **(Optional)** Choose how long a sign-in lasts. The application's session duration defaults to 24 hours, so everyone signs in again each day. You can set anything from immediately to one month, as Cloudflare's [session management](https://developers.cloudflare.com/cloudflare-one/access-controls/access-settings/session-management/) describes. A week suits a publisher on their own computer, and a shorter session is safer on a shared one.
 
 ## 3. Allow yourself in
 
-Every Access application denies everyone until a policy allows them.
+Every Access application denies everyone until a policy allows them. The policy goes on the same form, before you save the application.
 
-1. Under **Access policies**, create a new policy:
+1. Further down the form, under **Access policies**, create a new policy:
 
     - **Policy name:** `Publishers`
     - **Action:** Allow
     - **Include:** the **Emails** selector, with your email address
 
-1. Select **Create**.
+    Make a new policy for each publication, even if the form offers one you already have. A policy shared between applications lets everyone it allows into all of them, so someone you add for another app would get into this editor too. If your account has other Access applications, name this one for the publication, such as `Example publishers`.
+
+1. Save the policy, and then the application.
 
 Cloudflare's own login is on by default, and admits members of your Cloudflare account, so the email in your `Publishers` policy should be one. To let someone sign in another way, such as a one-time code by email, add it under **Zero Trust → Integrations → Identity providers**.
 
@@ -110,5 +116,7 @@ If a check fails:
 - **The editor says the configuration needs a fix.** Store the secret it names. While only one of the two is stored, `/health` answers `500` naming the other, and the public pages say the newsletter is temporarily unavailable.
 - **Cloudflare lets you in, but the editor answers `401`.** Check the two secrets for a typo, and that `ACCESS_ALLOWED_EMAILS`, if you set it, includes your address.
 - **The editor says Access let you in but didn't say who you are.** Your login carried no email, which happens through a kind of policy the app doesn't accept, such as a device check. Sign out, and sign in through the `Publishers` policy.
+
+[Troubleshooting](../publishing/06-troubleshooting.md#cloudflare-wont-save-the-access-application) covers an error when you save the application, and what can go wrong once the app is running.
 
 Next, [connect Amazon SES](04-ses.md).

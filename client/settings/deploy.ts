@@ -39,7 +39,7 @@ const SIMULATION_LABELS: Record<SimulationProfile, string> = {
 
 // The setup guide's step that gives the From address an inbox. The app never receives mail
 // and can't see whether that step was done, so Settings only points to it (SPEC §9).
-const REPLIES_HREF = "#/docs/ses/9-receive-replies-at-your-from-address";
+const REPLIES_HREF = "#/docs/ses/8-receive-replies-at-your-from-address";
 
 function bareAddress(from: string): string {
   const m = String(from || "").match(/<([^>]+)>/);

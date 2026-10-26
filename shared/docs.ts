@@ -50,7 +50,7 @@ export interface DocsResponse {
 
 /** A heading's anchor as GitHub derives it from the heading's text: lowercased, with
  *  punctuation dropped and each space a hyphen. The guide is read on GitHub too, so a link
- *  written against GitHub's anchors (`05-verify.md#7-read-the-logs`) works in the editor
+ *  written against GitHub's anchors (`05-verify.md#8-read-the-logs`) works in the editor
  *  unchanged. The editor names its headings by it, and the Worker's suite checks the
  *  editor's links to a heading against it. */
 export function headingAnchor(text: string): string {

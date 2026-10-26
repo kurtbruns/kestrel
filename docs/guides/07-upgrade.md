@@ -119,7 +119,7 @@ The output ends with your app's hostname.
 
 1. Send yourself a test email, as in [Verify it works](../get-started/05-verify.md#1-send-yourself-a-test-email). Don't send a real post to check an upgrade: on a live instance, it goes to your whole list.
 
-1. In the logs, `sweep.tick` still arrives every minute, as in [Verify it works](../get-started/05-verify.md#7-read-the-logs).
+1. In the logs, `sweep.tick` still arrives every minute, as in [Verify it works](../get-started/05-verify.md#8-read-the-logs).
 
 ## Go back
 

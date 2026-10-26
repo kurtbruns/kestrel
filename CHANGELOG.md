@@ -10,10 +10,15 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Added
+
+- A setup guide, Create an AWS account for your newsletter, covers the sign-up path, plan, and support choices, securing the root user, a budget alert, and one account per publication. The docs landing says to start it early, and Deploy the app no longer lists the AWS account.
+
 ### Changed
 
 - Until a post is listed, the home page is the subscribe form itself, with its line saying each signup is confirmed by email. A first visitor, or AWS reviewing the site for SES production access, sees how joining works without a click.
 - Name your publication now suggests a tagline that says what the newsletter covers and how often it goes out.
+- The setup guide asks AWS for SES production access later, in Verify it works once a test email passes authentication, so AWS's reviewer finds a working subscribe form. Connect Amazon SES now sets the custom MAIL FROM domain on the Create identity form, so all five DNS records go to Cloudflare in one trip, with a zone file to import, and verifies your two test addresses in its own section. Its sections and Verify's are renumbered, so a bookmark to one now lands at the page's top. Deploy the app and Lock the dashboard with Access gain the run-through's fixes, such as the empty private hostname row that stops Access saving, and each Get started page's checks link Troubleshooting.
 
 ### Fixed
 

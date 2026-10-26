@@ -9,7 +9,6 @@ In this guide, you choose your hostnames, create your instance's repository, cre
 - A [Cloudflare account](https://dash.cloudflare.com/sign-up), with your domain's DNS on Cloudflare. Your app's hostname and its login both live there.
 - [Node.js](https://nodejs.org/) 22 or later, and [Git](https://git-scm.com/).
 - A GitHub account, or another Git host, for your instance's repository.
-- An [AWS account](https://portal.aws.amazon.com/billing/signup), for Amazon SES, which sends your email.
 
 ## Choose your hostnames
 
@@ -48,14 +47,6 @@ Your instance's repository holds its configuration, its database migrations, and
     npm install
     ```
 
-1. Commit the new instance, and push it:
-
-    ```bash
-    git add -A
-    git commit -m "Start a Kestrel instance"
-    git push -u origin HEAD
-    ```
-
 1. **(Optional)** Try Kestrel locally before you deploy it. Copy the local settings, and start the app:
 
     ```bash
@@ -63,7 +54,15 @@ Your instance's repository holds its configuration, its database migrations, and
     npm run dev
     ```
 
-    Open http://localhost:8787/dashboard/, and run `npm run seed` in a second terminal to load a demo publication. Email goes to a stand-in, so nothing reaches a real inbox. Press Ctrl+C to stop the server when you're done.
+    Open http://localhost:8787/dashboard/, and run `npm run seed` in a second terminal to load a demo publication. Email goes to a stand-in, so nothing reaches a real inbox. Press Ctrl+C to stop the server when you're done. `init` prints these steps too, in this order.
+
+1. Commit the new instance, and push it. Your local settings and data stay out of the commit, since the instance's `.gitignore` lists them:
+
+    ```bash
+    git add -A
+    git commit -m "Start a Kestrel instance"
+    git push -u origin HEAD
+    ```
 
 ## 2. Sign in to Cloudflare
 
@@ -138,7 +137,7 @@ Each prints a snippet to add to your configuration. There's nothing to paste: `-
     - `routes` puts the app on your hostname when you deploy. Cloudflare creates the DNS record and the certificate. Your domain must be in the same Cloudflare account, and the hostname can't already have a CNAME record; delete one if it does. The block also turns off the `workers.dev` addresses, so the app answers only on your hostname.
     - `PROVIDER` stays empty until [Connect Amazon SES](04-ses.md) sets it. Until then the app runs without an email provider: posts can be written and previewed, but scheduling, test emails, and signups are refused. Never set it to `fake`, the top level's value, even when a wrangler warning suggests copying it: `fake` delivers nothing, and the app refuses it on your hostname.
     - `ARCHIVE_BASE_PATH` is permanent once the first post goes out. Every post sent carries its `/archive/…` link, and changing the prefix later breaks the links already mailed. Keep `/archive` unless you have a reason not to.
-    - `FROM_ADDRESS` is the address every email comes from. Keep it on your sending hostname, and set `SENDING_DOMAIN` to the part after the `@`.
+    - `FROM_ADDRESS` is the address every email comes from. Keep it on your sending hostname, and set `SENDING_DOMAIN` to the part after the `@`. The name before the `<` is what readers see as the sender. It also names the publication on its public pages, until the publisher sets a name under **Settings → Publication identity**. You can change the name at any time, and deploy again.
 
     Change every `example.com` value, the route included. The app refuses to run while any of its settings still names `example.com`.
 
@@ -183,7 +182,7 @@ npx wrangler delete --name kestrel
 
 ## Check it
 
-1. The app answers on your hostname. If `curl` reports a certificate error, Cloudflare is still issuing the new hostname's certificate; try again shortly.
+1. The app answers on your hostname:
 
     ```bash
     curl https://newsletter.example.com/health
@@ -192,6 +191,14 @@ npx wrangler delete --name kestrel
     ```
     {"status":"ok","service":"kestrel"}
     ```
+
+    If `curl` reports a certificate error, Cloudflare is still issuing the new hostname's certificate; try again shortly. If it says it could not resolve the host, your computer may remember that the name didn't exist, from a lookup before you deployed. Ask Cloudflare's resolver instead, which prints Cloudflare's addresses once the name exists:
+
+    ```bash
+    dig +short newsletter.example.com @1.1.1.1
+    ```
+
+    If it prints addresses, the name exists, and your computer catches up on its own once its remembered answer expires. Flushing its DNS cache, or trying another network, gets there sooner.
 
 1. The editor is locked. Until you set up Access in the next step, the app can't tell who is asking, so it lets no one in:
 
@@ -210,5 +217,7 @@ npx wrangler delete --name kestrel
 If the public pages instead say the newsletter is temporarily unavailable, and `/health` answers `500` with a body like `{"error":"invalid_config","variable":"APP_ORIGIN",…}`, the setting it names is missing, malformed, or still on `example.com`. Fix it in `wrangler.jsonc`, commit, and deploy again.
 
 If the public pages say the same, but `/health` answers `500` with `{"error":"schema_behind","missing":[…],…}`, the database hasn't run the migrations it lists, most often because step 5 was skipped or its prompt answered no. Run step 5's command, which the body's `message` repeats; the app answers as soon as it finishes, with no new deploy.
+
+[Troubleshooting](../publishing/06-troubleshooting.md) covers what can go wrong later, once the app is running.
 
 Next, [lock the dashboard with Access](03-access.md).
