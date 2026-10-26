@@ -118,7 +118,7 @@ If the bounce address has no flag, or the complaint address is still pending, SE
 
 The app writes a log line for each thing it does, and Cloudflare keeps them for a few days, depending on your plan. Nothing else tells you if the once-a-minute schedule that sends posts stops, so it's worth knowing where to look.
 
-1. In the Cloudflare dashboard, go to **Workers & Pages**, select `kestrel-production`, and select **Observability**.
+1. In the Cloudflare dashboard, go to **Workers & Pages**, select your Worker, the `name` in the `production` block of `wrangler.jsonc`, and select **Observability**.
 
 1. Filter on `event` equal to `sweep.tick`. A line arrives every minute.
 

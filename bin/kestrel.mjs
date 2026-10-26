@@ -26,7 +26,7 @@ const HELP = `kestrel ${PACKAGE.version}
 
 Usage: kestrel <command> [options]
 
-  init [dir]                    write a new instance repository here (or in dir)
+  init [dir] [--name <name>]    write a new instance repository here (or in dir)
   dev [wrangler dev args]       run locally, with the send sweep once a minute (PORT picks the port)
   sync-migrations               copy this release's migrations into migrations/
   check-context [--update]      compare the Claude files in .claude/ with this release's

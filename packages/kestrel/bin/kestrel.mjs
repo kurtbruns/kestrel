@@ -28,7 +28,7 @@ Usage: kestrel <command> [options]
   api <method> <path> [opts]    call the API as you, via Claude Code (kestrel api for options)
   api --list | help <m> <path>  list the instance's routes, or describe one
 
-  init [dir]                    write a new instance repository here (or in dir)
+  init [dir] [--name <name>]    write a new instance repository here (or in dir)
   dev, seed, reset, sync-migrations, check-context
                                 run in an instance's repository, by its ${INSTANCE_PACKAGE}
 

@@ -78,7 +78,7 @@ D1 keeps a history of your database, called Time Travel, for 30 days on Workers 
 1. Note where the database stands now:
 
     ```bash
-    npx wrangler d1 time-travel info kestrel-production
+    npx wrangler d1 time-travel info DB --env production
     ```
 
     It prints a bookmark for the database's current state. Copy it, and keep it until the upgrade checks out.
@@ -147,7 +147,7 @@ If the new release misbehaves, deploy the previous one, and put the database bac
 1. Restore the database to the bookmark from section 3:
 
     ```bash
-    npx wrangler d1 time-travel restore kestrel-production --bookmark=REPLACE_WITH_BOOKMARK
+    npx wrangler d1 time-travel restore DB --env production --bookmark=REPLACE_WITH_BOOKMARK
     ```
 
 1. Push the revert to your repository:

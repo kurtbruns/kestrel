@@ -6,7 +6,9 @@
  * tarball holds what an instance needs and none of Kestrel's source, and packs the client
  * (packages/kestrel, published as the unscoped `kestrel`), checking it holds only its own
  * files. Then it scaffolds a scratch instance with the client's `kestrel init`, which fetches the
- * packed instance package through npx as it fetches the release from npm, and installs the
+ * packed instance package through npx as it fetches the release from npm, checks that it names
+ * the Worker, database, and bucket after the folder (and after `--name` in a second scaffold,
+ * refusing a name Cloudflare would), and installs the
  * tarball into it, which on
  * npm 12 must block no dependency's install script. In that instance it runs the scaffold's typecheck (`wrangler types` and `tsc`), `tsc` again with
  * Kestrel's declaration checked too, and a `wrangler deploy --dry-run` that bundles the Worker
@@ -185,6 +187,46 @@ if (absent.length > 0 || stray.length > 0) {
     `init wrote ${stray.length ? `${stray.join(", ")} under shipped names` : ""}${absent.length ? ` and no ${absent.join(", ")}` : ""}`,
   );
 }
+
+// init named the Worker, the database, and the bucket after the instance: its folder, or
+// `--name` when given, which a second scratch init, also through the client, checks. A name
+// Cloudflare would refuse is refused before anything is written.
+const resourceNames = (dir) =>
+  [
+    ...readFileSync(join(dir, "wrangler.jsonc"), "utf8").matchAll(
+      /"(?:name|database_name|bucket_name)":\s*"([^"]+)"/g,
+    ),
+  ].map((m) => m[1]);
+const named = (name) => [
+  name,
+  `${name}-dev`,
+  `${name}-media-dev`,
+  `${name}-production`,
+  `${name}-production`,
+  `${name}-media-production`,
+];
+if (JSON.stringify(resourceNames(instance)) !== JSON.stringify(named("instance"))) {
+  fail(`init named the instance in folder "instance" ${resourceNames(instance).join(", ")}`);
+}
+const initClient = (args) =>
+  spawnSync(process.execPath, [clientBin, "init", ...args], {
+    cwd: work,
+    env: { ...process.env, KESTREL_INSTANCE_PACKAGE: tarball },
+    encoding: "utf8",
+  });
+const flagged = join(work, "flagged");
+const flaggedInit = initClient([flagged, "--name", "windbreak"]);
+if (flaggedInit.status !== 0) {
+  fail(`kestrel init --name exited ${flaggedInit.status}\n${flaggedInit.stderr}`);
+}
+if (JSON.stringify(resourceNames(flagged)) !== JSON.stringify(named("windbreak"))) {
+  fail(`kestrel init --name windbreak named ${resourceNames(flagged).join(", ")}`);
+}
+const refused = initClient([join(work, "refused"), "--name", "Wind_Break"]);
+if (refused.status === 0 || existsSync(join(work, "refused", "wrangler.jsonc"))) {
+  fail("kestrel init --name Wind_Break wrote an instance instead of refusing the name");
+}
+console.log("[check-package] init names the instance after its folder, or --name");
 
 // The scaffold's config tracks this repository's: the same runtime date and flags.
 const setting = (file, key) =>

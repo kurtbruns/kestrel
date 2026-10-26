@@ -86,16 +86,20 @@ Every command from here on acts on your Cloudflare account through the Wrangler 
 
 Each command creates the resource and writes it into the `production` block of `wrangler.jsonc`, under the binding the app already uses. Name `--env production` on each one, or Wrangler writes to the top level, which is local development.
 
+`kestrel init` named the Worker, the database, and the bucket after your instance's folder, and printed the names. The `production` block holds them: the database's `database_name` and the bucket's `bucket_name`. The commands below are for a folder named `newsletter`. Use the names from your `wrangler.jsonc` if they differ.
+
+A second instance in the same Cloudflare account needs names of its own, or its deploy replaces the first instance's Worker. Give it a different folder name, or run `npx kestrel init --name NAME` with a name of its own.
+
 1. Create the database:
 
     ```bash
-    npx wrangler d1 create kestrel-production --env production --binding DB --update-config
+    npx wrangler d1 create newsletter-production --env production --binding DB --update-config
     ```
 
 1. Create the bucket for images:
 
     ```bash
-    npx wrangler r2 bucket create kestrel-media-production --env production --binding MEDIA --update-config
+    npx wrangler r2 bucket create newsletter-media-production --env production --binding MEDIA --update-config
     ```
 
 Each prints a snippet to add to your configuration. There's nothing to paste: `--update-config` has filled in the database's id, and the `MEDIA` binding already names the bucket. Wrangler also rewrites `wrangler.jsonc` in its own layout, with tabs and one value per line, and your settings stay.

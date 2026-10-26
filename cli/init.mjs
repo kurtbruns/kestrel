@@ -8,6 +8,11 @@
  * wrangler config and one-line Worker entry, `.dev.vars.example`, the Claude context with its
  * headers (cli/context.mjs), and this release's migrations.
  *
+ * The scaffold's wrangler config names the Worker, the D1 database, and the R2 bucket
+ * `kestrel…`; init renames each after the instance (the folder's name, or `--name`), so a
+ * second instance in the same Cloudflare account never deploys over the first or collides
+ * with its database and bucket. An instance already written keeps the names it has.
+ *
  * A few files ship under other names and are renamed here: npm leaves `.gitignore` and
  * `.npmrc` out of a published package, and the Claude files sit outside `.claude/` so they
  * don't load into sessions in Kestrel's own repository. Init never overwrites: if any file it
@@ -62,9 +67,80 @@ function packageName(dir) {
   return name || "newsletter";
 }
 
-/** `kestrel init [dir]`. */
+// The longest name init derives is `<name>-media-production`, and an R2 bucket's name, like a
+// Worker's on workers.dev, is at most 63 characters. Each resource takes lowercase letters,
+// digits, and hyphens, never a hyphen at either end: the rules R2 and workers.dev share, and
+// D1 accepts.
+const NAME_MAX = 63 - "-media-production".length;
+const NAME_RULE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+
+/** Why `name` can't name an instance's resources, or null when it can. */
+export function nameRefusal(name) {
+  if (name.length > NAME_MAX) {
+    return `"${name}" is ${name.length} characters; an instance's name is at most ${NAME_MAX}`;
+  }
+  if (!NAME_RULE.test(name)) {
+    return `"${name}" isn't a valid instance name: use lowercase letters, digits, and hyphens, starting and ending with a letter or digit`;
+  }
+  return null;
+}
+
+/** The instance name a folder's name makes, its other characters as hyphens, or `newsletter`. */
+export function nameFromFolder(dir) {
+  const name = basename(dir)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+/, "")
+    .slice(0, NAME_MAX)
+    .replace(/-+$/, "");
+  return name || "newsletter";
+}
+
+// The scaffold's resource names: `kestrel`, then a suffix such as `-media-production`.
+const RESOURCE_NAME = /("(?:name|database_name|bucket_name)":\s*")kestrel((?:-[a-z]+)*")/g;
+const RESOURCE_COUNT = 6;
+
+/** The scaffold's wrangler config with its Worker, database, and bucket named after `name`. */
+export function nameResources(config, name) {
+  let count = 0;
+  const named = config.replace(RESOURCE_NAME, (_, key, suffix) => {
+    count++;
+    return `${key}${name}${suffix}`;
+  });
+  // A scaffold whose names this no longer finds would write an instance named `kestrel`.
+  if (count !== RESOURCE_COUNT) {
+    throw new Error(`template/wrangler.jsonc names ${count} resources, not ${RESOURCE_COUNT}`);
+  }
+  return named;
+}
+
+/** The instance directory and the `--name` flag's value, if given, from init's arguments. */
+export function parseInitArgs(argv) {
+  let dir;
+  let name;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--name") {
+      name = argv[++i] ?? "";
+    } else if (arg.startsWith("--name=")) {
+      name = arg.slice("--name=".length);
+    } else if (!arg.startsWith("-") && dir === undefined) {
+      dir = arg;
+    }
+  }
+  return { dir: dir ?? ".", name };
+}
+
+/** `kestrel init [dir] [--name <name>]`. */
 export function initCommand(argv) {
-  const root = resolve(argv.find((a) => !a.startsWith("-")) ?? ".");
+  const args = parseInitArgs(argv);
+  const root = resolve(args.dir);
+  const name = args.name ?? nameFromFolder(root);
+  const refusal = nameRefusal(name);
+  if (refusal) {
+    console.error(`[init] refused: ${refusal}.`);
+    process.exit(1);
+  }
   const files = [
     ...scaffoldFiles(),
     [join(PACKAGE_ROOT, ".dev.vars.example"), ".dev.vars.example"],
@@ -99,6 +175,8 @@ export function initCommand(argv) {
   pkg.devDependencies.typescript = PACKAGE.devDependencies.typescript;
   pkg.devDependencies.wrangler = PACKAGE.peerDependencies.wrangler;
   writeFileSync(join(root, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
+  const config = join(root, "wrangler.jsonc");
+  writeFileSync(config, nameResources(readFileSync(config, "utf8"), name));
   for (const file of CONTEXT_FILES) {
     writeShipped(root, file);
   }
@@ -107,7 +185,11 @@ export function initCommand(argv) {
   // A path from here when the instance is below this directory, else the absolute one.
   const rel = relative(process.cwd(), root);
   const where = rel.startsWith("..") ? root : rel;
-  console.log(`[init] a Kestrel ${PACKAGE.version} instance${where ? ` in ${where}` : ""}. Next:`);
+  console.log(`[init] a Kestrel ${PACKAGE.version} instance${where ? ` in ${where}` : ""}.`);
+  console.log(
+    `[init] named ${name}${args.name === undefined ? " after its folder (--name picks another)" : ""}: ` +
+      `Worker and database ${name}-production, image bucket ${name}-media-production. Next:`,
+  );
   console.log(
     [
       ...(where ? [`  cd ${where}`] : []),
