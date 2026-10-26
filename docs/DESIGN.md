@@ -54,6 +54,8 @@ The sidebar is full width on a wide window, an icon rail on a mid-size one, and 
 
 The editor, the web version, the docs, and the walls hide the sidebar: writing wants the full width, the web version is a page of its own, the docs are about Kestrel rather than the publication, and a wall stands alone.
 
+The sidebar is the publication's, so it belongs to someone signed in: it appears once the app knows who is asking, already showing the publication's name, and until then the page is empty.
+
 The browser tab names the screen open with one title, then Kestrel, so a tab among others, a bookmark, or a history entry says where it leads: "Subscribers - Kestrel", a post or a send's page by its subject ("Welcome - Kestrel", kept to the subject as it is typed), a set of docs by its name ("Publishing docs - Kestrel"), and a doc by its title. The web version reads "Welcome (web version) - Kestrel", apart from the editor's tab it is opened beside. A screen still loading shows its room's name until it has read what it shows. Nothing in the title changes with a send's progress.
 
 ### Screens
@@ -98,7 +100,7 @@ Five states replace the whole app with one card, because no screen could do anyt
 - **Access let you in, but didn't say who you are** (SPEC §11): an Access login that named neither a person nor a service token, which some other kind of Access policy let through. Signing in the same way again gets the same answer, so the wall says what Access sent and why Kestrel needs more, names the two kinds of policy it accepts (an Allow policy on people's emails, and a Service Auth policy on a service token), and links the Access guide on the project's site. One control, **Sign out** (Primary), which ends the Access session so the next visit signs in afresh, perhaps another way. It carries `role="alert"`, since a policy needs changing.
 - **The session has expired.** One control, **Sign in** (Primary), which reloads to start a fresh sign-in.
 
-Until the editor knows who is asking, it shows none of the publication's chrome, so the page starts as an empty background and the sidebar appears only with a session, already wearing its brand. A wall never follows a glimpse of the sidebar it hides. A wall is drawn once, however many calls fail, and can't be dismissed: there is nothing behind it to return to. Links out of a wall open the project's site in a new tab, since the editor's own Docs tab sits behind the same failure.
+A wall is drawn once, however many calls fail, and can't be dismissed: there is nothing behind it to return to. Links out of a wall open the project's site in a new tab, since the editor's own Docs tab sits behind the same failure.
 
 ### Dialogs and menus belong to their page
 
@@ -291,7 +293,7 @@ The groups have no headings, only a wider gap: each section's title, its **inten
 
 **Publication identity.** Its note says it is "Shown in every email" and, while posts are scheduled, how many emails a save would update and that the publisher confirms first, and, while one is about to send, when it sends and that you can save once it has. The sample email beside it shows which fields the template prints, so the note doesn't list them. It carries no in-use chip, since the identity is in every email.
 
-- **Name.** Its hint says what a blank name falls back to, the email "From" name. When the typed name is that same name, Save is live although nothing the reader sees changes, so the hint says why instead: saving keeps the name even if the From name changes.
+- **Name.** Left blank, the publication goes by the email "From" name, and the hint says so. Typing that same name makes it the publication's own, so until it is saved the hint says that saving keeps the name even if the From name changes.
 - **Logo.** Shown square everywhere, so the upload makes it square: a picked image is cropped to its centered square and scaled in the browser, then saved at once. The tile is the preview, a toast says when edges were cropped, and Replace is the way back. A logo that isn't square (one set through the API) carries a warning under the tile until it's replaced.
 - **Mailing address.** Optional (SPEC §9), so with none saved it isn't an empty field, which would read as a missing required value. It's an **Add a mailing address** button with a hint beside it. A saved address is an open field with **Remove**, and no status line, which would be untrue under a custom template that prints the address somewhere else. While an address is set and the template doesn't print it, an amber line under the field says so, with no link to the template and no mention of removing it, since Remove sits beside it. Each of the three, the Add row's hint, the open field's only hint, and the amber line, ends with **When to provide a mailing address ↗**, the section of Name your publication, the publisher's docs page for this card, opening in a new tab so a half-edited form stays as it was. The Template page carries the same fact as a save warning, one on each side of the pair that disagrees.
 
