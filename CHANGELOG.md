@@ -10,7 +10,9 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading from 1.15.1.** At the top level of your instance's `wrangler.jsonc`, outside `env`, add `"workers_dev": false` and `"preview_urls": false`, and change `triggers` to `{ "crons": [] }`, as a new instance now has, so a deploy without `--env production` answers on no address and never runs the send sweep. Keep the empty list rather than deleting the line, since only a list clears a schedule, and keep the `* * * * *` cron in `production`'s own `triggers`. If you ever deployed without `--env production`, that Worker is still live: remove it with `npx wrangler delete --name kestrel`. Run `npm run check-context` in your instance's repository: this release changes the operator's Claude context, and a copy you've edited is merged by hand.
+## [1.16.0] - 2026-10-25
+
+**Upgrading from 1.15.1.** At the top level of your instance's `wrangler.jsonc`, outside `env`, add `"workers_dev": false` and `"preview_urls": false`, and change `triggers` to `{ "crons": [] }`, as a new instance now has, so a deploy without `--env production` answers on no address and never runs the send sweep. Keep the empty list rather than deleting the line, since only a list clears a schedule, and keep the `* * * * *` cron in `production`'s own `triggers`. If you ever deployed without `--env production`, that Worker is still live: remove it with `npx wrangler delete --name kestrel`. A log filter or alert on `auth.service` finds nothing now: filter on `principal` = `service` instead. Run `npm run check-context` in your instance's repository: this release changes the operator's Claude context, and a copy you've edited is merged by hand.
 
 ### Added
 
@@ -652,7 +654,8 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
-[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.15.1...HEAD
+[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.16.0...HEAD
+[1.16.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.16.0
 [1.15.1]: https://github.com/kurtbruns/kestrel/releases/tag/v1.15.1
 [1.15.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.15.0
 [1.14.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.14.0

@@ -1,6 +1,6 @@
 {
   "name": "kestrel",
-  "version": "1.15.1",
+  "version": "1.16.0",
   "type": "module",
   "description": "The command-line client for Kestrel, the self-hosted newsletter app: sign in to an instance and call its API as you, from anywhere.",
   "license": "MIT",
