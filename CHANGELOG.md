@@ -13,7 +13,6 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Fixed
 
 - A locked editor (before Access is set up, or after a sign-in Kestrel refuses) no longer flashes the editor's sidebar before its explanation: the dashboard shows the publication's chrome only once it knows who is signing in.
-- In Settings, Publication identity's Name says why Save is live when the typed name is the email From name a blank one falls back to: saving keeps the name even if the From name changes.
 
 ## [1.17.0] - 2026-10-26
 

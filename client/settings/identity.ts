@@ -4,7 +4,7 @@
 import type { InUseView, LogoResponse } from "../../shared/settings";
 import { api } from "../api";
 import { $ } from "../ui/dom";
-import { type Html, html, setHtml } from "../ui/html";
+import { type Html, html } from "../ui/html";
 import { icon } from "../ui/icons";
 import { squareImage } from "../ui/square_image";
 import { busy, toast } from "../ui/widgets";
@@ -28,19 +28,6 @@ function identityNote(inUse: InUseView): Html {
   return html`${shown} ${reach}${remakeWaitHtml(inUse)}`;
 }
 
-/** The Name field's hint: what a blank name falls back to, or, once the typed name is the
- *  From name it would fall back to anyway, why Save is live with nothing visibly changed. */
-function nameHint(page: SettingsPage): Html {
-  const { state, fromDisplay } = page;
-  if (!fromDisplay) {
-    return html`Blank leaves the publication unnamed, since the email “From” has no name.`;
-  }
-  if (state.name === fromDisplay && page.saved().name !== state.name) {
-    return html`Same as the email “From” name. Saving keeps “${fromDisplay}” as the name even if the From name changes.`;
-  }
-  return html`Blank falls back to the email “From” name (“${fromDisplay}”).`;
-}
-
 /** The docs section that says when a publication needs a mailing address (SPEC §9), on the
  *  docs page for this section of Settings, linked beside each place the address shows. It
  *  opens in a new tab, so a half-edited form stays as it was. */
@@ -57,7 +44,7 @@ const LOGO_SIZE = 256;
 // The logo tile's background image is set from the DOM (applyLogoUi), not written into
 // the markup: a URL has no place inside a style attribute the tag would escape as text.
 export function identitySection(page: SettingsPage): Html {
-  const { state, fromName } = page;
+  const { state, fromDisplay, fromName } = page;
   // The mailing address is optional (SPEC §9): with none saved it is an "Add" row, not an
   // empty field that reads as a missing required value.
   const addressOpen = Boolean(state.address);
@@ -85,7 +72,11 @@ export function identitySection(page: SettingsPage): Html {
             <div class="set-field">
               <label for="setName">Name</label>
               <input id="setName" value="${state.name}" placeholder="${fromName}" maxlength="120" autocomplete="off">
-              <p class="field-hint" id="nameHint">${nameHint(page)}</p>
+              <p class="field-hint">${
+                fromDisplay
+                  ? html`Blank falls back to the email “From” name (“${fromDisplay}”).`
+                  : "Blank leaves the publication unnamed, since the email “From” has no name."
+              }</p>
             </div>
             <div class="set-field">
               <label for="setTagline">Tagline</label>
@@ -273,13 +264,9 @@ export function mountIdentity(
       }
     });
 
-  const nameHintEl = $("#nameHint", root);
-  const applyNameHint = () => setHtml(nameHintEl, nameHint(page));
-
   applyLogoUi();
   applyAddressUi();
   return {
-    repaint: applyNameHint,
     reset() {
       nameEl.value = state.name;
       taglineEl.value = state.tagline;
