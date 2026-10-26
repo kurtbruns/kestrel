@@ -795,6 +795,26 @@ describe("settings view", () => {
     expect($("#subscribePageLine").textContent).toContain("your publication’s name");
   });
 
+  it("says why Save is live when the typed name is the From name a blank one falls back to (SPEC §9)", async () => {
+    const blank = response({
+      settings: { publication: { ...settings().publication, name: "" } },
+    });
+    await open([{ path: "/api/settings", reply: () => blank }]);
+    const hint = () => $("#setName").nextElementSibling?.textContent;
+    expect(hint()).toBe("Blank falls back to the email “From” name (“Birds”).");
+    typeInto($<HTMLInputElement>("#setName"), "Birds");
+    // Nothing the reader sees changes, but the name is now the publication's own.
+    expect(bar().classList.contains("show")).toBe(true);
+    expect(hint()).toBe(
+      "Same as the email “From” name. Saving keeps “Birds” as the name even if the From name changes.",
+    );
+    typeInto($<HTMLInputElement>("#setName"), "Birds Weekly");
+    expect(hint()).toBe("Blank falls back to the email “From” name (“Birds”).");
+    typeInto($<HTMLInputElement>("#setName"), "Birds");
+    $("#savebarDiscard").click();
+    expect(hint()).toBe("Blank falls back to the email “From” name (“Birds”).");
+  });
+
   it("keeps the embed's Copy as it is while other fields change, and rebuilds it for the name", async () => {
     stubClipboard();
     await open();

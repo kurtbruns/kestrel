@@ -18,7 +18,10 @@
 })();
 </script>
 </head>
-<body>
+<!-- The body starts signed out, with the publication's chrome hidden, until the boot probe
+     (/api/whoami) answers: a session reveals it, and a wall keeps it hidden, so a locked
+     editor never flashes the sidebar first. -->
+<body class="signed-out">
 <!-- Sidebar icon sprite. The primary nav shows icon + label at full width; in the
      collapsed icon rail (the first step down from the full sidebar) the labels fold
      to hover tooltips and only these marks remain. Kept out of flow and hidden from

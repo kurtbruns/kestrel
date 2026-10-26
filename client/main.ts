@@ -27,7 +27,6 @@ async function boot(): Promise<unknown> {
   const session = await probeSession();
   if (session) {
     appState.session = session;
-    document.body.classList.remove("signed-out");
     renderIdentity();
     // Load the publication identity for the sidebar brand. Non-fatal: on failure the
     // brand keeps its "Kestrel" placeholder and routing still proceeds.
@@ -37,6 +36,10 @@ async function boot(): Promise<unknown> {
       /* keep the placeholder brand */
     }
     renderSidebarBrand();
+    // The page starts signed out (public/dashboard/index.html), so nothing of the
+    // publication shows until there is a session: a locked editor never flashes the
+    // sidebar. It shows here, with its brand, before the first view is routed.
+    document.body.classList.remove("signed-out");
     // Dev build only: pick up a rebuilt bundle or an edited stylesheet without a hand
     // refresh. The production build compiles this out (see scripts/build-client.mjs).
     if (__DEV__) {

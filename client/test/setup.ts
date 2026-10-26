@@ -6,5 +6,11 @@
 
 import page from "../../public/dashboard/index.html?raw";
 
-const body = page.slice(page.indexOf("<body>") + "<body>".length, page.lastIndexOf("</body>"));
+const open = /<body([^>]*)>/.exec(page);
+if (!open) {
+  throw new Error("public/dashboard/index.html has no <body>");
+}
+const body = page.slice(open.index + open[0].length, page.lastIndexOf("</body>"));
 document.body.innerHTML = body.replace(/<script[\s\S]*?<\/script>/g, "");
+// The body's own class too: it starts signed out, the chrome hidden until boot finds a session.
+document.body.className = /class="([^"]*)"/.exec(open[1] ?? "")?.[1] ?? "";
