@@ -23,7 +23,7 @@ A problem with your email provider never marks anyone unsent. The send waits whe
 - **A test says "The provider didn't answer, so the test may have arrived".** Kestrel can't tell whether your provider took it. Check the inbox before you send again, since a second test may arrive twice.
 - **"The template or publication details changed this email's look after your last test".** Send a new test of the post, since your last one no longer shows what goes out.
 - **The daily database writes warning.** On Cloudflare's free Workers plan, a send to more than about 5,000 recipients may use up the day's writes, and then the app stops working until midnight UTC. [Bring your existing list](01-your-list.md#limits) explains the limit, and when to upgrade to Workers Paid.
-- **"Workers Free suits a list of up to about 1,000 subscribers".** Your list is past what the free plan suits. Upgrade to Workers Paid ([As your list grows](../guides/09-as-your-list-grows.md)). If the account is on Workers Paid already, set `SUBREQUEST_BUDGET` so Kestrel knows, and the notice goes.
+- **"Workers Free suits a list of up to about 1,000 subscribers".** Your list is past what the free plan suits. Upgrade to Workers Paid ([As your list grows](../guides/09-as-your-list-grows.md)). If the account is on Workers Paid already, set `SUBREQUEST_BUDGET` to `10000` so Kestrel knows, and the notice goes.
 
 ## Reading a send's record
 

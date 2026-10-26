@@ -74,7 +74,7 @@ A `send_email` binding named `NOTIFY` moves notifications to Cloudflare's email.
 
 ## Check it
 
-1. In the editor, open **Settings → Notifications**. **Sent through** reads "Cloudflare Email, separate from your newsletter's provider", and **From address** shows `kestrel@newsletter.example.com`.
+1. In the editor, open **Settings → Notifications**. **Sent through** reads "Cloudflare Email, separate from your newsletter's provider", and **From address** shows `Kestrel <kestrel@newsletter.example.com>`.
 
 1. Select **Send a test notification**. It arrives at the notifications address, and **Last notification** shows it as delivered.
 

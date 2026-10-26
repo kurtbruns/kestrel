@@ -17,7 +17,7 @@ You need:
 
 Managed OAuth lets an app such as Claude act with a person's account, the way the editor does in their browser. Cloudflare marks it as beta, and its [Managed OAuth](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/) page describes it.
 
-1. In **Zero Trust**, go to **Access controls → Applications**, and select **Edit** on your application.
+1. In **Zero Trust**, go to **Access controls → Applications**, and select **Configure** on your application.
 
 1. On the **Additional settings** tab, select the **OAuth** filter, and find **Managed OAuth (Beta)**.
 

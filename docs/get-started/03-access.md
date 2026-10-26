@@ -109,6 +109,6 @@ If a check fails:
 
 - **The editor says the configuration needs a fix.** Store the secret it names. While only one of the two is stored, `/health` answers `500` naming the other, and the public pages say the newsletter is temporarily unavailable.
 - **Cloudflare lets you in, but the editor answers `401`.** Check the two secrets for a typo, and that `ACCESS_ALLOWED_EMAILS`, if you set it, includes your address.
-- **The editor says Access let you in but didn't say who you are.** Your login carried no email, which happens through a policy other than an Allow policy on emails. Sign out, and sign in through the `Publishers` policy.
+- **The editor says Access let you in but didn't say who you are.** Your login carried no email, which happens through a kind of policy the app doesn't accept, such as a device check. Sign out, and sign in through the `Publishers` policy.
 
 Next, [connect Amazon SES](04-ses.md).

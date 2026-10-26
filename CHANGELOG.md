@@ -12,7 +12,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
-- The setup guide's Connect Amazon SES page is rewritten for a newcomer: it requests production access early, stores each secret as soon as its value exists, makes the custom MAIL FROM domain a regular step, checks that the From address has no inbox before forwarding it, and drops the section on switching an instance that already sends. Its sections are renumbered, so a bookmark to one now lands at the page's top. Verify it works, Deploy the app, and Lock the dashboard with Access are tightened to match, and Verify's Send now steps follow the editor's order.
+- The setup guide's Connect Amazon SES page is rewritten for a newcomer. It stores each secret as soon as its value exists, makes the custom MAIL FROM domain a regular step, and checks that the From address has no inbox before forwarding it. The section on switching an instance that already sends is gone, and its caution moves to Configuration's `PROVIDER`. Its sections are renumbered, so a bookmark to one now lands at the page's top. Verify it works, Deploy the app, and Lock the dashboard with Access are tightened to match, and Verify's Send now steps follow the editor's order.
 
 ## [1.16.0] - 2026-10-26
 

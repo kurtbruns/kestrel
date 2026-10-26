@@ -29,7 +29,7 @@ SES sends only from an identity you've verified. Verifying the whole hostname le
 
 ## 2. Set a custom MAIL FROM domain
 
-By default, SES sends with its own return path, so Gmail shows your mail as "mailed-by `amazonses.com`", and only DKIM ties it to your domain. A custom MAIL FROM domain puts your hostname there too. Your mail then still passes DMARC if DKIM fails, and it meets Gmail's bulk-sender rule to set up SPF for your domain.
+By default, SES sends with its own return path, so Gmail shows your mail as "mailed-by `amazonses.com`", and only DKIM ties it to your domain. A custom MAIL FROM domain puts your hostname there too, so SPF also passes for your domain. Your mail then still passes DMARC, the check section 3 sets up, if DKIM ever fails. It also meets Gmail's bulk-sender rule to set up SPF for your domain.
 
 1. In SES, open the `send.example.com` identity. Under **Custom MAIL FROM domain**, choose **Edit**.
 
@@ -75,7 +75,7 @@ A new SES account starts in the sandbox: it sends only to addresses you've verif
 
 1. Verify two addresses you own, such as a personal address and a work address, so the sandbox lets you mail them. Your test emails go to these. For each, under **Identities**, choose **Create identity**, select **Email address**, and follow the link in the email AWS sends.
 
-If AWS asks for more detail, or denies the request, reply in the support case. Say how Kestrel handles the list:
+If AWS asks for more detail, or denies the request, reply in the support case, or open a new request from the **Account dashboard**. Say how Kestrel handles the list:
 
 - Signups use double opt-in: each subscriber confirms by email before joining the list.
 - Every post offers one-click unsubscribe.
@@ -125,7 +125,7 @@ SES reports bounces and complaints through Amazon Simple Notification Service (S
     npx wrangler secret put SNS_TOPIC_ARN --env production
     ```
 
-1. Store the configuration set's name, `kestrel-mail`. It's optional but recommended: the app names the set on every email, so SES reports on each one even without the hostname's default. Type the name exactly, since SES refuses every email that names a set it can't find:
+1. Store the configuration set's name, `kestrel-mail`. It's optional but recommended: the app names the set on every email, so SES reports on each one even without the hostname's default. Type it exactly as the set is named in this region, since SES refuses every email that names a set it can't find:
 
     ```bash
     npx wrangler secret put SES_CONFIGURATION_SET --env production
@@ -225,7 +225,7 @@ SNS delivers events only to a subscriber that has confirmed. The app confirms on
 
 1. Reload the subscription. Its status changes to **Confirmed**, with nothing for you to click.
 
-    If it stays **Pending confirmation**, check that your Access application covers only `/dashboard` and `/api`, and that `SNS_TOPIC_ARN` matches the topic's ARN. Then request confirmation again from the topic's subscriptions. SNS doesn't let you delete a pending subscription, and removes it on its own after 48 hours.
+    If it stays **Pending confirmation**, check that your Access application covers only `/dashboard` and `/api`, that `SNS_TOPIC_ARN` matches the topic's ARN, and that section 7's deploy finished. A mismatched ARN shows in the app's logs as a `webhook.refused` error naming both. Then request confirmation again from the topic's subscriptions. SNS doesn't let you delete a pending subscription, and removes it on its own after 48 hours.
 
 1. Give SNS longer to retry. By default it retries a failed delivery 3 times over about a minute, then discards the event, so a bounce that arrives mid-deploy is lost. Open the topic, choose **Edit**, and expand **Delivery retry policy (HTTP/S)**. Turn off the default policy, set these values, and choose **Save changes**:
 
@@ -239,7 +239,7 @@ SNS delivers events only to a subscriber that has confirmed. The app confirms on
     | Maximum delay retries | `6` |
     | Retry-backoff function | Exponential |
 
-    SNS then keeps trying for most of an hour, the longest it allows.
+    SNS then keeps trying for about 40 minutes. It allows an hour at most.
 
 1. **(Optional)** Keep what SNS still can't deliver. On the subscription, choose **Edit**, and set a **Redrive policy (dead-letter queue)** to an SQS queue of your own. SNS then moves an event there instead of discarding it. [Amazon SNS dead-letter queues](https://docs.aws.amazon.com/sns/latest/dg/sns-dead-letter-queues.html) covers the queue and its permissions.
 
@@ -253,7 +253,7 @@ Replies to a post go to your From address, `newsletter@send.example.com`, which 
     dig +short MX send.example.com
     ```
 
-    If it lists mail servers, your From address already receives mail. Skip to [Check it](#check-it), since Email Routing would replace those servers.
+    If it lists mail servers, `send.example.com` already receives mail elsewhere, and Email Routing would replace those servers. Check that your mail host has a mailbox for `newsletter@send.example.com`, and skip to [Check it](#check-it).
 
 1. In the [Cloudflare dashboard](https://dash.cloudflare.com/), go to **Compute → Email Service → Email Routing**.
 
@@ -295,7 +295,7 @@ Out-of-office and other automatic replies reach the publisher's inbox too. Bounc
 
 1. The SNS subscription shows **Confirmed**.
 
-1. Your From address receives mail. This lists Cloudflare's three `route` mail servers:
+1. Your From address receives mail. This lists Cloudflare's three `route` mail servers, or your own mail host's if you skipped section 9's forwarding:
 
     ```bash
     dig +short MX send.example.com
