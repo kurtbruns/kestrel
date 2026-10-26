@@ -435,7 +435,7 @@ function readProvider(v: string | undefined): ProviderName {
     // An instance made before Resend was removed: say what to do, not only what's allowed.
     throw new ConfigError(
       "PROVIDER",
-      'is "resend", which this release no longer supports. Set it to "ses": Connect Amazon SES in the setup guide walks through it, and its last section says how to switch an instance that already sends',
+      'is "resend", which this release no longer supports. Set it to "ses": Connect Amazon SES in the setup guide walks through it',
     );
   }
   if (!isProviderName(raw)) {

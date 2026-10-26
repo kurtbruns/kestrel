@@ -16,5 +16,5 @@ This is general information, not legal advice. The FTC's [CAN-SPAM compliance gu
 
 ## Who sets the From name and address
 
-The From name and address your emails come from are set when Kestrel is deployed, so **Settings → Email sender** shows them read-only. To change them, follow [Connect Amazon SES](../get-started/04-ses.md#8-set-the-provider-and-deploy).
+The From name and address your emails come from are set when Kestrel is deployed, so **Settings → Email sender** shows them read-only. To change them, follow [Deploy the app](../get-started/02-deploy.md#4-configure-production).
 

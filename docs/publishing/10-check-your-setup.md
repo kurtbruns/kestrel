@@ -10,7 +10,7 @@ Choose **Template** in the sidebar, then **Send test email**, and send a sample 
 
 - **The From name and address,** which readers see first. They're set when your instance is deployed.
 - **Where it lands:** the inbox, Promotions, or spam. If it lands in spam, check your sending domain's records, as [Sending-domain DNS](../reference/02-sending-domain-dns.md) describes.
-- **A reply.** Reply to the test, and check that it reaches your inbox. Kestrel never sees replies, so this depends on [forwarding your From address](../get-started/04-ses.md#3-receive-replies-at-your-from-address).
+- **A reply.** Reply to the test, and check that it reaches your inbox. Kestrel never sees replies, so this depends on [forwarding your From address](../get-started/04-ses.md#9-receive-replies-at-your-from-address).
 
 ## 2. Subscribe yourself
 

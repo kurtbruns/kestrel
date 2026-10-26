@@ -160,7 +160,7 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
     expect(links).toContainEqual([
       "../client/settings/deploy.ts",
       "ses",
-      "3-receive-replies-at-your-from-address",
+      "9-receive-replies-at-your-from-address",
     ]);
   });
 });

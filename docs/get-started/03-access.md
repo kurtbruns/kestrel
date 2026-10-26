@@ -53,8 +53,6 @@ Every Access application denies everyone until a policy allows them.
 
 Cloudflare's own login is on by default, and admits members of your Cloudflare account, so the email in your `Publishers` policy should be one. To let someone sign in another way, such as a one-time code by email, add it under **Zero Trust → Integrations → Identity providers**.
 
-The app accepts only two kinds of policy on this application. One is an Allow policy on people's emails, like this one. The other is a Service Auth policy on a service token, from [Automate with a service token](../guides/02-automate.md). A login through any other kind, such as a certificate, a device check, or an identity provider that gives no email, is refused with a `401`, and the editor says so.
-
 ## 4. Give the app its two values
 
 The app verifies each login against your team domain, and checks that it was issued for this application.
@@ -107,6 +105,10 @@ The app verifies each login against your team domain, and checks that it was iss
     {"status":"ok","service":"kestrel"}
     ```
 
-If the editor says the configuration needs a fix, store the secret it names. The app needs both values, so while only one is stored, `/health` answers `500` naming the other, and the public pages say the newsletter is temporarily unavailable. If Cloudflare lets you in but the editor answers `401`, check the two secrets for a typo, or `ACCESS_ALLOWED_EMAILS` may leave out your address. If the editor says Access let you in but didn't say who you are, your login carried no email: sign out, and sign in through the `Publishers` policy.
+If a check fails:
+
+- **The editor says the configuration needs a fix.** Store the secret it names. While only one of the two is stored, `/health` answers `500` naming the other, and the public pages say the newsletter is temporarily unavailable.
+- **Cloudflare lets you in, but the editor answers `401`.** Check the two secrets for a typo, and that `ACCESS_ALLOWED_EMAILS`, if you set it, includes your address.
+- **The editor says Access let you in but didn't say who you are.** Your login carried no email, which happens through a policy other than an Allow policy on emails. Sign out, and sign in through the `Publishers` policy.
 
 Next, [connect Amazon SES](04-ses.md).

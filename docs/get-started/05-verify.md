@@ -1,12 +1,12 @@
 # Verify it works
 
-Some things only show up with real email: whether inboxes trust your mail, how it looks in a real mail client, and whether bounces and unsubscribes come back to the app. Check them now, while the list is empty and every email goes only to you.
+This page checks your instance end to end with real email, while the list is empty and every email goes only to you. You confirm that inboxes trust your mail, that posts look right in a mail client, and that bounces, complaints, and unsubscribes reach the app.
 
 In this guide, you send yourself a test email, reply to it, and check that it passes authentication. Then you set up notifications, send a real post to yourself as a subscriber, and unsubscribe. Finally, you check that bounces and complaints reach the app, read the app's logs, check that SES can send to anyone, and clean up the test subscribers.
 
 ## Before you begin
 
-- Two email addresses you own, such as a personal address and a work address. Some steps use both. While your SES account is in the sandbox, verify both in SES first, as [Connect Amazon SES](04-ses.md#5-request-production-access) describes.
+- The two addresses you verified in SES in [Connect Amazon SES](04-ses.md#4-request-production-access). Some steps use both.
 - A Gmail address, or another mail client that shows a message's original source and an **Unsubscribe** button.
 
 ## 1. Send yourself a test email
@@ -17,9 +17,9 @@ A test email goes through the same code as a real send. If the test looks right,
 
 1. Select **Send test email**, enter your address, and send it.
 
-1. Open the email. It should arrive in your inbox, not in spam. The image loads and the subject reads as you wrote it. Its **View in browser** link opens "Nothing here yet" until the post goes out, and its unsubscribe link opens the page a subscriber sees, marked as a test and showing a sample address. Its button walks through to the confirmation, but a test email unsubscribes no one. Section 5 unsubscribes for real.
+1. Open the email. It arrives in your inbox, not in spam, the image loads, and the subject reads as you wrote it. Its links work, but a test email unsubscribes no one; section 5 unsubscribes for real.
 
-1. Reply to it, as a reader would. Reply from an address other than the inbox your From address forwards to, such as your second address. Gmail doesn't show you a message you sent when it comes back to you. Send that address a test email too if you need one. The reply arrives in the inbox you chose in [Connect Amazon SES](04-ses.md#3-receive-replies-at-your-from-address). The app can't see your forwarding, so this is the only proof that readers can reach the publisher. If the reply bounces, check the routing rule and the destination address there.
+1. Send a test email to your second address, and reply to it from there, as a reader would. The reply arrives in the publisher's inbox, the one you chose in [Connect Amazon SES](04-ses.md#9-receive-replies-at-your-from-address). If it bounces, check the routing rule and the destination address there.
 
 ## 2. Check that it passes authentication
 
@@ -33,13 +33,13 @@ Inboxes trust mail that passes DKIM and DMARC for the domain it's from. Passing 
     - `dmarc=pass` for `send.example.com`
     - `spf=pass`, for a hostname under `send.example.com`
 
-    With no custom MAIL FROM domain, SPF passes for `amazonses.com` instead. That's expected, and DMARC still passes.
+    If SPF passes for `amazonses.com` instead, SES couldn't read your custom MAIL FROM domain's MX record, and used its own. DMARC still passes, but check the records from [Connect Amazon SES](04-ses.md#2-set-a-custom-mail-from-domain).
 
 If a check fails, compare your DNS records with the ones in [Connect Amazon SES](04-ses.md#1-verify-your-sending-hostname). [Sending-domain DNS](../reference/02-sending-domain-dns.md#verify-alignment) explains each result.
 
 ## 3. Set up notifications
 
-Kestrel emails the notifications address when a send finishes, and right away when one runs into a problem. Notifications go through your email provider. To send them through Cloudflare instead, see [Notifications through Cloudflare's email](../guides/03-notifications.md).
+Kestrel emails the notifications address when a send finishes, and right away when one runs into a problem.
 
 1. In the editor, open **Settings → Notifications**.
 
@@ -57,15 +57,13 @@ This is a real send, to a list of one. It proves the whole path: subscribing, co
 
 1. Open the confirmation email, follow its link, and select **Confirm**. In the editor, **Subscribers** shows the address as **Confirmed**.
 
-1. Open the post, select **Schedule**, and then **Send now**. Every send waits at least five minutes before it goes out, so you can cancel a mistake.
+1. Open the post, select **Schedule**, and then **Send now**.
 
-1. Uncheck **Include in archive**. The post still goes to subscribers, but it's sent as email only: it isn't in the public archive or on the home page. That way the test proves the send without becoming the publication's first archived post, and the dashboard keeps its **Finish setting up** steps for the publisher.
+1. In the **Send now?** dialog, uncheck **Include in archive**, and select **Send now**. The post goes out as email only, so it doesn't become the publication's first archived post, and the dashboard keeps its **Finish setting up** steps for the publisher. Every send waits at least five minutes before it goes out, so you can cancel a mistake.
 
-1. Cancel the send, to see that canceling stops it. Then select **Schedule** and **Send now** again, check that **Include in archive** is still unchecked, and let it go.
+1. Cancel the send, to see that canceling stops it. Then send it again the same way, with **Include in archive** unchecked, and let it go.
 
 1. When the send finishes, the post arrives at your second address. A notification arrives at your first, with the subject `Sent:` and the post's title.
-
-If you verified this instance before Email only existed, the test post is in the archive. Open it under **Sent**, and select **Remove from archive…**.
 
 ## 5. Unsubscribe
 
@@ -88,7 +86,7 @@ When an address bounces or marks your mail as spam, SES tells the app through SN
 
 1. In the editor, **Subscribers** lists the bounce address as **Pending** with a **bounced** flag, and the complaint address as **Unsubscribed**. Open its row: its page says it left by a complaint. The app mails neither again.
 
-If the bounce address has no flag, or the complaint address is still pending, SES's events aren't reaching the app. Check the configuration set and the SNS subscription in [Connect Amazon SES](04-ses.md#6-send-bounces-and-complaints-to-sns).
+If the bounce address has no flag, or the complaint address is still pending, SES's events aren't reaching the app. Check the configuration set in [Send bounces and complaints to the app](04-ses.md#5-send-bounces-and-complaints-to-the-app), and the subscription in [Subscribe the app to the topic](04-ses.md#8-subscribe-the-app-to-the-topic).
 
 ## 7. Read the logs
 
@@ -100,21 +98,19 @@ The app writes a log line for each thing it does, and Cloudflare keeps them for 
 
 1. Filter on `event` equal to `send.completed`. Your send from section 4 is there.
 
-1. Filter on `event` equal to `send.scheduled`. Your two sends from section 4 are there, each with `act` equal to `send_now`, `principal` equal to `human`, and `client` equal to `editor`, and `send.canceled` shows the one you canceled. Each line that records an action, such as `send.canceled` or `import.committed`, says who took it the same way: `principal` is `human` for a person or `service` for a service token, and `client` names the program a person used. A service token's lines have no `client`, and neither does a person's through a program that doesn't name itself.
-
-1. Filter on `principal` equal to `service` to see what automation changed. On a new instance it finds nothing. Filter on `client` equal to `claude` or `claude-code` to see what Claude changed.
+1. Filter on `event` equal to `send.scheduled`. Your two sends from section 4 are there, and `send.canceled` shows the one you canceled. Each line that records an action says who took it: `principal` is `human` or `service`, and `client` names the program a person used, such as `editor` or `claude`.
 
 1. Filter on `level` equal to `error`. A healthy instance shows nothing.
 
-If you search a long time range, Cloudflare may show only a sample of the matching lines. To follow one send, narrow the range to a few hours and filter on its `sendId`. On the Free plan, Cloudflare stops keeping logs for the rest of the day once the day's allowance is used up, so a very large send can leave the rest of that day unlogged. [Cloudflare's pricing page](https://developers.cloudflare.com/observability/pricing/) has the current limits and how long each plan keeps logs.
+To follow one send, narrow the time range and filter on its `sendId`, since a long range may show only a sample. On the Free plan, Cloudflare stops keeping logs for the rest of the day once its daily allowance is used, as [its pricing page](https://developers.cloudflare.com/observability/pricing/) describes.
 
 ## 8. Check that SES can send to anyone
 
-[Connect Amazon SES](04-ses.md#5-request-production-access) asked AWS for production access. Until AWS grants it, the sandbox mails only your verified addresses, so check it before you go live.
+[Connect Amazon SES](04-ses.md#4-request-production-access) asked AWS for production access. Until AWS grants it, the sandbox mails only your verified addresses, so check it before you go live.
 
 1. In SES, open the **Account dashboard** in the region the app sends from. It no longer says your account is in the sandbox, and it shows your daily quota and maximum send rate.
 
-1. Check that `SES_MAX_SEND_RATE` in `wrangler.jsonc` matches that rate, and that you deployed after setting it, as [Connect Amazon SES](04-ses.md#8-set-the-provider-and-deploy) describes.
+1. Check that `SES_MAX_SEND_RATE` in `wrangler.jsonc` matches that rate, and that you deployed after setting it, as [Connect Amazon SES](04-ses.md#7-set-the-provider-and-deploy) describes.
 
 If the dashboard still says sandbox, AWS hasn't answered yet. Every other section works in the sandbox, so come back to this one when it does.
 

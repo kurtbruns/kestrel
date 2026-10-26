@@ -22,7 +22,7 @@ Kestrel uses two hostnames: one for the app, and one your email is sent from.
 
 These guides put the app on a subdomain, which leaves any website you already have on `example.com` untouched. If `example.com` has no website of its own, the app can live there instead. Use `example.com` wherever these guides say `newsletter.example.com`.
 
-It's recommended to send from a subdomain rather than from `example.com` itself. Your apex domain carries the reputation of your regular email, and a newsletter shouldn't put that at risk. Avoid `mail.` as the sending name too, since mail servers read it as an inbound host. [Sending-domain DNS](../reference/02-sending-domain-dns.md#choose-your-sending-name) explains both.
+It's recommended to send from a subdomain rather than from `example.com` itself. Your apex domain carries the reputation of your regular email, and a newsletter shouldn't put that at risk. These guides assume a sending subdomain throughout. Avoid `mail.` as the sending name too, since mail servers read it as an inbound host. [Sending-domain DNS](../reference/02-sending-domain-dns.md#choose-your-sending-name) explains both.
 
 Throughout these guides, replace the example names with your own, and any value written as `REPLACE_WITH_…`.
 
@@ -175,17 +175,15 @@ npx wrangler deploy --env production
 
 This deploys the release your instance runs, with your settings. The output ends with the hostname the app now answers on. Deploying also registers the once-a-minute schedule that sends posts, which you can see under the Worker's **Triggers** tab in the Cloudflare dashboard.
 
-Always name `--env production`, here and on every wrangler command that stores a secret. Without it, wrangler uses the top level, which is local development. A deploy then creates a second Worker named `kestrel`, which runs with an email stand-in that delivers nothing and a sign-in meant only for your machine. The top level turns off every address it could answer on and the schedule that sends posts, so no one can reach it and it never sends, but it does nothing useful. If you deployed without `--env production`, remove that Worker and deploy again with it:
+Always name `--env production`, here and on every wrangler command that stores a secret. Without it, wrangler deploys the top level, local development, as a second Worker named `kestrel` that answers nowhere and never sends. If that happens, remove it:
 
 ```bash
 npx wrangler delete --name kestrel
 ```
 
-Leave the top level's `"workers_dev": false`, `"preview_urls": false`, and `"triggers": { "crons": [] }` as they are, and never add a route there: they are what keep a deploy like that inert. Keep the empty `crons` rather than deleting the line, since only an empty list clears a schedule an earlier deploy left.
-
 ## Check it
 
-1. The app answers on your hostname. A new hostname can take a few minutes to get its certificate.
+1. The app answers on your hostname. If `curl` reports a certificate error, Cloudflare is still issuing the new hostname's certificate; try again shortly.
 
     ```bash
     curl https://newsletter.example.com/health

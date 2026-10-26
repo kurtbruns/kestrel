@@ -6,7 +6,7 @@ Every deploy-time setting: what it does, its default, and what the app refuses. 
 - **Secrets** are stored with `npx wrangler secret put NAME --env production`, and never committed. A secret takes effect as soon as you store it, with no redeploy.
 - **Bindings and triggers** connect the Worker to its database, its image bucket, and its schedule.
 
-In local development, `npm run dev` reads the top level of `wrangler.jsonc` and `.dev.vars`, which you copy from `.dev.vars.example`. Restart it after you change either.
+In local development, `npm run dev` reads the top level of `wrangler.jsonc` and `.dev.vars`, which you copy from `.dev.vars.example`. Restart it after you change either. The top level sets `workers_dev` and `preview_urls` to `false`, an empty `triggers.crons`, and no route, so a deploy that forgets `--env production` answers nowhere and never sends. Leave them as they are, and keep the empty `crons`, since only an empty list clears a schedule an earlier deploy left.
 
 None of these can be read or changed from inside the app, by the editor or by Claude. Settings in the editor shows the public ones, read-only.
 
@@ -46,7 +46,7 @@ Vars go in the environment block's `vars`. Every value is a string.
 
 - `PROVIDER` optional
 
-    The email provider: `ses`, or `fake` for local development. Default: none, so no provider is connected. Refused unless it's exactly `ses`, `fake`, or `none`: a misspelling, or `SES`, is never taken for another. `resend`, which earlier releases supported, is refused with a pointer to [Connect Amazon SES](../get-started/04-ses.md#switch-an-instance-that-already-sends).
+    The email provider: `ses`, or `fake` for local development. Default: none, so no provider is connected. Refused unless it's exactly `ses`, `fake`, or `none`: a misspelling, or `SES`, is never taken for another. `resend`, which earlier releases supported, is refused with a pointer to [Connect Amazon SES](../get-started/04-ses.md).
 
     Until it's set, or while it's empty, the app runs with no provider connected. Posts can be written and previewed, but everything that would send email is refused: scheduling, sending now, test emails, and the confirmation emails that signups need. The subscribe page says signups aren't open yet, and Settings shows **No email provider connected**. Setting it to `none` means the same. A new instance's `production` block declares it empty, so wrangler doesn't warn that the top level's value is missing there. [Connect Amazon SES](../get-started/04-ses.md) changes it to `ses`.
 
