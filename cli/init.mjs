@@ -70,7 +70,10 @@ function packageName(dir) {
 // The longest name init derives is `<name>-media-production`, and an R2 bucket's name, like a
 // Worker's on workers.dev, is at most 63 characters. Each resource takes lowercase letters,
 // digits, and hyphens, never a hyphen at either end: the rules R2 and workers.dev share, and
-// D1 accepts.
+// D1 accepts. Every name init makes ends in a suffix (`-dev`, `-production`), so no instance's
+// name can make another's: the development Worker's `NAME-dev` never equals a production
+// `OTHER-production`. `kestrel` alone is refused, being what instances made by earlier
+// releases are named.
 const NAME_MAX = 63 - "-media-production".length;
 const NAME_RULE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 
@@ -82,12 +85,20 @@ export function nameRefusal(name) {
   if (!NAME_RULE.test(name)) {
     return `"${name}" isn't a valid instance name: use lowercase letters, digits, and hyphens, starting and ending with a letter or digit`;
   }
+  if (name === "kestrel") {
+    return `"kestrel" names the instances made by earlier releases, so a new one takes a name of its own`;
+  }
   return null;
 }
 
-/** The instance name a folder's name makes, its other characters as hyphens, or `newsletter`. */
+/**
+ * The instance name a folder's name makes: accents dropped (`Café` is `cafe`), each run of
+ * other characters a hyphen, or `newsletter` when nothing is left.
+ */
 export function nameFromFolder(dir) {
   const name = basename(dir)
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+/, "")
@@ -138,7 +149,8 @@ export function initCommand(argv) {
   const name = args.name ?? nameFromFolder(root);
   const refusal = nameRefusal(name);
   if (refusal) {
-    console.error(`[init] refused: ${refusal}.`);
+    const hint = args.name === undefined ? " Name it with --name, or rename the folder." : "";
+    console.error(`[init] refused: ${refusal}.${hint}`);
     process.exit(1);
   }
   const files = [
@@ -169,7 +181,7 @@ export function initCommand(argv) {
   // nodejs_compat) and stops ending the typecheck with "Action required"; the scaffold's
   // tsconfig lists no `types`, so they never enter the program and the Worker's types win.
   const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-  pkg.name = packageName(root);
+  pkg.name = args.name ?? packageName(root);
   pkg.dependencies[PACKAGE.name] = PACKAGE.version;
   pkg.devDependencies["@types/node"] = PACKAGE.devDependencies["@types/node"];
   pkg.devDependencies.typescript = PACKAGE.devDependencies.typescript;

@@ -10,11 +10,11 @@ In local development, `npm run dev` reads the top level of `wrangler.jsonc` and 
 
 None of these can be read or changed from inside the app, by the editor or by Claude. Settings in the editor shows the public ones, read-only.
 
-This is the `production` block a new instance starts with, here for an instance named `newsletter`. [Deploy the app](../get-started/02-deploy.md) fills in its database and hostnames:
+This is the `production` block a new instance starts with, here for an instance in a folder named `newsletter.example.com`. [Deploy the app](../get-started/02-deploy.md) fills in its database and hostnames:
 
 ```jsonc
 "production": {
-  "name": "newsletter-production",
+  "name": "newsletter-example-com-production",
   "routes": [{ "pattern": "newsletter.example.com", "custom_domain": true }],
   "workers_dev": false,
   "preview_urls": false,
@@ -23,12 +23,12 @@ This is the `production` block a new instance starts with, here for an instance 
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "newsletter-production",
+      "database_name": "newsletter-example-com-production",
       "database_id": "REPLACE_WITH_PRODUCTION_D1_ID",
       "migrations_dir": "migrations"
     }
   ],
-  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "newsletter-media-production" }],
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "newsletter-example-com-media-production" }],
   "vars": {
     "PROVIDER": "",
     "APP_ORIGIN": "https://newsletter.example.com",
@@ -162,7 +162,9 @@ Wrangler doesn't carry bindings or vars over from the top level of `wrangler.jso
 
 - `name` required
 
-    The Worker's name. `kestrel init` names the Worker, the database, and the bucket after the instance: an instance named `newsletter` deploys as `newsletter-production`, with the database `newsletter-production` and the bucket `newsletter-media-production`. The name is made from the instance's folder name, or given with `init`'s `--name`. It takes lowercase letters, digits, and hyphens, starts and ends with a letter or digit, and is at most 46 characters, so every name it makes fits Cloudflare's rules. Each instance in a Cloudflare account needs a name of its own: a deploy under another instance's Worker name replaces that Worker. An instance made before Kestrel 1.18.0 keeps its names, `kestrel-production` and `kestrel-media-production`.
+    The Worker's name. `kestrel init` names the Worker, the database, and the bucket after the instance. The instance's name is made from its folder's name, so `newsletter.example.com` gives `newsletter-example-com`, or given with `init`'s `--name`. That instance deploys as `newsletter-example-com-production`, with the database of the same name and the bucket `newsletter-example-com-media-production`, and the top level's development Worker is `newsletter-example-com-dev`. A name takes lowercase letters, digits, and hyphens, starts and ends with a letter or digit, and is at most 46 characters, so every name made from it fits Cloudflare's rules. It can't be `kestrel`, which instances made by earlier releases use.
+
+    Each instance in a Cloudflare account needs a name of its own, since a deploy under another instance's Worker name replaces that Worker. An instance made by an earlier release keeps its names, `kestrel-production` and `kestrel-media-production`, and needs no change.
 
 - `routes` required
 

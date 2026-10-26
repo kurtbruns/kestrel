@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "kestrel",
+  "name": "kestrel-dev",
   // The Worker is Kestrel's: src/index.ts re-exports it from the release this repository pins.
   "main": "src/index.ts",
   // Matches the release's own config. An upgrade's changelog says when to change it.

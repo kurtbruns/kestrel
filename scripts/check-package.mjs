@@ -198,7 +198,7 @@ const resourceNames = (dir) =>
     ),
   ].map((m) => m[1]);
 const named = (name) => [
-  name,
+  `${name}-dev`,
   `${name}-dev`,
   `${name}-media-dev`,
   `${name}-production`,

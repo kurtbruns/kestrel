@@ -32,7 +32,8 @@ describe("nameFromFolder", () => {
   it("lowercases, and turns each run of other characters into one hyphen", () => {
     expect(nameFromFolder("/w/newsletter.example.com")).toBe("newsletter-example-com");
     expect(nameFromFolder("/w/My Wind_Break  News")).toBe("my-wind-break-news");
-    expect(nameFromFolder("/w/--Café--")).toBe("caf");
+    expect(nameFromFolder("/w/--Café--")).toBe("cafe");
+    expect(nameFromFolder("/w/Ｗｉｎｄ Brëak")).toBe("wind-break");
   });
 
   it("cuts a long name to the limit without leaving a hyphen at its end", () => {
@@ -57,6 +58,11 @@ describe("nameRefusal", () => {
     for (const name of ["", "Windbreak", "wind_break", "wind.break", "-wind", "wind-"]) {
       expect(nameRefusal(name)).toMatch(/lowercase letters, digits, and hyphens/);
     }
+  });
+
+  it("refuses kestrel, the name instances made by earlier releases have", () => {
+    expect(nameRefusal("kestrel")).toMatch(/earlier releases/);
+    expect(nameRefusal("kestrel-two")).toBeNull();
   });
 
   it("takes up to 46 characters, so the bucket's name fits R2's 63", () => {
@@ -88,13 +94,21 @@ describe("parseInitArgs", () => {
 describe("nameResources", () => {
   it("renames every resource in the scaffold, development's included", () => {
     expect(resourceNames(nameResources(TEMPLATE, "windbreak"))).toEqual([
-      "windbreak",
+      "windbreak-dev",
       "windbreak-dev",
       "windbreak-media-dev",
       "windbreak-production",
       "windbreak-production",
       "windbreak-media-production",
     ]);
+  });
+
+  it("never gives two instances a Worker of the same name, whatever names they take", () => {
+    const workers = (name) =>
+      resourceNames(nameResources(TEMPLATE, name)).filter((_, i) => i === 0 || i === 3);
+    const names = ["news", "news-dev", "news-production", "news-media", "news-production-dev"];
+    const all = names.flatMap(workers);
+    expect(new Set(all).size).toBe(all.length);
   });
 
   it("leaves the rest of the config as it was", () => {
@@ -130,6 +144,7 @@ describe("initCommand", () => {
     initCommand([dir, "--name", "windbreak"]);
     const config = readFileSync(join(dir, "wrangler.jsonc"), "utf8");
     expect(resourceNames(config)).toContain("windbreak-production");
+    expect(JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).name).toBe("windbreak");
   });
 
   it("refuses an invalid --name before writing anything", () => {

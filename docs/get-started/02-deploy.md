@@ -29,13 +29,13 @@ Throughout these guides, replace the example names with your own, and any value 
 
 Your instance's repository holds its configuration, its database migrations, and the release of Kestrel it runs. Kestrel itself installs from npm as `@kurtbruns/kestrel`, so the repository stays small, and an upgrade changes the version it names.
 
-1. On GitHub, [create a new repository](https://github.com/new) named `newsletter`. It can be private. Leave it empty, with no README, license, or `.gitignore`.
+1. On GitHub, [create a new repository](https://github.com/new) named after your app's hostname, such as `newsletter.example.com`. It can be private. Leave it empty, with no README, license, or `.gitignore`.
 
 1. Clone it, and write a new instance into it. Replace `YOUR_USERNAME` with your GitHub username:
 
     ```bash
-    git clone https://github.com/YOUR_USERNAME/newsletter.git
-    cd newsletter
+    git clone https://github.com/YOUR_USERNAME/newsletter.example.com.git
+    cd newsletter.example.com
     npx kestrel init
     ```
 
@@ -86,20 +86,20 @@ Every command from here on acts on your Cloudflare account through the Wrangler 
 
 Each command creates the resource and writes it into the `production` block of `wrangler.jsonc`, under the binding the app already uses. Name `--env production` on each one, or Wrangler writes to the top level, which is local development.
 
-`kestrel init` named the Worker, the database, and the bucket after your instance's folder, and printed the names. The `production` block holds them: the database's `database_name` and the bucket's `bucket_name`. The commands below are for a folder named `newsletter`. Use the names from your `wrangler.jsonc` if they differ.
+`kestrel init` named the Worker, the database, and the bucket after your instance's folder, and printed the names. For a folder named `newsletter.example.com`, the name is `newsletter-example-com`, which the commands below use. The `production` block of `wrangler.jsonc` holds yours: the database's `database_name` and the bucket's `bucket_name`. Use those if they differ.
 
 A second instance in the same Cloudflare account needs names of its own, or its deploy replaces the first instance's Worker. Give it a different folder name, or run `npx kestrel init --name NAME` with a name of its own.
 
 1. Create the database:
 
     ```bash
-    npx wrangler d1 create newsletter-production --env production --binding DB --update-config
+    npx wrangler d1 create newsletter-example-com-production --env production --binding DB --update-config
     ```
 
 1. Create the bucket for images:
 
     ```bash
-    npx wrangler r2 bucket create newsletter-media-production --env production --binding MEDIA --update-config
+    npx wrangler r2 bucket create newsletter-example-com-media-production --env production --binding MEDIA --update-config
     ```
 
 Each prints a snippet to add to your configuration. There's nothing to paste: `--update-config` has filled in the database's id, and the `MEDIA` binding already names the bucket. Wrangler also rewrites `wrangler.jsonc` in its own layout, with tabs and one value per line, and your settings stay.
@@ -121,7 +121,7 @@ Each prints a snippet to add to your configuration. There's nothing to paste: `-
       "d1_databases": [
         {
           "binding": "DB",
-          "database_name": "kestrel-production",
+          "database_name": "newsletter-example-com-production", // named by init; leave it
           "database_id": "…", // already filled in by section 3; leave it
           "migrations_dir": "migrations"
         }
@@ -178,10 +178,10 @@ npx wrangler deploy --env production
 
 This deploys the release your instance runs, with your settings. The output ends with the hostname the app now answers on. Deploying also registers the once-a-minute schedule that sends posts, which you can see under the Worker's **Triggers** tab in the Cloudflare dashboard.
 
-Always name `--env production`, here and on every wrangler command that stores a secret. Without it, wrangler deploys the top level, local development, as a second Worker named `kestrel` that answers nowhere and never sends. If that happens, remove it:
+Always name `--env production`, here and on every wrangler command that stores a secret. Without it, wrangler deploys the top level, local development, as a second Worker that answers nowhere and never sends. It takes the top level's `name` in `wrangler.jsonc`, such as `newsletter-example-com-dev`. If that happens, remove it by that name:
 
 ```bash
-npx wrangler delete --name kestrel
+npx wrangler delete --name newsletter-example-com-dev
 ```
 
 ## Check it
