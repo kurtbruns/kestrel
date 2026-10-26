@@ -111,6 +111,11 @@ async function whoami(): Promise<Response | null> {
   }
 }
 
+function isSession(data: unknown): data is Session {
+  const d = data as Partial<Session> | null;
+  return typeof d?.principal === "object" && d.principal !== null && typeof d.auth === "object";
+}
+
 /**
  * The boot probe: who is signed in, minting a dev token first in local development. Answers
  * the session, or null once it has put up the wall the probe landed on: the refused
@@ -131,10 +136,12 @@ export async function probeSession(): Promise<Session | null> {
       res = await whoami();
     }
   }
-  if (res?.ok) {
-    return (await res.json()) as Session;
-  }
+  // A 200 that isn't the app's JSON (a proxy's page, say) names no one, so it lands on the
+  // sign-in wall below rather than leaving the page blank.
   const data: unknown = res ? await res.json().catch(() => null) : null;
+  if (res?.ok && isSession(data)) {
+    return data;
+  }
   const refusal = configRefusal(data);
   const reason = unauthorizedReason(data);
   if (refusal) {

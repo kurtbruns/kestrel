@@ -799,7 +799,23 @@ describe("settings view", () => {
     const blank = response({
       settings: { publication: { ...settings().publication, name: "" } },
     });
-    await open([{ path: "/api/settings", reply: () => blank }]);
+    await open([
+      { path: "/api/settings", reply: () => blank },
+      {
+        method: "PUT",
+        path: "/api/settings",
+        reply: (req) => ({
+          settings: settings({
+            publication: {
+              ...settings().publication,
+              name: (req.json() as { publication: { name: string } }).publication.name,
+            },
+          }),
+          warnings: [],
+          remade: [],
+        }),
+      },
+    ]);
     const hint = () => $("#setName").nextElementSibling?.textContent;
     expect(hint()).toBe("Blank falls back to the email “From” name (“Birds”).");
     typeInto($<HTMLInputElement>("#setName"), "Birds");
@@ -812,6 +828,13 @@ describe("settings view", () => {
     expect(hint()).toBe("Blank falls back to the email “From” name (“Birds”).");
     typeInto($<HTMLInputElement>("#setName"), "Birds");
     $("#savebarDiscard").click();
+    expect(hint()).toBe("Blank falls back to the email “From” name (“Birds”).");
+    // Saved, the name is the publication's own, so there is nothing left to explain.
+    typeInto($<HTMLInputElement>("#setName"), "Birds");
+    $("#savebarSave").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($<HTMLInputElement>("#setName").value).toBe("Birds");
+    expect(bar().classList.contains("show")).toBe(false);
     expect(hint()).toBe("Blank falls back to the email “From” name (“Birds”).");
   });
 

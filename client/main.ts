@@ -8,12 +8,12 @@
 
 import type { SettingsResponse } from "../shared/settings";
 import { api } from "./api";
-import { probeSession, renderIdentity } from "./auth";
+import { probeSession, renderIdentity, showReauth } from "./auth";
 import { renderSidebarBrand } from "./brand";
 import { startDevReload } from "./dev_reload";
 import { installRoomBar } from "./room/shell";
 import { adoptLinkedRoute, installRouter, route } from "./router";
-import { installShell } from "./shell";
+import { app, installShell } from "./shell";
 import { appState } from "./state";
 import { installTooltips } from "./ui/widgets";
 
@@ -53,4 +53,13 @@ async function boot(): Promise<unknown> {
   // probeSession has already put up the wall it landed on.
   return undefined;
 }
-boot();
+boot().catch((err: unknown) => {
+  // The page starts signed out, so a boot that fails before the sidebar shows would leave it
+  // blank: put up the sign-in wall, whose reload starts over. Once the app has shown, a
+  // failure is the view's to report, and a wall already up stays as it is.
+  if (document.body.classList.contains("signed-out") && !app.querySelector(".auth-wall")) {
+    showReauth();
+  }
+  // Still reported as uncaught, so the console says what went wrong.
+  reportError(err);
+});
