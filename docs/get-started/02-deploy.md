@@ -60,7 +60,7 @@ Your instance's repository holds its configuration, its database migrations, and
 
     ```bash
     git add -A
-    git commit -m "Start a Kestrel instance"
+    git commit -m "Initialize Kestrel instance"
     git push -u origin HEAD
     ```
 
