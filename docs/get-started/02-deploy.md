@@ -29,9 +29,9 @@ Throughout these guides, replace the example names with your own, and any value 
 
 Your instance's repository holds its configuration, its database migrations, and the release of Kestrel it runs. Kestrel itself installs from npm as `@kurtbruns/kestrel`, so the repository stays small, and an upgrade changes the version it names.
 
-1. On GitHub, [create a new repository](https://github.com/new) named `newsletter`, or after your publication. It can be private. Leave it empty, with no README, license, or `.gitignore`.
+1. On GitHub, [create a new repository](https://github.com/new). It's recommended to name it after your publication, since `kestrel init` names the instance's Cloudflare resources after its folder. These guides use `newsletter`. It can be private. Leave it empty, with no README, license, or `.gitignore`.
 
-1. Clone it, and write a new instance into it. Replace `YOUR_USERNAME` with your GitHub username:
+1. Clone it, and write a new instance into it. Replace `YOUR_USERNAME` with your GitHub username, and `newsletter` with your repository's name:
 
     ```bash
     git clone https://github.com/YOUR_USERNAME/newsletter.git
@@ -86,7 +86,7 @@ Every command from here on acts on your Cloudflare account through the Wrangler 
 
 Each command creates the resource and writes it into the `production` block of `wrangler.jsonc`, under the binding the app already uses. Name `--env production` on each one, or Wrangler writes to the top level, which is local development.
 
-`kestrel init` named the Worker, the database, and the bucket after your instance's folder, and printed the names. A folder's name is made to fit Cloudflare's rules, so `newsletter.example.com` gives `newsletter-example-com`, and `npx kestrel init --name NAME` picks a name instead. The commands below are for an instance named `newsletter`. If yours differs, use the `database_name` and `bucket_name` in the `production` block of `wrangler.jsonc`.
+`kestrel init` named the Worker, the database, and the bucket after your instance's folder, and printed the names. A folder's name is made to fit Cloudflare's rules, so `newsletter.example.com` gives `newsletter-example-com`, and `npx kestrel init --name NAME` picks a name instead. The commands below use `newsletter`. If yours differs, use the `database_name` and `bucket_name` in the `production` block of `wrangler.jsonc`.
 
 A second instance in the same Cloudflare account needs names of its own, or its deploy replaces the first instance's Worker. Give it a different folder name, such as your publication's, or a different `--name`.
 
