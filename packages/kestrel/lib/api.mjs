@@ -182,8 +182,15 @@ export function parseApiArgs(argv) {
 /**
  * Which instance a call goes to: `--url`, then `KESTREL_URL`, then the one instance this
  * person is signed in to. Several sign-ins and nothing naming one is a refusal, not a guess.
+ * The one sign-in is named on stderr through `say`, since nothing in the command named it and
+ * a person in another instance's folder should see the mismatch; stdout stays the answer's.
  */
-export function chooseInstance({ url, env = process.env, signIns }) {
+export function chooseInstance({
+  url,
+  env = process.env,
+  signIns,
+  say = (line) => process.stderr.write(`${line}\n`),
+}) {
   if (url) {
     return instanceOrigin(url);
   }
@@ -192,6 +199,7 @@ export function chooseInstance({ url, env = process.env, signIns }) {
   }
   const origins = Object.keys(signIns);
   if (origins.length === 1) {
+    say(`Calling ${origins[0]}, your one sign-in. Use --url for another.`);
     return origins[0];
   }
   if (origins.length === 0) {
@@ -280,8 +288,23 @@ export async function accessToken(origin, { force = false, env = process.env } =
       writeSignInHeld(origin, { ...now, ...fields }, env);
       return fields.access_token;
     } catch (err) {
-      if (err instanceof SignInError && err.oauthError === "invalid_grant") {
+      if (!(err instanceof SignInError)) {
+        throw err;
+      }
+      if (err.oauthError === "invalid_grant") {
         throw new SignInError(ended);
+      }
+      // A 404 or no answer at all means the Access team the sign-in was made with no longer
+      // answers at that address, as when the team domain is renamed: signing in again
+      // discovers the team the instance uses now.
+      if (err.status === 404 || err.unreachable) {
+        const team = new URL(now.token_endpoint).host;
+        throw new SignInError(
+          `The sign-in for ${origin} was made with the Access team ${team}, which no longer answers there (${err.unreachable ? "it couldn't be reached" : "it answered 404"}): the team was renamed or removed. Run \`npx kestrel login ${origin}\` again.`,
+        );
+      }
+      if (err.status) {
+        throw new SignInError(`Access refused the token request for ${origin} (${err.detail}).`);
       }
       throw err;
     }
