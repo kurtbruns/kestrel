@@ -66,6 +66,7 @@ export async function landing(c: RequestContext): Promise<Response> {
     archiveUrl: archiveHomeUrl(c.config),
     featured,
     recent,
+    signupsOpen: c.config.provider !== "none",
     devDashboardUrl: devDashboardUrl(c.config),
   });
 }

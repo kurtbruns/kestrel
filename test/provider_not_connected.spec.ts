@@ -251,6 +251,11 @@ describe("the public subscribe page while signups aren't open (SPEC §7, §9)", 
     const page = await (await fetchWith({ PROVIDER: "fake" }, "/subscribe")).text();
     expect(page).toContain('action="/subscribe"');
   });
+  it("keeps the empty home page without a form, so it never offers what the subscribe page refuses (SPEC §5, §9)", async () => {
+    const page = await (await fetchWith(NOT_CONNECTED, "/")).text();
+    expect(page).toContain("No posts yet — subscribe to get the first one.");
+    expect(page).not.toContain("<form");
+  });
 });
 
 describe("a send scheduled before the provider was disconnected", () => {

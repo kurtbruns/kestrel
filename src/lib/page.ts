@@ -423,6 +423,18 @@ export function archiveLink(url: string, label: string): string {
   return `<a class="r-arch" href="${escapeHtmlAttr(url)}">${escapeHtml(label)} &rarr;</a>`;
 }
 
+/** The email field + submit + fine print, shared by the subscribe pages and the empty home
+ *  page. Posts same-origin to `/subscribe`; the double opt-in starts from there (I1), and
+ *  the fine print says so to whoever reads the page, AWS's reviewer included. */
+export function subscribeFormHtml(): string {
+  return (
+    `<form class="r-form" method="post" action="/subscribe">` +
+    `<input type="email" name="email" required placeholder="you@example.com" aria-label="Your email address">` +
+    `<button class="r-btn" type="submit">Subscribe</button></form>` +
+    `<p class="r-fine">We’ll email you a link to confirm. Unsubscribe anytime.</p>`
+  );
+}
+
 function postRow(i: ArchiveIndexPost): string {
   return (
     `<li class="r-item"><span class="r-d">${escapeHtml(i.dateLabel)}</span>` +
@@ -441,11 +453,25 @@ export function landingPage(opts: {
   featured?: ArchiveIndexPost;
   /** The next-most-recent posts, listed beneath the feature. */
   recent: ArchiveIndexPost[];
+  /** Whether a subscribe would be taken: false while no email provider is connected
+   *  (SPEC §9), when the subscribe page itself shows no form. */
+  signupsOpen: boolean;
   /** Dev-only editor shortcut (§11); set only on a dev-shaped instance. */
   devDashboardUrl?: string;
 }): Response {
   let main: string;
-  if (!opts.featured) {
+  // With nothing listed yet, the page is the subscribe form, so the first visitor (or the
+  // email provider's reviewer) sees what the newsletter is and how joining it works
+  // without a click; the masthead's call to action would then point at the form beside it.
+  const formHere = !opts.featured && opts.signupsOpen;
+  if (formHere) {
+    const name = opts.identity.name;
+    main =
+      `<p class="r-ey">Newsletter</p>` +
+      `<h1 class="r-h1">${escapeHtml(name ? `Subscribe to ${name}` : "Subscribe")}</h1>` +
+      `<p class="r-lead">No posts yet. Subscribe to get the first one in your inbox.</p>` +
+      subscribeFormHtml();
+  } else if (!opts.featured) {
     main = `<p class="r-empty">No posts yet — subscribe to get the first one.</p>`;
   } else {
     const f = opts.featured;
@@ -461,7 +487,7 @@ export function landingPage(opts: {
   }
   return readerPage({
     identity: opts.identity,
-    subscribeUrl: opts.subscribeUrl,
+    subscribeUrl: formHere ? undefined : opts.subscribeUrl,
     homeUrl: opts.homeUrl,
     // The front door is titled by the publication; with no name, by what it is.
     title: opts.identity.name || "Home",

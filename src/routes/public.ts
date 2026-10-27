@@ -15,6 +15,7 @@ import {
   type ReaderBanner,
   type ReaderIdentity,
   readerPage,
+  subscribeFormHtml,
 } from "../lib/page";
 import type { RequestContext } from "../router";
 import {
@@ -78,17 +79,6 @@ async function readToken(c: RequestContext): Promise<string> {
  *  choose (SPEC §9). */
 function toPublication(action: string, name: string): string {
   return name ? `${action} to ${name}` : action;
-}
-
-/** The email field + submit + fine print, shared by the form and the retry-on-error
- *  page. Posts same-origin to `/subscribe`; the double opt-in starts from there (I1). */
-function subscribeFormHtml(): string {
-  return (
-    `<form class="r-form" method="post" action="/subscribe">` +
-    `<input type="email" name="email" required placeholder="you@example.com" aria-label="Your email address">` +
-    `<button class="r-btn" type="submit">Subscribe</button></form>` +
-    `<p class="r-fine">We’ll email you a link to confirm. Unsubscribe anytime.</p>`
-  );
 }
 
 /** Wrap a subscribe-flow body in the branded reader shell (no masthead CTA — the

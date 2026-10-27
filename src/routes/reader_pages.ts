@@ -83,6 +83,7 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
         archiveUrl: archiveHomeUrl(c.config),
         featured,
         recent,
+        signupsOpen: c.config.provider !== "none",
       });
     }
     case "reading/archive":
@@ -100,6 +101,7 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
         homeUrl: home,
         archiveUrl: archiveHomeUrl(c.config),
         recent: [],
+        signupsOpen: c.config.provider !== "none",
       });
     case "reading/archive-empty":
       return archiveIndexPage({

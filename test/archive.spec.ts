@@ -269,13 +269,26 @@ describe("home page (the public front door, §5)", () => {
     expect(body).toContain("http://localhost:8787/dashboard/");
   });
 
-  it("shows an empty state when nothing has been sent", async () => {
+  it("is the subscribe form when nothing has been sent, saying how joining works (SPEC §5)", async () => {
+    await updateSettings(env.DB, { publication: { name: "Field Notes" } });
     await posts.createPost(env.DB, { subject: "Just A Draft", markdown: "wip" }, "test");
     const res = await SELF.fetch(`${base}/`);
     const body = await res.text();
     expect(res.status).toBe(200);
+    expect(body).toContain("Subscribe to Field Notes");
     expect(body).toContain("No posts yet");
+    expect(body).toContain('<form class="r-form" method="post" action="/subscribe">');
+    expect(body).toContain("We’ll email you a link to confirm. Unsubscribe anytime.");
+    // The form is the call to action, so the masthead doesn't repeat it.
+    expect(body).not.toContain("Subscribe here");
     expect(body).not.toContain("Just A Draft");
+  });
+
+  it("drops the form once a post is listed (SPEC §5)", async () => {
+    await publish("A Post", 1_000);
+    const body = await (await SELF.fetch(`${base}/`)).text();
+    expect(body).not.toContain("<form");
+    expect(body).toContain("Subscribe here");
   });
 });
 
@@ -413,6 +426,7 @@ describe("reader surface — no admin link once deployed (§11)", () => {
       homeUrl: "https://app.example/",
       archiveUrl: "https://app.example/archive",
       recent: [],
+      signupsOpen: true,
       devDashboardUrl: "https://app.example/dashboard/",
     }).text();
     const deployed = await landingPage({
@@ -421,6 +435,7 @@ describe("reader surface — no admin link once deployed (§11)", () => {
       homeUrl: "https://app.example/",
       archiveUrl: "https://app.example/archive",
       recent: [],
+      signupsOpen: true,
     }).text();
     expect(withLink).toContain("/dashboard/");
     expect(withLink).toContain('class="r-dev"');
