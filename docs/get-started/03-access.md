@@ -41,7 +41,7 @@ The editor lives under `/dashboard`, and the API under `/api`. One application c
 
 1. Name the application after your app's hostname, `newsletter.example.com`. Cloudflare suggests a name made from the subdomain, which won't tell two newsletters apart.
 
-1. **(Optional)** Choose how long a sign-in lasts. The application's session duration defaults to 24 hours, so everyone signs in again each day. You can set anything from immediately to one month, as Cloudflare's [session management](https://developers.cloudflare.com/cloudflare-one/access-controls/access-settings/session-management/) describes. A week suits a publisher on their own computer, and a shorter session is safer on a shared one.
+1. **(Optional)** Choose how long a sign-in lasts. The application's session duration defaults to 24 hours, so everyone signs in again each day. You can set anything from immediately to one month, as Cloudflare's [session management](https://developers.cloudflare.com/cloudflare-one/access-controls/access-settings/session-management/) describes. For example, a week may suit a publisher on their own computer.
 
 ## 3. Allow yourself in
 
@@ -52,8 +52,6 @@ Every Access application denies everyone until a policy allows them.
     - **Policy name:** the publication's name and `publishers`, such as `Example publishers`
     - **Action:** Allow
     - **Include:** the **Emails** selector, with your email address
-
-    Make a new policy for each publication, even if Cloudflare offers one you already have. A shared policy lets everyone it allows into every application that uses it. Someone you add for another app would get into this editor too.
 
 1. Select **Create**.
 
@@ -115,8 +113,6 @@ If a check fails:
 
 - **The editor says the configuration needs a fix.** Store the secret it names. While only one of the two is stored, `/health` answers `500` naming the other, and the public pages say the newsletter is temporarily unavailable.
 - **Cloudflare lets you in, but the editor answers `401`.** Check the two secrets for a typo, and that `ACCESS_ALLOWED_EMAILS`, if you set it, includes your address.
-- **The editor says Access let you in but didn't say who you are.** Your login carried no email, which happens through a kind of policy the app doesn't accept, such as a device check. Sign out, and sign in through the policy you made in section 3.
-
-[Troubleshooting](../publishing/06-troubleshooting.md#cloudflare-wont-save-the-access-application) covers an error when you save the application, and what can go wrong once the app is running.
+- **The editor says Access let you in but didn't say who you are.** Your login carried no email, which happens through a kind of policy the app doesn't accept, such as a device check. Sign out, and sign in through the policy you made above.
 
 Next, [connect Amazon SES](04-ses.md).
