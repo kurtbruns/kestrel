@@ -77,7 +77,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     renderError(body, message(e), () => mount(renderSettings));
     return;
   }
-  const provider = await readProviderStatus(data.deployment.provider, signal);
+  const provider = await readProviderStatus(data.deployment, signal);
   const s = data.settings;
   const p = s.publication;
   const ce = s.confirmation_email;

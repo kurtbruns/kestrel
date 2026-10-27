@@ -925,9 +925,9 @@ const SETTINGS_FIELDS: ReferenceField[] = [
   },
   {
     name: "deployment.simulation",
-    type: "{ profile, faults } | null",
+    type: "{ profile, faults, account } | null",
     description:
-      "In local development, the send simulation standing in for a provider: its `profile` and its `faults` (`realistic` or `none`). Always null once deployed.",
+      "In local development, the send simulation standing in for a provider: its `profile`, its `faults` (`realistic` or `none`), and the SES `account` it stands in for, from `SIMULATE_ACCOUNT`: its `state` (`sandbox`, `pending`, `denied`, `production`, or `permission`) and whether `bounces_routed`, or null when the account is left unread. Always null once deployed.",
   },
   {
     name: "deployment.free_plan_limits",

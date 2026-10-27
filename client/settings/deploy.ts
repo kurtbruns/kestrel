@@ -30,10 +30,14 @@ function providerValue(d: DeploymentView, status: ProviderStatusView | null): Ht
   if (d.provider === "none") {
     return html`${providerLabel(d.provider)}. ${connectProviderLink("set-link")} to start sending.`;
   }
+  const simulating = d.simulation
+    ? html`<span class="set-pill">Simulating ${SIMULATION_LABELS[d.simulation.profile]}${d.simulation.faults === "none" ? ", no failures" : ""}</span>`
+    : null;
   if (status) {
-    return providerStateHtml(status);
+    // A simulated account (SPEC §10) shows its state as SES would, with the simulation named beside it.
+    return providerStateHtml(status, simulating ? html` ${simulating}` : null);
   }
-  return html`${providerLabel(d.provider)}${d.simulation ? html`<span class="set-pill">Simulating ${SIMULATION_LABELS[d.simulation.profile]}${d.simulation.faults === "none" ? ", no failures" : ""}</span>` : null}`;
+  return html`${providerLabel(d.provider)}${simulating}`;
 }
 
 /** The provider a local send simulation models, as the Email provider row names it. */

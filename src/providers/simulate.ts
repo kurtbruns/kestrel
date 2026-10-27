@@ -43,7 +43,13 @@
  * beside what the app did about it.
  */
 
-import type { SimulationFaults, SimulationProfile, SimulationView } from "../../shared/settings";
+import type {
+  SimulatedAccountView,
+  SimulationFaults,
+  SimulationProfile,
+  SimulationView,
+} from "../../shared/settings";
+import type { AccountAnswer, ProviderAccountRow } from "../db/provider_account";
 import { type AcceptedAwaitingEvent, acceptedAwaitingEvent } from "../db/sends";
 import type { AppEnv, Config } from "../env";
 import { log } from "../lib/log";
@@ -569,4 +575,40 @@ export async function drainSimulatedWebhooks(env: AppEnv, config: Config): Promi
     due.map((d) => d.event),
   );
   return applied;
+}
+
+/** SES's sandbox limits, and a common starting production quota, for the simulated account. */
+const SANDBOX_ACCOUNT = { maxSendRate: 1, max24HourSend: 200 } as const;
+const PRODUCTION_ACCOUNT = { maxSendRate: 14, max24HourSend: 50_000 } as const;
+
+/**
+ * The account check's row as SES would leave it in the simulated state (`SIMULATE_ACCOUNT`,
+ * SPEC §10), read in place of the stored one. It changes what the editor shows of the
+ * account, not how a simulated send goes out: the `ses` profile keeps its own pace.
+ */
+export function simulatedAccountRow(
+  account: SimulatedAccountView,
+  now: number,
+): ProviderAccountRow {
+  if (account.state === "permission") {
+    return { attemptedAt: now, outcome: "permission", checkedAt: null, answer: null };
+  }
+  const production = account.state === "production";
+  const limits = production ? PRODUCTION_ACCOUNT : SANDBOX_ACCOUNT;
+  const answer: AccountAnswer = {
+    productionAccess: production,
+    review: production
+      ? "granted"
+      : account.state === "pending" || account.state === "denied"
+        ? account.state
+        : null,
+    reviewCase: account.state === "denied" ? "1234567890" : null,
+    maxSendRate: limits.maxSendRate,
+    max24HourSend: limits.max24HourSend,
+    sentLast24Hours: 0,
+    enforcement: "healthy",
+    sendingEnabled: true,
+    identityConfigurationSet: { name: account.bounces_routed ? "kestrel-mail" : null },
+  };
+  return { attemptedAt: now, outcome: "ok", checkedAt: now, answer };
 }

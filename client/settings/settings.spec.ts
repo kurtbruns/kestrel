@@ -186,7 +186,7 @@ describe("settings view", () => {
       ...local.deployment,
       provider: "fake",
       min_lead_ms: 60_000,
-      simulation: { profile: "ses", faults: "none" },
+      simulation: { profile: "ses", faults: "none", account: null },
     };
     await open([{ path: "/api/settings", reply: () => local }]);
     expect(row("Minimum lead")).toBe("1 minute");
@@ -1080,6 +1080,31 @@ describe("settings view", () => {
       );
       expect($<HTMLAnchorElement>("#providerUnread a").getAttribute("href")).toBe(
         "#/docs/ses/5-create-the-apps-aws-key",
+      );
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("reads a simulated account in local dev, and names the simulation beside its state (SPEC §10)", async () => {
+      const local = response();
+      local.deployment = {
+        ...local.deployment,
+        provider: "fake",
+        simulation: {
+          profile: "ses",
+          faults: "realistic",
+          account: { state: "production", bounces_routed: true },
+        },
+      };
+      await open([
+        { path: "/api/settings", reply: () => local },
+        {
+          path: "/api/provider",
+          reply: () =>
+            providerStatus({ provider: "fake", state: "production", unknown_reason: null }),
+        },
+      ]);
+      expect($("#providerValue").textContent?.trim()).toBe(
+        "Amazon SES Production Simulating Amazon SES",
       );
       expect(fake.unhandled).toEqual([]);
     });

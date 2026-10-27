@@ -137,6 +137,78 @@ describe("GET /api/provider (SPEC §9)", () => {
   });
 });
 
+// SPEC §10: local dev can stand in for the SES account, so the editor can be seen in each state.
+describe("SIMULATE_ACCOUNT", () => {
+  const simulated = (value: string, over: Record<string, string> = {}) =>
+    getConfig(withVars({ SIMULATE_SENDS: "ses", SIMULATE_ACCOUNT: value, ...over })).simulation
+      ?.account;
+  const read = async (value: string): Promise<ProviderStatusView> =>
+    (await fetchWith({ SIMULATE_SENDS: "ses", SIMULATE_ACCOUNT: value }, "/api/provider", {
+      headers: AUTH,
+    }).then((r) => r.json())) as ProviderStatusView;
+
+  it("is off when unset or off, and names a state, and whether bounces reach the app, otherwise", () => {
+    expect(simulated("off")).toBeNull();
+    expect(simulated("")).toBeNull();
+    expect(simulated("Sandbox")).toEqual({ state: "sandbox", bounces_routed: true });
+    expect(simulated("denied:unrouted")).toEqual({ state: "denied", bounces_routed: false });
+  });
+
+  it("refuses a value it doesn't know, and an account with no simulated SES beside it", () => {
+    for (const value of ["sandboxed", "sandbox:routed", "sandbox:unrouted:x", ":unrouted"]) {
+      expect(() => simulated(value)).toThrow(
+        expect.objectContaining({ name: "ConfigError", variable: "SIMULATE_ACCOUNT" }),
+      );
+    }
+    for (const sends of ["generic", "off", "not-connected"]) {
+      expect(() => simulated("sandbox", { SIMULATE_SENDS: sends })).toThrow(
+        expect.objectContaining({ name: "ConfigError", variable: "SIMULATE_ACCOUNT" }),
+      );
+    }
+  });
+
+  it("is never on outside local dev, whatever it says", async () => {
+    const deployed = { ...SES_DEPLOY, SIMULATE_SENDS: "ses", SIMULATE_ACCOUNT: "production" };
+    expect(getConfig(withVars(deployed)).simulation).toBeNull();
+    expect(await status(deployed)).toMatchObject({
+      state: "unknown",
+      unknown_reason: "not_checked",
+    });
+    expect(
+      getConfig(withVars({ ...SES_DEPLOY, SIMULATE_ACCOUNT: "nonsense" })).simulation,
+    ).toBeNull();
+  });
+
+  it("reads each state as SES would report it", async () => {
+    expect(await read("sandbox")).toMatchObject({
+      provider: "fake",
+      state: "sandbox",
+      review: null,
+      send_rate: { value: 1, source: "account" },
+      account: { max_24_hour_send: 200 },
+      warnings: [],
+    });
+    expect(await read("pending")).toMatchObject({ state: "sandbox", review: "pending" });
+    expect(await read("denied")).toMatchObject({
+      state: "sandbox",
+      review: "denied",
+      review_case: "1234567890",
+    });
+    expect(await read("production")).toMatchObject({
+      state: "production",
+      send_rate: { value: 14, source: "account" },
+      account: { max_24_hour_send: 50_000 },
+    });
+    expect(await read("permission")).toMatchObject({
+      state: "unknown",
+      unknown_reason: "permission",
+    });
+    expect((await read("sandbox:unrouted")).warnings.map((w) => w.code)).toEqual([
+      "bounces_not_routed",
+    ]);
+  });
+});
+
 describe("the account check", () => {
   it("reads a sandbox account and its pending review from SES while nothing is sending", async () => {
     const asked = answerReads((url) =>

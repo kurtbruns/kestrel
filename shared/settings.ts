@@ -73,10 +73,28 @@ export type SimulationProfile = (typeof SIMULATION_PROFILES)[number];
 export const SIMULATION_FAULTS = ["realistic", "none"] as const;
 export type SimulationFaults = (typeof SIMULATION_FAULTS)[number];
 
+/** The SES account states a local server can stand in for, from `SIMULATE_ACCOUNT`. */
+export const SIMULATED_ACCOUNTS = [
+  "sandbox",
+  "pending",
+  "denied",
+  "production",
+  "permission",
+] as const;
+export type SimulatedAccount = (typeof SIMULATED_ACCOUNTS)[number];
+
+/** The SES account a local server stands in for: its state, and whether bounces reach the app. */
+export interface SimulatedAccountView {
+  state: SimulatedAccount;
+  bounces_routed: boolean;
+}
+
 /** The local send simulation a dev server runs, from `SIMULATE_SENDS`; only ever set in local dev. */
 export interface SimulationView {
   profile: SimulationProfile;
   faults: SimulationFaults;
+  /** The SES account it stands in for, from `SIMULATE_ACCOUNT`; null leaves the account unread. */
+  account: SimulatedAccountView | null;
 }
 
 /**

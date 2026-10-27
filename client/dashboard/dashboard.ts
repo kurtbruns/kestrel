@@ -23,6 +23,7 @@ import {
   PRODUCTION_ACCESS_HREF,
   productionAccessHint,
   readProviderStatus,
+  readsSesAccount,
   sandboxHealthHtml,
   warningHtml,
 } from "../provider_status";
@@ -262,7 +263,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       api<PostListResponse>("/api/posts?limit=200", { signal }),
       api<SendListResponse>("/api/sends?limit=200", { signal }),
       api<SubscriberListResponse>("/api/subscribers", { signal }),
-      readProviderStatus(appState.appConfig?.deployment.provider, signal),
+      readProviderStatus(appState.appConfig?.deployment, signal),
     ]);
     provider = prov;
     posts = p.posts;
@@ -649,7 +650,7 @@ function setupStepsHtml(
 ): Html {
   const subscribeUrl = `${deployment?.app_origin || location.origin}/subscribe`;
   const notConnected = providerNotConnected();
-  const ses = !notConnected && deployment?.provider === "ses";
+  const ses = !notConnected && readsSesAccount(deployment);
   const { onList } = progress;
   const done = (yes: boolean) => (yes ? " setup-done" : "");
   return html`<div class="card setup${layout === "card" ? " setup-card" : ""}">

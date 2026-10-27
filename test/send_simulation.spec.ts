@@ -125,12 +125,20 @@ describe("SIMULATE_SENDS", () => {
       expect(simulation(off)).toBeNull();
     }
     for (const generic of ["1", "on", "true", "yes", "generic"]) {
-      expect(simulation(generic)).toEqual({ profile: "generic", faults: "realistic" });
+      expect(simulation(generic)).toEqual({
+        profile: "generic",
+        faults: "realistic",
+        account: null,
+      });
     }
-    expect(simulation("SES")).toEqual({ profile: "ses", faults: "realistic" });
-    expect(simulation("ses:none")).toEqual({ profile: "ses", faults: "none" });
-    expect(simulation("1:none")).toEqual({ profile: "generic", faults: "none" });
-    expect(simulation("ses:realistic")).toEqual({ profile: "ses", faults: "realistic" });
+    expect(simulation("SES")).toEqual({ profile: "ses", faults: "realistic", account: null });
+    expect(simulation("ses:none")).toEqual({ profile: "ses", faults: "none", account: null });
+    expect(simulation("1:none")).toEqual({ profile: "generic", faults: "none", account: null });
+    expect(simulation("ses:realistic")).toEqual({
+      profile: "ses",
+      faults: "realistic",
+      account: null,
+    });
   });
 
   it("refuses a value it doesn't know rather than reading it as off", () => {
@@ -162,7 +170,7 @@ describe("SIMULATE_SENDS", () => {
     const on = await readJson(
       await fetchWith({ SIMULATE_SENDS: "ses:none" }, "/api/settings", { headers: AUTH }),
     );
-    expect(on.deployment.simulation).toEqual({ profile: "ses", faults: "none" });
+    expect(on.deployment.simulation).toEqual({ profile: "ses", faults: "none", account: null });
     const off = await readJson(await fetchWith({}, "/api/settings", { headers: AUTH }));
     expect(off.deployment.simulation).toBeNull();
   });
@@ -192,7 +200,7 @@ describe("the SES profile, with the real adapter's traits", () => {
       withVars(sesVars),
     );
     const sim = new SimProvider(
-      { profile: "ses", faults: "realistic" },
+      { profile: "ses", faults: "realistic", account: null },
       getConfig(withVars({ SES_MAX_SEND_RATE: "3" })),
     );
     expect(sim.maxBatch).toBe(ses.maxBatch);
@@ -210,18 +218,21 @@ describe("the SES profile, with the real adapter's traits", () => {
     vi.spyOn(sesAdapter, "classifySesError").mockReturnValue(null);
     const config = getConfig(env);
     expect(
-      () => new SimProvider({ profile: "generic", faults: "realistic" }, config),
+      () => new SimProvider({ profile: "generic", faults: "realistic", account: null }, config),
     ).not.toThrow();
-    expect(() => new SimProvider({ profile: "ses", faults: "realistic" }, config)).toThrow(
-      "expected a halting error response to exist",
-    );
+    expect(
+      () => new SimProvider({ profile: "ses", faults: "realistic", account: null }, config),
+    ).toThrow("expected a halting error response to exist");
   });
 });
 
 describe("list sends only", () => {
   it("hands tests, confirmations, and notifications to the outbox at once, never refused", async () => {
     // The generic profile refuses about one recipient in 25 once; none of these may be.
-    const sim = new SimProvider({ profile: "generic", faults: "realistic" }, getConfig(env));
+    const sim = new SimProvider(
+      { profile: "generic", faults: "realistic", account: null },
+      getConfig(env),
+    );
     for (const purpose of ["test", "confirmation", "notification"] as const) {
       const batch = recipients(100, purpose);
       const started = Date.now();
@@ -269,7 +280,10 @@ describe("list sends only", () => {
   });
 
   it("records a simulated list batch in the outbox with each recipient's own link, once per key", async () => {
-    const sim = new SimProvider({ profile: "generic", faults: "none" }, getConfig(env));
+    const sim = new SimProvider(
+      { profile: "generic", faults: "none", account: null },
+      getConfig(env),
+    );
     const email = { ...rendered, html: `<p>hi</p><a href="${UNSUB_SENTINEL}">Unsubscribe</a>` };
     const batch = recipients(3);
     const opts = { purpose: "list" as const, tag: "s-1", batchKey: "s-1-k" };
@@ -450,7 +464,7 @@ describe("drainSimulatedWebhooks (delayed synthetic receipts through the real in
 }, () => {
   const simConfig = (): Config => ({
     ...getConfig(env),
-    simulation: { profile: "generic", faults: "realistic" },
+    simulation: { profile: "generic", faults: "realistic", account: null },
   });
 
   it("fabricates due delivered/bounced/complained events and suppresses only the hard-bad addresses (SPEC §10)", async () => {
@@ -567,7 +581,10 @@ describe("drainSimulatedWebhooks (delayed synthetic receipts through the real in
 
 describe("the generic profile", () => {
   it("paces a batch, accepting the bulk and refusing a few once, retryably", async () => {
-    const provider = new SimProvider({ profile: "generic", faults: "realistic" }, getConfig(env));
+    const provider = new SimProvider(
+      { profile: "generic", faults: "realistic", account: null },
+      getConfig(env),
+    );
     expect(provider.maxBatch).toBe(8);
 
     const started = Date.now();

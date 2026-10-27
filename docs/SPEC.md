@@ -457,6 +457,8 @@ The same seam lets **local development model a real provider**. A simulation sta
 
 Local development can also run **not connected** (§9), the state every new deployment passes through before a provider is connected, so the developer can see how the app behaves in it without deploying. It is that state, not an imitation of it; only the local stand-in for sign-in (§11) differs, and stays on. The setting is honored only in local development, so it can never take a deployment's provider away.
 
+Local development can likewise **stand in for the provider's account** (§9): beside a simulated Amazon SES, the developer picks the state the account would report (the sandbox, a request for production access under review or denied, production, or a key not allowed to read the account), and whether its bounces reach the app, so the editor can be seen in each without an AWS account. It changes what the app shows of the account, not how a simulated send goes out, and like the other settings it is honored only in local development.
+
 ---
 
 ## 11. Domains and deployment

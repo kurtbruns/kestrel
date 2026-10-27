@@ -41,3 +41,13 @@ MIN_LEAD_SECONDS="60"
 # For one run, set it in the shell instead: SIMULATE_SENDS=ses npm run dev
 # Only honored in a dev-shaped env (fake transport, no Access, APP_ORIGIN on localhost).
 SIMULATE_SENDS="ses"
+
+# --- SES account simulation (local only) ---
+# Stands in for the SES account the app reads, so Settings and the dashboard show a state a
+# real account would: sandbox, pending (AWS reviewing a request for production access),
+# denied, production, or permission (the AWS key isn't allowed to read the account). Add
+# ":unrouted" (e.g. "sandbox:unrouted") for bounces that reach no configuration set, which
+# shows the bounces warning. It changes what the editor shows, not how a simulated send goes
+# out. Needs SIMULATE_SENDS=ses; "off" leaves the account unread.
+# For one run, set it in the shell instead: SIMULATE_ACCOUNT=sandbox npm run dev
+SIMULATE_ACCOUNT="off"

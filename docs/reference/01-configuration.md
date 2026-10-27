@@ -196,7 +196,7 @@ Wrangler doesn't carry bindings or vars over from the top level of `wrangler.jso
 
 ## What the app refuses
 
-The app checks its configuration on every request. It refuses to run on one that would do the wrong thing quietly, and each setting above says what it refuses. In local development, `SIMULATE_SENDS` must also be off (`off`, `0`, `false`, `no`, or empty), `not-connected` to run as a deployment with no email provider yet, or the provider a local send models: `ses` or `generic` (also `1`, `on`, `true`, or `yes`), optionally followed by `:none` for no injected failures or `:realistic`, the default. Case doesn't matter. A deployed instance ignores it.
+The app checks its configuration on every request. It refuses to run on one that would do the wrong thing quietly, and each setting above says what it refuses. In local development, `SIMULATE_SENDS` must also be off (`off`, `0`, `false`, `no`, or empty), `not-connected` to run as a deployment with no email provider yet, or the provider a local send models: `ses` or `generic` (also `1`, `on`, `true`, or `yes`), optionally followed by `:none` for no injected failures or `:realistic`, the default. `SIMULATE_ACCOUNT` must be off, or, beside `SIMULATE_SENDS=ses`, the SES account state local development stands in for: `sandbox`, `pending`, `denied`, `production`, or `permission`, optionally followed by `:unrouted`. Case doesn't matter. A deployed instance ignores both.
 
 Until it's fixed, no sends go out, and each place says what its reader can act on:
 

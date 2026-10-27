@@ -27,6 +27,7 @@ import type { AppEnv, Config } from "../env";
 import { DEFAULT_SES_MAX_SEND_RATE } from "../env";
 import { log } from "../lib/log";
 import { checkSesAccount, MAX_ACCOUNT_REQUESTS } from "../providers/ses_account";
+import { simulatedAccountRow } from "../providers/simulate";
 import type { Budget } from "../send/budget";
 
 /** How old an answer may get before an idle tick asks again: a grant of production access
@@ -164,8 +165,9 @@ function warnings(config: Config, set: ConfigurationSetView | null): ProviderWar
 /** GET /api/provider, from the deploy config and the account check's row. */
 export function providerStatusView(
   config: Config,
-  row: ProviderAccountRow | null,
+  read: ProviderAccountRow | null,
 ): ProviderStatusView {
+  let row = read;
   const none: ProviderStatusView = {
     provider: config.provider,
     state: "not_connected",
@@ -182,7 +184,13 @@ export function providerStatusView(
     return none;
   }
   if (config.provider !== "ses") {
-    return { ...none, state: "unknown", unknown_reason: "stand_in" };
+    // Local dev may stand in for the SES account (`SIMULATE_ACCOUNT`, SPEC §10), so the
+    // editor can be seen in each state; `simulation` is only ever set in a dev-shaped env.
+    const simulated = config.simulation?.account;
+    if (!simulated) {
+      return { ...none, state: "unknown", unknown_reason: "stand_in" };
+    }
+    row = simulatedAccountRow(simulated, Date.now());
   }
   const answer = row?.answer ?? null;
   const set = configurationSet(config, answer);
