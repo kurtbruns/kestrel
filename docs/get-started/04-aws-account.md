@@ -43,7 +43,7 @@ The root user can do anything in the account, including close it, so it needs mo
 
 1. Under **Multi-factor authentication (MFA)**, choose **Assign MFA device**. Enter a device name, select **Passkey or Security Key**, and follow the prompts. A passkey on your computer or phone works.
 
-1. Leave **Access keys** empty. A root user's key could do anything the root user can. [Connect Amazon SES](05-ses.md#5-create-the-apps-aws-key) makes a separate key that can only send email.
+1. Leave **Access keys** empty. A root user's key could do anything the root user can. [Connect Amazon SES](05-ses.md#5-create-the-apps-aws-key) makes a separate key that can only send email and read the account's sending status.
 
 ## 4. Set a budget alert
 

@@ -128,6 +128,8 @@ SES reports bounces and complaints through Amazon Simple Notification Service (S
 
 The app sends through an AWS Identity and Access Management (IAM) user whose key can only send email and read the account's sending status. That limits the harm if the key ever leaks. Reading the status lets the app show whether SES is still in the sandbox, take its send rate from the account, and warn when bounces and complaints can't reach it.
 
+If `kestrel-sender` already exists, as on an instance set up before Kestrel read the account, don't create a second user or key. In the IAM console, open **Policies**, then `kestrel-send-email`, and choose **Edit**. In the JSON editor, add `"ses:GetAccount"` and `"ses:GetEmailIdentity"` to its `Action` list, as in the policy below, and save. The app's next check, within an hour, reads the account.
+
 1. In the [IAM console](https://console.aws.amazon.com/iam/), go to **Users**, and choose **Create user**. Name it `kestrel-sender`, and leave console access off.
 
 1. When asked for permissions, choose **Attach policies directly**, then **Create policy**. The policy editor opens in a new browser tab.
