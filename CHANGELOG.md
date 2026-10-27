@@ -17,7 +17,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
-- When renewing a sign-in fails because its Access team domain no longer answers (renamed or removed), `kestrel api` says so, naming the instance and the team, and to run `npx kestrel login` again, instead of "Access refused the token request (404)". A real refusal still reads "Access refused the token request", now naming the instance.
+- When renewing a sign-in fails because its Access team domain no longer answers (renamed or removed), `kestrel api` says so, naming the instance and the team, and to run `npx kestrel login` again, instead of "Access refused the token request (404)". When the team can't be reached at all, it names the team and the cause, since you may be offline. A real refusal still reads "Access refused the token request", now naming the instance.
 
 ## [1.18.0] - 2026-10-26
 

@@ -224,8 +224,9 @@ async function tokenRequest(endpoint, form, timeoutMs = TOKEN_TIMEOUT_MS) {
         `${new URL(endpoint).origin} didn't answer the token request within ${timeoutMs / 1000} seconds. Try again.`,
       );
     }
-    const error = new SignInError(`Couldn't reach ${new URL(endpoint).origin}: ${errText(err)}`);
-    error.unreachable = true;
+    const reason = errText(err);
+    const error = new SignInError(`Couldn't reach ${new URL(endpoint).origin}: ${reason}`);
+    error.unreachable = reason;
     throw error;
   }
   if (!res.ok) {

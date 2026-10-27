@@ -294,13 +294,19 @@ export async function accessToken(origin, { force = false, env = process.env } =
       if (err.oauthError === "invalid_grant") {
         throw new SignInError(ended);
       }
-      // A 404 or no answer at all means the Access team the sign-in was made with no longer
-      // answers at that address, as when the team domain is renamed: signing in again
-      // discovers the team the instance uses now.
-      if (err.status === 404 || err.unreachable) {
-        const team = new URL(now.token_endpoint).host;
+      // A 404 is an Access team that answered and no longer has this sign-in's endpoint, as
+      // when the team domain is renamed: signing in again discovers the team the instance
+      // uses now. No answer at all may be that too, or this computer being offline, so it
+      // keeps the cause and claims neither.
+      const team = new URL(now.token_endpoint).host;
+      if (err.status === 404) {
         throw new SignInError(
-          `The sign-in for ${origin} was made with the Access team ${team}, which no longer answers there (${err.unreachable ? "it couldn't be reached" : "it answered 404"}): the team was renamed or removed. Run \`npx kestrel login ${origin}\` again.`,
+          `The sign-in for ${origin} was made with the Access team ${team}, which no longer answers there (it answered 404): the team was renamed or removed. Run \`npx kestrel login ${origin}\` again.`,
+        );
+      }
+      if (err.unreachable) {
+        throw new SignInError(
+          `Couldn't reach ${team}, the Access team the sign-in for ${origin} was made with: ${err.unreachable}. If you're online, the team may have been renamed or removed: run \`npx kestrel login ${origin}\` again.`,
         );
       }
       if (err.status) {

@@ -267,13 +267,13 @@ describe("a call as the signed-in person", () => {
     );
   });
 
-  it("says the same when the Access team's host can't be reached", async () => {
+  it("names the Access team and the cause when its host can't be reached, without claiming the team is gone", async () => {
     await writeSignIn(ORIGIN, stored(-1));
     stubFetch(() => {
-      throw new TypeError("fetch failed");
+      throw new TypeError("fetch failed", { cause: new Error("getaddrinfo ENOTFOUND") });
     });
     await expect(accessToken(ORIGIN)).rejects.toThrow(
-      `The sign-in for ${ORIGIN} was made with the Access team team.cloudflareaccess.com, which no longer answers there (it couldn't be reached): the team was renamed or removed. Run \`npx kestrel login ${ORIGIN}\` again.`,
+      `Couldn't reach team.cloudflareaccess.com, the Access team the sign-in for ${ORIGIN} was made with: fetch failed (getaddrinfo ENOTFOUND). If you're online, the team may have been renamed or removed: run \`npx kestrel login ${ORIGIN}\` again.`,
     );
   });
 
