@@ -292,6 +292,4 @@ Out-of-office and other automatic replies reach the publisher's inbox too. Bounc
 
 The test emails in the next step prove the rest, including a reply, and then it asks AWS for production access. In the sandbox, they go only to the addresses you verified in section 3, and to the SES test addresses that page lists. SES charges for each email it sends, test emails included, as [Amazon SES pricing](https://aws.amazon.com/ses/pricing/) lists.
 
-If the app refuses to send once it's running, [Troubleshooting](../publishing/06-troubleshooting.md) says what each refusal means and where it's fixed.
-
 Next, [verify it works](05-verify.md).

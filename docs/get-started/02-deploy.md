@@ -192,13 +192,7 @@ npx wrangler delete --name kestrel
     {"status":"ok","service":"kestrel"}
     ```
 
-    If `curl` reports a certificate error, Cloudflare is still issuing the new hostname's certificate; try again shortly. If it says it could not resolve the host, your computer may remember that the name didn't exist, from a lookup before you deployed. Ask Cloudflare's resolver instead, which prints Cloudflare's addresses once the name exists:
-
-    ```bash
-    dig +short newsletter.example.com @1.1.1.1
-    ```
-
-    If it prints addresses, the name exists, and your computer catches up on its own once its remembered answer expires. Flushing its DNS cache, or trying another network, gets there sooner.
+    If `curl` reports a certificate error, or says it could not resolve the host, Cloudflare is still setting up the new hostname. Try again in a few minutes.
 
 1. The editor is locked. Until you set up Access in the next step, the app can't tell who is asking, so it lets no one in:
 
@@ -217,7 +211,5 @@ npx wrangler delete --name kestrel
 If the public pages instead say the newsletter is temporarily unavailable, and `/health` answers `500` with a body like `{"error":"invalid_config","variable":"APP_ORIGIN",…}`, the setting it names is missing, malformed, or still on `example.com`. Fix it in `wrangler.jsonc`, commit, and deploy again.
 
 If the public pages say the same, but `/health` answers `500` with `{"error":"schema_behind","missing":[…],…}`, the database hasn't run the migrations it lists, most often because step 5 was skipped or its prompt answered no. Run step 5's command, which the body's `message` repeats; the app answers as soon as it finishes, with no new deploy.
-
-[Troubleshooting](../publishing/06-troubleshooting.md) covers what can go wrong later, once the app is running.
 
 Next, [lock the dashboard with Access](03-access.md).
