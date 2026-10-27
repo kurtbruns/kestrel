@@ -2,7 +2,9 @@
 
 This page checks your instance end to end with real email, while the list is empty and every email goes only to you. You confirm that inboxes trust your mail, that posts look right in a mail client, and that bounces, complaints, and unsubscribes reach the app.
 
-In this guide, you send yourself a test email, reply to it, and check that it passes authentication. You set up notifications, send a real post to yourself as a subscriber, and unsubscribe. Finally, you check that bounces and complaints reach the app, read the app's logs, check that SES can send to anyone, and clean up the test subscribers.
+You can do all of this while SES is still in the sandbox, since every email goes to the addresses you verified in [Connect Amazon SES](05-ses.md#3-verify-your-test-addresses) or to SES's test addresses.
+
+In this guide, you send yourself a test email, reply to it, and check that it passes authentication. You set up notifications, send a real post to yourself as a subscriber, and unsubscribe. Finally, you check that bounces and complaints reach the app, read the app's logs, and clean up the test subscribers.
 
 ## Before you begin
 
@@ -104,15 +106,7 @@ The app writes a log line for each thing it does, and Cloudflare keeps them for 
 
 To follow one send, narrow the time range and filter on its `sendId`, since a long range may show only a sample. On the Free plan, Cloudflare stops keeping logs for the rest of the day once its daily allowance is used, as [its pricing page](https://developers.cloudflare.com/observability/pricing/) describes.
 
-## 8. Check that SES can send to anyone
-
-[Request production access](06-production-access.md) asked AWS for it. Until AWS grants it, the sandbox mails only your verified addresses, so check it before you go live.
-
-1. In the editor, open **Settings → Email sender**. The email provider reads **Production**, and **Send rate** shows your account's maximum send rate and daily quota, "from your SES account".
-
-1. If it still reads **Sandbox**, AWS hasn't granted access yet. Come back to this section when it does, and check the email AWS Support sends for questions. If it reads only "Amazon SES", the app can't read the account: check that the `kestrel-send-email` policy allows `ses:GetAccount`, as [Connect Amazon SES](05-ses.md#5-create-the-apps-aws-key) shows, and look again in ten minutes. The SES **Account dashboard** shows the same facts.
-
-## 9. Clean up the test subscribers
+## 8. Clean up the test subscribers
 
 The checks leave test addresses on the list. Erase them, so the publisher starts with only real readers.
 

@@ -1,10 +1,8 @@
 # Request production access
 
-A new Amazon SES account starts in a sandbox: it sends only to addresses you've verified, up to 200 emails a day and one a second. Production access lifts those limits, once AWS reviews the account. This page asks AWS for it.
+Once Amazon SES is connected, request production access to start sending email to subscribers. You may want to start this process sooner rather than later, since AWS reviews each request, and its first answer can take up to 96 hours.
 
-Ask now, before you verify the instance. AWS answers by email, and everything in [Verify it works](07-verify.md) runs in the sandbox, so you can continue there while you wait. Until AWS grants access, a signup on the publication's website gets its confirmation email only if its address is verified in SES.
-
-In this guide, you name the publication, so AWS's reviewer finds a website that says what the newsletter is. Then you submit the request, and answer any questions AWS asks.
+In this guide, you name the publication, submit the request, and answer any questions AWS asks. Then, once AWS answers, you check that it granted access.
 
 ## Before you begin
 
@@ -47,6 +45,20 @@ AWS Support may ask how you collect addresses and handle bounces before it decid
 - Bounces and complaints reach the app, and it stops mailing those addresses automatically. [Verify it works](07-verify.md#6-check-that-bounces-and-complaints-come-back) shows it working.
 - How many subscribers the newsletter expects, and how often it sends.
 
-Once AWS grants access, **Settings → Email sender** shows a **Production** pill. Verify it works checks it in its last steps, before you go live.
+## 4. Check that AWS granted it
 
-Next, [verify it works](07-verify.md) while AWS reviews the request.
+Until AWS grants production access, SES sends only to your verified addresses, so check it before you go live.
+
+1. In the editor, open **Settings → Email sender**. The email provider reads **Production**, and **Send rate** shows your account's maximum send rate and daily quota, "from your SES account". Claude, or a script signed in with `npx kestrel login`, reads the same from the API:
+
+    ```bash
+    npx kestrel api GET /api/provider
+    ```
+
+    Its `state` is `production`.
+
+1. If it reads **Sandbox**, or `state` is `sandbox`, AWS hasn't granted access yet. Come back to this section when it does, and check the email AWS Support sends for questions.
+
+1. If it reads only "Amazon SES", the app can't read the account, and `unknown_reason` says why. `permission` means the AWS key can't read it: check that the `kestrel-send-email` policy allows `ses:GetAccount`, as [Connect Amazon SES](05-ses.md#5-create-the-apps-aws-key) shows. `not_checked` means the app hasn't asked yet, so look again in ten minutes. The SES **Account dashboard** shows the same facts.
+
+Next, [verify it works](07-verify.md).

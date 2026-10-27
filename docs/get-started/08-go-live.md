@@ -1,6 +1,6 @@
 # Go live
 
-At this point, your instance should be deployed, verified, and out of the SES sandbox, so it can send to anyone. From here, the publisher can set up the publication, and you can continue with the guides below.
+At this point, your instance should be deployed and verified. Before anyone subscribes, check that AWS granted production access, as [Check that AWS granted it](06-production-access.md#4-check-that-aws-granted-it) describes, so SES can send to anyone. From here, the publisher can set up the publication, and you can continue with the guides below.
 
 ## Start publishing
 
