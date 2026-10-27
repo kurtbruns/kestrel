@@ -6,7 +6,7 @@ In this guide, you name the publication, submit the request, and answer any ques
 
 ## Before you begin
 
-- SES connected in the sandbox, from [Connect Amazon SES](05-ses.md). **Settings → Email sender** shows a **Sandbox** pill.
+- Amazon SES connected, from [Connect Amazon SES](05-ses.md).
 - The publication's name and tagline, from the publisher.
 
 ## 1. Name the publication

@@ -8,7 +8,7 @@ In this guide, you turn on Cloudflare's email for your app's hostname, and verif
 
 You need:
 
-- The notifications address saved, from [Verify it works](../get-started/07-verify.md#3-set-up-notifications).
+- The notifications address saved, from [Verify it works](../get-started/07-verify.md#3-check-that-notifications-arrive).
 - Your domain's DNS on Cloudflare, as for the rest of the app.
 
 ## 1. Turn on Email Routing for your app's hostname

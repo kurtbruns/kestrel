@@ -4,7 +4,7 @@ This page checks your instance end to end with real email, while the list is emp
 
 You can do all of this while SES is still in the sandbox, since every email goes to the addresses you verified in [Connect Amazon SES](05-ses.md#3-verify-your-test-addresses) or to SES's test addresses.
 
-In this guide, you send yourself a test email, reply to it, and check that it passes authentication. You set up notifications, send a real post to yourself as a subscriber, and unsubscribe. Finally, you check that bounces and complaints reach the app, read the app's logs, and clean up the test subscribers.
+In this guide, you send yourself a test email, reply to it, and check that it passes authentication. You check that notifications arrive, send a real post to yourself as a subscriber, and unsubscribe. Finally, you check that bounces and complaints reach the app, read the app's logs, and clean up the test subscribers.
 
 ## Before you begin
 
@@ -39,17 +39,15 @@ Inboxes trust mail that passes DKIM and DMARC for the domain it's from. Passing 
 
 If a check fails, compare your DNS records with the ones in [Connect Amazon SES](05-ses.md#1-verify-your-sending-hostname). [Sending-domain DNS](../reference/02-sending-domain-dns.md#verify-alignment) explains each result.
 
-## 3. Set up notifications
+## 3. Check that notifications arrive
 
-Kestrel emails the notifications address when a send finishes, and right away when one runs into a problem.
+Kestrel emails a notifications address when a send finishes, and right away when one runs into a problem. Check that they reach you, using one of the addresses you verified in SES.
 
-1. In the editor, open **Settings → Notifications**.
-
-1. Enter your address, and select **Save**.
+1. In the editor, open **Settings → Notifications**, enter that address, and select **Save**.
 
 1. Select **Send a test notification**. It arrives at that address.
 
-Use your own address to test. If you're not the publisher, they set theirs in [Check your setup](../publishing/10-check-your-setup.md).
+The publisher sets their own address in [Check your setup](../publishing/10-check-your-setup.md).
 
 ## 4. Send a real post to yourself
 
