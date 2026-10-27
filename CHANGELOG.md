@@ -22,6 +22,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Changed
 
 - Until a post is listed, the home page is the subscribe form itself, with its line saying each signup is confirmed by email. A first visitor, or AWS reviewing the site for SES production access, sees how joining works without a click.
+- Before any post is listed and while no email provider is connected, the home page reads "No posts yet. Subscribe to get the first one.", as two sentences without a dash.
 - Name your publication now suggests a tagline that says what the newsletter covers and how often it goes out.
 - A send keeps to your SES account's own maximum send rate once the app has read it, or to `SES_MAX_SEND_RATE` where that is lower, so a raise from AWS needs no deploy (SPEC §12). The setup guide no longer sets the rate to 1 in the sandbox and changes it after the grant, and its IAM policy adds `ses:GetAccount` and `ses:GetEmailIdentity`.
 - The setup guide asks AWS for SES production access on a page of its own, Request production access, after Connect Amazon SES, so AWS's reviewer finds a live site with SES connected and bounces handled. It ends by checking the grant, in Settings or from `GET /api/provider`, and Go live opens by pointing there. Verify it works now runs wholly in the sandbox, while AWS reviews the request.

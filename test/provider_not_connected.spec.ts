@@ -253,7 +253,7 @@ describe("the public subscribe page while signups aren't open (SPEC §7, §9)", 
   });
   it("keeps the empty home page without a form, so it never offers what the subscribe page refuses (SPEC §5, §9)", async () => {
     const page = await (await fetchWith(NOT_CONNECTED, "/")).text();
-    expect(page).toContain("No posts yet — subscribe to get the first one.");
+    expect(page).toContain("No posts yet. Subscribe to get the first one.");
     expect(page).not.toContain("<form");
   });
 });

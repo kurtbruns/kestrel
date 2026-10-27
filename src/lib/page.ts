@@ -472,7 +472,7 @@ export function landingPage(opts: {
       `<p class="r-lead">No posts yet. Subscribe to get the first one in your inbox.</p>` +
       subscribeFormHtml();
   } else if (!opts.featured) {
-    main = `<p class="r-empty">No posts yet — subscribe to get the first one.</p>`;
+    main = `<p class="r-empty">No posts yet. Subscribe to get the first one.</p>`;
   } else {
     const f = opts.featured;
     const feature =
