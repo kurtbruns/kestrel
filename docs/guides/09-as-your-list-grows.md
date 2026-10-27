@@ -1,6 +1,6 @@
 # As your list grows
 
-A new instance runs on Cloudflare's free Workers plan with your starting Amazon SES limits. Workers Free suits a list of up to about 1,000 subscribers. Past about 5,000, one send can use up the day's database writes and stop the newsletter until midnight UTC. Two limits matter as the list grows: how fast SES lets you send, and how many database writes the free plan allows a day.
+A new instance runs on Cloudflare's free Workers plan with your starting Amazon SES limits. Workers Free suits a list of up to about 1,000 subscribers. Past about 5,000, one send can use up the day's database writes and stop the newsletter until midnight UTC. As the list grows, two limits start to matter: how fast a send goes out, and how many database writes the free plan allows a day.
 
 In this guide, you raise your SES limits, which helps on either plan, and upgrade to Workers Paid, which a larger list needs. Then you see how long a send takes after each.
 
@@ -14,9 +14,12 @@ SES caps how many emails your account sends a day, and how many a second. A send
 
 ## 2. Upgrade to Workers Paid
 
-On the free plan, [D1](https://developers.cloudflare.com/d1/platform/pricing/) allows 100,000 written rows a day, reset at midnight UTC. A send writes about 14 rows a recipient, receipts included, and an import about 7 for each new subscriber. So at 1,000 subscribers, an import of the whole list and two sends on one day use about a third of the day. Once the day's rows are spent, the whole app stops until midnight UTC, the SES webhook with it, so that day's bounces and complaints are lost, and suppress or unsubscribe no one.
+Cloudflare's $5 Workers Paid plan helps in two ways, at any size of list.
 
-It's recommended to upgrade from about 1,000 subscribers. Past that, the Dashboard and the Subscribers screen say so, and so does an import that would take the list past it. Past about 5,000, a send that could use up the day on its own also warns before it's scheduled. The app doesn't count the day's writes, so between the two, two large sends or several imports and a send on one UTC day can still use it up without a warning at that moment.
+- **Faster sends.** On the free plan, Cloudflare caps how much one minute's work can do, so a send uses your SES rate for only a few seconds of each minute: about 56 emails a minute at a rate of 14. On Workers Paid, a send uses about 50 seconds of each minute, about 700 emails a minute at the same rate. If sends feel slow, upgrading speeds them up more than raising your SES rate does. [How long a send takes](#how-long-a-send-takes) compares them.
+- **No daily limit on database writes.** On the free plan, [D1](https://developers.cloudflare.com/d1/platform/pricing/) allows 100,000 written rows a day, reset at midnight UTC. A send writes about 14 rows a recipient, receipts included, and an import about 7 for each new subscriber. So at 1,000 subscribers, an import of the whole list and two sends on one day use about a third of the day. Once the day's rows are spent, the whole app stops until midnight UTC, the SES webhook with it, so that day's bounces and complaints are lost, and suppress or unsubscribe no one.
+
+    It's recommended to upgrade from about 1,000 subscribers. Past that, the Dashboard and the Subscribers screen say so, and so does an import that would take the list past it. Past about 5,000, a send that could use up the day on its own also warns before it's scheduled. The app doesn't count the day's writes, so between the two, two large sends or several imports and a send on one UTC day can still use it up without a warning at that moment.
 
 1. Upgrade your Cloudflare account to the $5 [Workers Paid plan](https://developers.cloudflare.com/workers/platform/pricing/), which has no daily limit on writes.
 

@@ -1,6 +1,6 @@
 # Request production access
 
-Once Amazon SES is connected, request production access to start sending email to subscribers. You may want to start this process sooner rather than later, since AWS reviews each request, and its first answer can take up to 96 hours.
+Once Amazon SES is connected, request production access to start sending email to subscribers. AWS reviews each request by hand, and its first answer can take up to 96 hours. Its reviewer looks for what's now in place: a website that says what the newsletter is, a subscribe form that confirms each signup by email, and bounces and complaints that reach the app.
 
 In this guide, you name the publication, submit the request, and answer any questions AWS asks. Then, once AWS answers, you check that it granted access.
 
@@ -38,11 +38,12 @@ AWS reviews each request by hand, for the region the app sends from.
 
 ## 3. Answer AWS's questions
 
-AWS Support may ask how you collect addresses and handle bounces before it decides. If it asks for more detail, or denies the request, reply in the support case, or open a new request from the **Account dashboard**. Say how Kestrel handles the list:
+AWS Support may ask how you collect addresses and handle bounces before it decides. A newsletter may be asked for more detail, or denied the first time, sometimes without a reason. A reply that explains how the list is built usually gets further than a new request. If it asks for more detail, or denies the request, reply in the support case, or open a new request from the **Account dashboard**. Say how Kestrel handles the list:
 
 - Signups use double opt-in: each subscriber confirms by email before joining the list.
 - Every post offers one-click unsubscribe.
 - Bounces and complaints reach the app, and it stops mailing those addresses automatically. [Verify it works](07-verify.md#6-check-that-bounces-and-complaints-come-back) shows it working.
+- That the publication's website shows what the newsletter is, and how readers subscribe.
 - How many subscribers the newsletter expects, and how often it sends.
 
 ## 4. Check that AWS granted it
