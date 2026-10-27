@@ -29,7 +29,7 @@ Throughout these guides, replace the example names with your own, and any value 
 
 Your instance's repository holds its configuration, its database migrations, and the release of Kestrel it runs. Kestrel itself installs from npm as `@kurtbruns/kestrel`, so the repository stays small, and an upgrade changes the version it names.
 
-1. On GitHub, [create a new repository](https://github.com/new). It's recommended to name it after your publication, since `kestrel init` names the instance's Cloudflare resources after its folder. These guides use `newsletter`. It can be private. Leave it empty, with no README, license, or `.gitignore`.
+1. On GitHub, [create a new repository](https://github.com/new) named after your publication. These guides use `newsletter`. It can be private. Leave it empty, with no README, license, or `.gitignore`.
 
 1. Clone it, and write a new instance into it. Replace `YOUR_USERNAME` with your GitHub username, and `newsletter` with your repository's name:
 
