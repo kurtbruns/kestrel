@@ -4,20 +4,20 @@ These pages cover deploying and running your own Kestrel, from an empty reposito
 
 ## Get started
 
-These are the steps to deploy a Kestrel instance and get it ready to send. Each one ends with a check, so you know it worked before you move on. Create your AWS account early, with the first of the [Guides](#guides). Connect Amazon SES needs it, and signing up needs an email address that already receives mail.
+These are the steps to deploy a Kestrel instance and get it ready to send. Each one ends with a check, so you know it worked before you move on.
 
 1. [Deploy the app](get-started/02-deploy.md)
 1. [Lock the dashboard with Access](get-started/03-access.md)
-1. [Connect Amazon SES](get-started/04-ses.md)
-1. [Request production access](get-started/05-production-access.md)
-1. [Verify it works](get-started/06-verify.md)
-1. [Go live](get-started/07-go-live.md)
+1. [Create an AWS account](get-started/04-aws-account.md)
+1. [Connect Amazon SES](get-started/05-ses.md)
+1. [Request production access](get-started/06-production-access.md)
+1. [Verify it works](get-started/07-verify.md)
+1. [Go live](get-started/08-go-live.md)
 
 ## Guides
 
 Each one stands on its own. Pick the ones you need.
 
-- [Create an AWS account for your newsletter](guides/04-aws-account.md)
 - [Allow Claude to connect](guides/01-allow-claude.md)
 - [Automate with a service token](guides/02-automate.md)
 - [Notifications through Cloudflare's email](guides/03-notifications.md)

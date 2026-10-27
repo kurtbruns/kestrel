@@ -2,13 +2,13 @@
 
 A new Amazon SES account starts in a sandbox: it sends only to addresses you've verified, up to 200 emails a day and one a second. Production access lifts those limits, once AWS reviews the account. This page asks AWS for it.
 
-Ask now, before you verify the instance. AWS answers by email, and everything in [Verify it works](06-verify.md) runs in the sandbox, so you can continue there while you wait. Until AWS grants access, a signup on the publication's website gets its confirmation email only if its address is verified in SES.
+Ask now, before you verify the instance. AWS answers by email, and everything in [Verify it works](07-verify.md) runs in the sandbox, so you can continue there while you wait. Until AWS grants access, a signup on the publication's website gets its confirmation email only if its address is verified in SES.
 
 In this guide, you name the publication, so AWS's reviewer finds a website that says what the newsletter is. Then you submit the request, and answer any questions AWS asks.
 
 ## Before you begin
 
-- SES connected in the sandbox, from [Connect Amazon SES](04-ses.md). **Settings → Email sender** shows a **Sandbox** pill.
+- SES connected in the sandbox, from [Connect Amazon SES](05-ses.md). **Settings → Email sender** shows a **Sandbox** pill.
 - The publication's name and tagline, from the publisher.
 
 ## 1. Name the publication
@@ -44,9 +44,9 @@ AWS Support may ask how you collect addresses and handle bounces before it decid
 
 - Signups use double opt-in: each subscriber confirms by email before joining the list.
 - Every post offers one-click unsubscribe.
-- Bounces and complaints reach the app, and it stops mailing those addresses automatically. [Verify it works](06-verify.md#6-check-that-bounces-and-complaints-come-back) shows it working.
+- Bounces and complaints reach the app, and it stops mailing those addresses automatically. [Verify it works](07-verify.md#6-check-that-bounces-and-complaints-come-back) shows it working.
 - How many subscribers the newsletter expects, and how often it sends.
 
 Once AWS grants access, **Settings → Email sender** shows a **Production** pill. Verify it works checks it in its last steps, before you go live.
 
-Next, [verify it works](06-verify.md) while AWS reviews the request.
+Next, [verify it works](07-verify.md) while AWS reviews the request.

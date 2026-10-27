@@ -46,9 +46,9 @@ Vars go in the environment block's `vars`. Every value is a string.
 
 - `PROVIDER` optional
 
-    The email provider: `ses`, or `fake` for local development. Default: none, so no provider is connected. Refused unless it's exactly `ses`, `fake`, or `none`: a misspelling, or `SES`, is never taken for another. `resend`, which earlier releases supported, is refused with a pointer to [Connect Amazon SES](../get-started/04-ses.md).
+    The email provider: `ses`, or `fake` for local development. Default: none, so no provider is connected. Refused unless it's exactly `ses`, `fake`, or `none`: a misspelling, or `SES`, is never taken for another. `resend`, which earlier releases supported, is refused with a pointer to [Connect Amazon SES](../get-started/05-ses.md).
 
-    Until it's set, or while it's empty, the app runs with no provider connected. Posts can be written and previewed, but everything that would send email is refused: scheduling, sending now, test emails, and the confirmation emails that signups need. The subscribe page says signups aren't open yet, and Settings shows **No email provider connected**. Setting it to `none` means the same. A new instance's `production` block declares it empty, so wrangler doesn't warn that the top level's value is missing there. [Connect Amazon SES](../get-started/04-ses.md) changes it to `ses`.
+    Until it's set, or while it's empty, the app runs with no provider connected. Posts can be written and previewed, but everything that would send email is refused: scheduling, sending now, test emails, and the confirmation emails that signups need. The subscribe page says signups aren't open yet, and Settings shows **No email provider connected**. Setting it to `none` means the same. A new instance's `production` block declares it empty, so wrangler doesn't warn that the top level's value is missing there. [Connect Amazon SES](../get-started/05-ses.md) changes it to `ses`.
 
     Change it, or move to another SES account or region, only while no send is sending. The dashboard lists any send in progress.
 
@@ -180,7 +180,7 @@ Wrangler doesn't carry bindings or vars over from the top level of `wrangler.jso
 
 - `observability` optional
 
-    Workers Logs, where the app's log lines land. On in the template. Kestrel sets no sampling, since sampling could drop the one minute that reports a stuck or missed send, so leave `head_sampling_rate` at its default of 1. Cloudflare's own daily limit on the Free plan can still stop new logs for the rest of the day, as [Read the logs](../get-started/06-verify.md#7-read-the-logs) describes.
+    Workers Logs, where the app's log lines land. On in the template. Kestrel sets no sampling, since sampling could drop the one minute that reports a stuck or missed send, so leave `head_sampling_rate` at its default of 1. Cloudflare's own daily limit on the Free plan can still stop new logs for the rest of the day, as [Read the logs](../get-started/07-verify.md#7-read-the-logs) describes.
 
 - `DB` required
 

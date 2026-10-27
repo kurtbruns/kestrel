@@ -16,7 +16,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 - On Amazon SES, the app reads the account itself, about every ten minutes while nothing is sending (SPEC §9). Settings → Email sender shows whether SES is still in the sandbox, where AWS's review of a production-access request stands, and the send rate and where it comes from; the dashboard's setup steps add Request production access, checked off once AWS grants it; and a warning says when no configuration set applies, so bounces and complaints would never reach the app. `GET /api/provider` carries all of it for Claude, and an AWS key that can't read the account reads as unknown, never as an error.
 - The operator's Claude context and the connector's instructions read whether SES is in the sandbox from the app, instead of asking the publisher, before helping share the subscribe link.
-- A setup guide, Create an AWS account for your newsletter, covers the sign-up path, plan, and support choices, securing the root user, a budget alert, and one account per publication. The docs landing says to start it early, and Deploy the app no longer lists the AWS account.
+- Get started has a new step, Create an AWS account, before Connect Amazon SES. It covers the sign-up path, plan, and support choices, securing the root user, a budget alert, and one account per publication. Deploy the app's Before you begin says to start it early.
 
 ### Changed
 

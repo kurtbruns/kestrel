@@ -1,12 +1,12 @@
 # Connect Amazon SES
 
-This page connects the app to Amazon Simple Email Service (Amazon SES), which delivers the newsletter's email. A new SES account starts in a sandbox, where it can send only to addresses you've verified, until AWS reviews it. See [Request production access](05-production-access.md) to take it out of the sandbox.
+This page connects the app to Amazon Simple Email Service (Amazon SES), which delivers the newsletter's email. A new SES account starts in a sandbox, where it can send only to addresses you've verified, until AWS reviews it. See [Request production access](06-production-access.md) to take it out of the sandbox.
 
 In this guide, you set up how the app sends mail through SES and receives bounces and complaints, and how readers' replies reach the publisher.
 
 ## Before you begin
 
-- An AWS account. [Create an AWS account for your newsletter](../guides/04-aws-account.md) covers signing up, if you haven't yet.
+- An AWS account for the newsletter, from [Create an AWS account](04-aws-account.md).
 - The publisher's inbox, for readers' replies.
 
 ## 1. Verify your sending hostname
@@ -69,7 +69,7 @@ DMARC tells inboxes what to do with mail that fails its checks, and sends you re
 
 ## 3. Verify your test addresses
 
-A new SES account starts in the sandbox: it sends only to addresses you've verified, up to 200 emails a day and one a second. The test emails in [Verify it works](06-verify.md) go to two addresses of your own, so verify those now. [Request production access](05-production-access.md) lifts the limit, once AWS grants it.
+A new SES account starts in the sandbox: it sends only to addresses you've verified, up to 200 emails a day and one a second. The test emails in [Verify it works](07-verify.md) go to two addresses of your own, so verify those now. [Request production access](06-production-access.md) lifts the limit, once AWS grants it.
 
 1. Choose two addresses you own, such as a personal address and a work address. Verify it works uses both.
 
@@ -302,4 +302,4 @@ Out-of-office and other automatic replies reach the publisher's inbox too. Bounc
 
 SES is now connected in the sandbox. Until AWS grants production access, it sends only to the addresses you verified in section 3, and to the SES test addresses Verify it works uses. SES charges for each email it sends, test emails included, as [Amazon SES pricing](https://aws.amazon.com/ses/pricing/) lists.
 
-Next, [request production access](05-production-access.md).
+Next, [request production access](06-production-access.md).

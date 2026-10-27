@@ -9,6 +9,7 @@ In this guide, you choose your hostnames, create your instance's repository, cre
 - A [Cloudflare account](https://dash.cloudflare.com/sign-up), with your domain's DNS on Cloudflare. Your app's hostname and its login both live there.
 - [Node.js](https://nodejs.org/) 22 or later, and [Git](https://git-scm.com/).
 - A GitHub account, or another Git host, for your instance's repository.
+- An AWS account for the newsletter, before [Connect Amazon SES](05-ses.md). [Create an AWS account](04-aws-account.md) walks through it. You can start it now, since signing up needs an email address that receives mail, and AWS can take a while to activate a new account.
 
 ## Choose your hostnames
 
@@ -137,7 +138,7 @@ Each prints a snippet to add to your configuration. There's nothing to paste: `-
     What each one does:
 
     - `routes` puts the app on your hostname when you deploy. Cloudflare creates the DNS record and the certificate. Your domain must be in the same Cloudflare account, and the hostname can't already have a CNAME record; delete one if it does. The block also turns off the `workers.dev` addresses, so the app answers only on your hostname.
-    - `PROVIDER` stays empty until [Connect Amazon SES](04-ses.md) sets it. Until then the app runs without an email provider: posts can be written and previewed, but scheduling, test emails, and signups are refused. Never set it to `fake`, the top level's value, even when a wrangler warning suggests copying it: `fake` delivers nothing, and the app refuses it on your hostname.
+    - `PROVIDER` stays empty until [Connect Amazon SES](05-ses.md) sets it. Until then the app runs without an email provider: posts can be written and previewed, but scheduling, test emails, and signups are refused. Never set it to `fake`, the top level's value, even when a wrangler warning suggests copying it: `fake` delivers nothing, and the app refuses it on your hostname.
     - `ARCHIVE_BASE_PATH` is permanent once the first post goes out. Every post sent carries its `/archive/…` link, and changing the prefix later breaks the links already mailed. Keep `/archive` unless you have a reason not to.
     - `FROM_ADDRESS` is the address every email comes from. Keep it on your sending hostname, and set `SENDING_DOMAIN` to the part after the `@`. The name before the `<` is what readers see as the sender. It also names the publication on its public pages, until the publisher sets a name under **Settings → Publication identity**. You can change the name at any time, and deploy again.
 

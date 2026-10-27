@@ -2,9 +2,9 @@
 
 Before your readers get anything, check three things yourself: your email arrives and replies reach you, subscribing works, and problems will reach you.
 
-**Email has to be connected first.** Until it is, nothing can be sent, and the dashboard's checklist shows **Connect Amazon SES** in place of this step, as [Connect Amazon SES](../get-started/04-ses.md) describes.
+**Email has to be connected first.** Until it is, nothing can be sent, and the dashboard's checklist shows **Connect Amazon SES** in place of this step, as [Connect Amazon SES](../get-started/05-ses.md) describes.
 
-**Until AWS grants production access, Amazon SES mails only addresses verified in SES.** So test with a verified address, and hold the subscribe link until then. The checklist adds **Request production access** after this step, and checks it off once AWS grants it, as [Request production access](../get-started/05-production-access.md) describes.
+**Until AWS grants production access, Amazon SES mails only addresses verified in SES.** So test with a verified address, and hold the subscribe link until then. The checklist adds **Request production access** after this step, and checks it off once AWS grants it, as [Request production access](../get-started/06-production-access.md) describes.
 
 ## 1. Send yourself a test
 
@@ -12,7 +12,7 @@ Choose **Template** in the sidebar, then **Send test email**, and send a sample 
 
 - **The From name and address,** which readers see first. They're set when your instance is deployed.
 - **Where it lands:** the inbox, Promotions, or spam. If it lands in spam, check your sending domain's records, as [Sending-domain DNS](../reference/02-sending-domain-dns.md) describes.
-- **A reply.** Reply to the test, and check that it reaches your inbox. Kestrel never sees replies, so this depends on [forwarding your From address](../get-started/04-ses.md#8-receive-replies-at-your-from-address).
+- **A reply.** Reply to the test, and check that it reaches your inbox. Kestrel never sees replies, so this depends on [forwarding your From address](../get-started/05-ses.md#8-receive-replies-at-your-from-address).
 
 ## 2. Subscribe yourself
 

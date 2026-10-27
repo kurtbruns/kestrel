@@ -115,4 +115,4 @@ If a check fails:
 - **Cloudflare lets you in, but the editor answers `401`.** Check the two secrets for a typo, and that `ACCESS_ALLOWED_EMAILS`, if you set it, includes your address.
 - **The editor says Access let you in but didn't say who you are.** Your login carried no email, which happens through a kind of policy the app doesn't accept, such as a device check. Sign out, and sign in through the policy you made above.
 
-Next, [connect Amazon SES](04-ses.md).
+Next, [create an AWS account](04-aws-account.md).

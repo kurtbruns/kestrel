@@ -9,14 +9,14 @@ This page covers what Kestrel handles, what you handle, and how to act on a read
 - **Consent.** Kestrel mails only people who confirmed they want your newsletter. Someone who subscribes gets an email with a link, and only once they confirm do they receive posts. People you import come with your old service's record of their consent, and your word for it ([Bring your existing list](01-your-list.md#what-carries-over)).
 - **Unsubscribing.** Every email has an unsubscribe link, and the one-click unsubscribe header that Gmail and Yahoo ask bulk senders for. It takes effect at once. US law allows up to 10 business days.
 - **Bounces and complaints.** An address that bounces is never mailed again, so a bad address can't keep hurting your sending reputation. A reader who marks your email as spam is unsubscribed, as if they had used the link, and you can't add them back: only their own sign-up does.
-- **Sender authentication.** Your emails are signed with DKIM for your own domain, and SPF and DMARC records in its DNS vouch for them. You set them up in [Connect Amazon SES](../get-started/04-ses.md), and mailbox providers now expect them.
+- **Sender authentication.** Your emails are signed with DKIM for your own domain, and SPF and DMARC records in its DNS vouch for them. You set them up in [Connect Amazon SES](../get-started/05-ses.md), and mailbox providers now expect them.
 
 ## What you handle
 
 - **An honest From name and subject line.** The From name should say who the email is from, and the subject should match what's inside. The From name and address are set when Kestrel is deployed ([Deploy the app](../get-started/02-deploy.md#4-configure-production)).
 - **Marking ads as ads.** When an email is an advertisement, say so clearly. In a newsletter that's mostly writing, labeling a sponsor's section is enough.
 - **A mailing address, when an email is commercial.** Most newsletters don't need one. [When to provide a mailing address](03-name-your-publication.md#when-to-provide-a-mailing-address) says when you do, beside where you add one.
-- **Requests readers send you.** A reader who replies to a post writes to your From address. Replies reach you once that address forwards to an inbox you read, as [Connect Amazon SES](../get-started/04-ses.md#8-receive-replies-at-your-from-address) sets up. Kestrel never sees a reply, so carrying out what a reader asks is up to you.
+- **Requests readers send you.** A reader who replies to a post writes to your From address. Replies reach you once that address forwards to an inbox you read, as [Connect Amazon SES](../get-started/05-ses.md#8-receive-replies-at-your-from-address) sets up. Kestrel never sees a reply, so carrying out what a reader asks is up to you.
 
 ## When a reader asks to leave or to be deleted
 

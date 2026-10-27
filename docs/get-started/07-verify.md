@@ -6,7 +6,7 @@ In this guide, you send yourself a test email, reply to it, and check that it pa
 
 ## Before you begin
 
-- The two addresses you verified in SES in [Connect Amazon SES](04-ses.md#3-verify-your-test-addresses). Some steps use both.
+- The two addresses you verified in SES in [Connect Amazon SES](05-ses.md#3-verify-your-test-addresses). Some steps use both.
 - A Gmail address, or another mail client that shows a message's original source and an **Unsubscribe** button.
 
 ## 1. Send yourself a test email
@@ -19,7 +19,7 @@ A test email goes through the same code as a real send. If the test looks right,
 
 1. Open the email. It arrives in your inbox, not in spam, the image loads, and the subject reads as you wrote it. Its links work, but a test email unsubscribes no one; section 5 unsubscribes for real.
 
-1. Send a test email to your second address, not the publisher's inbox, and reply to it from there, as a reader would. The reply arrives in the publisher's inbox, the one you chose in [Connect Amazon SES](04-ses.md#8-receive-replies-at-your-from-address), or in your From address's own mailbox if you skipped forwarding. If it bounces, check the routing rule and the destination address there.
+1. Send a test email to your second address, not the publisher's inbox, and reply to it from there, as a reader would. The reply arrives in the publisher's inbox, the one you chose in [Connect Amazon SES](05-ses.md#8-receive-replies-at-your-from-address), or in your From address's own mailbox if you skipped forwarding. If it bounces, check the routing rule and the destination address there.
 
 ## 2. Check that it passes authentication
 
@@ -33,9 +33,9 @@ Inboxes trust mail that passes DKIM and DMARC for the domain it's from. Passing 
     - `dmarc=pass` for `send.example.com`
     - `spf=pass`, for a hostname under `send.example.com`
 
-    If SPF passes for `amazonses.com` instead, SES couldn't read your custom MAIL FROM domain's MX record, and used its own. DMARC still passes, but check the MAIL FROM records from [Connect Amazon SES](04-ses.md#1-verify-your-sending-hostname).
+    If SPF passes for `amazonses.com` instead, SES couldn't read your custom MAIL FROM domain's MX record, and used its own. DMARC still passes, but check the MAIL FROM records from [Connect Amazon SES](05-ses.md#1-verify-your-sending-hostname).
 
-If a check fails, compare your DNS records with the ones in [Connect Amazon SES](04-ses.md#1-verify-your-sending-hostname). [Sending-domain DNS](../reference/02-sending-domain-dns.md#verify-alignment) explains each result.
+If a check fails, compare your DNS records with the ones in [Connect Amazon SES](05-ses.md#1-verify-your-sending-hostname). [Sending-domain DNS](../reference/02-sending-domain-dns.md#verify-alignment) explains each result.
 
 ## 3. Set up notifications
 
@@ -86,7 +86,7 @@ When an address bounces or marks your mail as spam, SES tells the app through SN
 
 1. In the editor, **Subscribers** lists the bounce address as **Pending** with a **bounced** flag, and the complaint address as **Unsubscribed**. Open its row: its page says it left by a complaint. The app mails neither again.
 
-If the bounce address has no flag, or the complaint address is still pending, SES's events aren't reaching the app. Check the configuration set in [Send bounces and complaints to the app](04-ses.md#4-send-bounces-and-complaints-to-the-app), and the subscription in [Subscribe the app to the topic](04-ses.md#7-subscribe-the-app-to-the-topic).
+If the bounce address has no flag, or the complaint address is still pending, SES's events aren't reaching the app. Check the configuration set in [Send bounces and complaints to the app](05-ses.md#4-send-bounces-and-complaints-to-the-app), and the subscription in [Subscribe the app to the topic](05-ses.md#7-subscribe-the-app-to-the-topic).
 
 ## 7. Read the logs
 
@@ -106,11 +106,11 @@ To follow one send, narrow the time range and filter on its `sendId`, since a lo
 
 ## 8. Check that SES can send to anyone
 
-[Request production access](05-production-access.md) asked AWS for it. Until AWS grants it, the sandbox mails only your verified addresses, so check it before you go live.
+[Request production access](06-production-access.md) asked AWS for it. Until AWS grants it, the sandbox mails only your verified addresses, so check it before you go live.
 
 1. In the editor, open **Settings → Email sender**. The email provider reads **Production**, and **Send rate** shows your account's maximum send rate and daily quota, "from your SES account".
 
-1. If it still reads **Sandbox**, AWS hasn't granted access yet. Come back to this section when it does, and check the email AWS Support sends for questions. If it reads only "Amazon SES", the app can't read the account: check that the `kestrel-send-email` policy allows `ses:GetAccount`, as [Connect Amazon SES](04-ses.md#5-create-the-apps-aws-key) shows, and look again in ten minutes. The SES **Account dashboard** shows the same facts.
+1. If it still reads **Sandbox**, AWS hasn't granted access yet. Come back to this section when it does, and check the email AWS Support sends for questions. If it reads only "Amazon SES", the app can't read the account: check that the `kestrel-send-email` policy allows `ses:GetAccount`, as [Connect Amazon SES](05-ses.md#5-create-the-apps-aws-key) shows, and look again in ten minutes. The SES **Account dashboard** shows the same facts.
 
 ## 9. Clean up the test subscribers
 
@@ -126,4 +126,4 @@ Erasing keeps only the address, so it's never mailed again, but the person can s
 
 When every section gives the result it describes, your instance is ready for subscribers. If one doesn't once the app is running, [Troubleshooting](../publishing/06-troubleshooting.md) says what the app's messages mean and where each is fixed.
 
-Next, [go live](07-go-live.md).
+Next, [go live](08-go-live.md).
