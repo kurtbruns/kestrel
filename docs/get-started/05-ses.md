@@ -73,7 +73,7 @@ A new SES account starts in the sandbox: it sends only to addresses you've verif
 
 1. Choose two addresses you own, such as a personal address and a work address. Verify it works uses both.
 
-1. For each, under **Identities**, choose **Create identity**, select **Email address**, and enter it. Leave both checkboxes unchecked. The form's notice about DMARC is about sending from the address, and the app only sends to it. Choose **Create identity**.
+1. For each, under **Identities**, choose **Create identity**, select **Email address**, and enter it. Leave **Assign a default configuration set** and **Assign to a tenant** unchecked. The form's notice about DMARC is about sending from the address, and the app only sends to it. Choose **Create identity**.
 
 1. Open the email AWS sends to each address, and follow its link. The identity's status changes to **Verified**.
 
@@ -97,7 +97,7 @@ SES reports bounces and complaints through Amazon Simple Notification Service (S
 
 1. Open the topic in the [SNS console](https://console.aws.amazon.com/sns/), in the same region, and find its ARN. It looks like `arn:aws:sns:us-east-1:111122223333:kestrel-events`, where `us-east-1` is your region's code and `111122223333` is your account ID.
 
-1. Check that SES may publish to the topic, on its **Access policy** tab. A topic created from SES's **Add destination**, as above, already has a statement allowing `ses.amazonaws.com` to publish from your account, so leave it as it is. For a topic you made in the SNS console instead, choose **Edit**, expand **Access policy**, and add this statement to the `Statement` list:
+1. Check that SES may publish to the topic, on its **Access policy** tab. A topic created from SES's **Add destination**, as above, already lets SES publish to it from your account. Leave that statement as it is. For a topic you made in the SNS console instead, choose **Edit**, expand **Access policy**, and add this statement to the `Statement` list:
 
     ```json
     {
@@ -272,13 +272,13 @@ SNS delivers events only to a subscriber that has confirmed. The app confirms on
     | Maximum delay retries | `6` |
     | Retry-backoff function | Exponential |
 
-    SNS then keeps trying for about 40 minutes. It allows an hour at most. You can set the same policy on the topic instead, under **Edit → Delivery retry policy (HTTP/S)**, so it also covers any subscription you add later.
+    SNS then keeps trying for about 40 minutes. It allows an hour at most. The topic has a delivery policy of its own, under **Edit**. Setting it there instead also covers any subscription you add later.
 
 1. Choose **Create subscription**.
 
 1. Reload the subscription. Its status changes to **Confirmed**, with nothing for you to click.
 
-    If it stays **Pending confirmation**, check that your Access application covers only `/dashboard` and `/api`, that `SNS_TOPIC_ARN` matches the topic's ARN, and that section 6's deploy finished. A mismatched ARN shows in the app's logs as a `webhook.refused` error naming both. Then request confirmation again from the topic's subscriptions. SNS doesn't let you delete a pending subscription, and removes it on its own after 48 hours.
+    If it stays **Pending confirmation**, check that your Access application covers only `/dashboard` and `/api`. Check that `SNS_TOPIC_ARN` matches the topic's ARN, and that section 6's deploy finished. A mismatched ARN shows in the app's logs as a `webhook.refused` error naming both. Then request confirmation again from the topic's subscriptions. SNS doesn't let you delete a pending subscription, and removes it on its own after 48 hours.
 
 1. **(Optional)** Keep what SNS still can't deliver. On the subscription, choose **Edit**, and set a **Redrive policy (dead-letter queue)** to an SQS queue of your own. SNS then moves an event there instead of discarding it. [Amazon SNS dead-letter queues](https://docs.aws.amazon.com/sns/latest/dg/sns-dead-letter-queues.html) covers the queue and its permissions.
 

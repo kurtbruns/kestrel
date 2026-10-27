@@ -10,7 +10,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading from 1.18.0.** If your instance sends through Amazon SES, let the app's AWS key send templated email before you deploy: in the IAM console, open **Policies**, then `kestrel-send-email`, choose **Edit**, add `"ses:SendTemplatedEmail"` and `"ses:SendBulkTemplatedEmail"` to its `Action` list in the JSON editor, and save. Keep the actions already there. Until then SES refuses the app's emails as not authorized, a test email included. Then deploy with `npx wrangler deploy --env production`.
+**Upgrading from 1.18.0.** If your instance sends through Amazon SES, let the app's AWS key send templated email now, whether or not you upgrade: in the IAM console, open **Policies**, then `kestrel-send-email`, choose **Edit**, add `"ses:SendTemplatedEmail"` and `"ses:SendBulkTemplatedEmail"` to its `Action` list in the JSON editor, and save. Keep the actions already there. A key with the guide's earlier policy can't send at all: until you add them, SES refuses every email the app sends as not authorized, test emails included. Then deploy with `npx wrangler deploy --env production`.
 
 ### Changed
 
