@@ -139,6 +139,12 @@ export function subscribeNotOpenPage(
   return subscribePage(c, identity, main, status);
 }
 
+/** Whether a subscribe would be taken: not while no email provider is connected (SPEC §9).
+ *  The subscribe page and the empty home page both ask this, so they never disagree. */
+export function signupsOpen(config: Config): boolean {
+  return config.provider !== "none";
+}
+
 /** The one answer every subscribe request gets, whatever the address's state (SPEC §7). */
 export function subscribeCheckInboxPage(c: RequestContext, identity: ReaderIdentity): Response {
   const main =
@@ -149,13 +155,11 @@ export function subscribeCheckInboxPage(c: RequestContext, identity: ReaderIdent
 
 export async function subscribeForm(c: RequestContext): Promise<Response> {
   const identity = await readerIdentity(c, c.config);
-  return c.config.provider === "none"
-    ? subscribeNotOpenPage(c, identity)
-    : subscribeFormPage(c, identity);
+  return signupsOpen(c.config) ? subscribeFormPage(c, identity) : subscribeNotOpenPage(c, identity);
 }
 
 export async function subscribe(c: RequestContext): Promise<Response> {
-  if (c.config.provider === "none") {
+  if (!signupsOpen(c.config)) {
     // Refused before the address is read, so no address is stored or even looked at, and
     // every request gets the same answer (SPEC §7, §9). Logged, so the operator can see
     // readers arriving before signups are open.

@@ -12,7 +12,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
-- Until a post is listed, the home page is the subscribe form itself, with its line saying each signup is confirmed by email, so a first visitor, or AWS reviewing the site for SES production access, sees what the newsletter is and how joining works without a click. Name your publication now suggests a tagline that says what the newsletter covers and how often it goes out.
+- Until a post is listed, the home page is the subscribe form itself, with its line saying each signup is confirmed by email. A first visitor, or AWS reviewing the site for SES production access, sees how joining works without a click.
+- Name your publication now suggests a tagline that says what the newsletter covers and how often it goes out.
 
 ### Fixed
 
