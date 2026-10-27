@@ -59,6 +59,6 @@ Until AWS grants production access, SES sends only to your verified addresses, s
 
 1. If it reads **Sandbox**, or `state` is `sandbox`, AWS hasn't granted access yet. Come back to this section when it does, and check the email AWS Support sends for questions.
 
-1. If it reads only "Amazon SES", the app can't read the account, and `unknown_reason` says why. `permission` means the AWS key can't read it: check that the `kestrel-send-email` policy allows `ses:GetAccount`, as [Connect Amazon SES](05-ses.md#5-create-the-apps-aws-key) shows. `not_checked` means the app hasn't asked yet, so look again in ten minutes. The SES **Account dashboard** shows the same facts.
+1. If it says Kestrel's AWS key needs permission to read your account, or `unknown_reason` is `permission`, allow the `kestrel-send-email` policy `ses:GetAccount`, as [Connect Amazon SES](05-ses.md#5-create-the-apps-aws-key) shows. Look again in an hour, since the app asks again hourly. If it reads only "Amazon SES", or `unknown_reason` is `not_checked`, the app hasn't asked yet: look again in ten minutes. The SES **Account dashboard** shows the same facts.
 
 Next, [verify it works](07-verify.md).

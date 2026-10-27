@@ -1063,12 +1063,25 @@ describe("settings view", () => {
 
     it("says only Amazon SES while the app can't tell, and where the rate comes from", async () => {
       await withStatus({
-        unknown_reason: "permission",
+        unknown_reason: "not_checked",
         send_rate: { value: 1, source: "setting" },
       });
       expect($("#providerValue").textContent?.trim()).toBe("Amazon SES");
       expect(document.querySelector("#providerState")).toBeNull();
+      expect(document.querySelector("#providerUnread")).toBeNull();
       expect($("#sendRate").textContent).toBe("1 email a second (set by SES_MAX_SEND_RATE)");
+    });
+
+    it("says when the key can't read the account, linking the step that allows it", async () => {
+      await withStatus({ unknown_reason: "permission" });
+      expect(document.querySelector("#providerState")).toBeNull();
+      expect($("#providerUnread").textContent).toBe(
+        "To show whether SES is in the sandbox, Kestrel’s AWS key needs permission to read your account. Add the permission",
+      );
+      expect($<HTMLAnchorElement>("#providerUnread a").getAttribute("href")).toBe(
+        "#/docs/ses/5-create-the-apps-aws-key",
+      );
+      expect(fake.unhandled).toEqual([]);
     });
 
     it("shows each warning in the server's words, linking the step that fixes it", async () => {

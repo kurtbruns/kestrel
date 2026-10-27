@@ -10,6 +10,9 @@ import { type Html, html } from "./ui/html";
 /** The setup guide's page that asks AWS for production access. */
 export const PRODUCTION_ACCESS_HREF = "#/docs/production-access";
 
+/** Connect Amazon SES' step whose policy lets the app's key read the account. */
+export const ACCOUNT_PERMISSION_HREF = "#/docs/ses/5-create-the-apps-aws-key";
+
 /**
  * The connection, or null when the read fails or there's nothing to read: only SES has an
  * account, so another provider is never asked. A failed read leaves the page as it was before
@@ -40,14 +43,19 @@ function daily(v: ProviderStatusView): string {
 
 /**
  * Settings' Email provider row for SES: the state as a pill and, in the sandbox, what it limits
- * and where AWS's review stands. Unknown says only "Amazon SES", as before the app could tell.
+ * and where AWS's review stands. Unknown says only "Amazon SES", as before the app could tell,
+ * except when the key isn't allowed to read the account: that is a deploy fix, so the row says
+ * what it would show and links the step that adds the permission. It explains, never warns,
+ * since sending works either way.
  */
 export function providerStateHtml(v: ProviderStatusView): Html {
   if (v.state === "production") {
     return html`Amazon SES <span class="set-pill ok" id="providerState">Production</span>`;
   }
   if (v.state !== "sandbox") {
-    return html`Amazon SES`;
+    return v.unknown_reason === "permission"
+      ? html`<span>Amazon SES</span><span class="muted" id="providerUnread">To show whether SES is in the sandbox, Kestrel’s AWS key needs permission to read your account. <a class="set-link" href="${ACCOUNT_PERMISSION_HREF}">Add the permission</a></span>`
+      : html`Amazon SES`;
   }
   const pill = html`<span class="set-pill warn" id="providerState">Sandbox</span>`;
   const line =
