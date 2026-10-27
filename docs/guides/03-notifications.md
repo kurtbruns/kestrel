@@ -8,7 +8,7 @@ In this guide, you turn on Cloudflare's email for your app's hostname, and verif
 
 You need:
 
-- The notifications address saved, from [Verify it works](../get-started/05-verify.md#3-set-up-notifications).
+- The notifications address saved, from [Verify it works](../get-started/06-verify.md#3-set-up-notifications).
 - Your domain's DNS on Cloudflare, as for the rest of the app.
 
 ## 1. Turn on Email Routing for your app's hostname
@@ -82,7 +82,7 @@ If the test isn't delivered, **Last notification** shows Cloudflare's reason, su
 
 ## What notifications don't cover
 
-- **The schedule stopping.** The same once-a-minute schedule that sends posts also notices problems. If the schedule itself stops, nothing tells you. [Read the logs](../get-started/05-verify.md#7-read-the-logs) to check that `sweep.tick` still arrives every minute.
+- **The schedule stopping.** The same once-a-minute schedule that sends posts also notices problems. If the schedule itself stops, nothing tells you. [Read the logs](../get-started/06-verify.md#7-read-the-logs) to check that `sweep.tick` still arrives every minute.
 - **A notification that can't get through.** The app tries each one up to five times, a minute apart. A failure shows under **Settings → Notifications**, and in the logs as `notify.failed`.
 - **Problems while no address is set.** With the address blank, the app sends nothing, and saves nothing up for later.
 

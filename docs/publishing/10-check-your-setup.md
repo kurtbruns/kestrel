@@ -4,7 +4,7 @@ Before your readers get anything, check three things yourself: your email arrive
 
 **Email has to be connected first.** Until it is, nothing can be sent, and the dashboard's checklist shows **Connect Amazon SES** in place of this step, as [Connect Amazon SES](../get-started/04-ses.md) describes.
 
-**Until AWS grants production access, Amazon SES mails only addresses verified in SES.** So test with a verified address, and hold the subscribe link until then. The checklist adds **Request production access** after this step, and checks it off once AWS grants it, as [Connect Amazon SES](../get-started/04-ses.md#9-request-production-access) describes.
+**Until AWS grants production access, Amazon SES mails only addresses verified in SES.** So test with a verified address, and hold the subscribe link until then. The checklist adds **Request production access** after this step, and checks it off once AWS grants it, as [Request production access](../get-started/05-production-access.md) describes.
 
 ## 1. Send yourself a test
 

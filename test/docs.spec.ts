@@ -24,6 +24,7 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
       "self-hosting/get-started/deploy",
       "self-hosting/get-started/access",
       "self-hosting/get-started/ses",
+      "self-hosting/get-started/production-access",
       "self-hosting/get-started/verify",
       "self-hosting/get-started/go-live",
       "self-hosting/guides/aws-account",
@@ -137,6 +138,14 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
     );
   });
 
+  it("opens the page Settings and the dashboard send the publisher to for production access", () => {
+    const { docs } = renderDocs();
+    expect(editorSources["../client/provider_status.ts"]).toContain('"#/docs/production-access"');
+    expect(docs.find((d) => d.slug === "production-access")?.title).toBe(
+      "Request production access",
+    );
+  });
+
   it("lands every link to a heading, from the guide or the editor, on a heading that exists", () => {
     // The editor names a doc's headings by the anchor rule, so a link to `#/docs/<slug>/<anchor>`
     // breaks silently when the heading is renamed or renumbered: the room opens the doc at its
@@ -159,12 +168,6 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
     }
     // The scan reads the editor's source, so it finds the link Settings makes under the From
     // address; finding none would mean the scan reads nothing.
-    // And the step Settings and the dashboard send the publisher to for production access.
-    expect(links).toContainEqual([
-      "../client/provider_status.ts",
-      "ses",
-      "9-request-production-access",
-    ]);
     expect(links).toContainEqual([
       "../client/settings/deploy.ts",
       "ses",

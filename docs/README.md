@@ -9,8 +9,9 @@ These are the steps to deploy a Kestrel instance and get it ready to send. Each 
 1. [Deploy the app](get-started/02-deploy.md)
 1. [Lock the dashboard with Access](get-started/03-access.md)
 1. [Connect Amazon SES](get-started/04-ses.md)
-1. [Verify it works](get-started/05-verify.md)
-1. [Go live](get-started/06-go-live.md)
+1. [Request production access](get-started/05-production-access.md)
+1. [Verify it works](get-started/06-verify.md)
+1. [Go live](get-started/07-go-live.md)
 
 ## Guides
 

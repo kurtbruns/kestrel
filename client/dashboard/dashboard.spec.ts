@@ -1053,7 +1053,7 @@ describe("dashboard", () => {
       expect($(".setup-access .muted").textContent).toBe(
         "AWS is reviewing your request. Until then, SES mails only addresses verified in SES.",
       );
-      expect($(".setup-access button").dataset.nav).toBe("#/docs/ses/9-request-production-access");
+      expect($(".setup-access button").dataset.nav).toBe("#/docs/production-access");
       expect($(".setup-subscribe .muted").textContent).toBe(
         "Share it once AWS grants production access: until then, signups from anyone not verified in SES fail.",
       );

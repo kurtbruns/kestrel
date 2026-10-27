@@ -106,7 +106,7 @@ To follow one send, narrow the time range and filter on its `sendId`, since a lo
 
 ## 8. Check that SES can send to anyone
 
-[Connect Amazon SES](04-ses.md#9-request-production-access) asked AWS for production access. Until AWS grants it, the sandbox mails only your verified addresses, so check it before you go live.
+[Request production access](05-production-access.md) asked AWS for it. Until AWS grants it, the sandbox mails only your verified addresses, so check it before you go live.
 
 1. In the editor, open **Settings → Email sender**. The email provider reads **Production**, and **Send rate** shows your account's maximum send rate and daily quota, "from your SES account".
 
@@ -126,4 +126,4 @@ Erasing keeps only the address, so it's never mailed again, but the person can s
 
 When every section gives the result it describes, your instance is ready for subscribers. If one doesn't once the app is running, [Troubleshooting](../publishing/06-troubleshooting.md) says what the app's messages mean and where each is fixed.
 
-Next, [go live](06-go-live.md).
+Next, [go live](07-go-live.md).

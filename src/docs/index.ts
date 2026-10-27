@@ -25,8 +25,9 @@ import { Lexer, type Token, type Tokens } from "marked";
 import deploy from "../../docs/get-started/02-deploy.md";
 import access from "../../docs/get-started/03-access.md";
 import ses from "../../docs/get-started/04-ses.md";
-import verify from "../../docs/get-started/05-verify.md";
-import goLive from "../../docs/get-started/06-go-live.md";
+import productionAccess from "../../docs/get-started/05-production-access.md";
+import verify from "../../docs/get-started/06-verify.md";
+import goLive from "../../docs/get-started/07-go-live.md";
 import allowClaude from "../../docs/guides/01-allow-claude.md";
 import automate from "../../docs/guides/02-automate.md";
 import notifications from "../../docs/guides/03-notifications.md";
@@ -71,8 +72,9 @@ const PAGES: Record<string, string> = {
   "get-started/02-deploy.md": deploy,
   "get-started/03-access.md": access,
   "get-started/04-ses.md": ses,
-  "get-started/05-verify.md": verify,
-  "get-started/06-go-live.md": goLive,
+  "get-started/05-production-access.md": productionAccess,
+  "get-started/06-verify.md": verify,
+  "get-started/07-go-live.md": goLive,
   "guides/01-allow-claude.md": allowClaude,
   "guides/02-automate.md": automate,
   "guides/03-notifications.md": notifications,

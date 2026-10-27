@@ -1,8 +1,8 @@
 # Connect Amazon SES
 
-This page connects the app to Amazon Simple Email Service (Amazon SES), which delivers the newsletter's email. A new SES account starts in a sandbox, where it can send only to addresses you've verified, until AWS reviews it. This page connects the app in the sandbox, then asks AWS for production access, so AWS reviews a site that already works.
+This page connects the app to Amazon Simple Email Service (Amazon SES), which delivers the newsletter's email. A new SES account starts in a sandbox, where it can send only to addresses you've verified, until AWS reviews it. This page connects the app in the sandbox, and checks each piece as you set it up. [Request production access](05-production-access.md) then asks AWS to lift the sandbox.
 
-In this guide, you verify your sending hostname with a custom MAIL FROM domain, and add a DMARC record. You verify two addresses of your own to test with. You then route bounces and complaints to the app, give it an AWS key, and deploy it with SES connected. You forward readers' replies to the publisher's inbox. Last, you ask AWS for production access.
+In this guide, you verify your sending hostname with a custom MAIL FROM domain, and add a DMARC record. You verify two addresses of your own to test with. You then route bounces and complaints to the app, give it an AWS key, and deploy it with SES connected. Last, you forward readers' replies to the publisher's inbox.
 
 ## Before you begin
 
@@ -13,9 +13,11 @@ In this guide, you verify your sending hostname with a custom MAIL FROM domain, 
 
 SES sends only from an identity you've verified. Verifying the whole hostname lets any address on it send, and sets up DKIM, which lets inboxes trust your mail.
 
-The same form sets a custom MAIL FROM domain. By default, SES sends with its own return path, so Gmail shows your mail as "mailed-by `amazonses.com`", and only DKIM ties it to your domain. A custom MAIL FROM domain puts your hostname there too, so SPF also passes for your domain. Your mail then still passes DMARC, the check section 2 sets up, if DKIM ever fails. It also meets Gmail's bulk-sender rule to set up SPF for your domain.
+The same form sets a custom MAIL FROM domain, so SPF also passes for your domain. [SPF: authorize the return path](../reference/02-sending-domain-dns.md#spf-authorize-the-return-path) explains why it matters.
 
-1. Open the [SES console](https://console.aws.amazon.com/ses/), and then choose a region near you in the region menu at the top right. SES keeps identities, quotas, and the sandbox separately in each region, so do every step on this page in this one. On every AWS page, go by that menu, not the page's address. Open SES before you choose, since a page for a global service, such as IAM or Billing, has no region to choose. A few newer regions must be [enabled for your account](https://docs.aws.amazon.com/accounts/latest/reference/manage-acct-regions.html) first.
+1. Open the [SES console](https://console.aws.amazon.com/ses/), and choose a region near you in the region menu at the top right.
+
+    SES keeps identities, quotas, and the sandbox separately in each region, so do every step on this page in the region you chose. [Configuration](../reference/01-configuration.md#vars) says more about choosing one, under `AWS_REGION`.
 
 1. Note the region's code, such as `eu-west-1`. The menu shows it beside the region's name, such as Europe (Ireland), and [Amazon SES endpoints](https://docs.aws.amazon.com/general/latest/gr/ses.html) lists each one too. Later steps use this code.
 
@@ -57,11 +59,17 @@ DMARC tells inboxes what to do with mail that fails its checks, and sends you re
 
 1. Replace `dmarc@example.com` with an address on your own domain that receives mail, such as one forwarded to your inbox with Cloudflare Email Routing. Reports arrive there as attachments. An address on another domain, such as a Gmail address, gets no reports unless that domain publishes a record allowing them, which Gmail doesn't.
 
+1. Check that the record is published. This prints it:
+
+    ```bash
+    dig +short TXT _dmarc.send.example.com
+    ```
+
 [Sending-domain DNS](../reference/02-sending-domain-dns.md#dmarc-publish-a-policy-and-collect-reports) explains each record, and when to tighten DMARC.
 
 ## 3. Verify your test addresses
 
-A new SES account starts in the sandbox: it sends only to addresses you've verified, up to 200 emails a day and one a second. The test emails in [Verify it works](05-verify.md) go to two addresses of your own, so verify those now. Section 9 asks AWS for production access, which lifts the limit.
+A new SES account starts in the sandbox: it sends only to addresses you've verified, up to 200 emails a day and one a second. The test emails in [Verify it works](06-verify.md) go to two addresses of your own, so verify those now. [Request production access](05-production-access.md) lifts the limit, once AWS grants it.
 
 1. Choose two addresses you own, such as a personal address and a work address. Verify it works uses both.
 
@@ -198,13 +206,37 @@ Until now the app has run with no email provider connected, refusing to send. Se
     npx wrangler deploy --env production
     ```
 
-1. Check that the app is connected. In the editor, **Settings → Email sender** shows Amazon SES and your From address, where it said **No email provider connected** before. Within a couple of minutes, a **Sandbox** pill appears beside it, once the app has read your SES account. If the page doesn't load, `https://newsletter.example.com/health` names the setting the app is missing.
+1. Check that the app answers on your hostname:
+
+    ```bash
+    curl https://newsletter.example.com/health
+    ```
+
+    ```
+    {"status":"ok","service":"kestrel"}
+    ```
+
+    Any other answer names the setting the app is missing.
+
+1. In the editor, **Settings → Email sender** shows Amazon SES and your From address, where it said **No email provider connected** before. Within a couple of minutes, a **Sandbox** pill appears beside it, once the app has read your SES account.
 
 1. In a browser, `https://newsletter.example.com/subscribe` shows the subscribe form, where it said signups aren't open yet.
 
 ## 7. Subscribe the app to the topic
 
 SNS delivers events only to a subscriber that has confirmed. The app confirms on its own, once it checks that the request came from your topic.
+
+1. Check that the app's webhook is public. It refuses a request that isn't from SNS:
+
+    ```bash
+    curl -s -o /dev/null -w "%{http_code}\n" -X POST https://newsletter.example.com/webhooks/ses
+    ```
+
+    ```
+    400
+    ```
+
+    Any other answer, such as a redirect to your Cloudflare login, means Access covers the webhook. Remove that path from your Access application.
 
 1. In the SNS console, open your topic, and choose **Create subscription**.
 
@@ -246,7 +278,7 @@ Replies to a post go to your From address, `newsletter@send.example.com`, which 
     dig +short MX send.example.com
     ```
 
-    If it lists mail servers, `send.example.com` already receives mail elsewhere, and Email Routing would replace those servers. Check that your mail host has a mailbox for `newsletter@send.example.com`, and skip to [Check it](#check-it).
+    If it lists mail servers, `send.example.com` already receives mail elsewhere, and Email Routing would replace those servers. Check that your mail host has a mailbox for `newsletter@send.example.com`, and skip the rest of this section.
 
 1. In the [Cloudflare dashboard](https://dash.cloudflare.com/), go to **Compute → Email Service → Email Routing**.
 
@@ -260,72 +292,14 @@ Replies to a post go to your From address, `newsletter@send.example.com`, which 
 
 1. **(Optional)** Give your DMARC reports an inbox too. If the address in your DMARC record doesn't receive mail, add a rule that forwards `dmarc` the same way. Then change the record's `rua` to `mailto:dmarc@send.example.com`.
 
-Out-of-office and other automatic replies reach the publisher's inbox too. Bounces don't: they go to SES, which reports them to the app. The publisher answers from their own inbox, not from `newsletter@send.example.com`. To answer from the newsletter's address instead, give it a mailbox at a mail host such as [Fastmail](https://www.fastmail.help/hc/en-us/articles/360060591133) or [Google Workspace](https://support.google.com/a/answer/140034), in place of forwarding.
-
-## 9. Request production access
-
-A new SES account sends only to the addresses you've verified, up to 200 emails a day and one a second. Production access lifts those limits, once AWS reviews the account. Ask now: the app is connected, and the publication's website shows a live subscribe form. A signup there gets its confirmation email only once AWS grants access, AWS's own included. Everything in [Verify it works](05-verify.md) runs in the sandbox, so continue there while AWS reviews the request.
-
-1. Name the publication, since AWS may visit its website to review the request. In the editor, open **Settings → Publication identity**, and enter the name and tagline, or ask the publisher for them. On a new instance with no posts, the tagline is the only line on the home page that says what the newsletter is about. Both can change later.
-
-1. If the newsletter will mainly sell something, add a mailing address there too, with **Add a mailing address**. [When to provide a mailing address](../publishing/03-name-your-publication.md#when-to-provide-a-mailing-address) explains when US law asks for one.
-
-1. In SES, in the region the app sends from, open the **Account dashboard**, select **View Get set up page**, and then **Request production access**.
-
-1. Fill in the request:
-
-    - **Mail type:** Marketing
-    - **Website URL:** `https://newsletter.example.com/`
-
-    Leave the other fields as they are.
-
-1. Check the acknowledgement, and select **Submit request**. AWS Support answers by email, and may ask how you collect addresses and handle bounces. Within about ten minutes, the app's **Settings → Email sender** says AWS is reviewing your request, and it says when AWS grants or denies it.
-
-If AWS asks for more detail, or denies the request, reply in the support case, or open a new request from the **Account dashboard**. Say how Kestrel handles the list:
-
-- Signups use double opt-in: each subscriber confirms by email before joining the list.
-- Every post offers one-click unsubscribe.
-- Bounces and complaints reach the app, and it stops mailing those addresses automatically. [Verify it works](05-verify.md#6-check-that-bounces-and-complaints-come-back) shows it working.
-- How many subscribers the newsletter expects, and how often it sends.
-
-## Check it
-
-1. The app answers on your hostname:
-
-    ```bash
-    curl https://newsletter.example.com/health
-    ```
-
-    ```
-    {"status":"ok","service":"kestrel"}
-    ```
-
-1. The webhook is public, and refuses a request that isn't from SNS:
-
-    ```bash
-    curl -s -o /dev/null -w "%{http_code}\n" -X POST https://newsletter.example.com/webhooks/ses
-    ```
-
-    ```
-    400
-    ```
-
-    Any other answer, such as a redirect to your Cloudflare login, means Access covers the webhook. Remove that path from your Access application.
-
-1. The SNS subscription shows **Confirmed**.
-
-1. Your From address receives mail. This lists Cloudflare's three `route` mail servers, or your own mail host's if you skipped section 8's forwarding:
+1. Check that your From address receives mail. This now lists Cloudflare's three `route` mail servers:
 
     ```bash
     dig +short MX send.example.com
     ```
 
-1. In the editor, **Settings → Email sender** shows Amazon SES and your From address, where it said **No email provider connected** before.
+Out-of-office and other automatic replies reach the publisher's inbox too. Bounces don't: they go to SES, which reports them to the app. The publisher answers from their own inbox, not from `newsletter@send.example.com`. To answer from the newsletter's address instead, give it a mailbox at a mail host such as [Fastmail](https://www.fastmail.help/hc/en-us/articles/360060591133) or [Google Workspace](https://support.google.com/a/answer/140034), in place of forwarding.
 
-1. In a browser, `https://newsletter.example.com/subscribe` shows the subscribe form, where it said signups aren't open yet.
+SES is now connected in the sandbox. Until AWS grants production access, it sends only to the addresses you verified in section 3, and to the SES test addresses Verify it works uses. SES charges for each email it sends, test emails included, as [Amazon SES pricing](https://aws.amazon.com/ses/pricing/) lists.
 
-1. **Settings → Email sender** shows a **Sandbox** pill and says AWS is reviewing your request for production access, or shows **Production** once AWS grants it.
-
-The test emails in the next step prove the rest, including a reply. Until AWS grants production access, they go only to the addresses you verified in section 3, and to the SES test addresses that page lists. SES charges for each email it sends, test emails included, as [Amazon SES pricing](https://aws.amazon.com/ses/pricing/) lists.
-
-Next, [verify it works](05-verify.md).
+Next, [request production access](05-production-access.md).

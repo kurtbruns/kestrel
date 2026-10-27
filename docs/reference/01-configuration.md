@@ -64,7 +64,7 @@ Vars go in the environment block's `vars`. Every value is a string.
 
 - `AWS_REGION` required with SES
 
-    The SES region. The template sets `us-east-1`.
+    The SES region. The template sets `us-east-1`. SES keeps identities, quotas, and the sandbox separately in each region, so set the region where you verified your sending hostname. On an AWS page, go by the region menu at the top right, not the page's address. A page for a global service, such as IAM or Billing, has no region to choose, so open SES before you choose. A few newer regions must be [enabled for your account](https://docs.aws.amazon.com/accounts/latest/reference/manage-acct-regions.html) first.
 
 - `FROM_ADDRESS` required with a real provider
 
@@ -180,7 +180,7 @@ Wrangler doesn't carry bindings or vars over from the top level of `wrangler.jso
 
 - `observability` optional
 
-    Workers Logs, where the app's log lines land. On in the template. Kestrel sets no sampling, since sampling could drop the one minute that reports a stuck or missed send, so leave `head_sampling_rate` at its default of 1. Cloudflare's own daily limit on the Free plan can still stop new logs for the rest of the day, as [Read the logs](../get-started/05-verify.md#7-read-the-logs) describes.
+    Workers Logs, where the app's log lines land. On in the template. Kestrel sets no sampling, since sampling could drop the one minute that reports a stuck or missed send, so leave `head_sampling_rate` at its default of 1. Cloudflare's own daily limit on the Free plan can still stop new logs for the rest of the day, as [Read the logs](../get-started/06-verify.md#7-read-the-logs) describes.
 
 - `DB` required
 

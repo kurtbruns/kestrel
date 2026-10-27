@@ -67,7 +67,7 @@ Once the reports show your sends passing and aligned, tighten the policy to `p=q
 
 ## Verify alignment
 
-A test email proves alignment better than any DNS lookup. Send yourself one, as in [Verify it works](../get-started/05-verify.md#2-check-that-it-passes-authentication), and read its `Authentication-Results` header. In Gmail, open the message's menu, and select **Show original**. Expect:
+A test email proves alignment better than any DNS lookup. Send yourself one, as in [Verify it works](../get-started/06-verify.md#2-check-that-it-passes-authentication), and read its `Authentication-Results` header. In Gmail, open the message's menu, and select **Show original**. Expect:
 
 - `dkim=pass` for `send.example.com`.
 - `dmarc=pass` for `send.example.com`.
