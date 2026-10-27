@@ -46,26 +46,19 @@ In the sandbox, the subscribe form's confirmation email reaches only addresses v
 - That every post offers one-click unsubscribe.
 - That bounces and complaints reach the app, and it stops mailing those addresses automatically. [Verify it works](07-verify.md#6-check-that-bounces-and-complaints-come-back) shows it working.
 - That the publication's website shows what the newsletter is, and how readers subscribe.
+- That an imported list was gathered with opt-in on the previous service.
 - How many subscribers the newsletter expects, and how often it sends.
 
 ## 4. Check that AWS granted it
 
 Until AWS grants production access, SES sends only to your verified addresses, so check it before you go live.
 
-1. In the editor, open **Settings → Email sender**. The email provider reads **Production**, and **Send rate** shows your account's maximum send rate and daily quota, "from your SES account". Claude, or a script signed in with `npx kestrel login`, reads the same from the API:
+1. In the editor, open **Settings → Email sender**. The email provider reads **Production**. From the API, `npx kestrel api GET /api/provider` shows `state` as `production`.
 
-    ```bash
-    npx kestrel api GET /api/provider
-    ```
+1. If it reads **Sandbox**, AWS hasn't granted access yet. Meanwhile, continue with [Verify it works](07-verify.md), which runs in the sandbox. Come back to this section when AWS answers, and check the email AWS Support sends for questions.
 
-    Its `state` is `production`.
+1. If it says Kestrel's AWS key needs permission to read your account, select **Add the permission** and follow the step it opens. The app checks again within an hour.
 
-1. If it reads **Sandbox**, or `state` is `sandbox`, AWS hasn't granted access yet. Meanwhile, continue with [Verify it works](07-verify.md), which runs in the sandbox. Come back to this section when AWS answers, and check the email AWS Support sends for questions.
-
-1. If it says Kestrel's AWS key needs permission to read your account, or `unknown_reason` is `permission`, allow the `kestrel-send-email` policy `ses:GetAccount`. [Connect Amazon SES](05-ses.md#5-create-the-apps-aws-key) shows the policy. Look again in an hour, since the app asks again hourly.
-
-1. If it reads only "Amazon SES", or `unknown_reason` is `not_checked`, the app hasn't asked yet. Look again in ten minutes.
-
-1. If it still reads only "Amazon SES" after that, or `unknown_reason` is `unreachable`, SES didn't give the app a usable answer. In the app's logs, the `provider.account_checked` line carries SES's error, as [Read the logs](07-verify.md#7-read-the-logs) describes. Meanwhile, the SES **Account dashboard** shows the same facts.
+1. If it reads just "Amazon SES", with nothing under it, the app hasn't heard from SES yet. Look again in ten minutes. If it still reads that way, the app's logs say why, in their `provider.account_checked` line, as [Read the logs](07-verify.md#7-read-the-logs) describes.
 
 Next, [verify it works](07-verify.md).
