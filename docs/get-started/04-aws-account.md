@@ -1,8 +1,8 @@
 # Create an AWS account
 
-Kestrel sends the newsletter's email through Amazon SES, which runs in an Amazon Web Services (AWS) account. This page creates that account for the newsletter. If you already made one for it, skip to [Connect Amazon SES](05-ses.md).
+Kestrel sends the newsletter's email through Amazon SES, which runs in an Amazon Web Services (AWS) account. This page assumes a brand-new account, made for the newsletter. If you'd rather use one you already have, skip to [Connect Amazon SES](05-ses.md).
 
-Create one account for each publication. SES keeps the sandbox, sending quotas, verified identities, and suppression list separately for each account and region. AWS can also pause an account's sending, so publications that share an account share each other's problems. To run several, [AWS Organizations](https://docs.aws.amazon.com/organizations/latest/userguide/orgs_introduction.html) keeps their accounts under one bill. Keep its management account apart, with no newsletter in it.
+If you plan to run multiple publications, you may want to consider setting up one account for each publication. With this setup, you can use [AWS Organizations](https://docs.aws.amazon.com/organizations/latest/userguide/orgs_introduction.html) to keep the accounts under one bill. Multiple publications can be run through one account. However, they share its sandbox, sending quotas, and suppression list, and AWS can pause sending for the whole account if one publication's bounces or complaints run high.
 
 In this guide, you choose the account's email address, sign up, and secure the account's root user. Then you set a monthly budget, so AWS emails you if the account ever costs more than you expect.
 
