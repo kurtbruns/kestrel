@@ -189,7 +189,7 @@ Until now the app has run with no email provider connected, refusing to send. Se
     }
     ```
 
-    On Workers Paid, also add `"SUBREQUEST_BUDGET": "10000"`, the plan's limit, so each minute sends more. Leave it out on Workers Free, which suits a list of up to about 1,000 subscribers. [As your list grows](../guides/09-as-your-list-grows.md) says why.
+    On Workers Paid, also add `"SUBREQUEST_BUDGET": "10000"`, the plan's limit, so each minute sends more. Leave it out on Workers Free. [As your list grows](../guides/09-as-your-list-grows.md) says when Workers Paid is worth it: for faster sends at any size, and for the daily database writes of a list past about 1,000 subscribers.
 
     The app reads its send rate from your SES account, so there's nothing to change when AWS grants production access. **Settings → Email sender** shows the rate and where it comes from.
 
@@ -300,6 +300,6 @@ Replies to a post go to your From address, `newsletter@send.example.com`, which 
 
 Out-of-office and other automatic replies reach the publisher's inbox too. Bounces don't: they go to SES, which reports them to the app. The publisher answers from their own inbox, not from `newsletter@send.example.com`. To answer from the newsletter's address instead, give it a mailbox at a mail host such as [Fastmail](https://www.fastmail.help/hc/en-us/articles/360060591133) or [Google Workspace](https://support.google.com/a/answer/140034), in place of forwarding.
 
-SES is now connected in the sandbox. Until AWS grants production access, it sends only to the addresses you verified in section 3, and to the SES test addresses Verify it works uses. SES charges for each email it sends, test emails included, as [Amazon SES pricing](https://aws.amazon.com/ses/pricing/) lists.
+SES is now connected in the sandbox. Until AWS grants production access, it sends only to the addresses you verified in section 3. It also sends to the SES test addresses Verify it works uses. SES charges for each email it sends, test emails included, as [Amazon SES pricing](https://aws.amazon.com/ses/pricing/) lists.
 
 Next, [request production access](06-production-access.md).

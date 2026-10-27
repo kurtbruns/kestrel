@@ -11,6 +11,9 @@ import { type Html, html } from "./ui/html";
 /** The setup guide's page that asks AWS for production access. */
 export const PRODUCTION_ACCESS_HREF = "#/docs/production-access";
 
+/** Its section on what to tell AWS when it asks for more, or denies a request. */
+const AWS_QUESTIONS_HREF = "#/docs/production-access/3-answer-awss-questions";
+
 /** Connect Amazon SES' step whose policy lets the app's key read the account. */
 export const ACCOUNT_PERMISSION_HREF = "#/docs/ses/5-create-the-apps-aws-key";
 
@@ -69,7 +72,7 @@ export function providerStateHtml(v: ProviderStatusView, beside: Html | null = n
     v.review === "pending"
       ? html`AWS is reviewing your request for production access. Until then, it mails only addresses verified in SES${daily(v)}.`
       : v.review === "denied"
-        ? html`<span class="set-warn">AWS denied production access.${v.review_case ? ` Its reply is in AWS Support, case ${v.review_case}.` : ""}</span> <a class="set-link" href="${PRODUCTION_ACCESS_HREF}">What AWS asks for</a>`
+        ? html`<span class="set-warn">AWS denied production access.${v.review_case ? ` Its reply is in AWS Support, case ${v.review_case}.` : ""}</span> <a class="set-link" href="${AWS_QUESTIONS_HREF}">What AWS asks for</a>`
         : v.review === "failed"
           ? html`<span class="set-warn">AWS didn’t receive your request for production access.</span> <a class="set-link" href="${PRODUCTION_ACCESS_HREF}">Request it again</a>`
           : html`<span class="set-warn">It mails only addresses verified in SES${daily(v)}.</span> <a class="set-link" href="${PRODUCTION_ACCESS_HREF}">Request production access</a>`;

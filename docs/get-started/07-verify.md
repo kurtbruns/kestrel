@@ -116,6 +116,6 @@ The checks leave test addresses on the list. Erase them, so the publisher starts
 
 Erasing keeps only the address, so it's never mailed again, but the person can subscribe again through the subscribe page. Erasing your own address doesn't lock you out.
 
-When every section gives the result it describes, your instance is ready for subscribers. If one doesn't once the app is running, [Troubleshooting](../publishing/06-troubleshooting.md) says what the app's messages mean and where each is fixed.
+When every section gives the result it describes, your instance is ready to go live once AWS grants production access, as [Check that AWS granted it](06-production-access.md#4-check-that-aws-granted-it) confirms. If one doesn't once the app is running, [Troubleshooting](../publishing/06-troubleshooting.md) says what the app's messages mean and where each is fixed.
 
 Next, [go live](08-go-live.md).

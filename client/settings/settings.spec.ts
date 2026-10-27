@@ -1044,6 +1044,9 @@ describe("settings view", () => {
       expect($("#providerReview").textContent).toBe(
         "AWS denied production access. Its reply is in AWS Support, case 1234567890. What AWS asks for",
       );
+      expect($<HTMLAnchorElement>("#providerReview a").getAttribute("href")).toBe(
+        "#/docs/production-access/3-answer-awss-questions",
+      );
     });
 
     it("marks production green, with the account's rate", async () => {

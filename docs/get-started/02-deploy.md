@@ -9,7 +9,7 @@ In this guide, you choose your hostnames, create your instance's repository, cre
 - A [Cloudflare account](https://dash.cloudflare.com/sign-up), with your domain's DNS on Cloudflare. Your app's hostname and its login both live there.
 - [Node.js](https://nodejs.org/) 22 or later, and [Git](https://git-scm.com/).
 - A GitHub account, or another Git host, for your instance's repository.
-- An AWS account for the newsletter, before [Connect Amazon SES](05-ses.md). [Create an AWS account](04-aws-account.md) walks through it. You can start it now, since signing up needs an email address that receives mail, and AWS can take a while to activate a new account.
+- An AWS account for the newsletter, before [Connect Amazon SES](05-ses.md). [Create an AWS account](04-aws-account.md) walks through it. You can start it now. Signing up needs an email address that receives mail, and AWS can take a while to activate a new account.
 
 ## Choose your hostnames
 

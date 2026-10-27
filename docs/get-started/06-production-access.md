@@ -38,11 +38,13 @@ AWS reviews each request by hand, for the region the app sends from.
 
 ## 3. Answer AWS's questions
 
-AWS Support may ask how you collect addresses and handle bounces before it decides. A newsletter may be asked for more detail, or denied the first time, sometimes without a reason. A reply that explains how the list is built usually gets further than a new request. If it asks for more detail, or denies the request, reply in the support case, or open a new request from the **Account dashboard**. Say how Kestrel handles the list:
+AWS Support may ask how you collect addresses and handle bounces before it decides. A newsletter may be asked for more detail, or denied the first time, sometimes without a reason. A reply that explains how the list is built usually gets further than a new request. If it asks for more detail, or denies the request, reply in the support case, or open a new request from the **Account dashboard**.
 
-- Signups use double opt-in: each subscriber confirms by email before joining the list.
-- Every post offers one-click unsubscribe.
-- Bounces and complaints reach the app, and it stops mailing those addresses automatically. [Verify it works](07-verify.md#6-check-that-bounces-and-complaints-come-back) shows it working.
+In the sandbox, the subscribe form's confirmation email reaches only addresses verified in SES. If AWS's reviewer tries the form, say that this is why no confirmation arrives. In your reply, cover:
+
+- That signups use double opt-in: each subscriber confirms by email before joining the list.
+- That every post offers one-click unsubscribe.
+- That bounces and complaints reach the app, and it stops mailing those addresses automatically. [Verify it works](07-verify.md#6-check-that-bounces-and-complaints-come-back) shows it working.
 - That the publication's website shows what the newsletter is, and how readers subscribe.
 - How many subscribers the newsletter expects, and how often it sends.
 
@@ -58,8 +60,12 @@ Until AWS grants production access, SES sends only to your verified addresses, s
 
     Its `state` is `production`.
 
-1. If it reads **Sandbox**, or `state` is `sandbox`, AWS hasn't granted access yet. Come back to this section when it does, and check the email AWS Support sends for questions.
+1. If it reads **Sandbox**, or `state` is `sandbox`, AWS hasn't granted access yet. Meanwhile, continue with [Verify it works](07-verify.md), which runs in the sandbox. Come back to this section when AWS answers, and check the email AWS Support sends for questions.
 
-1. If it says Kestrel's AWS key needs permission to read your account, or `unknown_reason` is `permission`, allow the `kestrel-send-email` policy `ses:GetAccount`, as [Connect Amazon SES](05-ses.md#5-create-the-apps-aws-key) shows. Look again in an hour, since the app asks again hourly. If it reads only "Amazon SES", or `unknown_reason` is `not_checked`, the app hasn't asked yet: look again in ten minutes. The SES **Account dashboard** shows the same facts.
+1. If it says Kestrel's AWS key needs permission to read your account, or `unknown_reason` is `permission`, allow the `kestrel-send-email` policy `ses:GetAccount`. [Connect Amazon SES](05-ses.md#5-create-the-apps-aws-key) shows the policy. Look again in an hour, since the app asks again hourly.
+
+1. If it reads only "Amazon SES", or `unknown_reason` is `not_checked`, the app hasn't asked yet. Look again in ten minutes.
+
+1. If it still reads only "Amazon SES" after that, or `unknown_reason` is `unreachable`, SES didn't give the app a usable answer. In the app's logs, the `provider.account_checked` line carries SES's error, as [Read the logs](07-verify.md#7-read-the-logs) describes. Meanwhile, the SES **Account dashboard** shows the same facts.
 
 Next, [verify it works](07-verify.md).
