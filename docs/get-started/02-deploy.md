@@ -86,9 +86,7 @@ Every command from here on acts on your Cloudflare account through the Wrangler 
 
 Each command creates the resource and writes it into the `production` block of `wrangler.jsonc`, under the binding the app already uses. Name `--env production` on each one, or Wrangler writes to the top level, which is local development.
 
-`kestrel init` named the Worker, the database, and the bucket after your instance's folder, and printed the names. A folder's name is made to fit Cloudflare's rules, so `newsletter.example.com` gives `newsletter-example-com`, and `npx kestrel init --name NAME` picks a name instead. The commands below use `newsletter`. If yours differs, use the `database_name` and `bucket_name` in the `production` block of `wrangler.jsonc`.
-
-A second instance in the same Cloudflare account needs names of its own, or its deploy replaces the first instance's Worker. Give it a different folder name, such as your publication's, or a different `--name`.
+The commands below use `newsletter`. Use your instance's names instead: `kestrel init` printed them, and they're in the `production` block of `wrangler.jsonc`.
 
 1. Create the database:
 
