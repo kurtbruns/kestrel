@@ -1,8 +1,8 @@
 # Connect Amazon SES
 
-This page connects the app to Amazon Simple Email Service (Amazon SES), which delivers the newsletter's email. A new SES account starts in a sandbox, where it can send only to addresses you've verified, until AWS reviews it. This page connects the app in the sandbox, and checks each piece as you set it up. [Request production access](05-production-access.md) then asks AWS to lift the sandbox.
+This page connects the app to Amazon Simple Email Service (Amazon SES), which delivers the newsletter's email. A new SES account starts in a sandbox, where it can send only to addresses you've verified, until AWS reviews it. See [Request production access](05-production-access.md) to take it out of the sandbox.
 
-In this guide, you verify your sending hostname with a custom MAIL FROM domain, and add a DMARC record. You verify two addresses of your own to test with. You then route bounces and complaints to the app, give it an AWS key, and deploy it with SES connected. Last, you forward readers' replies to the publisher's inbox.
+In this guide, you set up how the app sends mail through SES and receives bounces and complaints, and how readers' replies reach the publisher.
 
 ## Before you begin
 
