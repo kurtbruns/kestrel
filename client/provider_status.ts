@@ -7,8 +7,8 @@ import type { ProviderStatusView, ProviderWarning } from "../shared/provider";
 import { api } from "./api";
 import { type Html, html } from "./ui/html";
 
-/** Verify it works' step that asks AWS for production access. */
-export const PRODUCTION_ACCESS_HREF = "#/docs/verify/3-request-production-access";
+/** Connect Amazon SES' step that asks AWS for production access. */
+export const PRODUCTION_ACCESS_HREF = "#/docs/ses/9-request-production-access";
 
 /**
  * The connection, or null when the read fails or there's nothing to read: only SES has an

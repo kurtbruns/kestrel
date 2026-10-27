@@ -1019,7 +1019,7 @@ describe("settings view", () => {
         "It mails only addresses verified in SES, up to 200 a day. Request production access",
       );
       expect($<HTMLAnchorElement>("#providerReview a").getAttribute("href")).toBe(
-        "#/docs/verify/3-request-production-access",
+        "#/docs/ses/9-request-production-access",
       );
       expect($("#sendRate").textContent).toBe(
         "1 email a second, up to 200 a day (from your SES account)",

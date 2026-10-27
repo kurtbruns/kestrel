@@ -1,8 +1,8 @@
 # Connect Amazon SES
 
-This page connects the app to Amazon Simple Email Service (Amazon SES), which delivers the newsletter's email. A new SES account starts in a sandbox, where it can send only to addresses you've verified, until AWS reviews it. This page connects the app in the sandbox. [Verify it works](05-verify.md) then sends a test email and asks AWS for production access, so AWS reviews a site that already works.
+This page connects the app to Amazon Simple Email Service (Amazon SES), which delivers the newsletter's email. A new SES account starts in a sandbox, where it can send only to addresses you've verified, until AWS reviews it. This page connects the app in the sandbox, then asks AWS for production access, so AWS reviews a site that already works.
 
-In this guide, you verify your sending hostname with a custom MAIL FROM domain, and add a DMARC record. You verify two addresses of your own to test with. You then route bounces and complaints to the app, give it an AWS key, and deploy it with SES connected. Last, you forward readers' replies to the publisher's inbox.
+In this guide, you verify your sending hostname with a custom MAIL FROM domain, and add a DMARC record. You verify two addresses of your own to test with. You then route bounces and complaints to the app, give it an AWS key, and deploy it with SES connected. You forward readers' replies to the publisher's inbox. Last, you ask AWS for production access.
 
 ## Before you begin
 
@@ -61,7 +61,7 @@ DMARC tells inboxes what to do with mail that fails its checks, and sends you re
 
 ## 3. Verify your test addresses
 
-A new SES account starts in the sandbox: it sends only to addresses you've verified, up to 200 emails a day and one a second. The test emails in [Verify it works](05-verify.md) go to two addresses of your own, so verify those now. Verify it works asks AWS for production access, once a test email has arrived.
+A new SES account starts in the sandbox: it sends only to addresses you've verified, up to 200 emails a day and one a second. The test emails in [Verify it works](05-verify.md) go to two addresses of your own, so verify those now. Section 9 asks AWS for production access, which lifts the limit.
 
 1. Choose two addresses you own, such as a personal address and a work address. Verify it works uses both.
 
@@ -258,6 +258,32 @@ Replies to a post go to your From address, `newsletter@send.example.com`, which 
 
 Out-of-office and other automatic replies reach the publisher's inbox too. Bounces don't: they go to SES, which reports them to the app. The publisher answers from their own inbox, not from `newsletter@send.example.com`. To answer from the newsletter's address instead, give it a mailbox at a mail host such as [Fastmail](https://www.fastmail.help/hc/en-us/articles/360060591133) or [Google Workspace](https://support.google.com/a/answer/140034), in place of forwarding.
 
+## 9. Request production access
+
+A new SES account sends only to the addresses you've verified, up to 200 emails a day and one a second. Production access lifts those limits, once AWS reviews the account. Ask now: the app is connected, and the publication's website shows a live subscribe form. A signup there gets its confirmation email only once AWS grants access, AWS's own included. Everything in [Verify it works](05-verify.md) runs in the sandbox, so continue there while AWS reviews the request.
+
+1. Name the publication, since AWS may visit its website to review the request. In the editor, open **Settings → Publication identity**, and enter the name and tagline, or ask the publisher for them. On a new instance with no posts, the tagline is the only line on the home page that says what the newsletter is about. Both can change later.
+
+1. If the newsletter will mainly sell something, add a mailing address there too, with **Add a mailing address**. [When to provide a mailing address](../publishing/03-name-your-publication.md#when-to-provide-a-mailing-address) explains when US law asks for one.
+
+1. In SES, in the region the app sends from, open the **Account dashboard**, select **View Get set up page**, and then **Request production access**.
+
+1. Fill in the request:
+
+    - **Mail type:** Marketing
+    - **Website URL:** `https://newsletter.example.com/`
+
+    Leave the other fields as they are.
+
+1. Check the acknowledgement, and select **Submit request**. AWS Support answers by email, and may ask how you collect addresses and handle bounces. Within about ten minutes, the app's **Settings → Email sender** says AWS is reviewing your request, and it says when AWS grants or denies it.
+
+If AWS asks for more detail, or denies the request, reply in the support case, or open a new request from the **Account dashboard**. Say how Kestrel handles the list:
+
+- Signups use double opt-in: each subscriber confirms by email before joining the list.
+- Every post offers one-click unsubscribe.
+- Bounces and complaints reach the app, and it stops mailing those addresses automatically. [Verify it works](05-verify.md#6-check-that-bounces-and-complaints-come-back) shows it working.
+- How many subscribers the newsletter expects, and how often it sends.
+
 ## Check it
 
 1. The app answers on your hostname:
@@ -294,6 +320,8 @@ Out-of-office and other automatic replies reach the publisher's inbox too. Bounc
 
 1. In a browser, `https://newsletter.example.com/subscribe` shows the subscribe form, where it said signups aren't open yet.
 
-The test emails in the next step prove the rest, including a reply, and then it asks AWS for production access. In the sandbox, they go only to the addresses you verified in section 3, and to the SES test addresses that page lists. SES charges for each email it sends, test emails included, as [Amazon SES pricing](https://aws.amazon.com/ses/pricing/) lists.
+1. **Settings → Email sender** shows a **Sandbox** pill and says AWS is reviewing your request for production access, or shows **Production** once AWS grants it.
+
+The test emails in the next step prove the rest, including a reply. Until AWS grants production access, they go only to the addresses you verified in section 3, and to the SES test addresses that page lists. SES charges for each email it sends, test emails included, as [Amazon SES pricing](https://aws.amazon.com/ses/pricing/) lists.
 
 Next, [verify it works](05-verify.md).

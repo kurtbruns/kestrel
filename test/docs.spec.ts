@@ -162,8 +162,8 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
     // And the step Settings and the dashboard send the publisher to for production access.
     expect(links).toContainEqual([
       "../client/provider_status.ts",
-      "verify",
-      "3-request-production-access",
+      "ses",
+      "9-request-production-access",
     ]);
     expect(links).toContainEqual([
       "../client/settings/deploy.ts",
