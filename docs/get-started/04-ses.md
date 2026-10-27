@@ -164,7 +164,7 @@ The app sends through an AWS Identity and Access Management (IAM) user whose key
     npx wrangler secret put AWS_SECRET_ACCESS_KEY --env production
     ```
 
-## 6. Set the provider and deploy
+## 6. Connect the app and deploy
 
 Until now the app has run with no email provider connected, refusing to send. Setting `PROVIDER` to `ses` connects SES, with the secrets you stored in sections 4 and 5. If a required one is missing, the app refuses to run until you store it, and `/health` names it.
 
@@ -197,6 +197,10 @@ Until now the app has run with no email provider connected, refusing to send. Se
     ```bash
     npx wrangler deploy --env production
     ```
+
+1. Check that the app is connected. In the editor, **Settings → Email sender** shows Amazon SES and your From address, where it said **No email provider connected** before. Within a couple of minutes, a **Sandbox** pill appears beside it, once the app has read your SES account. If the page doesn't load, `https://newsletter.example.com/health` names the setting the app is missing.
+
+1. In a browser, `https://newsletter.example.com/subscribe` shows the subscribe form, where it said signups aren't open yet.
 
 ## 7. Subscribe the app to the topic
 
