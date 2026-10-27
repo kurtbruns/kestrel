@@ -1,6 +1,6 @@
 {
   "name": "@kurtbruns/kestrel",
-  "version": "1.17.0",
+  "version": "1.18.0",
   "type": "module",
   "description": "An open-source, self-hosted newsletter app where you own the list and the archive. Work in the editor, or just ask Claude. Runs on Cloudflare Workers.",
   "license": "MIT",

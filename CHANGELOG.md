@@ -10,6 +10,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+## [1.18.0] - 2026-10-26
+
 **Upgrading from 1.17.0.** In your instance's repository, run `npm run sync-migrations`, which brings in one database migration, `0015_provider_account`: a new table where the app keeps what it reads of your SES account, which rewrites nothing. Apply it before you deploy, with `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development). If your instance already sends through Amazon SES, let the app's AWS key read the account before you deploy: in the IAM console, open **Policies**, then `kestrel-send-email`, choose **Edit**, add `"ses:GetAccount"` and `"ses:GetEmailIdentity"` to its `Action` list in the JSON editor, and save. Otherwise the app's first check finds the key not allowed, Settings says so with **Add the permission**, and the app asks again only hourly. An instance not yet connected to SES skips this, since Connect Amazon SES's policy now includes both. Then deploy with `npx wrangler deploy --env production`. `SES_MAX_SEND_RATE` is now a cap: a send keeps to the lower of it and your account's own rate, so the old guide's `"1"` would hold every send at one a second even after AWS grants production access. Once Settings → Email sender shows a **Sandbox** or **Production** badge beside Amazon SES, the app has read your account: remove `SES_MAX_SEND_RATE` from the `production` block's `vars` in `wrangler.jsonc`, or raise it to the most you want, and deploy again. Run `npm run check-context`: this release changes the operator's Claude context, and a copy you've edited is merged by hand. An existing instance keeps its Worker, database, and bucket names: don't rename them, and don't copy a new instance's names from the template into your `wrangler.jsonc`. If you're partway through the setup guide, continue from its renumbered pages: 1.17.0's Connect Amazon SES section 4 is now its own page, Request production access, after Connect Amazon SES.
 
 ### Added
@@ -687,7 +689,8 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
-[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.17.0...HEAD
+[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.18.0...HEAD
+[1.18.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.18.0
 [1.17.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.17.0
 [1.16.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.16.0
 [1.15.1]: https://github.com/kurtbruns/kestrel/releases/tag/v1.15.1
