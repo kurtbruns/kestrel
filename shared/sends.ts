@@ -98,7 +98,7 @@ export const NOT_CONNECTED_ADVICE = {
 export function refusalAdvice(cause: HaltCause | null): string {
   switch (cause) {
     case "credentials":
-      return "Whoever runs the deployment replaces the SES access key in its secrets, or gives the key ses:SendEmail and ses:SendBulkEmail in its IAM policy.";
+      return "Whoever runs the deployment replaces the SES access key in its secrets, or allows the key ses:SendEmail, ses:SendBulkEmail, ses:SendTemplatedEmail, and ses:SendBulkTemplatedEmail in its IAM policy.";
     case "opt_in":
       return "The AWS account isn’t signed up for SES: whoever runs the deployment enables SES for the account in the region AWS_REGION names, or settles the account’s activation or billing with AWS.";
     case "configuration":

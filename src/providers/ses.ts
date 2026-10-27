@@ -130,8 +130,10 @@ const ACCOUNT_ERROR_TYPES = new Map<string, HaltCause>([
   // The AWS account isn't signed up for SES, which the key can't change.
   ["OptInRequired", "opt_in"],
   // The credentials themselves: unknown, missing, wrongly or incompletely signed, expired, or
-  // not permitted (a key whose policy lacks `ses:SendBulkEmail` among them). AWS's common
-  // errors carry some of these with a 400, which is why the type, not the status, decides; it
+  // not permitted (a key whose policy lacks `ses:SendTemplatedEmail` or
+  // `ses:SendBulkTemplatedEmail` among them: every send passes an inline template, and SES
+  // authorizes a templated send as its own action). AWS's common errors carry some of these
+  // with a 400, which is why the type, not the status, decides; it
   // names some both with and without the `Exception` suffix, depending on the front end that
   // answered, so both spellings are here.
   ["UnrecognizedClientException", "credentials"],

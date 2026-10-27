@@ -16,7 +16,11 @@ import {
 describe("a refusal's advice", () => {
   // Each cause names its own fix, checked against AWS's docs, and who makes it (SPEC §12).
   it.each([
-    ["credentials", ["SES access key", "ses:SendBulkEmail"], "whoever runs the deployment"],
+    [
+      "credentials",
+      ["SES access key", "ses:SendTemplatedEmail", "ses:SendBulkTemplatedEmail"],
+      "whoever runs the deployment",
+    ],
     ["opt_in", ["enables SES for the account"], "whoever runs the deployment"],
     ["configuration", ["SES_CONFIGURATION_SET", "creates the set"], "whoever runs the deployment"],
     ["sending_pool", ["dedicated IP pool", "sending options"], "whoever runs the deployment"],

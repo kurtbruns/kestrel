@@ -181,12 +181,12 @@ export const condition = {
     kind: "refused",
     severity: "action",
     since: 1_000,
-    message: `The provider is refusing the account: ${error} Whoever runs the deployment replaces the SES access key in its secrets, or gives the key ses:SendEmail and ses:SendBulkEmail in its IAM policy.`,
+    message: `The provider is refusing the account: ${error} Whoever runs the deployment replaces the SES access key in its secrets, or allows the key ses:SendEmail, ses:SendBulkEmail, ses:SendTemplatedEmail, and ses:SendBulkTemplatedEmail in its IAM policy.`,
     action: null,
     cause: "credentials",
     error,
     advice:
-      "Whoever runs the deployment replaces the SES access key in its secrets, or gives the key ses:SendEmail and ses:SendBulkEmail in its IAM policy.",
+      "Whoever runs the deployment replaces the SES access key in its secrets, or allows the key ses:SendEmail, ses:SendBulkEmail, ses:SendTemplatedEmail, and ses:SendBulkTemplatedEmail in its IAM policy.",
     retry_at: retryAt,
   }),
   noReceipts: (accepted: number): SendCondition => ({
