@@ -224,15 +224,12 @@ async function tokenRequest(endpoint, form, timeoutMs = TOKEN_TIMEOUT_MS) {
         `${new URL(endpoint).origin} didn't answer the token request within ${timeoutMs / 1000} seconds. Try again.`,
       );
     }
-    const reason = errText(err);
-    const error = new SignInError(`Couldn't reach ${new URL(endpoint).origin}: ${reason}`);
-    error.unreachable = reason;
-    throw error;
+    throw new SignInError(`Couldn't reach ${new URL(endpoint).origin}: ${errText(err)}`);
   }
   if (!res.ok) {
     const detail = `${res.status}${body.error ? `: ${body.error}` : ""}${body.error_description ? `, ${body.error_description}` : ""}`;
     const error = new SignInError(`Access refused the token request (${detail}).`);
-    // What a caller needs to say more: whether the team answered at all, and in its words.
+    // What a caller needs to say more: the status, and Access's words.
     error.status = res.status;
     error.detail = detail;
     error.oauthError = body.error;

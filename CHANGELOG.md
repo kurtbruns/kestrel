@@ -10,18 +10,17 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading from 1.18.0.** If your instance sends through Amazon SES, let the app's AWS key send templated email now, whether or not you upgrade: in the IAM console, open **Policies**, then `kestrel-send-email`, choose **Edit**, add `"ses:SendTemplatedEmail"` and `"ses:SendBulkTemplatedEmail"` to its `Action` list in the JSON editor, and save. Keep the actions already there. A key with the guide's earlier policy can't send at all: until you add them, SES refuses every email the app sends as not authorized, test emails included. Then deploy with `npx wrangler deploy --env production`. Run `npm run check-context`: this release changes the operator's Claude context, and a copy you've edited is merged by hand.
+**Upgrading from 1.18.0.** If your instance sends through Amazon SES, let the app's AWS key send templated email now, whether or not you upgrade: in the IAM console, open **Policies**, then `kestrel-send-email`, choose **Edit**, add `"ses:SendTemplatedEmail"` and `"ses:SendBulkTemplatedEmail"` to its `Action` list in the JSON editor, and save. Keep the actions already there. A key with the guide's earlier policy can't send at all: until you add them, SES refuses every email the app sends as not authorized, test emails included. Then deploy with `npx wrangler deploy --env production`.
 
 ### Changed
 
 - Connect Amazon SES follows the SES, SNS, and IAM consoles as they are now: it creates the key's policy before its user, sets SNS's longer retry policy on the subscription form, and leaves alone the SES statement a topic created from SES already has. It says why the other six event types stay off, and ends its replies section with a check in Email Routing's Activity log.
 - `kestrel api` run without `--url` or `KESTREL_URL` names the instance it calls on stderr ("calling …, the only instance you're signed in to"), so a call from another instance's folder no longer goes to that sign-in unseen.
-- The operator's Claude context checks the instance `kestrel api` says it called against the repository's own, and signs the person in again when renewing their sign-in gets a 404 from the Access team, so Claude no longer reads another instance's answer, or a stale sign-in's failure, as this instance's. Merge it into an edited copy by hand.
 
 ### Fixed
 
 - Connect Amazon SES's IAM policy, `kestrel-send-email`, now includes `ses:SendTemplatedEmail` and `ses:SendBulkTemplatedEmail`. Every SES email has been sent as an inline template since 1.8.0, so a key with only the guide's earlier actions had every email refused, test emails included. The advice for an SES credentials refusal names all four send actions.
-- When renewing a sign-in gets a 404 from its Access team, or can't reach it, `kestrel api` says so, naming the instance and the team, and to run `npx kestrel login` again, instead of "Access refused the token request (404)" or a bare network error. A real refusal still reads "Access refused the token request", now naming the instance.
+- When renewing a sign-in gets a 404 from its Access team, `kestrel api` says so, naming the instance and the team, and to run `npx kestrel login` again, instead of "Access refused the token request (404)". A real refusal still reads "Access refused the token request", now naming the instance.
 
 ## [1.18.0] - 2026-10-26
 

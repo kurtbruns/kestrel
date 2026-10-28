@@ -269,16 +269,6 @@ describe("a call as the signed-in person", () => {
     );
   });
 
-  it("names the Access team and the cause when its host can't be reached", async () => {
-    await writeSignIn(ORIGIN, stored(-1));
-    stubFetch(() => {
-      throw new TypeError("fetch failed", { cause: new Error("getaddrinfo ENOTFOUND") });
-    });
-    await expect(accessToken(ORIGIN)).rejects.toThrow(
-      `Couldn't renew your sign-in to ${ORIGIN}: its Access team, team.cloudflareaccess.com, couldn't be reached (fetch failed (getaddrinfo ENOTFOUND)). If you're online, run \`npx kestrel login ${ORIGIN}\` again.`,
-    );
-  });
-
   it('keeps "Access refused" for a real refusal from a team that answers, naming the instance', async () => {
     await writeSignIn(ORIGIN, stored(-1));
     stubFetch(() => json({ error: "invalid_client", error_description: "unknown client" }, 401));

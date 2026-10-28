@@ -296,19 +296,13 @@ export async function accessToken(origin, { force = false, env = process.env } =
       if (err.oauthError === "invalid_grant") {
         throw new SignInError(ended);
       }
-      // The token endpoint saved at sign-in wasn't found, or didn't answer. Signing in again
-      // discovers where the instance signs in now. The message says what happened, not why:
-      // a renamed team domain and a moved endpoint both answer 404, and no answer may be this
-      // computer being offline, so it keeps the cause.
-      const team = new URL(now.token_endpoint).host;
+      // The token endpoint saved at sign-in wasn't found; signing in again discovers where the
+      // instance signs in now. It says what happened, not why: a renamed team domain and a
+      // moved endpoint both answer 404.
       if (err.status === 404) {
+        const team = new URL(now.token_endpoint).host;
         throw new SignInError(
           `Couldn't renew your sign-in to ${origin}: its Access team, ${team}, answered 404 (not found). Run \`npx kestrel login ${origin}\` again.`,
-        );
-      }
-      if (err.unreachable) {
-        throw new SignInError(
-          `Couldn't renew your sign-in to ${origin}: its Access team, ${team}, couldn't be reached (${err.unreachable}). If you're online, run \`npx kestrel login ${origin}\` again.`,
         );
       }
       if (err.status) {
