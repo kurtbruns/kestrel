@@ -19,7 +19,7 @@ The same form sets a custom MAIL FROM domain, so SPF also passes for your domain
 
     SES keeps identities, quotas, and the sandbox separately in each region, so do every step on this page in the region you chose. [Configuration](../reference/01-configuration.md#vars) says more about choosing one, under `AWS_REGION`.
 
-1. Note the region's code, such as `eu-west-1`. The menu shows it beside the region's name, such as Europe (Ireland), and [Amazon SES endpoints](https://docs.aws.amazon.com/general/latest/gr/ses.html) lists each one too. Later steps use this code.
+1. Note the region's code, such as `us-west-2`. The menu shows it beside the region's name, and [Amazon SES endpoints](https://docs.aws.amazon.com/general/latest/gr/ses.html) lists each one too. AWS names a region in more than one way, such as United States (Oregon) and US West (Oregon), so go by the code. Later steps use it.
 
 1. Under **Configuration**, choose **Identities**, then **Create identity**.
 
@@ -73,27 +73,31 @@ A new SES account starts in the sandbox: it sends only to addresses you've verif
 
 1. Choose two addresses you own, such as a personal address and a work address. Verify it works uses both.
 
-1. For each, under **Identities**, choose **Create identity**, select **Email address**, and enter it. Choose **Create identity**.
+1. For each, under **Identities**, choose **Create identity**, select **Email address**, and enter it. Leave **Assign a default configuration set** and **Assign to a tenant** unchecked. The form's notice about DMARC is about sending from the address, and the app only sends to it. Choose **Create identity**.
 
 1. Open the email AWS sends to each address, and follow its link. The identity's status changes to **Verified**.
+
+    AWS's email and confirmation page say you can now send from the address. That's expected: SES has one kind of verified address, and the same verification lets the sandbox send to it.
 
 ## 4. Send bounces and complaints to the app
 
 SES reports bounces and complaints through Amazon Simple Notification Service (SNS), which delivers them to the app. The app then stops mailing an address that bounced or complained. A configuration set says which events SES reports, and an SNS topic carries them.
 
-1. In SES, under **Configuration**, choose **Configuration sets**, then **Create set**. Name it `kestrel-mail`, and choose **Create set**.
+1. In SES, under **Configuration**, choose **Configuration sets**, then **Create set**. Name it `kestrel-mail`, keep every other option as it is, and choose **Create set**.
 
 1. On the set's **Event destinations** tab, choose **Add destination**. Select **Hard bounces**, **Complaints**, **Deliveries**, and **Rendering failures**, and choose **Next**. The app logs a rendering failure, an email SES couldn't build, as an error.
 
-1. For **Destination type**, select **Amazon SNS**. Name it `kestrel-sns`, and keep **Event publishing** enabled. Choose **Next**.
+    Leave the other six off, since the app already knows about them or doesn't act on them. **Sends** repeats what the send records, and **Delivery delays** end as a bounce or a delivery. **Rejects** (a virus) and **Subscriptions** (SES's own unsubscribe) don't arise, since the app's emails carry no attachments and their own unsubscribe link. **Opens** and **Clicks** would add tracking the app doesn't record.
 
-1. For **SNS topic**, choose **Create SNS topic**. Make it a **Standard** topic named `kestrel-events`. Choose **Next**, then **Add destination**.
+1. For **Destination type**, select **Amazon SNS**. Name it `kestrel-sns`, and keep **Event publishing** enabled.
 
-1. Make the set your hostname's default, so SES reports on every email sent from it. Open the `send.example.com` identity, and choose the **Configuration set** tab. Under **Default configuration set**, choose **Edit**, select `kestrel-mail`, and save.
+1. On the same screen, under **SNS topic**, choose **Create SNS topic**. Name it `kestrel-events`, leave the display name empty, and choose **Create topic**. Then select `kestrel-events` in the topic menu, if it isn't already. Choose **Next**, then **Add destination**.
+
+1. Make the set your hostname's default, so SES reports on every email sent from it. Under **Identities**, open `send.example.com`, and choose its **Configuration set** tab, below the summary. Edit the **Default configuration set**, select **Assign a default configuration set**, select `kestrel-mail`, and save.
 
 1. Open the topic in the [SNS console](https://console.aws.amazon.com/sns/), in the same region, and find its ARN. It looks like `arn:aws:sns:us-east-1:111122223333:kestrel-events`, where `us-east-1` is your region's code and `111122223333` is your account ID.
 
-1. Let SES publish to the topic. Choose **Edit**, expand **Access policy**, and add this statement to the `Statement` list:
+1. Check that SES may publish to the topic, on its **Access policy** tab. A topic created from SES's **Add destination**, as above, already lets SES publish to it from your account. Leave that statement as it is. For a topic you made in the SNS console instead, choose **Edit**, expand **Access policy**, and add this statement to the `Statement` list:
 
     ```json
     {
@@ -128,13 +132,11 @@ SES reports bounces and complaints through Amazon Simple Notification Service (S
 
 The app sends through an AWS Identity and Access Management (IAM) user whose key can only send email and read the account's sending status. That limits the harm if the key ever leaks. Reading the status lets the app show whether SES is still in the sandbox, take its send rate from the account, and warn when bounces and complaints can't reach it.
 
-If `kestrel-sender` already exists, as on an instance set up before Kestrel read the account, don't create a second user or key. In the IAM console, open **Policies**, then `kestrel-send-email`, and choose **Edit**. In the JSON editor, add `"ses:GetAccount"` and `"ses:GetEmailIdentity"` to its `Action` list, as in the policy below, and save. The app's next check, within an hour, reads the account.
+If `kestrel-sender` already exists, from an earlier release, don't create a second user or key. Update its policy instead, as the end of this section shows.
 
-1. In the [IAM console](https://console.aws.amazon.com/iam/), go to **Users**, and choose **Create user**. Name it `kestrel-sender`, and leave console access off.
+1. In the [IAM console](https://console.aws.amazon.com/iam/), choose **Policies**, then **Create policy**.
 
-1. When asked for permissions, choose **Attach policies directly**, then **Create policy**. The policy editor opens in a new browser tab.
-
-1. In the new tab, choose the **JSON** editor, and replace its contents with this policy:
+1. Choose the **JSON** editor, and replace its contents with this policy:
 
     ```json
     {
@@ -145,6 +147,8 @@ If `kestrel-sender` already exists, as on an instance set up before Kestrel read
           "Action": [
             "ses:SendEmail",
             "ses:SendBulkEmail",
+            "ses:SendTemplatedEmail",
+            "ses:SendBulkTemplatedEmail",
             "ses:GetAccount",
             "ses:GetEmailIdentity"
           ],
@@ -154,13 +158,17 @@ If `kestrel-sender` already exists, as on an instance set up before Kestrel read
     }
     ```
 
-    Choose **Next**, name the policy `kestrel-send-email`, and choose **Create policy**. You can close this tab.
+1. Choose **Next**, name the policy `kestrel-send-email`, and choose **Create policy**. The review lists Pinpoint Email, SES, and SES v2, which is how IAM shows these SES actions.
 
-1. Go back to the first tab, where you're creating the user. Refresh the policy list, search for `kestrel-send-email`, and select it.
+1. Choose **IAM users**, then **Create user**. Name it `kestrel-sender`, leave console access off, and choose **Next**.
 
-1. Choose **Next**, then **Create user**.
+1. Choose **Attach policies directly**, search for `kestrel-send-email`, and select it. AWS recommends groups, which help manage many people, and one app's user doesn't need one. Choose **Next**, then **Create user**.
 
-1. Open the user, and on the **Security credentials** tab, choose **Create access key**. For the use case, choose **Application running outside AWS**.
+1. Open `kestrel-sender`, and choose **Create access key**. It's an access key, not an API key. For the use case, choose **Application running outside AWS**, and choose **Next**.
+
+    AWS suggests IAM Roles Anywhere instead. It needs a certificate authority of your own, so use the access key.
+
+1. For the description tag, enter the app's hostname, such as `newsletter.example.com`, so you can tell its key apart later. Choose **Create access key**.
 
 1. Keep the page open: AWS shows the secret access key only once. Store the access key ID in the app, and paste it at the prompt:
 
@@ -173,6 +181,8 @@ If `kestrel-sender` already exists, as on an instance set up before Kestrel read
     ```bash
     npx wrangler secret put AWS_SECRET_ACCESS_KEY --env production
     ```
+
+To update an existing key's policy, open **Policies** in the IAM console, then `kestrel-send-email`, and choose **Edit**. In the JSON editor, make its `Action` list match the policy above, and save. Without `ses:SendTemplatedEmail`, SES refuses even a test email. Once the key may call `ses:GetAccount`, the app's next check, within an hour, reads the account.
 
 ## 6. Connect the app and deploy
 
@@ -240,7 +250,7 @@ SNS delivers events only to a subscriber that has confirmed. The app confirms on
 
     Any other answer, such as a redirect to your Cloudflare login, means Access covers the webhook. Remove that path from your Access application.
 
-1. In the SNS console, open your topic, and choose **Create subscription**.
+1. In the SNS console, open your topic, and choose **Create subscription**. Check that **Topic ARN** shows the `kestrel-events` topic, and choose it if it's empty.
 
 1. Set **Protocol** to **HTTPS**, and enter the endpoint:
 
@@ -248,13 +258,9 @@ SNS delivers events only to a subscriber that has confirmed. The app confirms on
     https://newsletter.example.com/webhooks/ses
     ```
 
-1. Leave raw message delivery off, and choose **Create subscription**.
+1. Leave raw message delivery off.
 
-1. Reload the subscription. Its status changes to **Confirmed**, with nothing for you to click.
-
-    If it stays **Pending confirmation**, check that your Access application covers only `/dashboard` and `/api`, that `SNS_TOPIC_ARN` matches the topic's ARN, and that section 6's deploy finished. A mismatched ARN shows in the app's logs as a `webhook.refused` error naming both. Then request confirmation again from the topic's subscriptions. SNS doesn't let you delete a pending subscription, and removes it on its own after 48 hours.
-
-1. Give SNS longer to retry. By default it retries a failed delivery 3 times over about a minute, then discards the event, so a bounce that arrives mid-deploy is lost. Open the topic, choose **Edit**, and expand **Delivery retry policy (HTTP/S)**. Turn off the default policy, set these values, and choose **Save changes**:
+1. Give SNS longer to retry. By default it retries a failed delivery 3 times over about a minute, then discards the event, so a bounce that arrives mid-deploy is lost. Expand **Delivery policy (HTTP/S)**, turn off **Use the default delivery policy**, and set these values:
 
     | Field | Value |
     | --- | --- |
@@ -266,13 +272,19 @@ SNS delivers events only to a subscriber that has confirmed. The app confirms on
     | Maximum delay retries | `6` |
     | Retry-backoff function | Exponential |
 
-    SNS then keeps trying for about 40 minutes. It allows an hour at most.
+    SNS then keeps trying for about 40 minutes. It allows an hour at most. The topic has a delivery policy of its own, under **Edit**. Setting it there instead also covers any subscription you add later.
+
+1. Choose **Create subscription**.
+
+1. Reload the subscription. Its status changes to **Confirmed**, with nothing for you to click.
+
+    If it stays **Pending confirmation**, check that your Access application covers only `/dashboard` and `/api`. Check that `SNS_TOPIC_ARN` matches the topic's ARN, and that section 6's deploy finished. A mismatched ARN shows in the app's logs as a `webhook.refused` error naming both. Then request confirmation again from the topic's subscriptions. SNS doesn't let you delete a pending subscription, and removes it on its own after 48 hours.
 
 1. **(Optional)** Keep what SNS still can't deliver. On the subscription, choose **Edit**, and set a **Redrive policy (dead-letter queue)** to an SQS queue of your own. SNS then moves an event there instead of discarding it. [Amazon SNS dead-letter queues](https://docs.aws.amazon.com/sns/latest/dg/sns-dead-letter-queues.html) covers the queue and its permissions.
 
 ## 8. Receive replies at your From address
 
-Replies to a post go to your From address, `newsletter@send.example.com`, which has no inbox yet, so they bounce. This section forwards that address to the publisher's inbox with Cloudflare Email Routing. Forwarding only receives mail, so it doesn't change how SES sends.
+Replies to a post go to your From address, `newsletter@send.example.com`, which has no inbox yet, so they bounce. The reader is told your domain couldn't be found. This section forwards that address to the publisher's inbox with Cloudflare Email Routing. Forwarding only receives mail, so it doesn't change how SES sends.
 
 1. Check that your From address has no inbox yet. This prints nothing:
 
@@ -286,7 +298,7 @@ Replies to a post go to your From address, `newsletter@send.example.com`, which 
 
 1. Add `send.example.com` to Email Routing: select `example.com`, then **Settings**, and add `send` under **Subdomains**.
 
-1. Cloudflare adds MX, SPF, and DKIM records for `send.example.com`, and locks them. Wait until they show as added.
+1. Cloudflare adds MX, SPF, and DKIM records for `send.example.com`, and locks them. Wait until they show as added. Its SPF record is for forwarding: SES's mail passes SPF at `bounce.send.example.com`, from section 1.
 
 1. Under **Destination Addresses**, add the publisher's inbox. Open the email Cloudflare sends to it, and select **Verify email address**. If it isn't your inbox, ask the publisher to do this step.
 
@@ -299,6 +311,10 @@ Replies to a post go to your From address, `newsletter@send.example.com`, which 
     ```bash
     dig +short MX send.example.com
     ```
+
+1. Send an email to `newsletter@send.example.com` from an address whose mail doesn't go through the publisher's inbox. Gmail, for one, hides a forwarded copy of mail you sent yourself. In Email Routing's **Activity log**, the email shows as **Forwarded**.
+
+    If it bounces saying the domain couldn't be found, the sender's provider is still remembering that `send.example.com` had no mail servers. That happens after an email to it before this section, and lasts up to 30 minutes on Cloudflare's DNS. Wait, and send it again.
 
 Out-of-office and other automatic replies reach the publisher's inbox too. Bounces don't: they go to SES, which reports them to the app. The publisher answers from their own inbox, not from `newsletter@send.example.com`. To answer from the newsletter's address instead, give it a mailbox at a mail host such as [Fastmail](https://www.fastmail.help/hc/en-us/articles/360060591133) or [Google Workspace](https://support.google.com/a/answer/140034), in place of forwarding.
 

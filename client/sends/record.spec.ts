@@ -1031,7 +1031,7 @@ describe("sent record", () => {
       "ses 403 UnrecognizedClientException: The security token included in the request is invalid",
     );
     expect(alert.textContent).toContain(refusalAdvice("credentials"));
-    expect(alert.textContent).toContain("ses:SendBulkEmail in its IAM policy");
+    expect(alert.textContent).toContain("ses:SendBulkTemplatedEmail in its IAM policy");
     expect(document.querySelector("#resolveBtn")).toBeNull(); // Resolve is for a wedge only
     expect($(".wbar-sub").textContent).toMatch(/refusing this account/);
     expect($(".wbar-sub").textContent).toContain("next retry in 12 min");
