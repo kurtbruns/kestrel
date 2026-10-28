@@ -259,21 +259,21 @@ describe("a call as the signed-in person", () => {
     );
   });
 
-  it("says the Access team no longer answers, and to sign in again, when renewing gets a 404", async () => {
+  it("names the instance and the Access team that answered 404, and to sign in again", async () => {
     await writeSignIn(ORIGIN, stored(-1));
     stubFetch(() => new Response("Not Found", { status: 404 }));
     await expect(accessToken(ORIGIN)).rejects.toThrow(
-      `The sign-in for ${ORIGIN} was made with the Access team team.cloudflareaccess.com, which no longer answers there (it answered 404): the team was renamed or removed. Run \`npx kestrel login ${ORIGIN}\` again.`,
+      `Couldn't renew your sign-in to ${ORIGIN}: its Access team, team.cloudflareaccess.com, answered 404 (not found). Run \`npx kestrel login ${ORIGIN}\` again.`,
     );
   });
 
-  it("names the Access team and the cause when its host can't be reached, without claiming the team is gone", async () => {
+  it("names the Access team and the cause when its host can't be reached", async () => {
     await writeSignIn(ORIGIN, stored(-1));
     stubFetch(() => {
       throw new TypeError("fetch failed", { cause: new Error("getaddrinfo ENOTFOUND") });
     });
     await expect(accessToken(ORIGIN)).rejects.toThrow(
-      `Couldn't reach team.cloudflareaccess.com, the Access team the sign-in for ${ORIGIN} was made with: fetch failed (getaddrinfo ENOTFOUND). If you're online, the team may have been renamed or removed: run \`npx kestrel login ${ORIGIN}\` again.`,
+      `Couldn't renew your sign-in to ${ORIGIN}: its Access team, team.cloudflareaccess.com, couldn't be reached (fetch failed (getaddrinfo ENOTFOUND)). If you're online, run \`npx kestrel login ${ORIGIN}\` again.`,
     );
   });
 

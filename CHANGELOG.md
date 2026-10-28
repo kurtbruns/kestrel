@@ -16,12 +16,12 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 - Connect Amazon SES follows the SES, SNS, and IAM consoles as they are now: it creates the key's policy before its user, sets SNS's longer retry policy on the subscription form, and leaves alone the SES statement a topic created from SES already has. It says why the other six event types stay off, and ends its replies section with a check in Email Routing's Activity log.
 - `kestrel api` run without `--url` or `KESTREL_URL` names the instance it calls on stderr ("Calling …, your one sign-in. Use --url for another."), so a call from another instance's folder no longer goes to your one sign-in unseen.
-- The operator's Claude context checks the instance `kestrel api` says it called against the repository's own, and signs the person in again when their Access team no longer answers, so Claude no longer reads another instance's answer, or a stale sign-in's failure, as this instance's. Merge it into an edited copy by hand.
+- The operator's Claude context checks the instance `kestrel api` says it called against the repository's own, and signs the person in again when renewing their sign-in gets a 404 from the Access team, so Claude no longer reads another instance's answer, or a stale sign-in's failure, as this instance's. Merge it into an edited copy by hand.
 
 ### Fixed
 
 - Connect Amazon SES's IAM policy, `kestrel-send-email`, now includes `ses:SendTemplatedEmail` and `ses:SendBulkTemplatedEmail`. Every SES email has been sent as an inline template since 1.8.0, so a key with only the guide's earlier actions had every email refused, test emails included. The advice for an SES credentials refusal names all four send actions.
-- When renewing a sign-in fails because its Access team domain no longer answers (renamed or removed), `kestrel api` says so, naming the instance and the team, and to run `npx kestrel login` again, instead of "Access refused the token request (404)". When the team can't be reached at all, it names the team and the cause, since you may be offline. A real refusal still reads "Access refused the token request", now naming the instance.
+- When renewing a sign-in gets a 404 from its Access team, or can't reach it, `kestrel api` says so, naming the instance and the team, and to run `npx kestrel login` again, instead of "Access refused the token request (404)" or a bare network error. A real refusal still reads "Access refused the token request", now naming the instance.
 
 ## [1.18.0] - 2026-10-26
 
