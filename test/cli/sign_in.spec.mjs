@@ -141,7 +141,9 @@ describe("which instance a URL names", () => {
     const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     chooseInstance({ env: {}, signIns: one });
     expect(stderr.mock.calls).toEqual([
-      [`Calling ${ORIGIN}, your one sign-in. Use --url for another.\n`],
+      [
+        `kestrel api: calling ${ORIGIN}, the only instance you're signed in to. Pass --url to call a different one.\n`,
+      ],
     ]);
     expect(stdout).not.toHaveBeenCalled();
   });

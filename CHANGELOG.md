@@ -15,7 +15,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Changed
 
 - Connect Amazon SES follows the SES, SNS, and IAM consoles as they are now: it creates the key's policy before its user, sets SNS's longer retry policy on the subscription form, and leaves alone the SES statement a topic created from SES already has. It says why the other six event types stay off, and ends its replies section with a check in Email Routing's Activity log.
-- `kestrel api` run without `--url` or `KESTREL_URL` names the instance it calls on stderr ("Calling …, your one sign-in. Use --url for another."), so a call from another instance's folder no longer goes to your one sign-in unseen.
+- `kestrel api` run without `--url` or `KESTREL_URL` names the instance it calls on stderr ("calling …, the only instance you're signed in to"), so a call from another instance's folder no longer goes to that sign-in unseen.
 - The operator's Claude context checks the instance `kestrel api` says it called against the repository's own, and signs the person in again when renewing their sign-in gets a 404 from the Access team, so Claude no longer reads another instance's answer, or a stale sign-in's failure, as this instance's. Merge it into an edited copy by hand.
 
 ### Fixed

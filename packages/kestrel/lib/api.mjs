@@ -52,7 +52,7 @@ const USAGE = `Usage: kestrel api <method> <path> [options]
   --data <json|@file|->         the request body: inline, from a file, or from stdin
   --type <media type>           the body's type (default application/json)
   --form <name=value>           a multipart field, repeatable; name=@file attaches a file
-  --url <url>                   the instance (default: KESTREL_URL, else your one sign-in)
+  --url <url>                   the instance (default: KESTREL_URL, else the only one you're signed in to)
   --local                       this directory's dev server, started by kestrel dev
   --client <name>               your own script's Kestrel-Client name (default ${DEFAULT_CLIENT});
                                 never editor, which only the editor names itself
@@ -199,7 +199,9 @@ export function chooseInstance({
   }
   const origins = Object.keys(signIns);
   if (origins.length === 1) {
-    say(`Calling ${origins[0]}, your one sign-in. Use --url for another.`);
+    say(
+      `kestrel api: calling ${origins[0]}, the only instance you're signed in to. Pass --url to call a different one.`,
+    );
     return origins[0];
   }
   if (origins.length === 0) {
