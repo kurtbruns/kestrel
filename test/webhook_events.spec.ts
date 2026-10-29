@@ -442,6 +442,19 @@ describe("applyDeliveryEvents: a receipt that beats the provider's answer to its
       .run();
   }
 
+  /** A recipient of a later send in flight, beside the address's row on the seeded send. */
+  async function laterInFlight(email: string): Promise<void> {
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT OR IGNORE INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, scheduled_at) VALUES ('s-later', 'p-receipts', 'sending', ?, '', '', '', ?)",
+      ).bind(now, now),
+      env.DB.prepare(
+        "INSERT INTO deliveries (send_id, email, status, updated_at) VALUES ('s-later', ?, 'dispatched', ?)",
+      ).bind(email, now + 1),
+    ]);
+  }
+
   async function heldCount(): Promise<number> {
     const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM held_receipts").first<{
       n: number;
@@ -492,15 +505,7 @@ describe("applyDeliveryEvents: a receipt that beats the provider's answer to its
 
   it("holds the receipt rather than land it on an older send's row resolved as sent", async () => {
     await seedDelivery("both@example.com", null); // an earlier send, resolved as sent
-    const now = Date.now();
-    await env.DB.batch([
-      env.DB.prepare(
-        "INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, scheduled_at) VALUES ('s-later', 'p-receipts', 'sending', ?, '', '', '', ?)",
-      ).bind(now, now),
-      env.DB.prepare(
-        "INSERT INTO deliveries (send_id, email, status, updated_at) VALUES ('s-later', 'both@example.com', 'dispatched', ?)",
-      ).bind(now + 1),
-    ]);
+    await laterInFlight("both@example.com");
 
     const applied = await applyDeliveryEvents(env.DB, [
       { type: "bounced", providerId: "msg-new", email: "both@example.com", hard: true },
@@ -526,8 +531,9 @@ describe("applyDeliveryEvents: a receipt that beats the provider's answer to its
       recorded: 0,
       unchanged: 0,
       expired: 0,
-      waiting: 1,
+      waiting: 0,
     });
+    expect(await heldCount()).toBe(1); // still in flight, so the pass left it alone
 
     // Resolve's "assume sent": accepted, with no id the provider never answered with.
     await env.DB.prepare(
@@ -543,22 +549,81 @@ describe("applyDeliveryEvents: a receipt that beats the provider's answer to its
     expect(await heldCount()).toBe(0);
   });
 
-  it("releases a held receipt with no row to land on once its recipient is resolved as not sent", async () => {
-    await inFlight("unsent@example.com");
+  it("releases a held receipt once its recipient is resolved as not sent, landing on no other delivery (SPEC §10)", async () => {
+    await seedDelivery("unsent@example.com", null); // an earlier send, resolved as sent
+    await laterInFlight("unsent@example.com");
     await applyDeliveryEvents(env.DB, [
-      { type: "delivered", providerId: "msg-unsent", email: "unsent@example.com" },
+      { type: "bounced", providerId: "msg-unsent", email: "unsent@example.com", hard: false },
     ]);
     await env.DB.prepare(
-      "UPDATE deliveries SET status = 'unsent' WHERE email = 'unsent@example.com'",
+      "UPDATE deliveries SET status = 'unsent' WHERE send_id = 's-later' AND email = 'unsent@example.com'",
     ).run();
 
     const result = await applyHeldReceipts(env.DB, Date.now(), 10);
 
     expect(result).toEqual({ recorded: 0, unchanged: 1, expired: 0, waiting: 0 });
-    const row = await env.DB.prepare(
-      "SELECT status, event FROM deliveries WHERE email = 'unsent@example.com'",
-    ).first<{ status: string; event: string | null }>();
-    expect(row).toEqual({ status: "unsent", event: null });
+    const { results } = await env.DB.prepare(
+      "SELECT status, event FROM deliveries WHERE email = 'unsent@example.com' ORDER BY id",
+    ).all<{ status: string; event: string | null }>();
+    expect(results).toEqual([
+      { status: "accepted", event: null },
+      { status: "unsent", event: null },
+    ]);
+    expect(await heldCount()).toBe(0);
+  });
+
+  it("never lets a receipt still waiting hold back one whose row has learned its id", async () => {
+    await inFlight("stuck@example.com"); // a batch the provider never answered
+    await inFlight("answered@example.com");
+    await applyDeliveryEvents(env.DB, [
+      { type: "delivered", providerId: "msg-stuck", email: "stuck@example.com" },
+      { type: "bounced", providerId: "msg-answered", email: "answered@example.com", hard: true },
+    ]);
+    await env.DB.prepare(
+      "UPDATE deliveries SET status = 'accepted', provider_id = 'msg-answered' WHERE email = 'answered@example.com'",
+    ).run();
+
+    const result = await applyHeldReceipts(env.DB, Date.now(), 1);
+
+    expect(result).toEqual({ recorded: 1, unchanged: 0, expired: 0, waiting: 0 });
+    expect(await deliveryEvent("msg-answered")).toBe("bounced");
+    expect(await heldCount()).toBe(1);
+  });
+
+  it("lands a receipt on its row when the send loop records the answer while the receipt is being matched", async () => {
+    await inFlight("between@example.com");
+    // The send loop records the provider's answer just after the receipt looked for its id.
+    let settled = false;
+    const db = {
+      prepare(sql: string) {
+        const stmt = env.DB.prepare(sql);
+        if (settled || !sql.includes("WHERE provider_id = ?")) {
+          return stmt;
+        }
+        return {
+          bind: (...values: unknown[]) => {
+            const bound = stmt.bind(...values);
+            return {
+              first: async () => {
+                const row = await bound.first();
+                settled = true;
+                await env.DB.prepare(
+                  "UPDATE deliveries SET status = 'accepted', provider_id = 'msg-between' WHERE email = 'between@example.com'",
+                ).run();
+                return row;
+              },
+            };
+          },
+        };
+      },
+      batch: (statements: D1PreparedStatement[]) => env.DB.batch(statements),
+    } as unknown as D1Database;
+
+    await applyDeliveryEvents(db, [
+      { type: "bounced", providerId: "msg-between", email: "between@example.com", hard: true },
+    ]);
+
+    expect(await deliveryEvent("msg-between")).toBe("bounced");
     expect(await heldCount()).toBe(0);
   });
 
@@ -568,9 +633,8 @@ describe("applyDeliveryEvents: a receipt that beats the provider's answer to its
       { type: "delivered", providerId: "msg-wait", email: "waiting@example.com" },
     ]);
 
-    expect(
-      (await applyHeldReceipts(env.DB, Date.now() + HELD_RECEIPT_TTL_MS - 60_000, 10)).waiting,
-    ).toBe(1);
+    await applyHeldReceipts(env.DB, Date.now() + HELD_RECEIPT_TTL_MS - 60_000, 10);
+    expect(await heldCount()).toBe(1);
     const result = await applyHeldReceipts(env.DB, Date.now() + HELD_RECEIPT_TTL_MS, 10);
 
     expect(result).toEqual({ recorded: 0, unchanged: 0, expired: 1, waiting: 0 });

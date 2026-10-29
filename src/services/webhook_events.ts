@@ -77,8 +77,8 @@ export async function applyDeliveryEvents(
       at: now,
     };
     const matched = await markDeliveryEvent(db, update);
-    if (matched.held) {
-      await holdReceipt(db, update);
+    if (matched.heldFor !== null) {
+      await holdReceipt(db, update, matched.heldFor);
     }
     applied += 1;
     const tally = bySend.get(matched.sendId ?? "") ?? {
@@ -95,7 +95,7 @@ export async function applyDeliveryEvents(
     tally[e.type] += 1;
     if (matched.changes > 0) {
       tally.recorded += 1;
-    } else if (matched.held) {
+    } else if (matched.heldFor !== null) {
       tally.held += 1;
     } else {
       tally.unchanged += 1;
@@ -154,8 +154,8 @@ export async function applyDeliveryEvents(
 export interface HeldReceiptResult {
   /** Landed on a delivery row. */
   recorded: number;
-  /** Reached a row that already held as bad an outcome, or reached none once its address
-   *  had nothing in flight (a recipient resolved as not sent). */
+  /** Reached a row that already held as bad an outcome, or reached none once its recipient
+   *  settled without taking it (resolved as not sent). */
   unchanged: number;
   /** Still waiting after a day, so discarded. */
   expired: number;
@@ -164,11 +164,12 @@ export interface HeldReceiptResult {
 }
 
 /**
- * Apply up to `limit` held receipts to the record, by the rules any receipt follows
- * (`markDeliveryEvent`): one whose row now holds its id lands there, and one whose recipient
- * the publisher resolved as sent lands on that row. Each that reached a row, or that no row
- * will take now its address has nothing in flight, is released; one still waiting is kept,
- * for a day. The list already acted on each when it arrived, so this only writes the record.
+ * Apply up to `limit` held receipts that are done waiting (`heldReceipts`) to the record, by
+ * the rules any receipt follows (`markDeliveryEvent`): one whose row now holds its id lands
+ * there, and one whose recipient the publisher resolved as sent lands on that recipient's row,
+ * never another. Each that reached a row, or whose recipient settled without taking it, is
+ * released; one still waiting is kept, for a day. The list already acted on each when it
+ * arrived, so this only writes the record.
  */
 export async function applyHeldReceipts(
   db: D1Database,
@@ -177,9 +178,9 @@ export async function applyHeldReceipts(
 ): Promise<HeldReceiptResult> {
   const result: HeldReceiptResult = { recorded: 0, unchanged: 0, expired: 0, waiting: 0 };
   const released: number[] = [];
-  for (const { id, update } of await heldReceipts(db, limit)) {
+  for (const { id, update } of await heldReceipts(db, now, limit)) {
     const matched = await markDeliveryEvent(db, update);
-    if (!matched.held) {
+    if (matched.heldFor === null) {
       released.push(id);
       result[matched.changes > 0 ? "recorded" : "unchanged"] += 1;
     } else if (now - update.at >= HELD_RECEIPT_TTL_MS) {
