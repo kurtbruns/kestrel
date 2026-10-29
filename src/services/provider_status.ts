@@ -99,7 +99,9 @@ export async function refreshProviderAccount(
 /**
  * A part of the account this check couldn't read keeps what the last check found, as the
  * account itself does when it can't be read: the identity, and the configuration set while it
- * is still the one that applies.
+ * is still the one that applies. The sender's verdict isn't tied to the From address it was
+ * read for, so after a deploy that changes the address, a failed identity read shows the old
+ * verdict until the next good one: rare, and it clears itself.
  */
 function keepUnread(answer: AccountAnswer, last: AccountAnswer | null, config: Config): void {
   if (!last) {
@@ -216,7 +218,8 @@ function warnings(
     out.push({
       code: "sending_disabled",
       severity: "error",
-      message: `Sending is turned off for your SES account in ${region}, so no email can go out. Turn it back on from the SES console’s account dashboard.`,
+      // AWS documents turning account sending back on only from the CLI, with no console switch.
+      message: `Sending is turned off for your SES account in ${region}, so no email can go out. Turn it back on with the AWS CLI: aws sesv2 put-account-sending-attributes --sending-enabled --region ${region}`,
       docs: ACCOUNT_DOC,
     });
   }

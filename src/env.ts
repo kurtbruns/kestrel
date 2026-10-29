@@ -730,6 +730,13 @@ function readSimulateAccount(
       `must be off, or one of ${SIMULATED_ACCOUNTS.join(", ")} optionally followed by :unrouted or one of :${SIMULATED_ACCOUNT_PROBLEMS.join(", :")}, not "${v?.trim()}"`,
     );
   }
+  if (state === "permission" && problem) {
+    // A key not allowed to read the account reads nothing, so it can show no problem.
+    throw new ConfigError(
+      "SIMULATE_ACCOUNT",
+      `permission reads nothing of the account, so it takes no problem, not "${v?.trim()}"`,
+    );
+  }
   if (profile !== "ses") {
     throw new ConfigError(
       "SIMULATE_ACCOUNT",

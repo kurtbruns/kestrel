@@ -130,16 +130,14 @@ const ACCOUNT_ERROR_TYPES = new Map<string, HaltCause>([
   // The AWS account isn't signed up for SES, which the key can't change.
   ["OptInRequired", "opt_in"],
   // The credentials themselves: unknown, missing, wrongly or incompletely signed, expired, or
-  // not permitted (a key whose policy lacks `ses:SendTemplatedEmail` or
-  // `ses:SendBulkTemplatedEmail` among them: every send passes an inline template, and SES
-  // authorized such a send as a templated one when a key without those actions was refused,
-  // an observation from running an instance that AWS's documentation doesn't state, since its
-  // service reference ties neither action to SendEmail or SendBulkEmail). A request SES
-  // refuses as expired is not here: that is the clock, not the key (`UNAVAILABLE_ERROR_TYPES`).
-  // AWS's common errors carry some of these
-  // with a 400, which is why the type, not the status, decides; it
-  // names some both with and without the `Exception` suffix, depending on the front end that
-  // answered, so both spellings are here.
+  // not permitted. A key whose policy lacks `ses:SendTemplatedEmail` or
+  // `ses:SendBulkTemplatedEmail` is among them: every send passes an inline template, and SES
+  // refuses a templated send from a key without them. That rests on what a running instance
+  // saw, not on AWS's documentation, whose service reference ties neither action to SendEmail
+  // or SendBulkEmail. A request SES refuses as expired is not here: that is the clock, not the
+  // key (`UNAVAILABLE_ERROR_TYPES`). AWS's common errors carry some of these with a 400, which
+  // is why the type, not the status, decides; it names some both with and without the
+  // `Exception` suffix, depending on the front end that answered, so both spellings are here.
   ["UnrecognizedClientException", "credentials"],
   ["InvalidClientTokenId", "credentials"],
   ["MissingAuthenticationToken", "credentials"],
@@ -282,7 +280,7 @@ export function classifySesError(
   if (throttled) {
     return unavailable("rate_limit");
   }
-  if (status === 408 || UNAVAILABLE_ERROR_TYPES.has(type) || status >= 500) {
+  if (status === 408 || status >= 500) {
     return unavailable("outage");
   }
   return null;

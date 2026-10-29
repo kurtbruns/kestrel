@@ -645,7 +645,8 @@ export const TOOL_DEFS: ToolDef[] = [
           connection: {
             state: p.state,
             review: p.review,
-            warnings: p.warnings.map((w) => w.message),
+            unknown_reason: p.unknown_reason,
+            warnings: p.warnings.map((w) => ({ severity: w.severity, message: w.message })),
           },
         },
         subscribers: (list.body as SubscriberListResponse).counts,

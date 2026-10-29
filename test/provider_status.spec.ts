@@ -175,6 +175,7 @@ describe("SIMULATE_ACCOUNT", () => {
       ":unrouted",
       "sandbox:unrouted:set_missing",
       "set_missing",
+      "permission:key_rejected",
     ]) {
       expect(() => simulated(value)).toThrow(
         expect.objectContaining({ name: "ConfigError", variable: "SIMULATE_ACCOUNT" }),
@@ -524,16 +525,61 @@ describe("the account problems the check finds (SPEC §9)", () => {
     ]);
   });
 
+  it("never calls a From address unverified when it has more parent domains than one check reads", async () => {
+    const LONG = {
+      ...WITH_SET,
+      SENDING_DOMAIN: "news.mail.send.birds.example",
+      FROM_ADDRESS: "Birds <hi@news.mail.send.birds.example>",
+    };
+    const asked = reads((url) =>
+      url.startsWith(IDENTITY) ? sesError(404, "NotFoundException") : undefined,
+    );
+    await sweep(withVars(LONG));
+    // The address and three of its four domains; birds.example, unread, could be verified.
+    expect(asked.filter((u) => u.startsWith(IDENTITY))).toHaveLength(4);
+    expect(await codes(LONG)).toEqual([]);
+  }, 15_000); // six reads, a second apart
+
+  it("keeps the last sender and set findings when a later check can't read them", async () => {
+    reads((url) =>
+      url.startsWith(SET)
+        ? sesError(404, "NotFoundException")
+        : url.startsWith(IDENTITY)
+          ? sesError(404, "NotFoundException")
+          : undefined,
+    );
+    await sweep(SES_WITH_SET);
+    const found = [
+      ["configuration_set_missing", "error"],
+      ["sender_unverified", "error"],
+    ];
+    expect(await codes()).toEqual(found);
+
+    vi.restoreAllMocks();
+    reads((url) => (url === ACCOUNT ? undefined : sesError(500, "InternalFailure")));
+    vi.setSystemTime(Date.now() + ACCOUNT_CHECK_INTERVAL_MS);
+    await sweep(SES_WITH_SET);
+    expect((await readProviderAccount(env.DB))?.checkedAt).toBe(Date.now());
+    expect(await codes()).toEqual(found);
+  }, 15_000); // two checks of up to six reads, a second apart
+
   it("says nothing about the sender when the key may not read the identity", async () => {
     reads((url) => (url.startsWith(IDENTITY) ? sesError(403, "AccessDeniedException") : undefined));
     await sweep(SES_WITH_SET);
     expect(await codes()).toEqual([]);
   });
 
-  it("says sending is off for an account its owner turned off, an error", async () => {
+  it("says sending is off for an account its owner turned off, an error, with the CLI command that turns it on", async () => {
     reads((url) => (url === ACCOUNT ? ok(accountBody({ SendingEnabled: false })) : undefined));
     await sweep(SES_WITH_SET);
-    expect(await codes()).toEqual([["sending_disabled", "error"]]);
+    expect((await status(WITH_SET)).warnings).toMatchObject([
+      {
+        code: "sending_disabled",
+        severity: "error",
+        message:
+          "Sending is turned off for your SES account in us-east-1, so no email can go out. Turn it back on with the AWS CLI: aws sesv2 put-account-sending-attributes --sending-enabled --region us-east-1",
+      },
+    ]);
   });
 
   it("says sending is off for an account AWS has paused, an error", async () => {
