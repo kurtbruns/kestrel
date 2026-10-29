@@ -79,19 +79,21 @@ The app verifies each login against your team domain, and checks that it was iss
 
     A secret takes effect as soon as you store it, with no redeploy.
 
-1. **(Optional, recommended)** Limit the editor to named people. The Access policy decides who can sign in. This list keeps that true if the policy is widened later, for another app or by mistake. Enter a comma-separated list of email addresses at the prompt:
+1. **(Optional, recommended)** Limit the editor to named people. The Access policy decides who can sign in. This list keeps that true if the policy is widened later, for another app or by mistake. Store the list of addresses allowed in:
 
     ```bash
     npx wrangler secret put ACCESS_ALLOWED_EMAILS --env production
     ```
 
-    Without it, the app lets in anyone your Access policy allows.
+    At the prompt, enter the addresses separated by commas:
 
-To let someone else into the editor, such as the publisher or a co-editor, add their email address to the policy from [Allow yourself in](#3-allow-yourself-in). If you set `ACCESS_ALLOWED_EMAILS`, store it again with their address added, since the command replaces the whole list:
+    ```
+    you@example.com, publisher@example.com
+    ```
 
-```bash
-npx wrangler secret put ACCESS_ALLOWED_EMAILS --env production
-```
+    Spaces and capital letters don't matter. Without the list, the app lets in anyone your Access policy allows.
+
+To let someone else into the editor, such as the publisher or a co-editor, add their email address to the policy from [Allow yourself in](#3-allow-yourself-in). If you set `ACCESS_ALLOWED_EMAILS`, run the command again and enter the whole list with their address added, since the new value replaces the old one.
 
 ## Check it
 
