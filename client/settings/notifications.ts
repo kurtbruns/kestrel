@@ -77,11 +77,11 @@ export function notificationsSection(page: SettingsPage): Html {
       <p class="set-lede">Kestrel emails you when a send goes out, and right away if a send runs into a problem.</p>
       <div class="set-card">
         <div class="set-recip">
-          <div class="set-field" style="margin:0">
+          <div class="set-field">
             <label for="notifyTo">Send notifications to</label>
-            <p class="field-hint" style="margin:0 0 8px">Each address gets every notification. Add whoever runs Kestrel for you, so they’re told too. Up to ${MAX_NOTIFY_ADDRESSES}.</p>
-            ${addressListHtml(NOTIFY_IDS)}
+            <p class="field-hint" style="margin:0">Each address gets every notification. Add whoever runs Kestrel for you, so they’re told too. Up to ${MAX_NOTIFY_ADDRESSES}.</p>
           </div>
+          ${addressListHtml(NOTIFY_IDS)}
           <div class="row"><button type="button" class="ghost" id="notifyTest">Send a test notification</button><span class="field-hint" id="notifyTestHint"></span></div>
         </div>
         <div class="set-kv" style="border-top:1px solid var(--line)">
