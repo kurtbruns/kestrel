@@ -22,10 +22,8 @@ const subscriber = (over: Partial<Subscriber> = {}): Subscriber => ({
   id: "s1",
   email: "reader@b.c",
   status: "confirmed",
-  confirm_token: null,
   confirm_sent_at: 1,
   confirm_attempt_at: 1,
-  unsub_token: "u",
   created_at: Date.UTC(2026, 0, 2),
   confirmed_at: Date.UTC(2026, 0, 3),
   unsubscribed_at: null,
@@ -397,7 +395,6 @@ describe("the subscriber page (SPEC §8, DESIGN §3)", () => {
             consent_evidence: null,
             origin: null,
             opt_in: null,
-            unsub_token: null,
           });
           return { subscriber: sub, deliveries: 1 };
         },

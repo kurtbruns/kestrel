@@ -10,7 +10,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading from 1.18.0.** If your instance sends through Amazon SES, let the app's AWS key send templated email now, whether or not you upgrade: in the IAM console, open **Policies**, then `kestrel-send-email`, choose **Edit**, add `"ses:SendTemplatedEmail"` and `"ses:SendBulkTemplatedEmail"` to its `Action` list in the JSON editor, and save. Keep the actions already there. A key with the guide's earlier policy can't send at all: until you add them, SES refuses every email the app sends as not authorized, test emails included. Then deploy with `npx wrangler deploy --env production`.
+**Upgrading from 1.18.0.** If your instance sends through Amazon SES, let the app's AWS key send templated email now, whether or not you upgrade: in the IAM console, open **Policies**, then `kestrel-send-email`, choose **Edit**, add `"ses:SendTemplatedEmail"` and `"ses:SendBulkTemplatedEmail"` to its `Action` list in the JSON editor, and save. Keep the actions already there. A key with the guide's earlier policy can't send at all: until you add them, SES refuses every email the app sends as not authorized, test emails included. Then deploy with `npx wrangler deploy --env production`. A script of yours that read a subscriber's `confirm_token` or `unsub_token` from the API needs changing (see Breaking); nothing else does.
 
 ### Changed
 
@@ -18,12 +18,17 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - While Amazon SES is in the sandbox, an empty Subscribers list offers only the import, says to share the subscribe page once AWS grants production access, and links Request production access. A reader who signs up before then gets no confirmation email, since SES mails only addresses verified in it.
 - The confirm page's line under its heading reads "Confirm reader@example.com to start receiving the newsletter.", in the reader's words like the confirmation email, instead of asking whether to start sending to them.
 - The comment `kestrel init` writes above `PROVIDER` in `wrangler.jsonc` stays true after Connect Amazon SES sets it to `ses`. Only new instances get it; an existing instance can edit its comment by hand.
+- Allow Claude to connect's check after turning on Managed OAuth states only the expected answer, and says Access can take a few minutes more to accept sign-ins, showing `invalid_target` until then. Troubleshooting adds the `invalid_target` case, and Connect Claude includes the **Connect** and **Allow** steps after **Add**.
 - `kestrel api` run without `--url` or `KESTREL_URL` names the instance it calls on stderr ("calling …, the only instance you're signed in to"), so a call from another instance's folder no longer goes to that sign-in unseen.
 
 ### Fixed
 
 - Connect Amazon SES's IAM policy, `kestrel-send-email`, now includes `ses:SendTemplatedEmail` and `ses:SendBulkTemplatedEmail`. Every SES email has been sent as an inline template since 1.8.0, so a key with only the guide's earlier actions had every email refused, test emails included. The advice for an SES credentials refusal names all four send actions.
 - When renewing a sign-in gets a 404 from its Access team, `kestrel api` says so, naming the instance and the team, and to run `npx kestrel login` again, instead of "Access refused the token request (404)". A real refusal still reads "Access refused the token request", now naming the instance.
+
+### Breaking
+
+- A subscriber no longer carries `confirm_token` or `unsub_token` in any API answer, so no API client, Claude included, can confirm a pending address or unsubscribe someone as if the reader had (SPEC I1). Both stay in the database, and the links in mail work as before. Read `status` and `confirm_sent_at` for where a confirmation stands, and add the address again (`POST /api/subscribers`) to send another.
 
 ## [1.18.0] - 2026-10-26
 

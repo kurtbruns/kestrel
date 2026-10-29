@@ -14,7 +14,7 @@ How you connect depends on where you talk to Claude:
 1. In Claude, go to **Customize → Connectors**, select **Add**, then **Add custom connector**.
 1. Name it, and enter your publication's address followed by `/api/mcp`, such as `https://newsletter.example.com/api/mcp`.
 1. Under **OAuth client**, choose **Register automatically**.
-1. Select **Add**, then sign in the way you do for the dashboard, and approve the sign-in.
+1. Select **Add**, then **Connect**. Sign in the way you do for the dashboard if asked, and choose **Allow**.
 
 On a Team or Enterprise plan, an Owner of your Claude organization adds the connector under **Organization settings → Connectors** instead, and you then select **Connect** on it. Anthropic's [custom connectors guide](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) has the details.
 

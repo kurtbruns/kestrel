@@ -1879,17 +1879,15 @@ export function createRouter({
         "Erase a subscriber: unsubscribe them and keep only their address, so it's never mailed again. Can't be undone.",
       description:
         `${SUBSCRIBER_ACTIONS.erase.when} Unsubscribing stops the mail and keeps everything; erasing removes what the list knows about them. ` +
-        "One batch: unsubscribes them with `unsubscribe_cause` `erased` and strips the subscriber to the address and when (`created_at` and `unsubscribed_at` the time of the erasure; `confirmed_at`, `consent_evidence`, `import_id`, `origin`, `opt_in`, and both tokens null, so an unsubscribe link in mail already sent matches no one), replaces their address on every past delivery row with one placeholder (`erased:` and random hex, so each record still sums to its audience), and drops the `detail` of a bounce or block kept on the address. Works on someone already unsubscribed too. Answers the `subscriber` as it now stands and how many `deliveries` show the placeholder; a repeat changes nothing and answers `deliveries: 0`. They come back only by subscribing through the public form themselves: `POST /api/subscribers` refuses the address, and an import never reverses an unsubscribe. A later receipt on an erased row keeps its outcome without the provider's words.",
+        "One batch: unsubscribes them with `unsubscribe_cause` `erased` and strips the subscriber to the address and when (`created_at` and `unsubscribed_at` the time of the erasure; `confirmed_at`, `consent_evidence`, `import_id`, `origin`, and `opt_in` null), and discards their confirmation and unsubscribe links, so a link in mail already sent matches no one, replaces their address on every past delivery row with one placeholder (`erased:` and random hex, so each record still sums to its audience), and drops the `detail` of a bounce or block kept on the address. Works on someone already unsubscribed too. Answers the `subscriber` as it now stands and how many `deliveries` show the placeholder; a repeat changes nothing and answers `deliveries: 0`. They come back only by subscribing through the public form themselves: `POST /api/subscribers` refuses the address, and an import never reverses an unsubscribe. A later receipt on an erased row keeps its outcome without the provider's words.",
       example: {
         response: {
           subscriber: {
             id: "8b2f6c1e-4d3a-4f0b-9c7e-2a1d5e6f7a80",
             email: "reader@example.com",
             status: "unsubscribed",
-            confirm_token: null,
             confirm_sent_at: null,
             confirm_attempt_at: null,
-            unsub_token: null,
             created_at: 1760400000000,
             confirmed_at: null,
             unsubscribed_at: 1760400000000,

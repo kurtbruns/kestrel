@@ -43,7 +43,7 @@ Managed OAuth lets an app such as Claude act with a person's account, the way th
     curl -si https://newsletter.example.com/api/whoami
     ```
 
-    It answers `401`, and its `www-authenticate` line starts with `Bearer` and names `resource_metadata`. Without Managed OAuth, Cloudflare answers with a redirect to its login page instead. A browser still gets the login page either way.
+    You should see `401`, with a `www-authenticate` line that starts with `Bearer`. Access can take a few minutes more to start accepting sign-ins. Until it does, signing in shows `invalid_target`; wait, then try again.
 
 ## 2. Connect Claude, or send the publisher the address
 

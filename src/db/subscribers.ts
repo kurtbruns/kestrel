@@ -18,7 +18,16 @@ import { forgetDeliveries, idleFor } from "./erasure";
 // The row shapes live in shared/ so the editor reads the same definitions; the names
 // here are the Worker's own.
 export type { SubscribeAction, SubscriberStatus };
-export type SubscriberRow = Omit<Subscriber, "suppression" | "receives_posts">;
+
+/** A subscriber as stored: the wire fields, less what `withSuppressions` adds, plus the two
+ *  tokens that prove the reader acted, which never leave the server (I1, I2). */
+export type SubscriberRow = Omit<Subscriber, "suppression" | "receives_posts"> & {
+  /** One-shot double opt-in token, rotated on each re-arm; null once spent. */
+  confirm_token: string | null;
+  /** Durable token in every delivered mail's unsubscribe link; never rotated (I2). Null once
+   *  erased, which discards it; a person who signs up again gets a new one. */
+  unsub_token: string | null;
+};
 
 /** Subscribers as the API answers them, in the order given: each with its suppression, or
  *  null, and whether they receive posts (docs/API.md, principle 2: one shape on every route),
@@ -34,8 +43,22 @@ export async function withSuppressions(
   const by = new Map(found.map((s) => [s.email, s]));
   return rows.map((row) => {
     const sup = by.get(row.email);
+    // Field by field, never a spread of the row, so a column reaches the wire only when it is
+    // named here: the tokens never do, since holding one lets a client act as the reader (I1).
     return {
-      ...row,
+      id: row.id,
+      email: row.email,
+      status: row.status,
+      confirm_sent_at: row.confirm_sent_at,
+      confirm_attempt_at: row.confirm_attempt_at,
+      created_at: row.created_at,
+      confirmed_at: row.confirmed_at,
+      unsubscribed_at: row.unsubscribed_at,
+      unsubscribe_cause: row.unsubscribe_cause,
+      origin: row.origin,
+      opt_in: row.opt_in,
+      consent_evidence: row.consent_evidence,
+      import_id: row.import_id,
       suppression: sup
         ? { reason: sup.reason, detail: sup.detail, created_at: sup.created_at }
         : null,
