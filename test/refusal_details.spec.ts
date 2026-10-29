@@ -623,7 +623,7 @@ const CASES: Case[] = [
     refusal: "POST /api/settings/notifications/test bad_request",
     when: "no notifications address saved",
     run: async () => {
-      await updateSettings(env.DB, { notifications: { to: "" } });
+      await updateSettings(env.DB, { notifications: { to: [] } });
       return call("POST", "/api/settings/notifications/test");
     },
   },
@@ -631,7 +631,7 @@ const CASES: Case[] = [
     refusal: "POST /api/settings/notifications/test notify_failed",
     when: "the channel refusing it",
     run: async () => {
-      await updateSettings(env.DB, { notifications: { to: "you@x.io" } });
+      await updateSettings(env.DB, { notifications: { to: ["you@x.io"] } });
       failFakeNotify(1);
       return call("POST", "/api/settings/notifications/test");
     },
@@ -640,7 +640,7 @@ const CASES: Case[] = [
     refusal: "POST /api/settings/notifications/test provider_not_connected",
     when: "notifying through a provider that isn't there",
     run: async () => {
-      await updateSettings(env.DB, { notifications: { to: "you@x.io" } });
+      await updateSettings(env.DB, { notifications: { to: ["you@x.io"] } });
       return notConnected("POST", "/api/settings/notifications/test");
     },
   },

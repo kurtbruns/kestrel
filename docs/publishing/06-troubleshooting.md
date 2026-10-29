@@ -2,7 +2,7 @@
 
 When something needs you, Kestrel says so in a line on the send's page, under **Sent**. The top of the dashboard shows it too. Red needs you to act, and amber is worth a look. The line says what happened, what to do, and who does it. This page covers what the screen can't: the fixes made outside Kestrel, and the decisions that are yours.
 
-**Set a notifications address, so a problem reaches you without your watching.** Set it under **Settings → Notifications**, in **Send notifications to**. With none set, Kestrel emails you nothing. [Notifications](06-troubleshooting.md#notifications), below, lists what you're told.
+**Set a notifications address, so a problem reaches you without your watching.** Set it under **Settings → Notifications**, in **Send notifications to**, one address per line. Add the address of whoever runs your instance too, and both of you are told. With none set, Kestrel emails you nothing. [Notifications](06-troubleshooting.md#notifications), below, lists what you're told.
 
 ## A send is held or waiting
 
@@ -81,6 +81,6 @@ With an address set, Kestrel emails you:
 - when a send stops going out with nothing to explain it, waits for you to resolve it, or misses its time
 - when a service token imports a list, since no one saw it happen (an import you make yourself, or through Claude, sends nothing)
 
-Each links to the page it's about, and is sent once while the problem lasts. A bounce spike shows on the dashboard but isn't emailed. **Send a test notification** checks that one arrives.
+Each goes to every address set, links to the page it's about, and is sent once while the problem lasts. If one address can't be reached, the others still get it, and **Last notification** names the one that failed. A bounce spike shows on the dashboard but isn't emailed. **Send a test notification** checks that one arrives.
 
 By default, notifications go through your newsletter's own email provider. So when that provider refuses your account, the notification about it can't reach you either. You can send them another way, as [Notifications through Cloudflare's email](../guides/03-notifications.md) describes.

@@ -188,12 +188,11 @@ describe("settings surface", () => {
   });
 
   it("names the nested field of a refused value, as the API names it", async () => {
-    const res = await putSettings({ notifications: { to: "nope" } });
+    const res = await putSettings({ notifications: { to: ["nope"] } });
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
       error: "bad_request",
-      message:
-        "“nope” isn’t a valid email address. Fix it, or clear the field to turn notifications off.",
+      message: "“nope” isn’t a valid email address. Fix or remove it, then save.",
       field: "notifications.to",
     });
   });
@@ -208,7 +207,7 @@ describe("settings surface", () => {
       [{ testRecipients: ["me@example.com"] }, "testRecipients"],
       [{ confirmation_email: { buttonLabel: "Go" } }, "confirmation_email.buttonLabel"],
       [{ publication: { logo_url: "https://x.example/l.png" } }, "publication.logo_url"],
-      [{ notifications: { to: "me@example.com", channel: "x" } }, "notifications.channel"],
+      [{ notifications: { to: ["me@example.com"], channel: "x" } }, "notifications.channel"],
     ] as const) {
       const res = await putSettings(patch);
       expect([res.status, ((await res.json()) as { field: string }).field]).toEqual([400, field]);
@@ -654,7 +653,7 @@ describe("the stored settings keep their own shape while the wire is snake_case 
       buttonLabel: "Go",
       reassurance: "",
     },
-    notifications: { to: "me@example.com" },
+    notifications: { to: ["me@example.com"] },
   };
 
   it("reads a row in the 1.12.0 shape back through GET /api/settings, every field intact", async () => {

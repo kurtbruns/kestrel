@@ -20,6 +20,6 @@ Open your subscribe page from **Settings → Ways to subscribe**, subscribe with
 
 ## 3. Set your notifications address
 
-Under **Settings → Notifications**, fill in **Send notifications to**, save, and choose **Send a test notification**. Kestrel then emails you when a send finishes or needs you, as [Notifications](06-troubleshooting.md#notifications) lists.
+Under **Settings → Notifications**, fill in **Send notifications to**, one address per line, save, and choose **Send a test notification**. It goes to each address. If someone else runs your instance, add their address too, so a problem reaches both of you. Kestrel then emails you when a send finishes or needs you, as [Notifications](06-troubleshooting.md#notifications) lists.
 
 **If you're bringing more than about 1,000 subscribers, upgrade to Cloudflare's Workers Paid plan before you import.** [Bring your existing list](01-your-list.md#limits) explains why.

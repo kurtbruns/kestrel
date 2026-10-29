@@ -530,12 +530,12 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
     expect(before.text).toMatch(/^Refused: HTTP 400 bad_request\./);
     const saved = await callOk("update_settings", {
       test_recipients: ["Me@Example.com", "you@example.com"],
-      notifications: { to: "me@example.com" },
+      notifications: { to: ["me@example.com", "ops@example.com"] },
     });
     expect(Object.keys(saved).slice(0, 2)).toEqual(["test_recipients", "notifications_to"]);
     expect(saved).toMatchObject({
       test_recipients: ["me@example.com", "you@example.com"],
-      notifications_to: "me@example.com",
+      notifications_to: ["me@example.com", "ops@example.com"],
       remade: [],
     });
     const wording = await callOk("update_settings", {
@@ -543,11 +543,12 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
     });
     expect(wording).toMatchObject({
       test_recipients: ["me@example.com", "you@example.com"],
-      notifications_to: "me@example.com",
+      notifications_to: ["me@example.com", "ops@example.com"],
       confirmation_email: { subject: "Confirm, please" },
     });
     expect(await callOk("test_notifications", {})).toEqual({
-      to: "me@example.com",
+      to: ["me@example.com", "ops@example.com"],
+      failed: [],
       channel: "fake",
     });
     const tool = (await listTools()).find((t) => t.name === "update_settings");

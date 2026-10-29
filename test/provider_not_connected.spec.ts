@@ -166,7 +166,7 @@ describe("everything that would send is refused with provider_not_connected", ()
   });
 
   it("refuses a test notification through the provider, and records no failure", async () => {
-    await updateSettings(env.DB, { notifications: { to: "me@birds.example" } });
+    await updateSettings(env.DB, { notifications: { to: ["me@birds.example"] } });
     const c = context(NOT_CONNECTED, "/api/settings/notifications/test");
     expect(c.config.notifyChannel).toBe("provider");
     await expect(settingsRoutes.notificationTest(c)).rejects.toMatchObject(REFUSED);
@@ -321,6 +321,7 @@ describe("a send scheduled before the provider was disconnected", () => {
         kind: "refused",
         episode: 0,
         attempts: 0,
+        sent_to: [],
         subject: "Owls",
         send_status: "sending",
         fire_at: 0,
@@ -420,7 +421,7 @@ describe("local dev's not-connected preview, SIMULATE_SENDS=not-connected (SPEC 
     expect((await readJson(scheduled)).error).toBe("provider_not_connected");
     expect(await sendCount()).toBe(0);
 
-    await updateSettings(env.DB, { notifications: { to: "me@birds.example" } });
+    await updateSettings(env.DB, { notifications: { to: ["me@birds.example"] } });
     const notified = await fetchWith(PREVIEW, "/api/settings/notifications/test", {
       method: "POST",
       headers: AUTH,

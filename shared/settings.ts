@@ -43,13 +43,17 @@ export const ADDRESS_NOT_PRINTED =
 /** The identity fields an email template can carry, named as the settings surface names them. */
 export type IdentityField = "name" | "tagline" | "logo_url" | "address";
 
+/** The most addresses notifications go to (SPEC §8): enough for the publisher and whoever
+ *  runs the instance, and few enough that each notification stays a handful of requests. */
+export const MAX_NOTIFY_ADDRESSES = 5;
+
 /**
- * Where the notifications that tell the publisher about their sends go (SPEC §8). An
- * address only, never a credential: the channel and its sender are deploy config.
+ * Where the notifications that tell the publisher about their sends go (SPEC §8).
+ * Addresses only, never a credential: the channel and its sender are deploy config.
  */
 export interface NotificationPrefs {
-  /** The publisher's address, or "" for no notifications. */
-  to: string;
+  /** Every address a notification goes to, in the order saved; empty for no notifications. */
+  to: string[];
 }
 
 /** The editable preferences, resolved: a concrete template and confirmation copy, never a blank. */
@@ -211,9 +215,18 @@ export interface TemplateTestResponse {
   warnings: string[];
 }
 
-/** POST /api/settings/notifications/test: a sample notification to the saved address, through the live channel. */
+/** One saved address a test notification didn't reach, with the channel's words. */
+export interface NotificationTestMiss {
+  email: string;
+  error: string;
+}
+
+/** POST /api/settings/notifications/test: a sample notification to every saved address, through the live channel. */
 export interface NotificationTestResponse {
-  to: string;
+  /** Every saved address it was sent to, in the order saved. */
+  to: string[];
+  /** The addresses the channel refused, each with its words; empty when every one got it. */
+  failed: NotificationTestMiss[];
   channel: DeploymentView["notify_channel"];
 }
 

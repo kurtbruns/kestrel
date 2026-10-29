@@ -29,6 +29,8 @@ export interface DueNotification {
   kind: SendNotificationKind;
   episode: number;
   attempts: number;
+  /** The addresses it has reached so far. */
+  sent_to: string[];
   subject: string;
   send_status: string;
   fire_at: number;
@@ -58,6 +60,8 @@ export interface DueImportNotification {
   kind: "import";
   episode: 0;
   attempts: number;
+  /** The addresses it has reached so far. */
+  sent_to: string[];
   file_name: string;
   created_at: number;
   attestation_version: number | null;
@@ -74,6 +78,8 @@ export interface DueSandboxNotification {
   kind: "sandbox";
   episode: number;
   attempts: number;
+  /** The addresses it has reached so far. */
+  sent_to: string[];
 }
 
 /** Any notification that is due. */
@@ -171,7 +177,7 @@ export async function recordNotifications(db: D1Database, now: number): Promise<
 export async function dueNotifications(db: D1Database, limit: number): Promise<DueAny[]> {
   const { results } = await db
     .prepare(
-      `SELECT n.send_id, n.import_id, n.kind, n.episode, n.attempts,
+      `SELECT n.send_id, n.import_id, n.kind, n.episode, n.attempts, n.sent_to,
               s.subject, s.status AS send_status, s.fire_at, s.started_at, s.completed_at,
               s.locked_until, s.halt_reason, s.halted_at, s.halt_retry_at, s.progress_at, s.halt_cause, s.halt_error, s.c_pending, s.c_in_flight, s.c_accepted,
               s.c_delivered, s.c_bounced, s.c_complained, s.c_skipped, s.c_unsent,
@@ -186,6 +192,7 @@ export async function dueNotifications(db: D1Database, limit: number): Promise<D
     .bind(limit)
     .all<Record<string, unknown>>();
   return results.map((r): DueAny => {
+    const sentTo = readSentTo(r.sent_to as string);
     if (r.kind === "sandbox") {
       return {
         send_id: null,
@@ -193,6 +200,7 @@ export async function dueNotifications(db: D1Database, limit: number): Promise<D
         kind: "sandbox",
         episode: r.episode as number,
         attempts: r.attempts as number,
+        sent_to: sentTo,
       };
     }
     if (r.kind === "import") {
@@ -202,6 +210,7 @@ export async function dueNotifications(db: D1Database, limit: number): Promise<D
         kind: "import",
         episode: 0,
         attempts: r.attempts as number,
+        sent_to: sentTo,
         file_name: r.file_name as string,
         created_at: r.created_at as number,
         attestation_version: r.attestation_version as number | null,
@@ -210,8 +219,15 @@ export async function dueNotifications(db: D1Database, limit: number): Promise<D
       };
     }
     // A send's notice: the import's columns are all null beside it, and nothing reads them.
-    return r as unknown as DueNotification;
+    return { ...r, sent_to: sentTo } as unknown as DueNotification;
   });
+}
+
+/** The addresses a row says it has reached: a JSON array of strings, which the column's
+ *  CHECK keeps valid JSON and only `recordNotificationOutcome` writes. */
+function readSentTo(raw: string): string[] {
+  const list: unknown = JSON.parse(raw);
+  return Array.isArray(list) ? list.filter((e): e is string => typeof e === "string") : [];
 }
 
 // The set of keys as one JSON parameter, matched row by row (never a `?` per key; D1
@@ -241,16 +257,23 @@ export async function claimNotifications(
     .run();
 }
 
-/** How one try went: delivered, not delivered (with the channel's words), or not tried
- *  because the problem it tells of had already cleared. */
+/** How one try went: delivered to every address, not delivered to some (with the channel's
+ *  words), cut short with no failure because the tick ran out of room for the rest
+ *  (`deferred`), or not tried because the problem it tells of had already cleared. `sentTo`
+ *  is every address it has reached, this try's and the ones before. */
 export type NotificationOutcome =
-  | { status: "sent" }
+  | { status: "sent"; sentTo: string[] }
   | { status: "cleared" }
-  | { status: "unsent"; error: string; giveUp: boolean };
+  | { status: "deferred"; sentTo: string[] }
+  | { status: "unsent"; sentTo: string[]; error: string; giveUp: boolean };
 
 /**
  * Record how one try went. Not delivered leaves it pending for the next tick until
- * `giveUp`, when it is recorded failed; either way the channel's words are kept.
+ * `giveUp`, when it is recorded failed; either way the channel's words are kept, and the
+ * addresses it reached, so the next try goes only to the ones it missed (SPEC §8). One
+ * deferred stays pending with its words as they were, and gives back the try it was claimed
+ * for, since nothing failed: a tick short of room never brings a notification closer to
+ * giving up.
  */
 export async function recordNotificationOutcome(
   db: D1Database,
@@ -258,15 +281,33 @@ export async function recordNotificationOutcome(
   outcome: NotificationOutcome,
   now: number,
 ): Promise<void> {
+  if (outcome.status === "deferred") {
+    await db
+      .prepare(
+        `UPDATE notifications SET sent_to = ?, attempts = MAX(attempts - 1, 0), updated_at = ?
+          WHERE send_id IS ? AND import_id IS ? AND kind = ? AND episode = ?`,
+      )
+      .bind(
+        JSON.stringify(outcome.sentTo),
+        now,
+        key.send_id,
+        key.import_id ?? null,
+        key.kind,
+        key.episode,
+      )
+      .run();
+    return;
+  }
   const status =
     outcome.status === "unsent" ? (outcome.giveUp ? "failed" : "pending") : outcome.status;
   const error = outcome.status === "unsent" ? outcome.error : null;
+  const sentTo = outcome.status === "cleared" ? null : JSON.stringify(outcome.sentTo);
   await db
     .prepare(
-      `UPDATE notifications SET status = ?, error = ?, updated_at = ?
+      `UPDATE notifications SET status = ?, error = ?, sent_to = COALESCE(?, sent_to), updated_at = ?
         WHERE send_id IS ? AND import_id IS ? AND kind = ? AND episode = ?`,
     )
-    .bind(status, error, now, key.send_id, key.import_id ?? null, key.kind, key.episode)
+    .bind(status, error, sentTo, now, key.send_id, key.import_id ?? null, key.kind, key.episode)
     .run();
 }
 

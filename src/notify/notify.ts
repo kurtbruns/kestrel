@@ -3,9 +3,13 @@
  * a service token imported (SPEC §8).
  *
  * Each tick records every new event once (`recordNotifications`), then delivers the
- * pending ones through the channel, as many as its share of the invocation's subrequest
- * budget allows (`budget.ts`); what does not fit waits for the next tick. Every statement
- * is metered and every delivery charged, so notifying never pushes a tick past its cap.
+ * pending ones through the channel to every address set, as many as its share of the
+ * invocation's subrequest budget allows (`budget.ts`); what does not fit waits for the next
+ * tick. Every statement is metered and every delivery charged, so notifying never pushes a
+ * tick past its cap. Each address is its own delivery: the row keeps the ones a
+ * notification has reached, and a later try goes only to the ones it missed (SPEC §8). The
+ * reserve covers one address, so a tick the sends left short can reach some addresses and
+ * leave the rest for the next, which doesn't count against the notification's tries.
  *
  * It runs after the sends, reads the send record, and writes only its own table, so a
  * notification that fails, or this whole step throwing, never changes a send (I1 to I6).
@@ -32,11 +36,14 @@ import {
   composeSandboxNotification,
 } from "./compose";
 
-/** Record the events, list the due, read the destination, and claim them: four statements. */
+/** Record the events, list the due, read the destinations, and claim them: four statements. */
 const OPEN_COST = 4;
-/** One delivery: the channel's request and recording how it went. */
+/** One delivery to one address: the channel's request and recording how it went. A
+ *  notification to several addresses spends a request for each beyond the first. */
 const EACH_COST = 2;
-/** What a tick holds back so it can always deliver at least one notification. */
+/** What a tick holds back so it can always deliver at least one notification to one address.
+ *  Not one to every address: that much held back every minute would slow the sends, so the
+ *  addresses a tick can't afford wait for the next. */
 export const NOTIFY_RESERVE = OPEN_COST + EACH_COST;
 /** The most a tick delivers, however much budget is left, so a backlog drains steadily. */
 const MAX_PER_TICK = 10;
@@ -94,14 +101,16 @@ export async function notifyPublisher(env: AppEnv, budget: Budget): Promise<void
     return;
   }
   const { to } = (await getSettings(db)).notifications;
-  if (!to) {
+  if (to.length === 0) {
     await notifications.closeUnaddressed(db, now);
     return;
   }
   await notifications.claimNotifications(db, due, now);
 
   const notifier = getNotifier(config, env);
-  for (const n of due) {
+  for (const [i, n] of due.entries()) {
+    // Every claimed notification still to come needs its outcome recorded, this one included.
+    const recordsLeft = due.length - i;
     if (!stillHolds(n, Date.now())) {
       await notifications.recordNotificationOutcome(db, n, { status: "cleared" }, Date.now());
       continue;
@@ -113,33 +122,80 @@ export async function notifyPublisher(env: AppEnv, budget: Budget): Promise<void
           ? {}
           : { sendId: n.send_id };
     const key = `${n.send_id ?? n.import_id ?? "account"}-${n.kind}-${n.episode}`;
-    budget.request(); // the channel's request, which counts whether or not it succeeds
-    try {
-      const email =
-        n.kind === "import"
-          ? composeImportNotification(n, config)
-          : n.kind === "sandbox"
-            ? composeSandboxNotification(config)
-            : composeNotification(n, config);
-      await notifier.send(to, email, key);
-      await notifications.recordNotificationOutcome(db, n, { status: "sent" }, Date.now());
+    const write = () =>
+      n.kind === "import"
+        ? composeImportNotification(n, config)
+        : n.kind === "sandbox"
+          ? composeSandboxNotification(config)
+          : composeNotification(n, config);
+    let email: ReturnType<typeof write> | undefined;
+    // Only the addresses it hasn't reached: one that got it on an earlier try never gets it
+    // again because another failed.
+    const sentTo = [...n.sent_to];
+    const missed: AddressMiss[] = [];
+    let deferred = false;
+    for (const address of to.filter((a) => !n.sent_to.includes(a))) {
+      if (budget.left < recordsLeft + 1) {
+        deferred = true; // this tick can't afford the request; the next one tries it
+        break;
+      }
+      budget.request(); // the channel's request, which counts whether or not it succeeds
+      try {
+        email ??= write();
+        await notifier.send(address, email, key);
+        sentTo.push(address);
+      } catch (err) {
+        missed.push({ email: address, error: errorText(err) });
+      }
+    }
+    if (missed.length === 0) {
+      if (deferred) {
+        await notifications.recordNotificationOutcome(
+          db,
+          n,
+          { status: "deferred", sentTo },
+          Date.now(),
+        );
+        continue;
+      }
+      await notifications.recordNotificationOutcome(db, n, { status: "sent", sentTo }, Date.now());
       log.info("notify.sent", { ...about, kind: n.kind, channel: notifier.channel });
-    } catch (err) {
-      const error = errorText(err);
-      const giveUp = n.attempts + 1 >= MAX_NOTIFY_ATTEMPTS;
+      continue;
+    }
+    const giveUp = n.attempts + 1 >= MAX_NOTIFY_ATTEMPTS;
+    // One line for each address missed, without the address (logs never carry one).
+    for (const m of missed) {
       log.warn("notify.failed", {
         ...about,
         kind: n.kind,
         channel: notifier.channel,
-        error,
+        error: m.error,
         giveUp,
       });
-      await notifications.recordNotificationOutcome(
-        db,
-        n,
-        { status: "unsent", error, giveUp },
-        Date.now(),
-      );
     }
+    await notifications.recordNotificationOutcome(
+      db,
+      n,
+      { status: "unsent", sentTo, error: missedAddresses(to, missed), giveUp },
+      Date.now(),
+    );
   }
+}
+
+/** One address a notification didn't reach, with the channel's words. */
+export interface AddressMiss {
+  email: string;
+  error: string;
+}
+
+/**
+ * The channel's words for the addresses a notification or a test missed, as the settings
+ * surface shows them: the words alone when notifications go to one address, and each led by
+ * its address when they go to several, so the publisher can tell which to fix.
+ */
+export function missedAddresses(to: readonly string[], missed: readonly AddressMiss[]): string {
+  if (to.length === 1 && missed.length === 1) {
+    return missed[0]?.error ?? "";
+  }
+  return missed.map((m) => `${m.email}: ${m.error}`).join("; ");
 }

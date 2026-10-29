@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { dashboardRouteFromSearch } from "../shared/dashboard_link";
 import { refusalAdvice } from "../shared/sends";
-import type { SendNotificationKind } from "../shared/settings";
+import { MAX_NOTIFY_ADDRESSES, type SendNotificationKind } from "../shared/settings";
 import * as notifications from "../src/db/notifications";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
@@ -15,8 +15,9 @@ import * as channel from "../src/notify/channel";
 import { CloudflareNotifier, ProviderNotifier } from "../src/notify/channel";
 import { composeNotification, sendLink } from "../src/notify/compose";
 import { clearFakeNotifications, failFakeNotify, fakeNotifications } from "../src/notify/fake";
-import { stillHolds } from "../src/notify/notify";
+import { NOTIFY_RESERVE, notifyPublisher, stillHolds } from "../src/notify/notify";
 import * as providers from "../src/providers";
+import { Budget } from "../src/send/budget";
 import { sweep } from "../src/send/sweep";
 import { BatchProvider } from "./support/batching";
 import { guardD1 } from "./support/d1_guard";
@@ -62,7 +63,7 @@ let warnings: MockInstance;
 
 beforeEach(async () => {
   await resetDatabase();
-  await updateSettings(env.DB, { notifications: { to: PUBLISHER } });
+  await updateSettings(env.DB, { notifications: { to: [PUBLISHER] } });
   clearFakeNotifications();
   // Only Date is faked, so `ticks` can move the clock past a halt's backoff.
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -99,7 +100,7 @@ describe("a send finishing", () => {
   });
 
   it("with no address set, records the event as having nowhere to go and never mails a backlog", async () => {
-    await updateSettings(env.DB, { notifications: { to: "" } });
+    await updateSettings(env.DB, { notifications: { to: [] } });
     await seedConfirmed(addresses(2));
     const send = await dueSend();
 
@@ -107,7 +108,7 @@ describe("a send finishing", () => {
     expect(fakeNotifications()).toHaveLength(0);
     expect(await rows(send.id)).toMatchObject([{ kind: "finished", status: "unaddressed" }]);
 
-    await updateSettings(env.DB, { notifications: { to: PUBLISHER } });
+    await updateSettings(env.DB, { notifications: { to: [PUBLISHER] } });
     await ticks(2);
     expect(fakeNotifications()).toHaveLength(0);
   });
@@ -463,6 +464,85 @@ describe("isolation", () => {
   });
 });
 
+describe("several addresses (SPEC §8)", () => {
+  const OPERATOR = "operator@example.com";
+
+  beforeEach(async () => {
+    await updateSettings(env.DB, { notifications: { to: [PUBLISHER, OPERATOR] } });
+  });
+
+  const sentTo = async () =>
+    (
+      await env.DB.prepare("SELECT sent_to FROM notifications WHERE kind <> 'test'").first<{
+        sent_to: string;
+      }>()
+    )?.sent_to;
+
+  it("tells every address of each event", async () => {
+    await seedConfirmed(addresses(2));
+    const send = await dueSend({ subject: "Owls in winter" });
+
+    await ticks(3);
+    expect(fakeNotifications().map((n) => [n.to, n.subject])).toEqual([
+      [PUBLISHER, "Sent: Owls in winter"],
+      [OPERATOR, "Sent: Owls in winter"],
+    ]);
+    expect(await rows(send.id)).toMatchObject([{ kind: "finished", status: "sent", attempts: 1 }]);
+  });
+
+  it("an address that fails is tried again alone, never resending to the one that got it", async () => {
+    await seedConfirmed(addresses(2));
+    const send = await dueSend({ subject: "Owls in winter" });
+    failFakeNotify(1); // the first address's delivery
+
+    await ticks(1); // the send goes out, and both are tried
+    expect(fakeNotifications().map((n) => n.to)).toEqual([OPERATOR]);
+    expect(await rows(send.id)).toMatchObject([
+      {
+        kind: "finished",
+        status: "pending",
+        attempts: 1,
+        error: `${PUBLISHER}: fake notification failure`,
+      },
+    ]);
+    expect(await notifications.notificationStatus(env.DB)).toMatchObject({
+      last_failure: { kind: "finished", error: `${PUBLISHER}: fake notification failure` },
+    });
+
+    await ticks(2); // the retry, then a tick with nothing left to try
+    expect(fakeNotifications().map((n) => n.to)).toEqual([OPERATOR, PUBLISHER]);
+    expect(await rows(send.id)).toMatchObject([
+      { kind: "finished", status: "sent", attempts: 2, error: null },
+    ]);
+    expect(JSON.parse((await sentTo())!)).toEqual([OPERATOR, PUBLISHER]);
+  });
+
+  it("a tick short of room reaches what it can and leaves the rest for the next, without spending a try", async () => {
+    await notifications.sandboxNotice(env.DB, Date.now());
+
+    // The reserve alone affords one address.
+    await notifyPublisher(env as AppEnv, new Budget(NOTIFY_RESERVE));
+    expect(fakeNotifications().map((n) => n.to)).toEqual([PUBLISHER]);
+    expect(await rows()).toMatchObject([{ kind: "sandbox", status: "pending", attempts: 0 }]);
+
+    await notifyPublisher(env as AppEnv, new Budget(50));
+    expect(fakeNotifications().map((n) => n.to)).toEqual([PUBLISHER, OPERATOR]);
+    expect(await rows()).toMatchObject([{ kind: "sandbox", status: "sent", attempts: 1 }]);
+  });
+
+  it("an address added while one is pending gets it, and one removed is no longer waited on", async () => {
+    await notifications.sandboxNotice(env.DB, Date.now());
+    failFakeNotify(1);
+    await notifyPublisher(env as AppEnv, new Budget(50));
+    expect(fakeNotifications().map((n) => n.to)).toEqual([OPERATOR]);
+
+    await updateSettings(env.DB, { notifications: { to: [OPERATOR] } });
+    await notifyPublisher(env as AppEnv, new Budget(50));
+    expect(fakeNotifications().map((n) => n.to)).toEqual([OPERATOR]);
+    expect(await rows()).toMatchObject([{ kind: "sandbox", status: "sent" }]);
+  });
+});
+
 describe("after the review", () => {
   it("a send that resumes after a long refusal is not then reported as stuck", async () => {
     await seedConfirmed(addresses(1));
@@ -640,38 +720,50 @@ describe("the settings surface", () => {
       headers: AUTH,
     });
 
-  it("stores the address as a preference, normalized, and reflects the channel read-only", async () => {
-    const res = await put({ notifications: { to: "  Me@Example.COM " } });
+  it("stores the addresses as a preference, normalized, and reflects the channel read-only", async () => {
+    const res = await put({
+      notifications: { to: ["  Me@Example.COM ", "", "ops@example.com", "me@example.com"] },
+    });
     expect(res.status).toBe(200);
     const body = await get();
-    expect(body.settings.notifications).toEqual({ to: "me@example.com" });
+    expect(body.settings.notifications).toEqual({ to: ["me@example.com", "ops@example.com"] });
     expect(body.deployment.notify_channel).toBe("fake");
     expect(body.deployment.notify_from).toBe(env.FROM_ADDRESS);
     expect(body.notification_status).toEqual({ last_sent: null, last_failure: null });
   });
 
   it("refuses an address that isn't one, and a wrong type naming the field", async () => {
-    expect((await put({ notifications: { to: "not-an-address" } })).status).toBe(400);
-    const wrong = await put({ notifications: { to: 5 } });
-    expect(wrong.status).toBe(400);
-    expect(((await wrong.json()) as any).field).toBe("notifications.to");
+    expect((await put({ notifications: { to: ["not-an-address"] } })).status).toBe(400);
+    for (const to of [5, "me@example.com"]) {
+      const wrong = await put({ notifications: { to } });
+      expect(wrong.status).toBe(400);
+      expect(((await wrong.json()) as any).field).toBe("notifications.to");
+    }
+  });
+
+  it(`refuses more than ${MAX_NOTIFY_ADDRESSES} addresses, keeping the ones saved`, async () => {
+    const many = Array.from({ length: MAX_NOTIFY_ADDRESSES + 1 }, (_, i) => `a${i}@example.com`);
+    const res = await put({ notifications: { to: many } });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as any).field).toBe("notifications.to");
+    expect((await get()).settings.notifications).toEqual({ to: [PUBLISHER] });
   });
 
   it("changing the address asks nothing of scheduled sends: it is not an input to any email", async () => {
     await frozenSend(Date.now() + 24 * 60 * 60 * 1000, { subject: "Scheduled one" });
-    const res = await put({ notifications: { to: "other@example.com" } });
+    const res = await put({ notifications: { to: ["other@example.com"] } });
     expect(res.status).toBe(200);
     expect(((await res.json()) as any).remade).toEqual([]);
   });
 
   it("sends a test to the saved address only, and reports a refusing channel as a 502", async () => {
-    await updateSettings(env.DB, { notifications: { to: "" } });
+    await updateSettings(env.DB, { notifications: { to: [] } });
     expect((await test()).status).toBe(400);
 
-    await updateSettings(env.DB, { notifications: { to: PUBLISHER } });
+    await updateSettings(env.DB, { notifications: { to: [PUBLISHER] } });
     const ok = await test();
     expect(ok.status).toBe(200);
-    expect(await ok.json()).toEqual({ to: PUBLISHER, channel: "fake" });
+    expect(await ok.json()).toEqual({ to: [PUBLISHER], failed: [], channel: "fake" });
     expect(fakeNotifications().map((n) => n.to)).toEqual([PUBLISHER]);
     // Its link opens Settings, carried in the query so an Access login keeps it.
     expect(JSON.stringify(fakeNotifications()[0])).toContain("/dashboard/?to=/settings");
@@ -683,6 +775,38 @@ describe("the settings surface", () => {
       error: "notify_failed",
       message: "fake notification failure",
     });
+  });
+
+  it("sends a test to every saved address, naming the one the channel refused while the other gets it", async () => {
+    const OPERATOR = "operator@example.com";
+    await updateSettings(env.DB, { notifications: { to: [PUBLISHER, OPERATOR] } });
+
+    failFakeNotify(1);
+    const some = await test();
+    expect(some.status).toBe(200);
+    expect(await some.json()).toEqual({
+      to: [PUBLISHER, OPERATOR],
+      failed: [{ email: PUBLISHER, error: "fake notification failure" }],
+      channel: "fake",
+    });
+    expect(fakeNotifications().map((n) => n.to)).toEqual([OPERATOR]);
+    expect((await get()).notification_status.last_failure).toMatchObject({
+      kind: "test",
+      error: `${PUBLISHER}: fake notification failure`,
+    });
+
+    failFakeNotify(2);
+    const none = await test();
+    expect(none.status).toBe(502);
+    expect(await none.json()).toMatchObject({
+      error: "notify_failed",
+      message: `${PUBLISHER}: fake notification failure; ${OPERATOR}: fake notification failure`,
+    });
+
+    const all = await test();
+    expect(await all.json()).toMatchObject({ failed: [] });
+    expect(fakeNotifications().map((n) => n.to)).toEqual([OPERATOR, PUBLISHER, OPERATOR]);
+    expect((await get()).notification_status.last_failure).toBeNull();
   });
 });
 
@@ -697,6 +821,7 @@ describe("the link in a notification", () => {
           kind,
           episode: 0,
           attempts: 0,
+          sent_to: [],
           subject: "Owls",
           send_status: "sent",
           fire_at: 0,

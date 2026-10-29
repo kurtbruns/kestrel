@@ -18,10 +18,11 @@
  */
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
-import type {
-  ConfirmationEmailCopy,
-  NotificationPrefs,
-  SettingsPatchBody,
+import {
+  type ConfirmationEmailCopy,
+  MAX_NOTIFY_ADDRESSES,
+  type NotificationPrefs,
+  type SettingsPatchBody,
 } from "../../shared/settings";
 import { HttpError } from "../lib/errors";
 import { log } from "../lib/log";
@@ -88,8 +89,8 @@ export interface AppSettings {
   /** Editable wording of the double opt-in confirmation email (SPEC §7). */
   confirmationEmail: StoredConfirmationEmail;
   /**
-   * Where notifications about the publisher's sends go (SPEC §8): an address, which is a
-   * preference because it holds no secret. The channel that carries them, and its
+   * Where notifications about the publisher's sends go (SPEC §8): addresses, which are a
+   * preference because they hold no secret. The channel that carries them, and its
    * sender, are deploy config (SPEC §9).
    */
   notifications: NotificationPrefs;
@@ -146,7 +147,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   publication: { name: "", tagline: "", address: "", logo: null },
   emailTemplate: "",
   confirmationEmail: storedConfirmation(DEFAULT_CONFIRMATION_EMAIL),
-  notifications: { to: "" },
+  notifications: { to: [] },
 };
 
 /** Caps so a mistake (or a compromised session) can't grow a field unboundedly. */
@@ -222,10 +223,13 @@ function coerce(raw: unknown): AppSettings {
   };
 }
 
-/** Coerce a stored notifications blob; anything but a string address reads as none. */
+/** Coerce a stored notifications blob to its list of addresses. A single address, as a row
+ *  written before notifications went to several is stored until its migration
+ *  (`0017_notify_addresses`) runs, reads as a list of that one. */
 function coerceNotifications(raw: unknown): NotificationPrefs {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  return { to: typeof o.to === "string" ? o.to : "" };
+  const list = typeof o.to === "string" ? [o.to] : Array.isArray(o.to) ? o.to : [];
+  return { to: list.filter((e): e is string => typeof e === "string" && e !== "") };
 }
 
 /**
@@ -286,7 +290,7 @@ function parseStored(data: string): Record<string, unknown> {
   if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
     return parsed as Record<string, unknown>;
   }
-  // Not the stored text itself: it holds the notification address.
+  // Not the stored text itself: it holds the notification addresses.
   log.error("settings.corrupt", {
     message: `the settings row (settings.id = 1) ${problem}; reads and writes of settings fail until it is repaired by hand`,
     length: data.length,
@@ -424,7 +428,7 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
     ...current,
     publication: { ...current.publication },
     confirmationEmail: { ...current.confirmationEmail },
-    notifications: { ...current.notifications },
+    notifications: { to: [...current.notifications.to] },
   };
 
   if (patch.test_recipients !== undefined) {
@@ -515,19 +519,42 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
   return next;
 }
 
-/** One address, trimmed and lowercased, or "" to turn notifications off. */
-function normalizeNotifyTo(raw: unknown): string {
-  if (typeof raw !== "string") {
-    throw new SettingsFieldError("notifications.to", "The notifications address must be text.");
-  }
-  const email = normalizeEmail(raw);
-  if (email && !isValidEmail(email)) {
+/** The addresses, each trimmed and lowercased, blanks dropped and repeats kept once; an
+ *  empty list turns notifications off. */
+function normalizeNotifyTo(input: unknown): string[] {
+  if (!Array.isArray(input)) {
     throw new SettingsFieldError(
       "notifications.to",
-      `“${raw.trim()}” isn’t a valid email address. Fix it, or clear the field to turn notifications off.`,
+      "The notifications addresses must be a list of email addresses.",
     );
   }
-  return email;
+  const out: string[] = [];
+  for (const raw of input) {
+    if (typeof raw !== "string") {
+      throw new SettingsFieldError(
+        "notifications.to",
+        "Each notifications address must be an email address.",
+      );
+    }
+    const email = normalizeEmail(raw);
+    if (!email || out.includes(email)) {
+      continue;
+    }
+    if (!isValidEmail(email)) {
+      throw new SettingsFieldError(
+        "notifications.to",
+        `“${raw.trim()}” isn’t a valid email address. Fix or remove it, then save.`,
+      );
+    }
+    out.push(email);
+  }
+  if (out.length > MAX_NOTIFY_ADDRESSES) {
+    throw new SettingsFieldError(
+      "notifications.to",
+      `Notifications can go to at most ${MAX_NOTIFY_ADDRESSES} addresses. Remove some, then save.`,
+    );
+  }
+  return out;
 }
 
 /** The settings with the logo metadata set (or cleared, with `null`); pure. */

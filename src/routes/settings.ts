@@ -29,6 +29,7 @@ import {
   type DeploymentView,
   type InUseView,
   type LogoResponse,
+  type NotificationTestMiss,
   type NotificationTestResponse,
   type PublicationView,
   type SettingsResponse,
@@ -62,9 +63,11 @@ import {
 } from "../lib/body";
 import { badRequest, HttpError, json } from "../lib/errors";
 import { mediaType, RASTER_IMAGE_TYPES } from "../lib/image_types";
+import { errorText } from "../lib/log";
 import { unwrap } from "../lib/unwrap";
 import { getNotifier } from "../notify/channel";
 import { sampleNotification } from "../notify/compose";
+import { missedAddresses } from "../notify/notify";
 import { requireConnectedProvider } from "../providers";
 import {
   DEFAULT_EMAIL_TEMPLATE,
@@ -198,16 +201,18 @@ export async function get(c: RequestContext): Promise<Response> {
 }
 
 /**
- * Send a sample notification to the saved address through the live channel, so the
+ * Send a sample notification to each saved address through the live channel, so the
  * publisher proves the channel (a verified Cloudflare destination, say) before a send
- * runs into a problem. It goes to the one saved address only, never one named in the
- * request, so this cannot become a way to mail an arbitrary inbox. Its outcome is
- * recorded as the latest test, so a test that gets through after a failure clears "Not
- * delivered" on the status line. The channel's refusal is a 502 carrying its words.
+ * runs into a problem. It goes to the saved addresses only, never one named in the
+ * request, so this cannot become a way to mail an arbitrary inbox. Each address is its
+ * own try, so one the channel refuses doesn't keep the test from the others, and the
+ * answer names the ones it missed. Its outcome is recorded as the latest test, so a test
+ * that gets through after a failure clears "Not delivered" on the status line. A channel
+ * that refuses every address is a 502 carrying its words.
  */
 export async function notificationTest(c: RequestContext): Promise<Response> {
   const { to } = (await getSettings(c.env.DB)).notifications;
-  if (!to) {
+  if (to.length === 0) {
     throw badRequest("Add a notifications address first, then send a test.", {
       field: "notifications.to",
     });
@@ -217,15 +222,22 @@ export async function notificationTest(c: RequestContext): Promise<Response> {
     requireConnectedProvider(c.config);
   }
   const notifier = getNotifier(c.config, c.env);
-  try {
-    await notifier.send(to, sampleNotification(c.config), `test-${Date.now()}`);
-  } catch (err) {
-    const error = String((err as Error)?.message ?? err);
-    await recordNotificationTest(c.env.DB, error, Date.now());
+  const email = sampleNotification(c.config);
+  const key = `test-${Date.now()}`;
+  const failed: NotificationTestMiss[] = [];
+  for (const address of to) {
+    try {
+      await notifier.send(address, email, key);
+    } catch (err) {
+      failed.push({ email: address, error: errorText(err) });
+    }
+  }
+  const error = failed.length > 0 ? missedAddresses(to, failed) : null;
+  await recordNotificationTest(c.env.DB, error, Date.now());
+  if (error !== null && failed.length === to.length) {
     throw new HttpError("notify_failed", error);
   }
-  await recordNotificationTest(c.env.DB, null, Date.now());
-  const body: NotificationTestResponse = { to, channel: notifier.channel };
+  const body: NotificationTestResponse = { to, failed, channel: notifier.channel };
   return json(body);
 }
 
@@ -406,7 +418,7 @@ function readPatch(o: JsonObject): SettingsPatch {
   }
   const nBody = optObject(o, "notifications");
   if (nBody !== undefined) {
-    const to = optString(nBody, "to", "notifications");
+    const to = optStringList(nBody, "to", "notifications");
     patch.notifications = to === undefined ? {} : { to };
   }
   return patch;

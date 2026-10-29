@@ -51,7 +51,7 @@ function baselineOf(state: SettingsBaseline): SettingsBaseline {
     address: state.address,
     recipients: [...state.recipients],
     confirmation: { ...state.confirmation },
-    notifyTo: state.notifyTo,
+    notifyTo: [...state.notifyTo],
   };
 }
 
@@ -98,7 +98,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
       button_label: ce.button_label || "",
       reassurance: ce.reassurance || "",
     },
-    notifyTo: s.notifications.to || "",
+    notifyTo: [...s.notifications.to],
   };
   let baseline = baselineOf(state);
   const fromDisplay = fromDisplayName(data.deployment.from_address);
@@ -109,7 +109,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     state.address !== baseline.address ||
     !sameList(state.recipients, baseline.recipients) ||
     !sameCopy(state.confirmation, baseline.confirmation) ||
-    state.notifyTo !== baseline.notifyTo;
+    !sameList(state.notifyTo, baseline.notifyTo);
 
   const handles: SectionHandle[] = [];
   // The shared bottom save bar (Save + Discard), its callbacks the hoisted saveSettings /
@@ -202,7 +202,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
       state.address = ns.publication.address;
       state.recipients = [...ns.test_recipients];
       state.confirmation = { ...ns.confirmation_email };
-      state.notifyTo = ns.notifications.to;
+      state.notifyTo = [...ns.notifications.to];
       baseline = baselineOf(state);
       for (const h of handles) {
         h.reset?.();
