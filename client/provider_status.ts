@@ -1,7 +1,8 @@
 // The email provider's connection as the editor words it (GET /api/provider; SPEC §9): its
 // read, and the lines Settings and the dashboard show for the sandbox, production, the send
 // rate, and the server's warnings. The state and the warnings are the server's; the editor only
-// words the three states and shows each warning as it comes.
+// words the three states and shows each warning as it comes, red for an `error` and amber for a
+// `warn`.
 
 import type { ProviderStatusView, ProviderWarning } from "../shared/provider";
 import type { DeploymentView } from "../shared/settings";
@@ -11,7 +12,7 @@ import { type Html, html } from "./ui/html";
 /** The setup guide's page that asks AWS for production access. */
 export const PRODUCTION_ACCESS_HREF = "#/docs/production-access";
 
-/** Its section on what to tell AWS when it asks for more, or denies a request. */
+/** Its section on what to tell AWS when it replies without granting access. */
 const AWS_QUESTIONS_HREF = "#/docs/production-access/3-answer-awss-questions";
 
 /** Connect Amazon SES' step whose policy lets the app's key read the account. */
@@ -72,11 +73,22 @@ export function providerStateHtml(v: ProviderStatusView, beside: Html | null = n
     v.review === "pending"
       ? html`AWS is reviewing your request for production access. Until then, it mails only addresses verified in SES${daily(v)}.`
       : v.review === "denied"
-        ? html`<span class="set-warn">AWS denied production access.${v.review_case ? ` Its reply is in AWS Support, case ${v.review_case}.` : ""}</span> <a class="set-link" href="${AWS_QUESTIONS_HREF}">What AWS asks for</a>`
+        ? html`<span class="set-warn">AWS hasn’t granted production access yet. ${awsReplied(v)}: read its reply and answer there.</span> <a class="set-link" href="${AWS_QUESTIONS_HREF}">What AWS asks for</a>`
         : v.review === "failed"
           ? html`<span class="set-warn">AWS didn’t receive your request for production access.</span> <a class="set-link" href="${PRODUCTION_ACCESS_HREF}">Request it again</a>`
           : html`<span class="set-warn">It mails only addresses verified in SES${daily(v)}.</span> <a class="set-link" href="${PRODUCTION_ACCESS_HREF}">Request production access</a>`;
   return html`<span>Amazon SES ${pill}${beside}</span><span class="muted" id="providerReview">${line}</span>`;
+}
+
+/**
+ * Where AWS's reply to a request for production access is. AWS's account reads `denied` from
+ * the request for more information that follows every request within seconds, as well as for a
+ * final refusal, so the editor never says AWS denied it: only that AWS replied, and where.
+ */
+function awsReplied(v: ProviderStatusView): string {
+  return v.review_case
+    ? `It has replied in AWS Support, case ${v.review_case}`
+    : "It has replied in AWS Support";
 }
 
 const RATE_SOURCES = {
@@ -96,6 +108,12 @@ export function sendRateHtml(v: ProviderStatusView): Html | null {
 
 /** The guide step a warning's link names, by its code. */
 const WARNING_LINKS: Record<ProviderWarning["code"], string> = {
+  configuration_set_missing: "Send bounces and complaints to the app",
+  configuration_set_paused: "Send bounces and complaints to the app",
+  key_rejected: "Create the app’s AWS key",
+  sending_disabled: "A problem with Amazon SES",
+  sender_unverified: "Verify your sending hostname",
+  account_probation: "A problem with Amazon SES",
   bounces_not_routed: "Send bounces and complaints to the app",
 };
 
@@ -103,6 +121,9 @@ const WARNING_LINKS: Record<ProviderWarning["code"], string> = {
 export function warningHtml(w: ProviderWarning): Html {
   return html`${w.message} <a href="#/docs/${w.docs.slug}/${w.docs.anchor}">${WARNING_LINKS[w.code]}</a>`;
 }
+
+/** True for a warning that means no email can go out until it's fixed, which reads red. */
+export const stopsSending = (w: ProviderWarning): boolean => w.severity === "error";
 
 /** The dashboard's health line while SES is still in the sandbox. */
 export function sandboxHealthHtml(): Html {
@@ -118,9 +139,7 @@ export function productionAccessHint(v: ProviderStatusView | null): string {
     return "AWS is reviewing your request. Until then, SES mails only addresses verified in SES.";
   }
   if (v?.state === "sandbox" && v.review === "denied") {
-    return v.review_case
-      ? `AWS denied it. Its reply is in AWS Support, case ${v.review_case}.`
-      : "AWS denied it. Its reply is in AWS Support.";
+    return `AWS hasn’t granted it yet. ${awsReplied(v)}: answer there.`;
   }
   if (v?.state === "sandbox" && v.review === "failed") {
     return "AWS didn’t receive your request. Ask again.";

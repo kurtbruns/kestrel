@@ -33,6 +33,18 @@ When none come, the send's page says so an hour after it went out. Your provider
 
 While Amazon SES is in its sandbox, it mails only addresses verified in SES. Verify the address you test with in the SES console, or [request production access](../get-started/06-production-access.md). When the test's line says the provider didn't answer, check the inbox before you send it again, since the first may have arrived. A test SES refuses for your account has the same fix as [a send it refuses](06-troubleshooting.md#a-send-is-held-or-waiting).
 
+## A problem with Amazon SES
+
+**Settings → Email sender** and the top of the dashboard name a problem with your Amazon SES account within about ten minutes, without sending anything. Red means no email can go out until it's fixed, tests and confirmations included. Amber is worth a look. Each line links the step that fixes it, and whoever runs your instance makes the fix:
+
+- **The configuration set is missing, or its sending is off.** `SES_CONFIGURATION_SET` names a set SES doesn't have in your region, or one whose sending is turned off. Correct the name, or create the set, as [Connect Amazon SES](../get-started/05-ses.md#4-send-bounces-and-complaints-to-the-app) shows. Turn a set's sending back on in the SES console, under its configuration sets.
+- **SES rejects the AWS key.** The key ID is unknown, the secret doesn't match it, or the AWS account isn't signed up for SES. Store the key's ID and secret again, or create a new key, as [Connect Amazon SES](../get-started/05-ses.md#5-create-the-apps-aws-key) shows.
+- **The sender isn't verified.** SES has no verified identity for the From address in your region. Verify the sending hostname, as [Connect Amazon SES](../get-started/05-ses.md#1-verify-your-sending-hostname) shows.
+- **Sending is turned off for the account.** Turn it back on from the SES console's account dashboard.
+- **AWS paused the account, or is reviewing it.** AWS does this when the account's bounce or complaint rate runs high. While it reviews, SES still sends, and the line is amber. Once it pauses sending, the line is red. Either way, AWS's email to the AWS account says what it needs: answer it in AWS Support, and check the addresses on your recent sends' records.
+
+The app needs to read each of these. If its key isn't allowed to, the line says nothing rather than guessing. The policy in [Connect Amazon SES](../get-started/05-ses.md#5-create-the-apps-aws-key) allows all of it.
+
 ## Your list outgrows Workers Free
 
 Upgrade the Cloudflare account to Workers Paid, and set `SUBREQUEST_BUDGET` so Kestrel sends faster, as [As your list grows](../guides/09-as-your-list-grows.md) describes. Kestrel warns you before a send that could use up the free plan's daily database writes, which stops the app until midnight UTC. [Bring your existing list](01-your-list.md#limits) explains the limits.

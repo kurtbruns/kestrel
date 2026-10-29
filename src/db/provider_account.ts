@@ -11,8 +11,9 @@
 
 import type { AccountEnforcement, ProductionReview } from "../../shared/provider";
 
-/** How the last check went: an answer, a key not allowed to ask, or no usable answer. */
-export type AccountCheckOutcome = "ok" | "permission" | "unreachable";
+/** How the last check went: an answer, a key not allowed to ask, a key the provider rejects
+ *  outright, or no usable answer. */
+export type AccountCheckOutcome = "ok" | "permission" | "rejected" | "unreachable";
 
 /** The account's answer, as the check keeps it. */
 export interface AccountAnswer {
@@ -27,10 +28,21 @@ export interface AccountAnswer {
   sendingEnabled: boolean;
   /**
    * The sending identity's default configuration set: its name, or null when it has none.
-   * Absent when the check didn't look, because `SES_CONFIGURATION_SET` names a set or the key
-   * isn't allowed to read the identity.
+   * Absent when the check couldn't read the identity, or found none verified.
    */
   identityConfigurationSet?: { name: string | null };
+  /**
+   * The configuration set that applies (`SES_CONFIGURATION_SET`, else the identity's default),
+   * as SES described it: whether it exists in the region and, if so, whether its sending is
+   * on. Absent when no set applies or the check couldn't read it, so a key without
+   * `ses:GetConfigurationSet` raises nothing.
+   */
+  configurationSet?: { name: string; exists: boolean; sendingEnabled: boolean };
+  /**
+   * Whether an identity SES would sign the From address with is verified for sending. Absent
+   * when the check couldn't read the identities.
+   */
+  senderVerified?: boolean;
 }
 
 export interface ProviderAccountRow {

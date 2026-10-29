@@ -83,10 +83,23 @@ export const SIMULATED_ACCOUNTS = [
 ] as const;
 export type SimulatedAccount = (typeof SIMULATED_ACCOUNTS)[number];
 
-/** The SES account a local server stands in for: its state, and whether bounces reach the app. */
+/** The account problems a local server can stand in for, each one the account check finds (SPEC §9). */
+export const SIMULATED_ACCOUNT_PROBLEMS = [
+  "set_missing",
+  "set_paused",
+  "key_rejected",
+  "sending_disabled",
+  "shutdown",
+  "sender_unverified",
+  "probation",
+] as const;
+export type SimulatedAccountProblem = (typeof SIMULATED_ACCOUNT_PROBLEMS)[number];
+
+/** The SES account a local server stands in for: its state, whether bounces reach the app, and any problem it has. */
 export interface SimulatedAccountView {
   state: SimulatedAccount;
   bounces_routed: boolean;
+  problem: SimulatedAccountProblem | null;
 }
 
 /** The local send simulation a dev server runs, from `SIMULATE_SENDS`; only ever set in local dev. */

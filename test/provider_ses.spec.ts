@@ -988,7 +988,6 @@ describe("SesProvider.sendBatch", () => {
     [403, "MissingAuthenticationTokenException"],
     [403, "MissingAuthenticationToken"],
     [403, "InvalidClientTokenId"],
-    [400, "RequestExpired"],
     [403, "ExpiredTokenException"],
     [400, "AccessDeniedException"],
     [400, "NotAuthorized"],
@@ -1003,6 +1002,29 @@ describe("SesProvider.sendBatch", () => {
     );
     expect(r).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "credentials" } });
   });
+
+  // AWS refuses a request dated more than 15 minutes off as expired: the clock, not the key,
+  // so it waits for the retry like an outage, whatever status carries it.
+  it.each([400, 403])(
+    "waits out a %i RequestExpired as SES unavailable, never a refusal of the account (SPEC §12)",
+    async (status) => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(
+          JSON.stringify({ __type: "RequestExpired", message: "Request has expired." }),
+          { status },
+        ),
+      );
+      const r = await newProvider().sendBatch(
+        renderedFixture(),
+        [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
+        { purpose: "list", tag: "send-1" },
+      );
+      expect(r).toMatchObject({
+        kind: "halted",
+        halt: { reason: "unavailable", cause: "outage" },
+      });
+    },
+  );
 
   it.each(["test", "confirmation"] as const)(
     "holds a %s SES answers with a configuration set it can't find, rather than failing the address (SPEC §12)",

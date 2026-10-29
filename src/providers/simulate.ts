@@ -584,10 +584,13 @@ const PRODUCTION_ACCOUNT = { maxSendRate: 14, max24HourSend: 50_000 } as const;
 /**
  * The account check's row as SES would leave it in the simulated state (`SIMULATE_ACCOUNT`,
  * SPEC §10), read in place of the stored one. It changes what the editor shows of the
- * account, not how a simulated send goes out: the `ses` profile keeps its own pace.
+ * account, not how a simulated send goes out: the `ses` profile keeps its own pace. A
+ * simulated problem is the reading the real check would make of it (SPEC §9), so each warning
+ * can be seen locally: a rejected key keeps the last answer, as a real one does.
  */
 export function simulatedAccountRow(
   account: SimulatedAccountView,
+  config: Pick<Config, "sesConfigurationSet">,
   now: number,
 ): ProviderAccountRow {
   if (account.state === "permission") {
@@ -595,6 +598,9 @@ export function simulatedAccountRow(
   }
   const production = account.state === "production";
   const limits = production ? PRODUCTION_ACCOUNT : SANDBOX_ACCOUNT;
+  const problem = account.problem;
+  const identitySet = account.bounces_routed ? "kestrel-mail" : null;
+  const setName = config.sesConfigurationSet ?? identitySet;
   const answer: AccountAnswer = {
     productionAccess: production,
     review: production
@@ -606,9 +612,23 @@ export function simulatedAccountRow(
     maxSendRate: limits.maxSendRate,
     max24HourSend: limits.max24HourSend,
     sentLast24Hours: 0,
-    enforcement: "healthy",
-    sendingEnabled: true,
-    identityConfigurationSet: { name: account.bounces_routed ? "kestrel-mail" : null },
+    enforcement:
+      problem === "shutdown" ? "shutdown" : problem === "probation" ? "probation" : "healthy",
+    sendingEnabled: problem !== "sending_disabled",
+    identityConfigurationSet: { name: identitySet },
+    senderVerified: problem !== "sender_unverified",
   };
-  return { attemptedAt: now, outcome: "ok", checkedAt: now, answer };
+  if (setName) {
+    answer.configurationSet = {
+      name: setName,
+      exists: problem !== "set_missing",
+      sendingEnabled: problem !== "set_paused" && problem !== "set_missing",
+    };
+  }
+  return {
+    attemptedAt: now,
+    outcome: problem === "key_rejected" ? "rejected" : "ok",
+    checkedAt: now,
+    answer,
+  };
 }

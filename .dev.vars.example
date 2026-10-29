@@ -47,7 +47,11 @@ SIMULATE_SENDS="ses"
 # real account would: sandbox, pending (AWS reviewing a request for production access),
 # denied, production, or permission (the AWS key isn't allowed to read the account). Add
 # ":unrouted" (e.g. "sandbox:unrouted") for bounces that reach no configuration set, which
-# shows the bounces warning. It changes what the editor shows, not how a simulated send goes
+# shows the bounces warning, or one problem the account check finds, which shows its warning:
+# ":set_missing" or ":set_paused" (the configuration set), ":key_rejected" (SES rejects the
+# AWS key), ":sending_disabled" (sending turned off), ":shutdown" (AWS paused the account),
+# ":sender_unverified" (the From address isn't verified), or ":probation" (AWS reviewing the
+# account), e.g. "production:set_missing". It changes what the editor shows, not how a simulated send goes
 # out. Needs SIMULATE_SENDS=ses; "off" leaves the account unread.
 # For one run, set it in the shell instead: SIMULATE_ACCOUNT=sandbox npm run dev
 SIMULATE_ACCOUNT="off"

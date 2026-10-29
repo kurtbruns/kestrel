@@ -68,7 +68,7 @@ Vars go in the environment block's `vars`. Every value is a string.
 
 - `FROM_ADDRESS` required with a real provider
 
-    The `From:` of every email, and the identity your provider authenticates. Refused unless it's an email address, optionally with a display name in front, like `Name <address>`, and never on `example.com`, unless `PROVIDER` is `fake`.
+    The `From:` of every email, and the identity your provider authenticates. Refused unless it's an email address, optionally with a display name in front, like `Name <address>`, and never on `example.com`, unless `PROVIDER` is `fake`. With Amazon SES, when no identity covering it is verified for sending in `AWS_REGION`, **Settings → Email sender** says so in red within about ten minutes, without sending anything.
 
     It isn't the publication's name, tagline, or logo. You set those in the editor, under **Settings → Publication identity**. Until you do, the From address's display name stands in for the name, and with neither, the emails and reader pages show no name at all.
 
@@ -142,7 +142,7 @@ Store each with `npx wrangler secret put NAME --env production`, which prompts f
 
 - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` required with SES
 
-    The IAM user's access key, which sends through SES.
+    The IAM user's access key, which sends through SES. When SES rejects it, because the key ID is unknown, the secret doesn't match it, or the AWS account isn't signed up for SES, **Settings → Email sender** says so in red within about ten minutes, without sending anything.
 
 - `SNS_TOPIC_ARN` required with SES
 
@@ -150,7 +150,7 @@ Store each with `npx wrangler secret put NAME --env production`, which prompts f
 
 - `SES_CONFIGURATION_SET` optional, recommended with SES
 
-    The configuration set named on every email, so SES reports bounces and complaints. A name SES can't find in the region holds every list send until it's fixed.
+    The configuration set named on every email, so SES reports bounces and complaints. A name SES can't find in the region holds every list send until it's fixed. **Settings → Email sender** says so in red within about ten minutes, without sending anything, and does the same when the set's sending is turned off, as long as the app's key may call `ses:GetConfigurationSet`.
 
 - `DEV_AUTH_SECRET` never on a deployed environment
 
@@ -196,7 +196,7 @@ Wrangler doesn't carry bindings or vars over from the top level of `wrangler.jso
 
 ## What the app refuses
 
-The app checks its configuration on every request. It refuses to run on one that would do the wrong thing quietly, and each setting above says what it refuses. In local development, `SIMULATE_SENDS` must also be off (`off`, `0`, `false`, `no`, or empty), `not-connected` to run as a deployment with no email provider yet, or the provider a local send models: `ses` or `generic` (also `1`, `on`, `true`, or `yes`), optionally followed by `:none` for no injected failures or `:realistic`, the default. `SIMULATE_ACCOUNT` must be off, or, beside `SIMULATE_SENDS=ses`, the SES account state local development stands in for: `sandbox`, `pending`, `denied`, `production`, or `permission`, optionally followed by `:unrouted`. Case doesn't matter. A deployed instance ignores both.
+The app checks its configuration on every request. It refuses to run on one that would do the wrong thing quietly, and each setting above says what it refuses. In local development, `SIMULATE_SENDS` must also be off (`off`, `0`, `false`, `no`, or empty), `not-connected` to run as a deployment with no email provider yet, or the provider a local send models: `ses` or `generic` (also `1`, `on`, `true`, or `yes`), optionally followed by `:none` for no injected failures or `:realistic`, the default. `SIMULATE_ACCOUNT` must be off, or, beside `SIMULATE_SENDS=ses`, the SES account state local development stands in for: `sandbox`, `pending`, `denied`, `production`, or `permission`, optionally followed by `:unrouted` or by one account problem, which shows its warning: `:set_missing`, `:set_paused`, `:key_rejected`, `:sending_disabled`, `:shutdown`, `:sender_unverified`, or `:probation`, as in `production:set_missing`. Case doesn't matter. A deployed instance ignores both.
 
 Until it's fixed, no sends go out, and each place says what its reader can act on:
 

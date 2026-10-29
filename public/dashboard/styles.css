@@ -5348,7 +5348,11 @@ button.set-field-remove {
 .settings .set-warn {
   color: var(--warn-fg);
 }
-/* A notification channel that has stopped delivering: the one red in the settings reflection. */
+/* A provider warning that stops every email: red, beside the amber ones (DESIGN §8). */
+.settings .set-error {
+  color: var(--danger-fg);
+}
+/* A notification channel that has stopped delivering: red in the settings reflection. */
 .set-pill.danger {
   background: var(--danger-bg);
   color: var(--danger-fg);

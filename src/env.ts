@@ -23,10 +23,12 @@ import {
   MIN_LEAD_FLOOR_MS,
 } from "../shared/sends";
 import {
+  SIMULATED_ACCOUNT_PROBLEMS,
   SIMULATED_ACCOUNTS,
   SIMULATION_FAULTS,
   SIMULATION_PROFILES,
   type SimulatedAccount,
+  type SimulatedAccountProblem,
   type SimulatedAccountView,
   type SimulationFaults,
   type SimulationProfile,
@@ -77,7 +79,8 @@ export interface Secrets {
    * The SES account local dev stands in for (SPEC §10), so the editor can be seen in each
    * state the account check reports: `sandbox`, `pending` (AWS reviewing a request),
    * `denied`, `production`, or `permission` (a key not allowed to read the account),
-   * optionally with `:unrouted` for bounces that reach no configuration set. Needs
+   * optionally with `:unrouted` for bounces that reach no configuration set, or with one of
+   * the problems the check finds (`:set_missing`, `:key_rejected`, …, SPEC §9). Needs
    * `SIMULATE_SENDS=ses`; `off` or unset leaves the account unread, as before. Honored only
    * in a dev-shaped env.
    */
@@ -700,7 +703,8 @@ function readSimulateSends(
 
 /**
  * `SIMULATE_ACCOUNT` as the SES account a local server stands in for, or null to leave it
- * unread: off (or unset), or one of the states optionally followed by `:unrouted`. It models
+ * unread: off (or unset), or one of the states optionally followed by `:unrouted` or one
+ * account problem the check finds, such as `:set_missing` (SPEC §9). It models
  * the SES account, so it needs the `ses` send profile. Anything else is refused, as
  * `SIMULATE_SENDS` is, so a typo can't quietly show a state the developer didn't pick.
  */
@@ -712,15 +716,18 @@ function readSimulateAccount(
   if (SIMULATION_OFF.has(raw)) {
     return null;
   }
-  const [state = "", routing, ...rest] = raw.split(":");
+  const [state = "", modifier, ...rest] = raw.split(":");
+  const problem = (SIMULATED_ACCOUNT_PROBLEMS as readonly string[]).includes(modifier ?? "")
+    ? (modifier as SimulatedAccountProblem)
+    : null;
   if (
     rest.length > 0 ||
     !(SIMULATED_ACCOUNTS as readonly string[]).includes(state) ||
-    (routing !== undefined && routing !== "unrouted")
+    (modifier !== undefined && modifier !== "unrouted" && !problem)
   ) {
     throw new ConfigError(
       "SIMULATE_ACCOUNT",
-      `must be off, or one of ${SIMULATED_ACCOUNTS.join(", ")} optionally followed by :unrouted, not "${v?.trim()}"`,
+      `must be off, or one of ${SIMULATED_ACCOUNTS.join(", ")} optionally followed by :unrouted or one of :${SIMULATED_ACCOUNT_PROBLEMS.join(", :")}, not "${v?.trim()}"`,
     );
   }
   if (profile !== "ses") {
@@ -729,7 +736,7 @@ function readSimulateAccount(
       `stands in for the SES account, so it needs SIMULATE_SENDS=ses, not "${profile ?? "off"}"`,
     );
   }
-  return { state: state as SimulatedAccount, bounces_routed: routing === undefined };
+  return { state: state as SimulatedAccount, bounces_routed: modifier !== "unrouted", problem };
 }
 
 function parseEmailList(v: string | undefined): string[] | undefined {
