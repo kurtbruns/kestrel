@@ -25,8 +25,7 @@ async function storedTokens(): Promise<string[]> {
 }
 
 /** A raw answer's text, held to carrying neither token's key nor any token's value: those
- *  stored before the calls (a re-arm rotates a confirm token and an erasure wipes both) and
- *  those stored now. */
+ *  stored before the calls, since an erasure wipes both, and those stored now. */
 async function expectNoTokens(what: string, text: string, before: string[]): Promise<void> {
   expect(text, what).not.toMatch(/confirm_token|unsub_token/);
   for (const token of [...before, ...(await storedTokens())]) {
@@ -97,7 +96,7 @@ describe("a subscriber's tokens never leave the server (SPEC I1)", () => {
       ["by email", await call("GET", `/api/subscribers?email=${PENDING}`), 200],
       ["by id", await call("GET", "/api/subscribers/id-p"), 200],
       ["export", await call("GET", "/api/subscribers/export"), 200],
-      ["add, re-arming", await call("POST", "/api/subscribers", { email: PENDING }), 200],
+      ["add, inside the cooldown", await call("POST", "/api/subscribers", { email: PENDING }), 200],
       ["add, created", await call("POST", "/api/subscribers", { email: "new@example.com" }), 201],
       ["add, signup_required", await call("POST", "/api/subscribers", { email: COMPLAINED }), 409],
       ["erase, run_in_progress", await call("POST", `/api/subscribers/id-${HELD}/erase`), 409],
