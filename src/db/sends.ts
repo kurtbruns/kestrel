@@ -1921,6 +1921,9 @@ export interface DeliveryEventUpdate {
    *  table. Ignored for non-bounce events (they clear any prior kind). */
   hard?: boolean;
   at: number;
+  /** For a held receipt, the in-flight delivery it waits for: the one row it may land on
+   *  without its provider id. */
+  heldFor?: number;
 }
 
 export interface DeliveryEventResult {
@@ -1936,6 +1939,10 @@ export interface DeliveryEventResult {
   email: string | null;
   /** The matched row's send, or null if nothing matched. */
   sendId: string | null;
+  /** The in-flight delivery the receipt waits for, when it names a message no row holds
+   *  yet while its address has a recipient in flight: the caller holds it (`holdReceipt`)
+   *  rather than drop it. Null otherwise. */
+  heldFor: number | null;
 }
 
 // How bad an outcome is. SNS does not guarantee order, so a later event may be a better
@@ -1961,9 +1968,12 @@ const RECEIPT_RETRIES = 3;
  * delivery row, unless the row already holds a worse outcome. An event with a provider
  * id matches by it (unique per delivery). One whose id matches nothing may land only on
  * the address's most recent accepted row that never learned its id, which is a recipient
- * the publisher resolved as sent (SPEC §12), whose receipt still has to land; otherwise
- * it is dropped, since test sends and confirmation emails have no delivery row and their
- * events must never land on a real send's record (SPEC §8). An event carrying no provider
+ * the publisher resolved as sent (SPEC §12), whose receipt still has to land, unless the
+ * address has a recipient in flight: then it is held for that recipient (`heldFor`), since
+ * it is most likely theirs, reported before the send loop wrote the id the provider's answer
+ * carried (SPEC §10). A held receipt lands only on its row or on that recipient once resolved
+ * as sent, and is dropped once that recipient settles any other way. Otherwise it is dropped, since test sends and confirmation emails have no
+ * delivery row and their events must never land on a real send's record (SPEC §8). An event carrying no provider
  * id at all falls back to the address's most recent delivery, unless the send loop has
  * not settled that row yet (`pending` or `dispatched`): then it is dropped from the record,
  * since it cannot say it is this send's message, and an in-flight recipient's fate is
@@ -1987,12 +1997,13 @@ export async function markDeliveryEvent(
   const bounceKind = u.event === "bounced" ? (u.hard ? "hard" : "soft") : null;
   let row: ReceiptTarget | null = null;
   for (let attempt = 0; attempt < RECEIPT_RETRIES; attempt++) {
-    row = await findReceiptTarget(db, u);
-    if (!row) {
-      return { changes: 0, email: null, sendId: null };
+    const found = await findReceiptTarget(db, u);
+    if (found === null || "heldFor" in found) {
+      return { changes: 0, email: null, sendId: null, heldFor: found?.heldFor ?? null };
     }
+    row = found;
     if (eventRank(u.event, bounceKind) < eventRank(row.event, row.bounce_kind)) {
-      return { changes: 0, email: row.email, sendId: row.send_id };
+      return { changes: 0, email: row.email, sendId: row.send_id, heldFor: null };
     }
     // The row as read: every statement below applies only while it still stands.
     const unchanged = "id = ? AND status = ? AND event IS ? AND bounce_kind IS ?";
@@ -2031,7 +2042,7 @@ export async function markDeliveryEvent(
     const results = await db.batch(stmts);
     const write = results[fromCol !== toCol ? 1 : 0];
     if ((write?.meta.changes ?? 0) > 0) {
-      return { changes: 1, email: row.email, sendId: row.send_id };
+      return { changes: 1, email: row.email, sendId: row.send_id, heldFor: null };
     }
   }
   // Still losing to other writes after every retry: record nothing rather than guess. The
@@ -2042,7 +2053,7 @@ export async function markDeliveryEvent(
     event: u.event,
     attempts: RECEIPT_RETRIES,
   });
-  return { changes: 0, email: row?.email ?? null, sendId: row?.send_id ?? null };
+  return { changes: 0, email: row?.email ?? null, sendId: row?.send_id ?? null, heldFor: null };
 }
 
 /** The delivery row a receipt lands on, and the bucket it is leaving. */
@@ -2055,19 +2066,59 @@ interface ReceiptTarget {
   bounce_kind: string | null;
 }
 
-/** Find the row a receipt matches, by the rules `markDeliveryEvent` states. */
+/** Find the row a receipt matches, or the in-flight delivery it waits for (`heldFor`), by
+ *  the rules `markDeliveryEvent` states. */
 async function findReceiptTarget(
   db: D1Database,
   u: DeliveryEventUpdate,
-): Promise<ReceiptTarget | null> {
+): Promise<ReceiptTarget | { heldFor: number } | null> {
   const cols = "id, send_id, email, status, event, bounce_kind";
   if (u.providerId) {
-    const row = await db
-      .prepare(`SELECT ${cols} FROM deliveries WHERE provider_id = ? LIMIT 1`)
-      .bind(u.providerId)
-      .first<ReceiptTarget>();
-    if (row || !u.email) {
+    const byId = () =>
+      db
+        .prepare(`SELECT ${cols} FROM deliveries WHERE provider_id = ? LIMIT 1`)
+        .bind(u.providerId)
+        .first<ReceiptTarget>();
+    const row = await byId();
+    if (row) {
       return row;
+    }
+    if (u.heldFor !== undefined) {
+      // A held receipt goes to the recipient it waited for or nowhere: once resolved as sent
+      // that recipient has no id to match, and one settled any other way takes no receipt.
+      // Its own id, written since the read above, is that same message.
+      const held = await db
+        .prepare(`SELECT ${cols}, provider_id FROM deliveries WHERE id = ?`)
+        .bind(u.heldFor)
+        .first<ReceiptTarget & { provider_id: string | null }>();
+      if (held?.status === "dispatched") {
+        return { heldFor: held.id };
+      }
+      const resolved =
+        held?.status === "accepted" &&
+        (held.provider_id === null || held.provider_id === "" || held.provider_id === u.providerId);
+      return resolved ? held : null;
+    }
+    if (!u.email) {
+      return null;
+    }
+    // A recipient in flight has no id until the send loop records the provider's answer, which
+    // the provider's own report can beat. Checked before the fallback below, so such a receipt
+    // never lands on an older send's row resolved as sent.
+    const inFlight = await db
+      .prepare(
+        "SELECT id FROM deliveries WHERE email = ? AND status = 'dispatched' ORDER BY updated_at DESC LIMIT 1",
+      )
+      .bind(normalizeEmail(u.email))
+      .first<{ id: number }>();
+    if (inFlight) {
+      return { heldFor: inFlight.id };
+    }
+    // The send loop may have recorded the answer between the first read and that one, taking
+    // the recipient out of flight with this id.
+    const settled = await byId();
+    if (settled) {
+      return settled;
     }
     // An id-less accepted row: resolved as sent, or an SES answer whose body was unreadable.
     return db
@@ -2092,6 +2143,98 @@ async function findReceiptTarget(
     return row && row.status !== "pending" && row.status !== "dispatched" ? row : null;
   }
   return null;
+}
+
+/** How long a held receipt waits for its row before it is discarded: by then its batch has
+ *  been answered or gone to Resolve, and a Resolve has had a day to be made (SPEC §10). */
+export const HELD_RECEIPT_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** A receipt `markDeliveryEvent` held, as stored, with the update it was made from. */
+export interface HeldReceipt {
+  id: number;
+  update: DeliveryEventUpdate & { providerId: string; email: string; heldFor: number };
+}
+
+/** Keep a receipt `markDeliveryEvent` answered with `heldFor`, for the sweep to apply
+ *  (`heldReceipts`). Its address is stored normalized, the form erasure matches. */
+export async function holdReceipt(
+  db: D1Database,
+  u: DeliveryEventUpdate,
+  heldFor: number,
+): Promise<void> {
+  if (!u.providerId || !u.email) {
+    return;
+  }
+  await db
+    .prepare(
+      "INSERT INTO held_receipts (provider_id, email, event, detail, hard, at, delivery_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(
+      u.providerId,
+      normalizeEmail(u.email),
+      u.event,
+      u.detail ?? null,
+      u.hard === undefined ? null : u.hard ? 1 : 0,
+      u.at,
+      heldFor,
+    )
+    .run();
+}
+
+/**
+ * The held receipts that are done waiting, oldest first, at most `limit`: one whose message
+ * a row now holds, one whose recipient is no longer in flight, and one out of time. A receipt
+ * still waiting is left out, so a batch of them awaiting Resolve never holds back a later
+ * receipt that can land.
+ */
+export async function heldReceipts(
+  db: D1Database,
+  now: number,
+  limit: number,
+): Promise<HeldReceipt[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT h.id, h.provider_id, h.email, h.event, h.detail, h.hard, h.at, h.delivery_id
+         FROM held_receipts h
+        WHERE h.at <= ?
+           OR EXISTS (SELECT 1 FROM deliveries d WHERE d.provider_id = h.provider_id)
+           OR NOT EXISTS (SELECT 1 FROM deliveries d WHERE d.id = h.delivery_id AND d.status = 'dispatched')
+        ORDER BY h.id LIMIT ?`,
+    )
+    .bind(now - HELD_RECEIPT_TTL_MS, limit)
+    .all<{
+      id: number;
+      provider_id: string;
+      email: string;
+      event: DeliveryEventType;
+      detail: string | null;
+      hard: number | null;
+      at: number;
+      delivery_id: number;
+    }>();
+  return results.map((r) => ({
+    id: r.id,
+    update: {
+      providerId: r.provider_id,
+      email: r.email,
+      event: r.event,
+      detail: r.detail,
+      hard: r.hard === null ? undefined : r.hard === 1,
+      at: r.at,
+      heldFor: r.delivery_id,
+    },
+  }));
+}
+
+/** Discard held receipts by id: applied, dropped, or out of time. */
+export async function releaseHeldReceipts(db: D1Database, ids: readonly number[]): Promise<void> {
+  if (ids.length === 0) {
+    return;
+  }
+  await db
+    .prepare("DELETE FROM held_receipts WHERE id IN (SELECT value FROM json_each(?))")
+    .bind(JSON.stringify(ids))
+    .run();
 }
 
 /** An accepted recipient with no delivery event yet — a candidate for the dev send

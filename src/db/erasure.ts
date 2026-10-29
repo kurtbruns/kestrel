@@ -76,8 +76,10 @@ function withoutAddress(text: string | null, email: string, placeholder: string)
 /**
  * The statements that put a fresh placeholder in place of each of `emails` on its past
  * delivery rows, as of `now`, reading those rows first (through `idx_deliveries_email`).
- * `rewrite` replaces the address in the rows' provider text and must run first; `move`
- * replaces the rows' address, and its changes count the rows that now show an erased recipient.
+ * `rewrite` replaces the address in the rows' provider text, and discards any receipt held
+ * for one of the addresses (`holdReceipt`), which stores the address and the provider's words,
+ * and must run first; `move` replaces the rows' address, and its changes count the rows that
+ * now show an erased recipient.
  */
 export async function forgetDeliveries(
   db: D1Database,
@@ -123,6 +125,14 @@ export async function forgetDeliveries(
   }
   const field = (name: string) =>
     `${name} = (SELECT json_extract(value, '$.${name}') FROM json_each(?1) WHERE json_extract(value, '$.id') = deliveries.id)`;
+  const held = jsonChunks(emails).map((chunk) =>
+    db
+      .prepare(
+        `DELETE FROM held_receipts WHERE email IN (SELECT value FROM json_each(?1))
+            AND ${erasedNow("held_receipts.email")} AND ${idleFor("held_receipts.email", "?2")}`,
+      )
+      .bind(chunk, now),
+  );
   const rewrite = jsonChunks(rewritten).map((chunk) =>
     db
       .prepare(
@@ -142,5 +152,5 @@ export async function forgetDeliveries(
       )
       .bind(chunk, now),
   );
-  return { rewrite, move };
+  return { rewrite: [...held, ...rewrite], move };
 }

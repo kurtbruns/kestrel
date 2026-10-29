@@ -335,7 +335,7 @@ describe("a database that refuses every query partway through a send", () => {
   }
 
   it("leaves the batch it couldn't record waiting for Resolve, and mails no one twice (I4)", async () => {
-    allowErrorLogs("send.error", "sweep.error", "send.wedged");
+    allowErrorLogs("send.error", "sweep.error", "send.wedged", "receipt.release_error");
     vi.useFakeTimers({ toFake: ["Date"] });
     const refusing = { on: false };
     // Three groups of ten recipients, in batches of two: the first is recorded, the database

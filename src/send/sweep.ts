@@ -5,7 +5,9 @@
  *      halt that still stands instead of starting it over (SPEC §12),
  *   2. resume sends left mid-flight by a crash (expired lease), never a wedged one, which
  *      no run can move until Resolve (`WEDGED_SEND`),
- *   3. flag anomalies (sends in flight too long with nothing handed off, wedged sends
+ *   3. apply receipts held for a row that had not learned its message id yet
+ *      (`applyHeldReceipts`), after the sends, so a batch answered this tick takes its own,
+ *      then flag anomalies (sends in flight too long with nothing handed off, wedged sends
  *      awaiting Resolve),
  *   4. notify the publisher of sends that went out or ran into a problem (`notify/notify.ts`),
  *   5. on a tick that sent nothing, ask the provider about its account when the last answer
@@ -41,6 +43,7 @@ import { NOTIFY_RESERVE, notifyPublisher } from "../notify/notify";
 import { getProvider } from "../providers";
 import { drainSimulatedWebhooks } from "../providers/simulate";
 import { accountForPacing, refreshProviderAccount, sesSendRate } from "../services/provider_status";
+import { applyHeldReceipts } from "../services/webhook_events";
 import { Budget, metered } from "./budget";
 import { MIN_RUN_COST, runSend } from "./loop";
 import { SendWindow } from "./pace";
@@ -49,6 +52,13 @@ import { idleSince } from "./stuck";
 /** The two anomaly queries at the end of a tick, held back from the budget up front so
  *  they run whatever the sends spent. */
 const ANOMALY_CHECKS = 2;
+
+/** The D1 statements one held receipt is allowed when the tick plans its pass: a receipt
+ *  that finds its row first try reads at most three times and writes one batch of three. */
+const HELD_RECEIPT_COST = 6;
+
+/** The most held receipts one tick applies, so a backlog spreads over ticks. */
+const HELD_RECEIPTS_PER_TICK = 50;
 
 /** What a tick found, for its `sweep.tick` line: sends due to fire and sends to resume
  *  (each run logs what it did), and the sends flagged. */
@@ -144,7 +154,19 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
     await resume(s);
   }
 
-  // 4) Loud anomaly flags: the ANOMALY_CHECKS held back above, so on the raw handle.
+  // 4) Receipts held for their row, with what the sends left of the budget: the list query,
+  // the release, and each receipt's own. Caught, so a failed pass never stops the flags or
+  // the publisher's notice; what it left stays held for the next tick.
+  const heldRoom = Math.floor((budget.queriesLeft - 2) / HELD_RECEIPT_COST);
+  if (heldRoom > 0) {
+    try {
+      await applyHeldReceipts(db, now, Math.min(heldRoom, HELD_RECEIPTS_PER_TICK));
+    } catch (err) {
+      log.error("receipt.release_error", { error: errorText(err) });
+    }
+  }
+
+  // 5) Loud anomaly flags: the ANOMALY_CHECKS held back above, so on the raw handle.
   for (const s of await sends.stuckSends(env.DB, now - STUCK_THRESHOLD_MS)) {
     log.error("send.stuck", {
       sendId: s.id,
@@ -159,7 +181,7 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
     tick.wedged += 1;
   }
 
-  // 5) Tell the publisher: the reserve plus whatever the sends left. Last, and caught, so a
+  // 6) Tell the publisher: the reserve plus whatever the sends left. Last, and caught, so a
   // notification can never delay or break a send.
   const rest = new Budget(
     NOTIFY_RESERVE + Math.max(0, budget.left),
@@ -171,7 +193,7 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
     log.error("notify.error", { error: errorText(err) });
   }
 
-  // 6) Ask the provider about its account, only on a tick that sent nothing, so its requests
+  // 7) Ask the provider about its account, only on a tick that sent nothing, so its requests
   // never meet a send's, and caught, so a failed check never fails the tick.
   if (tick.due === 0 && tick.resumable === 0) {
     try {
