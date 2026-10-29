@@ -15,7 +15,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Changed
 
 - Connect Amazon SES follows the SES, SNS, and IAM consoles as they are now: it creates the key's policy before its user, sets SNS's longer retry policy on the subscription form, and leaves alone the SES statement a topic created from SES already has. It says why the other six event types stay off, and ends its replies section with a check in Email Routing's Activity log.
-- Allow Claude to connect says Access can take a few minutes to accept sign-ins after Managed OAuth is turned on, showing `invalid_target` until then, and how its curl check reads when Managed OAuth is off (`302`, `Cloudflare-Access`). Troubleshooting adds the `invalid_target` case, and Connect Claude includes the **Connect** and **Allow** steps after **Add**.
+- Allow Claude to connect's check after turning on Managed OAuth states only the expected answer, and says Access can take a few minutes more to accept sign-ins, showing `invalid_target` until then. Troubleshooting adds the `invalid_target` case, and Connect Claude includes the **Connect** and **Allow** steps after **Add**.
 - `kestrel api` run without `--url` or `KESTREL_URL` names the instance it calls on stderr ("calling …, the only instance you're signed in to"), so a call from another instance's folder no longer goes to that sign-in unseen.
 
 ### Fixed
