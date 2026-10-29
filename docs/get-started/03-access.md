@@ -87,6 +87,12 @@ The app verifies each login against your team domain, and checks that it was iss
 
     Without it, the app lets in anyone your Access policy allows.
 
+To let someone else into the editor, such as the publisher or a co-editor, add their email address to the policy from [Allow yourself in](#3-allow-yourself-in). If you set `ACCESS_ALLOWED_EMAILS`, store it again with their address added, since the command replaces the whole list:
+
+```bash
+npx wrangler secret put ACCESS_ALLOWED_EMAILS --env production
+```
+
 ## Check it
 
 1. In a private browser window, open `https://newsletter.example.com/dashboard/`. Cloudflare asks you to sign in.
@@ -112,7 +118,7 @@ The app verifies each login against your team domain, and checks that it was iss
 If a check fails:
 
 - **The editor says the configuration needs a fix.** Store the secret it names. While only one of the two is stored, `/health` answers `500` naming the other, and the public pages say the newsletter is temporarily unavailable.
-- **Cloudflare lets you in, but the editor answers `401`.** Check the two secrets for a typo, and that `ACCESS_ALLOWED_EMAILS`, if you set it, includes your address.
+- **Cloudflare lets you in, but the editor answers `401`.** Check the two secrets for a typo, and that `ACCESS_ALLOWED_EMAILS`, if you set it, includes your address. The same goes for anyone else you let in.
 - **The editor says Access let you in but didn't say who you are.** Your login carried no email, which happens through a kind of policy the app doesn't accept, such as a device check. Sign out, and sign in through the policy you made above.
 
 Next, [create an AWS account](04-aws-account.md).

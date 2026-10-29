@@ -12,12 +12,9 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 **Upgrading from 1.18.0.** If your instance sends through Amazon SES, let the app's AWS key send templated email now, whether or not you upgrade: in the IAM console, open **Policies**, then `kestrel-send-email`, choose **Edit**, add `"ses:SendTemplatedEmail"` and `"ses:SendBulkTemplatedEmail"` to its `Action` list in the JSON editor, and save. Keep the actions already there. A key with the guide's earlier policy can't send at all: until you add them, SES refuses every email the app sends as not authorized, test emails included. In your instance's repository, run `npm run sync-migrations`, which brings in one database migration, `0016_held_receipts`: a new table for receipts SES reports before the app has recorded the message they name, which rewrites nothing. Apply it before you deploy, with `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development). Then deploy with `npx wrangler deploy --env production`. A script of yours that read a subscriber's `confirm_token` or `unsub_token` from the API needs changing (see Breaking); nothing else does.
 
-### Added
-
-- Go live gains Setting it up for someone else, for an operator handing an instance to a client: what to do before the hand-off, right after the production access request goes in, how to let the publisher in, and that answering AWS stays with the operator.
-
 ### Changed
 
+- Lock the dashboard with Access says how to let another person into the editor: add them to the Access policy, and store `ACCESS_ALLOWED_EMAILS` again with their address if you set it, since storing it replaces the whole list.
 - Connect Amazon SES follows the SES, SNS, and IAM consoles as they are now: it creates the key's policy before its user, sets SNS's longer retry policy on the subscription form, and leaves alone the SES statement a topic created from SES already has. It says why the other six event types stay off, and ends its replies section with a check in Email Routing's Activity log.
 - While Amazon SES is in the sandbox, an empty Subscribers list offers only the import, says to share the subscribe page once AWS grants production access, and links Request production access. A reader who signs up before then gets no confirmation email, since SES mails only addresses verified in it.
 - The confirm page's line under its heading reads "Confirm reader@example.com to start receiving the newsletter.", in the reader's words like the confirmation email, instead of asking whether to start sending to them.
