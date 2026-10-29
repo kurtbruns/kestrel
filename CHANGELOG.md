@@ -14,7 +14,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Added
 
-- Notifications can go to up to five addresses, one per line under Settings → Notifications, so whoever runs an instance for someone else is told of problems alongside them. Each address gets every notification, an address that fails is tried again without resending to the others, and **Send a test notification** goes to each (SPEC §8). While SES is in the sandbox, each address must be verified in SES, or with Cloudflare's email when notifications go through it.
+- Notifications can go to up to five addresses, added one at a time under Settings → Notifications as the default test recipients are, so whoever runs an instance for someone else is told of problems alongside them. Each address gets every notification, an address that fails is tried again without resending to the others, and **Send a test notification** goes to each (SPEC §8). While SES is in the sandbox, each address must be verified in SES, or with Cloudflare's email when notifications go through it.
 
 ### Changed
 

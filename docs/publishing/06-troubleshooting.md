@@ -2,7 +2,7 @@
 
 When something needs you, Kestrel says so in a line on the send's page, under **Sent**. The top of the dashboard shows it too. Red needs you to act, and amber is worth a look. The line says what happened, what to do, and who does it. This page covers what the screen can't: the fixes made outside Kestrel, and the decisions that are yours.
 
-**Set a notifications address, so a problem reaches you without your watching.** Set it under **Settings → Notifications**, in **Send notifications to**, one address per line. Add the address of whoever runs your instance too, and both of you are told. With none set, Kestrel emails you nothing. [Notifications](06-troubleshooting.md#notifications), below, lists what you're told.
+**Set a notifications address, so a problem reaches you without your watching.** Set it under **Settings → Notifications**, in **Send notifications to**: type an address and choose **Add inbox**. Add the address of whoever runs your instance too, and both of you are told. With none set, Kestrel emails you nothing. [Notifications](06-troubleshooting.md#notifications), below, lists what you're told.
 
 ## A send is held or waiting
 

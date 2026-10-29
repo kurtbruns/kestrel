@@ -15,7 +15,7 @@ export interface SettingsBaseline {
   address: string;
   recipients: string[];
   confirmation: ConfirmationEmailCopy;
-  /** Where notifications about sends go (SPEC §8), as typed, one a line; empty for none. */
+  /** Where notifications about sends go (SPEC §8); empty for none. */
   notifyTo: string[];
 }
 

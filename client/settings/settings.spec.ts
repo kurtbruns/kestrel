@@ -374,7 +374,9 @@ describe("settings view", () => {
           }),
       },
     ]);
-    expect($<HTMLTextAreaElement>("#notifyTo").value).toBe("me@b.c");
+    expect($$("#notifyChips .set-recip-chip").map((c) => c.textContent?.trim())).toEqual([
+      "me@b.c",
+    ]);
     const facts = $$(".set-kv-v").map((v) => v.textContent?.trim());
     expect(facts).toContain("Your email provider (Amazon SES)");
     expect(facts).toContain("Birds <hello@send.birds.example>");
@@ -409,7 +411,7 @@ describe("settings view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("saves the notifications addresses, one a line, on the save bar, and holds the test until they are saved", async () => {
+  it("saves the notifications addresses added as chips on the save bar, and holds the test until they are saved", async () => {
     await open([
       { path: "/api/settings", reply: () => response() },
       {
@@ -434,7 +436,15 @@ describe("settings view", () => {
     expect(test.disabled).toBe(true);
     expect($("#notifyTestHint").textContent).toBe("Save an address to send a test.");
 
-    typeInto($<HTMLTextAreaElement>("#notifyTo"), " Me@B.C \n\nops@b.c\n");
+    expect($("#notifyChips").textContent).toMatch(/No addresses yet/);
+    typeInto($<HTMLInputElement>("#notifyTo"), " Me@B.C ");
+    $("#notifyAdd").click();
+    typeInto($<HTMLInputElement>("#notifyTo"), "ops@b.c");
+    $("#notifyAdd").click();
+    expect($$("#notifyChips .set-recip-chip").map((c) => c.textContent?.trim())).toEqual([
+      "me@b.c",
+      "ops@b.c",
+    ]);
     expect(bar().classList.contains("show")).toBe(true);
     expect(test.disabled).toBe(true);
     $("#savebarSave").click();
@@ -502,6 +512,42 @@ describe("settings view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("checks a notifications address as it is added, and stops at the most it takes", async () => {
+    await open([
+      {
+        path: "/api/settings",
+        reply: () =>
+          response({
+            settings: {
+              notifications: { to: ["a@b.c", "b@b.c", "c@b.c", "d@b.c", "e@b.c"] },
+            },
+          }),
+      },
+    ]);
+    const input = $<HTMLInputElement>("#notifyTo");
+    const reason = () => document.querySelector("#notifyTo + .field-error")?.textContent;
+    typeInto(input, "f@b.c");
+    $("#notifyAdd").click();
+    expect(reason()).toContain(
+      "Notifications go to at most 5 addresses. Remove one to add another.",
+    );
+    expect(input.value).toBe("f@b.c");
+    $("#notifyChips [data-rm='0']").click();
+    typeInto(input, "nope");
+    $("#notifyAdd").click();
+    expect(reason()).toContain("That doesn’t look like an email address.");
+    typeInto(input, "f@b.c");
+    $("#notifyAdd").click();
+    expect($$("#notifyChips .set-recip-chip").map((c) => c.textContent?.trim())).toEqual([
+      "b@b.c",
+      "c@b.c",
+      "d@b.c",
+      "e@b.c",
+      "f@b.c",
+    ]);
+    expect(bar().classList.contains("show")).toBe(true);
+  });
+
   it("puts the notifications address back on discard", async () => {
     await open([
       {
@@ -509,12 +555,15 @@ describe("settings view", () => {
         reply: () => response({ settings: { notifications: { to: ["me@b.c"] } } }),
       },
     ]);
-    typeInto($<HTMLTextAreaElement>("#notifyTo"), "other@b.c");
+    typeInto($<HTMLInputElement>("#notifyTo"), "other@b.c");
+    $("#notifyAdd").click();
     expect($("#notifyTestHint").textContent).toBe(
       "Save first: the test goes to the saved addresses.",
     );
     $("#savebarDiscard").click();
-    expect($<HTMLTextAreaElement>("#notifyTo").value).toBe("me@b.c");
+    expect($$("#notifyChips .set-recip-chip").map((c) => c.textContent?.trim())).toEqual([
+      "me@b.c",
+    ]);
     expect($<HTMLButtonElement>("#notifyTest").disabled).toBe(false);
     expect(bar().classList.contains("show")).toBe(false);
   });
@@ -625,21 +674,21 @@ describe("settings view", () => {
           jsonResponse(
             {
               error: "bad_request",
-              message:
-                "“nope” isn’t a valid email address. Fix it, or clear the field to turn notifications off.",
+              message: "Notifications can go to at most 5 addresses. Remove some, then save.",
               field: "notifications.to",
             },
             400,
           ),
       },
     ]);
-    typeInto($<HTMLInputElement>("#notifyTo"), "nope");
+    typeInto($<HTMLInputElement>("#notifyTo"), "me@b.c");
+    $("#notifyAdd").click();
     $("#savebarSave").click();
     await vi.advanceTimersByTimeAsync(0);
     const input = $<HTMLInputElement>("#notifyTo");
     expect(input.classList.contains("is-invalid")).toBe(true);
     expect($("#notifyTo + .field-error").textContent).toContain(
-      "“nope” isn’t a valid email address. Fix it, or clear the field to turn notifications off.",
+      "Notifications can go to at most 5 addresses. Remove some, then save.",
     );
     expect(document.activeElement).toBe(input);
     expect($(".savebar-msg").textContent).toBe("Not saved: fix the field marked above.");
@@ -836,6 +885,7 @@ describe("settings view", () => {
     $("#embedCopy button").click();
     await vi.advanceTimersByTimeAsync(0);
     typeInto($<HTMLInputElement>("#notifyTo"), "me@example.com");
+    $("#notifyAdd").click();
     // The snippet doesn't show the notifications address, so its block is left alone.
     expect($("#embedCopy button").getAttribute("aria-label")).toBe("Copied");
     typeInto($<HTMLInputElement>("#setName"), "Owls Monthly");

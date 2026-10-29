@@ -41,9 +41,9 @@ If a check fails, compare your DNS records with the ones in [Connect Amazon SES]
 
 ## 3. Check that notifications arrive
 
-Kestrel emails each notifications address when a send finishes, and right away when one runs into a problem. Check that they reach you, using one of the addresses you verified in SES. While SES is in the sandbox, every notifications address has to be verified there too, unless notifications go through [Cloudflare's email](../guides/03-notifications.md), where each is verified with Cloudflare instead. If you're setting Kestrel up for someone else, you can add their address beside yours later, one per line.
+Kestrel emails each notifications address when a send finishes, and right away when one runs into a problem. Check that they reach you, using one of the addresses you verified in SES. While SES is in the sandbox, every notifications address has to be verified there too, unless notifications go through [Cloudflare's email](../guides/03-notifications.md), where each is verified with Cloudflare instead. If you're setting Kestrel up for someone else, you can add their address beside yours later.
 
-1. In the editor, open **Settings → Notifications**, enter that address, and select **Save**.
+1. In the editor, open **Settings → Notifications**, type that address under **Send notifications to**, select **Add inbox**, and then **Save**.
 
 1. Select **Send a test notification**. It arrives at that address.
 

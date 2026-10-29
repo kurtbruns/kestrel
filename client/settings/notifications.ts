@@ -2,7 +2,6 @@
 // sends is a preference, committed through the save bar; how it gets there, and from whom,
 // is deploy config, shown read-only beside it with how the last one went.
 
-import { normalizeEmail } from "../../shared/email";
 import {
   MAX_NOTIFY_ADDRESSES,
   type NotificationStatusKind,
@@ -15,6 +14,7 @@ import { fmt } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { busy, toast } from "../ui/widgets";
+import { addressListHtml, mountAddressList } from "./address_list";
 import { providerLabel } from "./deploy";
 import { chip, message, type SectionHandle, type SettingsPage, secHead } from "./page";
 
@@ -67,15 +67,7 @@ function notificationStatusHtml(status: SettingsResponse["notification_status"])
   return html`<span class="muted">None yet</span>`;
 }
 
-/** The addresses as typed, one a line (or comma-separated), each trimmed and lowercased and
- *  blanks dropped. One that isn't an address is kept, so the save's refusal names it rather
- *  than the page quietly dropping it. */
-export function notifyLines(text: string): string[] {
-  return text
-    .split(/[\n,]+/)
-    .map(normalizeEmail)
-    .filter((a) => a !== "");
-}
+const NOTIFY_IDS = { chips: "notifyChips", input: "notifyTo", add: "notifyAdd" };
 
 export function notificationsSection(page: SettingsPage): Html {
   const d = page.data.deployment;
@@ -87,8 +79,8 @@ export function notificationsSection(page: SettingsPage): Html {
         <div class="set-recip">
           <div class="set-field" style="margin:0">
             <label for="notifyTo">Send notifications to</label>
-            <textarea id="notifyTo" rows="2" placeholder="you@example.com" autocomplete="off" spellcheck="false">${page.state.notifyTo.join("\n")}</textarea>
-            <p class="field-hint">One address per line, up to ${MAX_NOTIFY_ADDRESSES}, so whoever runs Kestrel for you can be told too. Leave blank for no notifications.</p>
+            <p class="field-hint" style="margin:0 0 8px">Each address gets every notification. Add whoever runs Kestrel for you, so they’re told too. Up to ${MAX_NOTIFY_ADDRESSES}.</p>
+            ${addressListHtml(NOTIFY_IDS)}
           </div>
           <div class="row"><button type="button" class="ghost" id="notifyTest">Send a test notification</button><span class="field-hint" id="notifyTestHint"></span></div>
         </div>
@@ -106,13 +98,17 @@ export function notificationsSection(page: SettingsPage): Html {
  *  never takes one from the request), so it waits for a save. Its outcome is the channel's
  *  latest word, so the status line takes it in place. */
 export function mountNotifications(root: HTMLElement, page: SettingsPage): SectionHandle {
-  const toEl = $<HTMLTextAreaElement>("#notifyTo", root);
   const test = $<HTMLButtonElement>("#notifyTest", root);
   const testHint = $("#notifyTestHint", root);
   const status = $("#notifyStatus", root);
-  toEl.addEventListener("input", () => {
-    page.state.notifyTo = notifyLines(toEl.value);
-    page.changed();
+  const list = mountAddressList(root, page, {
+    ids: NOTIFY_IDS,
+    list: () => page.state.notifyTo,
+    empty: "No addresses yet, so Kestrel emails no one. Add yours below.",
+    max: {
+      count: MAX_NOTIFY_ADDRESSES,
+      full: `Notifications go to at most ${MAX_NOTIFY_ADDRESSES} addresses. Remove one to add another.`,
+    },
   });
   const refreshTest = () => {
     const saved = page.saved().notifyTo;
@@ -162,7 +158,7 @@ export function mountNotifications(root: HTMLElement, page: SettingsPage): Secti
   return {
     repaint: refreshTest,
     reset() {
-      toEl.value = page.state.notifyTo.join("\n");
+      list.reset?.();
       refreshTest();
     },
   };
