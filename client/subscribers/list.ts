@@ -15,6 +15,8 @@ import type {
 } from "../../shared/subscribers";
 import { api, describeError } from "../api";
 import { setTitle } from "../lifecycle";
+import { inSandbox, PRODUCTION_ACCESS_HREF, readProviderStatus } from "../provider_status";
+import { appState } from "../state";
 import { $, $$ } from "../ui/dom";
 import { saveFile } from "../ui/download";
 import { fmt } from "../ui/format";
@@ -87,12 +89,16 @@ export async function renderSubscribers(
 
   const listEl = $("#subList");
   const pagerEl = $("#subPager");
+  // Read once for the empty list's advice: in the sandbox a shared subscribe page can't
+  // confirm anyone. It never fails (a failed read is no state), so it holds no list back.
+  const provider = readProviderStatus(appState.appConfig?.deployment, signal);
 
   async function load() {
     try {
-      const data = await api<SubscriberListResponse>(`/api/subscribers?${listQuery(state)}`, {
-        signal,
-      });
+      const [data, prov] = await Promise.all([
+        api<SubscriberListResponse>(`/api/subscribers?${listQuery(state)}`, { signal }),
+        provider,
+      ]);
       const c = data.counts;
       // The counts stay a global by-status summary (independent of the active filter);
       // the page total below reflects the filtered roster. Each count is also the way to
@@ -105,7 +111,7 @@ export async function renderSubscribers(
       plan.textContent = data.workers_plan_advice ?? "";
       // Suppressions alone are no subscribers, so a list of only them still points the way in.
       const listEmpty = c.pending + c.confirmed + c.unsubscribed === 0;
-      renderSubTable(listEl, data.subscribers, state, load, signal, listEmpty);
+      renderSubTable(listEl, data.subscribers, state, load, signal, listEmpty, inSandbox(prov));
       renderPager(pagerEl, state, data.page, load);
     } catch (e) {
       renderError(listEl, describeError(e), load);
@@ -235,14 +241,20 @@ function renderSubTable(
   reload: () => void,
   signal: AbortSignal,
   listEmpty: boolean,
+  sandbox: boolean,
 ): void {
   if (!rows.length) {
-    // An empty list, rather than a filter that matches no one, points the way in.
+    // An empty list, rather than a filter that matches no one, points the way in. In the SES
+    // sandbox the confirmation email reaches only addresses verified in SES, so the subscribe
+    // page waits for production access; an import sends no email, so it's offered either way.
+    const importLink = html`<a href="#/subscribers/import">Import your list</a>`;
     setHtml(
       listEl,
-      listEmpty
-        ? html`<p class="muted">No subscribers yet. <a href="#/subscribers/import">Import your list</a> from another service, or share your subscribe page.</p>`
-        : html`<p class="muted">No subscribers match.</p>`,
+      !listEmpty
+        ? html`<p class="muted">No subscribers match.</p>`
+        : sandbox
+          ? html`<p class="muted">No subscribers yet. ${importLink} from another service. Once AWS grants production access, share your subscribe page. <a class="set-link" href="${PRODUCTION_ACCESS_HREF}">Request production access</a></p>`
+          : html`<p class="muted">No subscribers yet. ${importLink} from another service, or share your subscribe page.</p>`,
     );
     return;
   }

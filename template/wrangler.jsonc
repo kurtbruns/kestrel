@@ -79,11 +79,11 @@
         }
       ],
       "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "kestrel-media-production" }],
-      // PROVIDER is empty, which means no provider connected: the app runs but sends nothing
-      // until the setup guide's Connect Amazon SES step sets it to `ses`, once its secrets are
-      // stored. It is declared so wrangler doesn't warn that the top level's is missing here.
-      // Never `fake`, which records every send as delivered and mails no one; the app refuses
-      // it on this hostname.
+      // PROVIDER is the email provider: `ses` once the setup guide's Connect Amazon SES step has
+      // stored its secrets, and empty, "", until then, which means none connected: the app runs
+      // but sends nothing. It is declared so wrangler doesn't warn that the top level's is
+      // missing here. Never `fake`, which records every send as delivered and mails no one; the
+      // app refuses it on this hostname.
       "vars": {
         "PROVIDER": "",
         "APP_ORIGIN": "https://newsletter.example.com",

@@ -4,6 +4,8 @@ Your publication's subscribe page is at `/subscribe` on your publication's addre
 
 **Signups open only once an email provider is connected.** Until then, the page says the newsletter isn't taking subscribers yet, and the dashboard says so too. You can share the link anyway, and it opens once email is connected ([Connect Amazon SES](../get-started/05-ses.md)).
 
+**On Amazon SES, share it once AWS grants production access.** Until then, SES mails only addresses verified in it, so a reader who signs up never gets their confirmation email. The dashboard's checklist and an empty **Subscribers** list say so, and link [Request production access](../get-started/06-production-access.md). Importing your list is safe meanwhile, since an import sends no email.
+
 ## How a reader joins
 
 A reader enters their address, gets a confirmation email, and presses **Confirm subscription** on the page its link opens. Only then do they receive your posts. Opening the link alone records nothing, since mail scanners open links before a person does. This double opt-in is your record that each reader asked for your newsletter.

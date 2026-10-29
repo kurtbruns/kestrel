@@ -16,7 +16,7 @@ const SHOWS: Record<string, string[]> = {
   "subscribe/not-an-email": ["That doesn’t look like an email"],
   "confirm/ready": [
     `Confirm your subscription to ${publication}`,
-    "<strong>reader@example.com</strong>",
+    "Confirm <strong>reader@example.com</strong> to start receiving the newsletter.",
   ],
   "confirm/confirmed": ["You’re subscribed", "<strong>reader@example.com</strong>"],
   "confirm/expired": ["This link has expired", "Send a new link"],

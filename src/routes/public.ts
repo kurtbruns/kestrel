@@ -238,7 +238,7 @@ export async function confirmStatePage(
           title: "Confirm your subscription",
           eyebrow,
           headline: toPublication("Confirm your subscription", identity.name),
-          ledeHtml: `Start sending the newsletter to <strong>${escapeHtml(state.subscriber.email)}</strong>?`,
+          ledeHtml: `Confirm <strong>${escapeHtml(state.subscriber.email)}</strong> to start receiving the newsletter.`,
           afterHtml:
             `<form class="r-form" method="post" action="/confirm">` +
             `<input type="hidden" name="token" value="${escapeHtmlAttr(token)}">` +

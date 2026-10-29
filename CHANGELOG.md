@@ -15,6 +15,9 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Changed
 
 - Connect Amazon SES follows the SES, SNS, and IAM consoles as they are now: it creates the key's policy before its user, sets SNS's longer retry policy on the subscription form, and leaves alone the SES statement a topic created from SES already has. It says why the other six event types stay off, and ends its replies section with a check in Email Routing's Activity log.
+- While Amazon SES is in the sandbox, an empty Subscribers list offers only the import, says to share the subscribe page once AWS grants production access, and links Request production access. A reader who signs up before then gets no confirmation email, since SES mails only addresses verified in it.
+- The confirm page's line under its heading reads "Confirm reader@example.com to start receiving the newsletter.", in the reader's words like the confirmation email, instead of asking whether to start sending to them.
+- The comment `kestrel init` writes above `PROVIDER` in `wrangler.jsonc` stays true after Connect Amazon SES sets it to `ses`. Only new instances get it; an existing instance can edit its comment by hand.
 - Allow Claude to connect's check after turning on Managed OAuth states only the expected answer, and says Access can take a few minutes more to accept sign-ins, showing `invalid_target` until then. Troubleshooting adds the `invalid_target` case, and Connect Claude includes the **Connect** and **Allow** steps after **Add**.
 - `kestrel api` run without `--url` or `KESTREL_URL` names the instance it calls on stderr ("calling …, the only instance you're signed in to"), so a call from another instance's folder no longer goes to that sign-in unseen.
 
