@@ -20,6 +20,7 @@
  * something no longer true.
  */
 
+import { missedAddresses, type NotificationTestMiss } from "../../shared/settings";
 import * as notifications from "../db/notifications";
 import { getSettings } from "../db/settings";
 import type { AppEnv } from "../env";
@@ -132,7 +133,7 @@ export async function notifyPublisher(env: AppEnv, budget: Budget): Promise<void
     // Only the addresses it hasn't reached: one that got it on an earlier try never gets it
     // again because another failed.
     const sentTo = [...n.sent_to];
-    const missed: AddressMiss[] = [];
+    const missed: NotificationTestMiss[] = [];
     let deferred = false;
     for (const address of to.filter((a) => !n.sent_to.includes(a))) {
       if (budget.left < recordsLeft + 1) {
@@ -180,22 +181,4 @@ export async function notifyPublisher(env: AppEnv, budget: Budget): Promise<void
       Date.now(),
     );
   }
-}
-
-/** One address a notification didn't reach, with the channel's words. */
-export interface AddressMiss {
-  email: string;
-  error: string;
-}
-
-/**
- * The channel's words for the addresses a notification or a test missed, as the settings
- * surface shows them: the words alone when notifications go to one address, and each led by
- * its address when they go to several, so the publisher can tell which to fix.
- */
-export function missedAddresses(to: readonly string[], missed: readonly AddressMiss[]): string {
-  if (to.length === 1 && missed.length === 1) {
-    return missed[0]?.error ?? "";
-  }
-  return missed.map((m) => `${m.email}: ${m.error}`).join("; ");
 }

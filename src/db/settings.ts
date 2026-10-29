@@ -224,8 +224,8 @@ function coerce(raw: unknown): AppSettings {
 }
 
 /** Coerce a stored notifications blob to its list of addresses. A single address, as a row
- *  written before notifications went to several is stored until its migration
- *  (`0017_notify_addresses`) runs, reads as a list of that one. */
+ *  saved before notifications went to several holds it, reads as a list of that one ("" as
+ *  none), so an instance keeps notifying where it did; the next save stores the list. */
 function coerceNotifications(raw: unknown): NotificationPrefs {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const list = typeof o.to === "string" ? [o.to] : Array.isArray(o.to) ? o.to : [];

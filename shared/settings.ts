@@ -215,10 +215,27 @@ export interface TemplateTestResponse {
   warnings: string[];
 }
 
-/** One saved address a test notification didn't reach, with the channel's words. */
+/** One saved address a notification or a test didn't reach, with the channel's words. */
 export interface NotificationTestMiss {
   email: string;
   error: string;
+}
+
+/**
+ * The channel's words for the addresses a notification or a test missed, as the settings
+ * surface shows them: the words alone when notifications go to one address, and each led by
+ * its address when they go to several, so the publisher can tell which to fix. One
+ * definition, so the status line the editor paints after a test reads as the one the server
+ * records.
+ */
+export function missedAddresses(
+  to: readonly string[],
+  missed: readonly NotificationTestMiss[],
+): string {
+  if (to.length === 1 && missed.length === 1) {
+    return missed[0]?.error ?? "";
+  }
+  return missed.map((m) => `${m.email}: ${m.error}`).join("; ");
 }
 
 /** POST /api/settings/notifications/test: a sample notification to every saved address, through the live channel. */

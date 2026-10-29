@@ -29,6 +29,7 @@ import {
   type DeploymentView,
   type InUseView,
   type LogoResponse,
+  missedAddresses,
   type NotificationTestMiss,
   type NotificationTestResponse,
   type PublicationView,
@@ -67,7 +68,6 @@ import { errorText } from "../lib/log";
 import { unwrap } from "../lib/unwrap";
 import { getNotifier } from "../notify/channel";
 import { sampleNotification } from "../notify/compose";
-import { missedAddresses } from "../notify/notify";
 import { requireConnectedProvider } from "../providers";
 import {
   DEFAULT_EMAIL_TEMPLATE,

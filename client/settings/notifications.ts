@@ -4,6 +4,7 @@
 
 import {
   MAX_NOTIFY_ADDRESSES,
+  missedAddresses,
   type NotificationStatusKind,
   type NotificationTestResponse,
   type SettingsResponse,
@@ -134,7 +135,7 @@ export function mountNotifications(root: HTMLElement, page: SettingsPage): Secti
             : `Test notification sent to ${reached.join(", ")}`,
         );
         // Some addresses missed it: the status row says which, as the server recorded it.
-        const error = r.failed.map((f) => `${f.email}: ${f.error}`).join("; ");
+        const error = missedAddresses(r.to, r.failed);
         setHtml(
           status,
           notificationStatusHtml({

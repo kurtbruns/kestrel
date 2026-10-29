@@ -530,6 +530,26 @@ describe("several addresses (SPEC §8)", () => {
     expect(await rows()).toMatchObject([{ kind: "sandbox", status: "sent", attempts: 1 }]);
   });
 
+  it("gives up on an address that keeps failing after the cap, never mailing the one it reached again", async () => {
+    await notifications.sandboxNotice(env.DB, Date.now());
+    for (let i = 0; i < MAX_NOTIFY_ATTEMPTS; i++) {
+      failFakeNotify(1); // the publisher's address, tried first on every try
+      await notifyPublisher(env as AppEnv, new Budget(50));
+    }
+    expect(fakeNotifications().map((n) => n.to)).toEqual([OPERATOR]);
+    expect(await rows()).toMatchObject([
+      {
+        kind: "sandbox",
+        status: "failed",
+        attempts: MAX_NOTIFY_ATTEMPTS,
+        error: `${PUBLISHER}: fake notification failure`,
+      },
+    ]);
+
+    await notifyPublisher(env as AppEnv, new Budget(50));
+    expect(fakeNotifications().map((n) => n.to)).toEqual([OPERATOR]);
+  });
+
   it("an address added while one is pending gets it, and one removed is no longer waited on", async () => {
     await notifications.sandboxNotice(env.DB, Date.now());
     failFakeNotify(1);
@@ -730,6 +750,28 @@ describe("the settings surface", () => {
     expect(body.deployment.notify_channel).toBe("fake");
     expect(body.deployment.notify_from).toBe(env.FROM_ADDRESS);
     expect(body.notification_status).toEqual({ last_sent: null, last_failure: null });
+  });
+
+  it("keeps an address saved before notifications went to several, as a list of that one, until the next save (SPEC §8)", async () => {
+    const stored = async (to: string) =>
+      env.DB.prepare("UPDATE settings SET data = ? WHERE id = 1")
+        .bind(JSON.stringify({ notifications: { to } }))
+        .run();
+
+    await stored("me@example.com");
+    expect((await get()).settings.notifications).toEqual({ to: ["me@example.com"] });
+    expect(await test()).toHaveProperty("status", 200);
+    expect(fakeNotifications().map((n) => n.to)).toEqual(["me@example.com"]);
+
+    // The next save of anything stores the list.
+    await put({ test_recipients: [] });
+    const row = await env.DB.prepare("SELECT data FROM settings WHERE id = 1").first<{
+      data: string;
+    }>();
+    expect(JSON.parse(row!.data).notifications).toEqual({ to: ["me@example.com"] });
+
+    await stored("");
+    expect((await get()).settings.notifications).toEqual({ to: [] });
   });
 
   it("refuses an address that isn't one, and a wrong type naming the field", async () => {

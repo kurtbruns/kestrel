@@ -2,7 +2,6 @@ import { env } from "cloudflare:workers";
 import type { D1Migration } from "@cloudflare/vitest-plugin";
 import { beforeEach, describe, expect, it } from "vitest";
 import { SHIPPED_MIGRATIONS } from "../src/db/migrations";
-import { getSettings } from "../src/db/settings";
 import { resetDatabase } from "./support/fixtures";
 
 // The migrations folder as vitest.config.ts read it, the same files the setup applied.
@@ -728,48 +727,6 @@ describe("schema (0014_send_acts)", () => {
 });
 
 describe("schema (0017_notify_addresses)", () => {
-  // Its column already stands here, so only its rewrite of the settings row runs again.
-  const rewrite = async () => {
-    const migration = FOLDER.find((m) => m.name === "0017_notify_addresses.sql");
-    const updates = (migration?.queries ?? []).filter((q) => q.includes("UPDATE settings"));
-    expect(updates).toHaveLength(1);
-    await env.DB.prepare(updates[0]!).run();
-  };
-  const stored = async () =>
-    env.DB.prepare("SELECT data, updated_at FROM settings WHERE id = 1").first<{
-      data: string;
-      updated_at: number;
-    }>();
-
-  it("keeps an instance's one notifications address as a list of it, and the rest of the row as it was (SPEC §8)", async () => {
-    await env.DB.prepare(
-      `INSERT INTO settings (id, data, updated_at) VALUES (1, '{"testRecipients":["t@example.com"],"notifications":{"to":"me@example.com"}}', 5)`,
-    ).run();
-    await rewrite();
-    const row = await stored();
-    expect(JSON.parse(row!.data)).toEqual({
-      testRecipients: ["t@example.com"],
-      notifications: { to: ["me@example.com"] },
-    });
-    expect(row!.updated_at).toBe(6);
-    expect((await getSettings(env.DB)).notifications).toEqual({ to: ["me@example.com"] });
-  });
-
-  it("turns no address into no addresses, and leaves a row that is already a list, or isn't JSON, alone", async () => {
-    await env.DB.prepare(
-      `INSERT INTO settings (id, data, updated_at) VALUES (1, '{"notifications":{"to":""}}', 5)`,
-    ).run();
-    await rewrite();
-    expect(JSON.parse((await stored())!.data)).toEqual({ notifications: { to: [] } });
-
-    await rewrite();
-    expect((await stored())!.updated_at).toBe(6);
-
-    await env.DB.prepare("UPDATE settings SET data = 'not json' WHERE id = 1").run();
-    await rewrite();
-    expect((await stored())!.data).toBe("not json");
-  });
-
   it("starts every notification having reached no address", async () => {
     await env.DB.prepare(
       "INSERT INTO notifications (send_id, kind, episode, created_at, updated_at) VALUES (NULL, 'sandbox', 0, 1, 1)",
