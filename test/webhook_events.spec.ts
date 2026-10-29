@@ -1,10 +1,14 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { audienceEmails, getByEmail, isSuppressed } from "../src/db/subscribers";
+import { HELD_RECEIPT_TTL_MS } from "../src/db/sends";
+import { audienceEmails, erase, getByEmail, isSuppressed } from "../src/db/subscribers";
+import { clearFakeOutbox, FakeProvider } from "../src/providers/fake";
 import type { DeliveryEvent } from "../src/providers/types";
-import { applyDeliveryEvents } from "../src/services/webhook_events";
+import { sweep } from "../src/send/sweep";
+import { applyDeliveryEvents, applyHeldReceipts } from "../src/services/webhook_events";
 import {
   deliveryEvent,
+  dueSend,
   resetDatabase,
   SEEDED_SEND_ID,
   seedConfirmed,
@@ -289,6 +293,7 @@ describe("applyDeliveryEvents: what it logs", () => {
         complained: 1,
         recorded: 4,
         unchanged: 1,
+        held: 0,
       },
       {
         event: "receipt.applied",
@@ -299,6 +304,7 @@ describe("applyDeliveryEvents: what it logs", () => {
         complained: 0,
         recorded: 0,
         unchanged: 1,
+        held: 0,
       },
     ]);
     // The soft bounce is not a suppression, the complaint unsubscribed rather than
@@ -417,5 +423,182 @@ describe("a complaint is leaving (SPEC §7, Leaving)", () => {
     expect(await standing("gone@example.com")).toEqual(["unsubscribed", "erased"]);
     // When they left stays when they first left.
     expect((await getByEmail(env.DB, "left@example.com"))?.unsubscribed_at).toBe(1);
+  });
+});
+
+// The provider can report a message before the send loop has recorded its answer, which is
+// what carries the message's id (SPEC §10).
+describe("applyDeliveryEvents: a receipt that beats the provider's answer to its row", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    clearFakeOutbox();
+  });
+
+  /** A recipient handed to the provider and awaiting its answer: in flight, with no id. */
+  async function inFlight(email: string): Promise<void> {
+    await seedDelivery(email, null);
+    await env.DB.prepare("UPDATE deliveries SET status = 'dispatched' WHERE email = ?")
+      .bind(email)
+      .run();
+  }
+
+  async function heldCount(): Promise<number> {
+    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM held_receipts").first<{
+      n: number;
+    }>();
+    return row!.n;
+  }
+
+  it("records a bounce SES reports while the batch is still being answered on its delivery row (SPEC §10)", async () => {
+    await seedConfirmed("early@example.com");
+    const send = await dueSend();
+    // The bounce arrives after the provider took the message and before the send loop
+    // records the answer that carries its id.
+    const real = FakeProvider.prototype.sendBatch;
+    vi.spyOn(FakeProvider.prototype, "sendBatch").mockImplementation(async function (
+      this: FakeProvider,
+      rendered,
+      recipients,
+      opts,
+    ) {
+      const answer = await real.call(this, rendered, recipients, opts);
+      if (answer.kind === "answered") {
+        for (const r of answer.results) {
+          if (r.accepted) {
+            await applyDeliveryEvents(env.DB, [
+              { type: "bounced", providerId: r.providerId, email: r.email, hard: true },
+            ]);
+          }
+        }
+      }
+      return answer;
+    });
+
+    await sweep(env);
+
+    const row = await env.DB.prepare(
+      "SELECT status, event, bounce_kind FROM deliveries WHERE send_id = ? AND email = 'early@example.com'",
+    )
+      .bind(send.id)
+      .first<{ status: string; event: string | null; bounce_kind: string | null }>();
+    expect(row).toEqual({ status: "accepted", event: "bounced", bounce_kind: "hard" });
+    const counts = await env.DB.prepare("SELECT c_accepted, c_bounced FROM sends WHERE id = ?")
+      .bind(send.id)
+      .first<{ c_accepted: number; c_bounced: number }>();
+    expect(counts).toEqual({ c_accepted: 0, c_bounced: 1 });
+    expect(await isSuppressed(env.DB, "early@example.com")).toBe(true);
+    expect(await heldCount()).toBe(0);
+  });
+
+  it("holds the receipt rather than land it on an older send's row resolved as sent", async () => {
+    await seedDelivery("both@example.com", null); // an earlier send, resolved as sent
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, scheduled_at) VALUES ('s-later', 'p-receipts', 'sending', ?, '', '', '', ?)",
+      ).bind(now, now),
+      env.DB.prepare(
+        "INSERT INTO deliveries (send_id, email, status, updated_at) VALUES ('s-later', 'both@example.com', 'dispatched', ?)",
+      ).bind(now + 1),
+    ]);
+
+    const applied = await applyDeliveryEvents(env.DB, [
+      { type: "bounced", providerId: "msg-new", email: "both@example.com", hard: true },
+    ]);
+
+    const { results } = await env.DB.prepare(
+      "SELECT status, event FROM deliveries WHERE email = 'both@example.com' ORDER BY id",
+    ).all<{ status: string; event: string | null }>();
+    expect(results).toEqual([
+      { status: "accepted", event: null },
+      { status: "dispatched", event: null },
+    ]);
+    expect(await heldCount()).toBe(1);
+    expect(applied.suppressed).toBe(1); // the list acts at once
+  });
+
+  it("lands a held receipt on its recipient once the publisher resolves it as sent (SPEC §12)", async () => {
+    await inFlight("resolved@example.com");
+    await applyDeliveryEvents(env.DB, [
+      { type: "bounced", providerId: "msg-lost", email: "resolved@example.com", hard: false },
+    ]);
+    expect(await applyHeldReceipts(env.DB, Date.now(), 10)).toEqual({
+      recorded: 0,
+      unchanged: 0,
+      expired: 0,
+      waiting: 1,
+    });
+
+    // Resolve's "assume sent": accepted, with no id the provider never answered with.
+    await env.DB.prepare(
+      "UPDATE deliveries SET status = 'accepted' WHERE email = 'resolved@example.com'",
+    ).run();
+    const result = await applyHeldReceipts(env.DB, Date.now(), 10);
+
+    expect(result).toEqual({ recorded: 1, unchanged: 0, expired: 0, waiting: 0 });
+    const row = await env.DB.prepare(
+      "SELECT event, bounce_kind FROM deliveries WHERE email = 'resolved@example.com'",
+    ).first<{ event: string | null; bounce_kind: string | null }>();
+    expect(row).toEqual({ event: "bounced", bounce_kind: "soft" });
+    expect(await heldCount()).toBe(0);
+  });
+
+  it("releases a held receipt with no row to land on once its recipient is resolved as not sent", async () => {
+    await inFlight("unsent@example.com");
+    await applyDeliveryEvents(env.DB, [
+      { type: "delivered", providerId: "msg-unsent", email: "unsent@example.com" },
+    ]);
+    await env.DB.prepare(
+      "UPDATE deliveries SET status = 'unsent' WHERE email = 'unsent@example.com'",
+    ).run();
+
+    const result = await applyHeldReceipts(env.DB, Date.now(), 10);
+
+    expect(result).toEqual({ recorded: 0, unchanged: 1, expired: 0, waiting: 0 });
+    const row = await env.DB.prepare(
+      "SELECT status, event FROM deliveries WHERE email = 'unsent@example.com'",
+    ).first<{ status: string; event: string | null }>();
+    expect(row).toEqual({ status: "unsent", event: null });
+    expect(await heldCount()).toBe(0);
+  });
+
+  it("discards a held receipt still waiting after a day", async () => {
+    await inFlight("waiting@example.com");
+    await applyDeliveryEvents(env.DB, [
+      { type: "delivered", providerId: "msg-wait", email: "waiting@example.com" },
+    ]);
+
+    expect(
+      (await applyHeldReceipts(env.DB, Date.now() + HELD_RECEIPT_TTL_MS - 60_000, 10)).waiting,
+    ).toBe(1);
+    const result = await applyHeldReceipts(env.DB, Date.now() + HELD_RECEIPT_TTL_MS, 10);
+
+    expect(result).toEqual({ recorded: 0, unchanged: 0, expired: 1, waiting: 0 });
+    expect(await heldCount()).toBe(0);
+  });
+
+  it("holds nothing for a test send's or a confirmation's receipt, whose address has nothing in flight", async () => {
+    await seedDelivery("reader@example.com", "msg-past");
+
+    await applyDeliveryEvents(env.DB, [
+      { type: "delivered", providerId: "msg-test", email: "reader@example.com" },
+    ]);
+
+    expect(await heldCount()).toBe(0);
+    expect(await deliveryEvent("msg-past")).toBeNull();
+  });
+
+  it("discards a receipt held for an address when its subscriber is erased (SPEC §7)", async () => {
+    await seedConfirmed("forget@example.com");
+    await inFlight("forget@example.com");
+    await applyDeliveryEvents(env.DB, [
+      { type: "bounced", providerId: "msg-forget", email: "forget@example.com", hard: false },
+    ]);
+    expect(await heldCount()).toBe(1);
+
+    const outcome = await erase(env.DB, "id-forget@example.com");
+
+    expect(outcome.kind).toBe("erased");
+    expect(await heldCount()).toBe(0);
   });
 });

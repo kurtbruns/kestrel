@@ -11,13 +11,26 @@
  *     their mail provider, whatever email it was about.
  * Soft (transient) bounces are recorded but never suppress.
  *
+ * A receipt that names a message the record has not learned yet, for an address with a
+ * recipient in flight, acts on the list at once and is held for the record
+ * (`holdReceipt`); the sweep applies it once its row holds the id (`applyHeldReceipts`),
+ * so a bounce reported before the send loop records the provider's answer still lands on
+ * its delivery row (SPEC §10).
+ *
  * Each call logs what it applied, aggregated per send (`receipt.applied`, then
  * `suppression.added` when it suppressed and `subscriber.complained` when a complaint
  * reached a subscriber), never an address: the counts are the story.
  */
 
 import { isErasedPlaceholder } from "../../shared/subscribers";
-import { markDeliveryEvent } from "../db/sends";
+import {
+  type DeliveryEventUpdate,
+  HELD_RECEIPT_TTL_MS,
+  heldReceipts,
+  holdReceipt,
+  markDeliveryEvent,
+  releaseHeldReceipts,
+} from "../db/sends";
 import { addSuppression, type ComplaintOutcome, complain } from "../db/subscribers";
 import { log } from "../lib/log";
 import type { DeliveryEvent } from "../providers/types";
@@ -43,6 +56,7 @@ export async function applyDeliveryEvents(
     {
       recorded: number;
       unchanged: number;
+      held: number;
       delivered: number;
       bounced: number;
       complained: number;
@@ -52,7 +66,7 @@ export async function applyDeliveryEvents(
   >();
 
   for (const e of events) {
-    const matched = await markDeliveryEvent(db, {
+    const update: DeliveryEventUpdate = {
       providerId: e.providerId,
       email: e.email,
       event: e.type,
@@ -61,11 +75,16 @@ export async function applyDeliveryEvents(
       // record's soft/hard split is a per-send fact, not a read of global suppression.
       hard: e.type === "bounced" ? e.hard : undefined,
       at: now,
-    });
+    };
+    const matched = await markDeliveryEvent(db, update);
+    if (matched.held) {
+      await holdReceipt(db, update);
+    }
     applied += 1;
     const tally = bySend.get(matched.sendId ?? "") ?? {
       recorded: 0,
       unchanged: 0,
+      held: 0,
       delivered: 0,
       bounced: 0,
       complained: 0,
@@ -76,6 +95,8 @@ export async function applyDeliveryEvents(
     tally[e.type] += 1;
     if (matched.changes > 0) {
       tally.recorded += 1;
+    } else if (matched.held) {
+      tally.held += 1;
     } else {
       tally.unchanged += 1;
     }
@@ -110,6 +131,7 @@ export async function applyDeliveryEvents(
       complained: t.complained,
       recorded: t.recorded,
       unchanged: t.unchanged,
+      held: t.held,
     });
     if (t.bounce > 0) {
       log.info("suppression.added", { ...tags, source: "webhook", count: t.bounce });
@@ -126,6 +148,52 @@ export async function applyDeliveryEvents(
   }
 
   return { applied, suppressed, unsubscribed };
+}
+
+/** What a sweep's pass over the held receipts did, for its `receipt.released` line. */
+export interface HeldReceiptResult {
+  /** Landed on a delivery row. */
+  recorded: number;
+  /** Reached a row that already held as bad an outcome, or reached none once its address
+   *  had nothing in flight (a recipient resolved as not sent). */
+  unchanged: number;
+  /** Still waiting after a day, so discarded. */
+  expired: number;
+  /** Still waiting for their row. */
+  waiting: number;
+}
+
+/**
+ * Apply up to `limit` held receipts to the record, by the rules any receipt follows
+ * (`markDeliveryEvent`): one whose row now holds its id lands there, and one whose recipient
+ * the publisher resolved as sent lands on that row. Each that reached a row, or that no row
+ * will take now its address has nothing in flight, is released; one still waiting is kept,
+ * for a day. The list already acted on each when it arrived, so this only writes the record.
+ */
+export async function applyHeldReceipts(
+  db: D1Database,
+  now: number,
+  limit: number,
+): Promise<HeldReceiptResult> {
+  const result: HeldReceiptResult = { recorded: 0, unchanged: 0, expired: 0, waiting: 0 };
+  const released: number[] = [];
+  for (const { id, update } of await heldReceipts(db, limit)) {
+    const matched = await markDeliveryEvent(db, update);
+    if (!matched.held) {
+      released.push(id);
+      result[matched.changes > 0 ? "recorded" : "unchanged"] += 1;
+    } else if (now - update.at >= HELD_RECEIPT_TTL_MS) {
+      released.push(id);
+      result.expired += 1;
+    } else {
+      result.waiting += 1;
+    }
+  }
+  await releaseHeldReceipts(db, released);
+  if (released.length > 0) {
+    log.info("receipt.released", { ...result });
+  }
+  return result;
 }
 
 function eventDetail(e: DeliveryEvent): string | null {
