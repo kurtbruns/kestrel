@@ -41,6 +41,7 @@ The most useful contributions right now are issues and discussion. If something 
 
 Pull requests are welcome, but may be closed with little explanation. The ones most likely to be merged come from people using Kestrel, after a discussion on the issue, and:
 
+- open by saying, in plain words, what changes for the people who run, publish, or read a Kestrel newsletter, and why;
 - pass `npm test`, `npm run typecheck`, and `npm run check`;
 - update the docs they affect in the same commit, as `.claude/CLAUDE.md` describes;
 - close their issue (`Closes #N`) and say what differs from it, if anything.
