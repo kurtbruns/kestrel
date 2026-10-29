@@ -198,7 +198,7 @@ export function fieldSchema(f: ReferenceField, keys: ReadonlySet<string>): Schem
   return { ...schema, description: f.description };
 }
 
-/** A field's documented names: a row may name several (`confirm_token, unsub_token`), and a
+/** A field's documented names: a row may name several (`confirm_sent_at, confirm_attempt_at`), and a
  *  trailing `…` says the list goes on, which no schema can name. */
 function fieldNames(name: string): string[] {
   return name

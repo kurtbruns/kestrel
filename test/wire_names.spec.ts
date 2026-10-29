@@ -67,7 +67,7 @@ describe("names on the wire are snake_case", () => {
   it("names every documented field in snake_case, each segment of a dotted path", () => {
     const bad = allFields()
       .flatMap(({ where, field }) =>
-        // A row may name several fields at once (`confirm_token, unsub_token`) or elide its
+        // A row may name several fields at once (`confirm_sent_at, confirm_attempt_at`) or elide its
         // middle (`send, post, …`); each name, and each segment of a dotted path, is checked.
         field.name
           .split(/[.,]\s*|\s+/)

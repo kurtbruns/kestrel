@@ -797,17 +797,6 @@ const SUBSCRIBER_FIELDS: ReferenceField[] = [
     description: "When they last left, kept while they are pending again.",
   },
   {
-    name: "confirm_token",
-    type: "string | null",
-    description: "The confirmation link's one-shot token, null once spent.",
-  },
-  {
-    name: "unsub_token",
-    type: "string | null",
-    description:
-      "The unsubscribe link's token, never rotated; null once erased, which discards it, and a person who signs up again gets a new one.",
-  },
-  {
     name: "confirm_sent_at, confirm_attempt_at",
     type: "number | null",
     description: "When a confirmation last went out, and was last attempted.",
@@ -1088,10 +1077,8 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
       id: "sub_1",
       email: "reader@example.com",
       status: "confirmed",
-      confirm_token: null,
       confirm_sent_at: 1768381200000,
       confirm_attempt_at: 1768381200000,
-      unsub_token: "6d1f04b2-a7e9c350-9f2c41d0-7ab35e8c",
       origin: "kestrel",
       opt_in: "double",
       consent_evidence: '{"confirmed_ip":"203.0.113.7"}',

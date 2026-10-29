@@ -116,15 +116,17 @@ const STRIPPED = {
   status: "unsubscribed",
   unsubscribe_cause: "erased",
   confirmed_at: null,
-  confirm_token: null,
   confirm_sent_at: null,
   confirm_attempt_at: null,
-  unsub_token: null,
   origin: null,
   opt_in: null,
   consent_evidence: null,
   import_id: null,
 };
+
+/** The same as stored, where both tokens are discarded too, so a link in mail already sent
+ *  matches no one. */
+const STRIPPED_ROW = { ...STRIPPED, confirm_token: null, unsub_token: null };
 
 /** The subscriber row as stored, or null. */
 function stored(email: string): Promise<subs.SubscriberRow | null> {
@@ -277,7 +279,7 @@ describe("erasing a subscriber (SPEC §7)", () => {
     const result = await importCsv([`${email},subscribed,double,sendy,,,,,,`]);
 
     expect(result.counts).toEqual(counts({ kept_unsubscribed: 1 }));
-    expect(await stored(email)).toMatchObject(STRIPPED);
+    expect(await stored(email)).toMatchObject(STRIPPED_ROW);
   });
 
   it("is brought back by the person's own subscribe and confirmation", async () => {
@@ -370,7 +372,7 @@ describe("an import after an erasure (SPEC §7)", () => {
       expect(plan.rows).toEqual(rows);
       expect(result.rows).toEqual(rows);
       expect(result.differed).toEqual([]);
-      expect(await stored(email)).toMatchObject(STRIPPED);
+      expect(await stored(email)).toMatchObject(STRIPPED_ROW);
       expect(await tablesNaming(email)).toEqual(["subscribers"]);
       expect((await everyRow()).filter((l) => l.includes("203.0.113.7"))).toEqual([]);
     });
@@ -385,7 +387,7 @@ describe("an import after an erasure (SPEC §7)", () => {
       { row: 1, email, outcome: "suppressed", suppression_added: true },
     ]);
     expect((await suppressionOf(email))?.reason).toBe("import_bounce");
-    expect(await stored(email)).toMatchObject(STRIPPED);
+    expect(await stored(email)).toMatchObject(STRIPPED_ROW);
   });
 });
 
@@ -415,7 +417,7 @@ describe("an import row whose person left by an erasure (SPEC §7)", () => {
       expect(plan.suppressions_added).toBe(0);
       expect(plan.attestation).toBeNull();
       expect(result.rows).toEqual(rows);
-      expect(await stored(email)).toMatchObject(STRIPPED);
+      expect(await stored(email)).toMatchObject(STRIPPED_ROW);
       expect(await suppressionOf(email)).toBeNull();
       expect((await everyRow()).filter((l) => l.includes("203.0.113.7"))).toEqual([]);
     });
@@ -434,7 +436,7 @@ describe("an import row whose person left by an erasure (SPEC §7)", () => {
     await importCsv([`${email},subscribed,double,sendy,,,,,,${evidence}`]);
     const result = await importCsv([`${email},subscribed,double,sendy,erased,,,,,`]);
     expect(result.rows).toEqual([{ row: 1, email, outcome: "erased", suppression_added: false }]);
-    expect(await stored(email)).toMatchObject(STRIPPED);
+    expect(await stored(email)).toMatchObject(STRIPPED_ROW);
     expect(await subs.audienceEmails(env.DB)).toEqual([]);
 
     // Erasing them here changes nothing more.
@@ -455,7 +457,7 @@ describe("an import row whose person left by an erasure (SPEC §7)", () => {
     );
 
     expect(result.rows).toEqual([{ row: 1, email, outcome: "erased", suppression_added: false }]);
-    expect(await stored(email)).toMatchObject(STRIPPED);
+    expect(await stored(email)).toMatchObject(STRIPPED_ROW);
     const confirm = await SELF.fetch(`${base}/confirm`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -481,7 +483,7 @@ describe("an import row whose person left by an erasure (SPEC §7)", () => {
     expect(plan.rows).toEqual(rows);
     expect(result.counts).toEqual(counts({ erased: 1 }));
     expect(result.rows).toEqual(rows);
-    expect(await stored(email)).toMatchObject(STRIPPED);
+    expect(await stored(email)).toMatchObject(STRIPPED_ROW);
     expect(await tablesNaming(email)).toEqual(["subscribers"]);
     const { results } = await env.DB.prepare(
       "SELECT email, event_detail FROM deliveries WHERE send_id = ? AND email <> 'other@example.com'",
@@ -537,7 +539,7 @@ describe("an import row whose person left by an erasure (SPEC §7)", () => {
       { row: 1, email, outcome: "added_unsubscribed", suppression_added: false },
     ]);
     expect(await suppressionOf(email)).toEqual({ email, reason: "bounce", detail: null });
-    expect(await stored(email)).toMatchObject(STRIPPED);
+    expect(await stored(email)).toMatchObject(STRIPPED_ROW);
   });
 });
 
@@ -593,7 +595,7 @@ describe("a receipt that lands after an erasure (SPEC §7)", () => {
       },
     ]);
 
-    expect(await stored(email)).toMatchObject(STRIPPED);
+    expect(await stored(email)).toMatchObject(STRIPPED_ROW);
     expect(await suppressionOf(email)).toBeNull();
     const delivery = await env.DB.prepare(
       "SELECT event, event_detail FROM deliveries WHERE email = ?",

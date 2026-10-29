@@ -72,7 +72,7 @@ describe("API reference is generated from the route registration", () => {
     // Each example satisfies its wire type in shared/ (src/reference/objects.ts), so the
     // compiler holds the example to the wire; this holds the described fields to the example.
     // A field's name before its first dot is the object's own field, and one row may name two
-    // fields that share a line ("confirm_token, unsub_token").
+    // fields that share a line ("confirm_sent_at, confirm_attempt_at").
     const notInExample: Partial<Record<keyof typeof OBJECTS, string[]>> = {
       // The example is one revision's read, with its body; the history's rows carry
       // `is_current` in its place.
