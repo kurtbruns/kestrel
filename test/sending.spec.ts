@@ -13,7 +13,14 @@ import { type AppEnv, getConfig } from "../src/env";
 import { fakeNotifications } from "../src/notify/fake";
 import * as providers from "../src/providers";
 import type { SendBatchResult } from "../src/providers/types";
-import { contactOutcome, noteContact, readSignups } from "../src/services/sending";
+import {
+  Contacts,
+  contactOutcome,
+  noteContact,
+  noteRefusal,
+  readSignups,
+  withoutReaders,
+} from "../src/services/sending";
 import { BatchProvider } from "./support/batching";
 import { dueSend, resetDatabase, seedConfirmed, tick } from "./support/fixtures";
 import { withVars } from "./support/worker_env";
@@ -205,5 +212,111 @@ describe("the account check finds a refusal without sending (SPEC §8, §9)", ()
     expect(await signups(clean)).toBe("paused");
     await noteContact(env.DB, config, "test", contactOutcome(accepted), Date.now());
     expect(await signups(clean)).toBe("open");
+  });
+});
+
+describe("an older answer never replaces a newer one (SPEC §9)", () => {
+  it("a sweep's refusal from before the fix doesn't undo the test that proved it", async () => {
+    const before = Date.now();
+    const contacts = new Contacts();
+    // The sweep meets the refusal, then the operator's test goes through while it runs.
+    contacts.add("list", contactOutcome(halted("configuration")), before);
+    await noteContact(env.DB, config, "test", contactOutcome(accepted), before + 1_000);
+    await contacts.record(env.DB, config);
+    expect(await readSending(env.DB)).toMatchObject({
+      state: "working",
+      lastAcceptedBy: "test",
+      lastAcceptedAt: before + 1_000,
+    });
+  });
+
+  it("nor does an account reading taken before a test", async () => {
+    const before = Date.now();
+    await noteContact(env.DB, config, "test", contactOutcome(accepted), before + 1_000);
+    await noteRefusal(
+      env.DB,
+      { cause: "configuration", foundBy: "account_check", error: "no such set" },
+      before,
+      false,
+    );
+    expect((await readSending(env.DB))?.state).toBe("working");
+  });
+
+  it("a sweep records the latest of its answers, with the time it was given", async () => {
+    const at = Date.now();
+    const contacts = new Contacts();
+    contacts.add("list", contactOutcome(halted("credentials")), at + 2_000);
+    contacts.add("notification", contactOutcome(accepted), at + 1_000);
+    await contacts.record(env.DB, config);
+    expect(await readSending(env.DB)).toMatchObject({ state: "refusing", since: at + 2_000 });
+  });
+});
+
+describe("a refusal's words never name a reader (SPEC §7, §9)", () => {
+  it("keeps only the sender of the identities SES's not-verified refusal lists", async () => {
+    const words =
+      "ses 400 MessageRejected: Email address is not verified. The following identities failed the check in region US-EAST-1: ada@example.org, newsletter@send.example.com, bo@example.org";
+    await noteContact(
+      env.DB,
+      config,
+      "confirmation",
+      { kind: "refused", cause: "sender", error: words },
+      Date.now(),
+    );
+    const stored = (await readSending(env.DB))?.refusalError ?? "";
+    expect(stored).toBe(
+      "ses 400 MessageRejected: Email address is not verified. The following identities failed the check in region US-EAST-1: newsletter@send.example.com",
+    );
+    expect(stored).not.toMatch(/example\.org/);
+  });
+
+  it("takes out an address anywhere in the words, keeping a domain", () => {
+    const from = "Newsletter <newsletter@send.example.com>";
+    expect(withoutReaders("failed the check: ada@example.org", from)).toBe("failed the check: …");
+    expect(withoutReaders("failed the check: send.example.com, Ada@Example.org", from)).toBe(
+      "failed the check: send.example.com",
+    );
+    expect(withoutReaders("Configuration set <kestrel-mail> does not exist.", from)).toBe(
+      "Configuration set <kestrel-mail> does not exist.",
+    );
+  });
+});
+
+describe("a finding an email contradicted pauses signups once (SPEC §9)", () => {
+  const sender = withVars({
+    SIMULATE_SENDS: "ses:none",
+    SIMULATE_ACCOUNT: "production:sender_unverified",
+  });
+  const setMissing = withVars({
+    SIMULATE_SENDS: "ses:none",
+    SIMULATE_ACCOUNT: "production:set_missing",
+  });
+  const clean = withVars({ SIMULATE_SENDS: "ses:none", SIMULATE_ACCOUNT: "production" });
+  const signups = () => readSignups(env.DB, getConfig(clean));
+
+  it("leaves signups open when the same finding comes back after SES took an email", async () => {
+    await tick(sender);
+    expect(await signups()).toBe("paused");
+    // SES took an email all the same: the reading is wrong, as with a sender another account
+    // authorized.
+    await noteContact(env.DB, config, "test", contactOutcome(accepted), Date.now());
+    await tick(sender);
+    expect(await signups()).toBe("open");
+    expect((await readSending(env.DB))?.checkContradicted).toEqual(["sender"]);
+  });
+
+  it("pauses them again for a different finding, and for the same one after a clean reading", async () => {
+    await tick(sender);
+    await noteContact(env.DB, config, "test", contactOutcome(accepted), Date.now());
+    await tick(setMissing);
+    expect(await readSending(env.DB)).toMatchObject({
+      state: "refusing",
+      refusalCause: "configuration",
+    });
+    await noteContact(env.DB, config, "test", contactOutcome(accepted), Date.now());
+    await tick(clean);
+    expect((await readSending(env.DB))?.checkContradicted).toEqual([]);
+    await tick(sender);
+    expect(await signups()).toBe("paused");
   });
 });

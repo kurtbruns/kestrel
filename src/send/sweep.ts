@@ -202,7 +202,7 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
   // reserve only on a tick with notices due and nothing else left. A tick without the room
   // records nothing, and a later one records the provider's next answer. Caught inside.
   if (rest.affords(1)) {
-    await contacts.record(metered(env.DB, rest), config, Date.now());
+    await contacts.record(metered(env.DB, rest), config);
   }
 
   // 7) Ask the provider about its account, only on a tick that sent nothing, so its requests
@@ -233,7 +233,7 @@ async function safeRun(
 ): Promise<void> {
   try {
     const run = await runSend(env, sendId, budget, window, sendRate);
-    contacts.add("list", runOutcome(run.accepted, run.refusal));
+    contacts.add("list", runOutcome(run.accepted, run.refusal), run.answeredAt ?? Date.now());
   } catch (err) {
     // One bad send must not stop the sweep; it will be retried next tick.
     log.error("send.error", { sendId, error: errorText(err) });

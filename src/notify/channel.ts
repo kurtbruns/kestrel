@@ -98,7 +98,7 @@ export class ProviderNotifier implements Notifier {
       purpose: "notification",
       tag: `notify-${key}`,
     });
-    contacts.add("notification", contactOutcome(answer));
+    contacts.add("notification", contactOutcome(answer), Date.now());
     const [result] = perRecipient(answer, recipients);
     if (!result?.accepted) {
       throw new Error(result?.error ?? "the provider gave no answer for the recipient");

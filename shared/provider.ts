@@ -137,8 +137,8 @@ export interface SendingRefusal {
 /** Whether email is getting out, as the provider last answered (SPEC §9). */
 export interface SendingView {
   state: SendingState;
-  /** When it entered this state. */
-  since: number;
+  /** When it last entered this state; null when nothing has been recorded yet. */
+  since: number | null;
   /** The last email the provider took, and what it was; null when it never has. */
   last_accepted: { at: number; by: SendingPurpose } | null;
   /** Why it is refusing; null unless `state` is `refusing`. */

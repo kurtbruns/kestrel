@@ -62,18 +62,35 @@ export function runOutcome(accepted: number, refusal: BatchHalt | null): Contact
   return accepted > 0 ? { kind: "accepted" } : { kind: "none" };
 }
 
+/** An email address anywhere in a provider's words. */
+const ADDRESS = /[^\s,:;<>"'()]+@[^\s,:;<>"'()]+[^\s,:;<>"'().]/g;
+
 /**
- * Record what an email's answer says about the account. `tell` asks for the publisher to be
- * told by email of a refusal, for an email nobody was there to see refused (a reader's
- * signup); one a person sent sees its refusal as it happens. Caught and logged, so recording
- * never changes the path's answer; `db` may be metered by the caller.
+ * A provider's words with every address but the sender's taken out, so a refusal kept in the
+ * record, shown to the publisher, and emailed in a notice never names a reader (SPEC §7). SES's
+ * "not verified" refusal lists every identity that failed the check, a sandboxed recipient's
+ * included, so the list keeps only the sender's address or domain.
+ */
+export function withoutReaders(words: string, from: string): string {
+  const sender = (/<([^>]+)>/.exec(from)?.[1] ?? from).trim().toLowerCase();
+  return words
+    .replace(ADDRESS, (a) => (a.toLowerCase() === sender ? a : "…"))
+    .replace(/(…,\s*)+/g, "")
+    .replace(/(,\s*…)+/g, "");
+}
+
+/**
+ * Record what an email's answer, given at `at`, says about the account. `tell` asks for the
+ * publisher to be told by email of a refusal, for an email nobody was there to see refused (a
+ * reader's signup); one a person sent sees its refusal as it happens. Caught and logged, so
+ * recording never changes the path's answer; `db` may be metered by the caller.
  */
 export async function noteContact(
   db: D1Database,
   config: Config,
   purpose: SendingPurpose,
   outcome: ContactOutcome,
-  now: number,
+  at: number,
   tell = false,
 ): Promise<void> {
   if (config.provider === "none" || outcome.kind === "none") {
@@ -81,13 +98,17 @@ export async function noteContact(
   }
   try {
     if (outcome.kind === "accepted") {
-      await recordAccepted(db, purpose, now);
+      await recordAccepted(db, purpose, at);
       return;
     }
     await noteRefusal(
       db,
-      { cause: outcome.cause, foundBy: purpose, error: outcome.error },
-      now,
+      {
+        cause: outcome.cause,
+        foundBy: purpose,
+        error: withoutReaders(outcome.error, config.fromAddress),
+      },
+      at,
       tell,
     );
   } catch (err) {
@@ -96,25 +117,28 @@ export async function noteContact(
 }
 
 /**
- * The provider's answers over one stretch of work that records them together, such as a
- * sweep tick, so its sends and notifications cost one statement between them, held for it
- * up front, rather than one each out of the budget the sends run on. The latest answer that
- * says anything stands, as it would had each been recorded in turn.
+ * The provider's answers over one stretch of work that records them together, a sweep tick,
+ * so its sends and notifications cost one statement between them out of what notifying left,
+ * rather than one each out of the budget the sends run on. Each answer keeps when the provider
+ * gave it, and the latest that says anything is recorded with that time, so it never replaces
+ * an answer given after it, such as a test sent while the tick ran.
  */
 export class Contacts {
-  private latest: { purpose: SendingPurpose; outcome: ContactOutcome } | null = null;
+  private latest: { purpose: SendingPurpose; outcome: ContactOutcome; at: number } | null = null;
 
-  add(purpose: SendingPurpose, outcome: ContactOutcome): void {
-    if (outcome.kind !== "none") {
-      this.latest = { purpose, outcome };
+  /** Add an answer the provider gave at `at`. */
+  add(purpose: SendingPurpose, outcome: ContactOutcome, at: number): void {
+    if (outcome.kind !== "none" && (!this.latest || at >= this.latest.at)) {
+      this.latest = { purpose, outcome, at };
     }
   }
 
   /** Record the latest answer, if any: at most one statement. */
-  async record(db: D1Database, config: Config, now: number): Promise<void> {
+  async record(db: D1Database, config: Config): Promise<void> {
     if (this.latest) {
-      await noteContact(db, config, this.latest.purpose, this.latest.outcome, now);
+      const { purpose, outcome, at } = this.latest;
       this.latest = null;
+      await noteContact(db, config, purpose, outcome, at);
     }
   }
 }
@@ -137,7 +161,7 @@ export function sendingView(config: Config, row: SendingRow | null): SendingView
     return null;
   }
   if (!row) {
-    return { state: "unproven", since: 0, last_accepted: null, refusal: null };
+    return { state: "unproven", since: null, last_accepted: null, refusal: null };
   }
   return {
     state: row.state,

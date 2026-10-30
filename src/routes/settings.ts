@@ -234,7 +234,7 @@ export async function notificationTest(c: RequestContext): Promise<Response> {
       failed.push({ email: address, error: errorText(err) });
     }
   }
-  await contacts.record(c.env.DB, c.config, Date.now());
+  await contacts.record(c.env.DB, c.config);
   const error = failed.length > 0 ? missedAddresses(to, failed) : null;
   await recordNotificationTest(c.env.DB, error, Date.now());
   if (error !== null && failed.length === to.length) {

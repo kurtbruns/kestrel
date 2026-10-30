@@ -276,7 +276,7 @@ describe("the account check", () => {
       configuration_set: { name: "kestrel-mail", source: "identity" },
       warnings: [],
       checked_at: Date.now(),
-      sending: { state: "unproven", since: 0, last_accepted: null, refusal: null },
+      sending: { state: "unproven", since: null, last_accepted: null, refusal: null },
       signups: "not_open",
     } satisfies ProviderStatusView);
   });

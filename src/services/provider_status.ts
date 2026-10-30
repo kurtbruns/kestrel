@@ -25,7 +25,7 @@ import {
   recordAnswer,
   recordMiss,
 } from "../db/provider_account";
-import { clearCheckRefusal, type SendingRow } from "../db/sending";
+import { clearCheckRefusal, readSending, type SendingRow } from "../db/sending";
 import type { AppEnv, Config } from "../env";
 import { DEFAULT_SES_MAX_SEND_RATE } from "../env";
 import { log } from "../lib/log";
@@ -42,9 +42,10 @@ export const ACCOUNT_CHECK_INTERVAL_MS = 10 * 60_000;
  *  added it spends one request an hour, not six. */
 export const PERMISSION_RECHECK_MS = 60 * 60_000;
 
-/** What one check may cost: the row's read, the provider's requests, one write, and a
- *  refusal it found recorded with its notice (SPEC §9). */
-const CHECK_QUERIES = 4;
+/** What one check may cost: the row's read, the provider's requests, one write, and what it
+ *  says about whether email is getting out: the sending row's read, and a refusal recorded
+ *  with its notice (SPEC §9). */
+const CHECK_QUERIES = 5;
 
 /** Whether the account is due a check at `now`. */
 export function accountCheckDue(row: ProviderAccountRow | null, now: number): boolean {
@@ -70,7 +71,12 @@ export async function refreshProviderAccount(
   if (simulated) {
     // Local dev's stand-in account finds its problems as the real check would, each tick
     // that sent nothing, so a refusal it stands in for reaches the state by the same path.
-    await noteAccountRefusal(env.DB, config, simulatedAccountRow(simulated, config, now), now);
+    await noteAccountRefusal(
+      env.DB,
+      config,
+      simulatedAccountRow(simulated, config, now),
+      Date.now(),
+    );
     return;
   }
   if (config.provider !== "ses" || !budget.affords(CHECK_QUERIES, MAX_ACCOUNT_REQUESTS)) {
@@ -83,16 +89,19 @@ export async function refreshProviderAccount(
   }
   budget.request(MAX_ACCOUNT_REQUESTS);
   const check = await checkSesAccount(config, env);
+  // When the account answered: what it says about whether email is getting out is as of then,
+  // so it never replaces an email's answer given after it.
+  const read = Date.now();
   budget.query();
   if (check.outcome === "ok") {
     keepUnread(check.answer, row?.answer ?? null, config);
     await recordAnswer(env.DB, now, check.answer);
-    budget.query(2);
+    budget.query(3);
     await noteAccountRefusal(
       env.DB,
       config,
       { attemptedAt: now, outcome: "ok", checkedAt: now, answer: check.answer },
-      now,
+      read,
     );
     log.info("provider.account_checked", {
       outcome: "ok",
@@ -114,12 +123,12 @@ export async function refreshProviderAccount(
     error: check.outcome === "permission" ? undefined : check.error,
   });
   if (check.outcome === "rejected") {
-    budget.query(2);
+    budget.query(3);
     await noteAccountRefusal(
       env.DB,
       config,
       { attemptedAt: now, outcome: "rejected", checkedAt: null, answer: null },
-      now,
+      read,
     );
   }
 }
@@ -135,41 +144,49 @@ const WARNING_CAUSES: Partial<Record<ProviderWarningCode, RefusingCause>> = {
 };
 
 /**
- * The refusal the account check found, if any: its first error, in the check's own words.
- * Found without sending, so it makes email refusing and pauses signups, and the publisher is
+ * The refusals the account check found, errors first, each in the check's own words. Found
+ * without sending, so each makes email refusing and pauses signups, and the publisher is
  * told, at most once a day (SPEC §8).
  */
-export function accountRefusal(
+export function accountRefusals(
   config: Config,
   row: ProviderAccountRow,
-): { cause: RefusingCause; error: string } | null {
-  const answer = row.answer;
-  for (const w of warnings(config, row, configurationSet(config, answer))) {
+): { cause: RefusingCause; error: string }[] {
+  const out: { cause: RefusingCause; error: string }[] = [];
+  for (const w of warnings(config, row, configurationSet(config, row.answer))) {
     const cause = WARNING_CAUSES[w.code];
     if (cause && w.severity === "error") {
-      return { cause, error: w.message };
+      out.push({ cause, error: w.message });
     }
   }
-  return null;
+  return out;
 }
 
 /**
- * What a reading says about whether email is getting out (SPEC §9): a refusal it finds makes
- * email refusing, and a clean reading lifts a refusal an earlier reading found, so a reading
- * that was wrong for a moment pauses signups only until the next, back to where email stood
- * before. It never makes email working where none has been, and never lifts a refusal an email met, which only an email the provider takes
- * lifts. A check that read nothing (a key not allowed to ask, no answer) says nothing.
+ * What a reading, taken at `at`, says about whether email is getting out (SPEC §9). A refusal
+ * it finds makes email refusing, unless an email the provider took has contradicted that same
+ * finding since, so a reading that stays wrong while email goes out pauses signups once, not
+ * every ten minutes; it still shows as a warning, and a different finding pauses them again.
+ * A clean reading lifts a refusal an earlier reading found, back to where email stood before,
+ * so a reading wrong for a moment pauses signups only until the next, and forgets what emails
+ * contradicted. It never makes email working where none has been, and never lifts a refusal
+ * an email met, which only an email the provider takes lifts. A check that read nothing (a
+ * key not allowed to ask, no answer) says nothing.
  */
 async function noteAccountRefusal(
   db: D1Database,
   config: Config,
   row: ProviderAccountRow,
-  now: number,
+  at: number,
 ): Promise<void> {
-  const found = accountRefusal(config, row);
-  if (found) {
-    await noteRefusal(db, { ...found, foundBy: "account_check" }, now, true);
-  } else if (row.outcome === "ok" && (await clearCheckRefusal(db, now))) {
+  const found = accountRefusals(config, row);
+  if (found.length > 0) {
+    const contradicted = (await readSending(db))?.checkContradicted ?? [];
+    const standing = found.find((f) => !contradicted.includes(f.cause));
+    if (standing) {
+      await noteRefusal(db, { ...standing, foundBy: "account_check" }, at, true);
+    }
+  } else if (row.outcome === "ok" && (await clearCheckRefusal(db, at))) {
     log.info("sending.cleared", { foundBy: "account_check" });
   }
 }
