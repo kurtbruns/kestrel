@@ -72,6 +72,7 @@ export const LOG_EVENTS = {
   "provider.account_error": "error",
   // Whether email is getting out (SPEC §9).
   "sending.refusing": "warn",
+  "sending.cleared": "info",
   "sending.record_failed": "error",
   "subscribe.closed": "warn",
   "test.refused": "warn",

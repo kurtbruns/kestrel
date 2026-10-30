@@ -40,7 +40,7 @@ Your subscribe page takes signups only while email is working, so a reader is ne
 - "Signups aren’t open yet" means SES hasn't sent an email for your publication yet. Send one from **Template → Send test email**, to an address verified in SES while it's in the sandbox. Once SES takes it, signups open. Before an email provider is connected, the page says the same, and [Connect Amazon SES](../get-started/05-ses.md) is the fix.
 - "Signups are paused" means SES is refusing your email, every email including confirmations and tests. The dashboard's **Email isn’t going out** line gives SES's words and the fix, which whoever runs your instance makes, as for [a problem with Amazon SES](#a-problem-with-amazon-ses). Then send a test email: once SES takes one, signups reopen.
 
-Kestrel notices a refusal when an email meets it, or within about ten minutes from its check of your SES account. A reader who signed up just as it started may have been told a link was coming, and can sign up again once signups reopen.
+Kestrel notices a refusal when an email meets it, or within about ten minutes from its check of your SES account. A refusal the check found lifts on its own within about ten minutes of the fix; one an email met lifts when a test email goes through. A reader who signed up just as it started may have been told a link was coming, and can sign up again once signups reopen.
 
 ## A problem with Amazon SES
 

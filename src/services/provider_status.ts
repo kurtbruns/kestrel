@@ -25,7 +25,7 @@ import {
   recordAnswer,
   recordMiss,
 } from "../db/provider_account";
-import type { SendingRow } from "../db/sending";
+import { clearCheckRefusal, type SendingRow } from "../db/sending";
 import type { AppEnv, Config } from "../env";
 import { DEFAULT_SES_MAX_SEND_RATE } from "../env";
 import { log } from "../lib/log";
@@ -136,9 +136,8 @@ const WARNING_CAUSES: Partial<Record<ProviderWarningCode, RefusingCause>> = {
 
 /**
  * The refusal the account check found, if any: its first error, in the check's own words.
- * Found without sending, so it makes email refusing, and the publisher is told, at most once
- * a day (SPEC §8); only an email the provider takes makes it working again, so a check that
- * no longer finds it changes nothing.
+ * Found without sending, so it makes email refusing and pauses signups, and the publisher is
+ * told, at most once a day (SPEC §8).
  */
 export function accountRefusal(
   config: Config,
@@ -154,6 +153,13 @@ export function accountRefusal(
   return null;
 }
 
+/**
+ * What a reading says about whether email is getting out (SPEC §9): a refusal it finds makes
+ * email refusing, and a clean reading lifts a refusal an earlier reading found, so a reading
+ * that was wrong for a moment pauses signups only until the next, back to where email stood
+ * before. It never makes email working where none has been, and never lifts a refusal an email met, which only an email the provider takes
+ * lifts. A check that read nothing (a key not allowed to ask, no answer) says nothing.
+ */
 async function noteAccountRefusal(
   db: D1Database,
   config: Config,
@@ -163,6 +169,8 @@ async function noteAccountRefusal(
   const found = accountRefusal(config, row);
   if (found) {
     await noteRefusal(db, { ...found, foundBy: "account_check" }, now, true);
+  } else if (row.outcome === "ok" && (await clearCheckRefusal(db, now))) {
+    log.info("sending.cleared", { foundBy: "account_check" });
   }
 }
 

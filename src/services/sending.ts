@@ -8,8 +8,9 @@
  * provider. An email the provider took makes it working; a refusal of the account for a cause
  * that won't clear on its own (`REFUSING_CAUSES`) makes it refusing; any other answer, the
  * sandbox refusing one reader or a throttle, says nothing about the account and changes
- * nothing. The account check can find a refusal too (`provider_status.ts`), but only an email
- * the provider takes ever makes it working again.
+ * nothing. The account check can find a refusal too (`provider_status.ts`), and its next clean
+ * reading lifts one it found, back to where email stood before; only an email the provider
+ * takes lifts one an email met, and a reading never makes email working where none has been.
  *
  * Recording is downstream of the email: a failure to record never changes what the path
  * answers, and nothing that decides whether to send reads the state. The public form and the

@@ -81,7 +81,9 @@ export function acceptedStatement(
 /**
  * The provider refuses the account, or the account check found it would: email is refusing,
  * from now if it wasn't already, with this refusal's cause and words, so the newest finding
- * is the one shown. The last email taken is kept.
+ * is the one shown. The last email taken is kept. The account check never takes over a
+ * refusal an email met: that one lifts only when the provider takes an email, which a clean
+ * reading must not undo (`clearCheckRefusal`).
  */
 export function refusalStatement(
   db: D1Database,
@@ -95,9 +97,29 @@ export function refusalStatement(
        ON CONFLICT (id) DO UPDATE SET
          since = CASE WHEN state = 'refusing' THEN since ELSE ?1 END,
          state = 'refusing',
-         refusal_cause = ?2, refusal_found_by = ?3, refusal_error = ?4, refusal_at = ?1`,
+         refusal_cause = ?2, refusal_found_by = ?3, refusal_error = ?4, refusal_at = ?1
+       WHERE ?3 <> 'account_check' OR state <> 'refusing' OR refusal_found_by = 'account_check'`,
     )
     .bind(now, refusal.cause, refusal.foundBy, refusal.error);
+}
+
+/**
+ * The account check read the account clean: a refusal it found itself lifts, back to where
+ * email stood before it, working if the provider has ever taken an email and not proven yet
+ * if not (SPEC §9). A refusal an email met is left as it is. Whether it changed anything.
+ */
+export async function clearCheckRefusal(db: D1Database, now: number): Promise<boolean> {
+  const r = await db
+    .prepare(
+      `UPDATE sending SET
+         state = CASE WHEN last_accepted_at IS NULL THEN 'unproven' ELSE 'working' END,
+         since = ?,
+         refusal_cause = NULL, refusal_found_by = NULL, refusal_error = NULL, refusal_at = NULL
+       WHERE id = 1 AND state = 'refusing' AND refusal_found_by = 'account_check'`,
+    )
+    .bind(now)
+    .run();
+  return (r.meta.changes ?? 0) > 0;
 }
 
 /** Record that the provider took an email. */

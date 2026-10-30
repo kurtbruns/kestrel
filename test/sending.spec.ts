@@ -1,19 +1,19 @@
 /**
  * Whether email is getting out (SPEC §9): which answers make it refusing and which don't,
- * that only an email the provider takes makes it working, and that every kind of email and
- * the account check write it.
+ * that an email the provider takes makes it working, that every kind of email writes it, and
+ * that the account check pauses signups and lifts only a pause it caused.
  */
 
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { REFUSING_CAUSES } from "../shared/provider";
 import type { HaltCause } from "../shared/sends";
-import { readSending } from "../src/db/sending";
-import { getConfig } from "../src/env";
+import { readSending, recordAccepted } from "../src/db/sending";
+import { type AppEnv, getConfig } from "../src/env";
 import { fakeNotifications } from "../src/notify/fake";
 import * as providers from "../src/providers";
 import type { SendBatchResult } from "../src/providers/types";
-import { contactOutcome, noteContact } from "../src/services/sending";
+import { contactOutcome, noteContact, readSignups } from "../src/services/sending";
 import { BatchProvider } from "./support/batching";
 import { dueSend, resetDatabase, seedConfirmed, tick } from "./support/fixtures";
 import { withVars } from "./support/worker_env";
@@ -131,12 +131,23 @@ describe("a send to the list writes it, once a tick (SPEC §9, §12)", () => {
 });
 
 describe("the account check finds a refusal without sending (SPEC §8, §9)", () => {
-  it("makes email refusing and tells the publisher once a day, and only an email clears it", async () => {
-    const e = withVars({ SIMULATE_SENDS: "ses:none", SIMULATE_ACCOUNT: "production:set_missing" });
+  const broken = withVars({
+    SIMULATE_SENDS: "ses:none",
+    SIMULATE_ACCOUNT: "production:set_missing",
+  });
+  const clean = withVars({ SIMULATE_SENDS: "ses:none", SIMULATE_ACCOUNT: "production" });
+  const signups = (e: AppEnv) => readSignups(env.DB, getConfig(e));
+
+  beforeEach(async () => {
     await env.DB.prepare(
       `INSERT INTO settings (id, data, updated_at) VALUES (1, json_object('notifications', json_object('to', json_array('me@example.com'))), 1)`,
     ).run();
-    await tick(e);
+  });
+
+  it("makes email refusing and pauses signups, telling the publisher once a day", async () => {
+    await recordAccepted(env.DB, "test", Date.now());
+    expect(await signups(broken)).toBe("open");
+    await tick(broken);
     const row = await readSending(env.DB);
     expect(row).toMatchObject({
       state: "refusing",
@@ -144,9 +155,55 @@ describe("the account check finds a refusal without sending (SPEC §8, §9)", ()
       refusalFoundBy: "account_check",
     });
     expect(row?.refusalError).toContain("SES has no configuration set by that name");
-    await tick(e);
+    expect(await signups(broken)).toBe("paused");
+    await tick(broken);
     expect(fakeNotifications().map((n) => n.subject)).toEqual([
       "Email isn't going out, and signups are paused",
     ]);
+  });
+
+  it("lifts a refusal it found on its next clean reading, back to where email stood", async () => {
+    await recordAccepted(env.DB, "test", Date.now());
+    await tick(broken);
+    expect(await signups(broken)).toBe("paused");
+    await tick(clean);
+    expect(await readSending(env.DB)).toMatchObject({
+      state: "working",
+      lastAcceptedBy: "test",
+      refusalCause: null,
+    });
+    expect(await signups(clean)).toBe("open");
+  });
+
+  it("never makes email working where none has been: a lifted refusal goes back to not proven", async () => {
+    await tick(broken);
+    expect((await readSending(env.DB))?.state).toBe("refusing");
+    await tick(clean);
+    expect(await readSending(env.DB)).toMatchObject({ state: "unproven", refusalCause: null });
+    expect(await signups(clean)).toBe("not_open");
+  });
+
+  it("leaves a refusal an email met to an email: a clean reading doesn't lift it, and a finding doesn't take it over", async () => {
+    await noteContact(
+      env.DB,
+      config,
+      "confirmation",
+      contactOutcome(halted("credentials")),
+      Date.now(),
+    );
+    await tick(broken);
+    expect(await readSending(env.DB)).toMatchObject({
+      state: "refusing",
+      refusalCause: "credentials",
+      refusalFoundBy: "confirmation",
+    });
+    await tick(clean);
+    expect(await readSending(env.DB)).toMatchObject({
+      state: "refusing",
+      refusalFoundBy: "confirmation",
+    });
+    expect(await signups(clean)).toBe("paused");
+    await noteContact(env.DB, config, "test", contactOutcome(accepted), Date.now());
+    expect(await signups(clean)).toBe("open");
   });
 });
