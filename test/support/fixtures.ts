@@ -47,7 +47,7 @@ export async function resetDatabase(): Promise<void> {
 }
 
 /**
- * Email proven to work, as on a live instance whose provider has taken an email (SPEC §9), so
+ * Email proven to work, as on a live instance whose provider has taken an email (SPEC §13), so
  * the public subscribe form takes signups (SPEC §7). A spec of the form's own gating sets
  * the state it needs instead.
  */

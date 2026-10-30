@@ -17,7 +17,7 @@ import { unwrap } from "../lib/unwrap";
 /**
  * What can be done to a post now, as its routes would take it given its state and the
  * deployment: a draft's text is edited and deleted (a scheduled or sent post's is frozen, I3),
- * and a draft is scheduled or sent now while a provider is connected (SPEC §6, §9). A blank
+ * and a draft is scheduled or sent now while a provider is connected (SPEC §6, §13). A blank
  * subject doesn't withdraw them: it is the one thing the publisher fixes in the act itself, so
  * it stays a refusal naming the field (`subject_required`), as a fire time inside the lead does.
  * A change to the post's settings is taken in any state, so it is no action of its own.

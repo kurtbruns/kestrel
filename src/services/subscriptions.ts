@@ -35,7 +35,7 @@ export type SubscriptionOutcome =
 
 /**
  * Subscribe `email` through double opt-in, sending it a confirmation if one is due. Never
- * confirms anyone (I1). Refused outright while no provider is connected (SPEC §9), before
+ * confirms anyone (I1). Refused outright while no provider is connected (SPEC §13), before
  * anything is stored: an address whose confirmation cannot go would only sit pending. A confirmation the provider refuses changes nothing: a new address
  * leaves no row, and an existing one keeps the last link that did arrive. One whose fate is
  * unknown (no answer, or a halt after which it may have gone) is treated as sent, so its
@@ -139,7 +139,7 @@ async function confirmationMessage(c: RequestContext, token: string): Promise<Re
 
 /** Hand one confirmation to the provider and say whether it went: `yes`, `no` (refused,
  *  nothing sent), or `unknown` (no answer). What the answer says about the account is
- *  recorded (SPEC §9). */
+ *  recorded (SPEC §13). */
 async function sendConfirmation(
   c: RequestContext,
   message: RenderedEmail,

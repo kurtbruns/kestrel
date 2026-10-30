@@ -14,7 +14,7 @@ const SENDER = {
   FROM_ADDRESS: "Birds <news@send.birds.example>",
 };
 
-/** No provider connected (SPEC §9), as the production template ships, its sender filled in. */
+/** No provider connected (SPEC §13), as the production template ships, its sender filled in. */
 export const NOT_CONNECTED_DEPLOY = { ...SENDER, PROVIDER: "" } as const;
 
 export const SES_DEPLOY = {

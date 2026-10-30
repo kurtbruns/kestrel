@@ -2,7 +2,7 @@
  * What each transport needs from deploy config (SPEC §9): the names `PROVIDER` may hold,
  * and the vars and secrets a real transport cannot run without. `none`, which an unset
  * `PROVIDER` also means, is no transport at all: the deployment runs not connected and
- * refuses to send (SPEC §9). `getConfig` validates
+ * refuses to send (SPEC §13). `getConfig` validates
  * against these, so a provider declares its needs beside its adapter and a deployment
  * missing one fails at the first request instead of at its first send.
  */

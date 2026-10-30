@@ -1,4 +1,4 @@
-// The email provider's connection as the editor words it (GET /api/provider; SPEC §9): its
+// The email provider's connection as the editor words it (GET /api/provider; SPEC §13): its
 // read, and the lines Settings, the dashboard, and Subscribers show for the sandbox, production,
 // the send rate, the server's warnings, and whether email is getting out. The state, the
 // warnings, and the refusal are the server's; the editor only words the states and shows each
@@ -157,7 +157,7 @@ export function productionAccessHint(v: ProviderStatusView | null): string {
   return "Ask once a test email has arrived. Kestrel can’t read your SES account, so the SES console’s account dashboard says whether AWS granted it.";
 }
 
-/** The refusal while email isn't going out (SPEC §9), or null. */
+/** The refusal while email isn't going out (SPEC §13), or null. */
 export function refusalOf(v: ProviderStatusView | null): SendingRefusal | null {
   return v?.sending?.state === "refusing" ? v.sending.refusal : null;
 }
@@ -191,7 +191,7 @@ const ACCEPTED_BY: Record<SendingPurpose, string> = {
 };
 
 /**
- * Settings' line under the Email provider for whether email is getting out (SPEC §9): its
+ * Settings' line under the Email provider for whether email is getting out (SPEC §13): its
  * pill (none while working) and what it means. Null with no provider.
  */
 export function sendingHtml(

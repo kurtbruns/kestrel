@@ -22,7 +22,7 @@ import { logged } from "./support/log";
 import { answerSes, SES_BULK_ENDPOINT } from "./support/ses";
 import { fetchWith, withVars } from "./support/worker_env";
 
-// The provider's connection (SPEC §9): the sweep asks SES about its account while nothing is
+// The provider's connection (SPEC §13): the sweep asks SES about its account while nothing is
 // sending, and GET /api/provider reports where the connection stands from what it last heard.
 // What it finds only paces a send (SPEC §12); it never decides whether one goes.
 
@@ -101,7 +101,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("GET /api/provider (SPEC §9)", () => {
+describe("GET /api/provider (SPEC §13)", () => {
   it("answers the signed-in editor with the connection, read-only", async () => {
     const res = await fetchWith({}, "/api/provider", { headers: AUTH });
     expect(res.status).toBe(200);
@@ -229,7 +229,7 @@ describe("SIMULATE_ACCOUNT", () => {
     ]);
   });
 
-  it("shows each account problem the check finds as its warning, so each can be seen locally (SPEC §9)", async () => {
+  it("shows each account problem the check finds as its warning, so each can be seen locally (SPEC §13)", async () => {
     const shown = async (value: string) =>
       (await read(value)).warnings.map((w) => [w.code, w.severity]);
     expect(await shown("production:set_missing")).toEqual([["configuration_set_missing", "error"]]);
@@ -355,7 +355,7 @@ describe("the account check", () => {
     expect(await status({ ...SES_DEPLOY })).toEqual(before);
   });
 
-  it("reads the identity and the named set on every check, whether or not SES_CONFIGURATION_SET names one (SPEC §9)", async () => {
+  it("reads the identity and the named set on every check, whether or not SES_CONFIGURATION_SET names one (SPEC §13)", async () => {
     const asked = answerReads((url) =>
       url === ACCOUNT
         ? ok(accountBody())
@@ -451,9 +451,9 @@ describe("the bounces warning (SPEC §8, §10)", () => {
   });
 });
 
-// SPEC §9: the check finds, without sending, the setup mistakes that would otherwise surface
+// SPEC §13: the check finds, without sending, the setup mistakes that would otherwise surface
 // only when SES refuses a send, a test, or a reader's confirmation.
-describe("the account problems the check finds (SPEC §9)", () => {
+describe("the account problems the check finds (SPEC §13)", () => {
   /** SES's answers for a healthy sandbox account with `kestrel-mail` named, `over` by URL. */
   const reads = (over: (url: string) => Response | undefined = () => undefined) =>
     answerReads(
@@ -850,7 +850,7 @@ describe("the account check, when SES answers otherwise", () => {
   });
 });
 
-describe("pacing a send (SPEC §9, §12)", () => {
+describe("pacing a send (SPEC §12, §13)", () => {
   it("still sends, at the deployment's rate, when the account's reading can't be read", async () => {
     vi.spyOn(providerAccount, "readProviderAccount").mockRejectedValue(new Error("D1 is down"));
     const warn = vi.spyOn(console, "warn");

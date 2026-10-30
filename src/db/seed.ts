@@ -154,7 +154,7 @@ export async function resetAll(db: D1Database): Promise<void> {
     db.prepare("DELETE FROM subscribers"),
     db.prepare("DELETE FROM imports"),
     db.prepare("DELETE FROM settings"),
-    // A fresh install has sent nothing, so email is not proven yet (SPEC §9).
+    // A fresh install has sent nothing, so email is not proven yet (SPEC §13).
     db.prepare("DELETE FROM sending"),
   ]);
 }

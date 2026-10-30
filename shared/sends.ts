@@ -31,7 +31,7 @@ export type HaltReason = "unavailable" | "account";
  * configuration set's (`set_paused`), the email's content (`content`) or a batch the provider
  * reads as invalid (`invalid_request`), which are one send's alone, a rate limit, the
  * provider itself failing (`outage`), or no provider connected to the deployment at all
- * (SPEC §9).
+ * (SPEC §13).
  */
 export type HaltCause =
   | "credentials"
@@ -75,7 +75,7 @@ export function haltRank(halt: { reason: HaltReason; cause: HaltCause | null }):
 }
 
 /**
- * The advice for a send held for want of a provider (SPEC §9), in its parts: the setup step,
+ * The advice for a send held for want of a provider (SPEC §13), in its parts: the setup step,
  * which a page makes the link every not-connected line carries, and what follows it. The
  * guide's mention stands in for that link where there is none (an email, the API's words).
  * "Deploy" is the step's own last one.
@@ -90,7 +90,7 @@ export const NOT_CONNECTED_ADVICE = {
  * What to do about the provider refusing the account or a send, by what the refusal is about
  * (SPEC §12), and who does it: almost always whoever runs the deployment, in the provider's
  * console or the deployment's settings, since nothing in the app can change a credential or
- * the provider's view of the account (SPEC §9); the publisher, when a subscriber's address
+ * the provider's view of the account (SPEC §13); the publisher, when a subscriber's address
  * explains it. One wording for the watch and the notification that tells the publisher, so
  * the two never advise differently. Plain text: a page that links the not-connected step
  * builds it from `NOT_CONNECTED_ADVICE`.

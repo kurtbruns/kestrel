@@ -1,5 +1,5 @@
 /**
- * Whether email is getting out (SPEC §9), and what follows from it: what the provider's
+ * Whether email is getting out (SPEC §13), and what follows from it: what the provider's
  * answer to an email says about the account, the view both clients read on
  * `GET /api/provider`, and whether the public form takes signups (SPEC §7).
  *

@@ -104,7 +104,7 @@ export function noEmailProvider(): boolean {
 }
 
 /**
- * True when no email provider is connected (SPEC §9): a deployment whose `PROVIDER` is not
+ * True when no email provider is connected (SPEC §13): a deployment whose `PROVIDER` is not
  * set yet, which refuses every send. The operator's voice: name the state and point to the
  * step that ends it, labelled "Connect Amazon SES" (`connectProviderLink`).
  */
@@ -139,7 +139,7 @@ export function connectProviderLink(cls?: string): Html {
 }
 
 /**
- * What to do about a send held for want of a provider (SPEC §9), as a page says it: the
+ * What to do about a send held for want of a provider (SPEC §13), as a page says it: the
  * shared advice (`refusalAdvice`) with its step as the link every not-connected line
  * carries, in place of the guide's mention. In the local preview there is nothing to
  * deploy, so it names the restart that ends the state instead.

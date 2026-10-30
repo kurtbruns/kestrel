@@ -158,7 +158,7 @@ describe("SIMULATE_SENDS", () => {
     });
   });
 
-  it("reads a refusal of the account every email meets, through SES's answers only (SPEC §9, §10)", () => {
+  it("reads a refusal of the account every email meets, through SES's answers only (SPEC §10, §13)", () => {
     expect(simulation("ses:refuse=configuration")).toMatchObject({
       profile: "ses",
       faults: "realistic",
@@ -175,7 +175,7 @@ describe("SIMULATE_SENDS", () => {
     }
   });
 
-  it("refuses every email as the account would, for an account problem that stops sending (SPEC §9, §10)", () => {
+  it("refuses every email as the account would, for an account problem that stops sending (SPEC §10, §13)", () => {
     const refuse = (sends: string, account: string) =>
       getConfig(withVars({ SIMULATE_SENDS: sends, SIMULATE_ACCOUNT: account })).simulation?.refuse;
     expect(refuse("ses", "production:set_missing")).toBe("configuration");

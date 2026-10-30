@@ -456,7 +456,7 @@ export function landingPage(opts: {
   featured?: ArchiveIndexPost;
   /** The next-most-recent posts, listed beneath the feature. */
   recent: ArchiveIndexPost[];
-  /** Whether a subscribe would be taken: false while email isn't working (SPEC §7, §9),
+  /** Whether a subscribe would be taken: false while email isn't working (SPEC §7, §13),
    *  when the subscribe page itself shows no form. */
   signupsOpen: boolean;
   /** Dev-only editor shortcut (§11); set only on a dev-shaped instance. */

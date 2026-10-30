@@ -24,7 +24,7 @@ export interface Notifier {
    * Deliver one message to `to`. `key` names the notification, so a channel that
    * records by it (the fake) never records the same one twice.
    * Throws with the channel's own words when it is not delivered. The provider channel adds
-   * what its answer says about the account to `contacts` (SPEC §9), which the caller records.
+   * what its answer says about the account to `contacts` (SPEC §13), which the caller records.
    */
   send(to: string, message: RenderedEmail, key: string, contacts: Contacts): Promise<void>;
 }

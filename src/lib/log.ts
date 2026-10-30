@@ -67,11 +67,11 @@ export const LOG_EVENTS = {
   "subscribe.not_connected": "warn",
   "provider.unrecognized": "warn",
   "provider.bad_request": "warn",
-  // The provider's account, as the sweep's account check reads it (SPEC §9).
+  // The provider's account, as the sweep's account check reads it (SPEC §13).
   "provider.account_checked": "info",
   "provider.pacing_unread": "warn",
   "provider.account_error": "error",
-  // Whether email is getting out (SPEC §9).
+  // Whether email is getting out (SPEC §13).
   "sending.refusing": "warn",
   "sending.cleared": "info",
   "sending.record_failed": "error",

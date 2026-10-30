@@ -643,7 +643,7 @@ describe("subscribers view", () => {
     expect(location.hash).toBe("#/subscribers/import");
   });
 
-  // SPEC §9: in the SES sandbox the confirmation reaches only addresses verified in SES, so
+  // SPEC §13: in the SES sandbox the confirmation reaches only addresses verified in SES, so
   // the empty list holds the subscribe page until AWS grants production access.
   describe("on SES", () => {
     const emptyList: FakeRoute = {
@@ -687,7 +687,7 @@ describe("subscribers view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
-    it("says signups are paused while email isn't going out, and where to fix it (SPEC §7, §9)", async () => {
+    it("says signups are paused while email isn't going out, and where to fix it (SPEC §7, §13)", async () => {
       fake = fakeApi(
         onSes({
           state: "production",
@@ -739,7 +739,7 @@ describe("subscribers view", () => {
     });
   });
 
-  // Only SES has an account whose sandbox AWS reviews, so nothing else asks (SPEC §9).
+  // Only SES has an account whose sandbox AWS reviews, so nothing else asks (SPEC §13).
   it.each([
     ["off SES", "fake"],
     ["with no provider connected", "none"],

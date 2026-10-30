@@ -1,5 +1,5 @@
 /**
- * Asking Amazon SES about its own account (SPEC §9): whether it is still in the sandbox, its
+ * Asking Amazon SES about its own account (SPEC §13): whether it is still in the sandbox, its
  * production-access review, its send rate and daily limit, its standing, whether the sending
  * identity is verified and which configuration set it files mail under by default, and whether
  * the configuration set that applies exists and can send. Read-only SESv2 calls, `GetAccount`,

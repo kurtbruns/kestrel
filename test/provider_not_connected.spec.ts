@@ -1,4 +1,4 @@
-// A deployment with no email provider connected (SPEC §9): `PROVIDER` unset or `none`. The
+// A deployment with no email provider connected (SPEC §13): `PROVIDER` unset or `none`. The
 // app runs, and refuses everything that would send with one named refusal; the public
 // subscribe page says signups aren't open; a send scheduled before is held, consuming no
 // one. The fake runs only where it is named. Local dev previews the same state through
@@ -86,7 +86,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("which provider a deployment runs on (SPEC §9)", () => {
+describe("which provider a deployment runs on (SPEC §13)", () => {
   it("reads an unset, blank, or `none` PROVIDER as not connected, on any origin", () => {
     for (const vars of [
       NOT_CONNECTED,
@@ -197,7 +197,7 @@ describe("everything that would send is refused with provider_not_connected", ()
   });
 });
 
-describe("the public subscribe page while signups aren't open (SPEC §7, §9)", () => {
+describe("the public subscribe page while signups aren't open (SPEC §7, §13)", () => {
   it("says signups aren't open yet, with no form to take an address", async () => {
     const res = await fetchWith(NOT_CONNECTED, "/subscribe");
     expect(res.status).toBe(200);
@@ -252,7 +252,7 @@ describe("the public subscribe page while signups aren't open (SPEC §7, §9)", 
     const page = await (await fetchWith({ PROVIDER: "fake" }, "/subscribe")).text();
     expect(page).toContain('action="/subscribe"');
   });
-  it("keeps the empty home page without a form, so it never offers what the subscribe page refuses (SPEC §5, §9)", async () => {
+  it("keeps the empty home page without a form, so it never offers what the subscribe page refuses (SPEC §5, §13)", async () => {
     const page = await (await fetchWith(NOT_CONNECTED, "/")).text();
     expect(page).toContain("No posts yet.");
     expect(page).not.toContain("Subscribe to get the first one");

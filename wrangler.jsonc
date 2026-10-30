@@ -80,7 +80,7 @@
   // they're omitted here. Set them only to opt into an apex archive or a media
   // custom domain (docs/reference/01-configuration.md). ARCHIVE_BASE_PATH drives both
   // the archive URL and the route that serves it. PROVIDER names `fake` on purpose: unset
-  // means no provider connected (SPEC §9), which refuses every send.
+  // means no provider connected (SPEC §13), which refuses every send.
   "vars": {
     "PROVIDER": "fake",
     "APP_ORIGIN": "http://localhost:8787",
