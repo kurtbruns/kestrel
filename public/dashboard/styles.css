@@ -4768,33 +4768,24 @@ button.copy-btn.api-copy-path {
 
 /* Setup steps: the first-run checklist, and the regular dashboard's Finish setting up card
    (one component, two layouts). The card is the compact one. Finished steps fold into one
-   line above the list; each step left carries a ring that says where it stands. */
+   line above the list, behind a solid check; each step left carries a small ring beside its
+   title that says where it stands: plain to take, dashed while AWS has it, dotted while it
+   waits on another step, solid red while a problem above is in its way. */
 .setup-title {
   margin-top: 0;
 }
 .setup-fold {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 8px 0 0;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 10px 0 2px;
+  padding: 0 2px;
   color: var(--muted);
   font-size: 13px;
 }
 .setup-fold strong {
   color: var(--fg);
-}
-.setup-fold-mark {
-  flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  border: 1px solid var(--ok-line);
-  background: var(--ok-bg);
-  color: var(--ok-fg);
-  font-size: 12px;
+  font-weight: 600;
 }
 .setup-steps {
   list-style: none;
@@ -4804,26 +4795,43 @@ button.copy-btn.api-copy-path {
 .setup-steps li {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   padding: 12px 2px;
   border-top: 1px solid var(--line);
 }
 .setup-steps li:first-child {
   border-top: 0;
 }
+/* The mark: beside the title's first line, whatever the hint below it. */
+.setup-fold-mark,
 .setup-steps li::before {
-  content: "";
   flex: 0 0 auto;
+  align-self: flex-start;
   box-sizing: border-box;
-  width: 22px;
-  height: 22px;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  border: 1.5px solid var(--muted);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 700;
+  line-height: 1;
+}
+.setup-fold-mark {
+  margin-top: 1px;
+  background: var(--ok-fg);
+  color: var(--card);
+}
+.setup-steps li::before {
+  content: "";
+  border: 1.5px solid var(--muted);
+}
+/* A step with only a title: the mark sits level with it, as the title does with its button. */
+.setup-steps li:not(:has(.setup-hint))::before {
+  align-self: center;
+  margin-top: 0;
 }
 /* Waiting on AWS, not on the publisher. */
 .setup-steps li.setup-waiting::before {
@@ -4834,10 +4842,10 @@ button.copy-btn.api-copy-path {
 .setup-steps li.setup-blocked::before {
   border-style: dotted;
   border-color: var(--muted);
-  opacity: 0.6;
 }
 .setup-steps li.setup-blocked strong {
   color: var(--muted);
+  font-weight: 500;
 }
 /* A problem the health block states is in its way. */
 .setup-steps li.setup-attention::before {
