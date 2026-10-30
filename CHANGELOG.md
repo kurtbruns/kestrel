@@ -14,6 +14,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- Lock the dashboard with Access says how to let another person into the editor: add them to the Access policy, and store `ACCESS_ALLOWED_EMAILS` again with their address if you set it, since storing it replaces the whole list. It and the Configuration reference show the list's format, and say spaces and capital letters don't matter.
 - Connect Amazon SES follows the SES, SNS, and IAM consoles as they are now: it creates the key's policy before its user, sets SNS's longer retry policy on the subscription form, and leaves alone the SES statement a topic created from SES already has. It says why the other six event types stay off, and ends its replies section with a check in Email Routing's Activity log.
 - While Amazon SES is in the sandbox, an empty Subscribers list offers only the import, says to share the subscribe page once AWS grants production access, and links Request production access. A reader who signs up before then gets no confirmation email, since SES mails only addresses verified in it.
 - The confirm page's line under its heading reads "Confirm reader@example.com to start receiving the newsletter.", in the reader's words like the confirmation email, instead of asking whether to start sending to them.
