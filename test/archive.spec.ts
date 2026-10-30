@@ -298,6 +298,22 @@ describe("home page (the public front door, §5)", () => {
   });
 });
 
+describe("while signups aren't open (SPEC §7)", () => {
+  it("invites no one to subscribe from the masthead of the home page or the archive", async () => {
+    await publish("A Post", 1_000);
+    for (const path of ["/", "/archive"]) {
+      expect(await (await SELF.fetch(`${base}${path}`)).text(), path).toContain("Subscribe here");
+    }
+    // Email not proven yet: signups close, and the call to action goes with them.
+    await env.DB.prepare("DELETE FROM sending").run();
+    for (const path of ["/", "/archive"]) {
+      const body = await (await SELF.fetch(`${base}${path}`)).text();
+      expect(body, path).not.toContain("Subscribe here");
+      expect(body, path).toContain("A Post");
+    }
+  });
+});
+
 describe("archive index (the full list, §5)", () => {
   it("lists every published post newest-first, linking to their canonical archive URLs", async () => {
     const older = await publish("The Older One", 1_000);

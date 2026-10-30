@@ -96,7 +96,7 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
     case "reading/archive":
       return archiveIndexPage({
         identity: await readerIdentity(c, c.config),
-        subscribeUrl,
+        subscribeUrl: (await readSignups(c.env.DB, c.config)) === "open" ? subscribeUrl : undefined,
         homeUrl: home,
         posts: samplePosts(c, Date.now()),
       });
@@ -113,7 +113,7 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
     case "reading/archive-empty":
       return archiveIndexPage({
         identity: await readerIdentity(c, c.config),
-        subscribeUrl,
+        subscribeUrl: (await readSignups(c.env.DB, c.config)) === "open" ? subscribeUrl : undefined,
         homeUrl: home,
         posts: [],
       });

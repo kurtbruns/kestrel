@@ -76,13 +76,14 @@ export async function landing(c: RequestContext): Promise<Response> {
 /** The full public archive index: every published post (its send has started) listed in the
  *  archive, an email-only post left out (SPEC §5), newest first, linking to their permanent (canonical) archive URLs. */
 export async function archiveIndex(c: RequestContext): Promise<Response> {
-  const [posts, identity] = await Promise.all([
+  const [posts, identity, signups] = await Promise.all([
     listPublishedPosts(c.env.DB),
     readerIdentity(c, c.config),
+    readSignups(c.env.DB, c.config),
   ]);
   return archiveIndexPage({
     identity,
-    subscribeUrl: `${c.config.appOrigin}/subscribe`,
+    subscribeUrl: signups === "open" ? `${c.config.appOrigin}/subscribe` : undefined,
     homeUrl: `${c.config.appOrigin}/`,
     posts: posts.map((i) => ({
       title: i.subject,

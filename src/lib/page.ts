@@ -491,7 +491,8 @@ export function landingPage(opts: {
   }
   return readerPage({
     identity: opts.identity,
-    subscribeUrl: formHere ? undefined : opts.subscribeUrl,
+    // The masthead's call to action only while the subscribe page takes signups (SPEC §7).
+    subscribeUrl: formHere || !opts.signupsOpen ? undefined : opts.subscribeUrl,
     homeUrl: opts.homeUrl,
     // The front door is titled by the publication; with no name, by what it is.
     title: opts.identity.name || "Home",
@@ -508,7 +509,8 @@ export function landingPage(opts: {
  *  home page's "Browse the full archive" link; served at the archive base path. */
 export function archiveIndexPage(opts: {
   identity: ReaderIdentity;
-  subscribeUrl: string;
+  /** The masthead's call to action; left out while signups aren't open (SPEC §7). */
+  subscribeUrl?: string;
   homeUrl: string;
   posts: ArchiveIndexPost[];
   /** Dev-only editor shortcut (§11); set only on a dev-shaped instance. */

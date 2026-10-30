@@ -27,8 +27,8 @@ MIN_LEAD_SECONDS="60"
 # On a list send, local dev stands in for a real provider instead of accepting everything
 # at once: the provider's batch size and pace, its failures, and delivery receipts that
 # arrive after the send (delivered, bounced, complained), all through the real send loop.
-# Test sends and confirmations go straight to the dev outbox (GET /api/dev/outbox),
-# unfaulted. The profile names the provider modeled:
+# Test sends, confirmations, and notifications go straight to the dev outbox
+# (GET /api/dev/outbox), unfaulted. The profile names the provider modeled:
 #   ses      Amazon SES: a second of its send rate a request (up to 50), one request a
 #            second, no key (a lost request waits for Resolve), and its daily quota running
 #            out once a send; a slice a minute on the default SUBREQUEST_BUDGET, as SES is
@@ -57,8 +57,9 @@ SIMULATE_SENDS="ses"
 # ":set_missing" or ":set_paused" (the configuration set), ":key_rejected" (SES rejects the
 # AWS key), ":sending_disabled" (sending turned off), ":shutdown" (AWS paused the account),
 # ":sender_unverified" (the From address isn't verified), or ":probation" (AWS reviewing the
-# account), e.g. "production:set_missing". A problem that stops every email also makes email
-# read as refusing, as the real check does. In the sandbox, a recipient outside SENDING_DOMAIN
+# account), e.g. "production:set_missing". A problem that stops every email also refuses every
+# simulated email with its cause (set_missing as configuration, key_rejected as credentials, and
+# so on), as the real account would, unless SIMULATE_SENDS names a refusal of its own. In the sandbox, a recipient outside SENDING_DOMAIN
 # and SES's mailbox simulator is refused. Needs SIMULATE_SENDS=ses; "off" leaves the account unread.
 # For one run, set it in the shell instead: SIMULATE_ACCOUNT=sandbox npm run dev
 SIMULATE_ACCOUNT="off"
