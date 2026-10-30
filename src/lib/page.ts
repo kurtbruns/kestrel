@@ -497,6 +497,10 @@ export function landingPage(opts: {
     title: opts.identity.name || "Home",
     mainHtml: main,
     devDashboardUrl: opts.devDashboardUrl,
+    // With nothing listed yet, whether it shows the form follows signups, which can open or
+    // pause at any moment (SPEC §7), so it is never served stale. Once a post is listed it
+    // doesn't depend on them, and stays briefly cacheable.
+    fresh: !opts.featured,
   });
 }
 

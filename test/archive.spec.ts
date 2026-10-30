@@ -284,13 +284,17 @@ describe("home page (the public front door, §5)", () => {
     // The form is the call to action, so the masthead doesn't repeat it.
     expect(body).not.toContain("Subscribe here");
     expect(body).not.toContain("Just A Draft");
+    // Whether it shows the form follows signups, which can change at any moment (SPEC §7).
+    expect(res.headers.get("cache-control")).toBe("no-cache");
   });
 
-  it("drops the form once a post is listed (SPEC §5)", async () => {
+  it("drops the form once a post is listed, and is briefly cacheable again (SPEC §5)", async () => {
     await publish("A Post", 1_000);
-    const body = await (await SELF.fetch(`${base}/`)).text();
+    const res = await SELF.fetch(`${base}/`);
+    const body = await res.text();
     expect(body).not.toContain("<form");
     expect(body).toContain("Subscribe here");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=300");
   });
 });
 
