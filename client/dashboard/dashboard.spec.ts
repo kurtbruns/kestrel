@@ -503,10 +503,11 @@ describe("dashboard", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect($(".setup-title").textContent).toBe("Set up your publication");
     expect(document.querySelector(".tiles")).toBeNull();
-    expect(document.querySelector(".setup-list")).toBeNull();
+    expect(document.querySelector(".setup > .setup-steps .setup-list")).toBeNull();
     // Confirmed and pending: the people a send can reach once they confirm.
-    expect($(".setup-fold").textContent).toBe(
-      "✓3 done: Amazon SES connected, named Birds Weekly, 43 subscribers on your list",
+    expect($(".setup-fold summary").textContent).toBe("✓3 done");
+    expect($(".setup-fold .setup-list .setup-hint").textContent).toBe(
+      "43 subscribers on your list.",
     );
     expect(document.querySelector(".setup [data-act='new-post']")).not.toBeNull();
     expect(fake.unhandled).toEqual([]);
@@ -526,7 +527,8 @@ describe("dashboard", () => {
 
   // SPEC §13, DESIGN §4: a deployment with no provider connected says so where the
   // developer lands, as a standing state, and its checklist puts connecting one first.
-  const steps = () => $$(".setup-steps li strong").map((s) => s.textContent);
+  // The steps left, outside the fold of done ones.
+  const steps = () => $$(".setup > .setup-steps li strong").map((s) => s.textContent);
   describe("while no email provider is connected", () => {
     const withProvider = (provider: "none" | "fake" | "ses") => {
       const c = config();
@@ -684,10 +686,13 @@ describe("dashboard", () => {
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
       expect($(".setup-card .setup-title").textContent).toBe("Finish setting up");
-      expect($(".setup-card .setup-fold").textContent).toBe(
-        "✓3 done: Amazon SES connected, named Birds Weekly, writing your first post",
-      );
-      expect($$(".setup-card .setup-steps li strong").map((s) => s.textContent)).toEqual([
+      expect($(".setup-card .setup-fold summary").textContent).toBe("✓3 done");
+      expect($$(".setup-card .setup-fold li strong").map((s) => s.textContent)).toEqual([
+        "Connect Amazon SES",
+        "Name your publication",
+        "Write your first post",
+      ]);
+      expect($$(".setup-card > .setup-steps li strong").map((s) => s.textContent)).toEqual([
         "Send a test email",
         "Get notified",
         "Bring your existing list",
@@ -713,18 +718,21 @@ describe("dashboard", () => {
       fake = world([post()], srv, counts);
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
-      expect($(".setup-card .setup-fold").textContent).toBe(
-        "✓6 done, including writing your first post and scheduling your first post",
-      );
+      expect($(".setup-card .setup-fold summary").textContent).toBe("✓6 done");
+      expect(document.querySelector(".setup-card .setup-fold .setup-schedule")).not.toBeNull();
       // The test that counts is the scheduled send's, the frozen email: it opens the post.
       expect($(".setup-card .setup-post-test .setup-hint").textContent).toMatch(
         /^“Gulls” goes out .+\. Send yourself a test of it first\.$/,
       );
       expect($(".setup-card .setup-post-test button").dataset.nav).toBe("#/edit/p2");
-      // A test of it, sent from the post, ticks it on the next read.
+      // A test of it, sent from the post, ticks it on the next read, and a reader who opened
+      // the done steps keeps them open through that repaint.
+      $<HTMLDetailsElement>(".setup-card .setup-fold").open = true;
       srv.edit("x2", { tested_at: Date.now() });
       await vi.advanceTimersByTimeAsync(60_000);
-      expect(document.querySelector(".setup-card .setup-post-test")).toBeNull();
+      expect($(".setup-card .setup-post-test").classList.contains("setup-done")).toBe(true);
+      expect($(".setup-card .setup-fold summary").textContent).toBe("✓7 done");
+      expect($<HTMLDetailsElement>(".setup-card .setup-fold").open).toBe(true);
       expect(fake.unhandled).toEqual([]);
     });
 
@@ -1160,8 +1168,8 @@ describe("dashboard", () => {
       fake = world([], sendServer(), none, onSes({ state: "production", unknown_reason: null }));
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
-      expect(document.querySelector(".setup-access")).toBeNull();
-      expect($(".setup-fold").textContent).toContain("production access");
+      expect($(".setup-access").classList.contains("setup-done")).toBe(true);
+      expect($(".setup-fold .setup-access .setup-hint").textContent).toBe("AWS granted it.");
       expect(document.querySelector(".setup-share .setup-hint")).toBeNull();
     });
 

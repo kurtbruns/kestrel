@@ -70,10 +70,8 @@ export interface SetupStep {
   key: SetupStepKey;
   title: string;
   state: SetupStepState;
-  /** The line under the title, or null for none. */
+  /** The line under the title, or null for none. Once done, the fact that ticked it. */
   hint: string | null;
-  /** What the fold line calls it once done. */
-  doneAs: string;
 }
 
 const CONNECT = "Connect Amazon SES";
@@ -109,22 +107,20 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
     hint: f.notConnected
       ? "Nothing can be sent, and signups stay closed, until SES is connected."
       : null,
-    doneAs: "Amazon SES connected",
   });
 
   steps.push(
     f.notConnected
-      ? { key: "test", title: TEST, state: "blocked", hint: after(CONNECT), doneAs: "" }
+      ? { key: "test", title: TEST, state: "blocked", hint: after(CONNECT) }
       : sending?.state === "working"
         ? {
             key: "test",
             title: TEST,
             state: "done",
-            hint: null,
-            doneAs: "email working",
+            hint: "Email is getting out.",
           }
         : sending?.state === "refusing"
-          ? { key: "test", title: TEST, state: "attention", hint: REFUSING, doneAs: "" }
+          ? { key: "test", title: TEST, state: "attention", hint: REFUSING }
           : {
               key: "test",
               title: TEST,
@@ -132,7 +128,6 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
               hint: sending
                 ? `SES is connected but hasn’t sent anything yet. Send one to ${sandbox ? "an address verified in SES" : "yourself"}.`
                 : "Send one to yourself, and check it arrives.",
-              doneAs: "",
             },
   );
 
@@ -140,8 +135,7 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
     key: "name",
     title: "Name your publication",
     state: f.named ? "done" : "todo",
-    hint: f.named ? null : `Currently “${f.name}”.`,
-    doneAs: `named ${f.name}`,
+    hint: f.named ? `Named “${f.name}”.` : `Currently “${f.name}”.`,
   });
 
   // A failed notification is the health block's line; the step only points up at it.
@@ -149,8 +143,11 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
     key: "notify",
     title: "Get notified",
     state: !f.notifyTo ? "todo" : f.notifyFailed ? "attention" : "done",
-    hint: f.notifyTo && f.notifyFailed ? NOTIFY_FAILED : null,
-    doneAs: `notifications to ${plural(f.notifyTo, "address", "addresses")}`,
+    hint: !f.notifyTo
+      ? null
+      : f.notifyFailed
+        ? NOTIFY_FAILED
+        : `Notifications go to ${plural(f.notifyTo, "address", "addresses")}.`,
   });
 
   if (f.notConnected || f.sesAccount) {
@@ -163,8 +160,7 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
           : sandbox && p?.review === "pending"
             ? "waiting"
             : "todo",
-      hint: productionAccessHint(p, f.named),
-      doneAs: "production access",
+      hint: p?.state === "production" ? "AWS granted it." : productionAccessHint(p, f.named),
     });
   }
 
@@ -172,8 +168,7 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
     key: "list",
     title: "Bring your existing list",
     state: f.onList ? "done" : "todo",
-    hint: f.onList ? null : "Optional.",
-    doneAs: `${plural(f.onList, "subscriber", "subscribers")} on your list`,
+    hint: f.onList ? `${plural(f.onList, "subscriber", "subscribers")} on your list.` : "Optional.",
   });
 
   steps.push({
@@ -181,7 +176,6 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
     title: "Write your first post",
     state: f.wrote ? "done" : "todo",
     hint: null,
-    doneAs: "writing your first post",
   });
 
   steps.push({
@@ -193,7 +187,6 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
       : sandbox && sending?.state === "working" && !f.firstSend
         ? "Best after AWS grants access: until then it reaches only verified addresses."
         : null,
-    doneAs: "scheduling your first post",
   });
 
   // The test of the frozen email that will go out, recorded on the send; a draft's test is a
@@ -207,9 +200,8 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
     hint: !s
       ? after(SCHEDULE)
       : tested
-        ? null
+        ? "The email that goes out has been tested."
         : `“${s.subject}” goes out ${fmt(s.fire_at)}. Send yourself a test of it first.`,
-    doneAs: "testing your first post",
   });
 
   // Sharing can't be known, so it's never done; it waits only for signups to open. In the
@@ -221,32 +213,31 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
     title: "Share your subscribe link",
     state: closed ? "blocked" : "todo",
     hint: closed ? after(TEST) : sandbox ? "Share it once AWS grants production access." : null,
-    doneAs: "",
   });
 
   return steps;
 }
 
 /**
- * The fold line: every done step by name while there are few. Past four, the count and two of
- * them: production access once AWS granted it, since after a hand-off it's the operator's step
- * the publisher most needs to know is done, and the latest other; otherwise the latest two.
+ * The step's control: where it's taken, or nothing for a blocked step, Schedule (taken from the
+ * post's editor), and Share in the sandbox. A done step keeps a control only where it still leads
+ * somewhere worth going: Settings to rename or change where notifications go, the template to
+ * send another test, the list, and the first post.
  */
-function foldHtml(done: SetupStep[]): Html {
-  const n = done.length;
-  const access = done.find((d) => d.key === "access");
-  const named = access ? [access, ...done.filter((d) => d !== access).slice(-1)] : done.slice(-2);
-  const words =
-    n <= 4
-      ? html`<strong>${n} done:</strong> ${done.map((d) => d.doneAs).join(", ")}`
-      : html`<strong>${n} done</strong>, including ${named.map((d) => d.doneAs).join(" and ")}`;
-  return html`<p class="setup-fold"><span class="setup-fold-mark" aria-hidden="true">✓</span><span>${words}</span></p>`;
-}
-
-/** The step's control: where it's taken, or nothing for a blocked step, Schedule (taken from the post's editor), and Share in the sandbox. */
 function stepAction(step: SetupStep, f: SetupFacts, primary: boolean): Html | null {
   if (step.state === "blocked") {
     return null;
+  }
+  if (step.state === "done") {
+    switch (step.key) {
+      case "connect":
+      case "access":
+      case "write":
+      case "schedule":
+        return null;
+      case "list":
+        return html`<button data-nav="#/subscribers">Subscribers</button>`;
+    }
   }
   const cls = primary ? "primary" : "";
   switch (step.key) {
@@ -280,33 +271,42 @@ function stepAction(step: SetupStep, f: SetupFacts, primary: boolean): Html | nu
  * The setup steps, in one of two layouts: the first-run `checklist` that stands in for the
  * dashboard until the first post, and the compact `card` the regular dashboard carries until the
  * first post listed in the archive is published. One list, so the two can't drift. Finished steps
- * fold into one line above the rest, so the list starts at what's left. On the checklist, where
- * the head carries no New post, the first step that can be taken now, past the optional list,
- * has the view's Primary. The steps, their order, and the fact that ticks each are restated by
- * hand in DESIGN (Dashboard), the Publishing docs (docs/publishing/README.md and
- * 10-check-your-setup.md), template/claude/CLAUDE.md, and src/mcp/instructions.ts, and nothing
- * checks them: a change here changes each (.claude/rules/maintainer.md).
+ * fold behind one "N done" line above the rest, so the list starts at what's left; it opens to
+ * show them, each with the fact that ticked it, and `foldOpen` keeps it open across a repaint.
+ * On the checklist, where the head carries no New post, the first step that can be taken now,
+ * past the optional list, has the view's Primary. The steps, their order, and the fact that
+ * ticks each are restated by hand in DESIGN (Dashboard), the Publishing docs
+ * (docs/publishing/README.md and 10-check-your-setup.md), template/claude/CLAUDE.md, and
+ * src/mcp/instructions.ts, and nothing checks them: a change here changes each
+ * (.claude/rules/maintainer.md).
  */
-export function setupStepsHtml(f: SetupFacts, layout: "checklist" | "card"): Html {
+export function setupStepsHtml(
+  f: SetupFacts,
+  layout: "checklist" | "card",
+  foldOpen = false,
+): Html {
   const steps = setupSteps(f);
   const done = steps.filter((s) => s.state === "done");
   const left = steps.filter((s) => s.state !== "done");
   const current = left.find(
     (s) => (s.state === "todo" || s.state === "attention") && s.key !== "list",
   );
+  const row = (s: SetupStep) =>
+    html`<li class="setup-${s.key.replace("_", "-")} setup-${s.state}"><div class="setup-step-main"><strong>${s.title}</strong>${
+      s.hint ? html`<span class="muted setup-hint">${s.hint}</span>` : null
+    }${
+      s.key === "share" && s.state !== "blocked" && shareable(f)
+        ? html`<code class="setup-url">${f.subscribeUrl}</code>`
+        : null
+    }</div>${stepAction(s, f, layout === "checklist" && s === current)}</li>`;
   return html`<div class="card setup${layout === "card" ? " setup-card" : ""}">
     <h2 class="setup-title">${layout === "card" ? "Finish setting up" : "Set up your publication"}</h2>
-    ${done.length ? foldHtml(done) : null}
-    <ol class="setup-steps">${left.map(
-      (s) =>
-        html`<li class="setup-${s.key.replace("_", "-")} setup-${s.state}"><div class="setup-step-main"><strong>${s.title}</strong>${
-          s.hint ? html`<span class="muted setup-hint">${s.hint}</span>` : null
-        }${
-          s.key === "share" && s.state !== "blocked" && shareable(f)
-            ? html`<code class="setup-url">${f.subscribeUrl}</code>`
-            : null
-        }</div>${stepAction(s, f, layout === "checklist" && s === current)}</li>`,
-    )}</ol>
+    ${
+      done.length
+        ? html`<details class="setup-fold"${foldOpen ? html` open` : null}><summary><span class="setup-fold-mark" aria-hidden="true">✓</span><strong>${done.length} done</strong></summary><ol class="setup-steps setup-done-steps">${done.map(row)}</ol></details>`
+        : null
+    }
+    <ol class="setup-steps">${left.map(row)}</ol>
   </div>`;
 }
 

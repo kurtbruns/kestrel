@@ -89,7 +89,7 @@ describe("setup steps", () => {
     expect(read(setupSteps(facts({ provider })))).toEqual([
       "Connect Amazon SES: done",
       "Send a test email: todo (SES is connected but hasn’t sent anything yet. Send one to an address verified in SES.)",
-      "Name your publication: done",
+      "Name your publication: done (Named “Symbol Soup”.)",
       "Get notified: todo",
       "Request production access: todo",
       "Bring your existing list: todo (Optional.)",
@@ -106,7 +106,7 @@ describe("setup steps", () => {
     expect(read(steps)).toEqual([
       "Connect Amazon SES: done",
       "Send a test email: attention (SES is refusing. The fix is above.)",
-      "Name your publication: done",
+      "Name your publication: done (Named “Symbol Soup”.)",
       "Get notified: todo",
       "Request production access: todo",
       "Bring your existing list: todo (Optional.)",
@@ -123,9 +123,9 @@ describe("setup steps", () => {
     const provider = ses({ review: "pending", sending: sending("working"), signups: "open" });
     expect(read(setupSteps(facts({ provider, notifyTo: 2 })))).toEqual([
       "Connect Amazon SES: done",
-      "Send a test email: done",
-      "Name your publication: done",
-      "Get notified: done",
+      "Send a test email: done (Email is getting out.)",
+      "Name your publication: done (Named “Symbol Soup”.)",
+      "Get notified: done (Notifications go to 2 addresses.)",
       "Request production access: waiting (Waiting for AWS to grant production access.)",
       "Bring your existing list: todo (Optional.)",
       "Write your first post: todo",
@@ -146,11 +146,11 @@ describe("setup steps", () => {
       read(setupSteps(facts({ provider, notifyTo: 1, onList: 40, wrote: true, firstSend: s }))),
     ).toEqual([
       "Connect Amazon SES: done",
-      "Send a test email: done",
-      "Name your publication: done",
-      "Get notified: done",
-      "Request production access: done",
-      "Bring your existing list: done",
+      "Send a test email: done (Email is getting out.)",
+      "Name your publication: done (Named “Symbol Soup”.)",
+      "Get notified: done (Notifications go to 1 address.)",
+      "Request production access: done (AWS granted it.)",
+      "Bring your existing list: done (40 subscribers on your list.)",
       "Write your first post: done",
       "Schedule your first post: done",
       `Send a test email for your first post: todo (“The integral sign” goes out ${fmt(s.fire_at)}. Send yourself a test of it first.)`,
@@ -193,8 +193,8 @@ describe("setup steps", () => {
     const provider = providerStatus({ unknown_reason: "permission", signups: "open" });
     expect(read(setupSteps(facts({ provider })).filter((s) => s.key !== "list"))).toEqual([
       "Connect Amazon SES: done",
-      "Send a test email: done",
-      "Name your publication: done",
+      "Send a test email: done (Email is getting out.)",
+      "Name your publication: done (Named “Symbol Soup”.)",
       "Get notified: todo",
       "Request production access: todo (Kestrel can’t read your SES account, so the SES console’s account dashboard says whether AWS granted it.)",
       "Write your first post: todo",
@@ -233,28 +233,51 @@ describe("setup steps", () => {
     expect(notify({ notifyTo: 1, notifyFailed: true })).toEqual([
       "Get notified: attention (The last notification didn’t arrive. The fix is above.)",
     ]);
-    expect(notify({ notifyTo: 2 })).toEqual(["Get notified: done"]);
+    expect(notify({ notifyTo: 2 })).toEqual([
+      "Get notified: done (Notifications go to 2 addresses.)",
+    ]);
     expect(notify({ notifyTo: 0 })).toEqual(["Get notified: todo"]);
   });
 });
 
 describe("setup card", () => {
   beforeEach(() => resetShell());
-  const render = (f: SetupFacts, layout: "checklist" | "card" = "card") => {
+  const render = (f: SetupFacts, layout: "checklist" | "card" = "card", foldOpen = false) => {
     const el = document.createElement("div");
-    setHtml(el, html`${setupStepsHtml(f, layout)}`);
+    setHtml(el, html`${setupStepsHtml(f, layout, foldOpen)}`);
     return el;
   };
-  const fold = (el: HTMLElement) => el.querySelector(".setup-fold")?.textContent;
+  const fold = (el: HTMLElement) => el.querySelector<HTMLDetailsElement>(".setup-fold");
+  const summary = (el: HTMLElement) => el.querySelector(".setup-fold summary")?.textContent;
+  const doneTitles = (el: HTMLElement) =>
+    [...el.querySelectorAll(".setup-fold li strong")].map((s) => s.textContent);
+  // The steps left: the list outside the fold.
   const titles = (el: HTMLElement) =>
-    [...el.querySelectorAll(".setup-steps li strong")].map((s) => s.textContent);
+    [...el.querySelectorAll(".setup > .setup-steps li strong")].map((s) => s.textContent);
 
-  it("folds finished steps into one line, naming each while there are few, and lists only what's left", () => {
+  it("folds finished steps behind one closed line that opens to them, and lists only what's left", () => {
     const provider = ses({ review: "pending", sending: sending("working"), signups: "open" });
     const el = render(facts({ provider, notifyTo: 2 }));
-    expect(fold(el)).toBe(
-      "✓4 done: Amazon SES connected, email working, named Symbol Soup, notifications to 2 addresses",
-    );
+    expect(summary(el)).toBe("✓4 done");
+    expect(fold(el)?.open).toBe(false);
+    // Opened, each in order with the fact that ticked it, and its control where one still helps.
+    expect(doneTitles(el)).toEqual([
+      "Connect Amazon SES",
+      "Send a test email",
+      "Name your publication",
+      "Get notified",
+    ]);
+    expect(
+      [...el.querySelectorAll(".setup-fold li")].map((li) => [
+        li.querySelector(".setup-hint")?.textContent ?? null,
+        li.querySelector("button")?.textContent ?? null,
+      ]),
+    ).toEqual([
+      [null, null],
+      ["Email is getting out.", "Send test email"],
+      ["Named “Symbol Soup”.", "Settings"],
+      ["Notifications go to 2 addresses.", "Settings"],
+    ]);
     expect(titles(el)).toEqual([
       "Request production access",
       "Bring your existing list",
@@ -271,12 +294,22 @@ describe("setup card", () => {
     expect(el.querySelector(".setup-share [data-copy]")).toBeNull();
   });
 
-  it("counts many finished steps, naming production access and the latest other", () => {
+  it("says only how many are done, however many, and renders open when asked to stay open", () => {
     const provider = ses({ state: "production", sending: sending("working") });
-    const el = render(
-      facts({ provider, notifyTo: 1, onList: 3, wrote: true, firstSend: firstSend() }),
-    );
-    expect(fold(el)).toBe("✓8 done, including production access and scheduling your first post");
+    const f = facts({ provider, notifyTo: 1, onList: 3, wrote: true, firstSend: firstSend() });
+    const el = render(f);
+    expect(summary(el)).toBe("✓8 done");
+    expect(doneTitles(el)).toEqual([
+      "Connect Amazon SES",
+      "Send a test email",
+      "Name your publication",
+      "Get notified",
+      "Request production access",
+      "Bring your existing list",
+      "Write your first post",
+      "Schedule your first post",
+    ]);
+    expect(el.querySelector(".setup-fold .setup-list button")?.textContent).toBe("Subscribers");
     expect(titles(el)).toEqual([
       "Send a test email for your first post",
       "Share your subscribe link",
@@ -286,6 +319,7 @@ describe("setup card", () => {
       "https://news.example.com/subscribe",
     );
     expect(el.querySelector(".setup-url")?.textContent).toBe("https://news.example.com/subscribe");
+    expect(fold(render(f, "card", true))?.open).toBe(true);
   });
 
   it("says a blocked step's wait in plain text, with no link and no control", () => {

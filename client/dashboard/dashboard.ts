@@ -355,7 +355,10 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
 
   // The Finish setting up card, while setup is open: it goes when a post listed in the
   // archive is published.
-  const setupCardHtml = () => (setupOpen() ? setupStepsHtml(facts(), "card") : html``);
+  // A repaint keeps the done steps open if the reader opened them, so a background read never
+  // folds them away mid-read.
+  const setupCardHtml = (foldOpen = false) =>
+    setupOpen() ? setupStepsHtml(facts(), "card", foldOpen) : html``;
 
   // Each tile deep-links into the roster pre-filtered on its criterion
   // (#/subscribers/<filter>), so a count is a way in, not just a number.
@@ -474,7 +477,8 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       tickCountdowns(); // the fresh cards are empty until the next tick
       setHtml($("#dashSent", root), dashSentHtml(sends));
       wireDashSentRows(root);
-      setHtml($("#dashSetup", root), setupCardHtml());
+      const fold = root.querySelector<HTMLDetailsElement>("#dashSetup .setup-fold");
+      setHtml($("#dashSetup", root), setupCardHtml(fold?.open ?? false));
       wireDashButtons($("#dashSetup", root), remount, signal); // Copy is delegated from root
       paintLive();
     } catch {

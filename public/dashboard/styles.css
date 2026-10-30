@@ -4774,18 +4774,48 @@ button.copy-btn.api-copy-path {
 .setup-title {
   margin-top: 0;
 }
+/* The done steps, behind one "N done" line that opens to list them. */
 .setup-fold {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
   margin: 10px 0 2px;
-  padding: 0 2px;
-  color: var(--muted);
-  font-size: 13px;
 }
-.setup-fold strong {
+.setup-fold summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px;
+  list-style: none;
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: 6px;
+}
+.setup-fold summary::-webkit-details-marker {
+  display: none;
+}
+.setup-fold summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.setup-fold summary strong {
   color: var(--fg);
   font-weight: 600;
+}
+/* A chevron that points down while closed and up while open. */
+.setup-fold summary::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -4px;
+  border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted);
+  transform: rotate(45deg);
+}
+.setup-fold[open] summary::after {
+  margin-top: 3px;
+  transform: rotate(-135deg);
+}
+.setup-done-steps {
+  margin: 4px 0 0;
+  border-bottom: 1px solid var(--line);
 }
 .setup-steps {
   list-style: none;
@@ -4820,9 +4850,8 @@ button.copy-btn.api-copy-path {
   line-height: 1;
 }
 .setup-fold-mark {
-  margin-top: 1px;
-  background: var(--ok-fg);
-  color: var(--card);
+  margin-top: 0;
+  align-self: center;
 }
 .setup-steps li::before {
   content: "";
@@ -4832,6 +4861,14 @@ button.copy-btn.api-copy-path {
 .setup-steps li:not(:has(.setup-hint))::before {
   align-self: center;
   margin-top: 0;
+}
+/* Done: a solid check, in the fold's line and on each step it opens to. */
+.setup-fold-mark,
+.setup-steps li.setup-done::before {
+  content: "✓";
+  border: 0;
+  background: var(--ok-fg);
+  color: var(--card);
 }
 /* Waiting on AWS, not on the publisher. */
 .setup-steps li.setup-waiting::before {
