@@ -138,7 +138,7 @@ Store each with `npx wrangler secret put NAME --env production`, which prompts f
 
 - `ACCESS_ALLOWED_EMAILS` optional
 
-    A comma-separated list of the people allowed to sign in. Without it, the app lets in anyone the Access policy allows, so it keeps the editor limited to named people if the policy is widened later. It applies to people only. A service token, the credential a script uses, carries no email, so the Access policy alone decides whether it gets in.
+    A comma-separated list of the people allowed to sign in, such as `you@example.com, publisher@example.com`. Spaces and capital letters don't matter. Without it, the app lets in anyone the Access policy allows, so it keeps the editor limited to named people if the policy is widened later. It applies to people only. A service token, the credential a script uses, carries no email, so the Access policy alone decides whether it gets in.
 
 - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` required with SES
 

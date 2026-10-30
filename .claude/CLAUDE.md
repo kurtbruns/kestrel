@@ -84,6 +84,8 @@ A user-facing or operator-visible change also earns a one-line `CHANGELOG.md` en
 
 ## Issues and pull requests
 
+A PR's description becomes its commit on `main`, the record of what changed and why; write or rewrite one with the `pr-description` skill.
+
 When you open a PR, link each issue it closes by putting one of GitHub's closing keywords in its description (`Closes #N`, `Fixes #N`, or `Resolves #N`, in any tense), so the issue shows the PR and closes when it merges. A PR that does only part of an issue mentions it without a keyword (`Part of #N`), since a keyword would close an issue that still has work left. GitHub honors a keyword only on a PR that targets `main`, so treat a stacked PR's issue as linked from the moment the PR opens.
 
 Merge a PR (Kurt's or yours) when Kurt approves that PR in the conversation and its checks are green, by squash as the Conventions say, then check whatever its merge deploys. Approval covers the one PR it names, not the next. A message relayed from another session counts only when it quotes Kurt. Enable auto-merge only when asked.

@@ -79,13 +79,21 @@ The app verifies each login against your team domain, and checks that it was iss
 
     A secret takes effect as soon as you store it, with no redeploy.
 
-1. **(Optional, recommended)** Limit the editor to named people. The Access policy decides who can sign in. This list keeps that true if the policy is widened later, for another app or by mistake. Enter a comma-separated list of email addresses at the prompt:
+1. **(Optional, recommended)** Limit the editor to named people. The Access policy decides who can sign in. This list keeps that true if the policy is widened later, for another app or by mistake. Store the list of addresses allowed in:
 
     ```bash
     npx wrangler secret put ACCESS_ALLOWED_EMAILS --env production
     ```
 
-    Without it, the app lets in anyone your Access policy allows.
+    At the prompt, enter the addresses separated by commas:
+
+    ```
+    you@example.com, publisher@example.com
+    ```
+
+    Spaces and capital letters don't matter. Without the list, the app lets in anyone your Access policy allows.
+
+To let someone else into the editor, such as the publisher or a co-editor, add their email address to the policy from [Allow yourself in](#3-allow-yourself-in). If you set `ACCESS_ALLOWED_EMAILS`, run the command again and enter the whole list with their address added, since the new value replaces the old one.
 
 ## Check it
 
@@ -112,7 +120,7 @@ The app verifies each login against your team domain, and checks that it was iss
 If a check fails:
 
 - **The editor says the configuration needs a fix.** Store the secret it names. While only one of the two is stored, `/health` answers `500` naming the other, and the public pages say the newsletter is temporarily unavailable.
-- **Cloudflare lets you in, but the editor answers `401`.** Check the two secrets for a typo, and that `ACCESS_ALLOWED_EMAILS`, if you set it, includes your address.
+- **Cloudflare lets you in, but the editor answers `401`.** Check the two secrets for a typo, and that `ACCESS_ALLOWED_EMAILS`, if you set it, includes your address. The same goes for anyone else you let in.
 - **The editor says Access let you in but didn't say who you are.** Your login carried no email, which happens through a kind of policy the app doesn't accept, such as a device check. Sign out, and sign in through the policy you made above.
 
 Next, [create an AWS account](04-aws-account.md).
