@@ -12,7 +12,7 @@
  * names (`refuse`), and, while the account stands in for the SES sandbox, a recipient not
  * verified with it (`sandboxRefusal`). Both are SES's own error responses read by the real
  * adapter's classifier, so the app reaches what follows (email refusing, a paused signup, a
- * held send, SPEC §9) by its own path. Simulated list sends land in the same outbox, so the
+ * held send, SPEC §13) by its own path. Simulated list sends land in the same outbox, so the
  * delivered bytes can be inspected. It engages only when `config.simulation` is set, which
  * `getConfig` allows only in a dev-shaped env.
  *
@@ -749,7 +749,7 @@ const PRODUCTION_ACCOUNT = { maxSendRate: 14, max24HourSend: 50_000 } as const;
  * The account check's row as SES would leave it in the simulated state (`SIMULATE_ACCOUNT`,
  * SPEC §10), read in place of the stored one. It changes what the editor shows of the
  * account, not how a simulated send goes out: the `ses` profile keeps its own pace. A
- * simulated problem is the reading the real check would make of it (SPEC §9), so each warning
+ * simulated problem is the reading the real check would make of it (SPEC §13), so each warning
  * can be seen locally: a rejected key keeps the last answer, as a real one does.
  */
 export function simulatedAccountRow(

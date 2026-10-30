@@ -1,5 +1,5 @@
 /**
- * The email provider's connection (authed admin, SPEC §9).
+ * The email provider's connection (authed admin, SPEC §13).
  *
  *   GET /api/provider → where the connection stands, what the provider's account last said
  *                       about itself, any warning, in the server's words, whether email is

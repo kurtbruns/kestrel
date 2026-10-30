@@ -37,7 +37,7 @@ export interface TestKind {
  * Hand a test to the provider and answer for each recipient, in order. A request that gets
  * no answer at all is every recipient's, possibly arrived, never a thrown error: the
  * provider's silence isn't the server failing. What the answer says about the account is
- * recorded (SPEC §9): a test the provider takes is what proves email works.
+ * recorded (SPEC §13): a test the provider takes is what proves email works.
  */
 export async function sendTest(
   db: D1Database,

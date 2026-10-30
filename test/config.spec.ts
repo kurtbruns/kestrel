@@ -131,11 +131,11 @@ describe("getConfig — deploy config is validated", () => {
     }
   });
 
-  it("reads an unset PROVIDER as no provider connected, never the fake (SPEC §9)", () => {
+  it("reads an unset PROVIDER as no provider connected, never the fake (SPEC §13)", () => {
     expect(getConfig(varsOnly({ PROVIDER: undefined })).provider).toBe("none");
   });
 
-  it("reads the production template's empty PROVIDER as not connected (SPEC §9)", () => {
+  it("reads the production template's empty PROVIDER as not connected (SPEC §13)", () => {
     const config = getConfig(varsOnly({ PROVIDER: "" }));
     expect(config.provider).toBe("none");
     expect(config.devMode).toBe(false);

@@ -31,7 +31,7 @@ export function providerLabel(provider: string): string {
 
 /**
  * The Email provider row's value: the provider's name, the simulation a local server runs
- * in its place, or, while none is connected (SPEC §9), the state and the step that ends it.
+ * in its place, or, while none is connected (SPEC §13), the state and the step that ends it.
  */
 function providerValue(d: DeploymentView, status: ProviderStatusView | null): Html {
   if (d.provider === "none") {
@@ -40,7 +40,7 @@ function providerValue(d: DeploymentView, status: ProviderStatusView | null): Ht
   const simulating = d.simulation
     ? html`<span class="set-pill">Simulating ${SIMULATION_LABELS[d.simulation.profile]}${d.simulation.faults === "none" ? ", no failures" : ""}</span>`
     : null;
-  // Whether email is getting out (SPEC §9), its pill beside the name and its line after.
+  // Whether email is getting out (SPEC §13), its pill beside the name and its line after.
   const sending = status ? sendingHtml(status, fmt) : null;
   if (status && status.unknown_reason !== "stand_in") {
     // A simulated account (SPEC §10) shows its state as SES would, with the simulation named

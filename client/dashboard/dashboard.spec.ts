@@ -524,7 +524,7 @@ describe("dashboard", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  // SPEC §9, DESIGN §4: a deployment with no provider connected says so where the
+  // SPEC §13, DESIGN §4: a deployment with no provider connected says so where the
   // developer lands, as a standing state, and its checklist puts connecting one first.
   const steps = () => $$(".setup-steps li strong").map((s) => s.textContent);
   describe("while no email provider is connected", () => {
@@ -647,7 +647,7 @@ describe("dashboard", () => {
         expect(steps(), provider).toEqual([
           "Name your publication",
           "Check your setup",
-          // Only SES has an account whose sandbox AWS reviews (SPEC §9).
+          // Only SES has an account whose sandbox AWS reviews (SPEC §13).
           ...(provider === "ses" ? ["Request production access"] : []),
           "Bring your existing list",
           "Publish your first post",
@@ -1035,7 +1035,7 @@ describe("dashboard", () => {
     expect($(".pub-card [data-copy]").getAttribute("aria-label")).toBe("Copied");
     expect($("#toasts").textContent).toBe("");
   });
-  // SPEC §9: on SES, the dashboard says where the connection stands, from GET /api/provider.
+  // SPEC §13: on SES, the dashboard says where the connection stands, from GET /api/provider.
   describe("the SES connection", () => {
     const onSes = (status: Parameters<typeof providerStatus>[0]): FakeRoute[] => {
       const c = config();
@@ -1074,7 +1074,7 @@ describe("dashboard", () => {
       );
     });
 
-    it("raises a red line for a warning that stops every email (SPEC §9)", async () => {
+    it("raises a red line for a warning that stops every email (SPEC §13)", async () => {
       fake = world(
         [post()],
         sendServer([send()]),
@@ -1128,7 +1128,7 @@ describe("dashboard", () => {
       );
     });
 
-    it("says email isn't going out in one red line, with SES's words, the fix, and a test, standing for the errors that say the same (SPEC §8, §9)", async () => {
+    it("says email isn't going out in one red line, with SES's words, the fix, and a test, standing for the errors that say the same (SPEC §8, §13)", async () => {
       fake = world(
         [post()],
         sendServer([send()]),

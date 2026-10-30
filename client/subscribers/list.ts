@@ -119,7 +119,7 @@ export async function renderSubscribers(
       // Suppressions alone are no subscribers, so a list of only them still points the way in.
       const listEmpty = c.pending + c.confirmed + c.unsubscribed === 0;
       renderSubTable(listEl, data.subscribers, state, load, signal, listEmpty, inSandbox(prov));
-      // While email isn't going out, signups are paused (SPEC §7, §9): said where the list is,
+      // While email isn't going out, signups are paused (SPEC §7, §13): said where the list is,
       // with the fix on the dashboard.
       const paused = $("#subSignupsPaused");
       paused.hidden = !refusalOf(prov);

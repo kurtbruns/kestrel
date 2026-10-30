@@ -91,7 +91,7 @@ export type SimulatedAccount = (typeof SIMULATED_ACCOUNTS)[number];
 /**
  * The refusals of the account a local server's simulated SES can answer every email with
  * (`SIMULATE_SENDS=ses:refuse=<cause>`), each one an SES error response the real adapter
- * reads as that cause (SPEC §9, §10). Every refusing cause but a missing sending pool, which
+ * reads as that cause (SPEC §10, §13). Every refusing cause but a missing sending pool, which
  * SES reports only in a bulk entry's result, not as an error.
  */
 export const SIMULATED_REFUSALS = [
@@ -106,7 +106,7 @@ export const SIMULATED_REFUSALS = [
   "unsupported",
 ] as const satisfies readonly RefusingCause[];
 
-/** The account problems a local server can stand in for, each one the account check finds (SPEC §9). */
+/** The account problems a local server can stand in for, each one the account check finds (SPEC §13). */
 export const SIMULATED_ACCOUNT_PROBLEMS = [
   "set_missing",
   "set_paused",

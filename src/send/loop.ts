@@ -62,7 +62,7 @@ export interface SendLoopResult {
   /** Why the run stopped at a halted batch, or null if it did not. */
   halt: HaltReason | null;
   /** The provider's refusal of the account this run met, or null: with `accepted`, what the
-   *  run says about whether email is getting out (SPEC §9), which the sweep records once a
+   *  run says about whether email is getting out (SPEC §13), which the sweep records once a
    *  tick. */
   refusal: BatchHalt | null;
   /** When the provider last answered one of this run's batches, or null if none was answered. */

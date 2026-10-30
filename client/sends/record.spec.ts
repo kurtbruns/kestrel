@@ -1037,7 +1037,7 @@ describe("sent record", () => {
     expect($(".wbar-sub").textContent).toContain("next retry in 12 min");
   });
 
-  // A send held for want of a provider (SPEC §9): the advice's step is the link every
+  // A send held for want of a provider (SPEC §13): the advice's step is the link every
   // not-connected line carries, and the local preview names its restart instead.
   it("advises connecting a provider as a link, or the restart in the local preview", async () => {
     const advice = refusalAdvice("not_connected");

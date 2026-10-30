@@ -134,7 +134,7 @@ describe("a post reads the same on every route, with its send and its actions (S
     }
   });
 
-  it("offers schedule and send now only while a provider is connected (SPEC §9)", async () => {
+  it("offers schedule and send now only while a provider is connected (SPEC §13)", async () => {
     const draft = { id: "p1", status: "draft" } as const;
     expect(postActions(draft, getConfig(env)).map((a) => a.name)).toEqual([
       "edit",

@@ -820,7 +820,7 @@ describe("schema (0019_sending)", () => {
     ).first();
   }
 
-  it("keeps a live instance's signups open: a send SES took a recipient of makes email working (SPEC §7, §9)", async () => {
+  it("keeps a live instance's signups open: a send SES took a recipient of makes email working (SPEC §7, §13)", async () => {
     const send = await dueSend();
     await env.DB.prepare(
       "INSERT INTO deliveries (send_id, email, status, attempts, updated_at) VALUES (?, 'a@example.com', 'accepted', 1, 5000)",

@@ -61,7 +61,7 @@ export function composeNotification(n: DueNotification, config: Config): Rendere
     }
     case "refused":
       if (n.halt_cause === "not_connected") {
-        // Held for want of a provider (SPEC §9): no provider is refusing anything, so say
+        // Held for want of a provider (SPEC §13): no provider is refusing anything, so say
         // what it is, and the fix once.
         return message(
           `Problem with ${title}: no email provider is connected`,

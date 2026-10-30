@@ -845,7 +845,7 @@ describe("SesProvider.sendBatch", () => {
     });
   });
 
-  it("refuses a bad request that names a configuration set for the account, not the recipient (SPEC §9, §12)", async () => {
+  it("refuses a bad request that names a configuration set for the account, not the recipient (SPEC §12, §13)", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({

@@ -1,5 +1,5 @@
 /**
- * The email provider's connection (SPEC §9): the sweep's account check, which asks the
+ * The email provider's connection (SPEC §13): the sweep's account check, which asks the
  * provider about its own account and keeps the answer (`db/provider_account.ts`), and the view
  * both clients read (`GET /api/provider`), built from that answer and the deploy config.
  *
@@ -44,7 +44,7 @@ export const PERMISSION_RECHECK_MS = 60 * 60_000;
 
 /** What one check may cost: the row's read, the provider's requests, one write, and what it
  *  says about whether email is getting out: the sending row's read, and a refusal recorded
- *  with its notice (SPEC §9). */
+ *  with its notice (SPEC §13). */
 const CHECK_QUERIES = 5;
 
 /** Whether the account is due a check at `now`. */
@@ -133,7 +133,7 @@ export async function refreshProviderAccount(
   }
 }
 
-/** The refusing cause each error the account check can find stands for (SPEC §9): every one
+/** The refusing cause each error the account check can find stands for (SPEC §13): every one
  *  of them refuses every email, as a send would find. */
 const WARNING_CAUSES: Partial<Record<ProviderWarningCode, RefusingCause>> = {
   key_rejected: "credentials",
@@ -163,7 +163,7 @@ export function accountRefusals(
 }
 
 /**
- * What a reading, taken at `at`, says about whether email is getting out (SPEC §9). A refusal
+ * What a reading, taken at `at`, says about whether email is getting out (SPEC §13). A refusal
  * it finds makes email refusing, unless an email the provider took has contradicted that same
  * finding since, so a reading that stays wrong while email goes out pauses signups once, not
  * every ten minutes; it still shows as a warning, and a different finding pauses them again.
@@ -296,7 +296,7 @@ function fromEmail(from: string): string {
 }
 
 /**
- * What the account check found worth a look (SPEC §9), errors first: each `error` stops every
+ * What the account check found worth a look (SPEC §13), errors first: each `error` stops every
  * email until it's fixed, each `warn` leaves sending working. A part the check couldn't read
  * raises nothing.
  */

@@ -1,5 +1,5 @@
 /**
- * The setup phases, one row of what anyone can do per action (SPEC §7, §9): not connected,
+ * The setup phases, one row of what anyone can do per action (SPEC §7, §13): not connected,
  * not proven yet, refusing, working in the SES sandbox, and working with production access.
  * Each phase is reached by its own path, through local development's simulated SES and the
  * real adapter's reading of its answers (SPEC §10), never by writing the state: refusing is a
@@ -87,7 +87,7 @@ afterEach(() => {
   clearFakeNotifications();
 });
 
-describe("what the API says in each phase (SPEC §9)", () => {
+describe("what the API says in each phase (SPEC §13)", () => {
   const expected: Record<Phase, { state: string | null; signups: SignupsState }> = {
     not_connected: { state: null, signups: "not_open" },
     unproven: { state: "unproven", signups: "not_open" },
@@ -109,7 +109,7 @@ describe("what the API says in each phase (SPEC §9)", () => {
   });
 });
 
-describe("what anyone can do, by phase (SPEC §6, §7, §9)", () => {
+describe("what anyone can do, by phase (SPEC §6, §7, §13)", () => {
   /** Each action's answer in each phase, as the target's grid says it. */
   const GRID: Record<string, Record<Phase, (phase: Phase) => Promise<void>>> = {
     "send a test email": {

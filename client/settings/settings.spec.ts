@@ -1080,7 +1080,7 @@ describe("settings view", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect($<HTMLInputElement>("#setName").value).toBe("Birds Weekly");
   });
-  // SPEC §9: on SES, the Email provider row says where the connection stands (GET /api/provider).
+  // SPEC §13: on SES, the Email provider row says where the connection stands (GET /api/provider).
   describe("the SES connection", () => {
     const withStatus = (over: Parameters<typeof providerStatus>[0]) =>
       open([
@@ -1095,7 +1095,7 @@ describe("settings view", () => {
       sending_enabled: true,
     } as const;
 
-    it("says whether email is getting out: not proven yet, refusing with the fix, or when SES last took one (SPEC §9)", async () => {
+    it("says whether email is getting out: not proven yet, refusing with the fix, or when SES last took one (SPEC §13)", async () => {
       await withStatus({
         state: "production",
         unknown_reason: null,
@@ -1272,7 +1272,7 @@ describe("settings view", () => {
       );
     });
 
-    it("shows a warning that stops every email in red, and one that leaves sending working in amber (SPEC §9)", async () => {
+    it("shows a warning that stops every email in red, and one that leaves sending working in amber (SPEC §13)", async () => {
       await withStatus({
         warnings: [
           {

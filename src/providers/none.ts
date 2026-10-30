@@ -1,5 +1,5 @@
 /**
- * The transport of a deployment with no provider connected (SPEC §9): it carries nothing.
+ * The transport of a deployment with no provider connected (SPEC §13): it carries nothing.
  * The routes that would send refuse before they reach it (`requireConnectedProvider`), so
  * what reaches this adapter is a send scheduled before the provider was disconnected, or a
  * notification through the provider channel. It answers each batch the way a provider

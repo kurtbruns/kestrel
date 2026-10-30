@@ -91,7 +91,7 @@ export function stillHolds(n: notifications.DueAny, now: number): boolean {
   }
 }
 
-/** `contacts` takes what the provider channel's answers say about the account (SPEC §9),
+/** `contacts` takes what the provider channel's answers say about the account (SPEC §13),
  *  for the caller to record; a caller that records none leaves it out. */
 export async function notifyPublisher(
   env: AppEnv,

@@ -1,4 +1,4 @@
-// The email provider's connection as both clients read it: GET /api/provider (SPEC §9). One
+// The email provider's connection as both clients read it: GET /api/provider (SPEC §13). One
 // of a few states the editor branches on, the facts the provider's account gave about itself,
 // and any warning in the server's own words. The Worker's route builds this shape and the
 // editor consumes it; one definition, so neither can drift.
@@ -7,7 +7,7 @@ import type { HaltCause } from "./sends";
 import type { DeploymentProvider } from "./settings";
 
 /**
- * Where the connection stands. `not_connected`: no provider named (SPEC §9). `sandbox`: SES
+ * Where the connection stands. `not_connected`: no provider named (SPEC §13). `sandbox`: SES
  * mails only addresses verified with it. `production`: anyone can be mailed. `unknown`: the
  * app couldn't learn which (`unknown_reason` says why), which is never an error.
  */
@@ -84,7 +84,7 @@ export interface ProviderWarning {
 }
 
 /**
- * Whether email is getting out (SPEC §9). `unproven`: the provider hasn't taken an email yet.
+ * Whether email is getting out (SPEC §13). `unproven`: the provider hasn't taken an email yet.
  * `working`: the last email it was asked to take, it took. `refusing`: it refuses the account
  * for a reason that won't clear on its own, found by an email or by the account check.
  */
@@ -98,7 +98,7 @@ export type SendingPurpose = "test" | "confirmation" | "list" | "notification";
 export type RefusalFoundBy = SendingPurpose | "account_check";
 
 /**
- * The causes that make email `refusing` (SPEC §9, §12): the account's, the same for every
+ * The causes that make email `refusing` (SPEC §12, §13): the account's, the same for every
  * email, and not cleared by waiting. The sandbox, a spent quota, a rate limit, an outage, and
  * a refusal of one email's content or request are left out: each lets some email through or
  * clears on its own.
@@ -134,7 +134,7 @@ export interface SendingRefusal {
   at: number;
 }
 
-/** Whether email is getting out, as the provider last answered (SPEC §9). */
+/** Whether email is getting out, as the provider last answered (SPEC §13). */
 export interface SendingView {
   state: SendingState;
   /** When it last entered this state; null when nothing has been recorded yet. */

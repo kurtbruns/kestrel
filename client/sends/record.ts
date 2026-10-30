@@ -223,7 +223,7 @@ function watchBodyHtml(prog: SendView): Html {
   // The provider refusing the account is the one loud condition here without a control:
   // the fix is outside the app, and the send resumes on its own once it lands (SPEC §12).
   const refused = conditionOf(prog, "refused");
-  // No provider connected is held the same way but is no provider's refusal (SPEC §9): its
+  // No provider connected is held the same way but is no provider's refusal (SPEC §13): its
   // own headline, and the fix said once, with no provider's words to quote: the step as the
   // link every not-connected line carries (or, in the local preview, the restart).
   const unconnected = refused?.cause === "not_connected";

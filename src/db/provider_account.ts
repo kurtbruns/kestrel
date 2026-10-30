@@ -1,5 +1,5 @@
 /**
- * What the email provider's account last said about itself (SPEC §9): one row, written by the
+ * What the email provider's account last said about itself (SPEC §13): one row, written by the
  * sweep's account check (`services/provider_status.ts`) and read by the provider route and the
  * send loop's rate.
  *

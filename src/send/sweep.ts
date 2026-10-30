@@ -102,7 +102,7 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
   const window = new SendWindow(getProvider(config, env).maxRequestRate);
   // The send rate this tick's sends keep to, read the first time a send runs. A read that
   // fails paces by the deployment's own rate instead, so reading the account never stops a
-  // send (SPEC §9).
+  // send (SPEC §13).
   let rate: Promise<number | undefined> | undefined;
   const sendRate = (): Promise<number | undefined> => {
     rate ??=
@@ -197,7 +197,7 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
     log.error("notify.error", { error: errorText(err) });
   }
 
-  // What the tick's emails said about whether email is getting out (SPEC §9), in one
+  // What the tick's emails said about whether email is getting out (SPEC §13), in one
   // statement from what notifying left, which is nearly always room: notifying spends its
   // reserve only on a tick with notices due and nothing else left. A tick without the room
   // records nothing, and a later one records the provider's next answer. Caught inside.
@@ -222,7 +222,7 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
 }
 
 /** Run one send, adding what its run says about whether email is getting out to `contacts`
- *  (SPEC §9). */
+ *  (SPEC §13). */
 async function safeRun(
   env: AppEnv,
   sendId: string,

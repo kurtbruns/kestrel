@@ -13,7 +13,7 @@
  * minimum lead under the sweep's one-minute tick or over a day, one half of the Access pair
  * without the other, the fake transport on an origin off this machine without the opt-in that
  * says it is on purpose) throws a `ConfigError` naming the variable. A `PROVIDER` left unset is not a mistake but the not-connected state
- * (SPEC §9): the app runs and refuses to send.
+ * (SPEC §13): the app runs and refuses to send.
  */
 
 import type { RefusingCause } from "../shared/provider";
@@ -73,7 +73,7 @@ export interface Secrets {
    * What stands in for the provider in local dev (SPEC §10): the send simulation, naming the
    * provider it models, `ses` or `generic` (`1`), optionally with `:none` for no
    * injected failures, and for `ses` optionally `:refuse=<cause>`, a refusal of the account
-   * every email meets (SPEC §9); `not-connected` to run as a deployment with no provider (SPEC §9);
+   * every email meets (SPEC §13); `not-connected` to run as a deployment with no provider (SPEC §13);
    * `off` or unset for the plain, instant fake. Honored only in a dev-shaped env, so never
    * in a deployed one. `.dev.vars.example` ships it on.
    */
@@ -158,7 +158,7 @@ export type AppEnv = Env & Secrets & OptionalVars & OptionalBindings;
 export type NotifyChannel = "fake" | "cloudflare" | "provider";
 
 export interface Config {
-  /** The transport, or `none` when no provider is connected (SPEC §9): the app then runs
+  /** The transport, or `none` when no provider is connected (SPEC §13): the app then runs
    *  and refuses everything that would send. Local dev's `SIMULATE_SENDS=not-connected`
    *  sets it too, so the preview of that state runs the same code as the real one. */
   provider: ProviderName;
@@ -450,7 +450,7 @@ function readTeamDomain(raw: string): string {
 }
 
 /** `PROVIDER` as one of the known names, exactly as spelled. Unset means `none`, not
- *  connected (SPEC §9), on every host alike: the fake runs only where it is named, since a
+ *  connected (SPEC §13), on every host alike: the fake runs only where it is named, since a
  *  deployment that fell back to it would record every recipient accepted and mail no one.
  *  Anything else unknown is an error. */
 function readProvider(v: string | undefined): ProviderName {
@@ -664,7 +664,7 @@ function readMinLead(v: string | undefined): number {
 }
 
 /**
- * The refusal each account problem the check finds stands for (SPEC §9): a simulated account
+ * The refusal each account problem the check finds stands for (SPEC §13): a simulated account
  * with one refuses every simulated email the same way, as the real account would, unless
  * `SIMULATE_SENDS` names a refusal of its own. AWS reviewing the account leaves it sending.
  */
@@ -693,7 +693,7 @@ const SIMULATION_GENERIC = new Set(["1", "on", "true", "yes"]);
  * `SIMULATE_SENDS` as a profile and fault level, `not-connected`, or null for the plain
  * fake: `off` (or unset), `not-connected`, or a profile (`generic`, or `1`, `ses`)
  * and optionally `:realistic` (the default) or `:none`, then, for `ses`, optionally
- * `:refuse=<cause>`, a refusal of the account every email meets (SPEC §9, §10), as in
+ * `:refuse=<cause>`, a refusal of the account every email meets (SPEC §10, §13), as in
  * `ses:refuse=configuration`. Anything else is refused rather than read as off, so a typo
  * can't quietly turn the simulation off or pick the wrong provider.
  */
@@ -739,7 +739,7 @@ function readSimulateSends(
 /**
  * `SIMULATE_ACCOUNT` as the SES account a local server stands in for, or null to leave it
  * unread: off (or unset), or one of the states optionally followed by `:unrouted` or one
- * account problem the check finds, such as `:set_missing` (SPEC §9). It models
+ * account problem the check finds, such as `:set_missing` (SPEC §13). It models
  * the SES account, so it needs the `ses` send profile. Anything else is refused, as
  * `SIMULATE_SENDS` is, so a typo can't quietly show a state the developer didn't pick.
  */

@@ -1,5 +1,5 @@
 /** Public, token-scoped reader routes: subscribe, confirm, unsubscribe. The subscribe page
- *  takes signups only while email is working (SPEC §7, §9): with no provider connected, or
+ *  takes signups only while email is working (SPEC §7, §13): with no provider connected, or
  *  before the provider has taken an email, it says signups aren't open yet, and while the
  *  provider refuses the account it says they're paused, the same way for every address. */
 
@@ -128,7 +128,7 @@ export function subscribeNotAnEmailPage(c: RequestContext, identity: ReaderIdent
 }
 
 /**
- * The subscribe page before email is working (SPEC §7, §9): no provider connected, or none
+ * The subscribe page before email is working (SPEC §7, §13): no provider connected, or none
  * proven yet. No form, since an address taken now might never be sent its confirmation.
  * Every request gets it alike, so it says nothing about the list.
  */
@@ -192,7 +192,7 @@ export async function subscribe(c: RequestContext): Promise<Response> {
   const signups = await readSignups(c.env.DB, c.config);
   if (signups !== "open") {
     // Refused before the address is read, so no address is stored or even looked at, and
-    // every request gets the same answer (SPEC §7, §9). Logged, so the operator can see
+    // every request gets the same answer (SPEC §7, §13). Logged, so the operator can see
     // readers arriving while signups are closed.
     const connected = c.config.provider !== "none";
     if (connected) {

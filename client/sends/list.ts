@@ -141,7 +141,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
   function renderStuck(live: SendView[]) {
     // A refused send carries no control: the fix is in the provider's account or the
     // deployment's secrets, and the send resumes on its own once it lands. Each card is the
-    // server's words for its condition. A send held for want of a provider (SPEC §9) is the
+    // server's words for its condition. A send held for want of a provider (SPEC §13) is the
     // deployment's state showing on a send, so while the deployment is not connected the
     // held sends and the state are one card in place of the state's amber line, with the
     // fix once, as a link (DESIGN §4).

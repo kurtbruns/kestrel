@@ -1,5 +1,5 @@
 /**
- * Whether email is getting out (SPEC §9): which answers make it refusing and which don't,
+ * Whether email is getting out (SPEC §13): which answers make it refusing and which don't,
  * that an email the provider takes makes it working, that every kind of email writes it, and
  * that the account check pauses signups and lifts only a pause it caused.
  */
@@ -50,7 +50,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("what makes email refusing (SPEC §9)", () => {
+describe("what makes email refusing (SPEC §13)", () => {
   it.each(REFUSING_CAUSES)("a refusal for %s does", async (cause) => {
     await noteContact(env.DB, config, "test", contactOutcome(halted(cause)), Date.now());
     expect(await readSending(env.DB)).toMatchObject({
@@ -114,7 +114,7 @@ describe("what makes email refusing (SPEC §9)", () => {
   });
 });
 
-describe("a send to the list writes it, once a tick (SPEC §9, §12)", () => {
+describe("a send to the list writes it, once a tick (SPEC §12, §13)", () => {
   it("a send the provider takes makes email working", async () => {
     await seedConfirmed(["a@example.com", "b@example.com"]);
     await dueSend();
@@ -137,7 +137,7 @@ describe("a send to the list writes it, once a tick (SPEC §9, §12)", () => {
   });
 });
 
-describe("the account check finds a refusal without sending (SPEC §8, §9)", () => {
+describe("the account check finds a refusal without sending (SPEC §8, §13)", () => {
   const broken = withVars({
     SIMULATE_SENDS: "ses:none",
     SIMULATE_ACCOUNT: "production:set_missing",
@@ -217,7 +217,7 @@ describe("the account check finds a refusal without sending (SPEC §8, §9)", ()
   });
 });
 
-describe("an older answer never replaces a newer one (SPEC §9)", () => {
+describe("an older answer never replaces a newer one (SPEC §13)", () => {
   it("a sweep's refusal from before the fix doesn't undo the test that proved it", async () => {
     const before = Date.now();
     const contacts = new Contacts();
@@ -254,7 +254,7 @@ describe("an older answer never replaces a newer one (SPEC §9)", () => {
   });
 });
 
-describe("a refusal's words never name a reader (SPEC §7, §9)", () => {
+describe("a refusal's words never name a reader (SPEC §7, §13)", () => {
   it("keeps only the sender of the identities SES's not-verified refusal lists", async () => {
     const words =
       "ses 400 MessageRejected: Email address is not verified. The following identities failed the check in region US-EAST-1: ada@example.org, newsletter@send.example.com, bo@example.org";
@@ -284,7 +284,7 @@ describe("a refusal's words never name a reader (SPEC §7, §9)", () => {
   });
 });
 
-describe("a finding an email contradicted pauses signups once (SPEC §9)", () => {
+describe("a finding an email contradicted pauses signups once (SPEC §13)", () => {
   const sender = withVars({
     SIMULATE_SENDS: "ses:none",
     SIMULATE_ACCOUNT: "production:sender_unverified",

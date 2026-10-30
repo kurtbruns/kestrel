@@ -71,7 +71,7 @@ interface HealthAlert {
 // keeps no rule of its own: the bounce spike included, which the server reads off each
 // recently sent send. Only the loud kinds are lines here; a re-made send's note and a
 // provider outage, which its retry explains, are shown where the send is. The one line
-// not about a send is the deployment's: no email provider connected (SPEC §9), an amber
+// not about a send is the deployment's: no email provider connected (SPEC §13), an amber
 // standing state with no time, read from the deployment reflection, gone once one is set.
 // When that state is holding a send, the two are said as one red line instead of two.
 // While the Finish setting up card carries its Connect Amazon SES step, the card says the
@@ -116,7 +116,7 @@ function computeHealth(
   }
   // The provider refusing the account stops every send it touches until the operator
   // fixes the account (SPEC §12): one red line, in the server's words for it.
-  // A send held for want of a provider (SPEC §9) is the deployment's state showing on a
+  // A send held for want of a provider (SPEC §13) is the deployment's state showing on a
   // send, so while the deployment is not connected the two are one line: the state, the
   // held sends, and the fix once, as a link. Red, since a send is waiting on the operator.
   const notConnected = providerNotConnected();
@@ -205,7 +205,7 @@ function computeHealth(
       text: html`<span class="dash-not-connected">No email provider connected, so nothing can be sent yet. ${connectProviderLink()} to start sending.</span>`,
     });
   }
-  // Email not going out (SPEC §8, §9): one red line with SES's words, the fix, and the way
+  // Email not going out (SPEC §8, §13): one red line with SES's words, the fix, and the way
   // out, standing for the account check's errors, which say the same cause.
   const refusal = refusalOf(provider);
   if (refusal) {

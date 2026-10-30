@@ -1,5 +1,5 @@
 /**
- * Whether email is getting out (SPEC §9): one row, written by every answer the provider gives
+ * Whether email is getting out (SPEC §13): one row, written by every answer the provider gives
  * a test, a confirmation, a list send, or a notification, and by the account check
  * (`services/sending.ts` decides what an answer means). Each write is one statement, so a
  * contact costs the path that made it one query.
@@ -128,7 +128,7 @@ export function refusalStatement(
 /**
  * The account check read the account clean at `at`: a refusal it found itself lifts, back to
  * where email stood before it, working if the provider has ever taken an email and not proven
- * yet if not (SPEC §9), and the findings emails contradicted are forgotten, so a real one
+ * yet if not (SPEC §13), and the findings emails contradicted are forgotten, so a real one
  * later pauses signups again. A refusal an email met is left as it is. Whether it changed
  * anything.
  */

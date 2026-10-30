@@ -689,21 +689,21 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
       "sending",
       "signups",
     ]);
-    // Whether SES is still in its sandbox (SPEC §9); the suite's stand-in has no account.
+    // Whether SES is still in its sandbox (SPEC §13); the suite's stand-in has no account.
     expect(pub.deployment.connection).toEqual({
       state: "unknown",
       review: null,
       unknown_reason: "stand_in",
       warnings: [],
     });
-    // Whether email is getting out, and so whether signups are open (SPEC §7, §9): nothing
+    // Whether email is getting out, and so whether signups are open (SPEC §7, §13): nothing
     // has been sent yet.
     expect(pub.deployment.sending).toMatchObject({ state: "unproven", refusal: null });
     expect(pub.deployment.signups).toBe("not_open");
     expect(pub.scheduled_sends).toEqual([]);
   });
 
-  it("carries each connection warning's severity, so an error that stops every email can be raised first (SPEC §9)", async () => {
+  it("carries each connection warning's severity, so an error that stops every email can be raised first (SPEC §13)", async () => {
     const vars = { SIMULATE_SENDS: "ses", SIMULATE_ACCOUNT: "production:set_missing" };
     const res = await rpc(
       "tools/call",
@@ -723,7 +723,7 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
     });
   });
 
-  it("sends a template test, the step that proves email works, and says signups opened (SPEC §7, §9)", async () => {
+  it("sends a template test, the step that proves email works, and says signups opened (SPEC §7, §13)", async () => {
     const r = await callOk("send_template_test", { to: "you@example.com" });
     expect(r).toMatchObject({
       sent: 1,
