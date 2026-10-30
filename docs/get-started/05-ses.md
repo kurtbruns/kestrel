@@ -130,7 +130,7 @@ SES reports bounces and complaints through Amazon Simple Notification Service (S
 
 ## 5. Create the app's AWS key
 
-The app sends through an AWS Identity and Access Management (IAM) user whose key can only send email and read the account's sending status. That limits the harm if the key ever leaks. Reading the status lets the app show whether SES is still in the sandbox, take its send rate from the account, and warn when bounces and complaints can't reach it.
+The app sends through an AWS Identity and Access Management (IAM) user whose key can only send email and read the account's sending status. That limits the harm if the key ever leaks. Reading the status lets the app show whether SES is still in the sandbox and take its send rate from the account. It also warns, without sending anything, when the configuration set is missing or paused, the sender isn't verified, or bounces and complaints can't reach the app.
 
 If `kestrel-sender` already exists, from an earlier release, don't create a second user or key. Update its policy instead, as the end of this section shows.
 
@@ -150,7 +150,8 @@ If `kestrel-sender` already exists, from an earlier release, don't create a seco
             "ses:SendTemplatedEmail",
             "ses:SendBulkTemplatedEmail",
             "ses:GetAccount",
-            "ses:GetEmailIdentity"
+            "ses:GetEmailIdentity",
+            "ses:GetConfigurationSet"
           ],
           "Resource": "*"
         }
@@ -182,7 +183,7 @@ If `kestrel-sender` already exists, from an earlier release, don't create a seco
     npx wrangler secret put AWS_SECRET_ACCESS_KEY --env production
     ```
 
-To update an existing key's policy, open **Policies** in the IAM console, then `kestrel-send-email`, and choose **Edit**. In the JSON editor, make its `Action` list match the policy above, and save. Without `ses:SendTemplatedEmail`, SES refuses even a test email. Once the key may call `ses:GetAccount`, the app's next check, within an hour, reads the account.
+To update an existing key's policy, open **Policies** in the IAM console, then `kestrel-send-email`, and choose **Edit**. In the JSON editor, make its `Action` list match the policy above, and save. Without `ses:SendTemplatedEmail`, SES refuses even a test email. Once the key may call `ses:GetAccount`, the app's next check, within an hour, reads the account. Without `ses:GetConfigurationSet`, the app can't tell whether the configuration set exists, so it says nothing about it rather than guessing.
 
 ## 6. Connect the app and deploy
 

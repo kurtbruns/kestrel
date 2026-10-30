@@ -1060,6 +1060,46 @@ describe("dashboard", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
+    it("says AWS has replied in its case, never that it denied production access", async () => {
+      fake = world(
+        [],
+        sendServer(),
+        none,
+        onSes({ ...sandbox, review: "denied", review_case: "1234567890" }),
+      );
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect($(".setup-access .muted").textContent).toBe(
+        "AWS hasn’t granted it yet. It has replied in AWS Support, case 1234567890: answer there.",
+      );
+    });
+
+    it("raises a red line for a warning that stops every email (SPEC §9)", async () => {
+      fake = world(
+        [post()],
+        sendServer([send()]),
+        counts,
+        onSes({
+          state: "production",
+          unknown_reason: null,
+          warnings: [
+            {
+              code: "key_rejected",
+              severity: "error",
+              message: "Amazon SES rejects Kestrel’s AWS key, so no email can go out.",
+              docs: { slug: "ses", anchor: "5-create-the-apps-aws-key" },
+            },
+          ],
+        }),
+      );
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect($("#dashHealth .health").classList.contains("red")).toBe(true);
+      expect($(".dash-provider-warning").textContent).toBe(
+        "Amazon SES rejects Kestrel’s AWS key, so no email can go out. Create the app’s AWS key",
+      );
+    });
+
     it("checks the step off once AWS grants production access", async () => {
       fake = world([], sendServer(), none, onSes({ state: "production", unknown_reason: null }));
       await mount(renderDashboard);

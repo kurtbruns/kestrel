@@ -28,6 +28,7 @@ import { fetchWith, withVars } from "./support/worker_env";
 
 const ACCOUNT = "https://email.us-east-1.amazonaws.com/v2/email/account";
 const IDENTITY = "https://email.us-east-1.amazonaws.com/v2/email/identities/";
+const SET = "https://email.us-east-1.amazonaws.com/v2/email/configuration-sets/";
 const SES = withVars(SES_DEPLOY);
 const SES_WITH_SET = withVars({ ...SES_DEPLOY, SES_CONFIGURATION_SET: "kestrel-mail" });
 
@@ -51,6 +52,9 @@ const verified = (set: string | null) =>
     VerifiedForSendingStatus: true,
     ...(set ? { ConfigurationSetName: set } : {}),
   });
+/** GetConfigurationSet for a set that exists, its sending on unless `sending` is false. */
+const configurationSet = (sending = true) =>
+  ok({ ConfigurationSetName: "kestrel-mail", SendingOptions: { SendingEnabled: sending } });
 const sesError = (status: number, type: string, message = "") =>
   new Response(JSON.stringify({ message }), {
     status,
@@ -150,12 +154,29 @@ describe("SIMULATE_ACCOUNT", () => {
   it("is off when unset or off, and names a state, and whether bounces reach the app, otherwise", () => {
     expect(simulated("off")).toBeNull();
     expect(simulated("")).toBeNull();
-    expect(simulated("Sandbox")).toEqual({ state: "sandbox", bounces_routed: true });
-    expect(simulated("denied:unrouted")).toEqual({ state: "denied", bounces_routed: false });
+    expect(simulated("Sandbox")).toEqual({ state: "sandbox", bounces_routed: true, problem: null });
+    expect(simulated("denied:unrouted")).toEqual({
+      state: "denied",
+      bounces_routed: false,
+      problem: null,
+    });
+    expect(simulated("production:Set_Missing")).toEqual({
+      state: "production",
+      bounces_routed: true,
+      problem: "set_missing",
+    });
   });
 
   it("refuses a value it doesn't know, and an account with no simulated SES beside it", () => {
-    for (const value of ["sandboxed", "sandbox:routed", "sandbox:unrouted:x", ":unrouted"]) {
+    for (const value of [
+      "sandboxed",
+      "sandbox:routed",
+      "sandbox:unrouted:x",
+      ":unrouted",
+      "sandbox:unrouted:set_missing",
+      "set_missing",
+      "permission:key_rejected",
+    ]) {
       expect(() => simulated(value)).toThrow(
         expect.objectContaining({ name: "ConfigError", variable: "SIMULATE_ACCOUNT" }),
       );
@@ -207,16 +228,36 @@ describe("SIMULATE_ACCOUNT", () => {
       "bounces_not_routed",
     ]);
   });
+
+  it("shows each account problem the check finds as its warning, so each can be seen locally (SPEC §9)", async () => {
+    const shown = async (value: string) =>
+      (await read(value)).warnings.map((w) => [w.code, w.severity]);
+    expect(await shown("production:set_missing")).toEqual([["configuration_set_missing", "error"]]);
+    expect(await shown("production:set_paused")).toEqual([["configuration_set_paused", "error"]]);
+    expect(await shown("production:sending_disabled")).toEqual([["sending_disabled", "error"]]);
+    expect(await shown("production:shutdown")).toEqual([["sending_disabled", "error"]]);
+    expect(await shown("production:sender_unverified")).toEqual([["sender_unverified", "error"]]);
+    expect(await shown("production:probation")).toEqual([["account_probation", "warn"]]);
+    // A rejected key keeps the last reading, as a real check does.
+    expect(await read("sandbox:key_rejected")).toMatchObject({
+      state: "sandbox",
+      warnings: [{ code: "key_rejected", severity: "error" }],
+    });
+  });
 });
 
 describe("the account check", () => {
   it("reads a sandbox account and its pending review from SES while nothing is sending", async () => {
     const asked = answerReads((url) =>
-      url === ACCOUNT ? ok(accountBody()) : verified("kestrel-mail"),
+      url === ACCOUNT
+        ? ok(accountBody())
+        : url.startsWith(SET)
+          ? configurationSet()
+          : verified("kestrel-mail"),
     );
     await sweep(SES);
 
-    expect(asked).toEqual([ACCOUNT, `${IDENTITY}news%40send.birds.example`]);
+    expect(asked).toEqual([ACCOUNT, `${IDENTITY}news%40send.birds.example`, `${SET}kestrel-mail`]);
     const view = await status({ ...SES_DEPLOY });
     expect(view).toEqual({
       provider: "ses",
@@ -312,13 +353,20 @@ describe("the account check", () => {
     expect(await status({ ...SES_DEPLOY })).toEqual(before);
   });
 
-  it("doesn't read the identity while SES_CONFIGURATION_SET names the set", async () => {
-    const asked = answerReads(() => ok(accountBody()));
+  it("reads the identity and the named set on every check, whether or not SES_CONFIGURATION_SET names one (SPEC §9)", async () => {
+    const asked = answerReads((url) =>
+      url === ACCOUNT
+        ? ok(accountBody())
+        : url.startsWith(SET)
+          ? configurationSet()
+          : verified(null),
+    );
     await sweep(SES_WITH_SET);
-    expect(asked).toEqual([ACCOUNT]);
-    expect(
-      (await status({ ...SES_DEPLOY, SES_CONFIGURATION_SET: "kestrel-mail" })).configuration_set,
-    ).toEqual({ name: "kestrel-mail", source: "setting" });
+    expect(asked).toEqual([ACCOUNT, `${IDENTITY}news%40send.birds.example`, `${SET}kestrel-mail`]);
+    expect(await status({ ...SES_DEPLOY, SES_CONFIGURATION_SET: "kestrel-mail" })).toMatchObject({
+      configuration_set: { name: "kestrel-mail", source: "setting" },
+      warnings: [],
+    });
   });
 
   it("reads the identity's set from the most specific identity that exists", async () => {
@@ -327,13 +375,16 @@ describe("the account check", () => {
         ? ok(accountBody())
         : url === `${IDENTITY}send.birds.example`
           ? verified("kestrel-mail")
-          : sesError(404, "NotFoundException"),
+          : url.startsWith(SET)
+            ? configurationSet()
+            : sesError(404, "NotFoundException"),
     );
     await sweep(SES);
     expect(asked).toEqual([
       ACCOUNT,
       `${IDENTITY}news%40send.birds.example`,
       `${IDENTITY}send.birds.example`,
+      `${SET}kestrel-mail`,
     ]);
     expect((await status({ ...SES_DEPLOY })).configuration_set).toEqual({
       name: "kestrel-mail",
@@ -395,6 +446,253 @@ describe("the bounces warning (SPEC §8, §10)", () => {
       headingAnchor((inner as string).replace(/<[^>]+>/g, "")),
     );
     expect(headings).toContain(BOUNCES_DOC.anchor);
+  });
+});
+
+// SPEC §9: the check finds, without sending, the setup mistakes that would otherwise surface
+// only when SES refuses a send, a test, or a reader's confirmation.
+describe("the account problems the check finds (SPEC §9)", () => {
+  /** SES's answers for a healthy sandbox account with `kestrel-mail` named, `over` by URL. */
+  const reads = (over: (url: string) => Response | undefined = () => undefined) =>
+    answerReads(
+      (url) =>
+        over(url) ??
+        (url === ACCOUNT
+          ? ok(accountBody())
+          : url.startsWith(SET)
+            ? configurationSet()
+            : verified("kestrel-mail")),
+    );
+  const WITH_SET = { ...SES_DEPLOY, SES_CONFIGURATION_SET: "kestrel-mail" };
+  const codes = async (vars: Record<string, string> = WITH_SET) =>
+    (await status(vars)).warnings.map((w) => [w.code, w.severity]);
+
+  it("says a named configuration set SES doesn't have is missing, an error", async () => {
+    reads((url) => (url.startsWith(SET) ? sesError(404, "NotFoundException") : undefined));
+    await sweep(SES_WITH_SET);
+    expect((await status(WITH_SET)).warnings).toEqual([
+      {
+        code: "configuration_set_missing",
+        severity: "error",
+        message:
+          "SES_CONFIGURATION_SET names kestrel-mail, and SES has no configuration set by that name in us-east-1, so it refuses every email. Correct the name, or create the set in that region.",
+        docs: BOUNCES_DOC,
+      },
+    ]);
+  });
+
+  it("checks the identity's default set when no set is named", async () => {
+    reads((url) => (url.startsWith(SET) ? sesError(404, "NotFoundException") : undefined));
+    await sweep(SES);
+    expect(await codes({ ...SES_DEPLOY })).toEqual([["configuration_set_missing", "error"]]);
+  });
+
+  it("says a set whose sending is off is paused, an error", async () => {
+    reads((url) => (url.startsWith(SET) ? configurationSet(false) : undefined));
+    await sweep(SES_WITH_SET);
+    expect(await codes()).toEqual([["configuration_set_paused", "error"]]);
+  });
+
+  it("forgets a finding about a set the deployment no longer names", async () => {
+    reads((url) => (url.startsWith(SET) ? sesError(404, "NotFoundException") : undefined));
+    await sweep(SES_WITH_SET);
+    expect(await codes({ ...SES_DEPLOY, SES_CONFIGURATION_SET: "kestrel-other" })).toEqual([]);
+  });
+
+  it("says nothing about the set when the key may not read it", async () => {
+    reads((url) => (url.startsWith(SET) ? sesError(403, "AccessDeniedException") : undefined));
+    await sweep(SES_WITH_SET);
+    expect(await codes()).toEqual([]);
+  });
+
+  it("says the sender isn't verified when no identity covering the From address is", async () => {
+    reads((url) =>
+      url.startsWith(IDENTITY)
+        ? url.endsWith("birds.example") && !url.includes("send.")
+          ? ok({ IdentityType: "DOMAIN", VerifiedForSendingStatus: false })
+          : sesError(404, "NotFoundException")
+        : undefined,
+    );
+    await sweep(SES_WITH_SET);
+    expect((await status(WITH_SET)).warnings).toMatchObject([
+      {
+        code: "sender_unverified",
+        severity: "error",
+        message:
+          "SES has no verified identity for news@send.birds.example in us-east-1, so it refuses every email. Verify send.birds.example in SES, in the region AWS_REGION names.",
+        docs: { slug: "ses", anchor: "1-verify-your-sending-hostname" },
+      },
+    ]);
+  });
+
+  it("never calls a From address unverified when it has more parent domains than one check reads", async () => {
+    const LONG = {
+      ...WITH_SET,
+      SENDING_DOMAIN: "news.mail.send.birds.example",
+      FROM_ADDRESS: "Birds <hi@news.mail.send.birds.example>",
+    };
+    const asked = reads((url) =>
+      url.startsWith(IDENTITY) ? sesError(404, "NotFoundException") : undefined,
+    );
+    await sweep(withVars(LONG));
+    // The address and three of its four domains; birds.example, unread, could be verified.
+    expect(asked.filter((u) => u.startsWith(IDENTITY))).toHaveLength(4);
+    expect(await codes(LONG)).toEqual([]);
+  }, 15_000); // six reads, a second apart
+
+  it("keeps the last sender and set findings when a later check can't read them", async () => {
+    reads((url) =>
+      url.startsWith(SET)
+        ? sesError(404, "NotFoundException")
+        : url.startsWith(IDENTITY)
+          ? sesError(404, "NotFoundException")
+          : undefined,
+    );
+    await sweep(SES_WITH_SET);
+    const found = [
+      ["configuration_set_missing", "error"],
+      ["sender_unverified", "error"],
+    ];
+    expect(await codes()).toEqual(found);
+
+    vi.restoreAllMocks();
+    reads((url) => (url === ACCOUNT ? undefined : sesError(500, "InternalFailure")));
+    vi.setSystemTime(Date.now() + ACCOUNT_CHECK_INTERVAL_MS);
+    await sweep(SES_WITH_SET);
+    expect((await readProviderAccount(env.DB))?.checkedAt).toBe(Date.now());
+    expect(await codes()).toEqual(found);
+  }, 15_000); // two checks of up to six reads, a second apart
+
+  it("says nothing about the sender when the key may not read the identity", async () => {
+    reads((url) => (url.startsWith(IDENTITY) ? sesError(403, "AccessDeniedException") : undefined));
+    await sweep(SES_WITH_SET);
+    expect(await codes()).toEqual([]);
+  });
+
+  it("says sending is off for an account its owner turned off, an error, with the CLI command that turns it on", async () => {
+    reads((url) => (url === ACCOUNT ? ok(accountBody({ SendingEnabled: false })) : undefined));
+    await sweep(SES_WITH_SET);
+    expect((await status(WITH_SET)).warnings).toMatchObject([
+      {
+        code: "sending_disabled",
+        severity: "error",
+        message:
+          "Sending is turned off for your SES account in us-east-1, so no email can go out. Turn it back on with the AWS CLI: aws sesv2 put-account-sending-attributes --sending-enabled --region us-east-1",
+      },
+    ]);
+  });
+
+  it("says sending is off for an account AWS has paused, an error", async () => {
+    reads((url) =>
+      url === ACCOUNT
+        ? ok(accountBody({ EnforcementStatus: "SHUTDOWN", SendingEnabled: false }))
+        : undefined,
+    );
+    await sweep(SES_WITH_SET);
+    expect((await status(WITH_SET)).warnings).toMatchObject([
+      {
+        code: "sending_disabled",
+        severity: "error",
+        message: expect.stringMatching(/^AWS has paused/),
+        docs: { slug: "troubleshooting", anchor: "a-problem-with-amazon-ses" },
+      },
+    ]);
+  });
+
+  it("warns while AWS reviews the account, which still sends", async () => {
+    reads((url) =>
+      url === ACCOUNT ? ok(accountBody({ EnforcementStatus: "PROBATION" })) : undefined,
+    );
+    await sweep(SES_WITH_SET);
+    expect(await codes()).toEqual([["account_probation", "warn"]]);
+  });
+
+  it.each([
+    [403, "UnrecognizedClientException"],
+    [403, "SignatureDoesNotMatch"],
+    [403, "InvalidSignatureException"],
+    [403, "OptInRequired"],
+  ])("says a %i %s is a rejected key, never unknown for want of an answer", async (code, type) => {
+    const spies = [vi.spyOn(console, "log"), vi.spyOn(console, "warn"), vi.spyOn(console, "error")];
+    const asked = answerReads(() => sesError(code, type, "refused"));
+    await sweep(SES);
+    expect(asked).toEqual([ACCOUNT]);
+    expect(await status({ ...SES_DEPLOY })).toMatchObject({
+      state: "unknown",
+      unknown_reason: "rejected",
+      warnings: [
+        { code: "key_rejected", severity: "error", docs: { anchor: "5-create-the-apps-aws-key" } },
+      ],
+    });
+    expect(logged(...spies).filter((l) => l.event === "provider.account_checked")).toMatchObject([
+      { level: "info", outcome: "rejected", error: `ses ${code} ${type}: refused` },
+    ]);
+  });
+
+  it("keeps the last reading when the key is later rejected, adding the warning", async () => {
+    reads();
+    await sweep(SES_WITH_SET);
+    vi.restoreAllMocks();
+    answerReads(() => sesError(403, "UnrecognizedClientException"));
+    vi.setSystemTime(Date.now() + ACCOUNT_CHECK_INTERVAL_MS);
+    await sweep(SES_WITH_SET);
+    expect(await status(WITH_SET)).toMatchObject({
+      state: "sandbox",
+      unknown_reason: null,
+      warnings: [{ code: "key_rejected" }],
+    });
+  });
+
+  it("reads a request refused as expired as no answer, since that is the clock, not the key", async () => {
+    answerReads(() => sesError(400, "RequestExpired", "Request has expired."));
+    await sweep(SES);
+    expect(await status({ ...SES_DEPLOY })).toMatchObject({
+      state: "unknown",
+      unknown_reason: "unreachable",
+      warnings: [],
+    });
+  });
+
+  it("links each warning to a heading the docs have", () => {
+    const docs = renderDocs().docs;
+    const config = getConfig(withVars(WITH_SET));
+    const now = Date.now();
+    const warnings = [
+      providerStatusView(config, {
+        attemptedAt: now,
+        outcome: "rejected",
+        checkedAt: now,
+        answer: answer({
+          enforcement: "probation",
+          sendingEnabled: false,
+          senderVerified: false,
+          configurationSet: { name: "kestrel-mail", exists: false, sendingEnabled: false },
+        }),
+      }).warnings,
+      providerStatusView(config, {
+        attemptedAt: now,
+        outcome: "ok",
+        checkedAt: now,
+        answer: answer({ enforcement: "shutdown" }),
+      }).warnings,
+    ].flat();
+    expect(new Set(warnings.map((w) => w.code))).toEqual(
+      new Set([
+        "key_rejected",
+        "sending_disabled",
+        "configuration_set_missing",
+        "sender_unverified",
+        "account_probation",
+      ]),
+    );
+    for (const w of warnings) {
+      const html = docs.find((d) => d.slug === w.docs.slug)?.html ?? "";
+      // An entity such as the apostrophe's is punctuation, which the anchor rule drops anyway.
+      const headings = [...html.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/g)].map(([, inner]) =>
+        headingAnchor((inner as string).replace(/<[^>]+>|&[#a-z0-9]+;/gi, "")),
+      );
+      expect(headings, w.code).toContain(w.docs.anchor);
+    }
   });
 });
 

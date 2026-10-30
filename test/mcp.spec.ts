@@ -686,8 +686,33 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
       "connection",
     ]);
     // Whether SES is still in its sandbox (SPEC §9); the suite's stand-in has no account.
-    expect(pub.deployment.connection).toEqual({ state: "unknown", review: null, warnings: [] });
+    expect(pub.deployment.connection).toEqual({
+      state: "unknown",
+      review: null,
+      unknown_reason: "stand_in",
+      warnings: [],
+    });
     expect(pub.scheduled_sends).toEqual([]);
+  });
+
+  it("carries each connection warning's severity, so an error that stops every email can be raised first (SPEC §9)", async () => {
+    const vars = { SIMULATE_SENDS: "ses", SIMULATE_ACCOUNT: "production:set_missing" };
+    const res = await rpc(
+      "tools/call",
+      { name: "get_publication", arguments: {} },
+      await adminAuth(PERSON),
+      (init) => fetchWith(vars, "/api/mcp", init),
+    );
+    const { result } = await readJson(res);
+    expect(result.isError).toBe(false);
+    const pub = JSON.parse(result.content[0].text);
+    expect(pub.deployment.connection).toMatchObject({
+      state: "production",
+      unknown_reason: null,
+      warnings: [
+        { severity: "error", message: expect.stringContaining("SES has no configuration set") },
+      ],
+    });
   });
 
   it("reads any other admin GET through the escape hatch, and never a write or a dev route", async () => {

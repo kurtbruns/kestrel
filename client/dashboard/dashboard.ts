@@ -25,6 +25,7 @@ import {
   readProviderStatus,
   readsSesAccount,
   sandboxHealthHtml,
+  stopsSending,
   warningHtml,
 } from "../provider_status";
 import { followSends, type SendStage, type SendsUpdate, stageOf } from "../send_state";
@@ -203,7 +204,7 @@ function computeHealth(
   }
   for (const w of provider?.warnings ?? []) {
     alerts.push({
-      level: "amber",
+      level: stopsSending(w) ? "red" : "amber",
       text: html`<span class="dash-provider-warning">${warningHtml(w)}</span>`,
     });
   }

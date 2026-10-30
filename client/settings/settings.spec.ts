@@ -1027,7 +1027,7 @@ describe("settings view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
-    it("says AWS is reviewing the request, or that it denied it with its case", async () => {
+    it("says AWS is reviewing the request, or that it has replied in its case without a grant, never that it denied it", async () => {
       await withStatus({ state: "sandbox", unknown_reason: null, review: "pending", account });
       expect($("#providerReview").textContent).toBe(
         "AWS is reviewing your request for production access. Until then, it mails only addresses verified in SES, up to 200 a day.",
@@ -1042,7 +1042,7 @@ describe("settings view", () => {
         account,
       });
       expect($("#providerReview").textContent).toBe(
-        "AWS denied production access. Its reply is in AWS Support, case 1234567890. What AWS asks for",
+        "AWS hasn’t granted production access yet. It has replied in AWS Support, case 1234567890: read its reply and answer there. What AWS asks for",
       );
       expect($<HTMLAnchorElement>("#providerReview a").getAttribute("href")).toBe(
         "#/docs/production-access/3-answer-awss-questions",
@@ -1095,7 +1095,7 @@ describe("settings view", () => {
         simulation: {
           profile: "ses",
           faults: "realistic",
-          account: { state: "production", bounces_routed: true },
+          account: { state: "production", bounces_routed: true, problem: null },
         },
       };
       await open([
@@ -1128,6 +1128,34 @@ describe("settings view", () => {
       );
       expect($<HTMLAnchorElement>("#providerValue .set-warn a").getAttribute("href")).toBe(
         "#/docs/ses/4-send-bounces-and-complaints-to-the-app",
+      );
+    });
+
+    it("shows a warning that stops every email in red, and one that leaves sending working in amber (SPEC §9)", async () => {
+      await withStatus({
+        warnings: [
+          {
+            code: "configuration_set_missing",
+            severity: "error",
+            message: "SES_CONFIGURATION_SET names kestrel-mail, and SES has no such set.",
+            docs: { slug: "ses", anchor: "4-send-bounces-and-complaints-to-the-app" },
+          },
+          {
+            code: "account_probation",
+            severity: "warn",
+            message: "AWS is reviewing your SES account.",
+            docs: { slug: "troubleshooting", anchor: "a-problem-with-amazon-ses" },
+          },
+        ],
+      });
+      expect($("#providerValue .set-error").textContent).toBe(
+        "SES_CONFIGURATION_SET names kestrel-mail, and SES has no such set. Send bounces and complaints to the app",
+      );
+      expect($("#providerValue .set-warn").textContent).toBe(
+        "AWS is reviewing your SES account. A problem with Amazon SES",
+      );
+      expect($<HTMLAnchorElement>("#providerValue .set-warn a").getAttribute("href")).toBe(
+        "#/docs/troubleshooting/a-problem-with-amazon-ses",
       );
     });
 
