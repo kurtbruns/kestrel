@@ -33,6 +33,15 @@ When none come, the send's page says so an hour after it went out. Your provider
 
 While Amazon SES is in its sandbox, it mails only addresses verified in SES. Verify the address you test with in the SES console, or [request production access](../get-started/06-production-access.md). When the test's line says the provider didn't answer, check the inbox before you send it again, since the first may have arrived. A test SES refuses for your account has the same fix as [a send it refuses](06-troubleshooting.md#a-send-is-held-or-waiting).
 
+## Signups aren't open yet, or are paused
+
+Your subscribe page takes signups only while email is working, so a reader is never told a link is coming when none can go. Every visitor gets the same page, whatever address they enter.
+
+- "Signups aren’t open yet" means SES hasn't sent an email for your publication yet. Send one from **Template → Send test email**, to an address verified in SES while it's in the sandbox. Once SES takes it, signups open. Before an email provider is connected, the page says the same, and [Connect Amazon SES](../get-started/05-ses.md) is the fix.
+- "Signups are paused" means SES is refusing your email, every email including confirmations and tests. The dashboard's **Email isn’t going out** line gives SES's words and the fix, which whoever runs your instance makes, as for [a problem with Amazon SES](#a-problem-with-amazon-ses). Then send a test email: once SES takes one, signups reopen.
+
+Kestrel notices a refusal when an email meets it, or within about ten minutes from its check of your SES account. A reader who signed up just as it started may have been told a link was coming, and can sign up again once signups reopen.
+
 ## A problem with Amazon SES
 
 **Settings → Email sender** and the top of the dashboard name a problem with your Amazon SES account within about ten minutes, without sending anything. Red means no email can go out until it's fixed, tests and confirmations included. Amber is worth a look. Each line links the step that fixes it, and whoever runs your instance makes the fix:
@@ -90,6 +99,7 @@ With an address set, Kestrel emails you:
 - when a send finishes, with how many emails were accepted, unsent, and skipped
 - when your provider refuses your account or a send, or no provider is connected
 - when the SES sandbox refuses a signup's confirmation, at most once a day
+- when email isn't going out and signups are paused, found by a reader's signup or the check of your SES account, at most once a day while it lasts
 - when a send stops going out with nothing to explain it, waits for you to resolve it, or misses its time
 - when a service token imports a list, since no one saw it happen (an import you make yourself, or through Claude, sends nothing)
 

@@ -44,6 +44,7 @@ const NOTIFICATION_KINDS: Record<NotificationStatusKind, string> = {
   missed: "missed fire time",
   import: "list imported",
   sandbox: "signup refused by the SES sandbox",
+  not_sending: "email not going out",
   test: "test",
 };
 

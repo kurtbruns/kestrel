@@ -83,21 +83,21 @@ function row(over: Partial<SendSummary>): SendSummary {
 
 describe("conditions: one server rule for each kind", () => {
   const NOW = 1_800_000_000_000;
-  const kinds = (s: SendSummary) => sendConditions(s, NOW, false).map((c) => c.kind);
+  const kinds = (s: SendSummary) =>
+    sendConditions(s, NOW, { freePlan: false, sandbox: false }).map((c) => c.kind);
 
   it("reads missed only past the tolerance, and remade only while the last test predates the re-make", () => {
     const sched = { status: "scheduled" as const, fire_at: NOW - 60_000, tested_at: NOW - 90_000 };
     expect(kinds(row(sched))).toEqual([]);
-    const missed = sendConditions(
-      row({ ...sched, fire_at: NOW - MISSED_THRESHOLD_MS - 1 }),
-      NOW,
-      false,
-    );
+    const missed = sendConditions(row({ ...sched, fire_at: NOW - MISSED_THRESHOLD_MS - 1 }), NOW, {
+      freePlan: false,
+      sandbox: false,
+    });
     expect(missed.map((c) => [c.kind, c.severity, c.action])).toEqual([["missed", "action", null]]);
     const remade = { status: "scheduled" as const, fire_at: NOW + 60_000, remade_at: NOW - 10 };
     expect(kinds(row(remade))).toEqual(["remade"]);
     // The editor shows this message as is, so its wording is pinned here, not only in the client's copy.
-    expect(sendConditions(row(remade), NOW, false)[0]?.message).toBe(
+    expect(sendConditions(row(remade), NOW, { freePlan: false, sandbox: false })[0]?.message).toBe(
       "The template or publication details changed this email’s look after your last test. Its content and send time are the same. Send a new test to check what will go out.",
     );
     expect(kinds(row({ ...remade, tested_at: NOW - 20 }))).toEqual(["remade"]);
@@ -106,7 +106,7 @@ describe("conditions: one server rule for each kind", () => {
 
   it("reads untested on a scheduled send never tested and never re-made, as info (SPEC §8)", () => {
     const sched = { status: "scheduled" as const, fire_at: NOW + 60_000, scheduled_at: NOW - 10 };
-    expect(sendConditions(row(sched), NOW, false)).toEqual([
+    expect(sendConditions(row(sched), NOW, { freePlan: false, sandbox: false })).toEqual([
       {
         kind: "untested",
         severity: "info",
@@ -133,7 +133,7 @@ describe("conditions: one server rule for each kind", () => {
       tested_at: NOW - 5,
       recipient_count: DAILY_WRITES_SEND_RECIPIENTS + 1,
     };
-    const free = (s: SendSummary) => sendConditions(s, NOW, true);
+    const free = (s: SendSummary) => sendConditions(s, NOW, { freePlan: true, sandbox: false });
     expect(free(row(sched))).toEqual([
       {
         kind: "daily_writes",
@@ -148,12 +148,15 @@ describe("conditions: one server rule for each kind", () => {
     // Judged by its audience alone: the threshold is the same whenever it fires.
     expect(free(row({ ...sched, recipient_count: DAILY_WRITES_SEND_RECIPIENTS }))).toEqual([]);
     expect(free(row({ ...sched, fire_at: NOW + 86_400_000 }))).toHaveLength(1);
-    expect(sendConditions(row(sched), NOW, false)).toEqual([]);
+    expect(sendConditions(row(sched), NOW, { freePlan: false, sandbox: false })).toEqual([]);
     expect(free(row({ ...sched, status: "sending", started_at: NOW - 60_000 }))).toEqual([]);
   });
 
   it("reads wedged with its count and the Resolve action, refused with the fix and no action, and stuck only when nothing explains the wait", () => {
-    const wedged = sendConditions(row({ c_in_flight: 3, started_at: NOW - 60_000 }), NOW, false);
+    const wedged = sendConditions(row({ c_in_flight: 3, started_at: NOW - 60_000 }), NOW, {
+      freePlan: false,
+      sandbox: false,
+    });
     expect(wedged).toEqual([
       expect.objectContaining({
         kind: "wedged",
@@ -173,7 +176,7 @@ describe("conditions: one server rule for each kind", () => {
         halt_retry_at: NOW + 60_000,
       }),
       NOW,
-      false,
+      { freePlan: false, sandbox: false },
     );
     // Started long ago, but the refusal explains the wait until its retry: not also stuck.
     expect(refused.map((c) => c.kind)).toEqual(["refused"]);
@@ -191,7 +194,7 @@ describe("conditions: one server rule for each kind", () => {
     const outage = sendConditions(
       row({ c_pending: 5, halt_reason: "unavailable", halt_error: "503", halt_retry_at: NOW + 1 }),
       NOW,
-      false,
+      { freePlan: false, sandbox: false },
     );
     expect(outage.map((c) => [c.kind, c.severity])).toEqual([["provider_unavailable", "info"]]);
     // Nothing handed off for the threshold and no halt to explain it (SPEC §12).
@@ -202,7 +205,7 @@ describe("conditions: one server rule for each kind", () => {
         progress_at: NOW - STUCK_THRESHOLD_MS - 60_000,
       }),
       NOW,
-      false,
+      { freePlan: false, sandbox: false },
     );
     expect(idle.map((c) => [c.kind, c.severity])).toEqual([["stuck", "warn"]]);
     expect(idle[0]).toMatchObject({ since: NOW - 60_000, action: null });
@@ -224,7 +227,7 @@ describe("conditions: one server rule for each kind", () => {
           halt_retry_at: NOW + 60_000,
         }),
         NOW,
-        false,
+        { freePlan: false, sandbox: false },
       );
     const burst = throttled(SELF_THROTTLE_HALTS - 1);
     expect(burst.map((c) => [c.kind, c.severity])).toEqual([["provider_unavailable", "info"]]);
@@ -246,7 +249,7 @@ describe("conditions: one server rule for each kind", () => {
         halt_retry_at: NOW + 60_000,
       }),
       NOW,
-      false,
+      { freePlan: false, sandbox: false },
     );
     expect(refused).toMatchObject({ kind: "refused", cause: "content" });
     expect(refused?.message).toMatch(
@@ -263,7 +266,9 @@ describe("conditions: one server rule for each kind", () => {
     expect(
       kinds(row({ ...sent, completed_at: NOW - BOUNCE_SPIKE_RECENT_MS - 1, c_bounced: 50 })),
     ).toEqual([]);
-    expect(sendConditions(row({ ...sent, c_bounced: 5 }), NOW, false)[0]).toMatchObject({
+    expect(
+      sendConditions(row({ ...sent, c_bounced: 5 }), NOW, { freePlan: false, sandbox: false })[0],
+    ).toMatchObject({
       severity: "warn",
       bounced: 5,
       rate: 0.05,
@@ -276,7 +281,7 @@ describe("conditions: one server rule for each kind", () => {
       completed_at: NOW - NO_RECEIPTS_AFTER_MS - 60_000,
       c_accepted: 40,
     };
-    const silent = sendConditions(row(sent), NOW, false);
+    const silent = sendConditions(row(sent), NOW, { freePlan: false, sandbox: false });
     expect(silent.map((c) => [c.kind, c.severity])).toEqual([["no_receipts", "warn"]]);
     expect(silent[0]).toMatchObject({
       since: NOW - 60_000,

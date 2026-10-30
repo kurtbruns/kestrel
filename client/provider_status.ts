@@ -1,10 +1,15 @@
 // The email provider's connection as the editor words it (GET /api/provider; SPEC §9): its
-// read, and the lines Settings and the dashboard show for the sandbox, production, the send
-// rate, and the server's warnings. The state and the warnings are the server's; the editor only
-// words the three states and shows each warning as it comes, red for an `error` and amber for a
-// `warn`.
+// read, and the lines Settings, the dashboard, and Subscribers show for the sandbox, production,
+// the send rate, the server's warnings, and whether email is getting out. The state, the
+// warnings, and the refusal are the server's; the editor only words the states and shows each
+// warning as it comes, red for an `error` and amber for a `warn`.
 
-import type { ProviderStatusView, ProviderWarning } from "../shared/provider";
+import type {
+  ProviderStatusView,
+  ProviderWarning,
+  SendingPurpose,
+  SendingRefusal,
+} from "../shared/provider";
 import type { DeploymentView } from "../shared/settings";
 import { api } from "./api";
 import { type Html, html } from "./ui/html";
@@ -18,15 +23,17 @@ const AWS_QUESTIONS_HREF = "#/docs/production-access/3-answer-awss-questions";
 /** Connect Amazon SES' step whose policy lets the app's key read the account. */
 export const ACCOUNT_PERMISSION_HREF = "#/docs/ses/5-create-the-apps-aws-key";
 
-/** True when the deployment has an SES account to read: SES itself, or local dev standing in for one. */
+/** The Template screen, whose Send test email is the step that proves email works. */
+export const TEMPLATE_TEST_HREF = "#/template";
+
+/** True when the deployment has a provider worth reading: SES itself, or local dev simulating one (SPEC §10). */
 export function readsSesAccount(d: DeploymentView | null | undefined): boolean {
-  return d?.provider === "ses" || Boolean(d?.simulation?.account);
+  return d?.provider === "ses" || Boolean(d?.simulation);
 }
 
 /**
- * The connection, or null when the read fails or there's nothing to read: only SES has an
- * account, so another provider is never asked, unless local dev stands in for one
- * (`SIMULATE_ACCOUNT`, SPEC §10). A failed read leaves the page as it was before the app
+ * The connection, or null when the read fails or there's nothing to read: only SES is asked,
+ * or local dev's simulation of one (`SIMULATE_SENDS`, SPEC §10). A failed read leaves the page as it was before the app
  * could tell, never in an error.
  */
 export async function readProviderStatus(
@@ -148,4 +155,67 @@ export function productionAccessHint(v: ProviderStatusView | null): string {
     return "SES mails only addresses verified in SES until AWS grants it. Ask once a test email has arrived.";
   }
   return "Ask once a test email has arrived. Kestrel can’t read your SES account, so the SES console’s account dashboard says whether AWS granted it.";
+}
+
+/** The refusal while email isn't going out (SPEC §9), or null. */
+export function refusalOf(v: ProviderStatusView | null): SendingRefusal | null {
+  return v?.sending?.state === "refusing" ? v.sending.refusal : null;
+}
+
+/** SES's words, or the account check's finding, then what fixes it. */
+function refusalWords(r: SendingRefusal): string {
+  return r.found_by === "account_check"
+    ? `${r.error} ${r.advice}`
+    : `SES says: ${r.error.replace(/[.!?]?$/, ".")} ${r.advice}`;
+}
+
+/**
+ * The dashboard's red line while email isn't going out: SES's words, the fix, and the way
+ * out, a test email, which reopens signups once SES takes it. It stands for the account
+ * check's errors too, so they aren't said twice.
+ */
+export function notGoingOutHtml(r: SendingRefusal): Html {
+  return html`<span class="dash-not-going-out"><strong>Email isn’t going out, and signups are paused.</strong> ${refusalWords(r)} Then <a href="${TEMPLATE_TEST_HREF}">send a test email</a>: once SES takes one, signups reopen.</span>`;
+}
+
+/** Subscribers' red line while email isn't going out: signups are paused, and where the fix is. */
+export function signupsPausedHtml(): Html {
+  return html`Signups are paused: Amazon SES is refusing email, including confirmations. <a href="#/">See what to fix</a>`;
+}
+
+const ACCEPTED_BY: Record<SendingPurpose, string> = {
+  test: "a test",
+  confirmation: "a confirmation",
+  list: "a post",
+  notification: "a notification",
+};
+
+/**
+ * Settings' line under the Email provider for whether email is getting out (SPEC §9): its
+ * pill (none while working) and what it means. Null with no provider.
+ */
+export function sendingHtml(
+  v: ProviderStatusView,
+  when: (ms: number) => string,
+): { pill: Html | null; line: Html } | null {
+  const s = v.sending;
+  if (!s) {
+    return null;
+  }
+  const last = s.last_accepted
+    ? html`<span class="muted" id="providerLastAccepted">SES last took ${ACCEPTED_BY[s.last_accepted.by]}: ${when(s.last_accepted.at)}.</span>`
+    : null;
+  if (s.state === "refusing" && s.refusal) {
+    return {
+      pill: html`<span class="set-pill danger" id="providerSending">Refusing</span>`,
+      line: html`<span class="set-error">${refusalWords(s.refusal)} Then <a class="set-link" href="${TEMPLATE_TEST_HREF}">send a test email</a>.</span>${last}`,
+    };
+  }
+  if (s.state === "unproven") {
+    return {
+      pill: html`<span class="set-pill" id="providerSending">Not proven yet</span>`,
+      line: html`<span>SES hasn’t sent anything yet, so signups are closed. <a class="set-link" href="${TEMPLATE_TEST_HREF}">Send a test email</a></span>`,
+    };
+  }
+  return { pill: null, line: last ?? html`` };
 }

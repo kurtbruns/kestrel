@@ -193,6 +193,8 @@ export async function test(c: RequestContext): Promise<Response> {
   // key of its own: the fake records once per key and address, and would fold a second
   // test into the first.
   const [res] = await sendTest(
+    c.env.DB,
+    c.config,
     provider,
     email,
     recipients,
@@ -352,6 +354,8 @@ export async function templateTest(c: RequestContext): Promise<Response> {
   const testId = `template-test-${crypto.randomUUID()}`;
   const batch = recipients.map((email) => ({ email, unsubscribeUrl }));
   const answers = await sendTest(
+    c.env.DB,
+    c.config,
     provider,
     result,
     batch,

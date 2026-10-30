@@ -82,8 +82,24 @@ export interface DueSandboxNotification {
   sent_to: string[];
 }
 
+/** A notice that email isn't going out (SPEC §8), due; one a UTC day, whose start is its
+ *  episode. Its email is written from the sending state as it stands when it goes. */
+export interface DueNotSendingNotification {
+  send_id: null;
+  import_id: null;
+  kind: "not_sending";
+  episode: number;
+  attempts: number;
+  /** The addresses it has reached so far. */
+  sent_to: string[];
+}
+
 /** Any notification that is due. */
-export type DueAny = DueNotification | DueImportNotification | DueSandboxNotification;
+export type DueAny =
+  | DueNotification
+  | DueImportNotification
+  | DueSandboxNotification
+  | DueNotSendingNotification;
 
 /** What names one notification: its send, kind, and episode, or for an import notice its import. */
 export interface NotificationKey {
@@ -116,12 +132,24 @@ export function utcDayStart(now: number): number {
  * the day makes an ignored insert rather than a second notice.
  */
 export async function sandboxNotice(db: D1Database, now: number): Promise<void> {
-  await db
+  await accountNotice(db, "sandbox", now).run();
+}
+
+/**
+ * The statement that records a notice about the account with no send behind it, `sandbox` or
+ * `not_sending`, at most once a UTC day: the partial unique index on each kind's day makes a
+ * second an ignored insert.
+ */
+export function accountNotice(
+  db: D1Database,
+  kind: "sandbox" | "not_sending",
+  now: number,
+): D1PreparedStatement {
+  return db
     .prepare(
-      "INSERT OR IGNORE INTO notifications (send_id, import_id, kind, episode, created_at, updated_at) VALUES (NULL, NULL, 'sandbox', ?, ?, ?)",
+      "INSERT OR IGNORE INTO notifications (send_id, import_id, kind, episode, created_at, updated_at) VALUES (NULL, NULL, ?, ?, ?, ?)",
     )
-    .bind(utcDayStart(now), now, now)
-    .run();
+    .bind(kind, utcDayStart(now), now, now);
 }
 
 /**
@@ -185,7 +213,7 @@ export async function dueNotifications(db: D1Database, limit: number): Promise<D
          FROM notifications n
          LEFT JOIN sends s ON s.id = n.send_id
          LEFT JOIN imports i ON i.id = n.import_id
-        WHERE n.status = 'pending' AND (s.id IS NOT NULL OR i.id IS NOT NULL OR n.kind = 'sandbox')
+        WHERE n.status = 'pending' AND (s.id IS NOT NULL OR i.id IS NOT NULL OR n.kind IN ('sandbox', 'not_sending'))
         ORDER BY n.created_at ASC, n.send_id ASC, n.kind ASC
         LIMIT ?`,
     )
@@ -193,11 +221,11 @@ export async function dueNotifications(db: D1Database, limit: number): Promise<D
     .all<Record<string, unknown>>();
   return results.map((r): DueAny => {
     const sentTo = readSentTo(r.sent_to as string);
-    if (r.kind === "sandbox") {
+    if (r.kind === "sandbox" || r.kind === "not_sending") {
       return {
         send_id: null,
         import_id: null,
-        kind: "sandbox",
+        kind: r.kind,
         episode: r.episode as number,
         attempts: r.attempts as number,
         sent_to: sentTo,

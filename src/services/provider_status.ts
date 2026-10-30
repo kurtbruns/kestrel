@@ -14,6 +14,8 @@ import type {
   ConfigurationSetView,
   ProviderStatusView,
   ProviderWarning,
+  ProviderWarningCode,
+  RefusingCause,
   SendRateSource,
 } from "../../shared/provider";
 import {
@@ -23,12 +25,14 @@ import {
   recordAnswer,
   recordMiss,
 } from "../db/provider_account";
+import type { SendingRow } from "../db/sending";
 import type { AppEnv, Config } from "../env";
 import { DEFAULT_SES_MAX_SEND_RATE } from "../env";
 import { log } from "../lib/log";
 import { checkSesAccount, MAX_ACCOUNT_REQUESTS } from "../providers/ses_account";
 import { simulatedAccountRow } from "../providers/simulate";
 import type { Budget } from "../send/budget";
+import { noteRefusal, sendingView, signupsState } from "./sending";
 
 /** How old an answer may get before an idle tick asks again: a grant of production access
  *  shows within about this long. */
@@ -38,8 +42,9 @@ export const ACCOUNT_CHECK_INTERVAL_MS = 10 * 60_000;
  *  added it spends one request an hour, not six. */
 export const PERMISSION_RECHECK_MS = 60 * 60_000;
 
-/** What one check may cost: the row's read, the provider's requests, and one write. */
-const CHECK_QUERIES = 2;
+/** What one check may cost: the row's read, the provider's requests, one write, and a
+ *  refusal it found recorded with its notice (SPEC §9). */
+const CHECK_QUERIES = 4;
 
 /** Whether the account is due a check at `now`. */
 export function accountCheckDue(row: ProviderAccountRow | null, now: number): boolean {
@@ -61,6 +66,13 @@ export async function refreshProviderAccount(
   budget: Budget,
   now: number,
 ): Promise<void> {
+  const simulated = config.provider === "ses" ? null : config.simulation?.account;
+  if (simulated) {
+    // Local dev's stand-in account finds its problems as the real check would, each tick
+    // that sent nothing, so a refusal it stands in for reaches the state by the same path.
+    await noteAccountRefusal(env.DB, config, simulatedAccountRow(simulated, config, now), now);
+    return;
+  }
   if (config.provider !== "ses" || !budget.affords(CHECK_QUERIES, MAX_ACCOUNT_REQUESTS)) {
     return;
   }
@@ -75,6 +87,13 @@ export async function refreshProviderAccount(
   if (check.outcome === "ok") {
     keepUnread(check.answer, row?.answer ?? null, config);
     await recordAnswer(env.DB, now, check.answer);
+    budget.query(2);
+    await noteAccountRefusal(
+      env.DB,
+      config,
+      { attemptedAt: now, outcome: "ok", checkedAt: now, answer: check.answer },
+      now,
+    );
     log.info("provider.account_checked", {
       outcome: "ok",
       productionAccess: check.answer.productionAccess,
@@ -94,6 +113,57 @@ export async function refreshProviderAccount(
     outcome: check.outcome,
     error: check.outcome === "permission" ? undefined : check.error,
   });
+  if (check.outcome === "rejected") {
+    budget.query(2);
+    await noteAccountRefusal(
+      env.DB,
+      config,
+      { attemptedAt: now, outcome: "rejected", checkedAt: null, answer: null },
+      now,
+    );
+  }
+}
+
+/** The refusing cause each error the account check can find stands for (SPEC §9): every one
+ *  of them refuses every email, as a send would find. */
+const WARNING_CAUSES: Partial<Record<ProviderWarningCode, RefusingCause>> = {
+  key_rejected: "credentials",
+  sending_disabled: "paused",
+  configuration_set_missing: "configuration",
+  configuration_set_paused: "set_paused",
+  sender_unverified: "sender",
+};
+
+/**
+ * The refusal the account check found, if any: its first error, in the check's own words.
+ * Found without sending, so it makes email refusing, and the publisher is told, at most once
+ * a day (SPEC §8); only an email the provider takes makes it working again, so a check that
+ * no longer finds it changes nothing.
+ */
+export function accountRefusal(
+  config: Config,
+  row: ProviderAccountRow,
+): { cause: RefusingCause; error: string } | null {
+  const answer = row.answer;
+  for (const w of warnings(config, row, configurationSet(config, answer))) {
+    const cause = WARNING_CAUSES[w.code];
+    if (cause && w.severity === "error") {
+      return { cause, error: w.message };
+    }
+  }
+  return null;
+}
+
+async function noteAccountRefusal(
+  db: D1Database,
+  config: Config,
+  row: ProviderAccountRow,
+  now: number,
+): Promise<void> {
+  const found = accountRefusal(config, row);
+  if (found) {
+    await noteRefusal(db, { ...found, foundBy: "account_check" }, now, true);
+  }
 }
 
 /**
@@ -149,6 +219,22 @@ export async function accountForPacing(
     return null;
   }
   return (await readProviderAccount(db))?.answer ?? null;
+}
+
+/**
+ * Whether the provider's account was last read in the sandbox: SES's own reading, or local
+ * dev's stand-in for it. False when it can't tell, so the `sandbox` condition only ever says
+ * what the account itself said (SPEC §6).
+ */
+export async function readSandbox(db: D1Database, config: Config): Promise<boolean> {
+  if (config.provider === "ses") {
+    const answer = (await readProviderAccount(db))?.answer;
+    return answer ? !answer.productionAccess : false;
+  }
+  const simulated = config.simulation?.account;
+  return simulated
+    ? simulatedAccountRow(simulated, config, Date.now()).answer?.productionAccess === false
+    : false;
 }
 
 /** The anchor of the guide's step that routes bounces and complaints to the app. */
@@ -273,12 +359,14 @@ function warnings(
   return out;
 }
 
-/** GET /api/provider, from the deploy config and the account check's row. */
+/** GET /api/provider, from the deploy config, the account check's row, and the sending row. */
 export function providerStatusView(
   config: Config,
   read: ProviderAccountRow | null,
+  sendingRow: SendingRow | null,
 ): ProviderStatusView {
   let row = read;
+  const sending = sendingView(config, sendingRow);
   const none: ProviderStatusView = {
     provider: config.provider,
     state: "not_connected",
@@ -290,6 +378,8 @@ export function providerStatusView(
     configuration_set: null,
     warnings: [],
     checked_at: null,
+    sending,
+    signups: signupsState(sending),
   };
   if (config.provider === "none") {
     return none;

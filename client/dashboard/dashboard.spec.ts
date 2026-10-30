@@ -1128,6 +1128,48 @@ describe("dashboard", () => {
       );
     });
 
+    it("says email isn't going out in one red line, with SES's words, the fix, and a test, standing for the errors that say the same (SPEC §8, §9)", async () => {
+      fake = world(
+        [post()],
+        sendServer([send()]),
+        counts,
+        onSes({
+          state: "production",
+          unknown_reason: null,
+          warnings: [
+            {
+              code: "configuration_set_missing",
+              severity: "error",
+              message: "SES has no configuration set by that name.",
+              docs: { slug: "ses", anchor: "4-send-bounces-and-complaints-to-the-app" },
+            },
+          ],
+          sending: {
+            state: "refusing",
+            since: 1,
+            last_accepted: null,
+            refusal: {
+              cause: "configuration",
+              found_by: "test",
+              error: "ses 404 NotFoundException: Configuration set <x> does not exist",
+              advice: "Fix the set.",
+              at: 1,
+            },
+          },
+          signups: "paused",
+        }),
+      );
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect($("#dashHealth .health").classList.contains("red")).toBe(true);
+      expect($(".dash-not-going-out").textContent).toBe(
+        "Email isn’t going out, and signups are paused. SES says: ses 404 NotFoundException: Configuration set <x> does not exist. Fix the set. Then send a test email: once SES takes one, signups reopen.",
+      );
+      expect($<HTMLAnchorElement>(".dash-not-going-out a").getAttribute("href")).toBe("#/template");
+      expect(document.querySelector(".dash-provider-warning")).toBeNull();
+      expect(fake.unhandled).toEqual([]);
+    });
+
     it("raises an amber line for the sandbox once setup is done, and one for each warning, in the server's words", async () => {
       const warning = {
         code: "bounces_not_routed",

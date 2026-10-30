@@ -189,7 +189,7 @@ export type SendViewRow = SendSummary &
  * Build the view of a send (the frozen bodies play no part). `hasRetries` is the cheap
  * EXISTS probe (see `hasActiveRetries`) — pass false when the send is not `sending`, where
  * it never affects the phase. `now` is the server's clock for everything derived, carried
- * as `as_of`.
+ * as `as_of`. `sandbox`: the provider's account was last read in the sandbox (`readSandbox`).
  */
 export function buildSendView(
   send: SendViewRow,
@@ -199,6 +199,7 @@ export function buildSendView(
   >,
   hasRetries: boolean,
   now: number,
+  sandbox: boolean,
 ): SendView {
   const counts = countsOf(send);
   const published = send.status === "sending" || send.status === "sent";
@@ -303,7 +304,7 @@ export function buildSendView(
     delivery: { confirmed, percent_of_accepted: deliveryPercent },
     provider: { name: config.provider, halt },
     phase,
-    conditions: sendConditions(send, now, onFreePlanLimits(config)),
+    conditions: sendConditions(send, now, { freePlan: onFreePlanLimits(config), sandbox }),
     actions: sendActions(send, now),
     next_change_at: nextChangeAt(send, now),
     links: {

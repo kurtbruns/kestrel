@@ -28,7 +28,7 @@ MIN_LEAD_SECONDS="60"
 # at once: the provider's batch size and pace, its failures, and delivery receipts that
 # arrive after the send (delivered, bounced, complained), all through the real send loop.
 # Test sends and confirmations go straight to the dev outbox (GET /api/dev/outbox),
-# unsimulated. The profile names the provider modeled:
+# unfaulted. The profile names the provider modeled:
 #   ses      Amazon SES: a second of its send rate a request (up to 50), one request a
 #            second, no key (a lost request waits for Resolve), and its daily quota running
 #            out once a send; a slice a minute on the default SUBREQUEST_BUDGET, as SES is
@@ -38,6 +38,12 @@ MIN_LEAD_SECONDS="60"
 # plain instant fake. "not-connected" runs the app as a deployment with no email provider
 # yet: every send refused, signups closed, a due send held. Switched back, the held send
 # goes out at its next retry, a few minutes later.
+# Add ":refuse=" and a cause (e.g. "ses:refuse=configuration") to have SES refuse every
+# email, tests, confirmations, and notifications included, as it would for that cause:
+# credentials, opt_in, configuration, sender, mail_from, paused, set_paused, suspended, or
+# unsupported. Email then reads as refusing and signups as paused. Beside a sandbox account
+# (SIMULATE_ACCOUNT=sandbox), SES refuses any recipient not at SENDING_DOMAIN or SES's
+# mailbox simulator.
 # For one run, set it in the shell instead: SIMULATE_SENDS=ses npm run dev
 # Only honored in a dev-shaped env (fake transport, no Access, APP_ORIGIN on localhost).
 SIMULATE_SENDS="ses"
@@ -51,7 +57,8 @@ SIMULATE_SENDS="ses"
 # ":set_missing" or ":set_paused" (the configuration set), ":key_rejected" (SES rejects the
 # AWS key), ":sending_disabled" (sending turned off), ":shutdown" (AWS paused the account),
 # ":sender_unverified" (the From address isn't verified), or ":probation" (AWS reviewing the
-# account), e.g. "production:set_missing". It changes what the editor shows, not how a simulated send goes
-# out. Needs SIMULATE_SENDS=ses; "off" leaves the account unread.
+# account), e.g. "production:set_missing". A problem that stops every email also makes email
+# read as refusing, as the real check does. In the sandbox, a recipient outside SENDING_DOMAIN
+# and SES's mailbox simulator is refused. Needs SIMULATE_SENDS=ses; "off" leaves the account unread.
 # For one run, set it in the shell instead: SIMULATE_ACCOUNT=sandbox npm run dev
 SIMULATE_ACCOUNT="off"

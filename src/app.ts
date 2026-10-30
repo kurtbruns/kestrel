@@ -1692,7 +1692,10 @@ export function createRouter({
           ...notConnected,
           when: "No email provider is connected, so the confirmation could not go; nothing is stored.",
         },
-        { code: "confirmation_not_sent" },
+        {
+          code: "confirmation_not_sent",
+          when: "The provider refused the confirmation, in its words and with what to do about it, or never answered. A refusal of the account also pauses public signups until an email goes through (`signups` on the provider object).",
+        },
       ],
       returns: {
         object: "subscriber",
@@ -2345,7 +2348,7 @@ export function createRouter({
       resource: "subscriptions",
       title: "Show the subscribe form",
       summary:
-        "The public subscribe form (HTML); while no email provider is connected, a page saying signups aren't open yet.",
+        "The public subscribe form (HTML) while email is working; otherwise a page saying signups aren't open yet, or that they're paused while the provider refuses the account.",
       handler: publicRoutes.subscribeForm,
     },
     {
@@ -2365,6 +2368,10 @@ export function createRouter({
         {
           ...notConnected,
           when: "No email provider is connected: every request alike, as JSON or the page saying signups aren't open yet, and nothing is stored.",
+        },
+        {
+          code: "signups_closed",
+          when: "Email isn't working: not proven yet, or the provider is refusing the account (`signups` on the provider object). Every request alike, before the address is read, as JSON or the page saying signups aren't open yet or are paused, and nothing is stored.",
         },
       ],
       handler: publicRoutes.subscribe,

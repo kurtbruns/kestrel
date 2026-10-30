@@ -10,18 +10,22 @@ import { encodeSendCursor } from "../../shared/cursor";
 import type { SendView } from "../../shared/sends";
 import { currentSendSeq, getSendViewRow, getSendViewRows } from "../db/sends";
 import { type AppEnv, getConfig } from "../env";
+import { readSandbox } from "../services/provider_status";
 import { buildSendView } from "./view";
 
 /** The send as it stands, or null when it is gone. */
 export async function viewSend(env: AppEnv, id: string): Promise<SendView | null> {
   const now = Date.now();
   const config = getConfig(env);
-  const row = await getSendViewRow(env.DB, id);
+  const [row, sandbox] = await Promise.all([
+    getSendViewRow(env.DB, id),
+    readSandbox(env.DB, config),
+  ]);
   if (!row) {
     return null;
   }
   const { has_retries, ...source } = row;
-  return buildSendView(source, config, has_retries === 1, now);
+  return buildSendView(source, config, has_retries === 1, now, sandbox);
 }
 
 /** Sends by id as they stand, each as its view, by id; a send that is gone is left out. One
@@ -29,11 +33,14 @@ export async function viewSend(env: AppEnv, id: string): Promise<SendView | null
 export async function viewSends(env: AppEnv, ids: string[]): Promise<Map<string, SendView>> {
   const now = Date.now();
   const config = getConfig(env);
-  const rows = await getSendViewRows(env.DB, ids);
+  const [rows, sandbox] = await Promise.all([
+    getSendViewRows(env.DB, ids),
+    readSandbox(env.DB, config),
+  ]);
   return new Map(
     rows.map(({ has_retries, ...source }) => [
       source.id,
-      buildSendView(source, config, has_retries === 1, now),
+      buildSendView(source, config, has_retries === 1, now, sandbox),
     ]),
   );
 }

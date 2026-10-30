@@ -70,6 +70,10 @@ export const LOG_EVENTS = {
   "provider.account_checked": "info",
   "provider.pacing_unread": "warn",
   "provider.account_error": "error",
+  // Whether email is getting out (SPEC §9).
+  "sending.refusing": "warn",
+  "sending.record_failed": "error",
+  "subscribe.closed": "warn",
   "test.refused": "warn",
   "test.unknown": "warn",
   "subscribe.failed": "error",

@@ -278,6 +278,9 @@ export function readerPage(opts: {
   /** For a page that can show one reader's address: never stored by a cache and kept
    *  out of search engines. Otherwise the page is briefly cacheable and indexable. */
   private?: boolean;
+  /** For a page whose answer can change at any moment, as the subscribe page's does when
+   *  signups open or pause (SPEC §7): checked with the app on every load, never served stale. */
+  fresh?: boolean;
 }): Response {
   const { name, tagline, logoUrl } = opts.identity;
   const logo = logoUrl
@@ -327,7 +330,7 @@ ${devDashboardBadge(opts.devDashboardUrl)}
       "content-type": "text/html; charset=utf-8",
       ...(opts.private
         ? { "cache-control": "no-store", "x-robots-tag": "noindex" }
-        : { "cache-control": "public, max-age=300" }),
+        : { "cache-control": opts.fresh ? "no-cache" : "public, max-age=300" }),
     },
   });
 }
@@ -453,8 +456,8 @@ export function landingPage(opts: {
   featured?: ArchiveIndexPost;
   /** The next-most-recent posts, listed beneath the feature. */
   recent: ArchiveIndexPost[];
-  /** Whether a subscribe would be taken: false while no email provider is connected
-   *  (SPEC §9), when the subscribe page itself shows no form. */
+  /** Whether a subscribe would be taken: false while email isn't working (SPEC §7, §9),
+   *  when the subscribe page itself shows no form. */
   signupsOpen: boolean;
   /** Dev-only editor shortcut (§11); set only on a dev-shaped instance. */
   devDashboardUrl?: string;
@@ -472,7 +475,8 @@ export function landingPage(opts: {
       `<p class="r-lead">No posts yet. Subscribe to get the first one in your inbox.</p>` +
       subscribeFormHtml();
   } else if (!opts.featured) {
-    main = `<p class="r-empty">No posts yet. Subscribe to get the first one.</p>`;
+    // Signups are closed, so the page invites no one to subscribe.
+    main = `<p class="r-empty">No posts yet.</p>`;
   } else {
     const f = opts.featured;
     const feature =

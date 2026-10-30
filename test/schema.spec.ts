@@ -2,7 +2,8 @@ import { env } from "cloudflare:workers";
 import type { D1Migration } from "@cloudflare/vitest-plugin";
 import { beforeEach, describe, expect, it } from "vitest";
 import { SHIPPED_MIGRATIONS } from "../src/db/migrations";
-import { resetDatabase } from "./support/fixtures";
+import { accountNotice } from "../src/db/notifications";
+import { dueSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 
 // The migrations folder as vitest.config.ts read it, the same files the setup applied.
 const FOLDER = (env as unknown as { TEST_MIGRATIONS: D1Migration[] }).TEST_MIGRATIONS;
@@ -19,7 +20,7 @@ describe("the migrations the schema gate expects (SPEC §9)", () => {
 // The exact set, not a containment check: a table a migration adds or drops has to be
 // named here, so the list can't silently fall behind the schema.
 describe("schema (every migration applied)", () => {
-  it("has exactly the app's fourteen tables", async () => {
+  it("has exactly the app's fifteen tables", async () => {
     const { results } = await env.DB.prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name <> 'd1_migrations'",
     ).all<{ name: string }>();
@@ -45,6 +46,8 @@ describe("schema (every migration applied)", () => {
         "provider_account",
         // 0016_held_receipts
         "held_receipts",
+        // 0019_sending
+        "sending",
       ].sort(),
     );
   });
@@ -801,5 +804,96 @@ describe("schema (0018_notify_addresses)", () => {
     await expect(env.DB.prepare("UPDATE notifications SET sent_to = 'nope'").run()).rejects.toThrow(
       /CHECK/,
     );
+  });
+});
+
+describe("schema (0019_sending)", () => {
+  /** The table rebuilt by the migration's own statements, over the records as they stand. */
+  async function migrate(): Promise<unknown> {
+    await env.DB.prepare("DROP TABLE sending").run();
+    const migration = FOLDER.find((m) => m.name === "0019_sending.sql");
+    for (const q of migration?.queries ?? []) {
+      await env.DB.prepare(q).run();
+    }
+    return env.DB.prepare(
+      "SELECT state, since, last_accepted_at, last_accepted_by, refusal_cause FROM sending",
+    ).first();
+  }
+
+  it("keeps a live instance's signups open: a send SES took a recipient of makes email working (SPEC §7, §9)", async () => {
+    const send = await dueSend();
+    await env.DB.prepare(
+      "INSERT INTO deliveries (send_id, email, status, attempts, updated_at) VALUES (?, 'a@example.com', 'accepted', 1, 5000)",
+    )
+      .bind(send.id)
+      .run();
+    expect(await migrate()).toEqual({
+      state: "working",
+      since: 5000,
+      last_accepted_at: 5000,
+      last_accepted_by: "list",
+      refusal_cause: null,
+    });
+  });
+
+  it("and so does a subscriber who confirmed through a link it mailed, the latest of the two standing", async () => {
+    const send = await dueSend();
+    await env.DB.prepare(
+      "INSERT INTO deliveries (send_id, email, status, attempts, updated_at) VALUES (?, 'a@example.com', 'accepted', 1, 5000)",
+    )
+      .bind(send.id)
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO subscribers (id, email, status, unsub_token, created_at, confirm_sent_at, confirmed_at) VALUES ('s1', 'b@example.com', 'confirmed', 'u1', 1, 7000, 7001)",
+    ).run();
+    expect(await migrate()).toMatchObject({
+      state: "working",
+      last_accepted_at: 7000,
+      last_accepted_by: "confirmation",
+    });
+  });
+
+  it("starts not proven when nothing shows email went out: only tests, imported readers, or a send nobody took", async () => {
+    await seedConfirmed("imported@example.com");
+    const send = await dueSend();
+    await env.DB.prepare(
+      "INSERT INTO deliveries (send_id, email, status, attempts, updated_at) VALUES (?, 'a@example.com', 'unsent', 1, 5000)",
+    )
+      .bind(send.id)
+      .run();
+    expect(await migrate()).toMatchObject({
+      state: "unproven",
+      last_accepted_at: null,
+      last_accepted_by: null,
+    });
+  });
+});
+
+describe("schema (0020_notifications_not_sending)", () => {
+  it("carries every notification over, with the addresses it reached, so none is mailed again", async () => {
+    await env.DB.prepare(
+      `INSERT INTO notifications (send_id, kind, episode, status, attempts, created_at, updated_at, sent_to)
+       VALUES (NULL, 'sandbox', 0, 'pending', 2, 1, 2, '["a@example.com"]')`,
+    ).run();
+    const migration = FOLDER.find((m) => m.name === "0020_notifications_not_sending.sql");
+    for (const q of migration?.queries ?? []) {
+      await env.DB.prepare(q).run();
+    }
+    expect(
+      await env.DB.prepare("SELECT kind, status, attempts, sent_to FROM notifications").all(),
+    ).toMatchObject({
+      results: [{ kind: "sandbox", status: "pending", attempts: 2, sent_to: '["a@example.com"]' }],
+    });
+  });
+
+  it("admits one notice a day that email isn't going out (SPEC §8)", async () => {
+    const day = 86_400_000;
+    for (const at of [day + 1, day + 2, 2 * day + 1]) {
+      await accountNotice(env.DB, "not_sending", at).run();
+    }
+    const { results } = await env.DB.prepare(
+      "SELECT episode FROM notifications WHERE kind = 'not_sending' ORDER BY episode",
+    ).all();
+    expect(results).toEqual([{ episode: day }, { episode: 2 * day }]);
   });
 });

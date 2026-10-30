@@ -8,7 +8,8 @@
  * wedged by `isWedged`; refused and provider_unavailable
  * by the halt the send carries; bounce_spike by its confirmed bounces over its audience at
  * fire; no_receipts by its counters long after dispatch finished; remade by its last re-make against its last test; untested by a test never sent; daily_writes by its audience as
- * scheduled alone, on Workers Free's limits only.
+ * scheduled alone, on Workers Free's limits only; sandbox by the provider's account, read by
+ * the account check, while it is still in the sandbox.
  * Each carries its severity, since when (null when the record does not say), the server's
  * words for it, and the action that settles it, if the API has one. The actions are exactly what the server would accept on
  * the send right now, so a client offers a control only while pressing it would work.
@@ -24,6 +25,7 @@ import {
   NO_RECEIPTS_AFTER_MS,
   refusalAdvice,
   refusedMessage,
+  SANDBOX_SEND_WARNING,
   type SendAction,
   type SendCondition,
   type SendSummary,
@@ -68,12 +70,35 @@ export function bySeverity<T extends Pick<SendCondition, "severity" | "since">>(
   return RANK[a.severity] - RANK[b.severity] || (a.since ?? 0) - (b.since ?? 0);
 }
 
-/**
- * The send's open conditions, most severe first. `freePlan`: the deployment runs on Workers
- * Free's limits (`onFreePlanLimits`).
- */
-export function sendConditions(send: SendSummary, now: number, freePlan: boolean): SendCondition[] {
+/** What the deployment adds to a send's conditions: whether it runs on Workers Free's limits
+ *  (`onFreePlanLimits`), and whether the provider's account was last read in the sandbox
+ *  (`readSandbox`). */
+export interface ConditionContext {
+  freePlan: boolean;
+  sandbox: boolean;
+}
+
+/** The send's open conditions, most severe first. */
+export function sendConditions(
+  send: SendSummary,
+  now: number,
+  { freePlan, sandbox }: ConditionContext,
+): SendCondition[] {
   const out: SendCondition[] = [];
+
+  // A send scheduled while SES is in the sandbox reaches only addresses verified in SES, and
+  // waits for the rest until AWS grants production access (SPEC §6). Allowed, since checking
+  // a send to verified addresses needs it and one scheduled during AWS's review finishes on
+  // its own once access is granted, but said before it fires.
+  if (sandbox && send.status === "scheduled") {
+    out.push({
+      kind: "sandbox",
+      severity: "warn",
+      since: send.scheduled_at,
+      message: SANDBOX_SEND_WARNING,
+      action: null,
+    });
+  }
 
   if (freePlan && send.status === "scheduled" && sendSpendsDailyWrites(send.recipient_count)) {
     out.push({

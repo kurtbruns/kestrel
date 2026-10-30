@@ -23,7 +23,7 @@ import * as settingsRoutes from "../src/routes/settings";
 import * as subscriberRoutes from "../src/routes/subscribers";
 import { condition } from "./support/conditions";
 import { NOT_CONNECTED_DEPLOY, SES_DEPLOY } from "./support/deploy";
-import { dueSend, resetDatabase, seedConfirmed, tick } from "./support/fixtures";
+import { dueSend, resetDatabase, seedConfirmed, sendingWorks, tick } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 import { logged } from "./support/log";
 import { viewOf } from "./support/view";
@@ -247,13 +247,15 @@ describe("the public subscribe page while signups aren't open (SPEC §7, §9)", 
     expect(await subscriberCount()).toBe(0);
   });
 
-  it("keeps the form when a provider is named", async () => {
+  it("keeps the form when a provider is named and email works", async () => {
+    await sendingWorks();
     const page = await (await fetchWith({ PROVIDER: "fake" }, "/subscribe")).text();
     expect(page).toContain('action="/subscribe"');
   });
   it("keeps the empty home page without a form, so it never offers what the subscribe page refuses (SPEC §5, §9)", async () => {
     const page = await (await fetchWith(NOT_CONNECTED, "/")).text();
-    expect(page).toContain("No posts yet. Subscribe to get the first one.");
+    expect(page).toContain("No posts yet.");
+    expect(page).not.toContain("Subscribe to get the first one");
     expect(page).not.toContain("<form");
   });
 });

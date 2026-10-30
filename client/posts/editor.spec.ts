@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DAILY_WRITES_SEND_RECIPIENTS, dailyWritesSendWarning } from "../../shared/free_plan";
 import type { PostAction } from "../../shared/posts";
 import type { SendSummary, SendView } from "../../shared/sends";
+import { SANDBOX_SEND_WARNING } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import { slugify } from "../../shared/slug";
 import type { ViewHandle } from "../lifecycle";
@@ -17,6 +18,7 @@ import {
   jsonResponse,
   mount,
   mounted,
+  providerStatus,
   resetShell,
   restoreHidden,
   sendSummary,
@@ -2173,6 +2175,30 @@ describe("editor view", () => {
     expect(document.querySelector(".modal")).toBeNull();
   });
 
+  it("warns in the Schedule dialog and Send now while SES is in the sandbox, in the send's condition words, and disables nothing (SPEC §6)", async () => {
+    appState.appConfig = settingsResponse({ deployment: { provider: "ses" } });
+    const server = draftServer(draft({ subject: "Owls" }));
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        path: "/api/provider",
+        reply: () => providerStatus({ state: "sandbox", unknown_reason: null }),
+      },
+      { path: "/api/subscribers", reply: () => ({ counts: { confirmed: 3 }, page: { total: 3 } }) },
+    ]);
+    $("#scheduleBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#schSandbox").hidden).toBe(false);
+    expect($("#schSandbox").textContent).toBe(SANDBOX_SEND_WARNING);
+    expect($<HTMLButtonElement>("#schGo").disabled).toBe(false);
+    $("#toSendNow").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#schSandbox").textContent).toBe(SANDBOX_SEND_WARNING);
+    expect($<HTMLButtonElement>("#snGo").disabled).toBe(false);
+    expect(fake.calls.filter((c) => c.url.pathname === "/api/provider")).toHaveLength(1);
+    expect(fake.unhandled).toEqual([]);
+  });
+
   describe("on Workers Free's limits, a send D1's daily writes may not cover (SPEC §8)", () => {
     async function openWithAudience(total: number, freePlanLimits: boolean) {
       appState.appConfig = settingsResponse({
@@ -2185,6 +2211,7 @@ describe("editor view", () => {
           path: "/api/subscribers",
           reply: () => ({ counts: { confirmed: total }, page: { total } }),
         },
+        { path: "/api/provider", reply: () => providerStatus({ state: "production" }) },
       ]);
       $("#scheduleBtn").click();
       await vi.advanceTimersByTimeAsync(0);

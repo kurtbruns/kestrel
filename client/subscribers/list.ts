@@ -15,7 +15,13 @@ import type {
 } from "../../shared/subscribers";
 import { api, describeError } from "../api";
 import { setTitle } from "../lifecycle";
-import { inSandbox, PRODUCTION_ACCESS_HREF, readProviderStatus } from "../provider_status";
+import {
+  inSandbox,
+  PRODUCTION_ACCESS_HREF,
+  readProviderStatus,
+  refusalOf,
+  signupsPausedHtml,
+} from "../provider_status";
 import { appState } from "../state";
 import { $, $$ } from "../ui/dom";
 import { saveFile } from "../ui/download";
@@ -81,6 +87,7 @@ export async function renderSubscribers(
     root,
     html`
     <div class="spread page-head"><h1>Subscribers</h1><span class="row"><button type="button" class="ghost" id="importSubs">Import</button><button type="button" class="ghost" id="exportSubs">Export</button><button class="primary" id="addSub">Add subscriber</button></span></div>
+    <div class="health red" id="subSignupsPaused" role="status" hidden></div>
     <div class="card sub-summary"><div class="sub-summary-head"><div id="subCounts" class="row muted" role="group" aria-label="Show">Loading…</div><button type="button" class="sub-legend-toggle" id="subLegendToggle" aria-expanded="false" aria-controls="subLegend">Legend</button></div><p class="workers-plan" id="subWorkersPlan" role="status" hidden></p>${legend()}</div>
     ${listToolbar({ statuses: SUB_STATUSES, suppressible: true, searchPlaceholder: "Search email…" })}
     <div id="subList" class="muted">Loading…</div>
@@ -112,6 +119,16 @@ export async function renderSubscribers(
       // Suppressions alone are no subscribers, so a list of only them still points the way in.
       const listEmpty = c.pending + c.confirmed + c.unsubscribed === 0;
       renderSubTable(listEl, data.subscribers, state, load, signal, listEmpty, inSandbox(prov));
+      // While email isn't going out, signups are paused (SPEC §7, §9): said where the list is,
+      // with the fix on the dashboard.
+      const paused = $("#subSignupsPaused");
+      paused.hidden = !refusalOf(prov);
+      setHtml(
+        paused,
+        refusalOf(prov)
+          ? html`<span class="health-dot">⚠️</span><div>${signupsPausedHtml()}</div>`
+          : html``,
+      );
       renderPager(pagerEl, state, data.page, load);
     } catch (e) {
       renderError(listEl, describeError(e), load);

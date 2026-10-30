@@ -218,6 +218,14 @@ const CONDITION_KINDS: Record<ConditionKind, ConditionKindDoc> = {
     meaning: "No test of the scheduled email has been sent, and it was never re-made.",
     remedy: "A test of the post (`POST /api/posts/:id/test`) clears it.",
   },
+  sandbox: {
+    severity: "`warn`",
+    fields: "",
+    meaning:
+      "The SES account is still in the sandbox, so when the send fires it reaches only addresses verified in SES, and waits for the rest, with other sends behind it, until AWS grants production access.",
+    remedy:
+      "AWS granting production access clears it, and the send then finishes on its own. Tell the publisher before it fires; it is a warning, not a refusal.",
+  },
   daily_writes: {
     severity: "`warn`",
     fields: "`recipients`",
@@ -914,9 +922,9 @@ const SETTINGS_FIELDS: ReferenceField[] = [
   },
   {
     name: "deployment.simulation",
-    type: "{ profile, faults, account } | null",
+    type: "{ profile, faults, refuse, account } | null",
     description:
-      "In local development, the send simulation standing in for a provider: its `profile`, its `faults` (`realistic` or `none`), and the SES `account` it stands in for, from `SIMULATE_ACCOUNT`: its `state` (`sandbox`, `pending`, `denied`, `production`, or `permission`), whether `bounces_routed`, and the `problem` it shows (`set_missing`, `set_paused`, `key_rejected`, `sending_disabled`, `shutdown`, `sender_unverified`, or `probation`; null for none), or null when the account is left unread. Always null once deployed.",
+      "In local development, the send simulation standing in for a provider: its `profile`, its `faults` (`realistic` or `none`), the refusal of the account it answers every email with (`refuse`, a cause such as `configuration`, or null), and the SES `account` it stands in for, from `SIMULATE_ACCOUNT`: its `state` (`sandbox`, `pending`, `denied`, `production`, or `permission`), whether `bounces_routed`, and the `problem` it shows (`set_missing`, `set_paused`, `key_rejected`, `sending_disabled`, `shutdown`, `sender_unverified`, or `probation`; null for none), or null when the account is left unread. Always null once deployed.",
   },
   {
     name: "deployment.free_plan_limits",
@@ -996,6 +1004,18 @@ const PROVIDER_FIELDS: ReferenceField[] = [
     type: "number | null",
     description:
       "When the account last answered. The app asks about every ten minutes while nothing is sending, so a grant shows within about that.",
+  },
+  {
+    name: "sending",
+    type: "object | null",
+    description:
+      "Whether email is getting out, from the provider's last answer to an email; null while no provider is connected. `state` is `unproven` until the provider takes an email, `working` while the last email it was asked to take it took, and `refusing` while it refuses the account for a reason that won't clear on its own (a rejected or unpermitted key, an account not signed up, a missing or paused configuration set or sending pool, an unverified sender or MAIL FROM domain, a paused or suspended account, or a request SES doesn't support), found by an email or by the account check. A refusal of one reader in the sandbox, a spent quota, a throttle, an outage, or a refusal of one email's content changes nothing. `since` is when it entered that state. `last_accepted` is `{ at, by }`, the last email the provider took and what it was (`test`, `confirmation`, `list`, or `notification`), or null. `refusal` is `{ cause, found_by, error, advice, at }` while refusing, else null: `found_by` is the kind of email that found it, or `account_check`. Only an email the provider takes makes it `working`, so after fixing a refusal, send a test email (`POST /api/settings/template/test`) and read this again.",
+  },
+  {
+    name: "signups",
+    type: '"open" | "not_open" | "paused"',
+    description:
+      "Whether the public subscribe form takes signups: `open` while `sending` is `working`, in the sandbox too, where it reaches only addresses verified in SES; `paused` while it is `refusing`; `not_open` with no provider or before email is proven. A closed form answers every request alike, `signups_closed` (or `provider_not_connected` with no provider). Offer the subscribe link only while this is `open` and `state` is `production`.",
   },
 ];
 
@@ -1194,6 +1214,13 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
       configuration_set: { name: "kestrel-mail", source: "setting" },
       warnings: [],
       checked_at: 1768467600000,
+      sending: {
+        state: "working",
+        since: 1768467000000,
+        last_accepted: { at: 1768467000000, by: "test" },
+        refusal: null,
+      },
+      signups: "open",
     } satisfies ProviderStatusView,
   },
 };

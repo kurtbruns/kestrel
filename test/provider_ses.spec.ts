@@ -845,6 +845,31 @@ describe("SesProvider.sendBatch", () => {
     });
   });
 
+  it("refuses a bad request that names a configuration set for the account, not the recipient (SPEC §9, §12)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          __type: "BadRequestException",
+          message: "Configuration set kestrel-mail does not exist.",
+        }),
+        { status: 400 },
+      ),
+    );
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      [{ email: "reader@example.com", unsubscribeUrl: "" }],
+      { purpose: "confirmation", tag: "confirm-1" },
+    );
+    expect(r).toEqual({
+      kind: "halted",
+      halt: {
+        reason: "account",
+        cause: "configuration",
+        error: "ses 400 BadRequestException: Configuration set kestrel-mail does not exist.",
+      },
+    });
+  });
+
   it("holds a batch SES refuses as invalid without naming anyone, rather than marking it unsent", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ __type: "BadRequestException", message: "Invalid input" }), {

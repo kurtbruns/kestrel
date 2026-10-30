@@ -3,6 +3,7 @@
 // and any warning in the server's own words. The Worker's route builds this shape and the
 // editor consumes it; one definition, so neither can drift.
 
+import type { HaltCause } from "./sends";
 import type { DeploymentProvider } from "./settings";
 
 /**
@@ -82,6 +83,75 @@ export interface ProviderWarning {
   docs: { slug: string; anchor: string };
 }
 
+/**
+ * Whether email is getting out (SPEC §9). `unproven`: the provider hasn't taken an email yet.
+ * `working`: the last email it was asked to take, it took. `refusing`: it refuses the account
+ * for a reason that won't clear on its own, found by an email or by the account check.
+ */
+export type SendingState = "unproven" | "working" | "refusing";
+
+/** What an email the provider took or refused was: a post's or the template's test, a
+ *  subscriber's confirmation, a list send, or a notification to the publisher. */
+export type SendingPurpose = "test" | "confirmation" | "list" | "notification";
+
+/** What found a refusal: an email of that kind, or the account check, which sends nothing. */
+export type RefusalFoundBy = SendingPurpose | "account_check";
+
+/**
+ * The causes that make email `refusing` (SPEC §9, §12): the account's, the same for every
+ * email, and not cleared by waiting. The sandbox, a spent quota, a rate limit, an outage, and
+ * a refusal of one email's content or request are left out: each lets some email through or
+ * clears on its own.
+ */
+export const REFUSING_CAUSES = [
+  "credentials",
+  "opt_in",
+  "configuration",
+  "sending_pool",
+  "sender",
+  "mail_from",
+  "paused",
+  "set_paused",
+  "suspended",
+  "unsupported",
+] as const satisfies readonly HaltCause[];
+export type RefusingCause = (typeof REFUSING_CAUSES)[number];
+
+/** Whether a refusal's cause makes email `refusing` (`REFUSING_CAUSES`). */
+export function isRefusingCause(cause: HaltCause | null): cause is RefusingCause {
+  return cause !== null && (REFUSING_CAUSES as readonly string[]).includes(cause);
+}
+
+/** Why email is refusing, while it is. */
+export interface SendingRefusal {
+  cause: RefusingCause;
+  found_by: RefusalFoundBy;
+  /** The provider's words, or the account check's finding. Never carries a credential. */
+  error: string;
+  /** What to do about it, and who does it. */
+  advice: string;
+  /** When it was last found. */
+  at: number;
+}
+
+/** Whether email is getting out, as the provider last answered (SPEC §9). */
+export interface SendingView {
+  state: SendingState;
+  /** When it entered this state. */
+  since: number;
+  /** The last email the provider took, and what it was; null when it never has. */
+  last_accepted: { at: number; by: SendingPurpose } | null;
+  /** Why it is refusing; null unless `state` is `refusing`. */
+  refusal: SendingRefusal | null;
+}
+
+/**
+ * Whether the public subscribe form takes signups (SPEC §7): `open` while email is working,
+ * the sandbox included; `paused` while it is refusing; `not_open` otherwise (no provider, or
+ * not proven yet).
+ */
+export type SignupsState = "open" | "not_open" | "paused";
+
 /** GET /api/provider. */
 export interface ProviderStatusView {
   provider: DeploymentProvider;
@@ -97,4 +167,8 @@ export interface ProviderStatusView {
   warnings: ProviderWarning[];
   /** When the account last answered; null when it never has. */
   checked_at: number | null;
+  /** Whether email is getting out; null while no provider is connected. */
+  sending: SendingView | null;
+  /** Whether the public subscribe form takes signups. */
+  signups: SignupsState;
 }

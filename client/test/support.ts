@@ -197,6 +197,8 @@ export function providerStatus(over: Partial<ProviderStatusView> = {}): Provider
     configuration_set: null,
     warnings: [],
     checked_at: null,
+    sending: { state: "working", since: 0, last_accepted: null, refusal: null },
+    signups: "open",
     ...over,
   };
 }

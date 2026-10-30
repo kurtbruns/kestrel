@@ -61,6 +61,10 @@ export interface SendLoopResult {
   finished: boolean;
   /** Why the run stopped at a halted batch, or null if it did not. */
   halt: HaltReason | null;
+  /** The provider's refusal of the account this run met, or null: with `accepted`, what the
+   *  run says about whether email is getting out (SPEC §9), which the sweep records once a
+   *  tick. */
+  refusal: BatchHalt | null;
 }
 
 /** The most recipients in one batch, whatever the provider allows. */
@@ -131,6 +135,7 @@ export async function runSend(
     requeued: 0,
     finished: false,
     halt: null,
+    refusal: null,
   };
   if (!budget.affords(MIN_RUN_COST)) {
     return empty;
@@ -397,6 +402,9 @@ export async function runSend(
     result.requeued += requeued;
     if (halt) {
       result.halt = halt.reason;
+      if (halt.reason === "account") {
+        result.refusal = halt;
+      }
     }
 
     const count = (status: DeliveryOutcome["status"]) =>

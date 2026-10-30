@@ -268,6 +268,14 @@ export function classifySesError(
   if (type === "MessageRejected") {
     return account(verificationCause(message, from) ?? "content");
   }
+  // AWS answers a send with a bad request when the sending identity's default configuration
+  // set was deleted ("Understanding default configuration sets"). That is the deployment's
+  // to fix and the same for every recipient, so it holds a send, and refuses a test or a
+  // confirmation for the account rather than failing its one recipient for good. Only when
+  // SES's words name a configuration set: its other bad requests can be about an address.
+  if (type === "BadRequestException" && /configuration set/i.test(message)) {
+    return account("configuration");
+  }
   if (UNAVAILABLE_ERROR_TYPES.has(type)) {
     return unavailable("outage");
   }
@@ -879,7 +887,7 @@ export function parseSesError(
 }
 
 /** The bare address of a `Name <addr>` from-line, lowercased. */
-function bareAddress(from: string): string {
+export function bareAddress(from: string): string {
   const angle = /<([^>]+)>/.exec(from);
   return (angle?.[1] ?? from).trim().toLowerCase();
 }

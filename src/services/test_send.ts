@@ -8,6 +8,7 @@
 
 import type { TestNotSent } from "../../shared/posts";
 import { refusalAdvice, sentence } from "../../shared/sends";
+import type { Config } from "../env";
 import { log } from "../lib/log";
 import { perRecipient } from "../providers";
 import type {
@@ -19,6 +20,7 @@ import type {
   SendBatchOptions,
   SendBatchResult,
 } from "../providers/types";
+import { contactOutcome, noteContact } from "./sending";
 
 /** One address's answer to a test: sent, or not, with why. */
 export type TestAnswer =
@@ -34,9 +36,12 @@ export interface TestKind {
 /**
  * Hand a test to the provider and answer for each recipient, in order. A request that gets
  * no answer at all is every recipient's, possibly arrived, never a thrown error: the
- * provider's silence isn't the server failing.
+ * provider's silence isn't the server failing. What the answer says about the account is
+ * recorded (SPEC §9): a test the provider takes is what proves email works.
  */
 export async function sendTest(
+  db: D1Database,
+  config: Config,
   provider: EmailProvider,
   email: RenderedEmail,
   recipients: Recipient[],
@@ -52,6 +57,7 @@ export async function sendTest(
     logNotSent(provider, kind, recipients.length, notSent);
     return recipients.map((r) => ({ email: r.email, sent: false, notSent }));
   }
+  await noteContact(db, config, "test", contactOutcome(answer), Date.now());
   const halt = answer.halt;
   const unknown: TestNotSent[] = [];
   const refused: TestNotSent[] = [];

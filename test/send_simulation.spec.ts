@@ -129,16 +129,50 @@ describe("SIMULATE_SENDS", () => {
         profile: "generic",
         faults: "realistic",
         account: null,
+        refuse: null,
       });
     }
-    expect(simulation("SES")).toEqual({ profile: "ses", faults: "realistic", account: null });
-    expect(simulation("ses:none")).toEqual({ profile: "ses", faults: "none", account: null });
-    expect(simulation("1:none")).toEqual({ profile: "generic", faults: "none", account: null });
+    expect(simulation("SES")).toEqual({
+      profile: "ses",
+      faults: "realistic",
+      account: null,
+      refuse: null,
+    });
+    expect(simulation("ses:none")).toEqual({
+      profile: "ses",
+      faults: "none",
+      account: null,
+      refuse: null,
+    });
+    expect(simulation("1:none")).toEqual({
+      profile: "generic",
+      faults: "none",
+      account: null,
+      refuse: null,
+    });
     expect(simulation("ses:realistic")).toEqual({
       profile: "ses",
       faults: "realistic",
       account: null,
+      refuse: null,
     });
+  });
+
+  it("reads a refusal of the account every email meets, through SES's answers only (SPEC §9, §10)", () => {
+    expect(simulation("ses:refuse=configuration")).toMatchObject({
+      profile: "ses",
+      faults: "realistic",
+      refuse: "configuration",
+    });
+    expect(simulation("ses:none:refuse=suspended")).toMatchObject({
+      faults: "none",
+      refuse: "suspended",
+    });
+    // A cause that isn't a refusal of the account, or one SES never answers as an error, and
+    // a profile without SES's answers, are refused.
+    for (const value of ["ses:refuse=sandbox", "ses:refuse=sending_pool", "1:refuse=paused"]) {
+      expect(() => simulation(value), value).toThrow(ConfigError);
+    }
   });
 
   it("refuses a value it doesn't know rather than reading it as off", () => {
@@ -170,7 +204,12 @@ describe("SIMULATE_SENDS", () => {
     const on = await readJson(
       await fetchWith({ SIMULATE_SENDS: "ses:none" }, "/api/settings", { headers: AUTH }),
     );
-    expect(on.deployment.simulation).toEqual({ profile: "ses", faults: "none", account: null });
+    expect(on.deployment.simulation).toEqual({
+      profile: "ses",
+      faults: "none",
+      account: null,
+      refuse: null,
+    });
     const off = await readJson(await fetchWith({}, "/api/settings", { headers: AUTH }));
     expect(off.deployment.simulation).toBeNull();
   });
@@ -200,7 +239,7 @@ describe("the SES profile, with the real adapter's traits", () => {
       withVars(sesVars),
     );
     const sim = new SimProvider(
-      { profile: "ses", faults: "realistic", account: null },
+      { profile: "ses", faults: "realistic", account: null, refuse: null },
       getConfig(withVars({ SES_MAX_SEND_RATE: "3" })),
     );
     expect(sim.maxBatch).toBe(ses.maxBatch);
@@ -218,10 +257,18 @@ describe("the SES profile, with the real adapter's traits", () => {
     vi.spyOn(sesAdapter, "classifySesError").mockReturnValue(null);
     const config = getConfig(env);
     expect(
-      () => new SimProvider({ profile: "generic", faults: "realistic", account: null }, config),
+      () =>
+        new SimProvider(
+          { profile: "generic", faults: "realistic", account: null, refuse: null },
+          config,
+        ),
     ).not.toThrow();
     expect(
-      () => new SimProvider({ profile: "ses", faults: "realistic", account: null }, config),
+      () =>
+        new SimProvider(
+          { profile: "ses", faults: "realistic", account: null, refuse: null },
+          config,
+        ),
     ).toThrow("expected a halting error response to exist");
   });
 });
@@ -230,7 +277,7 @@ describe("list sends only", () => {
   it("hands tests, confirmations, and notifications to the outbox at once, never refused", async () => {
     // The generic profile refuses about one recipient in 25 once; none of these may be.
     const sim = new SimProvider(
-      { profile: "generic", faults: "realistic", account: null },
+      { profile: "generic", faults: "realistic", account: null, refuse: null },
       getConfig(env),
     );
     for (const purpose of ["test", "confirmation", "notification"] as const) {
@@ -281,7 +328,7 @@ describe("list sends only", () => {
 
   it("records a simulated list batch in the outbox with each recipient's own link, once per key", async () => {
     const sim = new SimProvider(
-      { profile: "generic", faults: "none", account: null },
+      { profile: "generic", faults: "none", account: null, refuse: null },
       getConfig(env),
     );
     const email = { ...rendered, html: `<p>hi</p><a href="${UNSUB_SENTINEL}">Unsubscribe</a>` };
@@ -464,7 +511,7 @@ describe("drainSimulatedWebhooks (delayed synthetic receipts through the real in
 }, () => {
   const simConfig = (): Config => ({
     ...getConfig(env),
-    simulation: { profile: "generic", faults: "realistic", account: null },
+    simulation: { profile: "generic", faults: "realistic", account: null, refuse: null },
   });
 
   it("fabricates due delivered/bounced/complained events and suppresses only the hard-bad addresses (SPEC §10)", async () => {
@@ -582,7 +629,7 @@ describe("drainSimulatedWebhooks (delayed synthetic receipts through the real in
 describe("the generic profile", () => {
   it("paces a batch, accepting the bulk and refusing a few once, retryably", async () => {
     const provider = new SimProvider(
-      { profile: "generic", faults: "realistic", account: null },
+      { profile: "generic", faults: "realistic", account: null, refuse: null },
       getConfig(env),
     );
     expect(provider.maxBatch).toBe(8);

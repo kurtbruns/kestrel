@@ -53,6 +53,7 @@ import {
   type SeedSubscriber,
   type SeedSuppression,
 } from "../db/seed";
+import { recordAccepted } from "../db/sending";
 import { recomputeSendCounters } from "../db/sends";
 import { getSettings, newLogoKey, setPublicationLogo, updateSettings } from "../db/settings";
 import { audienceEmails } from "../db/subscribers";
@@ -1371,6 +1372,12 @@ export async function seedDatabase(
       archiveUrls.push(`${config.archiveOrigin}${config.archiveBasePath}/${demoPost.slug}`);
     }
     sentIndex++;
+  }
+
+  // The demo stands in for a live publication, whose provider has taken its posts, so email
+  // is working and its signups are open (SPEC §7, §9).
+  if (counts.deliveries > 0) {
+    await recordAccepted(db, "list", Date.now());
   }
 
   const bucket = (status: SeedSubscriber["status"]) =>

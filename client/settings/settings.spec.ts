@@ -186,9 +186,20 @@ describe("settings view", () => {
       ...local.deployment,
       provider: "fake",
       min_lead_ms: 60_000,
-      simulation: { profile: "ses", faults: "none", account: null },
+      simulation: { profile: "ses", faults: "none", account: null, refuse: null },
     };
-    await open([{ path: "/api/settings", reply: () => local }]);
+    fake = fakeApi([
+      { path: "/api/settings", reply: () => local },
+      readerPage,
+      // The server's answer for a simulation with no account to stand in for.
+      {
+        path: "/api/provider",
+        reply: () =>
+          providerStatus({ provider: "fake", state: "unknown", unknown_reason: "stand_in" }),
+      },
+    ]);
+    await mount(renderSettings);
+    await vi.advanceTimersByTimeAsync(0);
     expect(row("Minimum lead")).toBe("1 minute");
     expect(row("Email provider")).toBe("Fake (dev, dead-end)Simulating Amazon SES, no failures");
   });
@@ -1084,6 +1095,57 @@ describe("settings view", () => {
       sending_enabled: true,
     } as const;
 
+    it("says whether email is getting out: not proven yet, refusing with the fix, or when SES last took one (SPEC §9)", async () => {
+      await withStatus({
+        state: "production",
+        unknown_reason: null,
+        sending: { state: "unproven", since: 0, last_accepted: null, refusal: null },
+        signups: "not_open",
+      });
+      expect($("#providerSending").textContent).toBe("Not proven yet");
+      expect($("#providerValue").textContent).toContain(
+        "SES hasn’t sent anything yet, so signups are closed. Send a test email",
+      );
+      unmount();
+      fake.restore();
+      await withStatus({
+        state: "production",
+        unknown_reason: null,
+        sending: {
+          state: "refusing",
+          since: 1,
+          last_accepted: null,
+          refusal: {
+            cause: "credentials",
+            found_by: "account_check",
+            error: "Amazon SES rejects Kestrel’s AWS key.",
+            advice: "Replace the key.",
+            at: 1,
+          },
+        },
+        signups: "paused",
+      });
+      expect($("#providerSending").textContent).toBe("Refusing");
+      expect($("#providerSending").classList.contains("danger")).toBe(true);
+      expect($("#providerValue .set-error").textContent).toBe(
+        "Amazon SES rejects Kestrel’s AWS key. Replace the key. Then send a test email.",
+      );
+      unmount();
+      fake.restore();
+      await withStatus({
+        state: "production",
+        unknown_reason: null,
+        sending: {
+          state: "working",
+          since: 1,
+          last_accepted: { at: 1, by: "test" },
+          refusal: null,
+        },
+      });
+      expect(document.querySelector("#providerSending")).toBeNull();
+      expect($("#providerLastAccepted").textContent).toBe(`SES last took a test: ${fmt(1)}.`);
+    });
+
     it("names the sandbox, what it limits, and the step that asks AWS to lift it", async () => {
       await withStatus({
         state: "sandbox",
@@ -1173,6 +1235,7 @@ describe("settings view", () => {
         simulation: {
           profile: "ses",
           faults: "realistic",
+          refuse: null,
           account: { state: "production", bounces_routed: true, problem: null },
         },
       };

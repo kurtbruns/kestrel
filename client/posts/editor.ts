@@ -12,7 +12,13 @@ import type {
   PostSettingsResponse,
   TestSendResponse,
 } from "../../shared/posts";
-import type { ScheduleResponse, SendAction, SendResponse, SendView } from "../../shared/sends";
+import {
+  SANDBOX_SEND_WARNING,
+  type ScheduleResponse,
+  type SendAction,
+  type SendResponse,
+  type SendView,
+} from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import { slugify } from "../../shared/slug";
 import type { SubscriberListResponse } from "../../shared/subscribers";
@@ -27,11 +33,13 @@ import {
   notConnectedTestLine,
   notConnectedWarning,
   providerNotConnected,
+  sandboxSendLine,
   sendNowWhenText,
   tooSoonText,
   withNoProviderNote,
 } from "../deployment";
 import { at, every, mount, onAbort, poll, setTitle, type ViewHandle } from "../lifecycle";
+import { inSandbox, readProviderStatus } from "../provider_status";
 import { followSend, readSendsNow, type StageChange } from "../send_state";
 import { openRescheduleModal } from "../sends/dialogs";
 import { can, conditionOf, has } from "../sends/progress";
@@ -235,7 +243,7 @@ export async function renderEditor(
         <button type="button" class="ghost" id="settingsBtn">${icon("settings")}<span>Post settings</span></button>
       </div>
     </div>
-    ${locked && scheduled ? html`<div class="banner banner-scheduled banner-split"><div class="banner-top"><div class="sched-main"><span id="schedWhen"></span><div class="sched-by" id="schedBy" hidden></div>${heldWhenFiresHtml("banner")}<div class="sched-remade" id="schedRemade" hidden><span id="schedRemadeMsg"></span></div><div class="sched-note" id="schedDailyWrites" hidden><span class="sched-note-mark" aria-hidden="true">⚠️</span><span class="sched-note-msg" id="schedDailyWritesMsg"></span></div></div><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Edit schedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div><div class="banner-bottom sched-dest"><span class="sched-dest-icon" id="schedDestIcon">${destinationIcon(pub)}</span><span id="schedDest">${destinationHtml(pub)}</span></div></div>` : null}
+    ${locked && scheduled ? html`<div class="banner banner-scheduled banner-split"><div class="banner-top"><div class="sched-main"><span id="schedWhen"></span><div class="sched-by" id="schedBy" hidden></div>${heldWhenFiresHtml("banner")}<div class="sched-remade" id="schedRemade" hidden><span id="schedRemadeMsg"></span></div><div class="sched-note" id="schedDailyWrites" hidden><span class="sched-note-mark" aria-hidden="true">⚠️</span><span class="sched-note-msg" id="schedDailyWritesMsg"></span></div><div class="sched-note" id="schedSandbox" hidden><span class="sched-note-mark" aria-hidden="true">⚠️</span><span class="sched-note-msg" id="schedSandboxMsg"></span></div></div><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Edit schedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div><div class="banner-bottom sched-dest"><span class="sched-dest-icon" id="schedDestIcon">${destinationIcon(pub)}</span><span id="schedDest">${destinationHtml(pub)}</span></div></div>` : null}
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
     <div class="editor-form">
       <label for="f-subject">Subject</label>
@@ -1044,7 +1052,8 @@ export async function renderEditor(
     // tested at all is said quietly instead (SPEC §8), as "Not tested yet" beside Send test
     // email, the control that settles it, until its first test lands.
     // On Workers Free's limits, a send too large for D1's daily writes says so here too, in
-    // the server's words, for as long as it is scheduled (DESIGN §4). It never blocks.
+    // the server's words, for as long as it is scheduled (DESIGN §4). It never blocks. So does
+    // one scheduled while SES is in the sandbox, which reaches only verified addresses.
     const remadeEl = $("#schedRemade");
     const testHintEl = $("#testHint");
     const dailyWritesEl = $("#schedDailyWrites");
@@ -1062,6 +1071,9 @@ export async function renderEditor(
       const dailyWrites = conditionOf(current, "daily_writes");
       dailyWritesEl.hidden = !dailyWrites;
       $("#schedDailyWritesMsg").textContent = dailyWrites?.message ?? "";
+      const sandbox = conditionOf(current, "sandbox");
+      $("#schedSandbox").hidden = !sandbox;
+      $("#schedSandboxMsg").textContent = sandbox?.message ?? "";
     };
     paintConditions();
 
@@ -1391,7 +1403,7 @@ export async function renderEditor(
       }
       const scheduleHint = "It sends at the time you pick, with a cancelable window until then.";
       const scheduleView = () =>
-        html`<h3 id="schHead">Schedule this post</h3><p class="hint" id="schHint">${scheduleHint}</p>${notConnectedScheduleLine()}${dailyWritesLine()}${notConnected ? null : html`<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}"><div class="dialog-settings" id="schForm"></div>`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Or send as soon as possible.</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
+        html`<h3 id="schHead">Schedule this post</h3><p class="hint" id="schHint">${scheduleHint}</p>${notConnectedScheduleLine()}${dailyWritesLine()}${sandboxSendLine()}${notConnected ? null : html`<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}"><div class="dialog-settings" id="schForm"></div>`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Or send as soon as possible.</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
       // The picked time survives a trip to Send now and back.
       let picked = def;
       const m = modal(scheduleView(), signal);
@@ -1420,6 +1432,18 @@ export async function renderEditor(
         const el = box.querySelector<HTMLElement>("#schDailyWrites"); // gone if closed or flipped
         if (el && n !== null && n > DAILY_WRITES_SEND_RECIPIENTS) {
           el.textContent = dailyWritesSendWarning(n);
+          el.hidden = false;
+        }
+      };
+      // In the SES sandbox a send reaches only verified addresses: the scheduled send's own
+      // `sandbox` warning, in the same words, shown before it is scheduled (SPEC §6).
+      let provider: ReturnType<typeof readProviderStatus> | null = null;
+      const paintSandbox = async () => {
+        provider ??= readProviderStatus(appState.appConfig?.deployment, signal);
+        const sandboxed = inSandbox(await provider);
+        const el = box.querySelector<HTMLElement>("#schSandbox"); // gone if closed or flipped
+        if (el && sandboxed) {
+          el.textContent = SANDBOX_SEND_WARNING;
           el.hidden = false;
         }
       };
@@ -1539,6 +1563,7 @@ export async function renderEditor(
         showForm();
         $("#schWhen", box).focus();
         void paintDailyWrites();
+        void paintSandbox();
       }
 
       async function showSendNow() {
@@ -1548,7 +1573,7 @@ export async function renderEditor(
         }
         setHtml(
           box,
-          html`<h3 id="snHead">Send now?</h3><p class="hint">Sends this draft, as it is now, to <strong id="snWho">your subscribers</strong> in ${sendNowWhenText()}. The post locks until then, and you can cancel any time before it starts sending.</p><div class="dialog-settings" id="schForm"></div>${dailyWritesLine()}<div class="actions"><button type="button" class="linkbtn actions-back" id="toSchedule">← Back to schedule</button><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`,
+          html`<h3 id="snHead">Send now?</h3><p class="hint">Sends this draft, as it is now, to <strong id="snWho">your subscribers</strong> in ${sendNowWhenText()}. The post locks until then, and you can cancel any time before it starts sending.</p><div class="dialog-settings" id="schForm"></div>${dailyWritesLine()}${sandboxSendLine()}<div class="actions"><button type="button" class="linkbtn actions-back" id="toSchedule">← Back to schedule</button><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`,
         );
         box.setAttribute("aria-labelledby", "snHead");
         $("#snCancel", box).onclick = m.close;
@@ -1561,6 +1586,7 @@ export async function renderEditor(
         };
         $("#snGo", box).focus();
         void paintDailyWrites();
+        void paintSandbox();
         // Fill the count once known. The confirmed count would still include the suppressed.
         const n = await readAudience();
         const whoEl = box.querySelector("#snWho"); // gone if the view flipped back meanwhile

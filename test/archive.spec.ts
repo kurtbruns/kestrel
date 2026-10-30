@@ -26,12 +26,14 @@ import {
 import { readerIdentity } from "../src/routes/reader";
 import { cancel, freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
-import { dueSend, resetDatabase, seedConfirmed, setRow } from "./support/fixtures";
+import { dueSend, resetDatabase, seedConfirmed, sendingWorks, setRow } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH } from "./support/http";
 import { fetchWith } from "./support/worker_env";
 
 beforeEach(async () => {
   await resetDatabase();
+  // A live instance, whose public form takes signups (SPEC §7).
+  await sendingWorks();
   clearFakeOutbox();
 });
 
@@ -679,9 +681,10 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
       expect(off, name).toContain(` · ${publication}</title>`);
       expect(off, name).not.toContain('class="r-sub"');
       if (handler === subscribeForm || handler === subscribe) {
-        // The subscribe pages show no one's address, so they stay briefly cacheable
-        // and indexable like the rest of the public surface.
-        expect(offRes.headers.get("cache-control"), name).toBe("public, max-age=300");
+        // The subscribe pages show no one's address, so they stay indexable like the rest of
+        // the public surface, but are checked on every load, since whether they take
+        // signups can change at any moment (SPEC §7).
+        expect(offRes.headers.get("cache-control"), name).toBe("no-cache");
         expect(offRes.headers.get("x-robots-tag"), name).toBeNull();
       } else {
         // Some show the reader's address: never cached, never indexed.

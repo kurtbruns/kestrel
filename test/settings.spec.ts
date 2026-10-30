@@ -12,13 +12,21 @@ import { type AppEnv, getConfig } from "../src/env";
 import type { RequestContext } from "../src/router";
 import * as settingsRoutes from "../src/routes/settings";
 import { SES_DEPLOY } from "./support/deploy";
-import { clearLogos, dueSend, logoKeys, resetDatabase, tick } from "./support/fixtures";
+import {
+  clearLogos,
+  dueSend,
+  logoKeys,
+  resetDatabase,
+  sendingWorks,
+  tick,
+} from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, PNG_1x1 } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
 
 // Each test starts from no settings row, so none sees a name, logo, or address another left.
 beforeEach(async () => {
   await resetDatabase();
+  await sendingWorks();
   await clearLogos();
 });
 

@@ -5,6 +5,7 @@
 
 import type { BuildInfo } from "./build";
 import type { TestNotSent } from "./posts";
+import type { RefusingCause } from "./provider";
 import type { SendView } from "./sends";
 
 /** One address a template test missed, and why. */
@@ -87,6 +88,24 @@ export const SIMULATED_ACCOUNTS = [
 ] as const;
 export type SimulatedAccount = (typeof SIMULATED_ACCOUNTS)[number];
 
+/**
+ * The refusals of the account a local server's simulated SES can answer every email with
+ * (`SIMULATE_SENDS=ses:refuse=<cause>`), each one an SES error response the real adapter
+ * reads as that cause (SPEC §9, §10). Every refusing cause but a missing sending pool, which
+ * SES reports only in a bulk entry's result, not as an error.
+ */
+export const SIMULATED_REFUSALS = [
+  "credentials",
+  "opt_in",
+  "configuration",
+  "sender",
+  "mail_from",
+  "paused",
+  "set_paused",
+  "suspended",
+  "unsupported",
+] as const satisfies readonly RefusingCause[];
+
 /** The account problems a local server can stand in for, each one the account check finds (SPEC §9). */
 export const SIMULATED_ACCOUNT_PROBLEMS = [
   "set_missing",
@@ -110,6 +129,8 @@ export interface SimulatedAccountView {
 export interface SimulationView {
   profile: SimulationProfile;
   faults: SimulationFaults;
+  /** The refusal of the account it answers every email with, from `SIMULATE_SENDS=ses:refuse=<cause>`; null for none. */
+  refuse: RefusingCause | null;
   /** The SES account it stands in for, from `SIMULATE_ACCOUNT`; null leaves the account unread. */
   account: SimulatedAccountView | null;
 }
@@ -153,8 +174,9 @@ export interface DeploymentView {
 export type SendNotificationKind = "finished" | "refused" | "stuck" | "wedged" | "missed";
 
 /** What a notification is about (SPEC §8): a send, a list Claude imported for the publisher,
- *  or a signup's confirmation the SES sandbox refused (`sandbox`, at most one a UTC day). */
-export type NotificationKind = SendNotificationKind | "import" | "sandbox";
+ *  a signup's confirmation the SES sandbox refused (`sandbox`, at most one a UTC day), or email
+ *  not going out with no send behind it (`not_sending`, at most one a UTC day). */
+export type NotificationKind = SendNotificationKind | "import" | "sandbox" | "not_sending";
 
 /** What a line of the notification status is about: an event, or a test from the settings surface (whose subject is ""). An import's subject is its file's name. */
 export type NotificationStatusKind = NotificationKind | "test";

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { READER_JOURNEYS, readerPagePath } from "../shared/reader_pages";
 import { updateSettings } from "../src/db/settings";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
-import { resetDatabase } from "./support/fixtures";
+import { resetDatabase, sendingWorks } from "./support/fixtures";
 import { AUTH, base } from "./support/http";
 
 const publication = "Marsh Lane";
@@ -14,6 +14,8 @@ const SHOWS: Record<string, string[]> = {
   "subscribe/form": [`Subscribe to ${publication}`, 'name="email"'],
   "subscribe/check-inbox": ["Almost there"],
   "subscribe/not-an-email": ["That doesn’t look like an email"],
+  "subscribe/not-open": ["Signups aren’t open yet"],
+  "subscribe/paused": ["Signups are paused", "can’t send confirmation emails right now"],
   "confirm/ready": [
     `Confirm your subscription to ${publication}`,
     "Confirm <strong>reader@example.com</strong> to start receiving the newsletter.",
@@ -38,6 +40,8 @@ const SHOWS: Record<string, string[]> = {
 
 beforeEach(async () => {
   await resetDatabase();
+  // A live instance, so the landing page shows the form it would (SPEC §7).
+  await sendingWorks();
   await updateSettings(env.DB, { publication: { name: publication } });
   clearFakeOutbox();
 });

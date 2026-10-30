@@ -6,7 +6,14 @@ import type { ProviderStatusView } from "../../shared/provider";
 import { DEFAULT_MIN_LEAD_MS, formatLead } from "../../shared/sends";
 import type { DeploymentView, SimulationProfile } from "../../shared/settings";
 import { connectProviderLink } from "../deployment";
-import { providerStateHtml, sendRateHtml, stopsSending, warningHtml } from "../provider_status";
+import {
+  providerStateHtml,
+  sendingHtml,
+  sendRateHtml,
+  stopsSending,
+  warningHtml,
+} from "../provider_status";
+import { fmt } from "../ui/format";
 import { type Html, html } from "../ui/html";
 import { icon } from "../ui/icons";
 import { chip, monogram, type SettingsPage, secHead } from "./page";
@@ -33,11 +40,15 @@ function providerValue(d: DeploymentView, status: ProviderStatusView | null): Ht
   const simulating = d.simulation
     ? html`<span class="set-pill">Simulating ${SIMULATION_LABELS[d.simulation.profile]}${d.simulation.faults === "none" ? ", no failures" : ""}</span>`
     : null;
-  if (status) {
-    // A simulated account (SPEC §10) shows its state as SES would, with the simulation named beside it.
-    return providerStateHtml(status, simulating ? html` ${simulating}` : null);
+  // Whether email is getting out (SPEC §9), its pill beside the name and its line after.
+  const sending = status ? sendingHtml(status, fmt) : null;
+  if (status && status.unknown_reason !== "stand_in") {
+    // A simulated account (SPEC §10) shows its state as SES would, with the simulation named
+    // beside it.
+    const beside = [sending?.pill, simulating].filter((x): x is Html => Boolean(x));
+    return html`${providerStateHtml(status, beside.length ? html`${beside.map((b) => html` ${b}`)}` : null)}${sending?.line ?? null}`;
   }
-  return html`${providerLabel(d.provider)}${simulating}`;
+  return html`<span>${providerLabel(d.provider)}${sending?.pill ? html` ${sending.pill}` : null}${simulating}</span>${sending?.line ?? null}`;
 }
 
 /** The provider a local send simulation models, as the Email provider row names it. */

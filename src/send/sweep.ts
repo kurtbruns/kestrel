@@ -10,6 +10,8 @@
  *      then flag anomalies (sends in flight too long with nothing handed off, wedged sends
  *      awaiting Resolve),
  *   4. notify the publisher of sends that went out or ran into a problem (`notify/notify.ts`),
+ *      then record what the tick's emails said about whether email is getting out
+ *      (`services/sending.ts`), in one statement held back for it,
  *   5. on a tick that sent nothing, ask the provider about its account when the last answer
  *      is old (`services/provider_status.ts`), with what notifying left of the budget.
  *
@@ -43,6 +45,7 @@ import { NOTIFY_RESERVE, notifyPublisher } from "../notify/notify";
 import { getProvider } from "../providers";
 import { drainSimulatedWebhooks } from "../providers/simulate";
 import { accountForPacing, refreshProviderAccount, sesSendRate } from "../services/provider_status";
+import { Contacts, runOutcome } from "../services/sending";
 import { applyHeldReceipts } from "../services/webhook_events";
 import { Budget, metered } from "./budget";
 import { MIN_RUN_COST, runSend } from "./loop";
@@ -92,6 +95,7 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
   // sweep; instead it waits for the next tick (the backoff).
   const handled = new Set<string>();
   const held = ANOMALY_CHECKS + NOTIFY_RESERVE;
+  const contacts = new Contacts();
   const whole = new Budget(config.subrequestBudget);
   const budget = new Budget(whole.limit - held, whole.queryLimit - held);
   const db = metered(env.DB, budget);
@@ -123,7 +127,7 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
     }
     handled.add(s.id);
     tick.resumable += 1;
-    await safeRun(env, s.id, budget, window, await sendRate());
+    await safeRun(env, s.id, budget, window, await sendRate(), contacts);
   };
 
   // 1) A halted send whose retry is due asks the provider first. A halt is the account's or
@@ -145,7 +149,7 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
     }
     handled.add(s.id);
     tick.due += 1;
-    await safeRun(env, s.id, budget, window, await sendRate());
+    await safeRun(env, s.id, budget, window, await sendRate(), contacts);
   }
 
   // 3) The rest: interrupted sends whose lease has expired, while the budget has room for
@@ -188,9 +192,17 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
     NOTIFY_RESERVE + Math.max(0, budget.queriesLeft),
   );
   try {
-    await notifyPublisher(env, rest);
+    await notifyPublisher(env, rest, contacts);
   } catch (err) {
     log.error("notify.error", { error: errorText(err) });
+  }
+
+  // What the tick's emails said about whether email is getting out (SPEC §9), in one
+  // statement from what notifying left, which is nearly always room: notifying spends its
+  // reserve only on a tick with notices due and nothing else left. A tick without the room
+  // records nothing, and a later one records the provider's next answer. Caught inside.
+  if (rest.affords(1)) {
+    await contacts.record(metered(env.DB, rest), config, Date.now());
   }
 
   // 7) Ask the provider about its account, only on a tick that sent nothing, so its requests
@@ -209,15 +221,19 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
   await drainSimulatedWebhooks(env, config);
 }
 
+/** Run one send, adding what its run says about whether email is getting out to `contacts`
+ *  (SPEC §9). */
 async function safeRun(
   env: AppEnv,
   sendId: string,
   budget: Budget,
   window: SendWindow,
   sendRate: number | undefined,
+  contacts: Contacts,
 ): Promise<void> {
   try {
-    await runSend(env, sendId, budget, window, sendRate);
+    const run = await runSend(env, sendId, budget, window, sendRate);
+    contacts.add("list", runOutcome(run.accepted, run.refusal));
   } catch (err) {
     // One bad send must not stop the sweep; it will be retried next tick.
     log.error("send.error", { sendId, error: errorText(err) });

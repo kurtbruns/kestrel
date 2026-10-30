@@ -17,7 +17,7 @@ import { type AppEnv, getConfig } from "../src/env";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { sweep } from "../src/send/sweep";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
-import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
+import { frozenSend, resetDatabase, seedConfirmed, sendingWorks } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 
 // Erasing a subscriber (SPEC §7): they are unsubscribed by it and their record is stripped to
@@ -28,6 +28,8 @@ const PLACEHOLDER = /^erased:[0-9a-f]{16}$/;
 
 beforeEach(async () => {
   await resetDatabase();
+  // A live instance, whose public form takes signups (SPEC §7).
+  await sendingWorks();
   clearFakeOutbox();
 });
 

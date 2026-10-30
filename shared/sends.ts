@@ -158,6 +158,10 @@ export function sentence(error: string | null): string {
   return /[.!?]$/.test(text) ? text : `${text}.`;
 }
 
+/** The `sandbox` condition's words (SPEC §6), the same before a send is scheduled and on it. */
+export const SANDBOX_SEND_WARNING =
+  "Amazon SES is still in the sandbox, so when this send fires it reaches only addresses verified in SES. It waits for the rest, and other sends wait behind it, until AWS grants production access, then finishes on its own.";
+
 /**
  * The `refused` condition's words (SPEC §12), by whose refusal it is: no provider connected,
  * the provider refusing this send's own email (`isSendOwnHalt`), or the account. "Because of
@@ -534,6 +538,8 @@ interface ConditionBase {
  *   app; `accepted` is how many wait on one.
  * - `remade`: a template or identity change re-made the scheduled email after its last test.
  * - `untested`: no test of the scheduled email has been sent, and it was never re-made.
+ * - `sandbox`: the provider's account is in the SES sandbox, so the scheduled send will reach
+ *   only addresses verified in SES and wait for the rest until AWS grants production access.
  * - `daily_writes`: on Workers Free's limits, a scheduled send to more recipients than D1's
  *   daily writes comfortably cover (`DAILY_WRITES_SEND_RECIPIENTS`), judged by its audience
  *   alone; `recipients` is its audience as scheduled.
@@ -554,6 +560,7 @@ export type SendCondition =
   | (ConditionBase & { kind: "no_receipts"; accepted: number })
   | (ConditionBase & { kind: "remade"; tested_at: number | null })
   | (ConditionBase & { kind: "untested" })
+  | (ConditionBase & { kind: "sandbox" })
   | (ConditionBase & { kind: "daily_writes"; recipients: number });
 
 /** The kinds of condition. */
