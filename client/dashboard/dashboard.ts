@@ -338,6 +338,30 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       ),
     );
 
+  // The setup steps: the first-run checklist, or the Finish setting up card while setup is
+  // open. Whether the reader showed the done steps lasts for the page, so a repaint after a
+  // background read never hides them mid-read; a toggle keeps focus on the toggle it repaints.
+  let showDone = false;
+  const paintSetup = (refocus = false) => {
+    const box = $("#dashSetup", root);
+    const layout = posts.length ? "card" : "checklist";
+    setHtml(
+      box,
+      layout === "checklist" || setupOpen() ? setupStepsHtml(facts(), layout, showDone) : html``,
+    );
+    wireDashButtons(box, remount, signal); // Copy is delegated from root
+    const toggle = box.querySelector<HTMLButtonElement>("[data-act='toggle-done']");
+    if (toggle) {
+      toggle.onclick = () => {
+        showDone = !showDone;
+        paintSetup(true);
+      };
+      if (refocus) {
+        toggle.focus();
+      }
+    }
+  };
+
   // First run, with nothing written yet: replace the body with the setup checklist rather
   // than a wall of empty tiles. It ends at the first post, not the first subscriber, so
   // bringing a list in (a step on it) doesn't take away the steps after it; from the first
@@ -347,18 +371,15 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       root,
       html`<div class="dash-head"><div><h1>${pub.name}</h1>${
         pub.tagline ? html`<p class="muted dash-tagline">${pub.tagline}</p>` : null
-      }<p class="muted">Let’s get your first post out the door.</p></div></div><div id="dashHealth">${healthNow()}</div>${setupStepsHtml(facts(), "checklist")}<section class="dash-section"><h2>API access</h2>${apiConnectCard(false)}</section>`,
+      }<p class="muted">Let’s get your first post out the door.</p></div></div><div id="dashHealth">${healthNow()}</div><div id="dashSetup"></div><section class="dash-section"><h2>API access</h2>${apiConnectCard(false)}</section>`,
     );
+    paintSetup();
     wireDashActions(root, remount, signal);
     return;
   }
 
   // The Finish setting up card, while setup is open: it goes when a post listed in the
   // archive is published.
-  // A repaint keeps the done steps open if the reader opened them, so a background read never
-  // folds them away mid-read.
-  const setupCardHtml = (foldOpen = false) =>
-    setupOpen() ? setupStepsHtml(facts(), "card", foldOpen) : html``;
 
   // Each tile deep-links into the roster pre-filtered on its criterion
   // (#/subscribers/<filter>), so a count is a way in, not just a number.
@@ -419,7 +440,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       <button class="primary" data-act="new-post">New post</button>
     </div>
     <div id="dashHealth">${healthNow()}</div>
-    <div id="dashSetup">${setupCardHtml()}</div>
+    <div id="dashSetup"></div>
     <div id="dashActive">${dashActiveHtml(activeOf(sendsNow(sends, reported)))}</div>
     <section class="dash-section"><h2>Subscribers</h2>${tilesHtml}${
       workersPlanAdvice
@@ -438,6 +459,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
     </div>`,
   );
 
+  paintSetup();
   wireDashActions(root, remount, signal);
   // Row / card clicks open the post (subject links + Cancel opt out — the same guard
   // the Posts table and the Sends cards use).
@@ -477,9 +499,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       tickCountdowns(); // the fresh cards are empty until the next tick
       setHtml($("#dashSent", root), dashSentHtml(sends));
       wireDashSentRows(root);
-      const fold = root.querySelector<HTMLDetailsElement>("#dashSetup .setup-fold");
-      setHtml($("#dashSetup", root), setupCardHtml(fold?.open ?? false));
-      wireDashButtons($("#dashSetup", root), remount, signal); // Copy is delegated from root
+      paintSetup();
       paintLive();
     } catch {
       /* a background read: the sections keep their last render until the next change */

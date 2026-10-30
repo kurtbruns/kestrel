@@ -271,11 +271,11 @@ function stepAction(step: SetupStep, f: SetupFacts, primary: boolean): Html | nu
  * The setup steps, in one of two layouts: the first-run `checklist` that stands in for the
  * dashboard until the first post, and the compact `card` the regular dashboard carries until the
  * first post listed in the archive is published. One list, so the two can't drift. Finished steps
- * fold behind one "N done" line above the rest, so the list starts at what's left; it opens to
- * show them, each with the fact that ticked it, and `foldOpen` keeps it open across a repaint.
- * On the checklist, where the head carries no New post, the first step that can be taken now,
- * past the optional list, has the view's Primary. The steps, their order, and the fact that
- * ticks each are restated by hand in DESIGN (Dashboard), the Publishing docs
+ * are hidden behind one "N done" toggle, so the list starts at what's left; `showDone` shows
+ * them in place, so the list reads as the whole checklist in its order, each done step with the
+ * fact that ticked it. On the checklist, where the head carries no New post, the first step that
+ * can be taken now, past the optional list, has the view's Primary. The steps, their order, and
+ * the fact that ticks each are restated by hand in DESIGN (Dashboard), the Publishing docs
  * (docs/publishing/README.md and 10-check-your-setup.md), template/claude/CLAUDE.md, and
  * src/mcp/instructions.ts, and nothing checks them: a change here changes each
  * (.claude/rules/maintainer.md).
@@ -283,12 +283,12 @@ function stepAction(step: SetupStep, f: SetupFacts, primary: boolean): Html | nu
 export function setupStepsHtml(
   f: SetupFacts,
   layout: "checklist" | "card",
-  foldOpen = false,
+  showDone = false,
 ): Html {
   const steps = setupSteps(f);
   const done = steps.filter((s) => s.state === "done");
-  const left = steps.filter((s) => s.state !== "done");
-  const current = left.find(
+  const shown = showDone ? steps : steps.filter((s) => s.state !== "done");
+  const current = steps.find(
     (s) => (s.state === "todo" || s.state === "attention") && s.key !== "list",
   );
   const row = (s: SetupStep) =>
@@ -303,10 +303,10 @@ export function setupStepsHtml(
     <h2 class="setup-title">${layout === "card" ? "Finish setting up" : "Set up your publication"}</h2>
     ${
       done.length
-        ? html`<details class="setup-fold"${foldOpen ? html` open` : null}><summary><span class="setup-fold-mark" aria-hidden="true">✓</span><strong>${done.length} done</strong></summary><ol class="setup-steps setup-done-steps">${done.map(row)}</ol></details>`
+        ? html`<button type="button" class="setup-fold" data-act="toggle-done" aria-expanded="${showDone ? "true" : "false"}"><span class="setup-fold-mark" aria-hidden="true">✓</span><span>${done.length} done</span></button>`
         : null
     }
-    <ol class="setup-steps">${left.map(row)}</ol>
+    <ol class="setup-steps">${shown.map(row)}</ol>
   </div>`;
 }
 

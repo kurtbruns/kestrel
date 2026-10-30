@@ -4774,33 +4774,33 @@ button.copy-btn.api-copy-path {
 .setup-title {
   margin-top: 0;
 }
-/* The done steps, behind one "N done" line that opens to list them. */
+/* The done steps' toggle: one "N done" line that shows them in place in the list, and hides
+   them again. A plain text control, so it reads as a line of the card, not a button. */
 .setup-fold {
-  margin: 10px 0 2px;
-}
-.setup-fold summary {
   display: inline-flex;
   align-items: center;
   gap: 12px;
+  margin: 10px 0 2px;
   padding: 2px;
-  list-style: none;
-  cursor: pointer;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font: inherit;
   font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
   border-radius: 6px;
 }
-.setup-fold summary::-webkit-details-marker {
-  display: none;
+.setup-fold:hover {
+  background: none;
+  color: var(--fg);
 }
-.setup-fold summary:focus-visible {
+.setup-fold:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
-.setup-fold summary strong {
-  color: var(--fg);
-  font-weight: 600;
-}
-/* A chevron that points down while closed and up while open. */
-.setup-fold summary::after {
+/* A chevron that points down while the done steps are hidden and up while they show. */
+.setup-fold::after {
   content: "";
   width: 6px;
   height: 6px;
@@ -4809,23 +4809,23 @@ button.copy-btn.api-copy-path {
   border-bottom: 1.5px solid var(--muted);
   transform: rotate(45deg);
 }
-.setup-fold[open] summary::after {
+.setup-fold[aria-expanded="true"]::after {
   margin-top: 3px;
   transform: rotate(-135deg);
-}
-.setup-done-steps {
-  margin: 4px 0 0;
-  border-bottom: 1px solid var(--line);
 }
 .setup-steps {
   list-style: none;
   margin: 8px 0 0;
   padding: 0;
 }
+/* Every row is as tall as one with a button, so a row with only a title, or no control, doesn't
+   read as squeezed beside its neighbours. */
 .setup-steps li {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-height: 59px;
+  box-sizing: border-box;
   padding: 12px 2px;
   border-top: 1px solid var(--line);
 }
@@ -4932,6 +4932,7 @@ button.copy-btn.api-copy-path {
   font-size: 16px;
 }
 .setup-card .setup-steps li {
+  min-height: 51px;
   padding: 8px 2px;
 }
 
