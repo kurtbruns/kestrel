@@ -142,11 +142,7 @@ export function sandboxHealthHtml(): Html {
  * there's nothing to add. Never a block: before a request, it suggests naming the publication
  * first, since AWS's reviewer looks at it.
  */
-export function productionAccessHint(
-  v: ProviderStatusView | null,
-  named: boolean,
-  connected: boolean,
-): string | null {
+export function productionAccessHint(v: ProviderStatusView | null, named: boolean): string | null {
   if (v?.state === "production") {
     return null;
   }
@@ -162,7 +158,9 @@ export function productionAccessHint(
   if (!named) {
     return "Name your publication first: AWS’s reviewer looks at it.";
   }
-  if (connected && v?.state !== "sandbox") {
+  // Only a key that isn't allowed to read the account leaves the console as the place to look.
+  // A rejected key is the health block's red line, and a failed read says nothing either way.
+  if (v?.state === "unknown" && v.unknown_reason === "permission") {
     return "Kestrel can’t read your SES account, so the SES console’s account dashboard says whether AWS granted it.";
   }
   return null;

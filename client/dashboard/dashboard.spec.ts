@@ -685,7 +685,7 @@ describe("dashboard", () => {
       await vi.advanceTimersByTimeAsync(0);
       expect($(".setup-card .setup-title").textContent).toBe("Finish setting up");
       expect($(".setup-card .setup-fold").textContent).toBe(
-        "✓3 done: Amazon SES connected, named Birds Weekly, your first post written",
+        "✓3 done: Amazon SES connected, named Birds Weekly, writing your first post",
       );
       expect($$(".setup-card .setup-steps li strong").map((s) => s.textContent)).toEqual([
         "Send a test email",
@@ -714,7 +714,7 @@ describe("dashboard", () => {
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
       expect($(".setup-card .setup-fold").textContent).toBe(
-        "✓6 done, including your first post written and your first post scheduled",
+        "✓6 done, including writing your first post and scheduling your first post",
       );
       // The test that counts is the scheduled send's, the frozen email: it opens the post.
       expect($(".setup-card .setup-post-test .setup-hint").textContent).toMatch(
@@ -728,21 +728,45 @@ describe("dashboard", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
-    it("points at Settings while notifications fail, and leaves the step open with no address", async () => {
+    it("says a failed notification in the health block, with Get notified pointing up at it (SPEC §8)", async () => {
       appState.appConfig!.settings.notifications = { to: ["kurt@birds.example"] };
       appState.appConfig!.notification_status = {
         last_sent: null,
-        last_failure: { kind: "test", subject: "", at: NOW - 1000, error: "refused" },
+        last_failure: {
+          kind: "test",
+          subject: "",
+          at: NOW - 1000,
+          error: "Email Routing refused it",
+        },
       };
       fake = world([post()], sendServer(), counts);
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
+      expect($("#dashHealth .health").classList.contains("amber")).toBe(true);
+      expect($(".dash-notify-failed").textContent).toBe(
+        "Kestrel’s last notification didn’t arrive: Email Routing refused it. Check Settings → Notifications.",
+      );
+      expect($<HTMLAnchorElement>(".dash-notify-failed a").getAttribute("href")).toBe("#/settings");
       const step = $(".setup-card .setup-notify");
       expect(step.classList.contains("setup-attention")).toBe(true);
       expect($(".setup-hint", step).textContent).toBe(
-        "The last notification didn’t arrive. Settings says why.",
+        "The last notification didn’t arrive. The fix is above.",
       );
-      expect($("button", step).dataset.nav).toBe("#/settings");
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("keeps a failed notification's health line once setup is done", async () => {
+      appState.appConfig!.notification_status = {
+        last_sent: null,
+        last_failure: { kind: "finished", subject: "Waxwings", at: NOW - 1000, error: "refused." },
+      };
+      fake = world([post()], sendServer([send()]), counts);
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(document.querySelector(".setup-card")).toBeNull();
+      expect($(".dash-notify-failed").textContent).toBe(
+        "Kestrel’s last notification didn’t arrive: refused. Check Settings → Notifications.",
+      );
       expect(fake.unhandled).toEqual([]);
     });
 

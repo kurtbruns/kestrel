@@ -18,12 +18,12 @@ If SES refuses the test, the dashboard says why in red above the steps, with the
 
 ## 2. Get notified
 
-Under **Settings → Notifications**, add your address under **Send notifications to** with **Add inbox**, save, and choose **Send a test notification**. It goes to each address. If someone else runs your instance, add their address too, so a problem reaches both of you. Kestrel then emails you when a send finishes or needs you, as [Notifications](06-troubleshooting.md#notifications) lists. The step is checked off once an address is saved, and points back to Settings if the last notification didn't arrive.
+Under **Settings → Notifications**, add your address under **Send notifications to** with **Add inbox**, save, and choose **Send a test notification**. It goes to each address. If someone else runs your instance, add their address too, so a problem reaches both of you. Kestrel then emails you when a send finishes or needs you, as [Notifications](06-troubleshooting.md#notifications) lists. The step is checked off once an address is saved. If the last notification didn't arrive, the dashboard says so above the steps, with the channel's words.
 
 ## 3. See what your readers get
 
 Open your subscribe page from **Settings → Ways to subscribe**, subscribe with a personal address, and confirm. You see what a new reader sees, and you appear under **Subscribers** as **Confirmed**.
 
-Then, once your first post is scheduled, **Send a test email for your first post** from its page. Scheduling makes the exact email your list will get, so this test is what goes out, and the step is checked off once it's sent. A test sent from a draft is a preview and doesn't count. [Write and send a post](04-write-a-post.md) covers scheduling.
+Then, once your first post is scheduled, **Send a test email for your first post** from its page. Scheduling makes the exact email your list will get, so this test is what goes out, and the step is checked off once it's sent. A test sent from a draft is a preview and doesn't count, and a change to your template or publication identity re-makes the scheduled email, so the step opens again until you test the new one. [Write and send a post](04-write-a-post.md) covers scheduling.
 
 **If you're bringing more than about 1,000 subscribers, upgrade to Cloudflare's Workers Paid plan before you import.** [Bring your existing list](01-your-list.md#limits) explains why.

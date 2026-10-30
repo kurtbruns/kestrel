@@ -4,7 +4,7 @@ These pages get you publishing in the dashboard, and cover the decisions to make
 
 ## Set up your publication
 
-These are the dashboard's setup steps, in its order. Each is checked off from what Kestrel can see, and Claude reads the same. Connecting Amazon SES and requesting production access are for whoever runs your Kestrel instance, in [Connect Amazon SES](../get-started/05-ses.md) and [Request production access](../get-started/06-production-access.md). If you're starting without a list, skip importing one.
+These are the dashboard's setup steps, in its order. Each is checked off from what Kestrel can see, which Claude reads too, except sharing your link, which Kestrel can't see. Connecting Amazon SES and requesting production access are for whoever runs your Kestrel instance, in [Connect Amazon SES](../get-started/05-ses.md) and [Request production access](../get-started/06-production-access.md). If you're starting without a list, skip importing one.
 
 1. Connect Amazon SES
 1. [Send a test email](10-check-your-setup.md)

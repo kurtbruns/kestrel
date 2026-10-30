@@ -4,6 +4,7 @@
 import type { Post, PostListResponse } from "../../shared/posts";
 import type { ProviderStatusView } from "../../shared/provider";
 import type { SendListResponse, SendView } from "../../shared/sends";
+import type { NotificationStatusView } from "../../shared/settings";
 import type { SubscriberCounts, SubscriberListResponse } from "../../shared/subscribers";
 import { CLAUDE_CLIENT, CLAUDE_CODE_CLIENT } from "../../shared/who_acted";
 import { api, describeError } from "../api";
@@ -75,13 +76,15 @@ interface HealthAlert {
 // line is left out, so it is said once (DESIGN §3). The provider's connection adds the others
 // with no send behind them: each warning the server gives (GET /api/provider), in its words,
 // SES still in the sandbox, left out while setup's production-access step says it, and email
-// not going out, in red, which stands for the errors among the warnings while it lasts. Every
-// problem lives here: a setup step only points up at it.
+// not going out, in red, which stands for the errors among the warnings while it lasts. A failed
+// notification is the one from the settings. Every problem lives here: a setup step only points
+// up at it.
 function computeHealth(
   live: SendView[],
   setupSaysNotConnected = false,
   provider: ProviderStatusView | null = null,
   setupSaysSandbox = false,
+  notifyFailure: NotificationStatusView["last_failure"] = null,
 ): HealthAlert[] {
   const alerts: HealthAlert[] = [];
   // Missed only past the server's tolerance: an ordinary slow tick is never a miss (§12).
@@ -223,6 +226,14 @@ function computeHealth(
       text: html`<span class="dash-sandbox">${sandboxHealthHtml()}</span>`,
     });
   }
+  // The last notification failed, with none delivered since (SPEC §8): the publisher may not be
+  // hearing about their sends. Amber, in the channel's words, pointing to where it's set.
+  if (notifyFailure) {
+    alerts.push({
+      level: "amber",
+      text: html`<span class="dash-notify-failed">Kestrel’s last notification didn’t arrive: ${notifyFailure.error.replace(/[.!?]?$/, ".")} Check <a href="#/settings">Settings → Notifications</a>.</span>`,
+    });
+  }
   return alerts;
 }
 
@@ -323,6 +334,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
         setupOpen() && providerNotConnected(),
         provider,
         setupOpen(),
+        appState.appConfig?.notification_status.last_failure ?? null,
       ),
     );
 

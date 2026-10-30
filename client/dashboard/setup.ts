@@ -83,8 +83,9 @@ const SCHEDULE = "Schedule your first post";
 /** "After <step>", a blocked step's whole hint: the step it waits for, in plain words. */
 const after = (title: string) => `After ${title}`;
 
-/** The pointer a step gives while the health block states what's in its way. */
+/** The pointers a step gives while the health block states what's in its way. */
 const REFUSING = "SES is refusing. The fix is above.";
+const NOTIFY_FAILED = "The last notification didn’t arrive. The fix is above.";
 
 const plural = (n: number, one: string, many: string) =>
   `${n.toLocaleString()} ${n === 1 ? one : many}`;
@@ -120,7 +121,7 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
             title: TEST,
             state: "done",
             hint: null,
-            doneAs: sending.last_accepted?.by === "test" ? "a test email sent" : "email going out",
+            doneAs: "a test email sent",
           }
         : sending?.state === "refusing"
           ? { key: "test", title: TEST, state: "attention", hint: REFUSING, doneAs: "" }
@@ -143,15 +144,12 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
     doneAs: `named ${f.name}`,
   });
 
+  // A failed notification is the health block's line; the step only points up at it.
   steps.push({
     key: "notify",
     title: "Get notified",
     state: !f.notifyTo ? "todo" : f.notifyFailed ? "attention" : "done",
-    hint: !f.notifyTo
-      ? "Kestrel emails you when a send finishes or needs you."
-      : f.notifyFailed
-        ? "The last notification didn’t arrive. Settings says why."
-        : null,
+    hint: f.notifyTo && f.notifyFailed ? NOTIFY_FAILED : null,
     doneAs: `notifications to ${plural(f.notifyTo, "address", "addresses")}`,
   });
 
@@ -165,7 +163,7 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
           : sandbox && p?.review === "pending"
             ? "waiting"
             : "todo",
-      hint: productionAccessHint(p, f.named, !f.notConnected),
+      hint: productionAccessHint(p, f.named),
       doneAs: "production access",
     });
   }
@@ -183,7 +181,7 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
     title: "Write your first post",
     state: f.wrote ? "done" : "todo",
     hint: null,
-    doneAs: "your first post written",
+    doneAs: "writing your first post",
   });
 
   steps.push({
@@ -192,10 +190,10 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
     state: f.notConnected ? "blocked" : f.firstSend ? "done" : "todo",
     hint: f.notConnected
       ? after(CONNECT)
-      : sandbox && !f.firstSend
+      : sandbox && sending?.state === "working" && !f.firstSend
         ? "Best after AWS grants access: until then it reaches only verified addresses."
         : null,
-    doneAs: "your first post scheduled",
+    doneAs: "scheduling your first post",
   });
 
   // The test of the frozen email that will go out, recorded on the send; a draft's test is a
@@ -211,10 +209,12 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
       : tested
         ? null
         : `“${s.subject}” goes out ${fmt(s.fire_at)}. Send yourself a test of it first.`,
-    doneAs: "your first post tested",
+    doneAs: "testing your first post",
   });
 
-  // Sharing can't be known, so it's never done; it waits only for signups to open.
+  // Sharing can't be known, so it's never done; it waits only for signups to open. In the
+  // sandbox it says to wait for production access and offers no address to copy, since a
+  // reader not verified in SES would get no confirmation.
   const closed = f.notConnected || (p !== null && p.signups !== "open");
   steps.push({
     key: "share",
@@ -227,20 +227,23 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
   return steps;
 }
 
-/** The fold line: every done step by name while there are few, else the count and the latest two. */
+/**
+ * The fold line: every done step by name while there are few. Past four, the count and two of
+ * them: production access once AWS granted it, since after a hand-off it's the operator's step
+ * the publisher most needs to know is done, and the latest other; otherwise the latest two.
+ */
 function foldHtml(done: SetupStep[]): Html {
   const n = done.length;
+  const access = done.find((d) => d.key === "access");
+  const named = access ? [access, ...done.filter((d) => d !== access).slice(-1)] : done.slice(-2);
   const words =
     n <= 4
       ? html`<strong>${n} done:</strong> ${done.map((d) => d.doneAs).join(", ")}`
-      : html`<strong>${n} done</strong>, including ${done
-          .slice(-2)
-          .map((d) => d.doneAs)
-          .join(" and ")}`;
+      : html`<strong>${n} done</strong>, including ${named.map((d) => d.doneAs).join(" and ")}`;
   return html`<p class="setup-fold"><span class="setup-fold-mark" aria-hidden="true">✓</span><span>${words}</span></p>`;
 }
 
-/** The step's control: where it's taken, or nothing for a step that waits or can't be. */
+/** The step's control: where it's taken, or nothing for a blocked step, Schedule (taken from the post's editor), and Share in the sandbox. */
 function stepAction(step: SetupStep, f: SetupFacts, primary: boolean): Html | null {
   if (step.state === "blocked") {
     return null;
@@ -267,7 +270,9 @@ function stepAction(step: SetupStep, f: SetupFacts, primary: boolean): Html | nu
         ? html`<button class="${cls}" data-nav="#/edit/${f.firstSend.post_id}">Send test</button>`
         : null;
     case "share":
-      return html`<button class="${cls}" type="button" data-copy="${f.subscribeUrl}" aria-label="Copy the subscribe link">${copyFace()}</button>`;
+      return shareable(f)
+        ? html`<button class="${cls}" type="button" data-copy="${f.subscribeUrl}" aria-label="Copy the subscribe link">${copyFace()}</button>`
+        : null;
   }
 }
 
@@ -275,31 +280,38 @@ function stepAction(step: SetupStep, f: SetupFacts, primary: boolean): Html | nu
  * The setup steps, in one of two layouts: the first-run `checklist` that stands in for the
  * dashboard until the first post, and the compact `card` the regular dashboard carries until the
  * first post listed in the archive is published. One list, so the two can't drift. Finished steps
- * fold into one line above the rest, so the list starts at what's left; the first step that can
- * be taken now is marked as the one to take, and on the checklist, where the head carries no New
- * post, its button is the view's Primary. The Publishing docs' section of the same name
- * (docs/publishing/README.md) follows these steps, so a change here changes it.
+ * fold into one line above the rest, so the list starts at what's left. On the checklist, where
+ * the head carries no New post, the first step that can be taken now, past the optional list,
+ * has the view's Primary. The steps, their order, and the fact that ticks each are restated by
+ * hand in DESIGN (Dashboard), the Publishing docs (docs/publishing/README.md and
+ * 10-check-your-setup.md), template/claude/CLAUDE.md, and src/mcp/instructions.ts, and nothing
+ * checks them: a change here changes each (.claude/rules/maintainer.md).
  */
 export function setupStepsHtml(f: SetupFacts, layout: "checklist" | "card"): Html {
   const steps = setupSteps(f);
   const done = steps.filter((s) => s.state === "done");
   const left = steps.filter((s) => s.state !== "done");
-  const current = left.find((s) => s.state === "todo" || s.state === "attention");
+  const current = left.find(
+    (s) => (s.state === "todo" || s.state === "attention") && s.key !== "list",
+  );
   return html`<div class="card setup${layout === "card" ? " setup-card" : ""}">
     <h2 class="setup-title">${layout === "card" ? "Finish setting up" : "Set up your publication"}</h2>
     ${done.length ? foldHtml(done) : null}
     <ol class="setup-steps">${left.map(
       (s) =>
-        html`<li class="setup-${s.key.replace("_", "-")} setup-${s.state}${s === current ? " setup-current" : ""}"><div class="setup-step-main"><strong>${s.title}</strong>${
+        html`<li class="setup-${s.key.replace("_", "-")} setup-${s.state}"><div class="setup-step-main"><strong>${s.title}</strong>${
           s.hint ? html`<span class="muted setup-hint">${s.hint}</span>` : null
         }${
-          s.key === "share" && s.state !== "blocked"
+          s.key === "share" && s.state !== "blocked" && shareable(f)
             ? html`<code class="setup-url">${f.subscribeUrl}</code>`
             : null
         }</div>${stepAction(s, f, layout === "checklist" && s === current)}</li>`,
     )}</ol>
   </div>`;
 }
+
+/** The subscribe link is offered once it can confirm anyone: not in the SES sandbox. */
+const shareable = (f: SetupFacts) => !inSandbox(f.provider);
 
 /** The first post's send: the soonest scheduled send of a post meant for the archive. */
 export function firstListedSend(sends: SendView[]): SendView | null {

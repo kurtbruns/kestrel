@@ -4825,11 +4825,6 @@ button.copy-btn.api-copy-path {
   font-size: 12px;
   font-weight: 700;
 }
-/* The step to take now. */
-.setup-steps li.setup-current::before {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
 /* Waiting on AWS, not on the publisher. */
 .setup-steps li.setup-waiting::before {
   border-style: dashed;

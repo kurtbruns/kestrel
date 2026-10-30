@@ -74,7 +74,7 @@ describe("setup steps", () => {
       "Connect Amazon SES: todo (Nothing can be sent, and signups stay closed, until SES is connected.)",
       "Send a test email: blocked (After Connect Amazon SES)",
       "Name your publication: todo (Currently “Newsletter”.)",
-      "Get notified: todo (Kestrel emails you when a send finishes or needs you.)",
+      "Get notified: todo",
       "Request production access: todo (Name your publication first: AWS’s reviewer looks at it.)",
       "Bring your existing list: todo (Optional.)",
       "Write your first post: todo",
@@ -90,21 +90,29 @@ describe("setup steps", () => {
       "Connect Amazon SES: done",
       "Send a test email: todo (SES is connected but hasn’t sent anything yet. Send one to an address verified in SES.)",
       "Name your publication: done",
-      "Get notified: todo (Kestrel emails you when a send finishes or needs you.)",
+      "Get notified: todo",
       "Request production access: todo",
       "Bring your existing list: todo (Optional.)",
       "Write your first post: todo",
-      "Schedule your first post: todo (Best after AWS grants access: until then it reaches only verified addresses.)",
+      "Schedule your first post: todo",
       "Send a test email for your first post: blocked (After Schedule your first post)",
       "Share your subscribe link: blocked (After Send a test email)",
     ]);
   });
 
-  it("refusing: the test step points at the health block, which states the problem", () => {
+  it("refusing: the test step points at the health block, which states the problem, and the rest are as before", () => {
     const provider = ses({ sending: sending("refusing"), signups: "paused" });
     const steps = setupSteps(facts({ provider }));
-    expect(read(steps.filter((s) => s.key === "test" || s.key === "share"))).toEqual([
+    expect(read(steps)).toEqual([
+      "Connect Amazon SES: done",
       "Send a test email: attention (SES is refusing. The fix is above.)",
+      "Name your publication: done",
+      "Get notified: todo",
+      "Request production access: todo",
+      "Bring your existing list: todo (Optional.)",
+      "Write your first post: todo",
+      "Schedule your first post: todo",
+      "Send a test email for your first post: blocked (After Schedule your first post)",
       "Share your subscribe link: blocked (After Send a test email)",
     ]);
     // Nothing on the steps restates SES's words or its fix.
@@ -171,6 +179,9 @@ describe("setup steps", () => {
     expect(hint(providerStatus({ unknown_reason: "permission" }))).toBe(
       "Kestrel can’t read your SES account, so the SES console’s account dashboard says whether AWS granted it.",
     );
+    // A rejected key is the health block's red line, and a failed read says nothing either way.
+    expect(hint(providerStatus({ unknown_reason: "rejected" }))).toBeNull();
+    expect(hint(null)).toBeNull();
     // A review under way is a wait, never a block, named or not.
     const access = setupSteps(facts({ provider: ses({ review: "pending" }), named: false })).find(
       (s) => s.key === "access",
@@ -178,12 +189,52 @@ describe("setup steps", () => {
     expect(access?.state).toBe("waiting");
   });
 
-  it("leaves production access out where there's no SES account, and points at Settings when notifications fail", () => {
-    const steps = setupSteps(facts({ sesAccount: false, notifyTo: 1, notifyFailed: true }));
-    expect(steps.some((s) => s.key === "access")).toBe(false);
-    expect(read(steps.filter((s) => s.key === "notify"))).toEqual([
-      "Get notified: attention (The last notification didn’t arrive. Settings says why.)",
+  it("on SES in an unknown state, reads only what it can: email working, access not yet known", () => {
+    const provider = providerStatus({ unknown_reason: "permission", signups: "open" });
+    expect(read(setupSteps(facts({ provider })).filter((s) => s.key !== "list"))).toEqual([
+      "Connect Amazon SES: done",
+      "Send a test email: done",
+      "Name your publication: done",
+      "Get notified: todo",
+      "Request production access: todo (Kestrel can’t read your SES account, so the SES console’s account dashboard says whether AWS granted it.)",
+      "Write your first post: todo",
+      "Schedule your first post: todo",
+      "Send a test email for your first post: blocked (After Schedule your first post)",
+      "Share your subscribe link: todo",
     ]);
+  });
+
+  it("with no provider status, from a failed read or local development's stand-in, ticks no test and blocks no share", () => {
+    // SES whose status couldn't be read: production access stays, with nothing to say.
+    const failed = setupSteps(facts({ provider: null }));
+    expect(read(failed.filter((s) => ["test", "access", "share"].includes(s.key)))).toEqual([
+      "Send a test email: todo (Send one to yourself, and check it arrives.)",
+      "Request production access: todo",
+      "Share your subscribe link: todo",
+    ]);
+    // A provider with no SES account to ask about: no production-access step at all.
+    const standIn = setupSteps(facts({ provider: null, sesAccount: false }));
+    expect(standIn.map((s) => s.key)).toEqual([
+      "connect",
+      "test",
+      "name",
+      "notify",
+      "list",
+      "write",
+      "schedule",
+      "post_test",
+      "share",
+    ]);
+  });
+
+  it("points up at the health block while notifications fail, and is done once they go somewhere", () => {
+    const notify = (over: Partial<SetupFacts>) =>
+      read(setupSteps(facts(over)).filter((s) => s.key === "notify"));
+    expect(notify({ notifyTo: 1, notifyFailed: true })).toEqual([
+      "Get notified: attention (The last notification didn’t arrive. The fix is above.)",
+    ]);
+    expect(notify({ notifyTo: 2 })).toEqual(["Get notified: done"]);
+    expect(notify({ notifyTo: 0 })).toEqual(["Get notified: todo"]);
   });
 });
 
@@ -212,18 +263,20 @@ describe("setup card", () => {
       "Send a test email for your first post",
       "Share your subscribe link",
     ]);
-    // The step to take now: the first one the publisher can take, past the one AWS has.
-    expect(el.querySelector(".setup-current strong")?.textContent).toBe("Bring your existing list");
+    // In the sandbox, sharing says to wait, with no address to copy.
+    expect(el.querySelector(".setup-share .setup-hint")?.textContent).toBe(
+      "Share it once AWS grants production access.",
+    );
+    expect(el.querySelector(".setup-url")).toBeNull();
+    expect(el.querySelector(".setup-share [data-copy]")).toBeNull();
   });
 
-  it("counts many finished steps and names the latest two", () => {
+  it("counts many finished steps, naming production access and the latest other", () => {
     const provider = ses({ state: "production", sending: sending("working") });
     const el = render(
       facts({ provider, notifyTo: 1, onList: 3, wrote: true, firstSend: firstSend() }),
     );
-    expect(fold(el)).toBe(
-      "✓8 done, including your first post written and your first post scheduled",
-    );
+    expect(fold(el)).toBe("✓8 done, including production access and scheduling your first post");
     expect(titles(el)).toEqual([
       "Send a test email for your first post",
       "Share your subscribe link",
@@ -256,5 +309,11 @@ describe("setup card", () => {
     const f = facts({ notConnected: true, sesAccount: false });
     expect(render(f, "checklist").querySelector("button.primary")?.textContent).toBe("Connect");
     expect(render(f, "card").querySelector("button.primary")).toBeNull();
+    // Never the optional list: past it, to the first post.
+    const sandbox = ses({ review: "pending", sending: sending("working"), signups: "open" });
+    expect(
+      render(facts({ provider: sandbox, notifyTo: 1 }), "checklist").querySelector("button.primary")
+        ?.textContent,
+    ).toBe("New post");
   });
 });
