@@ -2,11 +2,9 @@
 // to the Template page where it is edited, and the default test recipients the publisher
 // proofs a post against.
 
-import { isValidEmail, normalizeEmail } from "../../shared/email";
 import { $ } from "../ui/dom";
-import { type Html, html, setHtml } from "../ui/html";
-import { icon } from "../ui/icons";
-import { fieldError } from "../ui/widgets";
+import { type Html, html } from "../ui/html";
+import { addressListHtml, mountAddressList } from "./address_list";
 import { chip, type SectionHandle, type SettingsPage, secHead } from "./page";
 import { inUseChip, remakeWaitHtml } from "./remake";
 import { mountSampleEmailPreview } from "./template";
@@ -49,6 +47,8 @@ export function mountTemplate(root: HTMLElement, page: SettingsPage): SectionHan
   return { repaint: () => preview.repaint() };
 }
 
+const RECIPIENT_IDS = { chips: "recipChips", input: "recipInput", add: "recipAdd" };
+
 export function recipientsSection(): Html {
   return html`
     <section class="set-sec">
@@ -56,11 +56,7 @@ export function recipientsSection(): Html {
       <div class="set-card">
         <div class="set-recip">
           <p class="field-hint" style="margin:0">Pre-filled into <strong>Send test email</strong> so you can proof a post against your own inboxes before scheduling. These are your addresses, and they don’t go through the subscribe-and-confirm flow.</p>
-          <div class="set-chips" id="recipChips"></div>
-          <div class="set-recip-add">
-            <input type="email" id="recipInput" placeholder="you@example.com" autocomplete="off">
-            <button type="button" id="recipAdd">Add inbox</button>
-          </div>
+          ${addressListHtml(RECIPIENT_IDS)}
         </div>
       </div>
     </section>`;
@@ -68,63 +64,9 @@ export function recipientsSection(): Html {
 
 /** Removable chips and an add row; the list commits through the save bar. */
 export function mountRecipients(root: HTMLElement, page: SettingsPage): SectionHandle {
-  const { state } = page;
-  const chips = $("#recipChips", root);
-  const input = $<HTMLInputElement>("#recipInput", root);
-  const render = () => {
-    if (!state.recipients.length) {
-      setHtml(
-        chips,
-        html`<span class="set-recip-empty">No default recipients yet. Add one below.</span>`,
-      );
-      return;
-    }
-    setHtml(
-      chips,
-      html`${state.recipients.map(
-        (addr, i) =>
-          html`<span class="set-recip-chip">${addr}<button type="button" data-rm="${i}" aria-label="Remove ${addr}">${icon("x")}</button></span>`,
-      )}`,
-    );
-  };
-  chips.addEventListener("click", (ev) => {
-    const b = ev.target instanceof Element ? ev.target.closest<HTMLElement>("[data-rm]") : null;
-    if (!b) {
-      return;
-    }
-    state.recipients.splice(Number(b.dataset.rm), 1);
-    render();
-    page.changed();
+  return mountAddressList(root, page, {
+    ids: RECIPIENT_IDS,
+    list: () => page.state.recipients,
+    empty: "No default recipients yet. Add one below.",
   });
-  const add = () => {
-    const v = normalizeEmail(input.value);
-    if (!v) {
-      return;
-    }
-    // A refused address says why on the field, and keeps what was typed so it can be fixed
-    // in place; the reason goes as soon as the field is edited (DESIGN §5).
-    if (!isValidEmail(v)) {
-      fieldError(input, "That doesn’t look like an email address.");
-      input.focus();
-      return;
-    }
-    if (state.recipients.includes(v)) {
-      fieldError(input, "That inbox is already in the list.");
-      input.focus();
-      return;
-    }
-    state.recipients.push(v);
-    input.value = "";
-    render();
-    page.changed();
-  };
-  $("#recipAdd", root).onclick = add;
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      add();
-    }
-  });
-  render();
-  return { reset: render };
 }

@@ -719,7 +719,7 @@ describe("the record and the notice (SPEC §8)", () => {
   });
 
   it("lets a service token attest, records it as the service, and emails the publisher the counts", async () => {
-    await updateSettings(env.DB, { notifications: { to: "publisher@example.com" } });
+    await updateSettings(env.DB, { notifications: { to: ["publisher@example.com"] } });
     const service = { ...(await adminAuth({})), "content-type": "application/json" };
     const file = csvFile([
       "a@x.io,subscribed,double,sendy,,,,,,",
@@ -744,7 +744,7 @@ describe("the record and the notice (SPEC §8)", () => {
   });
 
   it("reads a record whose counts an earlier release wrote under the outcomes' former names, in the record and the notice", async () => {
-    await updateSettings(env.DB, { notifications: { to: "publisher@example.com" } });
+    await updateSettings(env.DB, { notifications: { to: ["publisher@example.com"] } });
     const service = { ...(await adminAuth({})), "content-type": "application/json" };
     const file = csvFile(["a@x.io,subscribed,double,sendy,,,,,,"]);
     const p = await planOk({ file });
@@ -892,7 +892,7 @@ describe("what the app holds Claude to applies to every act not through the edit
   });
 
   it("records the client a person's import came through, and tells no one, since a person was there", async () => {
-    await updateSettings(env.DB, { notifications: { to: "publisher@example.com" } });
+    await updateSettings(env.DB, { notifications: { to: ["publisher@example.com"] } });
     const file = csvFile(["a@x.io,subscribed,double,sendy,,,,,,"]);
     const p = await planOk({ file });
     const res = await commit(

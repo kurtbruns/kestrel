@@ -790,3 +790,16 @@ describe("schema (0017_provider_account_rejected)", () => {
     await env.DB.prepare("UPDATE provider_account SET outcome = 'rejected'").run();
   });
 });
+
+describe("schema (0018_notify_addresses)", () => {
+  it("starts every notification having reached no address", async () => {
+    await env.DB.prepare(
+      "INSERT INTO notifications (send_id, kind, episode, created_at, updated_at) VALUES (NULL, 'sandbox', 0, 1, 1)",
+    ).run();
+    const row = await env.DB.prepare("SELECT sent_to FROM notifications").first();
+    expect(row).toEqual({ sent_to: "[]" });
+    await expect(env.DB.prepare("UPDATE notifications SET sent_to = 'nope'").run()).rejects.toThrow(
+      /CHECK/,
+    );
+  });
+});

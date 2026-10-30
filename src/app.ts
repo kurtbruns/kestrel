@@ -32,7 +32,11 @@ import {
   SEND_STATUSES,
   STUCK_THRESHOLD_MS,
 } from "../shared/sends";
-import type { TemplateTestResponse } from "../shared/settings";
+import {
+  MAX_NOTIFY_ADDRESSES,
+  type NotificationTestResponse,
+  type TemplateTestResponse,
+} from "../shared/settings";
 import { SUBSCRIBER_ACTIONS } from "../shared/subscriber_meanings";
 import {
   SUBSCRIBER_STATUSES,
@@ -611,8 +615,8 @@ export function createRouter({
         },
         {
           name: "notifications.to",
-          type: "string",
-          description: "The address the publisher's notifications go to.",
+          type: "string[]",
+          description: `Every address the publisher's notifications go to, at most ${MAX_NOTIFY_ADDRESSES}; empty for none. Replaces the whole list.`,
         },
         {
           name: "remake",
@@ -734,15 +738,21 @@ export function createRouter({
       resource: "settings",
       title: "Test notifications",
       summary:
-        "Send a sample notification to the saved notifications address, through the live channel.",
+        "Send a sample notification to every saved notifications address, through the live channel.",
       description:
-        "Takes no body and goes only to `settings.notifications.to`, so it cannot mail an arbitrary address.",
-      example: { response: { to: "you@example.com", channel: "cloudflare" } },
+        "Takes no body and goes only to `settings.notifications.to`, so it cannot mail an arbitrary address. Each address is its own try: one the channel refuses is listed in `failed` with its words while the others still get it.",
+      example: {
+        response: {
+          to: ["you@example.com", "ops@example.com"],
+          failed: [],
+          channel: "cloudflare",
+        } satisfies NotificationTestResponse,
+      },
       errors: [
         { code: "bad_request", when: "No notifications address is saved." },
         {
           code: "notify_failed",
-          when: "The channel refused it, in its own words (an unverified Cloudflare destination, say).",
+          when: "The channel refused it at every address, in its own words (an unverified Cloudflare destination, say).",
         },
         {
           ...notConnected,

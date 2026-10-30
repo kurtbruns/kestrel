@@ -869,7 +869,7 @@ const SETTINGS_FIELDS: ReferenceField[] = [
     name: "settings",
     type: "object",
     description:
-      "The runtime preferences: `test_recipients`, `publication` (`name`, `tagline`, `address`, `logo_url`), `email_template`, `confirmation_email` and its `confirmation_email_default`, and `notifications.to`. Never a secret.",
+      "The runtime preferences: `test_recipients`, `publication` (`name`, `tagline`, `address`, `logo_url`), `email_template`, `confirmation_email` and its `confirmation_email_default`, and `notifications.to`, the list of addresses notifications go to (empty for none). Never a secret.",
   },
   {
     name: "deployment",

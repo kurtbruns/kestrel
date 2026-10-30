@@ -15,8 +15,8 @@ export interface SettingsBaseline {
   address: string;
   recipients: string[];
   confirmation: ConfirmationEmailCopy;
-  /** Where notifications about sends go (SPEC §8); "" for none. */
-  notifyTo: string;
+  /** Where notifications about sends go (SPEC §8); empty for none. */
+  notifyTo: string[];
 }
 
 /** The page's live, in-memory state: the baseline fields plus the logo, which saves on

@@ -2,10 +2,12 @@
 // sends is a preference, committed through the save bar; how it gets there, and from whom,
 // is deploy config, shown read-only beside it with how the last one went.
 
-import type {
-  NotificationStatusKind,
-  NotificationTestResponse,
-  SettingsResponse,
+import {
+  MAX_NOTIFY_ADDRESSES,
+  missedAddresses,
+  type NotificationStatusKind,
+  type NotificationTestResponse,
+  type SettingsResponse,
 } from "../../shared/settings";
 import { api } from "../api";
 import { $ } from "../ui/dom";
@@ -13,6 +15,7 @@ import { fmt } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { busy, toast } from "../ui/widgets";
+import { addressListHtml, mountAddressList } from "./address_list";
 import { providerLabel } from "./deploy";
 import { chip, message, type SectionHandle, type SettingsPage, secHead } from "./page";
 
@@ -65,6 +68,8 @@ function notificationStatusHtml(status: SettingsResponse["notification_status"])
   return html`<span class="muted">None yet</span>`;
 }
 
+const NOTIFY_IDS = { chips: "notifyChips", input: "notifyTo", add: "notifyAdd" };
+
 export function notificationsSection(page: SettingsPage): Html {
   const d = page.data.deployment;
   return html`
@@ -73,11 +78,11 @@ export function notificationsSection(page: SettingsPage): Html {
       <p class="set-lede">Kestrel emails you when a send goes out, and right away if a send runs into a problem.</p>
       <div class="set-card">
         <div class="set-recip">
-          <div class="set-field" style="margin:0">
+          <div class="set-field">
             <label for="notifyTo">Send notifications to</label>
-            <input type="email" id="notifyTo" value="${page.state.notifyTo}" placeholder="you@example.com" autocomplete="off">
-            <p class="field-hint">One address. Leave blank for no notifications.</p>
+            <p class="field-hint" style="margin:0">Each address gets every notification. Add whoever runs Kestrel for you, so they’re told too. Up to ${MAX_NOTIFY_ADDRESSES}.</p>
           </div>
+          ${addressListHtml(NOTIFY_IDS)}
           <div class="row"><button type="button" class="ghost" id="notifyTest">Send a test notification</button><span class="field-hint" id="notifyTestHint"></span></div>
         </div>
         <div class="set-kv" style="border-top:1px solid var(--line)">
@@ -90,25 +95,30 @@ export function notificationsSection(page: SettingsPage): Html {
     </section>`;
 }
 
-/** The address rides the save bar; the test goes to the SAVED address only (the server
+/** The addresses ride the save bar; the test goes to the SAVED addresses only (the server
  *  never takes one from the request), so it waits for a save. Its outcome is the channel's
  *  latest word, so the status line takes it in place. */
 export function mountNotifications(root: HTMLElement, page: SettingsPage): SectionHandle {
-  const toEl = $<HTMLInputElement>("#notifyTo", root);
   const test = $<HTMLButtonElement>("#notifyTest", root);
   const testHint = $("#notifyTestHint", root);
   const status = $("#notifyStatus", root);
-  toEl.addEventListener("input", () => {
-    page.state.notifyTo = toEl.value.trim().toLowerCase();
-    page.changed();
+  const list = mountAddressList(root, page, {
+    ids: NOTIFY_IDS,
+    list: () => page.state.notifyTo,
+    empty: "No addresses yet, so Kestrel emails no one. Add yours below.",
+    max: {
+      count: MAX_NOTIFY_ADDRESSES,
+      full: `Notifications go to at most ${MAX_NOTIFY_ADDRESSES} addresses. Remove one to add another.`,
+    },
   });
   const refreshTest = () => {
     const saved = page.saved().notifyTo;
-    const reason = !saved
-      ? "Save an address to send a test."
-      : page.state.notifyTo !== saved
-        ? "Save first: the test goes to the saved address."
-        : "";
+    const reason =
+      saved.length === 0
+        ? "Save an address to send a test."
+        : page.state.notifyTo.join("\n") !== saved.join("\n")
+          ? "Save first: the test goes to the saved addresses."
+          : "";
     test.disabled = Boolean(reason);
     testHint.textContent = reason;
   };
@@ -118,16 +128,19 @@ export function mountNotifications(root: HTMLElement, page: SettingsPage): Secti
         const r = await api<NotificationTestResponse>("/api/settings/notifications/test", {
           method: "POST",
         });
+        const reached = r.to.filter((a) => !r.failed.some((f) => f.email === a));
         toast(
           r.channel === "fake"
-            ? `Test notification recorded for ${r.to} (local stand-in: nothing is delivered)`
-            : `Test notification sent to ${r.to}`,
+            ? `Test notification recorded for ${reached.join(", ")} (local stand-in: nothing is delivered)`
+            : `Test notification sent to ${reached.join(", ")}`,
         );
+        // Some addresses missed it: the status row says which, as the server recorded it.
+        const error = missedAddresses(r.to, r.failed);
         setHtml(
           status,
           notificationStatusHtml({
             last_sent: { kind: "test", subject: "", at: Date.now() },
-            last_failure: null,
+            last_failure: error ? { kind: "test", subject: "", at: Date.now(), error } : null,
           }),
         );
       } catch (err) {
@@ -146,7 +159,7 @@ export function mountNotifications(root: HTMLElement, page: SettingsPage): Secti
   return {
     repaint: refreshTest,
     reset() {
-      toEl.value = page.state.notifyTo;
+      list.reset?.();
       refreshTest();
     },
   };

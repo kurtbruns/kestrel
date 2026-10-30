@@ -220,7 +220,7 @@ export function settingsResponse(
         button_label: "Confirm",
         reassurance: "If this wasn't you, ignore this email.",
       },
-      notifications: { to: "" },
+      notifications: { to: [] },
       ...settings,
     },
     deployment: {
