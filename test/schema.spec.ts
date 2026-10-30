@@ -41,7 +41,7 @@ describe("schema (every migration applied)", () => {
         "imports",
         // 0014_send_acts
         "send_acts",
-        // 0015_provider_account
+        // 0015_provider_account, rebuilt by 0017_provider_account_rejected
         "provider_account",
         // 0016_held_receipts
         "held_receipts",
@@ -726,7 +726,72 @@ describe("schema (0014_send_acts)", () => {
   });
 });
 
-describe("schema (0017_notify_addresses)", () => {
+describe("schema (0017_provider_account_rejected)", () => {
+  it("admits a check whose key SES rejects, and nothing it doesn't know (SPEC §9)", async () => {
+    const write = (outcome: string) =>
+      env.DB.prepare(
+        "INSERT OR REPLACE INTO provider_account (id, attempted_at, outcome) VALUES (1, 1, ?)",
+      )
+        .bind(outcome)
+        .run();
+    // An `ok` row needs its answer, so only the outcomes that keep none are written bare.
+    for (const outcome of ["permission", "rejected", "unreachable"]) {
+      await write(outcome);
+    }
+    await expect(write("refused")).rejects.toThrow(/CHECK/);
+  });
+
+  it("carries the account's last reading across the rebuild, as it stood", async () => {
+    // The table as 0015 made it, with a reading in it; the live one is set aside, and the
+    // migration's own statements run over the old one, which they rebuild.
+    await env.DB.prepare("ALTER TABLE provider_account RENAME TO provider_account_now").run();
+    let migrated = false;
+    try {
+      const v15 = FOLDER.find((m) => m.name === "0015_provider_account.sql");
+      for (const q of v15?.queries ?? []) {
+        await env.DB.prepare(q).run();
+      }
+      await env.DB.prepare(
+        "INSERT INTO provider_account (id, attempted_at, outcome, checked_at, answer) VALUES (1, 20, 'unreachable', 10, ?)",
+      )
+        .bind('{"productionAccess":true,"maxSendRate":14}')
+        .run();
+      const migration = FOLDER.find((m) => m.name === "0017_provider_account_rejected.sql");
+      const statements = migration?.queries ?? [];
+      expect(statements.length).toBe(4);
+      for (const q of statements) {
+        await env.DB.prepare(q).run();
+      }
+      migrated = true;
+    } finally {
+      // The table the migration rebuilt is the live one now; had it failed, put the live one
+      // back, so the other tests still have it.
+      if (!migrated) {
+        await env.DB.batch([
+          env.DB.prepare("DROP TABLE IF EXISTS provider_account_next"),
+          env.DB.prepare("DROP TABLE IF EXISTS provider_account"),
+          env.DB.prepare("ALTER TABLE provider_account_now RENAME TO provider_account"),
+        ]);
+      }
+    }
+    await env.DB.prepare("DROP TABLE IF EXISTS provider_account_now").run();
+
+    expect(await env.DB.prepare("SELECT * FROM provider_account").all()).toMatchObject({
+      results: [
+        {
+          id: 1,
+          attempted_at: 20,
+          outcome: "unreachable",
+          checked_at: 10,
+          answer: '{"productionAccess":true,"maxSendRate":14}',
+        },
+      ],
+    });
+    await env.DB.prepare("UPDATE provider_account SET outcome = 'rejected'").run();
+  });
+});
+
+describe("schema (0018_notify_addresses)", () => {
   it("starts every notification having reached no address", async () => {
     await env.DB.prepare(
       "INSERT INTO notifications (send_id, kind, episode, created_at, updated_at) VALUES (NULL, 'sandbox', 0, 1, 1)",

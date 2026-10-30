@@ -6,7 +6,7 @@ import type { ProviderStatusView } from "../../shared/provider";
 import { DEFAULT_MIN_LEAD_MS, formatLead } from "../../shared/sends";
 import type { DeploymentView, SimulationProfile } from "../../shared/settings";
 import { connectProviderLink } from "../deployment";
-import { providerStateHtml, sendRateHtml, warningHtml } from "../provider_status";
+import { providerStateHtml, sendRateHtml, stopsSending, warningHtml } from "../provider_status";
 import { type Html, html } from "../ui/html";
 import { icon } from "../ui/icons";
 import { chip, monogram, type SettingsPage, secHead } from "./page";
@@ -81,7 +81,7 @@ export function senderSection(page: SettingsPage): Html {
         <div class="set-kv" style="border-top:1px solid var(--line)">
           <div class="set-kv-k">From address</div><div class="set-kv-v set-kv-stack"><span class="mono">${d.from_address}</span><span class="muted" id="replyNote">Readers’ replies go to this address. <a class="set-link" href="${REPLIES_HREF}">Forward it to your inbox</a>.</span></div>
           <div class="set-kv-k">Sending domain</div><div class="set-kv-v"><span class="mono">${d.sending_domain}</span></div>
-          <div class="set-kv-k">Email provider</div><div class="set-kv-v set-kv-stack" id="providerValue">${providerValue(d, status)}${status?.warnings.map((w) => html`<span class="set-warn">${warningHtml(w)}</span>`)}</div>
+          <div class="set-kv-k">Email provider</div><div class="set-kv-v set-kv-stack" id="providerValue">${providerValue(d, status)}${status?.warnings.map((w) => html`<span class="${stopsSending(w) ? "set-error" : "set-warn"}">${warningHtml(w)}</span>`)}</div>
           ${rate ? html`<div class="set-kv-k">Send rate</div><div class="set-kv-v" id="sendRate">${rate}</div>` : null}
         </div>
       </div>

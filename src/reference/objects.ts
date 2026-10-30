@@ -916,7 +916,7 @@ const SETTINGS_FIELDS: ReferenceField[] = [
     name: "deployment.simulation",
     type: "{ profile, faults, account } | null",
     description:
-      "In local development, the send simulation standing in for a provider: its `profile`, its `faults` (`realistic` or `none`), and the SES `account` it stands in for, from `SIMULATE_ACCOUNT`: its `state` (`sandbox`, `pending`, `denied`, `production`, or `permission`) and whether `bounces_routed`, or null when the account is left unread. Always null once deployed.",
+      "In local development, the send simulation standing in for a provider: its `profile`, its `faults` (`realistic` or `none`), and the SES `account` it stands in for, from `SIMULATE_ACCOUNT`: its `state` (`sandbox`, `pending`, `denied`, `production`, or `permission`), whether `bounces_routed`, and the `problem` it shows (`set_missing`, `set_paused`, `key_rejected`, `sending_disabled`, `shutdown`, `sender_unverified`, or `probation`; null for none), or null when the account is left unread. Always null once deployed.",
   },
   {
     name: "deployment.free_plan_limits",
@@ -952,15 +952,15 @@ const PROVIDER_FIELDS: ReferenceField[] = [
   },
   {
     name: "unknown_reason",
-    type: '"permission" | "unreachable" | "not_checked" | "stand_in" | null',
+    type: '"permission" | "rejected" | "unreachable" | "not_checked" | "stand_in" | null',
     description:
-      "Why `state` is `unknown`: the AWS key isn't allowed `ses:GetAccount` (`permission`), asking got no usable answer (`unreachable`), the app hasn't asked yet (`not_checked`), or local development's stand-in has no account (`stand_in`).",
+      "Why `state` is `unknown`: the AWS key isn't allowed `ses:GetAccount` (`permission`), SES rejects the key itself (`rejected`, with the `key_rejected` warning), asking got no usable answer (`unreachable`), the app hasn't asked yet (`not_checked`), or local development's stand-in has no account (`stand_in`).",
   },
   {
     name: "review",
     type: '"pending" | "granted" | "denied" | "failed" | null',
     description:
-      "AWS's review of the latest request for production access: under review, granted, denied, or not received (`failed`, so request it again). Null when none was made.",
+      "AWS's review of the latest request for production access: under review, granted, `denied`, or not received (`failed`, so request it again). Null when none was made. `denied` means AWS hasn't granted access and has replied in the case (`review_case`), not that it refused for good: AWS reads `denied` from the request for more information it sends within seconds of every request, until it grants access. Read the reply and answer in the case.",
   },
   {
     name: "review_case",
@@ -989,7 +989,7 @@ const PROVIDER_FIELDS: ReferenceField[] = [
     name: "warnings",
     type: "object[]",
     description:
-      "Each `{ code, severity, message, docs }` worth a look, in words to show as they come; `docs` names the page `slug` and heading `anchor` that fix it. `bounces_not_routed`: no configuration set applies.",
+      "Each `{ code, severity, message, docs }` worth a look, in words to show as they come; `docs` names the page `slug` and heading `anchor` that fix it. `severity` is `error` when no email can go out until it's fixed, and `warn` when sending still works. Errors: `configuration_set_missing` (SES has no set by the name that applies, in the deployment's region), `configuration_set_paused` (that set's sending is turned off), `key_rejected` (SES rejects the AWS key: unknown, a secret that doesn't match, or an account not signed up for SES), `sending_disabled` (the account's sending is turned off, or AWS has paused it), and `sender_unverified` (no identity covering the From address is verified for sending). Warnings: `account_probation` (AWS is reviewing the account's bounce or complaint rate) and `bounces_not_routed` (no configuration set applies). A part the key isn't allowed to read raises nothing. Never holds a send: SES's answer to the send decides that.",
   },
   {
     name: "checked_at",

@@ -1,4 +1,4 @@
--- 0017_notify_addresses: notifications go to one or more addresses (SPEC §8).
+-- 0018_notify_addresses: notifications go to one or more addresses (SPEC §8).
 --
 -- Each address is its own delivery: `sent_to` holds the addresses a notification has reached,
 -- as a JSON array, so a try after one address failed goes only to the ones still missing it,

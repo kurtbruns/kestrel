@@ -130,12 +130,14 @@ const ACCOUNT_ERROR_TYPES = new Map<string, HaltCause>([
   // The AWS account isn't signed up for SES, which the key can't change.
   ["OptInRequired", "opt_in"],
   // The credentials themselves: unknown, missing, wrongly or incompletely signed, expired, or
-  // not permitted (a key whose policy lacks `ses:SendTemplatedEmail` or
-  // `ses:SendBulkTemplatedEmail` among them: every send passes an inline template, and SES
-  // authorizes a templated send as its own action). AWS's common errors carry some of these
-  // with a 400, which is why the type, not the status, decides; it
-  // names some both with and without the `Exception` suffix, depending on the front end that
-  // answered, so both spellings are here.
+  // not permitted. A key whose policy lacks `ses:SendTemplatedEmail` or
+  // `ses:SendBulkTemplatedEmail` is among them: every send passes an inline template, and SES
+  // refuses a templated send from a key without them. That rests on what a running instance
+  // saw, not on AWS's documentation, whose service reference ties neither action to SendEmail
+  // or SendBulkEmail. A request SES refuses as expired is not here: that is the clock, not the
+  // key (`UNAVAILABLE_ERROR_TYPES`). AWS's common errors carry some of these with a 400, which
+  // is why the type, not the status, decides; it names some both with and without the
+  // `Exception` suffix, depending on the front end that answered, so both spellings are here.
   ["UnrecognizedClientException", "credentials"],
   ["InvalidClientTokenId", "credentials"],
   ["MissingAuthenticationToken", "credentials"],
@@ -144,7 +146,6 @@ const ACCOUNT_ERROR_TYPES = new Map<string, HaltCause>([
   ["IncompleteSignature", "credentials"],
   ["IncompleteSignatureException", "credentials"],
   ["InvalidSignatureException", "credentials"],
-  ["RequestExpired", "credentials"],
   ["ExpiredTokenException", "credentials"],
   ["AccessDeniedException", "credentials"],
   ["NotAuthorized", "credentials"],
@@ -153,9 +154,15 @@ const ACCOUNT_ERROR_TYPES = new Map<string, HaltCause>([
 ]);
 
 /** Error types that say SES didn't take the request for a reason of its own that the next
- *  request may not meet: it never received the whole request (408), or it limits a resource
- *  for now (`LimitExceededException`, which AWS describes only as too many of one). */
-const UNAVAILABLE_ERROR_TYPES = new Set(["RequestTimeoutException", "LimitExceededException"]);
+ *  request may not meet: it never received the whole request (408), it limits a resource for
+ *  now (`LimitExceededException`, which AWS describes only as too many of one), or the request
+ *  was dated more than 15 minutes off (`RequestExpired`), a clock running off that clears once
+ *  it's corrected, never a refusal of the account. The type decides, whatever the status. */
+const UNAVAILABLE_ERROR_TYPES = new Set([
+  "RequestTimeoutException",
+  "LimitExceededException",
+  "RequestExpired",
+]);
 
 /**
  * Error types after which SES's answer leaves the request's fate unknown, as no answer does
@@ -261,6 +268,9 @@ export function classifySesError(
   if (type === "MessageRejected") {
     return account(verificationCause(message, from) ?? "content");
   }
+  if (UNAVAILABLE_ERROR_TYPES.has(type)) {
+    return unavailable("outage");
+  }
   if (status === 404) {
     return account("configuration");
   }
@@ -270,7 +280,7 @@ export function classifySesError(
   if (throttled) {
     return unavailable("rate_limit");
   }
-  if (status === 408 || UNAVAILABLE_ERROR_TYPES.has(type) || status >= 500) {
+  if (status === 408 || status >= 500) {
     return unavailable("outage");
   }
   return null;

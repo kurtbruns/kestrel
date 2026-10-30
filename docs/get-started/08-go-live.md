@@ -8,7 +8,7 @@ The rest happens in the editor, at `https://newsletter.example.com/dashboard/`. 
 
 If someone else is the publisher, let them sign in first:
 
-1. Add their email address to the policy on the Access application that lets you in, as in [Allow yourself in](03-access.md#3-allow-yourself-in). If you set `ACCESS_ALLOWED_EMAILS`, store the list again with their address added.
+1. Add their email address to the policy on the Access application that lets you in, and to `ACCESS_ALLOWED_EMAILS` if you set it, as in [Give the app its two values](03-access.md#4-give-the-app-its-two-values).
 
 1. If they don't have a Cloudflare account, add another way to sign in, such as a one-time code by email. It's under **Zero Trust → Integrations → Identity providers**.
 

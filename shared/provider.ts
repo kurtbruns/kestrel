@@ -14,12 +14,21 @@ export type ProviderState = "not_connected" | "sandbox" | "production" | "unknow
 
 /**
  * Why the state is `unknown`. `permission`: the provider's key isn't allowed to ask about its
- * account. `unreachable`: asking got no usable answer, and there is no earlier one. `not_checked`:
+ * account. `rejected`: the provider rejects the key itself. `unreachable`: asking got no usable answer, and there is no earlier one. `not_checked`:
  * the app hasn't asked yet. `stand_in`: local development's stand-in, which has no account.
  */
-export type ProviderUnknownReason = "permission" | "unreachable" | "not_checked" | "stand_in";
+export type ProviderUnknownReason =
+  | "permission"
+  | "rejected"
+  | "unreachable"
+  | "not_checked"
+  | "stand_in";
 
-/** AWS's review of the latest request for production access, in its own terms. */
+/**
+ * AWS's review of the latest request for production access, in its own terms. `denied` is
+ * AWS's word for a request it has replied to without a grant, whether it asks for more or
+ * refuses, so the editor and Claude read it as "answer in the case", never as a refusal.
+ */
 export type ProductionReview = "pending" | "granted" | "denied" | "failed";
 
 /** Where the send rate a send keeps to comes from: the account, `SES_MAX_SEND_RATE`, or Kestrel's default. */
@@ -47,11 +56,27 @@ export interface ConfigurationSetView {
   source: "setting" | "identity" | "none";
 }
 
+/**
+ * What a provider warning is about. Errors stop every email: `configuration_set_missing` and
+ * `configuration_set_paused` (the set that applies), `key_rejected`, `sending_disabled` (the
+ * account's sending, turned off or paused by AWS), `sender_unverified`. Warnings leave sending
+ * working: `account_probation` (AWS reviewing the account's practices), `bounces_not_routed`
+ * (no configuration set applies, so bounces and complaints never reach the app).
+ */
+export type ProviderWarningCode =
+  | "configuration_set_missing"
+  | "configuration_set_paused"
+  | "key_rejected"
+  | "sending_disabled"
+  | "sender_unverified"
+  | "account_probation"
+  | "bounces_not_routed";
+
 /** Something about the connection worth the publisher's look, in words the editor shows as they come. */
 export interface ProviderWarning {
-  /** `bounces_not_routed`: no configuration set applies, so bounces and complaints never reach the app. */
-  code: "bounces_not_routed";
-  severity: "warn";
+  code: ProviderWarningCode;
+  /** `error`: no email can go out until it's fixed. `warn`: sending still works. */
+  severity: "error" | "warn";
   message: string;
   /** The docs page and heading that fix it. */
   docs: { slug: string; anchor: string };
