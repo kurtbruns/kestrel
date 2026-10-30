@@ -1,0 +1,356 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import type { ProviderStatusView } from "../../shared/provider";
+import type { SendView } from "../../shared/sends";
+import { sendView } from "../test/send_server";
+import { providerStatus, resetShell, sendSummary } from "../test/support";
+import { fmt } from "../ui/format";
+import { html, setHtml } from "../ui/html";
+import { type SetupFacts, type SetupStep, setupSteps, setupStepsHtml } from "./setup";
+
+// DESIGN §3, SPEC §13: the ten setup steps, read from facts both clients have, in each phase.
+
+const facts = (over: Partial<SetupFacts> = {}): SetupFacts => ({
+  notConnected: false,
+  sesAccount: true,
+  provider: null,
+  name: "Symbol Soup",
+  named: true,
+  notifyTo: 0,
+  notifyFailed: false,
+  onList: 0,
+  wrote: false,
+  firstSend: null,
+  subscribeUrl: "https://news.example.com/subscribe",
+  ...over,
+});
+
+const sending = (
+  state: "unproven" | "working" | "refusing",
+  by: "test" | "confirmation" = "test",
+): ProviderStatusView["sending"] => ({
+  state,
+  since: 1,
+  last_accepted: state === "working" ? { at: 1, by } : null,
+  refusal:
+    state === "refusing"
+      ? {
+          cause: "configuration",
+          found_by: "account_check",
+          error: "SES has no configuration set by that name.",
+          advice: "Fix the secret.",
+          at: 1,
+        }
+      : null,
+});
+
+const ses = (over: Partial<ProviderStatusView> = {}) =>
+  providerStatus({ state: "sandbox", unknown_reason: null, ...over });
+
+const firstSend = (over: Partial<SendView> = {}): SendView =>
+  sendView(
+    sendSummary({
+      id: "x1",
+      post_id: "p1",
+      subject: "The integral sign",
+      status: "scheduled",
+      fire_at: Date.now() + 86_400_000,
+    }),
+    over,
+  );
+
+/** Each step as `title: state (hint)`, so a phase reads as one list. */
+const read = (steps: SetupStep[]) =>
+  steps.map((s) => `${s.title}: ${s.state}${s.hint ? ` (${s.hint})` : ""}`);
+
+describe("setup steps", () => {
+  it("not connected: connecting is the step, and every step that sends waits for it (SPEC §13)", () => {
+    expect(
+      read(
+        setupSteps(
+          facts({ notConnected: true, sesAccount: false, named: false, name: "Newsletter" }),
+        ),
+      ),
+    ).toEqual([
+      "Connect Amazon SES: todo (Nothing can be sent, and signups stay closed, until SES is connected.)",
+      "Send a test email: blocked (After Connect Amazon SES)",
+      "Name your publication: todo (Currently “Newsletter”.)",
+      "Get notified: todo",
+      "Request production access: todo (Name your publication first: AWS’s reviewer looks at it.)",
+      "Bring your existing list: todo (Optional.)",
+      "Write your first post: todo",
+      "Schedule your first post: blocked (After Connect Amazon SES)",
+      "Send a test email for your first post: blocked (After Schedule your first post)",
+      "Share your subscribe link: blocked (After Send a test email)",
+    ]);
+  });
+
+  it("not proven yet: a test email is the step, and scheduling isn't blocked", () => {
+    const provider = ses({ sending: sending("unproven"), signups: "not_open" });
+    expect(read(setupSteps(facts({ provider })))).toEqual([
+      "Connect Amazon SES: done",
+      "Send a test email: todo (SES is connected but hasn’t sent anything yet. Send one to an address verified in SES.)",
+      "Name your publication: done (Named “Symbol Soup”.)",
+      "Get notified: todo",
+      "Request production access: todo",
+      "Bring your existing list: todo (Optional.)",
+      "Write your first post: todo",
+      "Schedule your first post: todo",
+      "Send a test email for your first post: blocked (After Schedule your first post)",
+      "Share your subscribe link: blocked (After Send a test email)",
+    ]);
+  });
+
+  it("refusing: the test step points at the health block, which states the problem, and the rest are as before", () => {
+    const provider = ses({ sending: sending("refusing"), signups: "paused" });
+    const steps = setupSteps(facts({ provider }));
+    expect(read(steps)).toEqual([
+      "Connect Amazon SES: done",
+      "Send a test email: attention (SES is refusing. The fix is above.)",
+      "Name your publication: done (Named “Symbol Soup”.)",
+      "Get notified: todo",
+      "Request production access: todo",
+      "Bring your existing list: todo (Optional.)",
+      "Write your first post: todo",
+      "Schedule your first post: todo",
+      "Send a test email for your first post: blocked (After Schedule your first post)",
+      "Share your subscribe link: blocked (After Send a test email)",
+    ]);
+    // Nothing on the steps restates SES's words or its fix.
+    expect(steps.some((s) => s.hint?.includes("configuration set"))).toBe(false);
+  });
+
+  it("working in the sandbox: production access waits on AWS, and schedule and share say to wait, unblocked", () => {
+    const provider = ses({ review: "pending", sending: sending("working"), signups: "open" });
+    expect(read(setupSteps(facts({ provider, notifyTo: 2 })))).toEqual([
+      "Connect Amazon SES: done",
+      "Send a test email: done (Email is getting out.)",
+      "Name your publication: done (Named “Symbol Soup”.)",
+      "Get notified: done (Notifications go to 2 addresses.)",
+      "Request production access: waiting (Waiting for AWS to grant production access.)",
+      "Bring your existing list: todo (Optional.)",
+      "Write your first post: todo",
+      "Schedule your first post: todo (Best after AWS grants access: until then it reaches only verified addresses.)",
+      "Send a test email for your first post: blocked (After Schedule your first post)",
+      "Share your subscribe link: todo (Share it once AWS grants production access.)",
+    ]);
+  });
+
+  it("working with production access, the first post scheduled: its frozen email's test is the step", () => {
+    const provider = ses({
+      state: "production",
+      review: "granted",
+      sending: sending("working", "confirmation"),
+    });
+    const s = firstSend();
+    expect(
+      read(setupSteps(facts({ provider, notifyTo: 1, onList: 40, wrote: true, firstSend: s }))),
+    ).toEqual([
+      "Connect Amazon SES: done",
+      "Send a test email: done (Email is getting out.)",
+      "Name your publication: done (Named “Symbol Soup”.)",
+      "Get notified: done (Notifications go to 1 address.)",
+      "Request production access: done (AWS granted it.)",
+      "Bring your existing list: done (40 subscribers on your list.)",
+      "Write your first post: done",
+      "Schedule your first post: done",
+      `Send a test email for your first post: todo (“The integral sign” goes out ${fmt(s.fire_at)}. Send yourself a test of it first.)`,
+      "Share your subscribe link: todo",
+    ]);
+  });
+
+  it("ticks the first post's test from the scheduled send's tested_at, until a re-make makes the email new", () => {
+    const at = Date.now();
+    const state = (s: SendView) =>
+      setupSteps(facts({ firstSend: s })).find((x) => x.key === "post_test")?.state;
+    expect(state(firstSend({ tested_at: null }))).toBe("todo");
+    expect(state(firstSend({ tested_at: at }))).toBe("done");
+    expect(state(firstSend({ tested_at: at, remade_at: at + 1 }))).toBe("todo");
+    expect(state(firstSend({ tested_at: at + 2, remade_at: at + 1 }))).toBe("done");
+  });
+
+  it("says where AWS's review stands, never that it denied, and what it can't tell", () => {
+    const hint = (provider: ProviderStatusView | null, named = true) =>
+      setupSteps(facts({ provider, named })).find((s) => s.key === "access")?.hint;
+    expect(hint(ses({ review: "denied", review_case: "123" }))).toBe(
+      "AWS hasn’t granted it yet. It has replied in AWS Support, case 123: answer there.",
+    );
+    expect(hint(ses({ review: "failed" }))).toBe("AWS didn’t receive your request. Ask again.");
+    expect(hint(ses(), false)).toBe("Name your publication first: AWS’s reviewer looks at it.");
+    expect(hint(providerStatus({ unknown_reason: "permission" }))).toBe(
+      "Kestrel can’t read your SES account, so the SES console’s account dashboard says whether AWS granted it.",
+    );
+    // A rejected key is the health block's red line, and a failed read says nothing either way.
+    expect(hint(providerStatus({ unknown_reason: "rejected" }))).toBeNull();
+    expect(hint(null)).toBeNull();
+    // A review under way is a wait, never a block, named or not.
+    const access = setupSteps(facts({ provider: ses({ review: "pending" }), named: false })).find(
+      (s) => s.key === "access",
+    );
+    expect(access?.state).toBe("waiting");
+  });
+
+  it("on SES in an unknown state, reads only what it can: email working, access not yet known", () => {
+    const provider = providerStatus({ unknown_reason: "permission", signups: "open" });
+    expect(read(setupSteps(facts({ provider })).filter((s) => s.key !== "list"))).toEqual([
+      "Connect Amazon SES: done",
+      "Send a test email: done (Email is getting out.)",
+      "Name your publication: done (Named “Symbol Soup”.)",
+      "Get notified: todo",
+      "Request production access: todo (Kestrel can’t read your SES account, so the SES console’s account dashboard says whether AWS granted it.)",
+      "Write your first post: todo",
+      "Schedule your first post: todo",
+      "Send a test email for your first post: blocked (After Schedule your first post)",
+      "Share your subscribe link: todo",
+    ]);
+  });
+
+  it("with no provider status, from a failed read or local development's stand-in, ticks no test and blocks no share", () => {
+    // SES whose status couldn't be read: production access stays, with nothing to say.
+    const failed = setupSteps(facts({ provider: null }));
+    expect(read(failed.filter((s) => ["test", "access", "share"].includes(s.key)))).toEqual([
+      "Send a test email: todo (Send one to yourself, and check it arrives.)",
+      "Request production access: todo",
+      "Share your subscribe link: todo",
+    ]);
+    // A provider with no SES account to ask about: no production-access step at all.
+    const standIn = setupSteps(facts({ provider: null, sesAccount: false }));
+    expect(standIn.map((s) => s.key)).toEqual([
+      "connect",
+      "test",
+      "name",
+      "notify",
+      "list",
+      "write",
+      "schedule",
+      "post_test",
+      "share",
+    ]);
+  });
+
+  it("points up at the health block while notifications fail, and is done once they go somewhere", () => {
+    const notify = (over: Partial<SetupFacts>) =>
+      read(setupSteps(facts(over)).filter((s) => s.key === "notify"));
+    expect(notify({ notifyTo: 1, notifyFailed: true })).toEqual([
+      "Get notified: attention (The last notification didn’t arrive. The fix is above.)",
+    ]);
+    expect(notify({ notifyTo: 2 })).toEqual([
+      "Get notified: done (Notifications go to 2 addresses.)",
+    ]);
+    expect(notify({ notifyTo: 0 })).toEqual(["Get notified: todo"]);
+  });
+});
+
+describe("setup card", () => {
+  beforeEach(() => resetShell());
+  const render = (f: SetupFacts, layout: "checklist" | "card" = "card", showDone = false) => {
+    const el = document.createElement("div");
+    setHtml(el, html`${setupStepsHtml(f, layout, showDone)}`);
+    return el;
+  };
+  const toggle = (el: HTMLElement) => el.querySelector<HTMLButtonElement>(".setup-fold");
+  const titles = (el: HTMLElement) =>
+    [...el.querySelectorAll(".setup-steps li strong")].map((s) => s.textContent);
+
+  it("hides finished steps behind one toggle, so the list starts at what's left", () => {
+    const provider = ses({ review: "pending", sending: sending("working"), signups: "open" });
+    const el = render(facts({ provider, notifyTo: 2 }));
+    expect(toggle(el)?.textContent).toBe("✓4 done");
+    expect(toggle(el)?.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle(el)?.dataset.act).toBe("toggle-done");
+    expect(titles(el)).toEqual([
+      "Request production access",
+      "Bring your existing list",
+      "Write your first post",
+      "Schedule your first post",
+      "Send a test email for your first post",
+      "Share your subscribe link",
+    ]);
+    // In the sandbox, sharing says to wait, with no address to copy.
+    expect(el.querySelector(".setup-share .setup-hint")?.textContent).toBe(
+      "Share it once AWS grants production access.",
+    );
+    expect(el.querySelector(".setup-url")).toBeNull();
+    expect(el.querySelector(".setup-share [data-copy]")).toBeNull();
+  });
+
+  it("shows them in place, in the list's order, each with the fact that ticked it and a control where one helps", () => {
+    // Not proven yet, but named and with a list: done steps sit between the ones left.
+    const provider = ses({ sending: sending("unproven"), signups: "not_open" });
+    const el = render(facts({ provider, onList: 3 }), "card", true);
+    expect(toggle(el)?.textContent).toBe("✓3 done");
+    expect(toggle(el)?.getAttribute("aria-expanded")).toBe("true");
+    expect(
+      [...el.querySelectorAll(".setup-steps li")].map((li) => [
+        li.querySelector("strong")?.textContent,
+        li.classList.contains("setup-done"),
+      ]),
+    ).toEqual([
+      ["Connect Amazon SES", true],
+      ["Send a test email", false],
+      ["Name your publication", true],
+      ["Get notified", false],
+      ["Request production access", false],
+      ["Bring your existing list", true],
+      ["Write your first post", false],
+      ["Schedule your first post", false],
+      ["Send a test email for your first post", false],
+      ["Share your subscribe link", false],
+    ]);
+    expect(
+      [...el.querySelectorAll(".setup-done")].map((li) => [
+        li.querySelector(".setup-hint")?.textContent ?? null,
+        li.querySelector("button")?.textContent ?? null,
+      ]),
+    ).toEqual([
+      [null, null],
+      ["Named “Symbol Soup”.", "Settings"],
+      ["3 subscribers on your list.", "Subscribers"],
+    ]);
+  });
+
+  it("says only how many are done, however many", () => {
+    const provider = ses({ state: "production", sending: sending("working") });
+    const el = render(
+      facts({ provider, notifyTo: 1, onList: 3, wrote: true, firstSend: firstSend() }),
+    );
+    expect(toggle(el)?.textContent).toBe("✓8 done");
+    expect(titles(el)).toEqual([
+      "Send a test email for your first post",
+      "Share your subscribe link",
+    ]);
+    expect(el.querySelector<HTMLElement>(".setup-post-test button")?.dataset.nav).toBe("#/edit/p1");
+    expect(el.querySelector<HTMLElement>(".setup-share button")?.dataset.copy).toBe(
+      "https://news.example.com/subscribe",
+    );
+    expect(el.querySelector(".setup-url")?.textContent).toBe("https://news.example.com/subscribe");
+  });
+
+  it("says a blocked step's wait in plain text, with no link and no control", () => {
+    const el = render(facts({ notConnected: true, sesAccount: false, named: false }));
+    expect(el.querySelector(".setup-fold")).toBeNull();
+    const blocked = [...el.querySelectorAll<HTMLElement>(".setup-blocked")];
+    expect(blocked.map((li) => li.querySelector(".setup-hint")?.textContent)).toEqual([
+      "After Connect Amazon SES",
+      "After Connect Amazon SES",
+      "After Schedule your first post",
+      "After Send a test email",
+    ]);
+    for (const li of blocked) {
+      expect(li.querySelector("a, button")).toBeNull();
+    }
+    // Sharing waits for signups: no address to copy yet.
+    expect(el.querySelector(".setup-url")).toBeNull();
+  });
+
+  it("makes the step to take now the Primary on the checklist only, where the head has no New post", () => {
+    const f = facts({ notConnected: true, sesAccount: false });
+    expect(render(f, "checklist").querySelector("button.primary")?.textContent).toBe("Connect");
+    expect(render(f, "card").querySelector("button.primary")).toBeNull();
+    // Never the optional list: past it, to the first post.
+    const sandbox = ses({ review: "pending", sending: sending("working"), signups: "open" });
+    expect(
+      render(facts({ provider: sandbox, notifyTo: 1 }), "checklist").querySelector("button.primary")
+        ?.textContent,
+    ).toBe("New post");
+  });
+});

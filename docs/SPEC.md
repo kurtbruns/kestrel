@@ -589,6 +589,8 @@ Two answers make the phase: whether email is getting out (not connected, not pro
 | **Working, in the sandbox** | Email goes out, but only to addresses verified with the provider | Open, though a reader not verified with it gets no email, and the publisher is told (§8) | To verified addresses | Allowed, and the send says it will reach only verified addresses (§6) | Verified addresses get a confirmation; any other is refused, with the cause |
 | **Working, with production access** | Email goes out to anyone | Open | Sent | Allowed | Allowed |
 
+The editor's guided start walks a new instance through these phases and the publication's own first steps, from connecting the provider to the first post. Each step is read only from what both clients can read: the provider's status, including these two answers; the settings; the list's counts; the posts; and a scheduled send's record of its last test, since the test that counts is of the email that will go out. So it keeps no setup state of its own, and Claude can say what's left from the same facts. It ends when the first post listed in the archive goes out (§5).
+
 ### How an instance moves
 
 | From | To | By |

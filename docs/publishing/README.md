@@ -4,12 +4,17 @@ These pages get you publishing in the dashboard, and cover the decisions to make
 
 ## Set up your publication
 
-These are the steps to set up your publication. If you're starting without a list, skip importing one.
+These are the dashboard's setup steps, in its order. Each is checked off from what Kestrel can see, which Claude reads too, except sharing your link, which Kestrel can't see. Connecting Amazon SES and requesting production access are for whoever runs your Kestrel instance, in [Connect Amazon SES](../get-started/05-ses.md) and [Request production access](../get-started/06-production-access.md). If you're starting without a list, skip importing one.
 
+1. Connect Amazon SES
+1. [Send a test email](10-check-your-setup.md)
 1. [Name your publication](03-name-your-publication.md)
-1. [Check your setup](10-check-your-setup.md)
+1. Get notified
+1. Request production access
 1. [Bring your existing list](01-your-list.md)
-1. [Write and send a post](04-write-a-post.md)
+1. [Write your first post](04-write-a-post.md)
+1. Schedule your first post
+1. Send a test email for your first post
 1. [Share your subscribe link](09-share-your-subscribe-link.md)
 
 ## Go further
