@@ -83,7 +83,7 @@ export interface Secrets {
    * state the account check reports: `sandbox`, `pending` (AWS reviewing a request),
    * `denied`, `production`, or `permission` (a key not allowed to read the account),
    * optionally with `:unrouted` for bounces that reach no configuration set, or with one of
-   * the problems the check finds (`:set_missing`, `:key_rejected`, …, SPEC §9). Needs
+   * the problems the check finds (`:set_missing`, `:key_rejected`, …, SPEC §13). Needs
    * `SIMULATE_SENDS=ses`; `off` or unset leaves the account unread, as before. Honored only
    * in a dev-shaped env.
    */
@@ -450,7 +450,7 @@ function readTeamDomain(raw: string): string {
 }
 
 /** `PROVIDER` as one of the known names, exactly as spelled. Unset means `none`, not
- *  connected (SPEC §13), on every host alike: the fake runs only where it is named, since a
+ *  connected (SPEC §9, §13), on every host alike: the fake runs only where it is named, since a
  *  deployment that fell back to it would record every recipient accepted and mail no one.
  *  Anything else unknown is an error. */
 function readProvider(v: string | undefined): ProviderName {

@@ -730,7 +730,7 @@ describe("schema (0014_send_acts)", () => {
 });
 
 describe("schema (0017_provider_account_rejected)", () => {
-  it("admits a check whose key SES rejects, and nothing it doesn't know (SPEC §9)", async () => {
+  it("admits a check whose key SES rejects, and nothing it doesn't know (SPEC §13)", async () => {
     const write = (outcome: string) =>
       env.DB.prepare(
         "INSERT OR REPLACE INTO provider_account (id, attempted_at, outcome) VALUES (1, 1, ?)",
