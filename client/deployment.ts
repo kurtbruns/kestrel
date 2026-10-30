@@ -223,6 +223,17 @@ export function dailyWritesLine(): Html | null {
     : null;
 }
 
+/**
+ * The Schedule and Send now dialogs' place for the sandbox warning, with a provider connected:
+ * hidden until the provider is read and found in the SES sandbox, then filled with the
+ * scheduled send's own `sandbox` condition words (SPEC §6, DESIGN §4). It never disables a control.
+ */
+export function sandboxSendLine(): Html | null {
+  return providerNotConnected()
+    ? null
+    : html`<p class="hint daily-writes" id="schSandbox" role="status" hidden></p>`;
+}
+
 /** The Schedule dialog's standing line; its Schedule and Send now are disabled beside it. */
 export function notConnectedScheduleLine(): Html | null {
   return notConnectedLine("this can’t be scheduled yet", " to schedule it");

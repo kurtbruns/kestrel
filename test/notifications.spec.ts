@@ -6,6 +6,7 @@ import { refusalAdvice } from "../shared/sends";
 import { MAX_NOTIFY_ADDRESSES, type SendNotificationKind } from "../shared/settings";
 import * as notifications from "../src/db/notifications";
 import * as posts from "../src/db/posts";
+import * as sending from "../src/db/sending";
 import * as sends from "../src/db/sends";
 import { updateSettings } from "../src/db/settings";
 import type { AppEnv } from "../src/env";
@@ -19,6 +20,7 @@ import { NOTIFY_RESERVE, notifyPublisher, stillHolds } from "../src/notify/notif
 import * as providers from "../src/providers";
 import { Budget } from "../src/send/budget";
 import { sweep } from "../src/send/sweep";
+import { Contacts } from "../src/services/sending";
 import { BatchProvider } from "./support/batching";
 import { guardD1 } from "./support/d1_guard";
 import { SES_DEPLOY } from "./support/deploy";
@@ -28,6 +30,7 @@ import {
   frozenSend,
   resetDatabase,
   seedConfirmed,
+  sendingWorks,
   tick,
   ticks,
 } from "./support/fixtures";
@@ -63,6 +66,7 @@ let warnings: MockInstance;
 
 beforeEach(async () => {
   await resetDatabase();
+  await sendingWorks();
   await updateSettings(env.DB, { notifications: { to: [PUBLISHER] } });
   clearFakeNotifications();
   // Only Date is faked, so `ticks` can move the clock past a halt's backoff.
@@ -329,11 +333,67 @@ describe("a signup the SES sandbox refuses", () => {
     expect(fakeNotifications()).toHaveLength(2);
   });
 
-  it("tells nothing for a confirmation refused for any other reason", async () => {
-    transport.refuse = "ses 403 UnrecognizedClientException: bad key";
+  it("tells nothing for a confirmation refused for a reason that clears on its own", async () => {
+    transport.sendBatch = async () => ({
+      kind: "halted",
+      halt: {
+        reason: "account",
+        cause: "quota",
+        error: "ses 429 TooManyRequestsException: Daily message quota exceeded.",
+      },
+    });
     await signUp("ada@example.com");
     await tick();
     expect(fakeNotifications()).toHaveLength(0);
+  });
+});
+
+describe("email not going out (SPEC §8)", () => {
+  const signUp = (email: string) =>
+    fetchWith({}, "/subscribe", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+
+  it("tells the publisher at most once a day when a reader's confirmation is refused for the account, with the provider's words and the fix", async () => {
+    transport.refuse = "ses 403 UnrecognizedClientException: bad key";
+    await signUp("ada@example.com");
+    // Signups are paused now, so a second reader is refused before anything is sent.
+    await signUp("bo@example.com");
+    await tick();
+
+    const sent = fakeNotifications();
+    expect(sent.map((n) => n.subject)).toEqual(["Email isn't going out, and signups are paused"]);
+    expect(sent[0]!.text).toContain("bad key");
+    expect(sent[0]!.text).toContain(refusalAdvice("credentials"));
+    expect(sent[0]!.text).not.toContain("ada@example.com");
+
+    // Still refusing the next day, found again: told again.
+    vi.setSystemTime(notifications.utcDayStart(Date.now()) + 86_400_000 + 1_000);
+    await tick();
+    expect(fakeNotifications()).toHaveLength(1);
+    await sending.recordRefusal(
+      env.DB,
+      { cause: "credentials", foundBy: "account_check", error: "bad key" },
+      Date.now(),
+      true,
+    );
+    await tick();
+    expect(fakeNotifications()).toHaveLength(2);
+  });
+
+  it("closes the notice unsent when an email went through before it was told", async () => {
+    await sending.recordRefusal(
+      env.DB,
+      { cause: "configuration", foundBy: "account_check", error: "no such set" },
+      Date.now(),
+      true,
+    );
+    await sending.recordAccepted(env.DB, "test", Date.now());
+    await tick();
+    expect(fakeNotifications()).toHaveLength(0);
+    expect(await rows()).toMatchObject([{ kind: "not_sending", status: "cleared" }]);
   });
 });
 
@@ -690,12 +750,22 @@ describe("the channels", () => {
   it("the provider fallback delivers through the newsletter's provider, and fails with its words when it refuses", async () => {
     const config = { ...getConfig(env), provider: "ses" as const };
     const notifier = new ProviderNotifier(config, env as AppEnv);
-    await notifier.send(PUBLISHER, { subject: "S", text: "T", html: "" }, "send1-finished-0");
+    await notifier.send(
+      PUBLISHER,
+      { subject: "S", text: "T", html: "" },
+      "send1-finished-0",
+      new Contacts(),
+    );
     expect(transport.mailed).toEqual([{ to: PUBLISHER, key: "notify-send1-finished-0:1" }]);
 
     transport.refuse = "ses 400 MailFromDomainNotVerifiedException: domain not verified";
     await expect(
-      notifier.send(PUBLISHER, { subject: "S", text: "T", html: "" }, "send1-refused-5"),
+      notifier.send(
+        PUBLISHER,
+        { subject: "S", text: "T", html: "" },
+        "send1-refused-5",
+        new Contacts(),
+      ),
     ).rejects.toThrow("domain not verified");
   });
 });

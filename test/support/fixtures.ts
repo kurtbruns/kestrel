@@ -1,5 +1,5 @@
 /**
- * The Worker suite's shared fixtures: an empty database, confirmed readers, a frozen send,
+ * The Worker suite's shared fixtures: an empty database, email that works, confirmed readers, a frozen send,
  * a send wedged on a recipient, the sweep's tick, a send's row set by hand, a delivery for a
  * receipt to land on, and a
  * template a spec can tell apart from another. One copy, so a schema change (a new table, a new NOT NULL column)
@@ -12,6 +12,7 @@
 import { env } from "cloudflare:workers";
 import type { Actor } from "../../shared/who_acted";
 import * as posts from "../../src/db/posts";
+import { recordAccepted } from "../../src/db/sending";
 import type { SendRow } from "../../src/db/sends";
 import * as sends from "../../src/db/sends";
 import { BRANDING_LOGO_KEY } from "../../src/db/settings";
@@ -37,11 +38,21 @@ const TABLES = [
   "settings",
   "provider_account",
   "held_receipts",
+  "sending",
 ];
 
 /** Empty every table, so a test starts from the schema alone whatever ran before it. */
 export async function resetDatabase(): Promise<void> {
   await env.DB.batch(TABLES.map((table) => env.DB.prepare(`DELETE FROM ${table}`)));
+}
+
+/**
+ * Email proven to work, as on a live instance whose provider has taken an email (SPEC §9), so
+ * the public subscribe form takes signups (SPEC §7). A spec of the form's own gating sets
+ * the state it needs instead.
+ */
+export async function sendingWorks(): Promise<void> {
+  await recordAccepted(env.DB, "test", Date.now());
 }
 
 /** A person in the editor, as who acted on a change (SPEC §11). */

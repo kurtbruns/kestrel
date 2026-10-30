@@ -79,6 +79,7 @@ import {
 import type { Principal, RequestContext } from "../router";
 import { viewSendsInOrder } from "../send/describe";
 import { insideLead, saveSettingsRemaking } from "../send/remake";
+import { Contacts } from "../services/sending";
 
 /** Logos are small brand assets; keep them well under any provider's object limits. */
 export const MAX_LOGO_BYTES = 512 * 1024;
@@ -225,13 +226,15 @@ export async function notificationTest(c: RequestContext): Promise<Response> {
   const email = sampleNotification(c.config);
   const key = `test-${Date.now()}`;
   const failed: NotificationTestMiss[] = [];
+  const contacts = new Contacts();
   for (const address of to) {
     try {
-      await notifier.send(address, email, key);
+      await notifier.send(address, email, key, contacts);
     } catch (err) {
       failed.push({ email: address, error: errorText(err) });
     }
   }
+  await contacts.record(c.env.DB, c.config);
   const error = failed.length > 0 ? missedAddresses(to, failed) : null;
   await recordNotificationTest(c.env.DB, error, Date.now());
   if (error !== null && failed.length === to.length) {

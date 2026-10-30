@@ -233,6 +233,8 @@ Until now the app has run with no email provider connected, refusing to send. Se
 
 1. In the editor, **Settings → Email sender** shows Amazon SES and your From address, where it said **No email provider connected** before. Within a couple of minutes, a **Sandbox** pill appears beside it, once the app has read your SES account.
 
+1. In the editor, open **Template** and select **Send test email**, to an address you verified in [Verify your test addresses](#3-verify-your-test-addresses). It arrives. Signups stay closed until SES takes an email, so the **Not proven yet** pill beside Amazon SES in **Settings → Email sender** is gone once it has. If SES refuses it, the test's line says why and what fixes it.
+
 1. In a browser, `https://newsletter.example.com/subscribe` shows the subscribe form, where it said signups aren't open yet.
 
 ## 7. Subscribe the app to the topic

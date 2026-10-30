@@ -117,6 +117,7 @@ describe("the tools are a curated set over the API's routes (SPEC §11)", () => 
       "lift_suppression",
       "update_settings",
       "update_template",
+      "send_template_test",
       "test_notifications",
       "kestrel_api_read",
     ]);
@@ -685,6 +686,8 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
       "min_lead_minutes",
       "free_plan_limits",
       "connection",
+      "sending",
+      "signups",
     ]);
     // Whether SES is still in its sandbox (SPEC §9); the suite's stand-in has no account.
     expect(pub.deployment.connection).toEqual({
@@ -693,6 +696,10 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
       unknown_reason: "stand_in",
       warnings: [],
     });
+    // Whether email is getting out, and so whether signups are open (SPEC §7, §9): nothing
+    // has been sent yet.
+    expect(pub.deployment.sending).toMatchObject({ state: "unproven", refusal: null });
+    expect(pub.deployment.signups).toBe("not_open");
     expect(pub.scheduled_sends).toEqual([]);
   });
 
@@ -713,6 +720,18 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
       warnings: [
         { severity: "error", message: expect.stringContaining("SES has no configuration set") },
       ],
+    });
+  });
+
+  it("sends a template test, the step that proves email works, and says signups opened (SPEC §7, §9)", async () => {
+    const r = await callOk("send_template_test", { to: "you@example.com" });
+    expect(r).toMatchObject({
+      sent: 1,
+      total: 1,
+      recipients: ["you@example.com"],
+      not_sent: [],
+      sending: { state: "working", last_accepted: { by: "test" }, refusal: null },
+      signups: "open",
     });
   });
 

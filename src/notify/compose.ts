@@ -8,7 +8,8 @@
 
 import { dashboardLink } from "../../shared/dashboard_link";
 import type { OutcomeCounts } from "../../shared/imports";
-import { isSendOwnHalt, refusalAdvice } from "../../shared/sends";
+import type { SendingRefusal } from "../../shared/provider";
+import { isSendOwnHalt, refusalAdvice, sentence } from "../../shared/sends";
 import type { DueImportNotification, DueNotification } from "../db/notifications";
 import type { Config } from "../env";
 import { escapeHtml, escapeHtmlAttr } from "../lib/html";
@@ -186,5 +187,31 @@ export function composeSandboxNotification(config: Config): RenderedEmail {
       "Until then, every signup from an address not verified in SES is refused the same way, and a post reaches only verified addresses. You are told at most once a day.",
     ],
     dashboardLink(config.appOrigin, "/subscribers"),
+  );
+}
+
+/**
+ * Tell the publisher email isn't going out (SPEC §8): the provider refuses the account, found
+ * by a reader's signup or by the account check, with nobody there to see it. Signups are
+ * paused until an email goes through. Sent at most once a UTC day, and naming no reader. It
+ * goes through the provider only when the deployment has no other channel, and then can't
+ * arrive while the refusal lasts, so the editor says it too.
+ */
+export function composeNotSendingNotification(
+  refusal: SendingRefusal,
+  config: Config,
+): RenderedEmail {
+  const found =
+    refusal.found_by === "account_check"
+      ? "Kestrel's check of your SES account found that SES will refuse every email"
+      : "Amazon SES refused an email for a reason that will refuse every email";
+  return message(
+    "Email isn't going out, and signups are paused",
+    [
+      `${found}: ${sentence(refusal.error)}`,
+      refusal.advice,
+      "Until an email goes through, the subscribe page tells readers signups are paused, and a scheduled send is held when it fires. Once it's fixed, send a test email from the Template screen: when SES takes it, signups reopen. You are told at most once a day while this lasts.",
+    ],
+    dashboardLink(config.appOrigin, "/"),
   );
 }

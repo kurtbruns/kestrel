@@ -3,13 +3,18 @@
  *
  * The plain `fake` accepts every batch instantly and never reports a receipt, so a local
  * send finishes in one sweep tick with nothing to watch and none of the ways a real
- * provider fails. This stands in for a real provider on LIST sends only, so a local run
+ * provider fails. This stands in for a real provider on LIST sends, so a local run
  * models what a deployed one does, through the REAL send loop, lease, resume, halt, and
  * webhook ingest, not a UI mock. A test send, a confirmation, or a notification goes to the
- * fake outbox untouched and unfaulted: those are the publisher's own checks and a reader's
- * sign-up, and a simulated refusal of either would only get in the way. Simulated list
- * sends land in the same outbox, so the delivered bytes can be inspected. It engages only
- * when `config.simulation` is set, which `getConfig` allows only in a dev-shaped env.
+ * fake outbox unfaulted: those are the publisher's own checks and a reader's sign-up, and a
+ * random fault in either would only get in the way. Two refusals reach every email, since
+ * each is what the account itself does, not a fault: a refusal of the account the developer
+ * names (`refuse`), and, while the account stands in for the SES sandbox, a recipient not
+ * verified with it (`sandboxRefusal`). Both are SES's own error responses read by the real
+ * adapter's classifier, so the app reaches what follows (email refusing, a paused signup, a
+ * held send, SPEC §9) by its own path. Simulated list sends land in the same outbox, so the
+ * delivered bytes can be inspected. It engages only when `config.simulation` is set, which
+ * `getConfig` allows only in a dev-shaped env.
  *
  * One simulator, a profile per provider (`SIMULATE_SENDS`):
  *   - `ses` takes its traits from the real adapter (`sesTraits`: a batch of one second of the
@@ -43,6 +48,7 @@
  * beside what the app did about it.
  */
 
+import type { RefusingCause } from "../../shared/provider";
 import type {
   SimulatedAccountView,
   SimulationFaults,
@@ -58,7 +64,7 @@ import { HALT_BACKOFF_MS, HALT_RETRY_SLACK_MS } from "../lib/time";
 import { unwrap } from "../lib/unwrap";
 import { applyDeliveryEvents } from "../services/webhook_events";
 import { deliverToOutbox, FakeProvider } from "./fake";
-import { classifySesError, sesEntryErrorText, sesErrorText, sesTraits } from "./ses";
+import { bareAddress, classifySesError, sesEntryErrorText, sesErrorText, sesTraits } from "./ses";
 import type {
   BatchHalt,
   DeliveryEvent,
@@ -145,6 +151,115 @@ const PROFILES: Record<SimulationProfile, () => SimProfile> = {
     guaranteed: { lost: true, quota: true },
   }),
 };
+
+// --- refusals of the account ----------------------------------------------------------
+
+/** An SES error response, as the adapter reads one. */
+interface SesErrorResponse {
+  status: number;
+  type: string;
+  msg: string;
+}
+
+/** The error response SES answers each simulated refusal with, as the real account would. */
+function refusalResponse(cause: RefusingCause, config: Config): SesErrorResponse {
+  switch (cause) {
+    case "credentials":
+      return {
+        status: 403,
+        type: "UnrecognizedClientException",
+        msg: "The security token included in the request is invalid. (simulated)",
+      };
+    case "opt_in":
+      return {
+        status: 403,
+        type: "OptInRequired",
+        msg: "The AWS Access Key Id needs a subscription for the service. (simulated)",
+      };
+    case "configuration":
+      return {
+        status: 404,
+        type: "NotFoundException",
+        msg: `Configuration set <${config.sesConfigurationSet ?? "kestrel-mail"}> does not exist. (simulated)`,
+      };
+    case "sender":
+      return {
+        status: 400,
+        type: "MessageRejected",
+        msg: `Email address is not verified. The following identities failed the check in region ${config.awsRegion.toUpperCase()}: ${bareAddress(config.fromAddress)}`,
+      };
+    case "mail_from":
+      return {
+        status: 400,
+        type: "MailFromDomainNotVerifiedException",
+        msg: "The MAIL FROM domain's MX record can't be read. (simulated)",
+      };
+    case "paused":
+      return {
+        status: 400,
+        type: "SendingPausedException",
+        msg: "Sending is paused for this account. (simulated)",
+      };
+    case "set_paused":
+      return {
+        status: 400,
+        type: "SendingPausedException",
+        msg: "Sending is paused for this configuration set. (simulated)",
+      };
+    case "suspended":
+      return {
+        status: 400,
+        type: "AccountSuspendedException",
+        msg: "The account's ability to send email has been permanently restricted. (simulated)",
+      };
+    default:
+      return { status: 404, type: "UnknownOperationException", msg: "(simulated)" };
+  }
+}
+
+/** The halt the real adapter returns for an SES error response. */
+function sesHalt(r: SesErrorResponse, from: string): BatchHalt {
+  return adapterHalt(
+    classifySesError(r.status, r.type, r.msg, from),
+    sesErrorText(r.status, r.type, r.msg),
+  );
+}
+
+/** The domain of SES's mailbox simulator, whose addresses the sandbox lets through. */
+const SES_SIMULATOR_DOMAIN = "simulator.amazonses.com";
+
+/**
+ * Whether a recipient is one the simulated sandbox mails: an address at the sending domain
+ * (a verified domain identity covers every address at it, as in SES) or at SES's mailbox
+ * simulator. Any other is one the developer hasn't verified.
+ */
+function sandboxVerified(email: string, config: Config): boolean {
+  const domain = email.slice(email.lastIndexOf("@") + 1).toLowerCase();
+  return domain === config.sendingDomain.toLowerCase() || domain === SES_SIMULATOR_DOMAIN;
+}
+
+/** The refusal SES's sandbox gives a request naming recipients it doesn't mail, or null. */
+function sandboxRefusal(recipients: Recipient[], config: Config): BatchHalt | null {
+  if (!config.simulation?.account) {
+    return null;
+  }
+  const row = simulatedAccountRow(config.simulation.account, config, Date.now());
+  if (row.answer?.productionAccess !== false) {
+    return null;
+  }
+  const unverified = recipients.filter((r) => !sandboxVerified(r.email, config));
+  if (unverified.length === 0) {
+    return null;
+  }
+  return sesHalt(
+    {
+      status: 400,
+      type: "MessageRejected",
+      msg: `Email address is not verified. The following identities failed the check in region ${config.awsRegion.toUpperCase()}: ${unverified.map((r) => r.email).join(", ")}`,
+    },
+    config.fromAddress,
+  );
+}
 
 // --- receipts: outcome mix and lag ----------------------------------------------------
 
@@ -331,11 +446,18 @@ export class SimProvider implements EmailProvider {
   private readonly profileName: SimulationProfile;
   private readonly faults: SimulationFaults;
   private readonly fake = new FakeProvider();
+  private readonly config: Config;
+  /** The refusal of the account every email meets, when the developer named one. */
+  private readonly refusal: BatchHalt | null;
 
   constructor(simulation: SimulationView, config: Config) {
     this.profile = PROFILES[simulation.profile]();
     this.profileName = simulation.profile;
     this.faults = simulation.faults;
+    this.config = config;
+    this.refusal = simulation.refuse
+      ? sesHalt(refusalResponse(simulation.refuse, config), config.fromAddress)
+      : null;
     const traits = this.profile.traits(config);
     this.maxBatch = traits.maxBatch;
     this.maxRequestRate = traits.maxRequestRate;
@@ -347,8 +469,15 @@ export class SimProvider implements EmailProvider {
     recipients: Recipient[],
     opts: SendBatchOptions,
   ): Promise<SendBatchResult> {
+    if (this.refusal) {
+      return { kind: "halted", halt: this.refusal };
+    }
     if (opts.purpose !== "list") {
-      return this.fake.sendBatch(rendered, recipients, opts);
+      return this.oneOff(rendered, recipients, opts);
+    }
+    const sandboxed = sandboxRefusal(recipients, this.config);
+    if (sandboxed) {
+      return { kind: "halted", halt: sandboxed };
     }
     const sendId = opts.tag;
     const key = opts.batchKey ?? sendId;
@@ -401,6 +530,41 @@ export class SimProvider implements EmailProvider {
       );
     }
     return { kind: "answered", results };
+  }
+
+  /**
+   * A one-off message, one request a recipient as the adapter sends it: through to the fake
+   * outbox, unless the sandbox refuses the recipient. A refusal of the first request speaks
+   * for the call, as the adapter's does; a later one holds back the rest.
+   */
+  private async oneOff(
+    rendered: RenderedEmail,
+    recipients: Recipient[],
+    opts: SendBatchOptions,
+  ): Promise<SendBatchResult> {
+    const out: PerRecipientResult[] = [];
+    for (const [i, r] of recipients.entries()) {
+      const refused = sandboxRefusal([r], this.config);
+      if (!refused) {
+        const answer = await this.fake.sendBatch(rendered, [r], opts);
+        out.push(...(answer.kind === "answered" ? answer.results : []));
+        continue;
+      }
+      if (i === 0) {
+        return { kind: "halted", halt: refused };
+      }
+      for (const rest of recipients.slice(i)) {
+        out.push({
+          email: rest.email,
+          accepted: false,
+          retryable: true,
+          error: refused.error,
+          held: true,
+        });
+      }
+      return { kind: "answered", results: out, halt: refused };
+    }
+    return { kind: "answered", results: out };
   }
 
   /** Whether this request is lost in flight: once per send when the profile guarantees it,

@@ -76,7 +76,7 @@ function answerReads(answer: (url: string) => Response) {
  *  itself is read over HTTP below, where the suite's sign-in holds (a dev-shaped env). */
 async function status(vars: Record<string, string>): Promise<ProviderStatusView> {
   const config = getConfig(withVars(vars));
-  return providerStatusView(config, await readProviderAccount(env.DB));
+  return providerStatusView(config, await readProviderAccount(env.DB), null);
 }
 
 const answer = (over: Partial<AccountAnswer> = {}): AccountAnswer => ({
@@ -276,6 +276,8 @@ describe("the account check", () => {
       configuration_set: { name: "kestrel-mail", source: "identity" },
       warnings: [],
       checked_at: Date.now(),
+      sending: { state: "unproven", since: null, last_accepted: null, refusal: null },
+      signups: "not_open",
     } satisfies ProviderStatusView);
   });
 
@@ -658,23 +660,31 @@ describe("the account problems the check finds (SPEC §9)", () => {
     const config = getConfig(withVars(WITH_SET));
     const now = Date.now();
     const warnings = [
-      providerStatusView(config, {
-        attemptedAt: now,
-        outcome: "rejected",
-        checkedAt: now,
-        answer: answer({
-          enforcement: "probation",
-          sendingEnabled: false,
-          senderVerified: false,
-          configurationSet: { name: "kestrel-mail", exists: false, sendingEnabled: false },
-        }),
-      }).warnings,
-      providerStatusView(config, {
-        attemptedAt: now,
-        outcome: "ok",
-        checkedAt: now,
-        answer: answer({ enforcement: "shutdown" }),
-      }).warnings,
+      providerStatusView(
+        config,
+        {
+          attemptedAt: now,
+          outcome: "rejected",
+          checkedAt: now,
+          answer: answer({
+            enforcement: "probation",
+            sendingEnabled: false,
+            senderVerified: false,
+            configurationSet: { name: "kestrel-mail", exists: false, sendingEnabled: false },
+          }),
+        },
+        null,
+      ).warnings,
+      providerStatusView(
+        config,
+        {
+          attemptedAt: now,
+          outcome: "ok",
+          checkedAt: now,
+          answer: answer({ enforcement: "shutdown" }),
+        },
+        null,
+      ).warnings,
     ].flat();
     expect(new Set(warnings.map((w) => w.code))).toEqual(
       new Set([

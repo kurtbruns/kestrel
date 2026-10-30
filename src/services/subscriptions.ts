@@ -14,6 +14,7 @@ import { getProvider, requireConnectedProvider } from "../providers";
 import type { HaltCause, RenderedEmail, SendBatchResult } from "../providers/types";
 import { resolveBranding } from "../render/template_engine";
 import type { RequestContext } from "../router";
+import { contactOutcome, noteContact } from "./sending";
 
 /**
  * What a subscribe request came to. `sent`: the provider took the confirmation. `skipped`:
@@ -30,7 +31,7 @@ export type SubscriptionOutcome =
       subscriber: subscribers.SubscriberRow | null;
       action: subscribers.SubscribeAction;
     }
-  | { kind: "failed"; delivered: "no" | "unknown"; error: string };
+  | { kind: "failed"; delivered: "no" | "unknown"; error: string; cause?: HaltCause };
 
 /**
  * Subscribe `email` through double opt-in, sending it a confirmation if one is due. Never
@@ -43,6 +44,9 @@ export type SubscriptionOutcome =
 export async function requestSubscription(
   c: RequestContext,
   email: string,
+  /** Whether a reader asked through the public form, where nobody sees a refusal as it
+   *  happens, so the publisher is told by email that email isn't going out (SPEC §8). */
+  fromReader = false,
 ): Promise<SubscriptionOutcome> {
   requireConnectedProvider(c.config);
   const db = c.env.DB;
@@ -74,7 +78,7 @@ export async function requestSubscription(
       ? "resubscribed"
       : "pending_resent";
 
-  const sent = await sendConfirmation(c, message, subscriber, now);
+  const sent = await sendConfirmation(c, message, subscriber, now, fromReader);
   if (sent.delivered === "no") {
     // Nothing went out, so nothing changes: the claim is released (a refusal is not a
     // send, and the reader may try again at once), and a row made for this request goes.
@@ -96,7 +100,7 @@ export async function requestSubscription(
         log.error("subscribe.failed", { provider: c.config.provider, error: errorText(err) });
       }
     }
-    return { kind: "failed", delivered: "no", error: sent.error };
+    return { kind: "failed", delivered: "no", error: sent.error, cause: sent.cause };
   }
   // Sent, or it may have been: arm its link so it works if it arrived, and keep the claim,
   // so a retry can't turn an outage into a flood.
@@ -134,12 +138,14 @@ async function confirmationMessage(c: RequestContext, token: string): Promise<Re
 }
 
 /** Hand one confirmation to the provider and say whether it went: `yes`, `no` (refused,
- *  nothing sent), or `unknown` (no answer). */
+ *  nothing sent), or `unknown` (no answer). What the answer says about the account is
+ *  recorded (SPEC §9). */
 async function sendConfirmation(
   c: RequestContext,
   message: RenderedEmail,
   subscriber: subscribers.SubscriberRow,
   attemptAt: number,
+  fromReader: boolean,
 ): Promise<
   | { delivered: "yes" }
   | { delivered: "no"; error: string; cause?: HaltCause }
@@ -158,6 +164,14 @@ async function sendConfirmation(
   } catch (err) {
     return { delivered: "unknown", error: err instanceof Error ? err.message : String(err) };
   }
+  await noteContact(
+    c.env.DB,
+    c.config,
+    "confirmation",
+    contactOutcome(result),
+    Date.now(),
+    fromReader,
+  );
   if (result.kind === "halted") {
     return { delivered: "no", error: result.halt.error, cause: result.halt.cause };
   }

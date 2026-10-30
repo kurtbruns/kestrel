@@ -33,7 +33,7 @@ import {
 import { fillDeliveryTokens } from "../render/template_engine";
 import type { RequestContext } from "../router";
 import { param } from "../router";
-import { signupsOpen } from "./public";
+import { readSignups } from "../services/sending";
 import { archiveHomeUrl, devDashboardUrl, readerIdentity, readerMessage } from "./reader";
 
 /** A post's date as the reader surface shows it. */
@@ -50,9 +50,10 @@ export function formatPublishedDate(ms: number): string {
  *  recent ones, with the publication identity and a subscribe call to action. Never
  *  bounces a visitor toward an admin path (§11). */
 export async function landing(c: RequestContext): Promise<Response> {
-  const [posts, identity] = await Promise.all([
+  const [posts, identity, signups] = await Promise.all([
     listPublishedPosts(c.env.DB, 6),
     readerIdentity(c, c.config),
+    readSignups(c.env.DB, c.config),
   ]);
   const mapped = posts.map((i) => ({
     title: i.subject,
@@ -67,7 +68,7 @@ export async function landing(c: RequestContext): Promise<Response> {
     archiveUrl: archiveHomeUrl(c.config),
     featured,
     recent,
-    signupsOpen: signupsOpen(c.config),
+    signupsOpen: signups === "open",
     devDashboardUrl: devDashboardUrl(c.config),
   });
 }
@@ -75,13 +76,14 @@ export async function landing(c: RequestContext): Promise<Response> {
 /** The full public archive index: every published post (its send has started) listed in the
  *  archive, an email-only post left out (SPEC §5), newest first, linking to their permanent (canonical) archive URLs. */
 export async function archiveIndex(c: RequestContext): Promise<Response> {
-  const [posts, identity] = await Promise.all([
+  const [posts, identity, signups] = await Promise.all([
     listPublishedPosts(c.env.DB),
     readerIdentity(c, c.config),
+    readSignups(c.env.DB, c.config),
   ]);
   return archiveIndexPage({
     identity,
-    subscribeUrl: `${c.config.appOrigin}/subscribe`,
+    subscribeUrl: signups === "open" ? `${c.config.appOrigin}/subscribe` : undefined,
     homeUrl: `${c.config.appOrigin}/`,
     posts: posts.map((i) => ({
       title: i.subject,

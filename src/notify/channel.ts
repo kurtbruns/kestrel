@@ -15,6 +15,7 @@
 import type { AppEnv, Config, NotifyChannel } from "../env";
 import { getProvider, perRecipient } from "../providers";
 import type { RenderedEmail } from "../render/render";
+import { type Contacts, contactOutcome } from "../services/sending";
 import { FakeNotifier } from "./fake";
 
 export interface Notifier {
@@ -22,9 +23,10 @@ export interface Notifier {
   /**
    * Deliver one message to `to`. `key` names the notification, so a channel that
    * records by it (the fake) never records the same one twice.
-   * Throws with the channel's own words when it is not delivered.
+   * Throws with the channel's own words when it is not delivered. The provider channel adds
+   * what its answer says about the account to `contacts` (SPEC §9), which the caller records.
    */
-  send(to: string, message: RenderedEmail, key: string): Promise<void>;
+  send(to: string, message: RenderedEmail, key: string, contacts: Contacts): Promise<void>;
 }
 
 export function getNotifier(config: Config, env: AppEnv): Notifier {
@@ -76,7 +78,8 @@ export class CloudflareNotifier implements Notifier {
 /**
  * The newsletter's own provider, for a deployment without the binding. It cannot carry a
  * notification that the provider is refusing the account, which is exactly when that one
- * matters; the setup guide says so, and the refusal still shows on the status surface.
+ * matters; the setup guide says so, and the refusal still shows on the status surface. Its
+ * answer is an email's answer like any other, so it records whether email is getting out.
  */
 export class ProviderNotifier implements Notifier {
   readonly channel = "provider" as const;
@@ -86,7 +89,7 @@ export class ProviderNotifier implements Notifier {
     private readonly env: AppEnv,
   ) {}
 
-  async send(to: string, message: RenderedEmail, key: string): Promise<void> {
+  async send(to: string, message: RenderedEmail, key: string, contacts: Contacts): Promise<void> {
     const provider = getProvider(this.config, this.env);
     // Transactional, like the confirmation email: no unsubscribe link, since it goes to
     // the publisher about their own sends and never to the list.
@@ -95,6 +98,7 @@ export class ProviderNotifier implements Notifier {
       purpose: "notification",
       tag: `notify-${key}`,
     });
+    contacts.add("notification", contactOutcome(answer), Date.now());
     const [result] = perRecipient(answer, recipients);
     if (!result?.accepted) {
       throw new Error(result?.error ?? "the provider gave no answer for the recipient");

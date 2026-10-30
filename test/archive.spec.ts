@@ -26,12 +26,14 @@ import {
 import { readerIdentity } from "../src/routes/reader";
 import { cancel, freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
-import { dueSend, resetDatabase, seedConfirmed, setRow } from "./support/fixtures";
+import { dueSend, resetDatabase, seedConfirmed, sendingWorks, setRow } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH } from "./support/http";
 import { fetchWith } from "./support/worker_env";
 
 beforeEach(async () => {
   await resetDatabase();
+  // A live instance, whose public form takes signups (SPEC §7).
+  await sendingWorks();
   clearFakeOutbox();
 });
 
@@ -282,13 +284,33 @@ describe("home page (the public front door, §5)", () => {
     // The form is the call to action, so the masthead doesn't repeat it.
     expect(body).not.toContain("Subscribe here");
     expect(body).not.toContain("Just A Draft");
+    // Whether it shows the form follows signups, which can change at any moment (SPEC §7).
+    expect(res.headers.get("cache-control")).toBe("no-cache");
   });
 
-  it("drops the form once a post is listed (SPEC §5)", async () => {
+  it("drops the form once a post is listed, and is briefly cacheable again (SPEC §5)", async () => {
     await publish("A Post", 1_000);
-    const body = await (await SELF.fetch(`${base}/`)).text();
+    const res = await SELF.fetch(`${base}/`);
+    const body = await res.text();
     expect(body).not.toContain("<form");
     expect(body).toContain("Subscribe here");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=300");
+  });
+});
+
+describe("while signups aren't open (SPEC §7)", () => {
+  it("invites no one to subscribe from the masthead of the home page or the archive", async () => {
+    await publish("A Post", 1_000);
+    for (const path of ["/", "/archive"]) {
+      expect(await (await SELF.fetch(`${base}${path}`)).text(), path).toContain("Subscribe here");
+    }
+    // Email not proven yet: signups close, and the call to action goes with them.
+    await env.DB.prepare("DELETE FROM sending").run();
+    for (const path of ["/", "/archive"]) {
+      const body = await (await SELF.fetch(`${base}${path}`)).text();
+      expect(body, path).not.toContain("Subscribe here");
+      expect(body, path).toContain("A Post");
+    }
   });
 });
 
@@ -679,9 +701,10 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
       expect(off, name).toContain(` · ${publication}</title>`);
       expect(off, name).not.toContain('class="r-sub"');
       if (handler === subscribeForm || handler === subscribe) {
-        // The subscribe pages show no one's address, so they stay briefly cacheable
-        // and indexable like the rest of the public surface.
-        expect(offRes.headers.get("cache-control"), name).toBe("public, max-age=300");
+        // The subscribe pages show no one's address, so they stay indexable like the rest of
+        // the public surface, but are checked on every load, since whether they take
+        // signups can change at any moment (SPEC §7).
+        expect(offRes.headers.get("cache-control"), name).toBe("no-cache");
         expect(offRes.headers.get("x-robots-tag"), name).toBeNull();
       } else {
         // Some show the reader's address: never cached, never indexed.

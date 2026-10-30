@@ -1,6 +1,6 @@
 import { createExecutionContext, SELF, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRouter } from "../src/app";
 import * as settings from "../src/db/settings";
 import * as subs from "../src/db/subscribers";
@@ -8,7 +8,7 @@ import { type AppEnv, getConfig } from "../src/env";
 import { CONFIRM_COOLDOWN_MS, CONFIRM_LINK_TTL_MS } from "../src/lib/time";
 import * as providers from "../src/providers";
 import type { EmailProvider, SendBatchResult } from "../src/providers/types";
-import { resetDatabase, seedConfirmed } from "./support/fixtures";
+import { resetDatabase, seedConfirmed, sendingWorks } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 import { allowErrorLogs } from "./support/log";
 import { fetchWith } from "./support/worker_env";
@@ -132,6 +132,9 @@ async function addComplainer(email: string): Promise<subs.SubscriberRow> {
   expect(await subs.complain(env.DB, email)).toBe("unsubscribed");
   return (await subs.getByEmail(env.DB, email))!;
 }
+
+// A live instance: email works, so the public form takes signups (SPEC §7).
+beforeEach(sendingWorks);
 
 describe("subscribers: double opt-in (I1) and unsubscribe (I2)", () => {
   it("public subscribe creates a pending subscriber and emails a confirmation", async () => {
@@ -621,6 +624,7 @@ describe("subscribers: admin + suppressions", () => {
     // suppressed count is subscribers whose address is suppressed, so an address suppressed
     // with no subscriber isn't one.
     await resetDatabase();
+    await sendingWorks();
     await seedConfirmed(["c1@example.com", "c2@example.com", "c3@example.com"]);
     await env.DB.prepare(
       `INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, unsubscribed_at, unsubscribe_cause)
@@ -904,6 +908,7 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
 
   it("GET /api/subscribers flags a row's suppression however many newer suppressions there are (SPEC §7)", async () => {
     await resetDatabase();
+    await sendingWorks();
     await seedConfirmed(["old@example.com"]);
     await env.DB.prepare(
       "INSERT INTO suppressions (email, reason, detail, created_at) VALUES ('old@example.com', 'bounce', 'mailbox gone', ?)",
@@ -1006,6 +1011,7 @@ describe("the list past what Workers Free suits (SPEC §7)", () => {
 
   it("carries the advice to move to Workers Paid once the confirmed list passes 1,000, on Free's limits only", async () => {
     await resetDatabase();
+    await sendingWorks();
     await seedConfirmed(Array.from({ length: 1_000 }, (_, i) => `r${i}@example.com`));
     expect(await advice()).toBe(null); // 1,000: what Free suits
     await seedConfirmed(["one-more@example.com"]);

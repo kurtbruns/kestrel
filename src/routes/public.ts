@@ -1,8 +1,10 @@
-/** Public, token-scoped reader routes: subscribe, confirm, unsubscribe. While no email
- *  provider is connected (SPEC §9), the subscribe page says signups aren't open yet and a
- *  subscribe request is refused, the same way for every address. */
+/** Public, token-scoped reader routes: subscribe, confirm, unsubscribe. The subscribe page
+ *  takes signups only while email is working (SPEC §7, §9): with no provider connected, or
+ *  before the provider has taken an email, it says signups aren't open yet, and while the
+ *  provider refuses the account it says they're paused, the same way for every address. */
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
+import type { SignupsState } from "../../shared/provider";
 import type { PublicSubscribeResponse } from "../../shared/subscribers";
 import * as subscribers from "../db/subscribers";
 import type { Config } from "../env";
@@ -18,6 +20,7 @@ import {
   subscribeFormHtml,
 } from "../lib/page";
 import type { RequestContext } from "../router";
+import { readSignups } from "../services/sending";
 import {
   type ConfirmLinkState,
   confirmLinkState,
@@ -82,7 +85,8 @@ function toPublication(action: string, name: string): string {
 }
 
 /** Wrap a subscribe-flow body in the branded reader shell (no masthead CTA — the
- *  reader is already here). */
+ *  reader is already here). Never served stale, since whether it takes signups can change
+ *  at any moment (SPEC §7). */
 function subscribePage(
   c: RequestContext,
   identity: ReaderIdentity,
@@ -96,6 +100,7 @@ function subscribePage(
     mainHtml,
     devDashboardUrl: devDashboardUrl(c.config),
     status,
+    fresh: true,
   });
 }
 
@@ -123,9 +128,9 @@ export function subscribeNotAnEmailPage(c: RequestContext, identity: ReaderIdent
 }
 
 /**
- * The subscribe page while no email provider is connected (SPEC §9): no form, since an
- * address taken now could not be sent its confirmation. Every request gets it alike, so it
- * says nothing about the list (§7).
+ * The subscribe page before email is working (SPEC §7, §9): no provider connected, or none
+ * proven yet. No form, since an address taken now might never be sent its confirmation.
+ * Every request gets it alike, so it says nothing about the list.
  */
 export function subscribeNotOpenPage(
   c: RequestContext,
@@ -139,10 +144,32 @@ export function subscribeNotOpenPage(
   return subscribePage(c, identity, main, status);
 }
 
-/** Whether a subscribe would be taken: not while no email provider is connected (SPEC §9).
- *  The subscribe page and the empty home page both ask this, so they never disagree. */
-export function signupsOpen(config: Config): boolean {
-  return config.provider !== "none";
+/**
+ * The subscribe page while the provider refuses the account (SPEC §7): no form, since no
+ * confirmation can go. Every request gets it alike, so it says nothing about the list.
+ */
+export function subscribePausedPage(
+  c: RequestContext,
+  identity: ReaderIdentity,
+  status = 200,
+): Response {
+  const main =
+    `<p class="r-ey">Newsletter</p>` +
+    `<h1 class="r-h1">Signups are paused</h1>` +
+    `<p class="r-lead">This newsletter can’t send confirmation emails right now. Please try again later.</p>`;
+  return subscribePage(c, identity, main, status);
+}
+
+/** The closed subscribe page for a signups state other than open. */
+function closedPage(
+  c: RequestContext,
+  identity: ReaderIdentity,
+  signups: Exclude<SignupsState, "open">,
+  status = 200,
+): Response {
+  return signups === "paused"
+    ? subscribePausedPage(c, identity, status)
+    : subscribeNotOpenPage(c, identity, status);
 }
 
 /** The one answer every subscribe request gets, whatever the address's state (SPEC §7). */
@@ -154,26 +181,43 @@ export function subscribeCheckInboxPage(c: RequestContext, identity: ReaderIdent
 }
 
 export async function subscribeForm(c: RequestContext): Promise<Response> {
-  const identity = await readerIdentity(c, c.config);
-  return signupsOpen(c.config) ? subscribeFormPage(c, identity) : subscribeNotOpenPage(c, identity);
+  const [identity, signups] = await Promise.all([
+    readerIdentity(c, c.config),
+    readSignups(c.env.DB, c.config),
+  ]);
+  return signups === "open" ? subscribeFormPage(c, identity) : closedPage(c, identity, signups);
 }
 
 export async function subscribe(c: RequestContext): Promise<Response> {
-  if (!signupsOpen(c.config)) {
+  const signups = await readSignups(c.env.DB, c.config);
+  if (signups !== "open") {
     // Refused before the address is read, so no address is stored or even looked at, and
     // every request gets the same answer (SPEC §7, §9). Logged, so the operator can see
-    // readers arriving before signups are open.
-    log.warn("subscribe.not_connected");
+    // readers arriving while signups are closed.
+    const connected = c.config.provider !== "none";
+    if (connected) {
+      log.warn("subscribe.closed", { signups });
+    } else {
+      log.warn("subscribe.not_connected");
+    }
     if (!wantsHtml(c)) {
       return json(
-        {
-          error: "provider_not_connected",
-          message: "This newsletter isn't taking subscribers yet.",
-        },
+        connected
+          ? {
+              error: "signups_closed",
+              message:
+                signups === "paused"
+                  ? "This newsletter can't send confirmation emails right now. Please try again later."
+                  : "This newsletter isn't taking subscribers yet.",
+            }
+          : {
+              error: "provider_not_connected",
+              message: "This newsletter isn't taking subscribers yet.",
+            },
         503,
       );
     }
-    return subscribeNotOpenPage(c, await readerIdentity(c, c.config), 503);
+    return closedPage(c, await readerIdentity(c, c.config), signups, 503);
   }
   const raw = await readEmail(c);
   const email = raw ? normalizeEmail(raw) : "";
@@ -187,7 +231,7 @@ export async function subscribe(c: RequestContext): Promise<Response> {
   // how long it takes, must not depend on the address's state (SPEC §7). A refusal is
   // logged and changes nothing, so the reader can simply submit again.
   c.ctx.waitUntil(
-    requestSubscription(c, email).catch((err: unknown) => {
+    requestSubscription(c, email, true).catch((err: unknown) => {
       // The error's kind, not its text, which may carry the address being subscribed.
       log.error("subscribe.failed", { name: err instanceof Error ? err.name : typeof err });
     }),

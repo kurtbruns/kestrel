@@ -29,6 +29,8 @@ export const SHIPPED_MIGRATIONS: readonly string[] = [
   "0016_held_receipts.sql",
   "0017_provider_account_rejected.sql",
   "0018_notify_addresses.sql",
+  "0019_sending.sql",
+  "0020_notifications_not_sending.sql",
 ];
 
 /**

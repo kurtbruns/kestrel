@@ -2,6 +2,7 @@
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
 import { freePlanListNotice, pastFreePlanList } from "../../shared/free_plan";
+import { refusalAdvice, sentence } from "../../shared/sends";
 import type {
   EraseResponse,
   SubscribeResponse,
@@ -48,7 +49,7 @@ export async function create(c: RequestContext): Promise<Response> {
       "confirmation_not_sent",
       outcome.delivered === "unknown"
         ? `No answer from the email provider, so the confirmation may not have reached ${email}: ${outcome.error}`
-        : `The email provider refused the confirmation to ${email}: ${outcome.error}`,
+        : `The email provider refused the confirmation to ${email}: ${sentence(outcome.error)}${outcome.cause ? ` ${refusalAdvice(outcome.cause)}` : ""}`,
     );
   }
   const response: SubscribeResponse = {

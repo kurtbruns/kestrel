@@ -667,6 +667,16 @@ const CASES: Case[] = [
       }),
   },
   {
+    refusal: "POST /subscribe signups_closed",
+    when: "email not proven yet",
+    run: () =>
+      fetchWith({}, "/subscribe", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "p@x.io" }),
+      }),
+  },
+  {
     refusal: "GET /health invalid_config",
     when: "a configuration it refuses",
     run: () => fetchWith({ ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com" }, "/health"),

@@ -20,10 +20,12 @@ import { mount, setTitle } from "../lifecycle";
 import { createNewPost } from "../posts/drafts";
 import {
   inSandbox,
+  notGoingOutHtml,
   PRODUCTION_ACCESS_HREF,
   productionAccessHint,
   readProviderStatus,
   readsSesAccount,
+  refusalOf,
   sandboxHealthHtml,
   stopsSending,
   warningHtml,
@@ -75,8 +77,9 @@ interface HealthAlert {
 // While the Finish setting up card carries its Connect Amazon SES step, the card says the
 // not-connected state and the amber line is left out, so it is said once (DESIGN §3). The
 // provider's connection adds the others with no send behind them: each warning the server
-// gives (GET /api/provider), in its words, and SES still in the sandbox, left out while the
-// setup card's production-access step says it.
+// gives (GET /api/provider), in its words, SES still in the sandbox, left out while the
+// setup card's production-access step says it, and email not going out, in red, which stands
+// for the errors among the warnings while it lasts.
 function computeHealth(
   live: SendView[],
   setupSaysNotConnected = false,
@@ -202,7 +205,16 @@ function computeHealth(
       text: html`<span class="dash-not-connected">No email provider connected, so nothing can be sent yet. ${connectProviderLink()} to start sending.</span>`,
     });
   }
+  // Email not going out (SPEC §8, §9): one red line with SES's words, the fix, and the way
+  // out, standing for the account check's errors, which say the same cause.
+  const refusal = refusalOf(provider);
+  if (refusal) {
+    alerts.push({ level: "red", text: notGoingOutHtml(refusal) });
+  }
   for (const w of provider?.warnings ?? []) {
+    if (refusal && stopsSending(w)) {
+      continue;
+    }
     alerts.push({
       level: stopsSending(w) ? "red" : "amber",
       text: html`<span class="dash-provider-warning">${warningHtml(w)}</span>`,
@@ -296,12 +308,19 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   // than a wall of empty tiles. It ends at the first post, not the first subscriber, so
   // bringing a list in (a step on it) doesn't take away the steps after it; from the first
   // post the same steps are the Finish setting up card below.
+  // Email not going out is said here too, above the checklist, since it stops the steps
+  // that send and pauses signups (DESIGN §4).
   if (!posts.length) {
+    const refusal = refusalOf(provider);
     setHtml(
       root,
       html`<div class="dash-head"><div><h1>${pub.name}</h1>${
         pub.tagline ? html`<p class="muted dash-tagline">${pub.tagline}</p>` : null
-      }<p class="muted">Let’s get your first post out the door.</p></div></div>${setupStepsHtml(pub, deployment, setupProgress(), "checklist", provider)}<section class="dash-section"><h2>API access</h2>${apiConnectCard(false)}</section>`,
+      }<p class="muted">Let’s get your first post out the door.</p></div></div>${
+        refusal
+          ? html`<div id="dashHealth">${healthHtml([{ level: "red", text: notGoingOutHtml(refusal) }])}</div>`
+          : null
+      }${setupStepsHtml(pub, deployment, setupProgress(), "checklist", provider)}<section class="dash-section"><h2>API access</h2>${apiConnectCard(false)}</section>`,
     );
     wireDashActions(root, remount, signal);
     return;

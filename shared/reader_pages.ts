@@ -37,6 +37,9 @@ export const READER_JOURNEYS = [
       { id: "form", label: "Form", at: SUBSCRIBE },
       { id: "check-inbox", label: "Check your inbox", at: SUBSCRIBE },
       { id: "not-an-email", label: "Not an email", offPath: true, at: SUBSCRIBE },
+      // While email isn't working: before it is proven, and while the provider refuses it.
+      { id: "not-open", label: "Not open yet", offPath: true, at: SUBSCRIBE },
+      { id: "paused", label: "Paused", offPath: true, at: SUBSCRIBE },
     ],
   },
   {

@@ -845,6 +845,52 @@ describe("SesProvider.sendBatch", () => {
     });
   });
 
+  it("refuses a bad request that names a configuration set for the account, not the recipient (SPEC §9, §12)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          __type: "BadRequestException",
+          message: "Configuration set kestrel-mail does not exist.",
+        }),
+        { status: 400 },
+      ),
+    );
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      [{ email: "reader@example.com", unsubscribeUrl: "" }],
+      { purpose: "confirmation", tag: "confirm-1" },
+    );
+    expect(r).toEqual({
+      kind: "halted",
+      halt: {
+        reason: "account",
+        cause: "configuration",
+        error: "ses 400 BadRequestException: Configuration set kestrel-mail does not exist.",
+      },
+    });
+  });
+
+  it("logs every bad request's words, never an address in full, so a real one shows what SES says", async () => {
+    const warns = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          __type: "BadRequestException",
+          message: "Illegal address: ada@example.org.",
+        }),
+        { status: 400 },
+      ),
+    );
+    await newProvider().sendBatch(
+      renderedFixture(),
+      [{ email: "ada@example.org", unsubscribeUrl: "" }],
+      { purpose: "confirmation", tag: "confirm-1" },
+    );
+    expect(logged(warns).filter((l) => l.event === "provider.bad_request")).toMatchObject([
+      { status: 400, error: "ses 400 BadRequestException: Illegal address: …@example.org." },
+    ]);
+  });
+
   it("holds a batch SES refuses as invalid without naming anyone, rather than marking it unsent", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ __type: "BadRequestException", message: "Invalid input" }), {

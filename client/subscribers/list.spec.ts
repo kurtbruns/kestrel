@@ -687,6 +687,44 @@ describe("subscribers view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
+    it("says signups are paused while email isn't going out, and where to fix it (SPEC §7, §9)", async () => {
+      fake = fakeApi(
+        onSes({
+          state: "production",
+          unknown_reason: null,
+          sending: {
+            state: "refusing",
+            since: 1,
+            last_accepted: null,
+            refusal: {
+              cause: "credentials",
+              found_by: "account_check",
+              error: "Amazon SES rejects Kestrel’s AWS key.",
+              advice: "Replace the key.",
+              at: 1,
+            },
+          },
+          signups: "paused",
+        }),
+      );
+      await mount((r, s) => renderSubscribers(undefined, r, s));
+      await settle();
+      const line = $("#subSignupsPaused");
+      expect(line.hidden).toBe(false);
+      expect(line.textContent).toBe(
+        "⚠️Signups are paused: Amazon SES is refusing email, including confirmations. See what to fix",
+      );
+      expect($<HTMLAnchorElement>("#subSignupsPaused a").getAttribute("href")).toBe("#/");
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("says nothing of signups while email works", async () => {
+      fake = fakeApi(onSes({ state: "production", unknown_reason: null }));
+      await mount((r, s) => renderSubscribers(undefined, r, s));
+      await settle();
+      expect($("#subSignupsPaused").hidden).toBe(true);
+    });
+
     it("suggests the subscribe page when the provider read fails", async () => {
       fake = fakeApi([
         onSes({})[0]!,

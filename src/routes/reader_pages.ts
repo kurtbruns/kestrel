@@ -16,13 +16,15 @@ import { archiveUrl, render } from "../render/render";
 import { resolveBranding } from "../render/template_engine";
 import type { RequestContext } from "../router";
 import { param } from "../router";
+import { readSignups } from "../services/sending";
 import { formatPublishedDate, nothingHereYetPage, webVersion } from "./archive";
 import {
   confirmStatePage,
-  signupsOpen,
   subscribeCheckInboxPage,
   subscribeFormPage,
   subscribeNotAnEmailPage,
+  subscribeNotOpenPage,
+  subscribePausedPage,
   unsubscribeAskPage,
   unsubscribedPage,
   unsubscribeInvalidPage,
@@ -61,6 +63,10 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
       return subscribeCheckInboxPage(c, await readerIdentity(c, c.config));
     case "subscribe/not-an-email":
       return subscribeNotAnEmailPage(c, await readerIdentity(c, c.config));
+    case "subscribe/not-open":
+      return subscribeNotOpenPage(c, await readerIdentity(c, c.config));
+    case "subscribe/paused":
+      return subscribePausedPage(c, await readerIdentity(c, c.config));
     case "confirm/ready":
       return confirmStatePage(c, { kind: "ready", subscriber: sample }, "");
     case "confirm/confirmed":
@@ -84,13 +90,13 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
         archiveUrl: archiveHomeUrl(c.config),
         featured,
         recent,
-        signupsOpen: signupsOpen(c.config),
+        signupsOpen: (await readSignups(c.env.DB, c.config)) === "open",
       });
     }
     case "reading/archive":
       return archiveIndexPage({
         identity: await readerIdentity(c, c.config),
-        subscribeUrl,
+        subscribeUrl: (await readSignups(c.env.DB, c.config)) === "open" ? subscribeUrl : undefined,
         homeUrl: home,
         posts: samplePosts(c, Date.now()),
       });
@@ -102,12 +108,12 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
         homeUrl: home,
         archiveUrl: archiveHomeUrl(c.config),
         recent: [],
-        signupsOpen: signupsOpen(c.config),
+        signupsOpen: (await readSignups(c.env.DB, c.config)) === "open",
       });
     case "reading/archive-empty":
       return archiveIndexPage({
         identity: await readerIdentity(c, c.config),
-        subscribeUrl,
+        subscribeUrl: (await readSignups(c.env.DB, c.config)) === "open" ? subscribeUrl : undefined,
         homeUrl: home,
         posts: [],
       });

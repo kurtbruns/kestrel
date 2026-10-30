@@ -13,7 +13,13 @@ import { sweep } from "../src/send/sweep";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { BatchProvider } from "./support/batching";
 import { toNextTick } from "./support/clock";
-import { dueSend, frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
+import {
+  dueSend,
+  frozenSend,
+  resetDatabase,
+  seedConfirmed,
+  sendingWorks,
+} from "./support/fixtures";
 import { allowErrorLogs, type LoggedLine, logged } from "./support/log";
 import { fetchWith } from "./support/worker_env";
 
@@ -49,6 +55,7 @@ function expectNoAddress(): void {
 
 beforeEach(async () => {
   await resetDatabase();
+  await sendingWorks();
   clearFakeOutbox();
   spies = [vi.spyOn(console, "log"), vi.spyOn(console, "warn"), vi.spyOn(console, "error")];
 });
@@ -317,6 +324,13 @@ describe("the entry points group a tick's or a request's lines under one run", (
     });
 
     expect(lines()).toEqual([
+      // Whether email is getting out, recorded in the same run (SPEC §9).
+      expect.objectContaining({
+        event: "sending.refusing",
+        level: "warn",
+        run: "8c0ffee-LHR",
+        cause: "credentials",
+      }),
       expect.objectContaining({
         event: "subscribe.confirmation_refused",
         level: "warn",

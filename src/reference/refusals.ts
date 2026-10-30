@@ -86,9 +86,16 @@ const FIX_DEPLOYMENT = {
   schema_behind: [500, "The database is behind the release, listing what's `missing`."],
   settings_corrupt: [500, "The stored settings can't be read; the server log says why."],
   internal_error: [500, "An error nothing handled."],
-  confirmation_not_sent: [502, "The provider refused a confirmation, or never answered."],
+  confirmation_not_sent: [
+    502,
+    "The provider refused a confirmation, or never answered, with what to do about a refusal.",
+  ],
   notify_failed: [502, "The notifications channel refused a test, in its own words."],
   provider_not_connected: [503, "No email provider is connected, so nothing can be sent."],
+  signups_closed: [
+    503,
+    "The public subscribe form isn't taking signups: email isn't working yet, or is refusing.",
+  ],
 } as const satisfies Record<string, Refusal>;
 
 const SIGN_IN = {

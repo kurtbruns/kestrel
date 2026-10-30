@@ -48,6 +48,7 @@ import type {
   RemakeTooCloseError,
   SettingsResponse,
   SettingsSavedResponse,
+  TemplateTestResponse,
 } from "../../shared/settings";
 import type {
   BlockResponse,
@@ -401,6 +402,7 @@ const SETTINGS = route("GET", "/api/settings");
 const PROVIDER = route("GET", "/api/provider");
 const SAVE_SETTINGS = route("PUT", "/api/settings");
 const TEST_NOTIFICATIONS = route("POST", "/api/settings/notifications/test");
+const TEST_TEMPLATE = route("POST", "/api/settings/template/test");
 
 const READ: ToolDef["annotations"] = { readOnlyHint: true, openWorldHint: false };
 
@@ -603,7 +605,7 @@ export const TOOL_DEFS: ToolDef[] = [
     name: "get_publication",
     title: "Get the publication",
     description:
-      "Who you are signed in as, the running version, the publication's name and identity, the test recipients, where notifications go, the email provider, whether it's still in the SES sandbox (`connection`), and the minimum lead, the scheduled sends, and the list's counts. Read it first.",
+      "Who you are signed in as, the running version, the publication's name and identity, the test recipients, where notifications go, the email provider, whether it's still in the SES sandbox (`connection`), whether email is getting out (`sending`: `unproven`, `working`, or `refusing` with SES's words and the fix), whether the public form takes signups (`signups`: `open`, `not_open`, or `paused`), and the minimum lead, the scheduled sends, and the list's counts. Read it first.",
     annotations: READ,
     routes: [WHOAMI, VERSION, SETTINGS, PROVIDER, LIST_SUBSCRIBERS],
     args: {},
@@ -648,6 +650,8 @@ export const TOOL_DEFS: ToolDef[] = [
             unknown_reason: p.unknown_reason,
             warnings: p.warnings.map((w) => ({ severity: w.severity, message: w.message })),
           },
+          sending: p.sending,
+          signups: p.signups,
         },
         subscribers: (list.body as SubscriberListResponse).counts,
         scheduled_sends: s.in_use.sends.slice(0, TOOL_PAGE).map(sendBrief),
@@ -1086,6 +1090,40 @@ export const TOOL_DEFS: ToolDef[] = [
         remade: remadeBrief(r),
         editor: api.editor("/settings"),
       });
+    },
+  },
+  {
+    name: "send_template_test",
+    title: "Send a template test email",
+    description:
+      "Email a sample post through the saved email template, to the test recipients from get_publication or to `to`, an address the publisher gives as theirs (ask before any other). It is the step that proves email works: once SES takes one, `sending` reads `working` and the public form opens (`signups`), which the answer carries. While `sending` is `refusing`, send one after the fix is made. A recipient SES refuses comes back in `not_sent` with why and the fix.",
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    routes: [TEST_TEMPLATE, PROVIDER],
+    args: {
+      to: pick(TEST_TEMPLATE, "body", "to", {
+        required: false,
+        note: "Omit it for the saved test recipients.",
+      }),
+    },
+    async run(api, args) {
+      const a = await api.call(TEST_TEMPLATE, { body: only(args, ["to"]) });
+      if (!a.ok) {
+        return refused(a);
+      }
+      const r = a.body as TemplateTestResponse;
+      // What the test proved, read again: the test's answer never carries it (docs/API.md).
+      const p = await api.call(PROVIDER);
+      const status = p.ok ? (p.body as ProviderStatusView) : null;
+      const result = data({
+        sent: r.sent,
+        total: r.total,
+        recipients: r.recipients,
+        not_sent: r.not_sent,
+        warnings: r.warnings,
+        sending: status?.sending ?? null,
+        signups: status?.signups ?? null,
+      });
+      return r.sent > 0 ? result : { ...result, isError: true };
     },
   },
   {

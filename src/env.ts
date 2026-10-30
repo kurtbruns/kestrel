@@ -16,6 +16,7 @@
  * (SPEC §9): the app runs and refuses to send.
  */
 
+import type { RefusingCause } from "../shared/provider";
 import {
   DEFAULT_MIN_LEAD_MS,
   formatLead,
@@ -25,6 +26,7 @@ import {
 import {
   SIMULATED_ACCOUNT_PROBLEMS,
   SIMULATED_ACCOUNTS,
+  SIMULATED_REFUSALS,
   SIMULATION_FAULTS,
   SIMULATION_PROFILES,
   type SimulatedAccount,
@@ -70,7 +72,8 @@ export interface Secrets {
   /**
    * What stands in for the provider in local dev (SPEC §10): the send simulation, naming the
    * provider it models, `ses` or `generic` (`1`), optionally with `:none` for no
-   * injected failures; `not-connected` to run as a deployment with no provider (SPEC §9);
+   * injected failures, and for `ses` optionally `:refuse=<cause>`, a refusal of the account
+   * every email meets (SPEC §9); `not-connected` to run as a deployment with no provider (SPEC §9);
    * `off` or unset for the plain, instant fake. Honored only in a dev-shaped env, so never
    * in a deployed one. `.dev.vars.example` ships it on.
    */
@@ -351,14 +354,11 @@ export function getConfig(env: AppEnv): Config {
   const notConnectedPreview = local === "not-connected";
   const sesMaxSendRateSetting = readPositiveInt("SES_MAX_SEND_RATE", env.SES_MAX_SEND_RATE);
   // The preview runs as a deployment with no provider and no `NOTIFY` binding does: the
-  // provider channel, over the not-connected adapter, which carries nothing.
-  const notifyChannel: NotifyChannel = notConnectedPreview
-    ? "provider"
-    : devShaped
-      ? "fake"
-      : env.NOTIFY
-        ? "cloudflare"
-        : "provider";
+  // provider channel, over the not-connected adapter, which carries nothing. So does the
+  // send simulation, over the simulated provider, so a notification meets what an email
+  // meets there, the sandbox and a refusal of the account included (SPEC §10).
+  const notifyChannel: NotifyChannel =
+    local !== null ? "provider" : devShaped ? "fake" : env.NOTIFY ? "cloudflare" : "provider";
   return {
     // The preview changes the provider alone, after `devShaped` was decided on the fake, so
     // local sign-in stays on while every send path takes the real not-connected route.
@@ -383,10 +383,7 @@ export function getConfig(env: AppEnv): Config {
     devShaped,
     devAuthSecret,
     devRunId: devMode ? orUndefined(env.DEV_RUN_ID) : undefined,
-    simulation:
-      local === "not-connected" || local === null
-        ? null
-        : { ...local, account: readSimulateAccount(env.SIMULATE_ACCOUNT, local.profile) },
+    simulation: local === "not-connected" || local === null ? null : simulationOf(local, env),
     notConnectedPreview,
     subrequestBudget: Math.max(
       MIN_SUBREQUEST_BUDGET,
@@ -666,6 +663,28 @@ function readMinLead(v: string | undefined): number {
   return seconds * 1000;
 }
 
+/**
+ * The refusal each account problem the check finds stands for (SPEC §9): a simulated account
+ * with one refuses every simulated email the same way, as the real account would, unless
+ * `SIMULATE_SENDS` names a refusal of its own. AWS reviewing the account leaves it sending.
+ */
+const PROBLEM_REFUSALS: Record<SimulatedAccountProblem, RefusingCause | null> = {
+  set_missing: "configuration",
+  set_paused: "set_paused",
+  key_rejected: "credentials",
+  sending_disabled: "paused",
+  shutdown: "paused",
+  sender_unverified: "sender",
+  probation: null,
+};
+
+/** The simulation `SIMULATE_SENDS` and `SIMULATE_ACCOUNT` describe together. */
+function simulationOf(local: Omit<SimulationView, "account">, env: AppEnv): SimulationView {
+  const account = readSimulateAccount(env.SIMULATE_ACCOUNT, local.profile);
+  const implied = account?.problem ? PROBLEM_REFUSALS[account.problem] : null;
+  return { ...local, refuse: local.refuse ?? implied, account };
+}
+
 /** The spellings that turn the simulation off, and those that pick the generic profile. */
 const SIMULATION_OFF = new Set(["", "0", "off", "false", "no"]);
 const SIMULATION_GENERIC = new Set(["1", "on", "true", "yes"]);
@@ -673,8 +692,10 @@ const SIMULATION_GENERIC = new Set(["1", "on", "true", "yes"]);
 /**
  * `SIMULATE_SENDS` as a profile and fault level, `not-connected`, or null for the plain
  * fake: `off` (or unset), `not-connected`, or a profile (`generic`, or `1`, `ses`)
- * and optionally `:realistic` (the default) or `:none`. Anything else is refused rather than
- * read as off, so a typo can't quietly turn the simulation off or pick the wrong provider.
+ * and optionally `:realistic` (the default) or `:none`, then, for `ses`, optionally
+ * `:refuse=<cause>`, a refusal of the account every email meets (SPEC §9, §10), as in
+ * `ses:refuse=configuration`. Anything else is refused rather than read as off, so a typo
+ * can't quietly turn the simulation off or pick the wrong provider.
  */
 function readSimulateSends(
   v: string | undefined,
@@ -686,19 +707,33 @@ function readSimulateSends(
   if (raw === "not-connected") {
     return "not-connected";
   }
-  const [name = "", faults = "realistic", ...rest] = raw.split(":");
+  const [name = "", ...parts] = raw.split(":");
+  const refusePart = parts.at(-1)?.startsWith("refuse=") ? parts.pop() : undefined;
+  const [faults = "realistic", ...rest] = parts;
+  const refuse = refusePart?.slice("refuse=".length);
   const profile = SIMULATION_GENERIC.has(name) ? "generic" : name;
   if (
     rest.length > 0 ||
     !(SIMULATION_PROFILES as readonly string[]).includes(profile) ||
-    !(SIMULATION_FAULTS as readonly string[]).includes(faults)
+    !(SIMULATION_FAULTS as readonly string[]).includes(faults) ||
+    (refuse !== undefined && !(SIMULATED_REFUSALS as readonly string[]).includes(refuse))
   ) {
     throw new ConfigError(
       "SIMULATE_SENDS",
-      `must be off, one of ${SIMULATION_PROFILES.join(", ")} (or 1) optionally followed by :${SIMULATION_FAULTS.join(" or :")}, or not-connected, not "${v?.trim()}"`,
+      `must be off, one of ${SIMULATION_PROFILES.join(", ")} (or 1) optionally followed by :${SIMULATION_FAULTS.join(" or :")} and, for ses, :refuse= and one of ${SIMULATED_REFUSALS.join(", ")}, or not-connected, not "${v?.trim()}"`,
     );
   }
-  return { profile: profile as SimulationProfile, faults: faults as SimulationFaults };
+  if (refuse !== undefined && profile !== "ses") {
+    throw new ConfigError(
+      "SIMULATE_SENDS",
+      `refuses through SES's own answers, so :refuse= needs the ses profile, not "${v?.trim()}"`,
+    );
+  }
+  return {
+    profile: profile as SimulationProfile,
+    faults: faults as SimulationFaults,
+    refuse: (refuse as RefusingCause | undefined) ?? null,
+  };
 }
 
 /**

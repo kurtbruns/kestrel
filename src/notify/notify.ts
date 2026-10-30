@@ -20,20 +20,25 @@
  * something no longer true.
  */
 
+import type { SendingRefusal } from "../../shared/provider";
 import { missedAddresses, type NotificationTestMiss } from "../../shared/settings";
 import * as notifications from "../db/notifications";
+import { readSending } from "../db/sending";
 import { getSettings } from "../db/settings";
 import type { AppEnv } from "../env";
 import { getConfig } from "../env";
 import { errorText, log } from "../lib/log";
 import { MAX_NOTIFY_ATTEMPTS, MISSED_THRESHOLD_MS } from "../lib/time";
+import { unwrap } from "../lib/unwrap";
 import { type Budget, metered } from "../send/budget";
 import { idleSince } from "../send/stuck";
 import { isWedged } from "../send/wedged";
+import { Contacts, sendingView } from "../services/sending";
 import { getNotifier } from "./channel";
 import {
   composeImportNotification,
   composeNotification,
+  composeNotSendingNotification,
   composeSandboxNotification,
 } from "./compose";
 
@@ -61,6 +66,9 @@ export function stillHolds(n: notifications.DueAny, now: number): boolean {
     case "import":
     case "sandbox":
       return true;
+    case "not_sending":
+      // Whether email is still refusing is read where it is delivered (`notifyPublisher`).
+      return true;
     case "finished":
       return true;
     case "refused":
@@ -83,7 +91,13 @@ export function stillHolds(n: notifications.DueAny, now: number): boolean {
   }
 }
 
-export async function notifyPublisher(env: AppEnv, budget: Budget): Promise<void> {
+/** `contacts` takes what the provider channel's answers say about the account (SPEC §9),
+ *  for the caller to record; a caller that records none leaves it out. */
+export async function notifyPublisher(
+  env: AppEnv,
+  budget: Budget,
+  contacts: Contacts = new Contacts(),
+): Promise<void> {
   const config = getConfig(env);
   const db = metered(env.DB, budget);
   const now = Date.now();
@@ -97,9 +111,20 @@ export async function notifyPublisher(env: AppEnv, budget: Budget): Promise<void
   if (room < 1) {
     return;
   }
-  const due = await notifications.dueNotifications(db, room);
+  let due = await notifications.dueNotifications(db, room);
   if (due.length === 0) {
     return;
+  }
+  // A notice that email isn't going out is told from the refusal as it stands, read once, and
+  // only when one is due. The read takes a place in the list when the tick has no room to
+  // spare, and a tick with only its reserve leaves them all for one with more.
+  let refusal: SendingRefusal | null = null;
+  if (due.some((n) => n.kind === "not_sending")) {
+    refusal = sendingView(config, await readSending(db))?.refusal ?? null;
+    due = due.slice(0, Math.floor((budget.left - (OPEN_COST - 2)) / EACH_COST));
+    if (due.length === 0) {
+      return;
+    }
   }
   const { to } = (await getSettings(db)).notifications;
   if (to.length === 0) {
@@ -112,14 +137,14 @@ export async function notifyPublisher(env: AppEnv, budget: Budget): Promise<void
   for (const [i, n] of due.entries()) {
     // Every claimed notification still to come needs its outcome recorded, this one included.
     const recordsLeft = due.length - i;
-    if (!stillHolds(n, Date.now())) {
+    if (!stillHolds(n, Date.now()) || (n.kind === "not_sending" && !refusal)) {
       await notifications.recordNotificationOutcome(db, n, { status: "cleared" }, Date.now());
       continue;
     }
     const about =
       n.kind === "import"
         ? { importId: n.import_id }
-        : n.kind === "sandbox"
+        : n.kind === "sandbox" || n.kind === "not_sending"
           ? {}
           : { sendId: n.send_id };
     const key = `${n.send_id ?? n.import_id ?? "account"}-${n.kind}-${n.episode}`;
@@ -128,7 +153,9 @@ export async function notifyPublisher(env: AppEnv, budget: Budget): Promise<void
         ? composeImportNotification(n, config)
         : n.kind === "sandbox"
           ? composeSandboxNotification(config)
-          : composeNotification(n, config);
+          : n.kind === "not_sending"
+            ? composeNotSendingNotification(unwrap(refusal, "the refusal"), config)
+            : composeNotification(n, config);
     let email: ReturnType<typeof write> | undefined;
     // Only the addresses it hasn't reached: one that got it on an earlier try never gets it
     // again because another failed.
@@ -143,7 +170,7 @@ export async function notifyPublisher(env: AppEnv, budget: Budget): Promise<void
       budget.request(); // the channel's request, which counts whether or not it succeeds
       try {
         email ??= write();
-        await notifier.send(address, email, key);
+        await notifier.send(address, email, key, contacts);
         sentTo.push(address);
       } catch (err) {
         missed.push({ email: address, error: errorText(err) });
