@@ -64,11 +64,16 @@ async function reach(phase: Phase): Promise<void> {
     await templateTest(phase, VERIFIED);
   }
   // Where the publisher is told, for the notifications row.
+  await notifyTo(VERIFIED);
+}
+
+/** Set where notifications go. */
+async function notifyTo(address: string): Promise<void> {
   await env.DB.prepare(
     `INSERT INTO settings (id, data, updated_at) VALUES (1, json_object('notifications', json_object('to', json_array(?))), 1)
      ON CONFLICT (id) DO UPDATE SET data = json_set(data, '$.notifications', json_object('to', json_array(?)))`,
   )
-    .bind(VERIFIED, VERIFIED)
+    .bind(address, address)
     .run();
 }
 
@@ -190,24 +195,34 @@ describe("what anyone can do, by phase (SPEC §6, §7, §9)", () => {
       sandbox: async (p) => expect(await signupAnswer(p)).toEqual([200, "check_inbox"]),
       production: async (p) => expect(await signupAnswer(p)).toEqual([200, "check_inbox"]),
     },
+    // Through the simulated SES, as on an instance without Cloudflare's email.
     "send a test notification": {
       not_connected: async (p) => {
         const r = await admin(p, "POST", "/api/settings/notifications/test");
         expect(r.status).toBe(503);
       },
+      // It goes, and SES taking it proves email works.
       unproven: async (p) => {
         expect((await admin(p, "POST", "/api/settings/notifications/test")).status).toBe(200);
+        expect((await provider(p)).signups).toBe("open");
       },
-      // Through SES, refused like every email: Cloudflare's email would still arrive.
+      // Refused, like every email: Cloudflare's email would still arrive.
       refusing: async (p) => {
         const r = await admin(p, "POST", "/api/settings/notifications/test");
         expect(r.status).toBe(502);
         expect((await readJson(r)).error).toBe("notify_failed");
       },
+      // To a verified address; another is refused for the sandbox.
       sandbox: async (p) => {
         expect((await admin(p, "POST", "/api/settings/notifications/test")).status).toBe(200);
+        await notifyTo(READER);
+        const r = await admin(p, "POST", "/api/settings/notifications/test");
+        expect(r.status).toBe(502);
+        expect((await readJson(r)).message).toContain("not verified");
+        expect((await provider(p)).sending?.state).toBe("working");
       },
       production: async (p) => {
+        await notifyTo(READER);
         expect((await admin(p, "POST", "/api/settings/notifications/test")).status).toBe(200);
       },
     },

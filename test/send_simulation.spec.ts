@@ -175,6 +175,17 @@ describe("SIMULATE_SENDS", () => {
     }
   });
 
+  it("refuses every email as the account would, for an account problem that stops sending (SPEC §9, §10)", () => {
+    const refuse = (sends: string, account: string) =>
+      getConfig(withVars({ SIMULATE_SENDS: sends, SIMULATE_ACCOUNT: account })).simulation?.refuse;
+    expect(refuse("ses", "production:set_missing")).toBe("configuration");
+    expect(refuse("ses", "sandbox:key_rejected")).toBe("credentials");
+    expect(refuse("ses", "production:shutdown")).toBe("paused");
+    // AWS reviewing the account leaves it sending, and a refusal named outright stands.
+    expect(refuse("ses", "production:probation")).toBeNull();
+    expect(refuse("ses:refuse=suspended", "production:set_missing")).toBe("suspended");
+  });
+
   it("refuses a value it doesn't know rather than reading it as off", () => {
     for (const value of ["sendgrid", "resend", "ses:loud", "ses:none:x", "ses:", ":none"]) {
       expect(() => simulation(value)).toThrow(ConfigError);

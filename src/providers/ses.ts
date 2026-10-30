@@ -268,11 +268,16 @@ export function classifySesError(
   if (type === "MessageRejected") {
     return account(verificationCause(message, from) ?? "content");
   }
-  // AWS answers a send with a bad request when the sending identity's default configuration
-  // set was deleted ("Understanding default configuration sets"). That is the deployment's
-  // to fix and the same for every recipient, so it holds a send, and refuses a test or a
-  // confirmation for the account rather than failing its one recipient for good. Only when
-  // SES's words name a configuration set: its other bad requests can be about an address.
+  // AWS answers a send with a "bad request" error when the sending identity's default
+  // configuration set was deleted (SES Developer Guide, Managing configuration sets,
+  // "Understanding default configuration sets"). That is the deployment's to fix and the same
+  // for every recipient, so it holds a send, and refuses a test or a confirmation for the
+  // account rather than failing its one recipient for good. AWS documents no wording for it:
+  // SendEmail's reference describes BadRequestException only as "The input you provided is
+  // invalid", and the guide's sending errors list "Configuration set does not exist" with no
+  // error type. So only words that name a configuration set count, since its other bad
+  // requests can be about one address, and every bad request's words are logged
+  // (`provider.bad_request`) so a real answer shows what SES says.
   if (type === "BadRequestException" && /configuration set/i.test(message)) {
     return account("configuration");
   }
@@ -564,6 +569,10 @@ export class SesProvider implements EmailProvider {
     const { type, message } = parseSesError(bodyText, res.headers.get("x-amzn-ErrorType"));
     const error = sesErrorText(res.status, type, message);
     const halt = classifySesError(res.status, type, message, this.from);
+    if (type === "BadRequestException") {
+      // SES's own words, never an address in full: the log redacts each one (SPEC §12).
+      log.warn("provider.bad_request", { status: res.status, error, cause: halt?.cause });
+    }
     return { type, halt: halt ? { ...halt, error } : null, error };
   }
 

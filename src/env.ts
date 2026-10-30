@@ -354,17 +354,11 @@ export function getConfig(env: AppEnv): Config {
   const notConnectedPreview = local === "not-connected";
   const sesMaxSendRateSetting = readPositiveInt("SES_MAX_SEND_RATE", env.SES_MAX_SEND_RATE);
   // The preview runs as a deployment with no provider and no `NOTIFY` binding does: the
-  // provider channel, over the not-connected adapter, which carries nothing.
-  // So does a simulated refusal of the account, so a notification meets it too (SPEC §10).
-  const simulatedRefusal = typeof local === "object" && local !== null && local.refuse !== null;
+  // provider channel, over the not-connected adapter, which carries nothing. So does the
+  // send simulation, over the simulated provider, so a notification meets what an email
+  // meets there, the sandbox and a refusal of the account included (SPEC §10).
   const notifyChannel: NotifyChannel =
-    notConnectedPreview || simulatedRefusal
-      ? "provider"
-      : devShaped
-        ? "fake"
-        : env.NOTIFY
-          ? "cloudflare"
-          : "provider";
+    local !== null ? "provider" : devShaped ? "fake" : env.NOTIFY ? "cloudflare" : "provider";
   return {
     // The preview changes the provider alone, after `devShaped` was decided on the fake, so
     // local sign-in stays on while every send path takes the real not-connected route.
@@ -389,10 +383,7 @@ export function getConfig(env: AppEnv): Config {
     devShaped,
     devAuthSecret,
     devRunId: devMode ? orUndefined(env.DEV_RUN_ID) : undefined,
-    simulation:
-      local === "not-connected" || local === null
-        ? null
-        : { ...local, account: readSimulateAccount(env.SIMULATE_ACCOUNT, local.profile) },
+    simulation: local === "not-connected" || local === null ? null : simulationOf(local, env),
     notConnectedPreview,
     subrequestBudget: Math.max(
       MIN_SUBREQUEST_BUDGET,
@@ -670,6 +661,28 @@ function readMinLead(v: string | undefined): number {
     );
   }
   return seconds * 1000;
+}
+
+/**
+ * The refusal each account problem the check finds stands for (SPEC §9): a simulated account
+ * with one refuses every simulated email the same way, as the real account would, unless
+ * `SIMULATE_SENDS` names a refusal of its own. AWS reviewing the account leaves it sending.
+ */
+const PROBLEM_REFUSALS: Record<SimulatedAccountProblem, RefusingCause | null> = {
+  set_missing: "configuration",
+  set_paused: "set_paused",
+  key_rejected: "credentials",
+  sending_disabled: "paused",
+  shutdown: "paused",
+  sender_unverified: "sender",
+  probation: null,
+};
+
+/** The simulation `SIMULATE_SENDS` and `SIMULATE_ACCOUNT` describe together. */
+function simulationOf(local: Omit<SimulationView, "account">, env: AppEnv): SimulationView {
+  const account = readSimulateAccount(env.SIMULATE_ACCOUNT, local.profile);
+  const implied = account?.problem ? PROBLEM_REFUSALS[account.problem] : null;
+  return { ...local, refuse: local.refuse ?? implied, account };
 }
 
 /** The spellings that turn the simulation off, and those that pick the generic profile. */

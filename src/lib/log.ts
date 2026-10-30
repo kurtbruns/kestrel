@@ -66,6 +66,7 @@ export const LOG_EVENTS = {
   "subscribe.confirmation_unknown": "warn",
   "subscribe.not_connected": "warn",
   "provider.unrecognized": "warn",
+  "provider.bad_request": "warn",
   // The provider's account, as the sweep's account check reads it (SPEC §9).
   "provider.account_checked": "info",
   "provider.pacing_unread": "warn",

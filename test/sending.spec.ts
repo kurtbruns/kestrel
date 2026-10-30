@@ -145,13 +145,10 @@ describe("the account check finds a refusal without sending (SPEC §8, §9)", ()
   const clean = withVars({ SIMULATE_SENDS: "ses:none", SIMULATE_ACCOUNT: "production" });
   const signups = (e: AppEnv) => readSignups(env.DB, getConfig(e));
 
-  beforeEach(async () => {
+  it("makes email refusing and pauses signups, telling the publisher once a day", async () => {
     await env.DB.prepare(
       `INSERT INTO settings (id, data, updated_at) VALUES (1, json_object('notifications', json_object('to', json_array('me@example.com'))), 1)`,
     ).run();
-  });
-
-  it("makes email refusing and pauses signups, telling the publisher once a day", async () => {
     await recordAccepted(env.DB, "test", Date.now());
     expect(await signups(broken)).toBe("open");
     await tick(broken);
@@ -164,9 +161,14 @@ describe("the account check finds a refusal without sending (SPEC §8, §9)", ()
     expect(row?.refusalError).toContain("SES has no configuration set by that name");
     expect(await signups(broken)).toBe("paused");
     await tick(broken);
-    expect(fakeNotifications().map((n) => n.subject)).toEqual([
-      "Email isn't going out, and signups are paused",
-    ]);
+    // One notice for the day. Without Cloudflare's email it goes through SES, which refuses
+    // it as it refuses every email, so it can't arrive: the editor says it instead.
+    const notices = await env.DB.prepare(
+      "SELECT status, error FROM notifications WHERE kind = 'not_sending'",
+    ).all<{ status: string; error: string }>();
+    expect(notices.results).toHaveLength(1);
+    expect(notices.results[0]?.error).toContain("does not exist");
+    expect(fakeNotifications()).toEqual([]);
   });
 
   it("lifts a refusal it found on its next clean reading, back to where email stood", async () => {

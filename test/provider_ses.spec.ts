@@ -870,6 +870,27 @@ describe("SesProvider.sendBatch", () => {
     });
   });
 
+  it("logs every bad request's words, never an address in full, so a real one shows what SES says", async () => {
+    const warns = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          __type: "BadRequestException",
+          message: "Illegal address: ada@example.org.",
+        }),
+        { status: 400 },
+      ),
+    );
+    await newProvider().sendBatch(
+      renderedFixture(),
+      [{ email: "ada@example.org", unsubscribeUrl: "" }],
+      { purpose: "confirmation", tag: "confirm-1" },
+    );
+    expect(logged(warns).filter((l) => l.event === "provider.bad_request")).toMatchObject([
+      { status: 400, error: "ses 400 BadRequestException: Illegal address: …@example.org." },
+    ]);
+  });
+
   it("holds a batch SES refuses as invalid without naming anyone, rather than marking it unsent", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ __type: "BadRequestException", message: "Invalid input" }), {
