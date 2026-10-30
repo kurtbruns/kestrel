@@ -563,9 +563,9 @@ Beside the record, the app keeps a **log** that explains it. The record decides 
 
 The level carries the meaning: **error** for anything that threatens a send going out at most once to each person (I4), or a send that should have gone out and has not (the missed fire time and the send in flight too long, above), and for any failure nothing else handled; **warn** for a halt or a refusal the app is waiting out, and for a person's manual call on recipients whose fate was unknown (Resolve, above); **info** for the ordinary lifecycle. Every event and its level are listed once, in the code that writes the log, so a line can't name an event that isn't listed or carry another level.
 
-## 13. Getting email out
+## 13. Setting up the email provider
 
-A new instance goes from deployed to open for readers in phases, and it reports which phase it is in, the same to the editor and to Claude. Three things hold through every phase. A reader is never told a confirmation is on its way when none can go (§7). Every phase is read from evidence the app has: an email the provider took or refused, or what the provider's account says of itself. Nothing ticks a phase by hand. And every phase but the last has one act that moves it on, which the admin surface names. How to take each step is the setup guide's (§11); this section says what the app does at each one.
+Setting up the email provider takes a new instance from deployed to open for readers, in phases the instance reports itself, the same to the editor and to Claude. Three things hold through every phase. A reader is never told a confirmation is on its way when none can go (§7). Every phase is read from evidence the app has: an email the provider took or refused, or what the provider's account says of itself. Nothing ticks a phase by hand. And every phase but the last has one act that moves it on, which the admin surface names. How to take each step is the setup guide's (§11); this section says what the app does at each one.
 
 ### Three channels, one proof
 
@@ -709,7 +709,7 @@ An index of what was decided and the alternative each choice was made over, in t
 - **A halted send's retries are spaced out to at most an hour apart**, over retrying every tick (§12).
 - **Notifications through the hosting platform's own email, with the newsletter's provider as the fallback when it is not set up**, over the provider alone, and over falling back from one channel to the other at runtime (§12).
 - **The reported phase is derived, never stored**, over a second copy of the send's state (§12).
-- **Setup is one section, appended after the rest**, over renumbering every section after §9, whose numbers the code, the tests, the changelog, and the frozen first migration cite (§13).
+- **Setting up the email provider is one section, appended after the rest**, over renumbering every section after §9, whose numbers the code, the tests, the changelog, and the frozen first migration cite (§13).
 - **Only an email the provider took proves email goes out**, over trusting the account reading, which can find a broken account but not prove a working one, or receipts, which arrive only once the whole return path works (§13).
 - **Signups open only once email works, in the provider's sandbox too**, over trusting the setup guide to keep readers away until it does, and over closing the form in the sandbox, where the provider's reviewer and the developer's own checks need it (§7, §13).
 - **A live instance starts as working on the upgrade that brings this answer, from its own record of email that went out**, over starting every instance as not proven, which would close a running newsletter's signups (§13).
