@@ -121,7 +121,7 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
             title: TEST,
             state: "done",
             hint: null,
-            doneAs: "a test email sent",
+            doneAs: "email working",
           }
         : sending?.state === "refusing"
           ? { key: "test", title: TEST, state: "attention", hint: REFUSING, doneAs: "" }

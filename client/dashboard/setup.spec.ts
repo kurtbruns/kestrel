@@ -253,7 +253,7 @@ describe("setup card", () => {
     const provider = ses({ review: "pending", sending: sending("working"), signups: "open" });
     const el = render(facts({ provider, notifyTo: 2 }));
     expect(fold(el)).toBe(
-      "✓4 done: Amazon SES connected, a test email sent, named Symbol Soup, notifications to 2 addresses",
+      "✓4 done: Amazon SES connected, email working, named Symbol Soup, notifications to 2 addresses",
     );
     expect(titles(el)).toEqual([
       "Request production access",
