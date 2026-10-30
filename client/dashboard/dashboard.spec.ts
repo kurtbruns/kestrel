@@ -482,20 +482,20 @@ describe("dashboard", () => {
     expect(location.hash).toBe("#/edit/p9");
   });
 
-  it("offers bringing an existing list before writing, as a step a fresh publication skips", async () => {
+  it("offers bringing an existing list as an optional step a fresh publication skips", async () => {
     fake = world([], sendServer(), none);
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(0);
     const step = $(".setup-list");
-    expect(step.classList.contains("setup-done")).toBe(false);
+    expect(step.classList.contains("setup-todo")).toBe(true);
     expect($("strong", step).textContent).toBe("Bring your existing list");
-    expect($(".muted", step).textContent).toMatch(/Skip this if you’re starting fresh\.$/);
+    expect($(".setup-hint", step).textContent).toBe("Optional.");
     expect($("button", step).dataset.nav).toBe("#/subscribers/import");
     expect($("button", step).textContent).toBe("Import");
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("keeps the checklist after an import until the first post, with the list step done", async () => {
+  it("keeps the checklist after an import until the first post, the list folded as done", async () => {
     // The first-run page ends at the first post, not the first subscriber, so the steps
     // after bringing a list in stay on screen.
     fake = world([], sendServer(), counts);
@@ -503,11 +503,11 @@ describe("dashboard", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect($(".setup-title").textContent).toBe("Set up your publication");
     expect(document.querySelector(".tiles")).toBeNull();
-    const step = $(".setup-list");
-    expect(step.classList.contains("setup-done")).toBe(true);
+    expect(document.querySelector(".setup-list")).toBeNull();
     // Confirmed and pending: the people a send can reach once they confirm.
-    expect($(".muted", step).textContent).toBe("43 subscribers on your list.");
-    expect($("button", step).dataset.nav).toBe("#/subscribers");
+    expect($(".setup-fold").textContent).toBe(
+      "✓3 done: Amazon SES connected, named Birds Weekly, 43 subscribers on your list",
+    );
     expect(document.querySelector(".setup [data-act='new-post']")).not.toBeNull();
     expect(fake.unhandled).toEqual([]);
   });
@@ -533,25 +533,28 @@ describe("dashboard", () => {
       c.deployment = { ...c.deployment, provider };
       appState.appConfig = c;
     };
-    it("puts connecting one in place of the sending-domain step, ahead of writing, and keeps the subscribe link closed", async () => {
+    it("puts connecting it first, and every step that sends after it, in plain words", async () => {
       withProvider("none");
       fake = world([], sendServer(), none);
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
       expect(steps()).toEqual([
-        "Name your publication",
         "Connect Amazon SES",
+        "Send a test email",
+        "Get notified",
+        "Request production access",
         "Bring your existing list",
-        "Publish your first post",
+        "Write your first post",
+        "Schedule your first post",
+        "Send a test email for your first post",
         "Share your subscribe link",
       ]);
       expect($(".setup-connect button").dataset.nav).toBe("#/docs/ses");
-      expect($(".setup-connect button").textContent).toBe("Connect Amazon SES");
-      expect($(".setup-subscribe").textContent).toMatch(
-        /Signups open once an email provider is connected/,
-      );
+      expect($(".setup-connect button").textContent).toBe("Connect");
+      expect($(".setup-test .setup-hint").textContent).toBe("After Connect Amazon SES");
+      expect($(".setup-share .setup-hint").textContent).toBe("After Send a test email");
       expect(document.querySelector(".setup-url")).toBeNull();
-      expect(document.querySelector(".setup-subscribe [data-copy]")).toBeNull();
+      expect(document.querySelector(".setup-share [data-copy]")).toBeNull();
       expect(fake.unhandled).toEqual([]);
     });
 
@@ -579,7 +582,7 @@ describe("dashboard", () => {
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
       expect($(".setup-card .setup-title").textContent).toBe("Finish setting up");
-      expect($(".setup-card .setup-connect button").textContent).toBe("Connect Amazon SES");
+      expect($(".setup-card .setup-connect button").textContent).toBe("Connect");
       expect(document.querySelector("#dashHealth .health")).toBeNull();
       expect(fake.unhandled).toEqual([]);
     });
@@ -644,18 +647,19 @@ describe("dashboard", () => {
         fake = world([], sendServer(), none, status);
         await mount(renderDashboard);
         await vi.advanceTimersByTimeAsync(0);
+        // SES is read, and email is working; local development's stand-in can't say.
         expect(steps(), provider).toEqual([
-          "Name your publication",
-          "Check your setup",
+          ...(provider === "ses" ? [] : ["Send a test email"]),
+          "Get notified",
           // Only SES has an account whose sandbox AWS reviews (SPEC §13).
           ...(provider === "ses" ? ["Request production access"] : []),
           "Bring your existing list",
-          "Publish your first post",
+          "Write your first post",
+          "Schedule your first post",
+          "Send a test email for your first post",
           "Share your subscribe link",
         ]);
         expect($(".setup-url").textContent, provider).toBe("https://app.birds.example/subscribe");
-        // Checking the setup is the publisher's step, so it opens the publisher's page.
-        expect($(".setup-check button").dataset.nav, provider).toBe("#/docs/check-your-setup");
         unmount();
         fake.restore();
         fake = world([post()], sendServer([scheduled()]), counts, status);
@@ -674,48 +678,71 @@ describe("dashboard", () => {
   // archive is published (SPEC §5).
   describe("Finish setting up", () => {
     const card = () => document.querySelector(".setup-card");
-    const done = () => $$(".setup-card .setup-done strong").map((s) => s.textContent);
 
     it("carries the same steps as the first-run checklist once a draft exists, under the health block", async () => {
       fake = world([post()], sendServer(), none);
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
       expect($(".setup-card .setup-title").textContent).toBe("Finish setting up");
+      expect($(".setup-card .setup-fold").textContent).toBe(
+        "✓3 done: Amazon SES connected, named Birds Weekly, your first post written",
+      );
       expect($$(".setup-card .setup-steps li strong").map((s) => s.textContent)).toEqual([
-        "Name your publication",
-        "Check your setup",
+        "Send a test email",
+        "Get notified",
         "Bring your existing list",
-        "Publish your first post",
+        "Schedule your first post",
+        "Send a test email for your first post",
         "Share your subscribe link",
       ]);
       expect($("#dashSetup").previousElementSibling?.id).toBe("dashHealth");
       expect(document.querySelector(".tiles")).not.toBeNull(); // the regular dashboard
-      // One Primary per view: the head's New post. The card's is Ghost.
-      expect($$("button.primary[data-act='new-post']")).toHaveLength(1);
+      // One Primary per view: the head's New post. The card has none.
+      expect($$("#dash button.primary").map((b) => b.textContent)).toEqual(["New post"]);
       expect(fake.unhandled).toEqual([]);
     });
 
-    it("marks done only what the app knows: a name set, subscribers; never checking the setup, which is guidance", async () => {
-      // A scheduled send and a sent email-only one: an operator's checks say nothing about
-      // whether the publisher checked theirs, and neither is in the archive.
+    it("reads each step from what both clients can read: notifications, the first post's scheduled send, and its test", async () => {
+      // An email-only send, such as Verify it works', counts for nothing: neither the first
+      // post nor its schedule.
       const srv = sendServer([scheduled()]);
       srv.put(send(), { email_only: true });
+      appState.appConfig!.settings.notifications = {
+        to: ["kurt@birds.example", "ed@birds.example"],
+      };
       fake = world([post()], srv, counts);
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
-      expect(done()).toEqual(["Name your publication", "Bring your existing list"]);
-      expect($(".setup-card .setup-check button").textContent).toBe("Docs");
-      // Every step but the archive one can be done, and the card still waits on it.
-      expect($(".setup-card .setup-write button").textContent).toBe("New post");
-      unmount();
-      fake.restore();
-      const c = config();
-      c.settings.publication = { name: "", tagline: "", address: "", logo_url: "" };
-      appState.appConfig = c;
-      fake = world([post()], sendServer(), none);
+      expect($(".setup-card .setup-fold").textContent).toBe(
+        "✓6 done, including your first post written and your first post scheduled",
+      );
+      // The test that counts is the scheduled send's, the frozen email: it opens the post.
+      expect($(".setup-card .setup-post-test .setup-hint").textContent).toMatch(
+        /^“Gulls” goes out .+\. Send yourself a test of it first\.$/,
+      );
+      expect($(".setup-card .setup-post-test button").dataset.nav).toBe("#/edit/p2");
+      // A test of it, sent from the post, ticks it on the next read.
+      srv.edit("x2", { tested_at: Date.now() });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(document.querySelector(".setup-card .setup-post-test")).toBeNull();
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("points at Settings while notifications fail, and leaves the step open with no address", async () => {
+      appState.appConfig!.settings.notifications = { to: ["kurt@birds.example"] };
+      appState.appConfig!.notification_status = {
+        last_sent: null,
+        last_failure: { kind: "test", subject: "", at: NOW - 1000, error: "refused" },
+      };
+      fake = world([post()], sendServer(), counts);
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
-      expect(done()).toEqual([]);
+      const step = $(".setup-card .setup-notify");
+      expect(step.classList.contains("setup-attention")).toBe(true);
+      expect($(".setup-hint", step).textContent).toBe(
+        "The last notification didn’t arrive. Settings says why.",
+      );
+      expect($("button", step).dataset.nav).toBe("#/settings");
       expect(fake.unhandled).toEqual([]);
     });
 
@@ -1045,17 +1072,22 @@ describe("dashboard", () => {
     };
     const sandbox = { state: "sandbox", unknown_reason: null } as const;
 
-    it("asks for production access as a setup step, says where AWS's review stands, and holds the subscribe link until it's granted", async () => {
+    it("waits on AWS while it reviews, and says to wait to schedule and share, never blocking them", async () => {
       fake = world([], sendServer(), none, onSes({ ...sandbox, review: "pending" }));
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
-      expect($(".setup-access").classList.contains("setup-done")).toBe(false);
-      expect($(".setup-access .muted").textContent).toBe(
-        "AWS is reviewing your request. Until then, SES mails only addresses verified in SES.",
+      expect($(".setup-access").classList.contains("setup-waiting")).toBe(true);
+      expect($(".setup-access .setup-hint").textContent).toBe(
+        "Waiting for AWS to grant production access.",
       );
       expect($(".setup-access button").dataset.nav).toBe("#/docs/production-access");
-      expect($(".setup-subscribe .muted").textContent).toBe(
-        "Share it once AWS grants production access: until then, signups from anyone not verified in SES fail.",
+      expect($(".setup-schedule").classList.contains("setup-blocked")).toBe(false);
+      expect($(".setup-schedule .setup-hint").textContent).toBe(
+        "Best after AWS grants access: until then it reaches only verified addresses.",
+      );
+      expect($(".setup-share").classList.contains("setup-blocked")).toBe(false);
+      expect($(".setup-share .setup-hint").textContent).toBe(
+        "Share it once AWS grants production access.",
       );
       expect(fake.unhandled).toEqual([]);
     });
@@ -1069,7 +1101,7 @@ describe("dashboard", () => {
       );
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
-      expect($(".setup-access .muted").textContent).toBe(
+      expect($(".setup-access .setup-hint").textContent).toBe(
         "AWS hasn’t granted it yet. It has replied in AWS Support, case 1234567890: answer there.",
       );
     });
@@ -1100,32 +1132,77 @@ describe("dashboard", () => {
       );
     });
 
-    it("checks the step off once AWS grants production access", async () => {
+    it("folds the step away once AWS grants production access", async () => {
       fake = world([], sendServer(), none, onSes({ state: "production", unknown_reason: null }));
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
-      expect($(".setup-access").classList.contains("setup-done")).toBe(true);
-      expect(document.querySelector(".setup-subscribe .muted")).toBeNull();
+      expect(document.querySelector(".setup-access")).toBeNull();
+      expect($(".setup-fold").textContent).toContain("production access");
+      expect(document.querySelector(".setup-share .setup-hint")).toBeNull();
     });
 
     it("never checks the step off while the app can't tell, nor says it's in the sandbox", async () => {
       fake = world([], sendServer(), none, onSes({ unknown_reason: "permission" }));
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
-      expect($(".setup-access").classList.contains("setup-done")).toBe(false);
-      expect($(".setup-access .muted").textContent).toBe(
-        "Ask once a test email has arrived. Kestrel can’t read your SES account, so the SES console’s account dashboard says whether AWS granted it.",
+      expect($(".setup-access").classList.contains("setup-todo")).toBe(true);
+      expect($(".setup-access .setup-hint").textContent).toBe(
+        "Kestrel can’t read your SES account, so the SES console’s account dashboard says whether AWS granted it.",
       );
-      expect(document.querySelector(".setup-subscribe .muted")).toBeNull();
+      expect(document.querySelector(".setup-share .setup-hint")).toBeNull();
     });
 
-    it("says what the sandbox limits before any request is made", async () => {
-      fake = world([], sendServer(), none, onSes(sandbox));
+    it("suggests naming the publication before asking AWS, without blocking the step", async () => {
+      appState.appConfig = config();
+      const routes = onSes(sandbox);
+      appState.appConfig.settings.publication = {
+        name: "",
+        tagline: "",
+        address: "",
+        logo_url: "",
+      };
+      fake = world([], sendServer(), none, routes);
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
-      expect($(".setup-access .muted").textContent).toBe(
-        "SES mails only addresses verified in SES until AWS grants it. Ask once a test email has arrived.",
+      expect($(".setup-access").classList.contains("setup-todo")).toBe(true);
+      expect($(".setup-access .setup-hint").textContent).toBe(
+        "Name your publication first: AWS’s reviewer looks at it.",
       );
+    });
+
+    it("shows the same health block on first run, and the test step only points up at it (SPEC §8, §13)", async () => {
+      fake = world(
+        [],
+        sendServer(),
+        none,
+        onSes({
+          ...sandbox,
+          sending: {
+            state: "refusing",
+            since: 1,
+            last_accepted: null,
+            refusal: {
+              cause: "configuration",
+              found_by: "account_check",
+              error: "SES has no configuration set named kestrel-mail-missing.",
+              advice: "Fix the secret.",
+              at: 1,
+            },
+          },
+          signups: "paused",
+        }),
+      );
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect($("#dashHealth").nextElementSibling?.classList.contains("setup")).toBe(true);
+      expect($("#dashHealth .health").classList.contains("red")).toBe(true);
+      expect($(".dash-not-going-out").textContent).toMatch(/^Email isn’t going out/);
+      const step = $(".setup-test");
+      expect(step.classList.contains("setup-attention")).toBe(true);
+      expect($(".setup-hint", step).textContent).toBe("SES is refusing. The fix is above.");
+      // The sandbox is the access step's to say while setup is open.
+      expect(document.querySelector(".dash-sandbox")).toBeNull();
+      expect(fake.unhandled).toEqual([]);
     });
 
     it("says email isn't going out in one red line, with SES's words, the fix, and a test, standing for the errors that say the same (SPEC §8, §13)", async () => {

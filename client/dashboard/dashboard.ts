@@ -4,13 +4,11 @@
 import type { Post, PostListResponse } from "../../shared/posts";
 import type { ProviderStatusView } from "../../shared/provider";
 import type { SendListResponse, SendView } from "../../shared/sends";
-import type { DeploymentView } from "../../shared/settings";
 import type { SubscriberCounts, SubscriberListResponse } from "../../shared/subscribers";
 import { CLAUDE_CLIENT, CLAUDE_CODE_CLIENT } from "../../shared/who_acted";
 import { api, describeError } from "../api";
-import { derivePublication, type Publication } from "../brand";
+import { derivePublication } from "../brand";
 import {
-  CONNECT_PROVIDER_HREF,
   connectProviderLink,
   heldSendsHtml,
   heldWhenFiresHtml,
@@ -21,8 +19,6 @@ import { createNewPost } from "../posts/drafts";
 import {
   inSandbox,
   notGoingOutHtml,
-  PRODUCTION_ACCESS_HREF,
-  productionAccessHint,
   readProviderStatus,
   readsSesAccount,
   refusalOf,
@@ -45,12 +41,13 @@ import {
 } from "../sends/progress";
 import { appState } from "../state";
 import { addSubscriberModal } from "../subscribers/dialogs";
-import { copyButton, copyFace, wireCopy } from "../ui/copy";
+import { copyButton, wireCopy } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
 import { fmt } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { badge, renderError } from "../ui/widgets";
+import { firstListedSend, type SetupFacts, setupStepsHtml } from "./setup";
 
 // The post-login landing and the brand's target (the default route). Built entirely
 // from existing authed endpoints — GET /api/posts, /sends, /subscribers, the cached
@@ -74,12 +71,12 @@ interface HealthAlert {
 // not about a send is the deployment's: no email provider connected (SPEC §13), an amber
 // standing state with no time, read from the deployment reflection, gone once one is set.
 // When that state is holding a send, the two are said as one red line instead of two.
-// While the Finish setting up card carries its Connect Amazon SES step, the card says the
-// not-connected state and the amber line is left out, so it is said once (DESIGN §3). The
-// provider's connection adds the others with no send behind them: each warning the server
-// gives (GET /api/provider), in its words, SES still in the sandbox, left out while the
-// setup card's production-access step says it, and email not going out, in red, which stands
-// for the errors among the warnings while it lasts.
+// While setup is open, its Connect Amazon SES step says the not-connected state and the amber
+// line is left out, so it is said once (DESIGN §3). The provider's connection adds the others
+// with no send behind them: each warning the server gives (GET /api/provider), in its words,
+// SES still in the sandbox, left out while setup's production-access step says it, and email
+// not going out, in red, which stands for the errors among the warnings while it lasts. Every
+// problem lives here: a setup step only points up at it.
 function computeHealth(
   live: SendView[],
   setupSaysNotConnected = false,
@@ -293,44 +290,32 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   const pub = derivePublication(appState.appConfig);
   const deployment = appState.appConfig?.deployment ?? null;
 
-  // A post listed in the archive has been published (its send started): the step that ends
-  // setup. An email-only post (Verify it works' test send) doesn't count (SPEC §5).
+  // A post listed in the archive has been published (its send started): the moment setup
+  // ends. An email-only post (Verify it works' test send) doesn't count (SPEC §5).
   const archived = () =>
     sends.some((s) => (s.status === "sending" || s.status === "sent") && !s.email_only);
-  // What the setup steps read as done, from what the app already knows (DESIGN §3).
-  const setupProgress = (): SetupProgress => ({
-    named: Boolean(appState.appConfig?.settings.publication?.name?.trim()),
-    onList: counts.confirmed + counts.pending,
-    archived: archived(),
-  });
-
-  // First run, with nothing written yet: replace the body with the setup checklist rather
-  // than a wall of empty tiles. It ends at the first post, not the first subscriber, so
-  // bringing a list in (a step on it) doesn't take away the steps after it; from the first
-  // post the same steps are the Finish setting up card below.
-  // Email not going out is said here too, above the checklist, since it stops the steps
-  // that send and pauses signups (DESIGN §4).
-  if (!posts.length) {
-    const refusal = refusalOf(provider);
-    setHtml(
-      root,
-      html`<div class="dash-head"><div><h1>${pub.name}</h1>${
-        pub.tagline ? html`<p class="muted dash-tagline">${pub.tagline}</p>` : null
-      }<p class="muted">Let’s get your first post out the door.</p></div></div>${
-        refusal
-          ? html`<div id="dashHealth">${healthHtml([{ level: "red", text: notGoingOutHtml(refusal) }])}</div>`
-          : null
-      }${setupStepsHtml(pub, deployment, setupProgress(), "checklist", provider)}<section class="dash-section"><h2>API access</h2>${apiConnectCard(false)}</section>`,
-    );
-    wireDashActions(root, remount, signal);
-    return;
-  }
-
-  // The Finish setting up card, while setup is open: until its last step, a post listed in
-  // the archive published, is done, so the step's check and the card ending are one moment.
+  // What the setup steps read, each a fact Claude can read too (DESIGN §3, SPEC §13).
+  const facts = (): SetupFacts => {
+    const config = appState.appConfig;
+    const failed = config?.notification_status.last_failure ?? null;
+    return {
+      notConnected: providerNotConnected(),
+      sesAccount: !providerNotConnected() && readsSesAccount(deployment),
+      provider,
+      name: pub.name,
+      named: Boolean(config?.settings.publication?.name?.trim()),
+      notifyTo: config?.settings.notifications.to.length ?? 0,
+      notifyFailed: failed !== null,
+      onList: counts.confirmed + counts.pending,
+      wrote: posts.some((p) => !p.email_only),
+      firstSend: firstListedSend(sends),
+      subscribeUrl: `${deployment?.app_origin || location.origin}/subscribe`,
+    };
+  };
+  // The health block (SPEC §8), the same on both layouts: under the head, above the steps.
+  // While setup is open, the steps say the not-connected and sandbox states, so the block
+  // leaves those two out and says each once (DESIGN §3).
   const setupOpen = () => !archived();
-  const setupCardHtml = () =>
-    setupOpen() ? setupStepsHtml(pub, deployment, setupProgress(), "card", provider) : html``;
   const healthNow = () =>
     healthHtml(
       computeHealth(
@@ -340,6 +325,25 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
         setupOpen(),
       ),
     );
+
+  // First run, with nothing written yet: replace the body with the setup checklist rather
+  // than a wall of empty tiles. It ends at the first post, not the first subscriber, so
+  // bringing a list in (a step on it) doesn't take away the steps after it; from the first
+  // post the same steps are the Finish setting up card below.
+  if (!posts.length) {
+    setHtml(
+      root,
+      html`<div class="dash-head"><div><h1>${pub.name}</h1>${
+        pub.tagline ? html`<p class="muted dash-tagline">${pub.tagline}</p>` : null
+      }<p class="muted">Let’s get your first post out the door.</p></div></div><div id="dashHealth">${healthNow()}</div>${setupStepsHtml(facts(), "checklist")}<section class="dash-section"><h2>API access</h2>${apiConnectCard(false)}</section>`,
+    );
+    wireDashActions(root, remount, signal);
+    return;
+  }
+
+  // The Finish setting up card, while setup is open: it goes when a post listed in the
+  // archive is published.
+  const setupCardHtml = () => (setupOpen() ? setupStepsHtml(facts(), "card") : html``);
 
   // Each tile deep-links into the roster pre-filtered on its criterion
   // (#/subscribers/<filter>), so a count is a way in, not just a number.
@@ -631,73 +635,5 @@ function apiConnectCard(connected: boolean): Html {
   return html`<div class="card pub-card">
     <p class="pub-note">Let Claude draft, proofread, and schedule your posts.</p>
     <div class="pub-foot pub-links"><a href="#/docs/connect-claude">${icon("article")}Connect Claude →</a><a href="#/api-reference">${icon("code")}API reference →</a></div>
-  </div>`;
-}
-
-/**
- * What the setup steps read as done, each from what the app already knows (DESIGN §3).
- * Checking the setup is never read as done: a send the operator made to verify the instance
- * says nothing about whether the publisher has checked theirs.
- */
-interface SetupProgress {
-  /** A name has been set in Settings. */
-  named: boolean;
-  /** Confirmed and pending subscribers on the list. */
-  onList: number;
-  /** A post listed in the archive has been published: setup is done. */
-  archived: boolean;
-}
-
-/**
- * The setup steps, in one of two layouts: the first-run `checklist` that stands in for the
- * dashboard until the first post, and the compact `card` the regular dashboard carries until
- * the first post listed in the archive is published. One list, so the two can't drift. The
- * steps go in the order they depend on each other, each the publisher's to take except
- * connecting a provider, which shows only until one is: while none is, connecting replaces
- * the check-your-setup step (nothing can be checked before it) and the subscribe step says
- * signups wait for it. A step reads as done only from what the app knows. Checking the setup
- * and sharing the link are guidance and never read as done; sending a post to the archive is
- * the one that ends setup, so its check and the card clearing happen together. The Publishing docs'
- * section of the same name (docs/publishing/README.md) follows these steps, so a change here
- * changes it.
- */
-function setupStepsHtml(
-  pub: Publication,
-  deployment: DeploymentView | null,
-  progress: SetupProgress,
-  layout: "checklist" | "card",
-  provider: ProviderStatusView | null = null,
-): Html {
-  const subscribeUrl = `${deployment?.app_origin || location.origin}/subscribe`;
-  const notConnected = providerNotConnected();
-  const ses = !notConnected && readsSesAccount(deployment);
-  const { onList } = progress;
-  const done = (yes: boolean) => (yes ? " setup-done" : "");
-  return html`<div class="card setup${layout === "card" ? " setup-card" : ""}">
-    <h2 class="setup-title">${layout === "card" ? "Finish setting up" : "Set up your publication"}</h2>
-    <ol class="setup-steps">
-      <li class="setup-name${done(progress.named)}"><div class="setup-step-main"><strong>Name your publication</strong><span class="muted">Currently “${pub.name}”. Set the name, tagline, and brand in Settings.</span></div><button data-nav="#/settings">Settings</button></li>
-      ${
-        notConnected
-          ? html`<li class="setup-connect"><div class="setup-step-main"><strong>Connect Amazon SES</strong><span class="muted">Nothing can be sent, and signups stay closed, until SES is connected.</span></div><button data-nav="${CONNECT_PROVIDER_HREF}">Connect Amazon SES</button></li>`
-          : html`<li class="setup-check"><div class="setup-step-main"><strong>Check your setup</strong><span class="muted">Send yourself a test, and see how Kestrel tells you when something needs attention.</span></div><button data-nav="#/docs/check-your-setup">Docs</button></li>`
-      }
-      ${
-        ses
-          ? html`<li class="setup-access${done(provider?.state === "production")}"><div class="setup-step-main"><strong>Request production access</strong><span class="muted">${productionAccessHint(provider)}</span></div><button data-nav="${PRODUCTION_ACCESS_HREF}">Docs</button></li>`
-          : null
-      }
-      ${
-        onList
-          ? html`<li class="setup-done setup-list"><div class="setup-step-main"><strong>Bring your existing list</strong><span class="muted">${onList.toLocaleString()} ${onList === 1 ? "subscriber" : "subscribers"} on your list.</span></div><button data-nav="#/subscribers">Subscribers</button></li>`
-          : html`<li class="setup-list"><div class="setup-step-main"><strong>Bring your existing list</strong><span class="muted">Import the subscribers you have on another service, with the consent they gave there. Skip this if you’re starting fresh.</span></div><button data-nav="#/subscribers/import">Import</button></li>`
-      }
-      <li class="setup-write${done(progress.archived)}"><div class="setup-step-main"><strong>Publish your first post</strong><span class="muted">Write a post, test it, and send it. It goes to your subscribers and onto your site.</span></div>${layout === "card" ? html`<button data-act="new-post">New post</button>` : html`<button class="primary" data-act="new-post">New post</button>`}</li>
-      ${
-        notConnected
-          ? html`<li class="setup-subscribe"><div class="setup-step-main"><strong>Share your subscribe link</strong><span class="muted">Signups open once an email provider is connected; until then the page says they aren’t open yet.</span></div></li>`
-          : html`<li class="setup-subscribe"><div class="setup-step-main"><strong>Share your subscribe link</strong>${inSandbox(provider) ? html`<span class="muted">Share it once AWS grants production access: until then, signups from anyone not verified in SES fail.</span>` : null}<code class="setup-url">${subscribeUrl}</code></div><button type="button" data-copy="${subscribeUrl}" aria-label="Copy the subscribe link">${copyFace()}</button></li>`
-      }
-    </ol>
   </div>`;
 }

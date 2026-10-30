@@ -12,8 +12,8 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
   it("renders the docs in the indexes' order, Publishing first, with titles from each doc's H1 and an HTML fragment", () => {
     const { docs } = renderDocs();
     expect(docs.map((d) => `${d.set}/${d.section}/${d.slug}`)).toEqual([
-      "publishing/set-up-your-publication/name-your-publication",
       "publishing/set-up-your-publication/check-your-setup",
+      "publishing/set-up-your-publication/name-your-publication",
       "publishing/set-up-your-publication/your-list",
       "publishing/set-up-your-publication/write-a-post",
       "publishing/set-up-your-publication/share-your-subscribe-link",

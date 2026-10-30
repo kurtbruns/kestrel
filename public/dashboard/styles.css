@@ -4767,18 +4767,41 @@ button.copy-btn.api-copy-path {
 }
 
 /* Setup steps: the first-run checklist, and the regular dashboard's Finish setting up card
-   (one component, two layouts). The card is the compact one. */
+   (one component, two layouts). The card is the compact one. Finished steps fold into one
+   line above the list; each step left carries a ring that says where it stands. */
 .setup-title {
   margin-top: 0;
 }
+.setup-fold {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.setup-fold strong {
+  color: var(--fg);
+}
+.setup-fold-mark {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--ok-line);
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+  font-size: 12px;
+}
 .setup-steps {
   list-style: none;
-  counter-reset: step;
   margin: 8px 0 0;
   padding: 0;
 }
 .setup-steps li {
-  counter-increment: step;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -4789,25 +4812,47 @@ button.copy-btn.api-copy-path {
   border-top: 0;
 }
 .setup-steps li::before {
-  content: counter(step);
+  content: "";
   flex: 0 0 auto;
-  width: 26px;
-  height: 26px;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  border: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
+  border: 1.5px solid var(--muted);
+  font-size: 12px;
+  font-weight: 700;
 }
-/* A step already done (the list has subscribers): a check in place of its number. */
-.setup-steps li.setup-done::before {
-  content: "✓";
-  color: var(--ok-fg);
-  border-color: var(--ok-line);
-  background: var(--ok-bg);
+/* The step to take now. */
+.setup-steps li.setup-current::before {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+/* Waiting on AWS, not on the publisher. */
+.setup-steps li.setup-waiting::before {
+  border-style: dashed;
+  border-color: var(--accent);
+}
+/* Can't be taken until an earlier step is: muted, its hint the step it waits for. */
+.setup-steps li.setup-blocked::before {
+  border-style: dotted;
+  border-color: var(--muted);
+  opacity: 0.6;
+}
+.setup-steps li.setup-blocked strong {
+  color: var(--muted);
+}
+/* A problem the health block states is in its way. */
+.setup-steps li.setup-attention::before {
+  content: "!";
+  color: var(--danger-on);
+  background: var(--danger-fg);
+  border-color: var(--danger-fg);
+}
+.setup-steps li.setup-attention .setup-hint {
+  color: var(--danger-fg);
 }
 .setup-step-main {
   flex: 1 1 auto;
@@ -4848,11 +4893,6 @@ button.copy-btn.api-copy-path {
 }
 .setup-card .setup-steps li {
   padding: 8px 2px;
-}
-.setup-card .setup-steps li::before {
-  width: 22px;
-  height: 22px;
-  font-size: 12px;
 }
 
 /* ============================================================

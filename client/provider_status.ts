@@ -137,13 +137,21 @@ export function sandboxHealthHtml(): Html {
   return html`Amazon SES is still in the sandbox, so it mails only addresses verified in SES. <a href="${PRODUCTION_ACCESS_HREF}">Request production access</a>`;
 }
 
-/** The setup step's hint for production access, by where AWS's review stands. */
-export function productionAccessHint(v: ProviderStatusView | null): string {
+/**
+ * The setup step's hint for production access, by where AWS's review stands, or null when
+ * there's nothing to add. Never a block: before a request, it suggests naming the publication
+ * first, since AWS's reviewer looks at it.
+ */
+export function productionAccessHint(
+  v: ProviderStatusView | null,
+  named: boolean,
+  connected: boolean,
+): string | null {
   if (v?.state === "production") {
-    return "AWS granted it: SES mails anyone who signs up.";
+    return null;
   }
   if (v?.state === "sandbox" && v.review === "pending") {
-    return "AWS is reviewing your request. Until then, SES mails only addresses verified in SES.";
+    return "Waiting for AWS to grant production access.";
   }
   if (v?.state === "sandbox" && v.review === "denied") {
     return `AWS hasn’t granted it yet. ${awsReplied(v)}: answer there.`;
@@ -151,10 +159,13 @@ export function productionAccessHint(v: ProviderStatusView | null): string {
   if (v?.state === "sandbox" && v.review === "failed") {
     return "AWS didn’t receive your request. Ask again.";
   }
-  if (v?.state === "sandbox") {
-    return "SES mails only addresses verified in SES until AWS grants it. Ask once a test email has arrived.";
+  if (!named) {
+    return "Name your publication first: AWS’s reviewer looks at it.";
   }
-  return "Ask once a test email has arrived. Kestrel can’t read your SES account, so the SES console’s account dashboard says whether AWS granted it.";
+  if (connected && v?.state !== "sandbox") {
+    return "Kestrel can’t read your SES account, so the SES console’s account dashboard says whether AWS granted it.";
+  }
+  return null;
 }
 
 /** The refusal while email isn't going out (SPEC §13), or null. */
