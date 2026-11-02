@@ -127,16 +127,19 @@ describe("reader pages section (SPEC §5)", () => {
     row("subscribe", "Not open yet").click();
     await settle();
     expect($("#rpNote").textContent).toBe(
-      "Shown in place of the form until you send your first email.",
+      "Shown in place of the form until your email provider accepts your first email, such as a test.",
     );
     expect($("#rpNote").textContent).toBe(row("subscribe", "Not open yet").getAttribute("title"));
     // The Reading pages that invite readers to subscribe say they're shown with signups open.
     row("reading", "Archive").click();
     await settle();
     expect($("#rpNote").textContent).toMatch(/Shown with signups open/);
-    row("reading", "Nothing here yet").click();
-    await settle();
-    expect($("#rpNote").textContent).not.toMatch(/signups open/);
+    // A post page and Nothing here yet carry no Subscribe link or form, so say nothing of signups.
+    for (const label of ["Post page", "Nothing here yet"]) {
+      row("reading", label).click();
+      await settle();
+      expect($("#rpNote").textContent).not.toMatch(/signups/);
+    }
   });
 
   it("opens on the subscribe form, framed so no form on it submits", async () => {

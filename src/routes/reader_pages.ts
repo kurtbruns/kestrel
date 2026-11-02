@@ -3,9 +3,10 @@
  * on, rendered by the code that serves the real page, with the publication's saved
  * identity and sample values in place of a reader's, and nothing else: the frame Settings
  * holds it in says it is a preview, so the page is exactly a reader's. Each shows the
- * publication once set up, with signups open, whatever this instance's are now: the pages
- * readers get while they aren't open are previews of their own (Not open yet, Paused), so
- * a publisher mid-setup still sees what readers will get. Authed, and never a
+ * publication once set up, and the Reading pages that offer signing up (the landing page
+ * and the archive, with posts and without) show signups open, whatever this instance's are
+ * now: the pages readers get while they aren't open are previews of their own (Not open
+ * yet, Paused), so a publisher mid-setup still sees what readers will get. Authed, and never a
  * public page (§11): a preview shows, it never acts.
  *   GET /api/reader-pages/:journey/:state → the page as a standalone HTML document
  */

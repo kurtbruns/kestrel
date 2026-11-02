@@ -36,10 +36,11 @@ const STATE_NOTES: StateNotes = {
   subscribe: {
     form: "Your subscribe page, where a reader enters their email address.",
     "check-inbox":
-      "What the reader is shown after pressing Subscribe, here or on a form embedded on your site.",
+      "What the reader is shown after pressing Subscribe, here, on your website before your first post, or on a form embedded on your site.",
     "not-an-email":
       "When the email address a reader sent isn’t one that can be mailed. The browser catches most mistakes first.",
-    "not-open": "Shown in place of the form until you send your first email.",
+    "not-open":
+      "Shown in place of the form until your email provider accepts your first email, such as a test.",
     paused:
       "Shown in place of the form while your email provider won’t send for your account, as when SES pauses your sending.",
   },
@@ -47,17 +48,17 @@ const STATE_NOTES: StateNotes = {
     ready: "When a reader opens the link in your confirmation email.",
     confirmed: "After they confirm. They’re on your list and get your next post.",
     expired: "When a reader opens a confirmation link that’s too old. They can ask for a new one.",
-    invalid: "When a confirmation link is broken or mistyped.",
+    invalid: "When a confirmation link is broken, mistyped, or replaced by a newer one.",
   },
   unsubscribe: {
-    ask: "When a reader opens the unsubscribe link in one of your emails. A mail application’s own Unsubscribe button skips this page and removes them right away.",
-    done: "After they confirm. They get no more of your emails.",
+    ask: "When a reader opens the unsubscribe link in one of your emails. A mail application with its own one-click Unsubscribe button skips this page and removes them right away.",
+    done: "After they press Unsubscribe. They get no more of your emails.",
     invalid: "When an unsubscribe link is broken or mistyped.",
   },
   reading: {
     landing: `What anyone sees when they visit your newsletter’s website. The posts are samples. ${SHOWN_OPEN}`,
     archive: `Every post in your archive. These are samples. ${SHOWN_OPEN}`,
-    post: `The web version of a post that went out. Readers reach it from View in browser in its email, or from your archive. ${SHOWN_OPEN}`,
+    post: "The web version of a post that went out. Readers reach it from View in browser in its email, or from your archive.",
     "landing-empty": `Your newsletter’s website before your first post goes out. ${SHOWN_OPEN}`,
     "archive-empty": `Your archive before your first post goes out. ${SHOWN_OPEN}`,
     "not-found": "When a reader follows a link to a page that isn’t there.",
