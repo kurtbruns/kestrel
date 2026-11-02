@@ -1192,7 +1192,7 @@ describe("dashboard", () => {
       );
       // Nor offers the link, since it can't tell whether AWS granted access.
       expect($(".setup-share .setup-hint").textContent).toBe(
-        "Share it once AWS has granted production access: Kestrel can’t tell yet.",
+        "Share it once AWS grants production access.",
       );
       expect(document.querySelector(".setup-share [data-copy]")).toBeNull();
     });
