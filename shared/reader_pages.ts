@@ -12,8 +12,8 @@ export interface ReaderPageAddress {
 
 /** One page or state a reader can land on. `offPath` marks one a reader reaches only when
  *  something goes wrong or there is nothing yet (an expired link, a publication that has
- *  sent no post). `whileClosed` marks an off-path page the instance causes, not the reader:
- *  one shown in place of the form while signups aren't open (SPEC §7, §13). */
+ *  sent no post). `whileClosed` marks one shown in place of the form while signups aren't open (SPEC §7,
+ *  §13), which the instance causes, not the reader. */
 export interface ReaderPageState {
   id: string;
   label: string;

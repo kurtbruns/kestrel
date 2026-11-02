@@ -26,7 +26,6 @@ import link from "./icons/link.svg";
 import mail from "./icons/mail.svg";
 import ol from "./icons/ol.svg";
 import paperclip from "./icons/paperclip.svg";
-import pause from "./icons/pause.svg";
 import phone from "./icons/phone.svg";
 import plus from "./icons/plus.svg";
 import preview from "./icons/preview.svg";
@@ -58,7 +57,6 @@ const ICONS = {
   link: unsafeHtml(link),
   ol: unsafeHtml(ol),
   paperclip: unsafeHtml(paperclip),
-  pause: unsafeHtml(pause),
   plus: unsafeHtml(plus),
   preview: unsafeHtml(preview),
   quote: unsafeHtml(quote),

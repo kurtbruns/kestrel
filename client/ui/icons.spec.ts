@@ -38,7 +38,6 @@ const ALL = {
   desktop: true,
   mail: true,
   phone: true,
-  pause: true,
 } as const satisfies Record<IconName, true>;
 const names = Object.keys(ALL) as IconName[];
 
