@@ -1,4 +1,4 @@
--- 0017_provider_account_rejected: an account check whose key SES rejects (SPEC §9).
+-- 0017_provider_account_rejected: an account check whose key SES rejects (SPEC §13).
 --
 -- The account check used to file a key SES doesn't know, a secret that doesn't match, and an
 -- account not signed up for SES as `unreachable`, the same as no answer, so a dead key read

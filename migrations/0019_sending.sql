@@ -1,4 +1,4 @@
--- 0019_sending: whether email is getting out (SPEC §9).
+-- 0019_sending: whether email is getting out (SPEC §13).
 --
 -- One row, written whenever the provider answers a test, a confirmation, a list send, or a
 -- notification, and by the account check: `unproven` until the provider takes an email,
