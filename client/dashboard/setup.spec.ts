@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ProviderStatusView } from "../../shared/provider";
 import type { SendView } from "../../shared/sends";
+import type { DeploymentView } from "../../shared/settings";
 import { sendView } from "../test/send_server";
-import { providerStatus, resetShell, sendSummary } from "../test/support";
+import { providerStatus, resetShell, sendSummary, settingsResponse } from "../test/support";
 import { fmt } from "../ui/format";
 import { html, setHtml } from "../ui/html";
-import { type SetupFacts, type SetupStep, setupSteps, setupStepsHtml } from "./setup";
+import { connectedTo, type SetupFacts, type SetupStep, setupSteps, setupStepsHtml } from "./setup";
 
 // DESIGN §3, SPEC §13: the ten setup steps, read from facts both clients have, in each phase.
 
@@ -18,7 +19,8 @@ const facts = (over: Partial<SetupFacts> = {}): SetupFacts => ({
   notifyTo: 0,
   notifyFailed: false,
   onList: 0,
-  wrote: false,
+  connectedTo: "Sends through Amazon SES in us-west-2.",
+  firstPost: null,
   firstSend: null,
   subscribeUrl: "https://news.example.com/subscribe",
   ...over,
@@ -87,7 +89,7 @@ describe("setup steps", () => {
   it("not proven yet: a test email is the step, and scheduling isn't blocked", () => {
     const provider = ses({ sending: sending("unproven"), signups: "not_open" });
     expect(read(setupSteps(facts({ provider })))).toEqual([
-      "Connect Amazon SES: done",
+      "Connect Amazon SES: done (Sends through Amazon SES in us-west-2.)",
       "Send a test email: todo (SES is connected but hasn’t sent anything yet. Send one to an address verified in SES.)",
       "Name your publication: done (Named “Symbol Soup”.)",
       "Get notified: todo",
@@ -104,7 +106,7 @@ describe("setup steps", () => {
     const provider = ses({ sending: sending("refusing"), signups: "paused" });
     const steps = setupSteps(facts({ provider }));
     expect(read(steps)).toEqual([
-      "Connect Amazon SES: done",
+      "Connect Amazon SES: done (Sends through Amazon SES in us-west-2.)",
       "Send a test email: attention (SES is refusing. See why above.)",
       "Name your publication: done (Named “Symbol Soup”.)",
       "Get notified: todo",
@@ -122,7 +124,7 @@ describe("setup steps", () => {
   it("working in the sandbox: production access waits on AWS, and schedule and share say to wait, unblocked", () => {
     const provider = ses({ review: "pending", sending: sending("working"), signups: "open" });
     expect(read(setupSteps(facts({ provider, notifyTo: 2 })))).toEqual([
-      "Connect Amazon SES: done",
+      "Connect Amazon SES: done (Sends through Amazon SES in us-west-2.)",
       "Send a test email: done (Email is getting out.)",
       "Name your publication: done (Named “Symbol Soup”.)",
       "Get notified: done (Notifications go to 2 addresses.)",
@@ -143,16 +145,26 @@ describe("setup steps", () => {
     });
     const s = firstSend();
     expect(
-      read(setupSteps(facts({ provider, notifyTo: 1, onList: 40, wrote: true, firstSend: s }))),
+      read(
+        setupSteps(
+          facts({
+            provider,
+            notifyTo: 1,
+            onList: 40,
+            firstPost: "The integral sign",
+            firstSend: s,
+          }),
+        ),
+      ),
     ).toEqual([
-      "Connect Amazon SES: done",
+      "Connect Amazon SES: done (Sends through Amazon SES in us-west-2.)",
       "Send a test email: done (Email is getting out.)",
       "Name your publication: done (Named “Symbol Soup”.)",
       "Get notified: done (Notifications go to 1 address.)",
       "Request production access: done (AWS granted it.)",
       "Bring your existing list: done (40 subscribers on your list.)",
-      "Write your first post: done",
-      "Schedule your first post: done",
+      "Write your first post: done (“The integral sign”.)",
+      `Schedule your first post: done (Goes out ${fmt(s.fire_at)}.)`,
       `Send a test email for your first post: todo (“The integral sign” goes out ${fmt(s.fire_at)}. Send yourself a test of it first.)`,
       "Share your subscribe link: todo",
     ]);
@@ -192,7 +204,7 @@ describe("setup steps", () => {
   it("on SES in an unknown state, reads only what it can: email working, access not yet known", () => {
     const provider = providerStatus({ unknown_reason: "permission", signups: "open" });
     expect(read(setupSteps(facts({ provider })).filter((s) => s.key !== "list"))).toEqual([
-      "Connect Amazon SES: done",
+      "Connect Amazon SES: done (Sends through Amazon SES in us-west-2.)",
       "Send a test email: done (Email is getting out.)",
       "Name your publication: done (Named “Symbol Soup”.)",
       "Get notified: todo",
@@ -200,7 +212,7 @@ describe("setup steps", () => {
       "Write your first post: todo",
       "Schedule your first post: todo",
       "Send a test email for your first post: blocked (After Schedule your first post)",
-      "Share your subscribe link: todo",
+      "Share your subscribe link: todo (Share it once AWS has granted production access: Kestrel can’t tell yet.)",
     ]);
   });
 
@@ -210,10 +222,12 @@ describe("setup steps", () => {
     expect(read(failed.filter((s) => ["test", "access", "share"].includes(s.key)))).toEqual([
       "Send a test email: todo (Send one to yourself, and check it arrives.)",
       "Request production access: todo",
-      "Share your subscribe link: todo",
+      "Share your subscribe link: todo (Share it once AWS has granted production access: Kestrel can’t tell yet.)",
     ]);
     // A provider with no SES account to ask about: no production-access step at all.
     const standIn = setupSteps(facts({ provider: null, sesAccount: false }));
+    // With no SES account there is no sandbox to wait for, so sharing says nothing.
+    expect(standIn.find((s) => s.key === "share")?.hint).toBeNull();
     expect(standIn.map((s) => s.key)).toEqual([
       "connect",
       "test",
@@ -302,16 +316,66 @@ describe("setup card", () => {
         li.querySelector("button")?.textContent ?? null,
       ]),
     ).toEqual([
-      [null, null],
+      ["Sends through Amazon SES in us-west-2.", null],
       ["Named “Symbol Soup”.", "Settings"],
       ["3 subscribers on your list.", "Subscribers"],
     ]);
   });
 
+  it("offers the subscribe link on SES only once it reads as granted production access", () => {
+    const offered = (f: SetupFacts) => {
+      const el = render(f);
+      return [
+        el.querySelector(".setup-url")?.textContent ?? null,
+        el.querySelector<HTMLElement>(".setup-share [data-copy]")?.dataset.copy ?? null,
+      ];
+    };
+    const url = "https://news.example.com/subscribe";
+    const working = sending("working");
+    expect(offered(facts({ provider: ses({ state: "production", sending: working }) }))).toEqual([
+      url,
+      url,
+    ]);
+    // Can't read the account, or the read failed: it can't tell, so it waits.
+    expect(offered(facts({ provider: providerStatus({ unknown_reason: "permission" }) }))).toEqual([
+      null,
+      null,
+    ]);
+    expect(offered(facts({ provider: null }))).toEqual([null, null]);
+    // A provider with no SES account to ask, such as local development's stand-in.
+    expect(offered(facts({ provider: null, sesAccount: false }))).toEqual([url, url]);
+  });
+
+  it("names where email goes out once connected", () => {
+    const d = (over: Partial<DeploymentView>) => ({ ...settingsResponse().deployment, ...over });
+    expect(connectedTo(d({ provider: "ses", aws_region: "us-west-2" }))).toBe(
+      "Sends through Amazon SES in us-west-2.",
+    );
+    expect(connectedTo(d({ provider: "fake" }))).toBe(
+      "Sends through local development’s stand-in, which delivers nothing.",
+    );
+  });
+
+  it("names the toggle by what it does, and points it at the list", () => {
+    const provider = ses({ sending: sending("working") });
+    const shut = toggle(render(facts({ provider })));
+    expect(shut?.getAttribute("aria-label")).toBe("Show 3 done steps");
+    expect(shut?.getAttribute("aria-controls")).toBe("setupSteps");
+    expect(toggle(render(facts({ provider }), "card", true))?.getAttribute("aria-label")).toBe(
+      "Hide 3 done steps",
+    );
+  });
+
   it("says only how many are done, however many", () => {
     const provider = ses({ state: "production", sending: sending("working") });
     const el = render(
-      facts({ provider, notifyTo: 1, onList: 3, wrote: true, firstSend: firstSend() }),
+      facts({
+        provider,
+        notifyTo: 1,
+        onList: 3,
+        firstPost: "The integral sign",
+        firstSend: firstSend(),
+      }),
     );
     expect(toggle(el)?.textContent).toBe("✓8 done");
     expect(titles(el)).toEqual([

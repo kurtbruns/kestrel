@@ -661,7 +661,11 @@ describe("dashboard", () => {
           "Send a test email for your first post",
           "Share your subscribe link",
         ]);
-        expect($(".setup-url").textContent, provider).toBe("https://app.birds.example/subscribe");
+        // SES offers the link only once it reads as granted production access, which an
+        // account not yet read doesn't; the stand-in has no sandbox to wait for.
+        expect(document.querySelector(".setup-url")?.textContent ?? null, provider).toBe(
+          provider === "ses" ? null : "https://app.birds.example/subscribe",
+        );
         unmount();
         fake.restore();
         fake = world([post()], sendServer([scheduled()]), counts, status);
@@ -731,6 +735,8 @@ describe("dashboard", () => {
       expect($(".setup-card .setup-post-test").classList.contains("setup-done")).toBe(true);
       expect($(".setup-card .setup-fold").textContent).toBe("✓7 done");
       expect($(".setup-card .setup-fold").getAttribute("aria-expanded")).toBe("true");
+      // The repaint replaced the toggle, and focus came back to it.
+      expect(document.activeElement).toBe($(".setup-card .setup-fold"));
       // Hidden again, only what's left shows.
       $(".setup-card .setup-fold").click();
       expect(document.querySelector(".setup-card .setup-post-test")).toBeNull();
@@ -1184,7 +1190,11 @@ describe("dashboard", () => {
       expect($(".setup-access .setup-hint").textContent).toBe(
         "Kestrel can’t read your SES account, so the SES console’s account dashboard says whether AWS granted it.",
       );
-      expect(document.querySelector(".setup-share .setup-hint")).toBeNull();
+      // Nor offers the link, since it can't tell whether AWS granted access.
+      expect($(".setup-share .setup-hint").textContent).toBe(
+        "Share it once AWS has granted production access: Kestrel can’t tell yet.",
+      );
+      expect(document.querySelector(".setup-share [data-copy]")).toBeNull();
     });
 
     it("suggests naming the publication before asking AWS, without blocking the step", async () => {

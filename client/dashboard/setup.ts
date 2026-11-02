@@ -4,6 +4,7 @@
 
 import type { ProviderStatusView } from "../../shared/provider";
 import type { SendView } from "../../shared/sends";
+import type { DeploymentView } from "../../shared/settings";
 import { CONNECT_PROVIDER_HREF } from "../deployment";
 import {
   inSandbox,
@@ -38,8 +39,11 @@ export interface SetupFacts {
   notifyFailed: boolean;
   /** Confirmed and pending subscribers on the list. */
   onList: number;
-  /** A post meant for the archive exists: an email-only one, such as Verify it works', doesn't count. */
-  wrote: boolean;
+  /** Where email goes out, as the connect step says once done (`connectedTo`). */
+  connectedTo: string;
+  /** The subject of the first post meant for the archive, a draft included, or null for none:
+   *  an email-only one, such as Verify it works', doesn't count. */
+  firstPost: string | null;
   /** The soonest scheduled send of a post meant for the archive, or null. */
   firstSend: SendView | null;
   /** The public subscribe page's address. */
@@ -106,7 +110,7 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
     state: f.notConnected ? "todo" : "done",
     hint: f.notConnected
       ? "Nothing can be sent, and signups stay closed, until SES is connected."
-      : null,
+      : f.connectedTo,
   });
 
   steps.push(
@@ -174,8 +178,8 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
   steps.push({
     key: "write",
     title: "Write your first post",
-    state: f.wrote ? "done" : "todo",
-    hint: null,
+    state: f.firstPost !== null ? "done" : "todo",
+    hint: f.firstPost !== null ? `“${f.firstPost || "Untitled"}”.` : null,
   });
 
   steps.push({
@@ -184,9 +188,11 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
     state: f.notConnected ? "blocked" : f.firstSend ? "done" : "todo",
     hint: f.notConnected
       ? after(CONNECT)
-      : sandbox && sending?.state === "working" && !f.firstSend
-        ? "Best after AWS grants access: until then it reaches only verified addresses."
-        : null,
+      : f.firstSend
+        ? `Goes out ${fmt(f.firstSend.fire_at)}.`
+        : sandbox && sending?.state === "working"
+          ? "Best after AWS grants access: until then it reaches only verified addresses."
+          : null,
   });
 
   // The test of the frozen email that will go out, recorded on the send; a draft's test is a
@@ -212,7 +218,13 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
     key: "share",
     title: "Share your subscribe link",
     state: closed ? "blocked" : "todo",
-    hint: closed ? after(TEST) : sandbox ? "Share it once AWS grants production access." : null,
+    hint: closed
+      ? after(TEST)
+      : sandbox
+        ? "Share it once AWS grants production access."
+        : shareable(f)
+          ? null
+          : "Share it once AWS has granted production access: Kestrel can’t tell yet.",
   });
 
   return steps;
@@ -303,15 +315,29 @@ export function setupStepsHtml(
     <h2 class="setup-title">${layout === "card" ? "Finish setting up" : "Set up your publication"}</h2>
     ${
       done.length
-        ? html`<button type="button" class="setup-fold" data-act="toggle-done" aria-expanded="${showDone ? "true" : "false"}"><span class="setup-fold-mark" aria-hidden="true">✓</span><span>${done.length} done</span></button>`
+        ? html`<button type="button" class="setup-fold" data-act="toggle-done" aria-controls="setupSteps" aria-expanded="${showDone ? "true" : "false"}" aria-label="${showDone ? "Hide" : "Show"} ${done.length} done ${done.length === 1 ? "step" : "steps"}"><span class="setup-fold-mark" aria-hidden="true">✓</span><span>${done.length} done</span></button>`
         : null
     }
-    <ol class="setup-steps">${shown.map(row)}</ol>
+    <ol class="setup-steps" id="setupSteps">${shown.map(row)}</ol>
   </div>`;
 }
 
-/** The subscribe link is offered once it can confirm anyone: not in the SES sandbox. */
-const shareable = (f: SetupFacts) => !inSandbox(f.provider);
+/**
+ * The subscribe link is offered once it can confirm anyone: on SES, only once the account
+ * reads as having production access, so neither the sandbox nor an account Kestrel can't read
+ * offers it, as both Claude copies say. A provider with no SES account to ask has no sandbox.
+ */
+const shareable = (f: SetupFacts) => !f.sesAccount || f.provider?.state === "production";
+
+/** Where email goes out, for the connect step's done line. */
+export function connectedTo(d: DeploymentView | null): string {
+  if (d?.provider === "ses") {
+    return d.aws_region
+      ? `Sends through Amazon SES in ${d.aws_region}.`
+      : "Sends through Amazon SES.";
+  }
+  return "Sends through local development’s stand-in, which delivers nothing.";
+}
 
 /** The first post's send: the soonest scheduled send of a post meant for the archive. */
 export function firstListedSend(sends: SendView[]): SendView | null {

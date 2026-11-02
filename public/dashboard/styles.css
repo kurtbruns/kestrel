@@ -4902,6 +4902,15 @@ button.copy-btn.api-copy-path {
 .setup-steps li.setup-attention .setup-hint {
   color: var(--danger-fg);
 }
+/* A failed notification is an amber health line, so the step pointing at it is amber too. */
+.setup-steps li.setup-notify.setup-attention::before {
+  background: var(--warn-fg);
+  border-color: var(--warn-fg);
+  color: var(--card);
+}
+.setup-steps li.setup-notify.setup-attention .setup-hint {
+  color: var(--warn-fg);
+}
 .setup-step-main {
   flex: 1 1 auto;
   min-width: 0;

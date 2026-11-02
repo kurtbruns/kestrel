@@ -48,7 +48,7 @@ import { fmt } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { badge, renderError } from "../ui/widgets";
-import { firstListedSend, type SetupFacts, setupStepsHtml } from "./setup";
+import { connectedTo, firstListedSend, type SetupFacts, setupStepsHtml } from "./setup";
 
 // The post-login landing and the brand's target (the default route). Built entirely
 // from existing authed endpoints — GET /api/posts, /sends, /subscribers, the cached
@@ -318,7 +318,10 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       notifyTo: config?.settings.notifications.to.length ?? 0,
       notifyFailed: failed !== null,
       onList: counts.confirmed + counts.pending,
-      wrote: posts.some((p) => !p.email_only),
+      connectedTo: connectedTo(deployment),
+      firstPost:
+        posts.filter((p) => !p.email_only).sort((a, b) => a.created_at - b.created_at)[0]
+          ?.subject ?? null,
       firstSend: firstListedSend(sends),
       subscribeUrl: `${deployment?.app_origin || location.origin}/subscribe`,
     };
@@ -342,8 +345,11 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   // open. Whether the reader showed the done steps lasts for the page, so a repaint after a
   // background read never hides them mid-read; a toggle keeps focus on the toggle it repaints.
   let showDone = false;
-  const paintSetup = (refocus = false) => {
+  const paintSetup = (toggled = false) => {
     const box = $("#dashSetup", root);
+    // A background repaint replaces the toggle, so focus on it is put back, as after a click.
+    const refocus =
+      toggled || document.activeElement?.closest("#dashSetup [data-act='toggle-done']") != null;
     const layout = posts.length ? "card" : "checklist";
     setHtml(
       box,
