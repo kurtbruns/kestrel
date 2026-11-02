@@ -82,8 +82,8 @@ const SCHEDULE = "Schedule your first post";
 const after = (title: string) => `After ${title}`;
 
 /** The pointers a step gives while the health block states what's in its way. */
-const REFUSING = "SES is refusing. The fix is above.";
-const NOTIFY_FAILED = "The last notification didn’t arrive. The fix is above.";
+const REFUSING = "SES is refusing. See why above.";
+const NOTIFY_FAILED = "The last notification didn’t arrive. See why above.";
 
 const plural = (n: number, one: string, many: string) =>
   `${n.toLocaleString()} ${n === 1 ? one : many}`;

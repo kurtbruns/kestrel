@@ -4875,10 +4875,18 @@ button.copy-btn.api-copy-path {
   border-style: dashed;
   border-color: var(--accent);
 }
-/* Can't be taken until an earlier step is: muted, its hint the step it waits for. */
+/* Can't be taken until an earlier step is: muted, its hint the step it waits for. Its ring is
+   ten even dashes drawn by an SVG mask over the muted color, since a dotted border this small
+   renders as faint specks that vary with the screen. */
 .setup-steps li.setup-blocked::before {
-  border-style: dotted;
-  border-color: var(--muted);
+  border: 0;
+  background: var(--muted);
+  -webkit-mask:
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='7.25' fill='none' stroke='black' stroke-width='1.5' stroke-dasharray='2.4 2.155'/></svg>")
+    center / 100% 100% no-repeat;
+  mask:
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='7.25' fill='none' stroke='black' stroke-width='1.5' stroke-dasharray='2.4 2.155'/></svg>")
+    center / 100% 100% no-repeat;
 }
 .setup-steps li.setup-blocked strong {
   color: var(--muted);

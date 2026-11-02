@@ -14,7 +14,7 @@ Choose **Template** in the sidebar, then **Send test email**, and send a sample 
 - **Where it lands:** the inbox, Promotions, or spam. If it lands in spam, check your sending domain's records, as [Sending-domain DNS](../reference/02-sending-domain-dns.md) describes.
 - **A reply.** Reply to the test, and check that it reaches your inbox. Kestrel never sees replies, so this depends on [forwarding your From address](../get-started/05-ses.md#8-receive-replies-at-your-from-address).
 
-If SES refuses the test, the dashboard says why in red above the steps, with the fix. Send another test once it's made.
+If SES refuses the test, the dashboard says why in red above the steps, with what to check. Send another test once it's fixed.
 
 ## 2. Get notified
 

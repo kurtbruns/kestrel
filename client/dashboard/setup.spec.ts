@@ -105,7 +105,7 @@ describe("setup steps", () => {
     const steps = setupSteps(facts({ provider }));
     expect(read(steps)).toEqual([
       "Connect Amazon SES: done",
-      "Send a test email: attention (SES is refusing. The fix is above.)",
+      "Send a test email: attention (SES is refusing. See why above.)",
       "Name your publication: done (Named “Symbol Soup”.)",
       "Get notified: todo",
       "Request production access: todo",
@@ -231,7 +231,7 @@ describe("setup steps", () => {
     const notify = (over: Partial<SetupFacts>) =>
       read(setupSteps(facts(over)).filter((s) => s.key === "notify"));
     expect(notify({ notifyTo: 1, notifyFailed: true })).toEqual([
-      "Get notified: attention (The last notification didn’t arrive. The fix is above.)",
+      "Get notified: attention (The last notification didn’t arrive. See why above.)",
     ]);
     expect(notify({ notifyTo: 2 })).toEqual([
       "Get notified: done (Notifications go to 2 addresses.)",

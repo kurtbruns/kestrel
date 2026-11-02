@@ -759,7 +759,7 @@ describe("dashboard", () => {
       const step = $(".setup-card .setup-notify");
       expect(step.classList.contains("setup-attention")).toBe(true);
       expect($(".setup-hint", step).textContent).toBe(
-        "The last notification didn’t arrive. The fix is above.",
+        "The last notification didn’t arrive. See why above.",
       );
       expect(fake.unhandled).toEqual([]);
     });
@@ -1234,7 +1234,7 @@ describe("dashboard", () => {
       expect($(".dash-not-going-out").textContent).toMatch(/^Email isn’t going out/);
       const step = $(".setup-test");
       expect(step.classList.contains("setup-attention")).toBe(true);
-      expect($(".setup-hint", step).textContent).toBe("SES is refusing. The fix is above.");
+      expect($(".setup-hint", step).textContent).toBe("SES is refusing. See why above.");
       // The sandbox is the access step's to say while setup is open.
       expect(document.querySelector(".dash-sandbox")).toBeNull();
       expect(fake.unhandled).toEqual([]);
