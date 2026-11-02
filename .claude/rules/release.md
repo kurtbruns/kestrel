@@ -7,7 +7,7 @@ paths:
 
 # Releases
 
-A release starts in this repository and reaches three places beyond it: the two npm packages (`@kurtbruns/kestrel`, which instances install, and the unscoped `kestrel`, the client in `packages/kestrel/`, which anyone runs with `npx kestrel`), the docs on getkestrel.dev, and the live demo at demo.getkestrel.dev. The packages publish themselves from the tag. The site and the demo each pin a release and move only by a PR that moves the pin, so a release isn't finished until both have. The maintainer decides when to cut one, and the `release` skill (`/release`) carries it through all three. What goes in `CHANGELOG.md`, and how each line is written, is `.claude/rules/changelog.md`.
+A release starts in this repository and reaches three places beyond it: the two npm packages (`@kurtbruns/kestrel`, which instances install, and the unscoped `kestrel`, the client in `packages/kestrel/`, which anyone runs with `npx kestrel`), the docs on getkestrel.dev, and the live demo at demo.getkestrel.dev. The packages publish themselves from the tag. The site and the demo each pin a release and move only by a PR that moves the pin, so a release isn't finished until both have. The maintainer decides when to cut one, and the `release` skill (`/release`) carries it through all three. Before the tag it reviews the release whole, since each PR was reviewed only against its own issue and the places where they meet go unread otherwise. What goes in `CHANGELOG.md`, and how each line is written, is `.claude/rules/changelog.md`.
 
 ## When
 

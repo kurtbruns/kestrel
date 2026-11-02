@@ -22,7 +22,11 @@ describe("a refusal's advice", () => {
       "whoever runs the deployment",
     ],
     ["opt_in", ["enables SES for the account"], "whoever runs the deployment"],
-    ["configuration", ["SES_CONFIGURATION_SET", "creates the set"], "whoever runs the deployment"],
+    [
+      "configuration",
+      ["SES_CONFIGURATION_SET", "the sending identity’s default", "create the set"],
+      "whoever runs the deployment",
+    ],
     ["sending_pool", ["dedicated IP pool", "sending options"], "whoever runs the deployment"],
     ["unsupported", ["AWS_REGION", "updates Kestrel"], "whoever runs the deployment"],
     [

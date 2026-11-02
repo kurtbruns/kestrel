@@ -11,7 +11,7 @@ When to cut and how to number it are `.claude/rules/release.md`. This is the pro
 
 ```
 - [ ] 1. [Unreleased] reviewed against main
-- [ ] 2. Release PR gated, approved, merged
+- [ ] 2. Release PR gated, the release reviewed whole, approved, merged
 - [ ] 3. Tag pushed, GitHub release published
 - [ ] 4. npm serves the version, for both packages
 - [ ] 5. Site and demo PRs open, CI green, merged
@@ -36,7 +36,20 @@ On a branch off `origin/main`:
 2. `npm version X.Y.Z --no-git-tag-version` (bumps `package.json` and `package-lock.json` together, no commit, no tag), then the client's to match: `npm version X.Y.Z --no-git-tag-version --prefix packages/kestrel`. The two packages always carry one version.
 3. At the bottom of `CHANGELOG.md`, point `[Unreleased]` at `compare/vX.Y.Z...HEAD` and add `[X.Y.Z]: …/releases/tag/vX.Y.Z`.
 4. Run the gate: `npm test`, `npm run typecheck`, `npm run check:package`, `npm run check`.
-5. Open a PR titled "Release X.Y.Z", and merge it as `.claude/CLAUDE.md` says (Issues and pull requests).
+5. Open a PR titled "Release X.Y.Z".
+6. Review the release whole (below), and put its fixes in this PR, or in a small PR before it.
+7. Merge it as `.claude/CLAUDE.md` says (Issues and pull requests).
+
+### Review the release whole
+
+Each PR was reviewed against its own issue, so nothing has yet read the places where they meet: a line a later PR made untrue, a name it changed, an upgrade step two PRs each half-described. This review reads the release as an operator and a publisher will get it. Give it to a subagent with a fresh read, pointed at the release branch and the last tag, and have it report findings with line numbers and replacement text:
+
+- **The CHANGELOG as one story:** no two lines contradicting, no name a later PR changed, nothing missing that an operator or publisher would notice.
+- **The Upgrading paragraph as an operator coming from the last release:** every step there, in the order they run them.
+- **The documents end to end where the release changed them:** the docs, `docs/SPEC.md`, `docs/DESIGN.md`, the API reference, `template/claude/`, and the MCP instructions.
+- **A fresh instance and an upgraded one in local development:** one scaffolded new, and one migrated from the last release's schema with data in it.
+
+Bring the findings to the maintainer, who decides which to fix before the tag. A migration that ships in the release can only change before the tag.
 
 ## 3. Tag and GitHub release
 
