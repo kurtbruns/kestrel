@@ -125,7 +125,7 @@ describe("setup steps", () => {
     const provider = ses({ review: "pending", sending: sending("working"), signups: "open" });
     expect(read(setupSteps(facts({ provider, notifyTo: 2 })))).toEqual([
       "Connect Amazon SES: done (Sends through Amazon SES in us-west-2.)",
-      "Send a test email: done (Email is getting out.)",
+      `Send a test email: done (SES accepted an email ${fmt(1)}.)`,
       "Name your publication: done (Named “Symbol Soup”.)",
       "Get notified: done (Notifications go to 2 addresses.)",
       "Request production access: waiting (Waiting for AWS to grant production access.)",
@@ -158,7 +158,7 @@ describe("setup steps", () => {
       ),
     ).toEqual([
       "Connect Amazon SES: done (Sends through Amazon SES in us-west-2.)",
-      "Send a test email: done (Email is getting out.)",
+      `Send a test email: done (SES accepted an email ${fmt(1)}.)`,
       "Name your publication: done (Named “Symbol Soup”.)",
       "Get notified: done (Notifications go to 1 address.)",
       "Request production access: done (AWS granted it.)",
@@ -205,14 +205,15 @@ describe("setup steps", () => {
     const provider = providerStatus({ unknown_reason: "permission", signups: "open" });
     expect(read(setupSteps(facts({ provider })).filter((s) => s.key !== "list"))).toEqual([
       "Connect Amazon SES: done (Sends through Amazon SES in us-west-2.)",
-      "Send a test email: done (Email is getting out.)",
+      // No email recorded yet, as on an upgraded instance: the plain status.
+      "Send a test email: done (SES is accepting email.)",
       "Name your publication: done (Named “Symbol Soup”.)",
       "Get notified: todo",
       "Request production access: todo (Kestrel can’t read your SES account, so the SES console’s account dashboard says whether AWS granted it.)",
       "Write your first post: todo",
       "Schedule your first post: todo",
       "Send a test email for your first post: blocked (After Schedule your first post)",
-      "Share your subscribe link: todo (Share it once AWS has granted production access: Kestrel can’t tell yet.)",
+      "Share your subscribe link: todo (Share it once AWS grants production access.)",
     ]);
   });
 
@@ -222,7 +223,7 @@ describe("setup steps", () => {
     expect(read(failed.filter((s) => ["test", "access", "share"].includes(s.key)))).toEqual([
       "Send a test email: todo (Send one to yourself, and check it arrives.)",
       "Request production access: todo",
-      "Share your subscribe link: todo (Share it once AWS has granted production access: Kestrel can’t tell yet.)",
+      "Share your subscribe link: todo (Share it once AWS grants production access.)",
     ]);
     // A provider with no SES account to ask about: no production-access step at all.
     const standIn = setupSteps(facts({ provider: null, sesAccount: false }));

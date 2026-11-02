@@ -121,7 +121,9 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
             key: "test",
             title: TEST,
             state: "done",
-            hint: "Email is getting out.",
+            hint: sending.last_accepted
+              ? `SES accepted an email ${fmt(sending.last_accepted.at)}.`
+              : "SES is accepting email.",
           }
         : sending?.state === "refusing"
           ? { key: "test", title: TEST, state: "attention", hint: REFUSING }
@@ -220,11 +222,10 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
     state: closed ? "blocked" : "todo",
     hint: closed
       ? after(TEST)
-      : sandbox
-        ? "Share it once AWS grants production access."
-        : shareable(f)
-          ? null
-          : "Share it once AWS has granted production access: Kestrel can’t tell yet.",
+      : shareable(f)
+        ? null
+        : // In the sandbox, or while the account can't be read: the access step says which.
+          "Share it once AWS grants production access.",
   });
 
   return steps;
