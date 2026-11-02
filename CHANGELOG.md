@@ -24,7 +24,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
-- Settings → Reader pages shows the landing and archive pages as readers get them once signups are open, whatever the instance's state, so a publisher previewing mid-setup sees the Subscribe link and the empty landing page's form. The Subscribe note, and a tooltip on each row, say that Not open yet and Paused are what readers get while signups aren't open.
+- Settings → Reader pages shows the landing and archive pages as readers get them once signups are open, whatever the instance's state, so a publisher previewing mid-setup sees the Subscribe link and the empty landing page's form. Each page now has its own line, beside the preview and as its row's tooltip, saying how a reader comes to it, in place of one note per journey.
 - The subscribe form takes signups only while email is working, in the SES sandbox too, and otherwise says "Signups aren't open yet" or "Signups are paused" to every address alike, with a new `signups_closed` (503) for JSON (SPEC §7). A reader is no longer told a link is coming when none can go.
 - The operator's Claude context (`template/claude/CLAUDE.md`) and the MCP instructions offer the subscribe link only while signups are open and SES has production access, and say to send a template test once a refusal is fixed, so Claude never shares a closed form.
 - An SES bad request that names a configuration set, as a deleted default set causes, now refuses the account's configuration instead of failing one recipient for good.

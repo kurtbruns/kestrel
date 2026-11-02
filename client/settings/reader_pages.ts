@@ -19,16 +19,57 @@ import { apiText, describeError } from "../api";
 import { onAbort } from "../lifecycle";
 import { $, $$ } from "../ui/dom";
 import { framedCopy } from "../ui/email_frame";
-import { type Html, html, setHtml } from "../ui/html";
+import { type Html, html } from "../ui/html";
 import { type IconName, icon } from "../ui/icons";
 
-/** What on a journey's pages follows the publisher, what they word, and what is fixed. */
-const JOURNEY_NOTES: Record<ReaderJourneyId, Html> = {
-  subscribe: html`Your name, tagline, and logo head each page; the words are Kestrel’s. The embeddable form in Ways to subscribe posts to these pages too. Not open yet and Paused are what readers get in place of the form while signups aren’t open: until email is proven to work, and while it’s refusing.`,
-  confirm: html`Your identity heads each page. You word the email that links here, under Confirmation email; these pages’ words are fixed, so what a reader agrees to can’t be edited away.`,
-  unsubscribe: html`Your identity heads each page; the words are fixed, so leaving always reads the same. A mail client’s own Unsubscribe button leaves without a page.`,
-  reading: html`Your identity heads each page, and a post page is your <a class="set-link" href="#/template">email template</a> around the post, as its web version shows it. Where a page lists posts, they are samples. Each shows signups open; while they aren’t, these pages invite no one to subscribe.`,
+/** What the previews of pages that invite readers to subscribe add, since every preview
+ *  shows signups open whatever this instance's are (SPEC §5). */
+const SHOWN_OPEN =
+  "Shown with signups open; until they are, readers get no Subscribe link or form here.";
+
+/** How a reader comes to each page, as the note beside the preview and the page's row
+ *  tooltip say it: one line per state, so each answers one question. Typed over the shared
+ *  list, so a new page can't ship without its line. */
+type StateNotes = { [J in ReaderJourney as J["id"]]: Record<J["states"][number]["id"], string> };
+
+const STATE_NOTES: StateNotes = {
+  subscribe: {
+    form: "Your subscribe page, where a reader enters their email address.",
+    "check-inbox":
+      "What the reader is shown after pressing Subscribe, here or on a form embedded on your site.",
+    "not-an-email":
+      "When the email address a reader sent isn’t one that can be mailed. The browser catches most mistakes first.",
+    "not-open": "Shown in place of the form until you send your first email.",
+    paused:
+      "Shown in place of the form while your email provider won’t send for your account, as when SES pauses your sending.",
+  },
+  confirm: {
+    ready: "When a reader opens the link in your confirmation email.",
+    confirmed: "After they confirm. They’re on your list and get your next post.",
+    expired: "When a reader opens a confirmation link that’s too old. They can ask for a new one.",
+    invalid: "When a confirmation link is broken or mistyped.",
+  },
+  unsubscribe: {
+    ask: "When a reader opens the unsubscribe link in one of your emails. A mail application’s own Unsubscribe button skips this page and removes them right away.",
+    done: "After they confirm. They get no more of your emails.",
+    invalid: "When an unsubscribe link is broken or mistyped.",
+  },
+  reading: {
+    landing: `What anyone sees when they visit your newsletter’s website. The posts are samples. ${SHOWN_OPEN}`,
+    archive: `Every post in your archive. These are samples. ${SHOWN_OPEN}`,
+    post: `The web version of a post that went out. Readers reach it from View in browser in its email, or from your archive. ${SHOWN_OPEN}`,
+    "landing-empty": `Your newsletter’s website before your first post goes out. ${SHOWN_OPEN}`,
+    "archive-empty": `Your archive before your first post goes out. ${SHOWN_OPEN}`,
+    "not-found": "When a reader follows a link to a page that isn’t there.",
+  },
 };
+
+/** The line for one page of the list. */
+function stateNote(j: ReaderJourney, s: ReaderPageState): string {
+  const notes: Partial<Record<string, string>> = STATE_NOTES[j.id];
+  // The map's type gives every listed page a line, so this never falls back.
+  return notes[s.id] ?? "";
+}
 
 const JOURNEY_ICONS: Record<ReaderJourneyId, IconName> = {
   subscribe: "mail",
@@ -44,17 +85,11 @@ type PreviewWidth = "desktop" | "phone";
  *  puts it, so the circle's own centering places it exactly. */
 const PEER_DOT = html`<span class="set-rp-dot"></span>`;
 
-/** One row of the outline: a step's number, a peer's dot, or an off-path page's branch. A
- *  page shown while signups aren't open says when in its tooltip, since no reader's misstep
- *  leads there. */
+/** One row of the outline: a step's number, a peer's dot, or an off-path page's branch,
+ *  with how a reader comes to the page as its tooltip. */
 function outlineRow(j: ReaderJourney, s: ReaderPageState, mark: Html | string): Html {
-  return html`<li><button type="button" class="set-rp-item${s.offPath ? " off" : ""}" data-journey="${j.id}" data-state="${s.id}" aria-current="false"${
-    s.whileClosed ? html` title="${WHILE_CLOSED}"` : null
-  }><span class="set-rp-mark" aria-hidden="true">${mark}</span>${s.label}</button></li>`;
+  return html`<li><button type="button" class="set-rp-item${s.offPath ? " off" : ""}" data-journey="${j.id}" data-state="${s.id}" aria-current="false" title="${stateNote(j, s)}"><span class="set-rp-mark" aria-hidden="true">${mark}</span>${s.label}</button></li>`;
 }
-
-/** When readers get a page shown while signups aren't open, as its row's tooltip says. */
-const WHILE_CLOSED = "Shown in place of the form while signups aren’t open";
 
 /** The outline: each journey a heading over its main-path pages, then the ones off it.
  *  A thread joins a journey's steps; peers carry a dot, not a number. The off-path pages
@@ -161,7 +196,7 @@ export function mountReaderPages(
     select.value = `${journey.id}/${state.id}`;
     $("#rpJourney", root).textContent = journey.label;
     $("#rpState", root).textContent = state.label;
-    setHtml($("#rpNote", root), JOURNEY_NOTES[journey.id]);
+    $("#rpNote", root).textContent = stateNote(journey, state);
     $("#rpAt", root).textContent = readerPageAddress(state.at, deployment);
   };
 

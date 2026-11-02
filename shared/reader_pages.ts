@@ -12,13 +12,11 @@ export interface ReaderPageAddress {
 
 /** One page or state a reader can land on. `offPath` marks one a reader reaches only when
  *  something goes wrong or there is nothing yet (an expired link, a publication that has
- *  sent no post). `whileClosed` marks one shown in place of the form while signups aren't open (SPEC §7,
- *  §13), which the instance causes, not the reader. */
+ *  sent no post). */
 export interface ReaderPageState {
   id: string;
   label: string;
   offPath?: true;
-  whileClosed?: true;
   at: ReaderPageAddress;
 }
 
@@ -40,8 +38,8 @@ export const READER_JOURNEYS = [
       { id: "check-inbox", label: "Check your inbox", at: SUBSCRIBE },
       { id: "not-an-email", label: "Not an email", offPath: true, at: SUBSCRIBE },
       // While email isn't working: before it is proven, and while the provider refuses it.
-      { id: "not-open", label: "Not open yet", offPath: true, whileClosed: true, at: SUBSCRIBE },
-      { id: "paused", label: "Paused", offPath: true, whileClosed: true, at: SUBSCRIBE },
+      { id: "not-open", label: "Not open yet", offPath: true, at: SUBSCRIBE },
+      { id: "paused", label: "Paused", offPath: true, at: SUBSCRIBE },
     ],
   },
   {
