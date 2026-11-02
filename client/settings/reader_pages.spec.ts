@@ -115,12 +115,41 @@ describe("reader pages section (SPEC §5)", () => {
     }
   });
 
+  it("says how a reader comes to each page, in the note and as its row's tooltip", async () => {
+    await open();
+    // Every row has its own line, and the note shows the chosen page's.
+    for (const b of $$(".set-rp-item")) {
+      expect(b.getAttribute("title")).toBeTruthy();
+    }
+    expect(row("subscribe", "Paused").getAttribute("title")).toMatch(
+      /^Shown in place of the form while/,
+    );
+    row("subscribe", "Not open yet").click();
+    await settle();
+    expect($("#rpNote").textContent).toBe(
+      "Shown in place of the form until your email provider accepts your first email, such as a test.",
+    );
+    expect($("#rpNote").textContent).toBe(row("subscribe", "Not open yet").getAttribute("title"));
+    // The Reading pages that invite readers to subscribe say they're shown with signups open.
+    row("reading", "Archive").click();
+    await settle();
+    expect($("#rpNote").textContent).toMatch(/Shown with signups open/);
+    // A post page and Nothing here yet carry no Subscribe link or form, so say nothing of signups.
+    for (const label of ["Post page", "Nothing here yet"]) {
+      row("reading", label).click();
+      await settle();
+      expect($("#rpNote").textContent).not.toMatch(/signups/);
+    }
+  });
+
   it("opens on the subscribe form, framed so no form on it submits", async () => {
     await open();
     expect(current()).toEqual(["subscribe/form"]);
     expect($("#rpJourney").textContent).toBe("Subscribe");
     expect($("#rpState").textContent).toBe("Form");
-    expect($("#rpNote").textContent).toMatch(/Your name, tagline, and logo head each page/);
+    expect($("#rpNote").textContent).toBe(
+      "Your subscribe page, where a reader enters their email address.",
+    );
     expect($("#rpAt").textContent).toBe("app.birds.example/subscribe");
     expect(reads()).toEqual(["/api/reader-pages/subscribe/form"]);
     expect(frame().srcdoc).toContain("/api/reader-pages/subscribe/form");
@@ -130,7 +159,7 @@ describe("reader pages section (SPEC §5)", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("shows the page a row names, with its journey's note and where a reader meets it", async () => {
+  it("shows the page a row names, with its note and where a reader meets it", async () => {
     await open();
     row("confirm", "Expired").click();
     await settle();
@@ -138,13 +167,13 @@ describe("reader pages section (SPEC §5)", () => {
     expect($(".set-rp-journey.current").dataset.journey).toBe("confirm");
     expect($("#rpJourney").textContent).toBe("Confirm");
     expect($("#rpState").textContent).toBe("Expired");
-    expect($("#rpNote").textContent).toMatch(/what a reader agrees to can’t be edited away/);
+    expect($("#rpNote").textContent).toMatch(/confirmation link that’s too old/);
     expect($("#rpAt").textContent).toBe("app.birds.example/confirm?token=…");
     expect($<HTMLSelectElement>("#rpSelect").value).toBe("confirm/expired");
     row("reading", "Post page").click();
     await settle();
     expect($("#rpAt").textContent).toBe("app.birds.example/archive/sample-post");
-    expect($("#rpNote a").getAttribute("href")).toBe("#/template");
+    expect($("#rpNote").textContent).toMatch(/^The web version of a post/);
     // The row already shown reads nothing again.
     row("reading", "Post page").click();
     await settle();

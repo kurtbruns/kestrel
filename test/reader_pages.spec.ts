@@ -91,6 +91,24 @@ describe("reader page previews (SPEC §5)", () => {
     expect(fakeOutbox()).toHaveLength(0);
   });
 
+  it("show the reading pages with signups open, whatever this instance's are, since closed signups are previews of their own (SPEC §7)", async () => {
+    // A fresh instance: email isn't proven yet, so the real pages invite no one.
+    await resetDatabase();
+    await updateSettings(env.DB, { publication: { name: publication } });
+    const read = async (state: string) => (await preview("reading", state)).text();
+    expect(await read("landing-empty")).toContain(
+      "No posts yet. Subscribe to get the first one in your inbox.",
+    );
+    expect(await read("landing-empty")).toContain('name="email"');
+    for (const state of ["landing", "archive", "archive-empty"]) {
+      expect(await read(state), state).toContain('class="r-sub"');
+    }
+    // The pages a reader gets in their place are the Subscribe journey's.
+    expect(await (await preview("subscribe", "not-open")).text()).toContain(
+      "Signups aren’t open yet",
+    );
+  });
+
   it("answers 404 for a page the catalog lacks", async () => {
     expect((await preview("subscribe", "nope")).status).toBe(404);
     expect((await preview("nope", "form")).status).toBe(404);
