@@ -1095,7 +1095,7 @@ describe("settings view", () => {
       sending_enabled: true,
     } as const;
 
-    it("says whether email is getting out: not proven yet, refusing with the fix, or when SES last took one (SPEC §13)", async () => {
+    it("says whether email is getting out: not proven yet, refusing with the fix, or when SES accepted an email (SPEC §13)", async () => {
       await withStatus({
         state: "production",
         unknown_reason: null,
@@ -1143,7 +1143,7 @@ describe("settings view", () => {
         },
       });
       expect(document.querySelector("#providerSending")).toBeNull();
-      expect($("#providerLastAccepted").textContent).toBe(`SES last took a test: ${fmt(1)}.`);
+      expect($("#providerLastAccepted").textContent).toBe(`SES accepted an email ${fmt(1)}.`);
     });
 
     it("names the sandbox, what it limits, and the step that asks AWS to lift it", async () => {
