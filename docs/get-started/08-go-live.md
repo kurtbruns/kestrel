@@ -12,6 +12,8 @@ If someone else is the publisher, let them sign in first:
 
 1. If they don't have a Cloudflare account, add another way to sign in, such as a one-time code by email. It's under **Zero Trust → Integrations → Identity providers**.
 
+1. Add their address under **Settings → Notifications** beside yours, so a problem reaches both of you.
+
 1. Send them the editor's address and a link to [Name your publication](../publishing/03-name-your-publication.md).
 
 ## Optional next steps

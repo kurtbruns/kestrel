@@ -4,12 +4,7 @@
 // warnings, and the refusal are the server's; the editor only words the states and shows each
 // warning as it comes, red for an `error` and amber for a `warn`.
 
-import type {
-  ProviderStatusView,
-  ProviderWarning,
-  SendingPurpose,
-  SendingRefusal,
-} from "../shared/provider";
+import type { ProviderStatusView, ProviderWarning, SendingRefusal } from "../shared/provider";
 import type { DeploymentView } from "../shared/settings";
 import { api } from "./api";
 import { type Html, html } from "./ui/html";
@@ -192,13 +187,6 @@ export function signupsPausedHtml(): Html {
   return html`Signups are paused: Amazon SES is refusing email, including confirmations. <a href="#/">See what to fix</a>`;
 }
 
-const ACCEPTED_BY: Record<SendingPurpose, string> = {
-  test: "a test",
-  confirmation: "a confirmation",
-  list: "a post",
-  notification: "a notification",
-};
-
 /**
  * Settings' line under the Email provider for whether email is getting out (SPEC §13): its
  * pill (none while working) and what it means. Null with no provider.
@@ -212,7 +200,7 @@ export function sendingHtml(
     return null;
   }
   const last = s.last_accepted
-    ? html`<span class="muted" id="providerLastAccepted">SES last took ${ACCEPTED_BY[s.last_accepted.by]}: ${when(s.last_accepted.at)}.</span>`
+    ? html`<span class="muted" id="providerLastAccepted">SES accepted an email ${when(s.last_accepted.at)}.</span>`
     : null;
   if (s.state === "refusing" && s.refusal) {
     return {

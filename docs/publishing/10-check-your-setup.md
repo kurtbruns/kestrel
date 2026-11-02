@@ -1,6 +1,6 @@
 # Check your setup
 
-Two checks before your readers get anything: is email getting out, and what will your readers get. The dashboard's setup steps tick each one off from what Kestrel sees, so you, and Claude, can tell what's left.
+Three checks before your readers get anything: is email getting out, will you hear about problems, and what will your readers get. The dashboard's setup steps tick each one off from what Kestrel sees, so you, and Claude, can tell what's left.
 
 **Email has to be connected first.** Until it is, nothing can be sent, and **Send a test email** waits on the dashboard's **Connect Amazon SES** step, which [Connect Amazon SES](../get-started/05-ses.md) covers.
 
@@ -18,7 +18,7 @@ If SES refuses the test, the dashboard says why in red above the steps, with wha
 
 ## 2. Get notified
 
-Under **Settings → Notifications**, add your address under **Send notifications to** with **Add inbox**, save, and choose **Send a test notification**. It goes to each address. If someone else runs your instance, add their address too, so a problem reaches both of you. Kestrel then emails you when a send finishes or needs you, as [Notifications](06-troubleshooting.md#notifications) lists. The step is checked off once an address is saved. If the last notification didn't arrive, the dashboard says so above the steps, with the channel's words.
+Under **Settings → Notifications**, add your address under **Send notifications to** with **Add inbox**, save, and choose **Send a test notification**. It goes to each address. If someone else runs your instance, add their address too, so a problem reaches both of you. Kestrel then emails you when a send finishes or needs you, as [Notifications](06-troubleshooting.md#notifications) lists. The step is checked off once an address is saved and the last notification arrived. If the last notification didn't arrive, the dashboard says so above the steps, with the channel's words.
 
 ## 3. See what your readers get
 
