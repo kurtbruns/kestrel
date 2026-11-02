@@ -24,10 +24,10 @@ import { type IconName, icon } from "../ui/icons";
 
 /** What on a journey's pages follows the publisher, what they word, and what is fixed. */
 const JOURNEY_NOTES: Record<ReaderJourneyId, Html> = {
-  subscribe: html`Your name, tagline, and logo head each page; the words are Kestrel’s. The embeddable form in Ways to subscribe posts to these pages too.`,
+  subscribe: html`Your name, tagline, and logo head each page; the words are Kestrel’s. The embeddable form in Ways to subscribe posts to these pages too. Pages marked with a pause are shown in place of the form while signups aren’t open: until email is proven to work, and while it’s refusing.`,
   confirm: html`Your identity heads each page. You word the email that links here, under Confirmation email; these pages’ words are fixed, so what a reader agrees to can’t be edited away.`,
   unsubscribe: html`Your identity heads each page; the words are fixed, so leaving always reads the same. A mail client’s own Unsubscribe button leaves without a page.`,
-  reading: html`Your identity heads each page, and a post page is your <a class="set-link" href="#/template">email template</a> around the post, as its web version shows it. Where a page lists posts, they are samples.`,
+  reading: html`Your identity heads each page, and a post page is your <a class="set-link" href="#/template">email template</a> around the post, as its web version shows it. Where a page lists posts, they are samples. Each shows signups open; while they aren’t, these pages invite no one to subscribe.`,
 };
 
 const JOURNEY_ICONS: Record<ReaderJourneyId, IconName> = {
@@ -44,10 +44,17 @@ type PreviewWidth = "desktop" | "phone";
  *  puts it, so the circle's own centering places it exactly. */
 const PEER_DOT = html`<span class="set-rp-dot"></span>`;
 
-/** One row of the outline: a step's number, a peer's dot, or an off-path page's branch. */
+/** One row of the outline: a step's number, a peer's dot, an off-path page's branch, or a
+ *  pause for a page the instance shows while signups aren't open, which no reader's misstep
+ *  causes. That one says so in its tooltip, since the mark itself is decorative. */
 function outlineRow(j: ReaderJourney, s: ReaderPageState, mark: Html | string): Html {
-  return html`<li><button type="button" class="set-rp-item${s.offPath ? " off" : ""}" data-journey="${j.id}" data-state="${s.id}" aria-current="false"><span class="set-rp-mark" aria-hidden="true">${mark}</span>${s.label}</button></li>`;
+  return html`<li><button type="button" class="set-rp-item${s.offPath ? " off" : ""}" data-journey="${j.id}" data-state="${s.id}" aria-current="false"${
+    s.whileClosed ? html` title="${WHILE_CLOSED}"` : null
+  }><span class="set-rp-mark" aria-hidden="true">${mark}</span>${s.label}</button></li>`;
 }
+
+/** What a paused row's tooltip says about when readers get it. */
+const WHILE_CLOSED = "Shown in place of the form while signups aren’t open";
 
 /** The outline: each journey a heading over its main-path pages, then the ones off it.
  *  A thread joins a journey's steps; peers carry a dot, not a number. The off-path pages
@@ -63,7 +70,9 @@ function outline(): Html {
         ${states.filter((s) => !s.offPath).map((s, i) => outlineRow(j, s, steps ? String(i + 1) : PEER_DOT))}
       </ul>
       <ul class="set-rp-list" aria-label="${j.label}, off the main path">
-        ${states.filter((s) => s.offPath).map((s) => outlineRow(j, s, icon("branch")))}
+        ${states
+          .filter((s) => s.offPath)
+          .map((s) => outlineRow(j, s, icon(s.whileClosed ? "pause" : "branch")))}
       </ul>
     </div>`;
   })}`;

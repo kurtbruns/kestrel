@@ -115,6 +115,29 @@ describe("reader pages section (SPEC §5)", () => {
     }
   });
 
+  it("marks the pages shown while signups aren't open with a pause, not a branch, and says when in a tooltip", async () => {
+    await open();
+    const off = $$('.set-rp-journey[data-journey="subscribe"] .set-rp-item.off');
+    expect(
+      off.map((b) => [
+        b.dataset.state,
+        b.querySelector(".set-rp-mark svg path")?.getAttribute("d"),
+        b.getAttribute("title"),
+      ]),
+    ).toEqual([
+      ["not-an-email", "M6 3v8a4 4 0 0 0 4 4h8", null],
+      ["not-open", "M9 6v12", "Shown in place of the form while signups aren’t open"],
+      ["paused", "M9 6v12", "Shown in place of the form while signups aren’t open"],
+    ]);
+    // The note says what the mark means, and that the Reading pages show signups open.
+    expect($("#rpNote").textContent).toMatch(
+      /Pages marked with a pause are shown in place of the form while signups aren’t open/,
+    );
+    row("reading", "Archive").click();
+    await settle();
+    expect($("#rpNote").textContent).toMatch(/Each shows signups open/);
+  });
+
   it("opens on the subscribe form, framed so no form on it submits", async () => {
     await open();
     expect(current()).toEqual(["subscribe/form"]);

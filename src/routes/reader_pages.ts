@@ -2,7 +2,10 @@
  * Settings' previews of the reader pages (SPEC §5): every page and state a reader can land
  * on, rendered by the code that serves the real page, with the publication's saved
  * identity and sample values in place of a reader's, and nothing else: the frame Settings
- * holds it in says it is a preview, so the page is exactly a reader's. Authed, and never a
+ * holds it in says it is a preview, so the page is exactly a reader's. Each shows the
+ * publication once set up, with signups open, whatever this instance's are now: the pages
+ * readers get while they aren't open are previews of their own (Not open yet, Paused), so
+ * a publisher mid-setup still sees what readers will get. Authed, and never a
  * public page (§11): a preview shows, it never acts.
  *   GET /api/reader-pages/:journey/:state → the page as a standalone HTML document
  */
@@ -16,7 +19,6 @@ import { archiveUrl, render } from "../render/render";
 import { resolveBranding } from "../render/template_engine";
 import type { RequestContext } from "../router";
 import { param } from "../router";
-import { readSignups } from "../services/sending";
 import { formatPublishedDate, nothingHereYetPage, webVersion } from "./archive";
 import {
   confirmStatePage,
@@ -90,13 +92,13 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
         archiveUrl: archiveHomeUrl(c.config),
         featured,
         recent,
-        signupsOpen: (await readSignups(c.env.DB, c.config)) === "open",
+        signupsOpen: true,
       });
     }
     case "reading/archive":
       return archiveIndexPage({
         identity: await readerIdentity(c, c.config),
-        subscribeUrl: (await readSignups(c.env.DB, c.config)) === "open" ? subscribeUrl : undefined,
+        subscribeUrl,
         homeUrl: home,
         posts: samplePosts(c, Date.now()),
       });
@@ -108,12 +110,12 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
         homeUrl: home,
         archiveUrl: archiveHomeUrl(c.config),
         recent: [],
-        signupsOpen: (await readSignups(c.env.DB, c.config)) === "open",
+        signupsOpen: true,
       });
     case "reading/archive-empty":
       return archiveIndexPage({
         identity: await readerIdentity(c, c.config),
-        subscribeUrl: (await readSignups(c.env.DB, c.config)) === "open" ? subscribeUrl : undefined,
+        subscribeUrl,
         homeUrl: home,
         posts: [],
       });
