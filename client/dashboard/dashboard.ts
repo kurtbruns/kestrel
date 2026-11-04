@@ -302,7 +302,9 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   const deployment = appState.appConfig?.deployment ?? null;
 
   // A post listed in the archive has been published (its send started): the moment setup
-  // ends. An email-only post (Verify it works' test send) doesn't count (SPEC §5).
+  // ends. An email-only post (Verify it works' test send) doesn't count (SPEC §5). This is
+  // worked out from the sends and recorded nowhere, so setup follows the archive: unlisting the
+  // only listed post reopens it, and listing a sent email-only post closes it.
   const archived = () =>
     sends.some((s) => (s.status === "sending" || s.status === "sent") && !s.email_only);
   // What the setup steps read, each a fact Claude can read too (DESIGN §3, SPEC §13).

@@ -4947,6 +4947,10 @@ button.copy-btn.api-copy-path {
 }
 .setup-card .setup-title {
   font-size: 16px;
+  margin-bottom: 4px;
+}
+.setup-note {
+  margin: 0;
 }
 .setup-card .setup-steps li {
   min-height: 51px;
