@@ -42,9 +42,11 @@ const NOTIFICATION_KINDS: Record<NotificationStatusKind, string> = {
   stuck: "in flight too long",
   wedged: "waiting to be resolved",
   missed: "missed fire time",
+  no_receipts: "no receipts from the provider",
   import: "list imported",
   sandbox: "signup refused by the SES sandbox",
   not_sending: "email not going out",
+  not_sending_held: "email not going out",
   test: "test",
 };
 

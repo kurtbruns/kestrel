@@ -13,7 +13,6 @@
 import type { ImportRecord, OptIn, OutcomeCounts } from "../../shared/imports";
 import type { SubscriberStatus, UnsubscribeCause } from "../../shared/subscribers";
 import { readOutcomeCounts } from "./import_counts";
-import { importNotice } from "./notifications";
 
 /**
  * The most bytes of JSON one statement binds. D1 refuses a string over 2,000,000 bytes;
@@ -213,8 +212,6 @@ export interface ImportWrites {
   suppress: { e: string; r: string; at: number | null }[];
   /** The addresses the file says left by an erasure, whose records are stripped to the address. */
   erase: string[];
-  /** Whether to tell the publisher of the import (one a service token committed, SPEC §8). */
-  notice: boolean;
 }
 
 /** The addresses each write actually changed. */
@@ -234,7 +231,7 @@ const v = (field: string) => `json_extract(j.value, '$.${field}')`;
  * names it), then, each guarded against the list as it stands, the unsubscribes, the new
  * unsubscribed addresses, the confirmations of pending subscribers, the new confirmed ones,
  * the suppressions, the stripping of whoever the file says left by an erasure, the records of
- * past sends losing their address (`forget`), and the publisher's notice. Confirmations run before the suppressions so a row's own bounce lands
+ * past sends losing their address (`forget`). Confirmations run before the suppressions so a row's own bounce lands
  * beside its subscriber; a suppression already here holds any confirmation back and is never
  * replaced. Throws on a second import of the same plan (`plan_hash` is unique), having
  * written nothing.
@@ -396,9 +393,6 @@ export async function applyImport(
   // Then the records of past sends lose each erased person's address, as Erase rewrites them:
   // `forget` is `forgetDeliveries`' statements for the addresses this import erases.
   statements.push(...forget);
-  if (writes.notice) {
-    statements.push(importNotice(db, r.id, now));
-  }
 
   const results = await db.batch<{ email: string }>(statements);
   const applied: AppliedWrites = {

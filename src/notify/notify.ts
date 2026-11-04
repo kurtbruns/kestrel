@@ -1,6 +1,6 @@
 /**
- * The sweep's last step: tell the publisher about what happened to their sends, and of a list
- * a service token imported (SPEC §8).
+ * The sweep's last step: tell the publisher about what happened to their sends and whether
+ * email is getting out (SPEC §8).
  *
  * Each tick records every new event once (`recordNotifications`), then delivers the
  * pending ones through the channel to every address set, as many as its share of the
@@ -36,9 +36,8 @@ import { isWedged } from "../send/wedged";
 import { Contacts, sendingView } from "../services/sending";
 import { getNotifier } from "./channel";
 import {
-  composeImportNotification,
   composeNotification,
-  composeNotSendingNotification,
+  composeOutageNotification,
   composeSandboxNotification,
 } from "./compose";
 
@@ -54,6 +53,11 @@ export const NOTIFY_RESERVE = OPEN_COST + EACH_COST;
 /** The most a tick delivers, however much budget is left, so a backlog drains steadily. */
 const MAX_PER_TICK = 10;
 
+/** A notice that email isn't going out, the first of an outage or the one further (SPEC §8). */
+function isOutageNotice(n: notifications.DueAny): n is notifications.DueNotSendingNotification {
+  return n.kind === "not_sending" || n.kind === "not_sending_held";
+}
+
 /**
  * Whether the event a notification tells of is still true of the send now. A finished
  * send stays finished, and a send that went out late stays late; the other problems can
@@ -63,14 +67,16 @@ const MAX_PER_TICK = 10;
  */
 export function stillHolds(n: notifications.DueAny, now: number): boolean {
   switch (n.kind) {
-    case "import":
     case "sandbox":
       return true;
     case "not_sending":
+    case "not_sending_held":
       // Whether email is still refusing is read where it is delivered (`notifyPublisher`).
       return true;
     case "finished":
       return true;
+    case "no_receipts":
+      return !n.receipt_since;
     case "refused":
       // A wedged send is no longer retried, whatever halt it last carried, so it waits on
       // Resolve, not on the refusal (as its conditions say).
@@ -85,9 +91,8 @@ export function stillHolds(n: notifications.DueAny, now: number): boolean {
     case "wedged":
       return isWedged({ ...n, status: n.send_status });
     case "missed":
-      return n.send_status === "scheduled"
-        ? n.fire_at < now - MISSED_THRESHOLD_MS
-        : n.started_at !== null && n.started_at - n.fire_at > MISSED_THRESHOLD_MS;
+      // Once it has gone out, its Sent email says how late.
+      return n.send_status === "scheduled" && n.fire_at < now - MISSED_THRESHOLD_MS;
   }
 }
 
@@ -115,12 +120,17 @@ export async function notifyPublisher(
   if (due.length === 0) {
     return;
   }
-  // A notice that email isn't going out is told from the refusal as it stands, read once, and
-  // only when one is due. The read takes a place in the list when the tick has no room to
-  // spare, and a tick with only its reserve leaves them all for one with more.
+  // A notice that email isn't going out is told from the refusal and the posts it holds as they
+  // stand, read once, and only when one is due. The reads take places in the list when the tick
+  // has no room to spare, and a tick with only its reserve leaves them all for one with more.
   let refusal: SendingRefusal | null = null;
-  if (due.some((n) => n.kind === "not_sending")) {
-    refusal = sendingView(config, await readSending(db))?.refusal ?? null;
+  let since = now;
+  let held: string[] = [];
+  if (due.some(isOutageNotice)) {
+    const view = sendingView(config, await readSending(db));
+    refusal = view?.refusal ?? null;
+    since = view?.since ?? now;
+    held = await notifications.postsHeldByOutage(db);
     due = due.slice(0, Math.floor((budget.left - (OPEN_COST - 2)) / EACH_COST));
     if (due.length === 0) {
       return;
@@ -137,25 +147,22 @@ export async function notifyPublisher(
   for (const [i, n] of due.entries()) {
     // Every claimed notification still to come needs its outcome recorded, this one included.
     const recordsLeft = due.length - i;
-    if (!stillHolds(n, Date.now()) || (n.kind === "not_sending" && !refusal)) {
+    if (n.kind === "not_sending_held" && refusal && held.length === 0) {
+      await notifications.forgetNotification(db, n);
+      continue;
+    }
+    if (!stillHolds(n, Date.now()) || (isOutageNotice(n) && !refusal)) {
       await notifications.recordNotificationOutcome(db, n, { status: "cleared" }, Date.now());
       continue;
     }
-    const about =
-      n.kind === "import"
-        ? { importId: n.import_id }
-        : n.kind === "sandbox" || n.kind === "not_sending"
-          ? {}
-          : { sendId: n.send_id };
-    const key = `${n.send_id ?? n.import_id ?? "account"}-${n.kind}-${n.episode}`;
+    const about = n.send_id === null ? {} : { sendId: n.send_id };
+    const key = `${n.send_id ?? "account"}-${n.kind}-${n.episode}`;
     const write = () =>
-      n.kind === "import"
-        ? composeImportNotification(n, config)
-        : n.kind === "sandbox"
-          ? composeSandboxNotification(config)
-          : n.kind === "not_sending"
-            ? composeNotSendingNotification(unwrap(refusal, "the refusal"), config)
-            : composeNotification(n, config);
+      n.kind === "sandbox"
+        ? composeSandboxNotification(config)
+        : isOutageNotice(n)
+          ? composeOutageNotification(unwrap(refusal, "the refusal"), since, held, config)
+          : composeNotification(n, config);
     let email: ReturnType<typeof write> | undefined;
     // Only the addresses it hasn't reached: one that got it on an earlier try never gets it
     // again because another failed.
