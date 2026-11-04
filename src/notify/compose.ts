@@ -343,10 +343,10 @@ export function composeOutageNotification(
   return problem({
     subject: `Email isn’t going out, and ${waiting}`,
     happened,
-    affected: `Nothing can go out until it’s fixed: ${one ? waiting : `${posts.join(", ")} are waiting`}, and signups are paused.`,
+    affected: `Nothing can go out until it’s fixed: ${one ? waiting : `${posts.slice(0, -1).join(", ")} and ${posts.at(-1)} are waiting`}, and signups are paused.`,
     said: said(refusal.error),
     todo: refusal.advice,
-    next: `Once it’s fixed, ${one ? `${first} carries` : "they carry"} on by itself within the hour, and any other post that comes due waits with ${one ? "it" : "them"}. To reopen signups right away, send a test email from the Template screen. ${NO_ONE_HARMED}${late}`,
+    next: `Once it’s fixed, ${one ? `${first} carries on by itself` : "they carry on by themselves"} within the hour, and any other post that comes due waits with ${one ? "it" : "them"}. To reopen signups right away, send a test email from the Template screen. ${NO_ONE_HARMED}${late}`,
     link,
   });
 }

@@ -550,8 +550,8 @@ describe("email not going out (SPEC §8)", () => {
     await notifyPublisher(env, new Budget(50));
     const sent = fakeNotifications();
     expect(sent.map((n) => n.subject)).toEqual(["Email isn’t going out, and 2 posts are waiting"]);
-    expect(sent[0]!.text).toContain('"One"');
-    expect(sent[0]!.text).toContain('"Two"');
+    expect(sent[0]!.text).toMatch(/"(One|Two)" and "(One|Two)" are waiting/);
+    expect(sent[0]!.text).toContain("they carry on by themselves within the hour");
   });
 
   it("closes the notice unsent when an email went through before it was told", async () => {
