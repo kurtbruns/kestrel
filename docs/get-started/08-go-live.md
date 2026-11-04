@@ -8,7 +8,7 @@ Open the editor at `https://newsletter.example.com/dashboard/`. The dashboard's 
 
 ## If someone else is writing it
 
-[Let them into the editor](03-access.md#let-someone-else-in), and add their address beside yours under **Settings → Notifications**, so a problem reaches both of you. Then send them the editor's address and a link to [Publishing](../publishing/README.md). The dashboard's setup steps show them what's left.
+[Let them into the editor](03-access.md#allow-someone-else-in), and add their address beside yours under **Settings → Notifications**, so a problem reaches both of you. Then send them the editor's address and a link to [Publishing](../publishing/README.md). The dashboard's setup steps show them what's left.
 
 ## Optional guides
 
