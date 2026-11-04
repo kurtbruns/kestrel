@@ -693,7 +693,7 @@ describe("provenance is keyed on the import, not on the file's claims (SPEC §7)
   });
 });
 
-describe("the record and the notice (SPEC §8)", () => {
+describe("the record (SPEC §8)", () => {
   it("keeps who committed it, the attestation's version, the file, and the counts, and no subscriber's address", async () => {
     const file = csvFile(["a@x.io,subscribed,double,sendy,,,,,,"]);
     const result = await importFile(file);
@@ -709,7 +709,7 @@ describe("the record and the notice (SPEC §8)", () => {
     });
     expect(JSON.parse(row?.counts as string)).toEqual(counts({ added_confirmed: 1 }));
     expect(JSON.stringify(row)).not.toContain("a@x.io");
-    // A person's import needs no notice: they saw it happen.
+    // Nobody is told of an import by email, whoever made it.
     expect(await count("SELECT COUNT(*) AS n FROM notifications")).toBe(0);
   });
 
@@ -718,7 +718,7 @@ describe("the record and the notice (SPEC §8)", () => {
     expect(result.import.attestation_version).toBeNull();
   });
 
-  it("lets a service token attest, records it as the service, and emails the publisher the counts", async () => {
+  it("lets a service token attest, records it as the service, and tells no one by email", async () => {
     await updateSettings(env.DB, { notifications: { to: ["publisher@example.com"] } });
     const service = { ...(await adminAuth({})), "content-type": "application/json" };
     const file = csvFile([
@@ -732,19 +732,10 @@ describe("the record and the notice (SPEC §8)", () => {
     expect(result.import.principal).toEqual({ kind: "service", email: null, client: null });
 
     await notifyPublisher(env, new Budget(50));
-    const sent = fakeNotifications();
-    expect(sent).toHaveLength(1);
-    expect(sent[0]?.subject).toBe("A service token imported 1 subscribers from list.csv");
-    expect(sent[0]?.text).toContain("Confirmed as subscribers: 1. Unsubscribed: 1.");
-    expect(sent[0]?.text).toContain("The service token attested for you");
-    expect(sent[0]?.text).toContain("/dashboard/?to=/subscribers");
-    // Told once.
-    await notifyPublisher(env, new Budget(50));
-    expect(fakeNotifications()).toHaveLength(1);
+    expect(fakeNotifications()).toEqual([]);
   });
 
-  it("reads a record whose counts an earlier release wrote under the outcomes' former names, in the record and the notice", async () => {
-    await updateSettings(env.DB, { notifications: { to: ["publisher@example.com"] } });
+  it("reads a record whose counts an earlier release wrote under the outcomes' former names", async () => {
     const service = { ...(await adminAuth({})), "content-type": "application/json" };
     const file = csvFile(["a@x.io,subscribed,double,sendy,,,,,,"]);
     const p = await planOk({ file });
@@ -778,11 +769,6 @@ describe("the record and the notice (SPEC §8)", () => {
         kept_suppressed: 5,
         suppressed: 6,
       }),
-    );
-    await notifyPublisher(env, new Budget(50));
-    expect(fakeNotifications()[0]?.text).toContain("Confirmed as subscribers: 3. Unsubscribed: 7.");
-    expect(fakeNotifications()[0]?.text).toContain(
-      "Not imported as subscribers (suppressed here, unsubscribed here, invalid, or with no consent claim): 5.",
     );
   });
 });

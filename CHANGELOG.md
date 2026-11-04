@@ -10,6 +10,21 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+**Upgrading.** Run the new database migration, as [Upgrade to a new release](docs/guides/07-upgrade.md) says.
+
+### Added
+
+- Kestrel emails you when your provider has sent no receipts for six hours after a send, once until a receipt arrives, since a broken connection stops bounces and complaints from suppressing anyone (SPEC §8).
+
+### Changed
+
+- Notification emails are rewritten to say whether anyone has to act, and how, with the details left to the dashboard: Sent is one sentence and a link, every problem reads in one order, links are named for what you'd do there, and each email says why you got it (SPEC §8).
+- One outage now sends one email instead of a per-day notice beside a per-post one, naming the posts it holds, plus one more if a post is first held after an email that named none (SPEC §8). The notification status's `kind` gains `no_receipts` and `not_sending_held`.
+- A send that goes out late says so in its Sent email instead of a separate one, and a finished send no one accepted is now told as a problem, since it can't be sent again (SPEC §8).
+- A reader's address in your provider's words shows only as its domain in an email, and in full on the send's page (SPEC §12).
+- The fix for a provider refusal, in the editor, the API's `advice` and `message`, and email, now says what to do and adds "If someone else set up Kestrel for you, pass this along to them." instead of "Whoever runs the deployment" (SPEC §12).
+- Kestrel no longer emails you when a service token imports a list. The import stays on the record with who committed it (SPEC §7).
+
 ### Fixed
 
 - An image uploaded with spaces in its name, as every macOS screenshot has, or with other characters that break a Markdown reference, now shows in the email instead of its `![…](…)` text: the upload stores it with hyphens in their place and answers that `filename` to reference, and images already stored keep their names. The preview now warns when text that reads as an image reference didn't become an image, and when an image uploaded to the post isn't used by it (SPEC §4), and the editor's Preview tab now shows a render's warnings, which it used to show only after a test. The operator's Claude context (`template/claude/CLAUDE.md`) now says to reference the `filename` the upload answers, since it may differ from the name sent, and names the new warnings.

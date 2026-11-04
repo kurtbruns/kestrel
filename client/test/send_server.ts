@@ -163,7 +163,7 @@ export const condition = {
     severity: selfThrottled ? "warn" : "info",
     since: 1_000,
     message: selfThrottled
-      ? "The provider keeps refusing for its sending rate: Maximum sending rate exceeded. Whoever runs the deployment sets SES_MAX_SEND_RATE."
+      ? "The provider keeps refusing for its sending rate: Maximum sending rate exceeded. Set SES_MAX_SEND_RATE."
       : "The provider is unavailable: ses 503.",
     action: null,
     error: selfThrottled ? "Maximum sending rate exceeded." : "ses 503",
@@ -181,12 +181,12 @@ export const condition = {
     kind: "refused",
     severity: "action",
     since: 1_000,
-    message: `The provider is refusing the account: ${error} Whoever runs the deployment replaces the SES access key in its secrets, or allows the key ses:SendEmail, ses:SendBulkEmail, ses:SendTemplatedEmail, and ses:SendBulkTemplatedEmail in its IAM policy.`,
+    message: `The provider is refusing the account: ${error} Replace the SES access key in the instance’s secrets, or allow the key ses:SendEmail, ses:SendBulkEmail, ses:SendTemplatedEmail, and ses:SendBulkTemplatedEmail in its IAM policy. If someone else set up Kestrel for you, pass this along to them.`,
     action: null,
     cause: "credentials",
     error,
     advice:
-      "Whoever runs the deployment replaces the SES access key in its secrets, or allows the key ses:SendEmail, ses:SendBulkEmail, ses:SendTemplatedEmail, and ses:SendBulkTemplatedEmail in its IAM policy.",
+      "Replace the SES access key in the instance’s secrets, or allow the key ses:SendEmail, ses:SendBulkEmail, ses:SendTemplatedEmail, and ses:SendBulkTemplatedEmail in its IAM policy. If someone else set up Kestrel for you, pass this along to them.",
     retry_at: retryAt,
   }),
   noReceipts: (accepted: number): SendCondition => ({

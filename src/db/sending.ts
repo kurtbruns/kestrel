@@ -19,7 +19,7 @@ import type {
   SendingPurpose,
   SendingState,
 } from "../../shared/provider";
-import { accountNotice } from "./notifications";
+import { outageNotice } from "./notifications";
 
 /** The sending row as stored. */
 export interface SendingRow {
@@ -164,7 +164,7 @@ export async function recordAccepted(
 
 /**
  * Record a refusal of the account, found at `at`, and, when `tell`, that the publisher is to
- * be told by email that email isn't going out (SPEC §8), at most once a UTC day. One batch,
+ * be told by email that email isn't going out (SPEC §8), once however long it lasts. One batch,
  * so the notice exists exactly when the refusal is recorded.
  */
 export async function recordRefusal(
@@ -174,5 +174,5 @@ export async function recordRefusal(
   tell: boolean,
 ): Promise<void> {
   const write = refusalStatement(db, refusal, at);
-  await (tell ? db.batch([write, accountNotice(db, "not_sending", at)]) : write.run());
+  await (tell ? db.batch([write, outageNotice(db, at)]) : write.run());
 }

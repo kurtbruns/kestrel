@@ -158,14 +158,14 @@ const CONDITION_KINDS: Record<ConditionKind, ConditionKindDoc> = {
     fields: "",
     meaning: `Still scheduled ${MISSED_THRESHOLD_MS / 60_000} minutes past its fire time: the sweep that fires sends is not running.`,
     remedy:
-      "Whoever runs the deployment checks the Worker's Cron Trigger (`triggers.crons`) and its logs; locally, `npm run dev` runs the sweep. The send goes out as soon as the sweep runs again; nothing in this API fires it.",
+      "Whoever runs the instance checks the Worker's Cron Trigger (`triggers.crons`) and its logs; locally, `npm run dev` runs the sweep. The send goes out as soon as the sweep runs again; nothing in this API fires it.",
   },
   stuck: {
     severity: "`warn`",
     fields: "",
     meaning: `Sending, with no recipient handed off for ${STUCK_THRESHOLD_MS / 60_000} minutes and no halt or wedge to explain it: the sweep has stopped, every run on it fails, or another send is taking every tick. A send that keeps handing off, however slowly, is never stuck.`,
     remedy:
-      "If another send is going out, this one picks up once it finishes. Otherwise whoever runs the deployment reads the logs and checks the Cron Trigger. It carries on from where it stopped, mailing no one twice.",
+      "If another send is going out, this one picks up once it finishes. Otherwise whoever runs the instance reads the logs and checks the Cron Trigger. It carries on from where it stopped, mailing no one twice.",
   },
   wedged: {
     severity: "`action`",
@@ -203,7 +203,7 @@ const CONDITION_KINDS: Record<ConditionKind, ConditionKindDoc> = {
     fields: "`accepted`",
     meaning: `A send finished within ${RECENT_DAYS} days, ${NO_RECEIPTS_AFTER_MS / 60_000} minutes past dispatch, with no receipt for any of its \`accepted\`: the provider's events may not be reaching the webhook, so its bounces suppress no one and its complaints unsubscribe no one.`,
     remedy:
-      "Whoever runs the deployment looks for `webhook.refused` in the logs and checks the provider's event subscription. It clears once any receipt lands.",
+      "Whoever runs the instance looks for `webhook.refused` in the logs and checks the provider's event subscription. It clears once any receipt lands.",
   },
   remade: {
     severity: "`info`",
@@ -231,7 +231,7 @@ const CONDITION_KINDS: Record<ConditionKind, ConditionKindDoc> = {
     fields: "`recipients`",
     meaning: `On the Workers Free plan's limits, a scheduled send to more than ${DAILY_WRITES_SEND_RECIPIENTS.toLocaleString("en-US")} recipients, judged by its audience alone, which may spend D1's daily written rows and stop the instance until midnight UTC.`,
     remedy:
-      "Never a refusal: the send goes out as scheduled. Whoever runs the deployment can move to Workers Paid, whose limits a send this size fits.",
+      "Never a refusal: the send goes out as scheduled. Whoever runs the instance can move to Workers Paid, whose limits a send this size fits.",
   },
 };
 

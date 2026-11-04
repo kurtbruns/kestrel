@@ -171,15 +171,25 @@ export interface DeploymentView {
 }
 
 /** What a notification about a send is about (SPEC §8): it finished, or one of the conditions that need the publisher. */
-export type SendNotificationKind = "finished" | "refused" | "stuck" | "wedged" | "missed";
+export type SendNotificationKind =
+  | "finished"
+  | "refused"
+  | "stuck"
+  | "wedged"
+  | "missed"
+  | "no_receipts";
 
-/** What a notification is about (SPEC §8): a send, a list Claude imported for the publisher,
- *  a signup's confirmation the SES sandbox refused (`sandbox`, at most one a UTC day), or email
- *  not going out with no send behind it (`not_sending`, at most one a UTC day). */
-export type NotificationKind = SendNotificationKind | "import" | "sandbox" | "not_sending";
+/** What a notification is about (SPEC §8): a send, a signup's confirmation the SES sandbox
+ *  refused (`sandbox`, at most one a UTC day), or email not going out (`not_sending`, once an
+ *  outage, and `not_sending_held`, the one further when a post is first held after it). */
+export type NotificationKind =
+  | SendNotificationKind
+  | "sandbox"
+  | "not_sending"
+  | "not_sending_held";
 
-/** What a line of the notification status is about: an event, or a test from the settings surface (whose subject is ""). An import's subject is its file's name. */
-export type NotificationStatusKind = NotificationKind | "test";
+/** What a line of the notification status is about: an event, a test from the settings surface (whose subject is ""), or an import told of before the publisher stopped being told of them, whose subject is its file's name. */
+export type NotificationStatusKind = NotificationKind | "test" | "import";
 
 /** How notifications have gone lately, so a channel that stopped working is visible where the destination is set. */
 export interface NotificationStatusView {

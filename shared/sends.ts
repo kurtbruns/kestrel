@@ -86,49 +86,53 @@ export const NOT_CONNECTED_ADVICE = {
   after: ", then deploy.",
 } as const;
 
+/** Who acts, said once beside the action: Kestrel can't tell whether the person reading is the
+ *  one who set it up, and a forwarded line has to make sense on its own. */
+export const PASS_THIS_ALONG = "If someone else set up Kestrel for you, pass this along to them.";
+
 /**
  * What to do about the provider refusing the account or a send, by what the refusal is about
- * (SPEC §12), and who does it: almost always whoever runs the deployment, in the provider's
- * console or the deployment's settings, since nothing in the app can change a credential or
- * the provider's view of the account (SPEC §13); the publisher, when a subscriber's address
- * explains it. One wording for the watch and the notification that tells the publisher, so
- * the two never advise differently. Plain text: a page that links the not-connected step
- * builds it from `NOT_CONNECTED_ADVICE`.
+ * (SPEC §12), and who does it: almost always whoever set Kestrel up, in the provider's console
+ * or the instance's settings, since nothing in the app can change a credential or the provider's
+ * view of the account (SPEC §13), so the action ends with `PASS_THIS_ALONG`; the publisher, when
+ * a subscriber's address explains it. One wording for the watch and the notification that tells
+ * the publisher, so the two never advise differently. Plain text: a page that links the
+ * not-connected step builds it from `NOT_CONNECTED_ADVICE`, which an email follows with the line.
  */
 export function refusalAdvice(cause: HaltCause | null): string {
   switch (cause) {
     case "credentials":
-      return "Whoever runs the deployment replaces the SES access key in its secrets, or allows the key ses:SendEmail, ses:SendBulkEmail, ses:SendTemplatedEmail, and ses:SendBulkTemplatedEmail in its IAM policy.";
+      return `Replace the SES access key in the instance’s secrets, or allow the key ses:SendEmail, ses:SendBulkEmail, ses:SendTemplatedEmail, and ses:SendBulkTemplatedEmail in its IAM policy. ${PASS_THIS_ALONG}`;
     case "opt_in":
-      return "The AWS account isn’t signed up for SES: whoever runs the deployment enables SES for the account in the region AWS_REGION names, or settles the account’s activation or billing with AWS.";
+      return `The AWS account isn’t signed up for SES: enable SES for the account in the region AWS_REGION names, or settle the account’s activation or billing with AWS. ${PASS_THIS_ALONG}`;
     case "configuration":
-      return "Whoever runs the deployment checks that the configuration set Kestrel sends with exists in the SES region: the one SES_CONFIGURATION_SET names, or the sending identity’s default if that secret isn’t set. Or they create the set in the SES console.";
+      return `Check that the configuration set Kestrel sends with exists in the SES region: the one SES_CONFIGURATION_SET names, or the sending identity’s default if that secret isn’t set. Or create the set in the SES console. ${PASS_THIS_ALONG}`;
     case "sending_pool":
-      return "The configuration set SES_CONFIGURATION_SET names sends through a dedicated IP pool SES can’t find: whoever runs the deployment picks an existing pool in the set’s sending options, or removes the pool, in the SES console.";
+      return `The configuration set SES_CONFIGURATION_SET names sends through a dedicated IP pool SES can’t find: pick an existing pool in the set’s sending options, or remove the pool, in the SES console. ${PASS_THIS_ALONG}`;
     case "unsupported":
-      return "SES read the request as naming something Kestrel never sends, such as a stored template: whoever runs the deployment checks that AWS_REGION names a region that offers SES, and updates Kestrel.";
+      return `SES read the request as naming something Kestrel never sends, such as a stored template: check that AWS_REGION names a region that offers SES, and update Kestrel. ${PASS_THIS_ALONG}`;
     case "sender":
-      return "Whoever runs the deployment verifies the From address, or its domain, in SES, in the region AWS_REGION names.";
+      return `Verify the From address, or its domain, in SES, in the region AWS_REGION names. ${PASS_THIS_ALONG}`;
     case "mail_from":
-      return "SES says the sending domain isn’t verified, or it can’t read the sender’s custom MAIL FROM domain’s MX record: whoever runs the deployment checks that the sending domain is verified in the region AWS_REGION names, and checks the MAIL FROM domain’s MX record in DNS or sets the identity’s Behavior on MX failure to use the default MAIL FROM domain, in the SES console.";
+      return `SES says the sending domain isn’t verified, or it can’t read the sender’s custom MAIL FROM domain’s MX record: check that the sending domain is verified in the region AWS_REGION names, and check the MAIL FROM domain’s MX record in DNS or set the identity’s Behavior on MX failure to use the default MAIL FROM domain, in the SES console. ${PASS_THIS_ALONG}`;
     case "sandbox":
-      return "The SES account is still in the sandbox, which mails only addresses verified in SES: whoever runs the deployment requests production access on the SES console’s account dashboard. To test before then, verify the reader’s address in SES.";
+      return `The SES account is still in the sandbox, which mails only addresses verified in SES: request production access on the SES console’s account dashboard. To test before then, verify the reader’s address in SES. ${PASS_THIS_ALONG}`;
     case "quota":
-      return "SES’s 24-hour quota frees up on its own. In the sandbox (200 a day), whoever runs the deployment requests production access; otherwise they can ask AWS to raise the quota in the Service Quotas console.";
+      return `SES’s 24-hour quota frees up on its own, so nothing is needed unless you want to send more next time: ask AWS to raise the quota in the Service Quotas console. In the sandbox (200 a day), request production access. ${PASS_THIS_ALONG}`;
     case "suspended":
-      return "AWS has shut down the account’s sending, and only AWS can lift it: whoever runs the deployment opens a case with AWS Support from the SES console.";
+      return `AWS has shut down the account’s sending, and only AWS can lift it: open a case with AWS Support from the SES console. ${PASS_THIS_ALONG}`;
     case "paused":
-      return "Sending is paused for the SES account. If AWS paused it under review, its email to the AWS account’s address says what to fix; if it was turned off by hand, whoever runs the deployment turns it back on (aws sesv2 put-account-sending-attributes --sending-enabled).";
+      return `Sending is paused for the SES account. If AWS paused it under review, its email to the AWS account’s address says what to fix; if it was turned off by hand, turn it back on (aws sesv2 put-account-sending-attributes --sending-enabled). ${PASS_THIS_ALONG}`;
     case "set_paused":
-      return "Sending is turned off on the configuration set SES_CONFIGURATION_SET names, by hand or by an alarm set up on it: whoever runs the deployment turns it back on (aws sesv2 put-configuration-set-sending-options --sending-enabled, naming the set).";
+      return `Sending is turned off on the configuration set SES_CONFIGURATION_SET names, by hand or by an alarm set up on it: turn it back on (aws sesv2 put-configuration-set-sending-options --sending-enabled, naming the set). ${PASS_THIS_ALONG}`;
     case "content":
-      return "SES refuses this email itself, not a reader or the account, and the email can’t change once its send has started: whoever runs the deployment asks AWS Support what SES refuses in it, quoting SES’s words.";
+      return `This email can’t change once its send has started, so ask AWS Support what SES refuses in it, quoting SES’s words. ${PASS_THIS_ALONG}`;
     case "invalid_request":
       return "SES refused a batch of this send as invalid. If its words name an address, remove that subscriber: the send skips anyone no longer on the list, and resumes at its next retry.";
     case "not_connected":
       return `${NOT_CONNECTED_ADVICE.step}${NOT_CONNECTED_ADVICE.guide}${NOT_CONNECTED_ADVICE.after}`;
     default:
-      return "Whoever runs the deployment fixes the account with the provider.";
+      return `Fix the account with the provider. ${PASS_THIS_ALONG}`;
   }
 }
 
@@ -188,7 +192,7 @@ export function unavailableMessage(
   send: Pick<Send, "halt_reason" | "halt_cause" | "halt_retries" | "halt_error">,
 ): string {
   if (isSelfThrottled(send)) {
-    return `The provider keeps refusing for its sending rate: ${sentence(send.halt_error)} A burst clears within a second, and this has refused the first request of ${send.halt_retries} retries in a row, minutes apart, so the deployment is asking for more a second than the account allows. Whoever runs the deployment sets SES_MAX_SEND_RATE to the maximum send rate on the SES console’s account dashboard, or removes it and lets the app read that rate by allowing its AWS key ses:GetAccount, and deploys. The send retries on its own meanwhile, and no one has been marked unsent because of this.`;
+    return `The provider keeps refusing for its sending rate: ${sentence(send.halt_error)} A burst clears within a second, and this has refused the first request of ${send.halt_retries} retries in a row, minutes apart, so the instance is asking for more a second than the account allows. Set SES_MAX_SEND_RATE to the maximum send rate on the SES console’s account dashboard, or remove it and let the app read that rate by allowing its AWS key ses:GetAccount, and deploy. ${PASS_THIS_ALONG} The send retries on its own meanwhile, and no one has been marked unsent because of this.`;
   }
   return `The provider is unavailable: ${sentence(send.halt_error)} The send retries on its own, spaced out the longer this lasts, and no one has been marked unsent because of this.`;
 }
