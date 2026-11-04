@@ -54,6 +54,9 @@ export interface DueNotification {
   c_complained: number;
   c_skipped: number;
   c_unsent: number;
+  /** Whether this send, or one finished after it, has heard a receipt: what ends the
+   *  provider's silence (`no_receipts`), the same test the record makes. */
+  receipt_since: number;
 }
 
 /** A notice that the SES sandbox refused a signup's confirmation, due; one a UTC day, whose
@@ -151,7 +154,8 @@ export async function postsHeldByOutage(db: D1Database): Promise<string[]> {
  * refusal's notice closed as cleared before it went out holds back no other send's.
  * A refusal of every email is an outage instead, told without naming a send: once when a held
  * post first shows it, unless a reader's signup or the account check already told it, and once
- * more when a post is held after that first notice went, since it named no such post. The
+ * more when a post is held after that first notice went, since it named no such post; a first
+ * notice that failed may have reached no one, so any post held since it was recorded counts. The
  * sending row is written at the end of the tick that met the refusal, so this is the next tick.
  * A late send is told in its Sent email, so only one still not out is told as missed. The
  * provider's silence is told once, however many sends go quiet, until any receipt lands: a send
@@ -201,7 +205,10 @@ export async function recordNotifications(db: D1Database, now: number): Promise<
                          WHERE t.kind = 'not_sending' AND t.episode = g.since
                            AND t.status IN ('sent', 'failed', 'unaddressed')
                            AND EXISTS (SELECT 1 FROM sends
-                                        WHERE ${HELD_BY_OUTAGE} AND sends.halted_at > t.updated_at))
+                                        WHERE ${HELD_BY_OUTAGE}
+                                          AND sends.halted_at >
+                                              CASE t.status WHEN 'failed' THEN t.created_at
+                                                            ELSE t.updated_at END))
          UNION ALL
          SELECT id, 'no_receipts', 0, ?1, ?1 FROM sends s
           WHERE s.status = 'sent' AND s.c_accepted > 0
@@ -234,7 +241,10 @@ export async function dueNotifications(db: D1Database, limit: number): Promise<D
       `SELECT n.send_id, n.kind, n.episode, n.attempts, n.sent_to,
               s.subject, s.status AS send_status, s.fire_at, s.started_at, s.completed_at,
               s.locked_until, s.halt_reason, s.halted_at, s.halt_retry_at, s.progress_at, s.halt_cause, s.halt_error, s.c_pending, s.c_in_flight, s.c_accepted,
-              s.c_delivered, s.c_bounced, s.c_complained, s.c_skipped, s.c_unsent
+              s.c_delivered, s.c_bounced, s.c_complained, s.c_skipped, s.c_unsent,
+              EXISTS (SELECT 1 FROM sends h
+                       WHERE h.completed_at >= s.completed_at
+                         AND h.c_delivered + h.c_bounced + h.c_complained > 0) AS receipt_since
          FROM notifications n
          LEFT JOIN sends s ON s.id = n.send_id
         WHERE n.status = 'pending'
@@ -335,6 +345,18 @@ export async function recordNotificationOutcome(
         WHERE send_id IS ? AND kind = ? AND episode = ?`,
     )
     .bind(status, error, sentTo, now, key.send_id, key.kind, key.episode)
+    .run();
+}
+
+/**
+ * Take back a notification that has nothing left to tell, freeing its key: a further outage
+ * notice whose post stopped being held before it went, so a post held later in the same outage
+ * can still be told (SPEC §8).
+ */
+export async function forgetNotification(db: D1Database, key: NotificationKey): Promise<void> {
+  await db
+    .prepare("DELETE FROM notifications WHERE send_id IS ? AND kind = ? AND episode = ?")
+    .bind(key.send_id, key.kind, key.episode)
     .run();
 }
 

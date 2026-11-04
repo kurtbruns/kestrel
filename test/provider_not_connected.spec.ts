@@ -344,6 +344,7 @@ describe("a send scheduled before the provider was disconnected", () => {
         c_complained: 0,
         c_skipped: 0,
         c_unsent: 0,
+        receipt_since: 0,
       } satisfies DueNotification,
       getConfig(env),
     );

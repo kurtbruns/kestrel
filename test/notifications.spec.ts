@@ -163,6 +163,53 @@ describe("a send that needs the publisher", () => {
     ]);
   });
 
+  it("a refusal short of an outage that lifts and returns is a new event", async () => {
+    /** Answers one batch once `relapse` is set, then refuses again for that reason: the
+     *  quota freed long enough for a batch to land, then used up once more. */
+    class Relapsing extends BatchProvider {
+      relapse: string | null = null;
+      override async sendBatch(
+        ...args: Parameters<BatchProvider["sendBatch"]>
+      ): ReturnType<BatchProvider["sendBatch"]> {
+        const result = await super.sendBatch(...args);
+        if (result.kind === "answered" && this.relapse) {
+          this.refuse = this.relapse;
+          this.relapse = null;
+        }
+        return result;
+      }
+    }
+    const relapsing = new Relapsing();
+    relapsing.refuseCause = "quota";
+    vi.spyOn(providers, "getProvider").mockReturnValue(relapsing);
+    // More than one batch, so the send is still going when the refusal returns.
+    await seedConfirmed(addresses(3 * relapsing.maxBatch));
+    const send = await dueSend({ subject: "Owls in winter" });
+    relapsing.refuse = "ses 429 LimitExceededException: Daily message quota exceeded.";
+
+    await ticks(2);
+    const first = (await sends.getSend(env.DB, send.id))!.halted_at;
+    expect(first).not.toBeNull();
+    expect(relapsing.mailed).toHaveLength(0);
+
+    // The quota frees: a batch is answered, which lifts the refusal, and the next is refused.
+    relapsing.refuse = null;
+    relapsing.relapse = "ses 429 LimitExceededException: Daily message quota exceeded.";
+    await ticks(1);
+    expect(relapsing.mailed).toHaveLength(relapsing.maxBatch);
+    const second = (await sends.getSend(env.DB, send.id))!.halted_at;
+    expect(second).toBeGreaterThan(first!);
+
+    expect((await rows(send.id)).map((r) => [r.kind, r.episode])).toEqual([
+      ["refused", first],
+      ["refused", second],
+    ]);
+    expect(fakeNotifications().map((n) => n.subject)).toEqual([
+      '"Owls in winter" is waiting: SES’s daily quota is used up',
+      '"Owls in winter" is waiting: SES’s daily quota is used up',
+    ]);
+  });
+
   it("a send in flight past the threshold: told once, and not while a refusal already says why", async () => {
     await seedConfirmed(addresses(1));
     const slow = await dueSend({ subject: "Slow one" });
@@ -259,6 +306,7 @@ describe("a send that needs the publisher", () => {
       c_complained: 0,
       c_skipped: 0,
       c_unsent: 0,
+      receipt_since: 0,
     } satisfies notifications.DueNotification;
 
     const none = composeNotification({ ...finished, c_unsent: 30 }, config);
@@ -416,6 +464,72 @@ describe("email not going out (SPEC §8)", () => {
     await found(Date.now());
     await notifyPublisher(env, new Budget(50));
     expect(fakeNotifications()).toHaveLength(2);
+  });
+
+  it("through the sweep: a post the provider holds after the first notice gets the one more, and one joining it none", async () => {
+    await seedConfirmed(addresses(2));
+    await found(Date.now());
+    await tick();
+    expect(fakeNotifications().map((n) => n.subject)).toEqual([
+      "Email isn’t going out, and signups are paused",
+    ]);
+
+    vi.setSystemTime(Date.now() + 60_000);
+    transport.refuse = "ses 403 UnrecognizedClientException: bad key";
+    const first = await dueSend({ subject: "First post" });
+    await tick();
+    expect((await sends.getSend(env.DB, first.id))!.halt_reason).toBe("account");
+    expect(fakeNotifications().map((n) => n.subject)).toEqual([
+      "Email isn’t going out, and signups are paused",
+      'Email isn’t going out, and "First post" is waiting',
+    ]);
+
+    vi.setSystemTime(Date.now() + 60_000);
+    const second = await dueSend({ subject: "Second post" });
+    await tick();
+    expect((await sends.getSend(env.DB, second.id))!.halt_reason).toBe("account");
+    expect(fakeNotifications()).toHaveLength(2);
+  });
+
+  it("a post held while the first notice kept failing is still named, in the one more", async () => {
+    await found(Date.now());
+    failFakeNotify(MAX_NOTIFY_ATTEMPTS);
+    await notifyPublisher(env, new Budget(50));
+    vi.setSystemTime(Date.now() + 60_000);
+    await held("During the retries", Date.now());
+    for (let i = 1; i < MAX_NOTIFY_ATTEMPTS; i++) {
+      vi.setSystemTime(Date.now() + 60_000);
+      await notifyPublisher(env, new Budget(50));
+    }
+    expect(fakeNotifications()).toHaveLength(0);
+    expect(await rows()).toMatchObject([{ kind: "not_sending", status: "failed" }]);
+
+    vi.setSystemTime(Date.now() + 60_000);
+    await notifyPublisher(env, new Budget(50));
+    expect(fakeNotifications().map((n) => n.subject)).toEqual([
+      'Email isn’t going out, and "During the retries" is waiting',
+    ]);
+  });
+
+  it("a further notice whose post stopped being held leaves room for a later post", async () => {
+    await found(Date.now());
+    await notifyPublisher(env, new Budget(50));
+    vi.setSystemTime(Date.now() + 60_000);
+    const gone = await held("Gone", Date.now());
+    await notifications.recordNotifications(env.DB, Date.now());
+    await env.DB.prepare("UPDATE sends SET halt_reason = NULL, halt_cause = NULL WHERE id = ?")
+      .bind(gone.id)
+      .run();
+    await notifyPublisher(env, new Budget(50));
+    expect(fakeNotifications()).toHaveLength(1);
+
+    vi.setSystemTime(Date.now() + 60_000);
+    await held("Later", Date.now());
+    await notifyPublisher(env, new Budget(50));
+    expect(fakeNotifications().map((n) => n.subject)).toEqual([
+      "Email isn’t going out, and signups are paused",
+      'Email isn’t going out, and "Later" is waiting',
+    ]);
   });
 
   it("names a post held before its notice goes, and sends no second for it", async () => {
@@ -706,22 +820,15 @@ describe("after the review", () => {
   it("a problem that clears before its notification gets through is dropped, not sent late", async () => {
     await seedConfirmed(addresses(2));
     const send = await dueSend({ subject: "Owls in winter" });
-    const answer = transport.sendBatch.bind(transport);
-    transport.sendBatch = async () => ({
-      kind: "halted",
-      halt: {
-        reason: "account",
-        cause: "quota",
-        error: "ses 429 LimitExceededException: Daily message quota exceeded.",
-      },
-    });
+    transport.refuse = "ses 429 LimitExceededException: Daily message quota exceeded.";
+    transport.refuseCause = "quota";
     failFakeNotify(1);
     await ticks(1);
     expect(await rows(send.id)).toMatchObject([
       { kind: "refused", status: "pending", error: "fake notification failure" },
     ]);
 
-    transport.sendBatch = answer;
+    transport.refuse = null;
     await ticks(3);
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
     expect(fakeNotifications().map((n) => n.subject)).toEqual(["Sent: Owls in winter"]);
@@ -1025,6 +1132,7 @@ describe("the link in a notification", () => {
           c_complained: 0,
           c_skipped: 0,
           c_unsent: 0,
+          receipt_since: 0,
         },
         config,
       );
@@ -1334,6 +1442,21 @@ describe("no receipts from the provider (SPEC §8)", () => {
     expect(await told()).toEqual([]);
   });
 
+  it("is dropped if a later send hears a receipt while the channel keeps it from going", async () => {
+    const quiet = await finished("Quiet", 7 * HOUR);
+    failFakeNotify(2); // the quiet send's Sent email and this notice both wait
+    await notifyPublisher(env, new Budget(50));
+    expect((await rows(quiet.id)).find((r) => r.kind === "no_receipts")?.status).toBe("pending");
+
+    await finished("Heard", 6.5 * HOUR, 1);
+    clearFakeNotifications();
+    await notifyPublisher(env, new Budget(50));
+    expect((await rows(quiet.id)).find((r) => r.kind === "no_receipts")?.status).toBe("cleared");
+    expect(fakeNotifications().map((n) => n.subject)).not.toContain(
+      "Kestrel isn’t hearing back from Amazon SES",
+    );
+  });
+
   it("is dropped if a receipt lands before it goes, and words what it tells as a possibility", async () => {
     const send = await finished("Owls", 7 * HOUR);
     await notifications.recordNotifications(env.DB, Date.now());
@@ -1343,7 +1466,7 @@ describe("no receipts from the provider (SPEC §8)", () => {
     const email = composeNotification(n, getConfig(env));
     expect(email.subject).toBe("Kestrel isn’t hearing back from Amazon SES");
     expect(email.text).toContain("may not be reaching Kestrel");
-    expect(stillHolds({ ...n, c_delivered: 1 }, Date.now())).toBe(false);
+    expect(stillHolds({ ...n, receipt_since: 1 }, Date.now())).toBe(false);
     expect((await rows(send.id)).map((r) => r.kind)).toContain("no_receipts");
   });
 });

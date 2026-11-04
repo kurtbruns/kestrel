@@ -76,7 +76,7 @@ export function stillHolds(n: notifications.DueAny, now: number): boolean {
     case "finished":
       return true;
     case "no_receipts":
-      return n.c_delivered + n.c_bounced + n.c_complained === 0;
+      return !n.receipt_since;
     case "refused":
       // A wedged send is no longer retried, whatever halt it last carried, so it waits on
       // Resolve, not on the refusal (as its conditions say).
@@ -147,11 +147,11 @@ export async function notifyPublisher(
   for (const [i, n] of due.entries()) {
     // Every claimed notification still to come needs its outcome recorded, this one included.
     const recordsLeft = due.length - i;
-    if (
-      !stillHolds(n, Date.now()) ||
-      (isOutageNotice(n) && !refusal) ||
-      (n.kind === "not_sending_held" && held.length === 0)
-    ) {
+    if (n.kind === "not_sending_held" && refusal && held.length === 0) {
+      await notifications.forgetNotification(db, n);
+      continue;
+    }
+    if (!stillHolds(n, Date.now()) || (isOutageNotice(n) && !refusal)) {
       await notifications.recordNotificationOutcome(db, n, { status: "cleared" }, Date.now());
       continue;
     }
