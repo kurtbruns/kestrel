@@ -41,6 +41,11 @@ export const HALT_RETRY_SLACK_MS = 30 * 1000;
  *  are set up never mails the publisher about the whole history. */
 export const NOTIFY_HORIZON_MS = 24 * 60 * 60 * 1000;
 /** Tries a notification gets before it is recorded failed (one a tick). */
+/** How long a finished send may hear no receipt before the publisher is told by email (SPEC §8).
+ *  Longer than the hour the surfaces wait to show it, since an email can't be taken back and a
+ *  slow mail server or a small list can be this quiet on its own for a while. */
+export const NO_RECEIPTS_NOTICE_AFTER_MS = 6 * 60 * 60 * 1000;
+
 export const MAX_NOTIFY_ATTEMPTS = 5;
 /** Per-recipient retry cap before a delivery is marked unsent so the send can complete. */
 export const MAX_DELIVERY_ATTEMPTS = 5;

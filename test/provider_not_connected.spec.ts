@@ -347,7 +347,7 @@ describe("a send scheduled before the provider was disconnected", () => {
       } satisfies DueNotification,
       getConfig(env),
     );
-    expect(email.subject).toBe('Problem with "Owls": no email provider is connected');
+    expect(email.subject).toBe('"Owls" is waiting: no email provider is connected');
     expect(email.text).not.toMatch(/refusing/);
     expect(email.text.split(ADVICE)).toHaveLength(2); // the fix, said once
   });

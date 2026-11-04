@@ -83,7 +83,7 @@ afterEach(() => {
 });
 
 describe("a send finishing", () => {
-  it("tells the publisher once, with the record's headline numbers and a link to it", async () => {
+  it("tells the publisher once, in a sentence with a link to the send report", async () => {
     await seedConfirmed(addresses(3));
     const send = await dueSend({ subject: "Owls in winter" });
 
@@ -94,7 +94,9 @@ describe("a send finishing", () => {
     expect(sent).toHaveLength(1);
     expect(sent[0]!.to).toBe(PUBLISHER);
     expect(sent[0]!.subject).toBe("Sent: Owls in winter");
-    expect(sent[0]!.text).toContain("Accepted by the provider: 3 of 3. Unsent: 0. Skipped");
+    expect(sent[0]!.text).toContain("Your email provider accepted all 3 emails.");
+    expect(sent[0]!.text).toContain("See the send report: ");
+    expect(sent[0]!.text).toContain("Settings → Notifications");
     // In the query, not the hash, so an Access login in between keeps it.
     expect(sent[0]!.text).toContain(`/dashboard/?to=/sent/${send.id}`);
     expect(await rows(send.id)).toMatchObject([{ kind: "finished", status: "sent", attempts: 1 }]);
@@ -133,23 +135,20 @@ describe("a send finishing", () => {
 });
 
 describe("a send that needs the publisher", () => {
-  it("the provider refusing the account: told at once with its words and the advice, once however long it lasts", async () => {
+  it("the provider refusing the account: told within two ticks with its words and the advice, once however long it lasts", async () => {
     allowErrorLogs("send.stuck");
     await seedConfirmed(addresses(5));
     const send = await dueSend({ subject: "Owls in winter" });
     transport.refuse =
       "ses 403 UnrecognizedClientException: The security token included in the request is invalid";
 
-    await ticks(1);
+    await ticks(2);
     const [refused] = fakeNotifications();
-    expect(refused!.subject).toBe(
-      'Problem with "Owls in winter": the provider is refusing your account',
-    );
+    expect(refused!.subject).toBe('Email isn’t going out, and "Owls in winter" is waiting');
     expect(refused!.text).toContain("security token included in the request is invalid");
-    expect(refused!.text).toContain(
-      "Whoever runs the deployment replaces the SES access key in its secrets, or allows the key ses:SendEmail, ses:SendBulkEmail, ses:SendTemplatedEmail, and ses:SendBulkTemplatedEmail in its IAM policy.",
-    );
+    expect(refused!.text).toContain(refusalAdvice("credentials"));
     expect(refused!.text).toContain("No one has been marked unsent because of this");
+    expect(await rows(send.id)).toEqual([]);
 
     await ticks(5);
     expect(fakeNotifications()).toHaveLength(1);
@@ -159,57 +158,8 @@ describe("a send that needs the publisher", () => {
     await ticks(3);
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
     expect(fakeNotifications().map((n) => n.subject)).toEqual([
-      'Problem with "Owls in winter": the provider is refusing your account',
+      'Email isn’t going out, and "Owls in winter" is waiting',
       "Sent: Owls in winter",
-    ]);
-  });
-
-  it("a refusal that lifts and returns is a new event", async () => {
-    /** Answers one batch once `relapse` is set, then refuses again for that reason: the
-     *  account fixed long enough for a batch to land, then refused once more. */
-    class Relapsing extends BatchProvider {
-      relapse: string | null = null;
-      override async sendBatch(
-        ...args: Parameters<BatchProvider["sendBatch"]>
-      ): ReturnType<BatchProvider["sendBatch"]> {
-        const result = await super.sendBatch(...args);
-        if (result.kind === "answered" && this.relapse) {
-          this.refuse = this.relapse;
-          this.relapse = null;
-        }
-        return result;
-      }
-    }
-    const relapsing = new Relapsing();
-    vi.spyOn(providers, "getProvider").mockReturnValue(relapsing);
-    // More than one batch, so the send is still going when the refusal returns.
-    await seedConfirmed(addresses(3 * relapsing.maxBatch));
-    const send = await dueSend({ subject: "Owls in winter" });
-    relapsing.refuse =
-      "ses 403 UnrecognizedClientException: The security token included in the request is invalid";
-
-    await ticks(2);
-    const first = (await sends.getSend(env.DB, send.id))!.halted_at;
-    expect(first).not.toBeNull();
-    expect(relapsing.mailed).toHaveLength(0);
-
-    // The key is replaced: a batch is answered, which lifts the refusal, and the next is
-    // refused again.
-    relapsing.refuse = null;
-    relapsing.relapse =
-      "ses 403 UnrecognizedClientException: The security token included in the request is invalid";
-    await ticks(1);
-    expect(relapsing.mailed).toHaveLength(relapsing.maxBatch);
-    const second = (await sends.getSend(env.DB, send.id))!.halted_at;
-    expect(second).toBeGreaterThan(first!);
-
-    expect((await rows(send.id)).map((r) => [r.kind, r.episode])).toEqual([
-      ["refused", first],
-      ["refused", second],
-    ]);
-    expect(fakeNotifications().map((n) => n.subject)).toEqual([
-      'Problem with "Owls in winter": the provider is refusing your account',
-      'Problem with "Owls in winter": the provider is refusing your account',
     ]);
   });
 
@@ -260,7 +210,7 @@ describe("a send that needs the publisher", () => {
     expect(await rows(held.id)).toEqual([]);
   });
 
-  it("a missed fire time: told once, whether the send went out late or has not gone out", async () => {
+  it("a late send: told in its Sent email alone, and one still not out told once as missed", async () => {
     allowErrorLogs("send.missed");
     await seedConfirmed(addresses(2));
     const late = await frozenSend(Date.now() - MISSED_THRESHOLD_MS - 5 * 60_000, {
@@ -268,13 +218,10 @@ describe("a send that needs the publisher", () => {
     });
 
     await ticks(3);
-    const subjects = fakeNotifications().map((n) => n.subject);
-    expect(subjects).toContain('Problem with "Late one": it missed its fire time');
-    expect(subjects).toContain("Sent: Late one");
-    expect(fakeNotifications().find((n) => n.subject.startsWith("Problem"))!.text).toContain(
-      "minutes late",
-    );
-    expect((await rows(late.id)).map((r) => r.kind).sort()).toEqual(["finished", "missed"]);
+    const sent = fakeNotifications();
+    expect(sent.map((n) => n.subject)).toEqual(["Sent: Late one"]);
+    expect(sent[0]!.text).toContain("minutes late");
+    expect((await rows(late.id)).map((r) => r.kind)).toEqual(["finished"]);
 
     // One the sweep cannot fire stays scheduled, and is reported as not gone out.
     const stranded = await frozenSend(Date.now() - MISSED_THRESHOLD_MS - 60_000, {
@@ -282,6 +229,53 @@ describe("a send that needs the publisher", () => {
     });
     await notifications.recordNotifications(env.DB, Date.now());
     expect((await rows(stranded.id)).map((r) => r.kind)).toEqual(["missed"]);
+  });
+
+  it("a finished send no one accepted is a problem, and one with no one left to send to is not", async () => {
+    const config = getConfig(env);
+    const finished = {
+      send_id: "s1",
+      kind: "finished",
+      episode: 0,
+      attempts: 0,
+      sent_to: [],
+      subject: "Owls",
+      send_status: "sent",
+      fire_at: 0,
+      started_at: 0,
+      completed_at: 60_000,
+      locked_until: null,
+      halt_reason: null,
+      halted_at: null,
+      halt_retry_at: null,
+      progress_at: null,
+      halt_cause: null,
+      halt_error: null,
+      c_pending: 0,
+      c_in_flight: 0,
+      c_accepted: 0,
+      c_delivered: 0,
+      c_bounced: 0,
+      c_complained: 0,
+      c_skipped: 0,
+      c_unsent: 0,
+    } satisfies notifications.DueNotification;
+
+    const none = composeNotification({ ...finished, c_unsent: 30 }, config);
+    expect(none.subject).toBe('"Owls" didn’t reach anyone');
+    expect(none.text).toContain("A finished post can’t be sent again.");
+
+    const left = composeNotification({ ...finished, c_skipped: 4 }, config);
+    expect(left.subject).toBe("Sent: Owls");
+    expect(left.text).toContain("no one left to send to");
+
+    const some = composeNotification(
+      { ...finished, c_accepted: 1_200, c_unsent: 30, c_skipped: 10 },
+      config,
+    );
+    expect(some.text).toContain(
+      "accepted 1,200 of 1,230 emails. The send report shows why the other 30 weren’t sent.",
+    );
   });
 
   it("a send on time is not late", async () => {
@@ -319,12 +313,10 @@ describe("a signup the SES sandbox refuses", () => {
 
     const sent = fakeNotifications();
     expect(sent).toHaveLength(1);
-    expect(sent[0]!.subject).toBe(
-      "A signup's confirmation was refused: SES is still in the sandbox",
-    );
-    expect(sent[0]!.text).toContain(refusalAdvice("sandbox"));
+    expect(sent[0]!.subject).toBe("A reader couldn’t sign up: SES is still in the sandbox");
+    expect(sent[0]!.text).toContain("Request production access");
     expect(sent[0]!.text).not.toContain("ada@example.com");
-    expect(sent[0]!.text).toContain("/dashboard/?to=/subscribers");
+    expect(sent[0]!.text).toContain("Open the dashboard: ");
 
     // The next UTC day's first refusal is told again.
     vi.setSystemTime(notifications.utcDayStart(Date.now()) + 86_400_000 + 1_000);
@@ -356,7 +348,15 @@ describe("email not going out (SPEC §8)", () => {
       body: JSON.stringify({ email }),
     });
 
-  it("tells the publisher at most once a day when a reader's confirmation is refused for the account, with the provider's words and the fix", async () => {
+  const found = (at: number) =>
+    sending.recordRefusal(
+      env.DB,
+      { cause: "credentials", foundBy: "account_check", error: "bad key" },
+      at,
+      true,
+    );
+
+  it("tells the publisher once an outage when a reader's confirmation is refused for the account, with the provider's words and the fix", async () => {
     transport.refuse = "ses 403 UnrecognizedClientException: bad key";
     await signUp("ada@example.com");
     // Signups are paused now, so a second reader is refused before anything is sent.
@@ -364,23 +364,80 @@ describe("email not going out (SPEC §8)", () => {
     await tick();
 
     const sent = fakeNotifications();
-    expect(sent.map((n) => n.subject)).toEqual(["Email isn't going out, and signups are paused"]);
+    expect(sent.map((n) => n.subject)).toEqual(["Email isn’t going out, and signups are paused"]);
     expect(sent[0]!.text).toContain("bad key");
     expect(sent[0]!.text).toContain(refusalAdvice("credentials"));
     expect(sent[0]!.text).not.toContain("ada@example.com");
 
-    // Still refusing the next day, found again: told again.
-    vi.setSystemTime(notifications.utcDayStart(Date.now()) + 86_400_000 + 1_000);
+    // Still refusing days later, found again: the same outage, not told again.
+    vi.setSystemTime(Date.now() + 3 * 86_400_000);
+    await found(Date.now());
     await tick();
     expect(fakeNotifications()).toHaveLength(1);
-    await sending.recordRefusal(
-      env.DB,
-      { cause: "credentials", foundBy: "account_check", error: "bad key" },
-      Date.now(),
-      true,
-    );
+  });
+
+  it("a refusal that lifts and returns is a new outage, told again", async () => {
+    await found(Date.now());
+    await tick();
+    vi.setSystemTime(Date.now() + 60_000);
+    await sending.recordAccepted(env.DB, "test", Date.now());
+    vi.setSystemTime(Date.now() + 60_000);
+    await found(Date.now());
     await tick();
     expect(fakeNotifications()).toHaveLength(2);
+  });
+
+  /** A send the outage holds, halted `at`, as the sweep leaves one. */
+  async function held(subject: string, at: number) {
+    const send = await frozenSend(at - 60_000, { subject });
+    await env.DB.prepare(
+      `UPDATE sends SET status = 'sending', started_at = ?1, progress_at = ?1, c_pending = 4,
+         halt_reason = 'account', halt_cause = 'credentials', halt_error = 'bad key',
+         halted_at = ?1, halt_retries = 1, halt_retry_at = ?2 WHERE id = ?3`,
+    )
+      .bind(at, at + 60 * 60_000, send.id)
+      .run();
+    return send;
+  }
+
+  it("tells once more when a post is first held after a notice that named none, and never a third time", async () => {
+    await found(Date.now());
+    await notifyPublisher(env, new Budget(50));
+    vi.setSystemTime(Date.now() + 60_000);
+    await held("Later one", Date.now());
+    await notifyPublisher(env, new Budget(50));
+    expect(fakeNotifications().map((n) => n.subject)).toEqual([
+      "Email isn’t going out, and signups are paused",
+      'Email isn’t going out, and "Later one" is waiting',
+    ]);
+
+    vi.setSystemTime(Date.now() + 60_000);
+    await held("Another one", Date.now());
+    await found(Date.now());
+    await notifyPublisher(env, new Budget(50));
+    expect(fakeNotifications()).toHaveLength(2);
+  });
+
+  it("names a post held before its notice goes, and sends no second for it", async () => {
+    await held("First one", Date.now());
+    await found(Date.now());
+    await notifyPublisher(env, new Budget(50));
+    vi.setSystemTime(Date.now() + 60_000);
+    await notifyPublisher(env, new Budget(50));
+    expect(fakeNotifications().map((n) => n.subject)).toEqual([
+      'Email isn’t going out, and "First one" is waiting',
+    ]);
+  });
+
+  it("names every post it holds in one email", async () => {
+    await held("One", Date.now());
+    await held("Two", Date.now());
+    await found(Date.now());
+    await notifyPublisher(env, new Budget(50));
+    const sent = fakeNotifications();
+    expect(sent.map((n) => n.subject)).toEqual(["Email isn’t going out, and 2 posts are waiting"]);
+    expect(sent[0]!.text).toContain('"One"');
+    expect(sent[0]!.text).toContain('"Two"');
   });
 
   it("closes the notice unsent when an email went through before it was told", async () => {
@@ -649,15 +706,22 @@ describe("after the review", () => {
   it("a problem that clears before its notification gets through is dropped, not sent late", async () => {
     await seedConfirmed(addresses(2));
     const send = await dueSend({ subject: "Owls in winter" });
-    transport.refuse =
-      "ses 403 UnrecognizedClientException: The security token included in the request is invalid";
+    const answer = transport.sendBatch.bind(transport);
+    transport.sendBatch = async () => ({
+      kind: "halted",
+      halt: {
+        reason: "account",
+        cause: "quota",
+        error: "ses 429 LimitExceededException: Daily message quota exceeded.",
+      },
+    });
     failFakeNotify(1);
     await ticks(1);
     expect(await rows(send.id)).toMatchObject([
       { kind: "refused", status: "pending", error: "fake notification failure" },
     ]);
 
-    transport.refuse = null;
+    transport.sendBatch = answer;
     await ticks(3);
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
     expect(fakeNotifications().map((n) => n.subject)).toEqual(["Sent: Owls in winter"]);
@@ -925,7 +989,14 @@ describe("the settings surface", () => {
 describe("the link in a notification", () => {
   it("opens the send's own page, carried in the query, for every kind", () => {
     const config = getConfig(env);
-    const kinds: SendNotificationKind[] = ["finished", "refused", "stuck", "wedged", "missed"];
+    const kinds: SendNotificationKind[] = [
+      "finished",
+      "refused",
+      "stuck",
+      "wedged",
+      "missed",
+      "no_receipts",
+    ];
     for (const kind of kinds) {
       const email = composeNotification(
         {
@@ -960,7 +1031,7 @@ describe("the link in a notification", () => {
       const link = sendLink(config, "s 1");
       if (kind === "wedged") {
         // Kestrel can't tell whether a lost request went out, so the advice names the safe choice.
-        expect(email.text).toContain("Assume not sent is the safe default");
+        expect(email.text).toContain("Unless you know otherwise, choose Assume not sent.");
       }
       expect(email.text, kind).toContain(link);
       expect(email.html, kind).toContain(`href="${link}"`);
@@ -981,15 +1052,15 @@ describe("what the publisher is told agrees with what every surface shows (SPEC 
   const cases: { name: string; state: (now: number) => Record<string, number | string | null> }[] =
     [
       {
-        name: "refused: the account",
+        name: "refused: a hold short of an outage",
         state: (now) => ({
           status: "sending",
           started_at: now - 5 * MIN,
           progress_at: now - 5 * MIN,
           c_pending: 4,
           halt_reason: "account",
-          halt_cause: "credentials",
-          halt_error: "The security token included in the request is invalid",
+          halt_cause: "quota",
+          halt_error: "Daily message quota exceeded",
           halted_at: now - 4 * MIN,
           halt_retries: 1,
           halt_retry_at: now + 10 * MIN,
@@ -1150,6 +1221,29 @@ describe("what the publisher is told agrees with what every surface shows (SPEC 
     });
   }
 
+  it("a provider's words name a reader only behind the login, never in the email (SPEC §12)", async () => {
+    const now = Date.now();
+    const send = await setUp({
+      status: "sending",
+      started_at: now - 5 * MIN,
+      progress_at: now - 5 * MIN,
+      c_pending: 4,
+      halt_reason: "account",
+      halt_cause: "invalid_request",
+      halt_error: "ses 400 InvalidParameterValue: Illegal address ada@example.com",
+      halted_at: now - 4 * MIN,
+      halt_retries: 1,
+      halt_retry_at: now + 10 * MIN,
+    });
+    await notifications.recordNotifications(env.DB, now);
+    const [due] = await notifications.dueNotifications(env.DB, 1);
+    const email = composeNotification(due as notifications.DueNotification, getConfig(env));
+    expect(email.text).toContain("Illegal address …@example.com");
+    expect(email.html).not.toContain("ada@");
+    const shownNow = await shown(send.id);
+    expect(shownNow.find((c) => c.kind === "refused")?.error).toContain("ada@example.com");
+  });
+
   it("a refusal two sends share is told for the one still held, when the other has wedged", async () => {
     // One account refusal holds both sends (the second joined it, so they share when it
     // began); the first then wedges on a request that got no answer. The refusal still
@@ -1187,5 +1281,69 @@ describe("what the publisher is told agrees with what every surface shows (SPEC 
     expect((await rows(first.id)).map((r) => r.kind)).toEqual(["wedged"]);
     expect((await rows(second.id)).map((r) => r.kind)).toEqual(["refused"]);
     expect((await shown(second.id)).map((cond) => cond.kind)).toContain("refused");
+  });
+});
+
+describe("no receipts from the provider (SPEC §8)", () => {
+  const HOUR = 60 * 60_000;
+
+  /** A send the provider took, finished `ago` back, with `heard` receipts. */
+  async function finished(subject: string, ago: number, heard = 0) {
+    const at = Date.now() - ago;
+    const send = await frozenSend(at - 60_000, { subject });
+    await env.DB.prepare(
+      `UPDATE sends SET status = 'sent', started_at = ?1, completed_at = ?1, c_pending = 0,
+         c_accepted = 4, c_delivered = ?2 WHERE id = ?3`,
+    )
+      .bind(at, heard, send.id)
+      .run();
+    return send;
+  }
+
+  const told = async () =>
+    (await rows()).filter((r) => r.kind === "no_receipts").map((r) => r.send_id);
+
+  it("waits six hours, then tells once, however many sends go quiet", async () => {
+    const early = await finished("Early", 5 * HOUR);
+    await notifications.recordNotifications(env.DB, Date.now());
+    expect(await told()).toEqual([]);
+
+    vi.setSystemTime(Date.now() + 2 * HOUR);
+    await notifications.recordNotifications(env.DB, Date.now());
+    expect(await told()).toEqual([early.id]);
+
+    await finished("Quiet too", 6 * HOUR + 60_000);
+    await notifications.recordNotifications(env.DB, Date.now());
+    expect(await told()).toEqual([early.id]);
+  });
+
+  it("tells again only after a receipt has landed", async () => {
+    const first = await finished("First", 7 * HOUR);
+    await notifications.recordNotifications(env.DB, Date.now());
+    await env.DB.prepare("UPDATE sends SET c_delivered = 1 WHERE id = ?").bind(first.id).run();
+    vi.setSystemTime(Date.now() + 8 * HOUR);
+    const second = await finished("Second", 7 * HOUR);
+    await notifications.recordNotifications(env.DB, Date.now());
+    expect(await told()).toEqual([first.id, second.id]);
+  });
+
+  it("isn't told for a quiet send when a later one has heard from the provider", async () => {
+    await finished("Quiet", 7 * HOUR);
+    await finished("Heard", 6.5 * HOUR, 1);
+    await notifications.recordNotifications(env.DB, Date.now());
+    expect(await told()).toEqual([]);
+  });
+
+  it("is dropped if a receipt lands before it goes, and words what it tells as a possibility", async () => {
+    const send = await finished("Owls", 7 * HOUR);
+    await notifications.recordNotifications(env.DB, Date.now());
+    const due = await notifications.dueNotifications(env.DB, 5);
+    const n = due.find((d) => d.kind === "no_receipts") as notifications.DueNotification;
+    expect(stillHolds(n, Date.now())).toBe(true);
+    const email = composeNotification(n, getConfig(env));
+    expect(email.subject).toBe("Kestrel isn’t hearing back from Amazon SES");
+    expect(email.text).toContain("may not be reaching Kestrel");
+    expect(stillHolds({ ...n, c_delivered: 1 }, Date.now())).toBe(false);
+    expect((await rows(send.id)).map((r) => r.kind)).toContain("no_receipts");
   });
 });
