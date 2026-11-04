@@ -234,7 +234,7 @@ describe("conditions: one server rule for each kind", () => {
     expect(burst[0]?.message).not.toContain("SES_MAX_SEND_RATE");
     const setting = throttled(SELF_THROTTLE_HALTS);
     expect(setting.map((c) => [c.kind, c.severity])).toEqual([["provider_unavailable", "warn"]]);
-    expect(setting[0]?.message).toContain("Whoever runs the deployment sets SES_MAX_SEND_RATE");
+    expect(setting[0]?.message).toContain("Set SES_MAX_SEND_RATE");
   });
 
   it("says this send, not the account, when the provider refuses its email, and holds no one unsent because of it", () => {

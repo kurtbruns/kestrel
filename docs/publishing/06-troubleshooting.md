@@ -96,13 +96,14 @@ Whoever sets up your instance can meet this in [Lock the dashboard with Access](
 
 With an address set, Kestrel emails you:
 
-- when a send finishes, with how many emails were accepted, unsent, and skipped
-- when your provider refuses your account or a send, or no provider is connected
+- when a send finishes, with how many emails your provider accepted, and how late it went out if it did
+- when no one's email was accepted for a finished send, since it can't be sent again
+- when email isn't going out and signups are paused: once when it starts, and once more if a post is held after an email that named none
+- when your provider refuses a send or hits a limit, or no provider is connected
 - when the SES sandbox refuses a signup's confirmation, at most once a day
-- when email isn't going out and signups are paused, found by a reader's signup or the check of your SES account, at most once a day while it lasts
-- when a send stops going out with nothing to explain it, waits for you to resolve it, or misses its time
-- when a service token imports a list, since no one saw it happen (an import you make yourself, or through Claude, sends nothing)
+- when a send stops going out with nothing to explain it, waits for you to resolve it, or doesn't go out on time
+- when your provider has sent no receipts for six hours after a send, once until a receipt arrives
 
-Each goes to every address set, links to the page it's about, and is sent once while the problem lasts. If one address can't be reached, the others still get it, and **Last notification** names the one that failed. A bounce spike shows on the dashboard but isn't emailed. **Send a test notification** checks that one arrives.
+Each says whether anyone has to act, and how. If the fix needs whoever set up your instance, you can forward it as it stands. Each goes to every address set, links to the page it's about, and is sent once while the problem lasts. A reader's address in your provider's words shows only as its domain, and in full on the send's page. If one address can't be reached, the others still get it, and **Last notification** names the one that failed. A bounce spike shows on the dashboard but isn't emailed. **Send a test notification** checks that one arrives.
 
 By default, notifications go through your newsletter's own email provider. So when that provider refuses your account, the notification about it can't reach you either. You can send them another way, as [Notifications through Cloudflare's email](../guides/03-notifications.md) describes.

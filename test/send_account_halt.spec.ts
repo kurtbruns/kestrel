@@ -75,7 +75,7 @@ describe("a send that comes due during an account refusal", () => {
     expect(prog.phase).toBe("needs_attention");
     expect(condition(prog, "refused")?.retry_at).toBe(held.halt_retry_at);
     expect(has(prog, "stuck")).toBe(false);
-    expect(await notified("refused")).toEqual([first.id]);
+    expect(await notified("not_sending")).toEqual([null]);
 
     // The account is fixed: at the shared retry the first send probes, and both go out.
     transport.refuse = null;
@@ -86,7 +86,7 @@ describe("a send that comes due during an account refusal", () => {
     expect([(await row(first.id)).status, (await row(second.id)).status]).toEqual(["sent", "sent"]);
     expect((await row(second.id)).c_accepted).toBe(3);
     expect(emails.every((e) => transport.timesMailed(e) === 2)).toBe(true); // once per post
-    expect(await notified("refused")).toEqual([first.id]);
+    expect(await notified("not_sending")).toEqual([null]);
   });
 });
 
@@ -112,7 +112,7 @@ describe("a post that fires in the tick a held send retries", () => {
       2,
       retried.halt_retry_at,
     ]);
-    expect(await notified("refused")).toEqual([first.id]);
+    expect(await notified("not_sending")).toEqual([null]);
   });
 });
 
