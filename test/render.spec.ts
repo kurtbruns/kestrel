@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { SAMPLE_POST_HTML, SAMPLE_POST_MARKDOWN } from "../shared/sample_post";
 import type { ImageRow } from "../src/db/images";
 import type { PostRow, RevisionRow } from "../src/db/posts";
 import { DEFAULT_SETTINGS } from "../src/db/settings";
 import type { Config } from "../src/env";
-import { markdownToHtml } from "../src/render/markdown";
 import {
   omitEmailOnly,
   render,
@@ -487,19 +485,5 @@ describe("the publication name in the email (SPEC §9)", () => {
     expect(signOffName(await emailFrom("Other <news@send.example>", "Field Notes"))).toBe(
       "Field Notes",
     );
-  });
-});
-
-describe("the sample post (SPEC §5)", () => {
-  it("is the same copy in the Template page's preview as in a template test", () => {
-    const warnings: string[] = [];
-    const html = markdownToHtml(SAMPLE_POST_MARKDOWN, {
-      images: new Map(),
-      mediaBase: config.mediaPublicBase,
-      maxWidth: 600,
-      warnings,
-    });
-    expect(html).toBe(SAMPLE_POST_HTML);
-    expect(warnings).toEqual([]);
   });
 });

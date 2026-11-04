@@ -13,7 +13,6 @@
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
 import type { PreviewResponse, TestSendResponse } from "../../shared/posts";
-import { SAMPLE_POST_MARKDOWN, TEMPLATE_TEST_SUBJECT } from "../../shared/sample_post";
 import type { TemplateTestResponse } from "../../shared/settings";
 import * as images from "../db/images";
 import type { PostRow, RevisionRow } from "../db/posts";
@@ -232,11 +231,35 @@ export async function test(c: RequestContext): Promise<Response> {
 /** How many addresses one template test may fan out to (matches the settings cap). */
 export const MAX_TEMPLATE_TEST_RECIPIENTS = 20;
 
-/** Build the synthetic render input for a sample post, with no post and no images: it stands
- *  in for {{ .Post.Body }} when testing the template itself, since there's no real post to
- *  render. It flows through the same render() as a real send (I5); only the body's source
- *  differs, and the copy is the one the on-page preview shows. A template test's subject says
- *  it is one; a preview passes its own. */
+// A synthetic post that stands in for {{ .Post.Body }} when testing the TEMPLATE
+// itself, since there's no real post to render. It flows through the same render() as a
+// real send (I5); only the body's source differs. It says what it is because it arrives
+// under the publisher's own sign-off and would otherwise read as a post they didn't write.
+// The on-page preview can use placeholder text instead: its dashed box says that, and an
+// email can't carry the box.
+const TEMPLATE_TEST_SUBJECT = "Template test: how your posts will look";
+
+/** The sample post as it is headed outside a template test: Settings' preview of a post
+ *  page (`routes/reader_pages.ts`). */
+export const SAMPLE_POST_SUBJECT = "How your posts will look";
+
+const TEMPLATE_TEST_MARKDOWN = [
+  `# ${SAMPLE_POST_SUBJECT}`,
+  "",
+  "This is a test of your email template, with sample text. A real post’s Markdown fills this space.",
+  "",
+  "It shows the parts of a post that a template styles:",
+  "",
+  "- Headings, like the one above",
+  "- **Bold** text",
+  "- [Links](https://example.com)",
+  "- Lists, like this one",
+  "",
+  "> And quotes, like this one.",
+].join("\n");
+
+/** Build the synthetic render input for a sample post, with no post and no images. A template
+ *  test's subject says it is one; a preview passes its own. */
 export function sampleRenderInput(subject = TEMPLATE_TEST_SUBJECT): RenderInput {
   const now = Date.now();
   const post: PostRow = {
@@ -255,7 +278,7 @@ export function sampleRenderInput(subject = TEMPLATE_TEST_SUBJECT): RenderInput 
   const revision: RevisionRow = {
     id: "sample-rev",
     post_id: "sample",
-    markdown: SAMPLE_POST_MARKDOWN,
+    markdown: TEMPLATE_TEST_MARKDOWN,
     metadata: JSON.stringify({ subject, slug: post.slug }),
     author: null,
     client: null,

@@ -12,7 +12,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
-- A template test email now says what it is, under the subject "Template test: how your posts will look", instead of arriving as a made-up post about starlings under your own sign-off. The Template page's preview and Settings' previews of the reader pages show the same sample.
+- A template test email now says what it is, under the subject "Template test: how your posts will look", instead of arriving as a made-up post about starlings under your own sign-off. Settings' previews of the reader pages show the same sample; the Template page's preview keeps its placeholder text.
 
 ## [1.19.0] - 2026-11-02
 
