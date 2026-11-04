@@ -47,6 +47,8 @@ The same form sets a custom MAIL FROM domain, so SPF also passes for your domain
 
 1. Wait until SES shows **Identity status** as **Verified**, and both **DKIM configuration** and **MAIL FROM configuration** as **Successful**.
 
+    If they stay pending, check that each record's proxy status is **DNS only**.
+
 ## 2. Add a DMARC record
 
 DMARC tells inboxes what to do with mail that fails its checks, and sends you reports about it. SES doesn't add this record, so you add it yourself. It starts in monitor mode, which reports without blocking anything.
