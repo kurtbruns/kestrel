@@ -84,7 +84,7 @@ const EMAIL_TEMPLATE_VARS: TemplateVarGroup[] = [
     group: "Email",
     vars: [
       { token: "{{ .Email.SentTo }}", desc: "The recipient’s address (filled per send)." },
-      { token: "{{ .Email.UnsubscribeURL }}", desc: "Their one-click unsubscribe link." },
+      { token: "{{ .Email.UnsubscribeURL }}", desc: "Their unsubscribe link." },
       { token: "{{ .Email.ViewInBrowserURL }}", desc: "The web version’s permanent URL." },
     ],
   },
