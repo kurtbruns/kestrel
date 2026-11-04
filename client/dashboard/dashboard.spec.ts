@@ -792,6 +792,28 @@ describe("dashboard", () => {
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
       expect(card()).not.toBeNull();
+      expect($(".setup-card .setup-title").nextElementSibling?.textContent).toBe(
+        "This card stays until your first post goes out to the archive. Email-only sends don’t count.",
+      );
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("follows the archive on each load: unlisting the only listed post reopens setup, and listing it closes setup again (SPEC §5)", async () => {
+      const srv = sendServer([send({ id: "x1" })]);
+      fake = world([post({ status: "sent" })], srv, counts);
+      const load = async () => {
+        unmount();
+        await mount(renderDashboard);
+        await vi.advanceTimersByTimeAsync(0);
+      };
+      await load();
+      expect(card()).toBeNull();
+      srv.edit("x1", {}, { email_only: true });
+      await load();
+      expect(card()).not.toBeNull();
+      srv.edit("x1", {}, { email_only: false });
+      await load();
+      expect(card()).toBeNull();
       expect(fake.unhandled).toEqual([]);
     });
 
@@ -1179,7 +1201,9 @@ describe("dashboard", () => {
       $(".setup-fold").click();
       expect($(".setup-access").classList.contains("setup-done")).toBe(true);
       expect($(".setup-access .setup-hint").textContent).toBe("AWS granted it.");
-      expect(document.querySelector(".setup-share .setup-hint")).toBeNull();
+      expect($(".setup-share .setup-hint").textContent).toBe(
+        "Share it before your first post goes out, so readers get it.",
+      );
     });
 
     it("never checks the step off while the app can't tell, nor says it's in the sandbox", async () => {
