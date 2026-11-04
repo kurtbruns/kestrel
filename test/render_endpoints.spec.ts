@@ -356,8 +356,11 @@ describe("template test-send (POST /api/settings/template/test)", () => {
     // substituted, the test unsubscribe link present.
     expect(msg.html).not.toContain(UNSUB_SENTINEL);
     expect(msg.html).toContain("/unsubscribe?test=1");
-    // The sample subject line proves it rendered the synthetic post.
-    expect(msg.subject).toContain("Template test");
+    // The sample says what it is, in the subject and the body, since it arrives under the
+    // publisher's own sign-off.
+    expect(msg.subject).toBe("Template test: how your posts will look");
+    expect(msg.html).toContain("This is a test of your email template");
+    expect(msg.text).toContain("This is a test of your email template");
   });
 
   it("accepts several addresses in one call", async () => {

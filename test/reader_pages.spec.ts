@@ -26,9 +26,9 @@ const SHOWS: Record<string, string[]> = {
   "unsubscribe/ask": [`Unsubscribe from ${publication}?`, "<strong>reader@example.com</strong>"],
   "unsubscribe/done": ["You’re unsubscribed", "<strong>reader@example.com</strong>"],
   "unsubscribe/invalid": ["This link is invalid", "It may be incomplete."],
-  "reading/landing": ["Latest post", "The starlings are back", "Browse the full archive"],
-  "reading/archive": ["The starlings are back", "What the river kept"],
-  "reading/post": ["<title>The starlings are back</title>", 'class="k-mast"'],
+  "reading/landing": ["Latest post", "How your posts will look", "Browse the full archive"],
+  "reading/archive": ["How your posts will look", "What the river kept"],
+  "reading/post": ["<title>How your posts will look</title>", 'class="k-mast"'],
   "reading/landing-empty": [
     `Subscribe to ${publication}`,
     "No posts yet. Subscribe to get the first one in your inbox.",
