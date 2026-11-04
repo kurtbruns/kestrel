@@ -1,28 +1,22 @@
 # Go live
 
-At this point, your instance should be deployed and verified. Before anyone subscribes, check that AWS granted production access, as [Check that AWS granted it](06-production-access.md#4-check-that-aws-granted-it) describes, so SES can send to anyone. From here, the publisher can set up the publication, and you can continue with the guides below.
+Your instance is deployed and verified, and SES can send to anyone. What's left is the newsletter itself, so where you go next depends on who's writing it.
 
-## Start publishing
+## If you're writing it
 
-The rest happens in the editor, at `https://newsletter.example.com/dashboard/`. The Publishing docs walk through it in the order of the dashboard's setup checklist, starting with [Name your publication](../publishing/03-name-your-publication.md).
+Open the editor at `https://newsletter.example.com/dashboard/`. The dashboard's setup steps show what's left, and [Publishing](../publishing/README.md) covers each one.
 
-If someone else is the publisher, let them sign in first:
+## If someone else is writing it
 
-1. Add their email address to the policy on the Access application that lets you in, and to `ACCESS_ALLOWED_EMAILS` if you set it, as in [Give the app its two values](03-access.md#4-give-the-app-its-two-values).
+[Let them into the editor](03-access.md#let-someone-else-in), and add their address beside yours under **Settings → Notifications**, so a problem reaches both of you. Then send them the editor's address and a link to [Publishing](../publishing/README.md). The dashboard's setup steps show them what's left.
 
-1. If they don't have a Cloudflare account, add another way to sign in, such as a one-time code by email. It's under **Zero Trust → Integrations → Identity providers**.
+## Optional guides
 
-1. Add their address under **Settings → Notifications** beside yours, so a problem reaches both of you.
+Each one adds one thing, and you can come back to any of them later.
 
-1. Send them the editor's address and a link to [Name your publication](../publishing/03-name-your-publication.md).
-
-## Optional next steps
-
-Each of these guides adds one thing, and you can come back to any of them later.
-
-- [Allow Claude to connect](../guides/01-allow-claude.md), so the publisher can connect Claude Desktop, claude.ai, or Claude Code, and have it draft, proofread, and schedule posts as them, through the same API the editor uses.
-- [Automate with a service token](../guides/02-automate.md), so a script can call the API with a service token, when no one is signed in.
-- [Notifications through Cloudflare's email](../guides/03-notifications.md), so problems are reported even when the email provider has stopped sending.
-- [Rate-limit the subscribe form](../guides/05-rate-limit.md), before the subscribe link is shared widely.
-- [As your list grows](../guides/09-as-your-list-grows.md), from about 1,000 subscribers.
-- [Upgrade to a new release](../guides/07-upgrade.md), when one comes out.
+- **Before you share your subscribe link:** [Rate-limit the subscribe form](../guides/05-rate-limit.md)
+- **To hear about a problem even when SES has stopped sending:** [Notifications through Cloudflare's email](../guides/03-notifications.md)
+- **To have Claude draft, proofread, and schedule posts:** [Allow Claude to connect](../guides/01-allow-claude.md)
+- **To run scripts with no one signed in:** [Automate with a service token](../guides/02-automate.md)
+- **To see when your list needs Workers Paid or higher SES limits:** [As your list grows](../guides/09-as-your-list-grows.md)
+- **To move to a new release:** [Upgrade to a new release](../guides/07-upgrade.md)
