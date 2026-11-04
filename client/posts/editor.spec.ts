@@ -1108,8 +1108,8 @@ describe("editor view", () => {
     const server = draftServer();
     await open([
       { path: "/api/posts/p1", reply: server.get },
-      {
-        path: "/api/posts/p1/preview",
+      ...["/api/posts/p1/preview", "/api/posts/p1/preview.json"].map((path) => ({
+        path,
         reply: () =>
           jsonResponse(
             {
@@ -1118,7 +1118,7 @@ describe("editor view", () => {
             },
             400,
           ),
-      },
+      })),
     ]);
     $(".ctab[data-tab='preview']").click();
     await vi.advanceTimersByTimeAsync(0);
@@ -1133,6 +1133,7 @@ describe("editor view", () => {
     await open([
       { path: "/api/posts/p1", reply: () => (deleted ? postGone() : draft()) },
       { path: "/api/posts/p1/preview", reply: postGone },
+      { path: "/api/posts/p1/preview.json", reply: postGone },
     ]);
     deleted = true;
     $(".ctab[data-tab='preview']").click();
@@ -2333,7 +2334,7 @@ describe("editor view", () => {
       {
         method: "POST",
         path: "/api/posts/p1/images",
-        reply: () => ({ image: { filename: "my-owl-1-.png", url: "http://m/my-owl-1-.png" } }),
+        reply: () => ({ image: { filename: "my-owl-1.png", url: "http://m/my-owl-1.png" } }),
       },
     ]);
     body().setSelectionRange(0, 0);
@@ -2342,7 +2343,7 @@ describe("editor view", () => {
     Object.defineProperty(input, "files", { value: [file], configurable: true });
     input.dispatchEvent(new Event("change"));
     await vi.advanceTimersByTimeAsync(0);
-    expect(body().value).toMatch(/^\n!\[my-owl-1-\.png\]\(my-owl-1-\.png\)\n# Owls/);
+    expect(body().value).toMatch(/^\n!\[my-owl-1\.png\]\(my-owl-1\.png\)\n# Owls/);
   });
 
   it("mounts a scheduled post read-only, with no autosave", async () => {

@@ -130,10 +130,10 @@ describe("images", () => {
     for (const [sent, stored] of [
       // A macOS screenshot: spaces, and a narrow no-break space before "AM".
       ["Screenshot 2026-10-30 at 9.41.12 AM.png", "Screenshot-2026-10-30-at-9.41.12-AM.png"],
-      ["My Cover (2).PNG", "My-Cover-2-.PNG"],
+      ["My Cover (2).PNG", "My-Cover-2.PNG"],
       ["tab\tand nbsp.png", "tab-and-nbsp.png"],
-      ["<a>[b]`c`.png", "-a-b-c-.png"],
-      ["50% #1?.png", "50-1-.png"],
+      ["<a>[b]`c`.png", "a-b-c.png"],
+      ["50% #1?.png", "50-1.png"],
       ["clean_name-1.png", "clean_name-1.png"],
       ["café.png", "café.png"],
     ] as const) {
@@ -164,7 +164,7 @@ describe("images", () => {
     expect((await readJson(named)).image.filename).toBe("named-shot.png");
   });
 
-  it("refuses a name with nothing in it but what cleaning removes", async () => {
+  it("refuses a name with nothing in it but what cleaning removes, in the same words however it came", async () => {
     const id = await newDraft("Blank Name");
     const raw = await SELF.fetch(`${base}/api/posts/${id}/images?filename=%20%20`, {
       method: "POST",
@@ -172,7 +172,10 @@ describe("images", () => {
       body: PNG_1x1,
     });
     expect(raw.status).toBe(400);
-    expect(await readJson(raw)).toMatchObject({ field: "filename" });
+    expect(await readJson(raw)).toMatchObject({
+      field: "filename",
+      message: "a filename is required",
+    });
   });
 
   it("a reference by the name an upload answered becomes an image in the preview, and the stored bytes serve at its address (SPEC §4)", async () => {

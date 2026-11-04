@@ -41,12 +41,16 @@ const UNREFERENCEABLE = /[\s\p{Cc}<>()[\]`#?%]+/gu;
 /**
  * The name to store an upload under, so that `![alt](name)` always becomes an image (SPEC §4):
  * each run of characters that would break the reference becomes a hyphen, and the case stays.
- * A name with nothing else in it comes back empty, for the caller's refusal. Only an upload
- * names an image this way: an image stored before this rule keeps its name, and a delete
- * looks up exactly the name the post has.
+ * A hyphen at either end of the name or before a dot goes, since the name shows in a public
+ * address. A name with nothing else in it comes back empty, for the caller's refusal. Only an
+ * upload names an image this way: an image stored before this rule keeps its name, and a
+ * delete looks up exactly the name the post has.
  */
 function cleanName(name: string): string {
-  return baseName(name).replace(UNREFERENCEABLE, "-").replace(/^-+$/, "");
+  return baseName(name)
+    .replace(UNREFERENCEABLE, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-+\./g, ".");
 }
 
 /** A name's nth candidate on a post: `image.png`, `image-2.png`, `image-3.png`. */
@@ -95,9 +99,6 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
   } else {
     // Raw body upload: filename via query, content-type via header.
     filename = cleanName(c.url.searchParams.get("filename") ?? "");
-    if (!filename) {
-      throw badRequest("filename query param required for a raw upload", { field: "filename" });
-    }
     contentType = mediaType(ct);
     bytes = await c.req.arrayBuffer();
   }
@@ -122,7 +123,8 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
   // An upload never replaces an image (SPEC §4). A browser names every pasted image the same,
   // so replacing would leave each reference showing the last paste, at an address a browser
   // may have cached the first under. The name is claimed before the bytes are written, since
-  // the editor uploads a paste's or a drop's files at the same time.
+  // the editor uploads a paste's or a drop's files at the same time. A Worker lost between
+  // the two leaves a row with no bytes, which a reference to it would send as a broken image.
   const dims = probeImageDimensions(new Uint8Array(bytes));
   let row: ImageRow | null = null;
   for (let n = 1; !row; n++) {

@@ -275,6 +275,23 @@ describe("render (the single render path)", async () => {
       }
     });
 
+    it("says nothing of an image whose address reaches the email escaped or encoded", async () => {
+      const spaced = image({ filename: "my cat.png", storage_key: "posts/p1/my cat.png" });
+      const amp = image({ filename: "cat&dog.png", storage_key: "posts/p1/cat&dog.png" });
+      const accent = image({ filename: "café&co.png", storage_key: "posts/p1/café&co.png" });
+      for (const [markdown, img] of [
+        ['<img src="https://media.example/posts/p1/my%20cat.png" alt="A cat">', spaced],
+        ["[See the pair](https://media.example/posts/p1/cat&dog.png)", amp],
+        ["[See the caf\u00e9](https://media.example/posts/p1/caf\u00e9&co.png)", accent],
+      ] as const) {
+        const result = await render(
+          { post: post(), revision: revision(markdown), images: [img] },
+          config,
+        );
+        expect(result.warnings, markdown).toEqual([]);
+      }
+    });
+
     it("warns on a raw reference by bare name, which the render leaves unresolved", async () => {
       const result = await render(
         { post: post(), revision: revision('<img src="cat.png" alt="A cat">'), images: [image()] },

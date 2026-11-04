@@ -70,9 +70,11 @@ export function markdownToHtml(md: string, ctx: MarkdownContext): string {
   });
   const html = m.parse(md) as string;
   for (const image of ctx.images.values()) {
-    // Raw HTML and a link reach an image by its address without passing the image renderer.
+    // Raw HTML and a link reach an image by its address without passing the image renderer, and
+    // what they write may be percent-encoded, HTML-escaped, or both.
     const address = `${ctx.mediaBase}/${image.storage_key}`;
-    if (!referenced.has(image) && !html.includes(address)) {
+    const written = [address, encodeURI(address)].flatMap((a) => [a, escapeHtmlAttr(a)]);
+    if (!referenced.has(image) && !written.some((a) => html.includes(a))) {
       ctx.warnings.push(`The uploaded image “${image.filename}” isn’t used in this post.`);
     }
   }

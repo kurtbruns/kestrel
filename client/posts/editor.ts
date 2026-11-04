@@ -484,7 +484,13 @@ export async function renderEditor(
       if (!locked) {
         await saveDraft(true);
       }
-      previewFrame.srcdoc = await apiText(`/api/posts/${id}/preview`);
+      // The page carries only the email, so what the render found wrong with it is read beside
+      // it: a broken image reference reads as text in the email itself.
+      const [page, { warnings }] = await Promise.all([
+        apiText(`/api/posts/${id}/preview`),
+        api<PreviewResponse>(`/api/posts/${id}/preview.json`, { signal }),
+      ]);
+      previewFrame.srcdoc = page;
       previewFrame.onload = () => {
         try {
           const doc = previewFrame.contentDocument;
@@ -499,9 +505,6 @@ export async function renderEditor(
           }
         } catch {}
       };
-      // The page carries only the email, so what the render found wrong with it is read apart,
-      // once the email is showing: a broken image reference reads as text in the email itself.
-      const { warnings } = await api<PreviewResponse>(`/api/posts/${id}/preview.json`, { signal });
       showWarnings(warnings);
     } catch (e) {
       if (signal.aborted || foundGone(e)) {
