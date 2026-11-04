@@ -8,6 +8,7 @@
  * `SesLikeProvider` is the one-recipient shape: SES on an account allowed fewer than ten a
  * second, the one shape whose requests the send loop groups.
  */
+import type { HaltCause } from "../../shared/sends";
 import type { AppEnv } from "../../src/env";
 import type {
   EmailProvider,
@@ -35,6 +36,8 @@ export class BatchProvider implements EmailProvider {
   rateLimit = 0;
   /** While set, refuse every batch for this account-level reason (a revoked key, say). */
   refuse: string | null = null;
+  /** What the refusal is about, while `refuse` is set: a revoked key unless a spec says. */
+  refuseCause: HaltCause = "credentials";
 
   async sendBatch(
     _rendered: RenderedEmail,
@@ -48,7 +51,7 @@ export class BatchProvider implements EmailProvider {
     if (this.refuse) {
       return {
         kind: "halted",
-        halt: { reason: "account", cause: "credentials", error: this.refuse },
+        halt: { reason: "account", cause: this.refuseCause, error: this.refuse },
       };
     }
     if (this.outage > 0) {

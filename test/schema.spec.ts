@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import type { D1Migration } from "@cloudflare/vitest-plugin";
 import { beforeEach, describe, expect, it } from "vitest";
 import { SHIPPED_MIGRATIONS } from "../src/db/migrations";
-import { accountNotice } from "../src/db/notifications";
+import { outageNotice } from "../src/db/notifications";
 import { dueSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 
 // The migrations folder as vitest.config.ts read it, the same files the setup applied.
@@ -875,8 +875,13 @@ describe("schema (0020_notifications_not_sending)", () => {
       `INSERT INTO notifications (send_id, kind, episode, status, attempts, created_at, updated_at, sent_to)
        VALUES (NULL, 'sandbox', 0, 'pending', 2, 1, 2, '["a@example.com"]')`,
     ).run();
-    const migration = FOLDER.find((m) => m.name === "0020_notifications_not_sending.sql");
-    for (const q of migration?.queries ?? []) {
+    // With the rebuild after it, so a later test still finds the schema as it ships.
+    const rebuilds = FOLDER.filter(
+      (m) =>
+        m.name === "0020_notifications_not_sending.sql" ||
+        m.name === "0021_notifications_outage_receipts.sql",
+    );
+    for (const q of rebuilds.flatMap((m) => m.queries ?? [])) {
       await env.DB.prepare(q).run();
     }
     expect(
@@ -885,15 +890,57 @@ describe("schema (0020_notifications_not_sending)", () => {
       results: [{ kind: "sandbox", status: "pending", attempts: 2, sent_to: '["a@example.com"]' }],
     });
   });
+});
 
-  it("admits one notice a day that email isn't going out (SPEC §8)", async () => {
-    const day = 86_400_000;
-    for (const at of [day + 1, day + 2, 2 * day + 1]) {
-      await accountNotice(env.DB, "not_sending", at).run();
+describe("schema (0021_notifications_outage_receipts)", () => {
+  it("closes a pending import notice unsent, carrying every other row over as it was", async () => {
+    await env.DB.prepare(
+      `INSERT INTO imports (id, plan_hash, file_name, file_sha256, created_at, counts, principal_kind)
+       VALUES ('i1', 'hash', 'list.csv', 'sha', 1, '{}', 'service')`,
+    ).run();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO notifications (send_id, import_id, kind, episode, status, created_at, updated_at)
+         VALUES (NULL, 'i1', 'import', 0, 'pending', 1, 1)`,
+      ),
+      env.DB.prepare(
+        `INSERT INTO notifications (send_id, kind, episode, status, attempts, created_at, updated_at, sent_to)
+         VALUES (NULL, 'sandbox', 0, 'pending', 2, 1, 2, '["a@example.com"]')`,
+      ),
+    ]);
+    const migration = FOLDER.find((m) => m.name === "0021_notifications_outage_receipts.sql");
+    for (const q of migration?.queries ?? []) {
+      await env.DB.prepare(q).run();
     }
     const { results } = await env.DB.prepare(
-      "SELECT episode FROM notifications WHERE kind = 'not_sending' ORDER BY episode",
+      "SELECT kind, status, attempts, sent_to FROM notifications ORDER BY kind",
     ).all();
-    expect(results).toEqual([{ episode: day }, { episode: 2 * day }]);
+    expect(results).toMatchObject([
+      { kind: "import", status: "cleared" },
+      { kind: "sandbox", status: "pending", attempts: 2, sent_to: '["a@example.com"]' },
+    ]);
+  });
+
+  it("holds an outage to one first notice and one further, by when the refusal began (SPEC §8)", async () => {
+    await env.DB.prepare(
+      `INSERT INTO sending (id, state, since, observed_at, refusal_cause, refusal_found_by, refusal_error, refusal_at)
+       VALUES (1, 'refusing', 500, 500, 'credentials', 'account_check', 'bad key', 500)`,
+    ).run();
+    await outageNotice(env.DB, 600).run();
+    await outageNotice(env.DB, 700).run();
+    const insertFurther = () =>
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO notifications (send_id, kind, episode, created_at, updated_at)
+         VALUES (NULL, 'not_sending_held', 500, 800, 800)`,
+      ).run();
+    await insertFurther();
+    await insertFurther();
+    const { results } = await env.DB.prepare(
+      "SELECT kind, episode FROM notifications ORDER BY kind",
+    ).all();
+    expect(results).toEqual([
+      { kind: "not_sending", episode: 500 },
+      { kind: "not_sending_held", episode: 500 },
+    ]);
   });
 });
