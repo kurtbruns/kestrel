@@ -10,7 +10,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading.** Run the new database migration, as [Upgrade to a new release](docs/guides/07-upgrade.md) says.
+**Upgrading from 1.19.0.** In your instance's repository, run `npm run sync-migrations`, which brings in one database migration, `0021_notifications_outage_receipts`: it rebuilds the notifications table for the new notices, carrying every row over, and closes any import notice not yet sent, since this release sends none. Run `npm run check-context`: this release changes the operator's Claude context, and a copy you've edited is merged by hand. Apply the migration before you deploy, with `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development). Then deploy with `npx wrangler deploy --env production`. A script of yours that replaced an image by uploading its name again needs changing (see Breaking); nothing else does.
 
 ### Added
 
@@ -28,10 +28,11 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - The dashboard's **Finish setting up** card now says under its title that it stays until your first post goes out to the archive and that email-only sends don't count, and **Share your subscribe link** says to share it before then, so readers get that post.
 - A template test email now says what it is, under the subject "Template test: how your posts will look", instead of arriving as a made-up post about starlings under your own sign-off. Settings' previews of the reader pages show the same sample; the Template page's preview keeps its placeholder text.
 - The setup guide's Go live page is now a checkpoint on where to go next: one path if you're writing the newsletter, one if someone else is, and the optional guides, each named by when you'd want it. How to let someone else into the editor moves to its own section of Lock the dashboard with Access.
+- The operator's Claude context (`template/claude/CLAUDE.md`) now says to reference an image by the `filename` the upload answers, since it may differ from the name sent, says how to swap an image, and names the preview's new warnings.
 
 ### Fixed
 
-- An image uploaded with spaces in its name, as every macOS screenshot has, or with other characters that break a Markdown reference, now shows in the email instead of its `![…](…)` text: the upload stores it with hyphens in their place and answers that `filename` to reference, and images already stored keep their names. The preview now warns when text that reads as an image reference didn't become an image, and when an image uploaded to the post isn't used by it (SPEC §4), and the editor's Preview tab now shows a render's warnings, which it used to show only after a test. The operator's Claude context (`template/claude/CLAUDE.md`) now says to reference the `filename` the upload answers, since it may differ from the name sent, says how to swap an image, and names the new warnings.
+- An image uploaded with spaces in its name, as every macOS screenshot has, or with other characters that break a Markdown reference, now shows in the email instead of its `![…](…)` text: the upload stores it with hyphens in their place and answers that `filename` to reference, and images already stored keep their names. The preview now warns when text that reads as an image reference didn't become an image, and when an image uploaded to the post isn't used by it (SPEC §4), and the editor's Preview tab now shows a render's warnings, which it used to show only after a test.
 - Two images pasted into one post no longer become one image: a browser names every pasted image the same, so the second replaced the first, both references showed it, and the preview could show a stale copy.
 
 ### Breaking
