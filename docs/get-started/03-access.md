@@ -37,7 +37,7 @@ The editor lives under `/dashboard`, and the API under `/api`. One application c
 
     Each path covers everything under it. Leave every other path out. The home page, the archive, subscribing, unsubscribing, images, and your email provider's webhooks must stay public.
 
-1. Add only these two public hostnames. If the form also shows an empty private hostname or IP row, remove it, or saving fails with an error naming `use_clientless_isolation_app_launcher_url`.
+1. Add only these two public hostnames. If the form also shows an empty private hostname or IP row, remove it, or saving fails with an error naming `use_clientless_isolation_app_launcher_url`, saying it needs private destinations.
 
 1. Name the application after your app's hostname, `newsletter.example.com`. Cloudflare suggests a name made from the subdomain, which won't tell two newsletters apart.
 
@@ -120,7 +120,7 @@ To let someone else into the editor, such as the publisher or a co-editor, add t
 If a check fails:
 
 - **The editor says the configuration needs a fix.** Store the secret it names. While only one of the two is stored, `/health` answers `500` naming the other, and the public pages say the newsletter is temporarily unavailable.
-- **Cloudflare lets you in, but the editor answers `401`.** Check the two secrets for a typo, and that `ACCESS_ALLOWED_EMAILS`, if you set it, includes your address. The same goes for anyone else you let in.
+- **Cloudflare lets you in, but the editor answers `401`.** Check the two secrets for a typo, and that `ACCESS_ALLOWED_EMAILS`, if you set it, includes your address. The same goes for anyone else you let in. If you renamed the team domain, store `ACCESS_TEAM_DOMAIN` again, since the app still checks logins against the old one.
 - **The editor says Access let you in but didn't say who you are.** Your login carried no email, which happens through a kind of policy the app doesn't accept, such as a device check. Sign out, and sign in through the policy you made above.
 
 Next, [create an AWS account](04-aws-account.md).

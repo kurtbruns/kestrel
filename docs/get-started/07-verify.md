@@ -17,9 +17,9 @@ A test email goes through the same code as a real send. If the test looks right,
 
 1. In the editor at `https://newsletter.example.com/dashboard/`, create a post with a subject, a short body, and an image.
 
-1. Select **Send test email**, enter your address, and send it.
+1. Select **Send test email**, enter your address, and send it. If SES refuses it, the test's line says why and what fixes it. In the sandbox, SES takes only the addresses you verified.
 
-1. Open the email. It arrives in your inbox, not in spam, the image loads, and the subject reads as you wrote it. Its links work, but a test email unsubscribes no one; section 5 unsubscribes for real.
+1. Open the email. It arrives in your inbox, not in spam, the image loads, and the subject reads as you wrote it. Gmail may put it under Promotions, which still counts as your inbox. Its links work, but a test email unsubscribes no one; section 5 unsubscribes for real.
 
 1. Send a test email to your second address, not the publisher's inbox, and reply to it from there, as a reader would. The reply arrives in the publisher's inbox, the one you chose in [Connect Amazon SES](05-ses.md#8-receive-replies-at-your-from-address), or in your From address's own mailbox if you skipped forwarding. If it bounces, check the routing rule and the destination address there.
 
@@ -27,7 +27,7 @@ A test email goes through the same code as a real send. If the test looks right,
 
 Inboxes trust mail that passes DKIM and DMARC for the domain it's from. Passing both is the best single sign that your mail reaches the inbox.
 
-1. Open the test email's original source. In Gmail, open the message's menu and select **Show original**.
+1. Open the test email's original source. Pick the one from your From address, not a forwarded reply, which has the same subject. In Gmail, open the message's menu and select **Show original**.
 
 1. Find the `Authentication-Results` header. It shows:
 
@@ -45,7 +45,7 @@ Kestrel emails each notifications address when a send finishes, and right away w
 
 1. In the editor, open **Settings → Notifications**, type that address under **Send notifications to**, select **Add inbox**, and then **Save**.
 
-1. Select **Send a test notification**. It arrives at that address.
+1. Select **Send a test notification**. It arrives at that address. If it doesn't, **Last notification**, on the same page, says what happened.
 
 The publisher sets their own address in [Check your setup](../publishing/10-check-your-setup.md).
 
@@ -65,11 +65,13 @@ This is a real send, to a list of one. It proves the whole path: subscribing, co
 
 1. When the send finishes, the post arrives at your second address. A notification arrives at your first, with the subject `Sent:` and the post's title.
 
+If the send shows in red under **Sent**, its line names the fix. No one is marked unsent, and the send resumes on its own at its next retry once that's fixed. The notification about it goes through the same SES account, so it can arrive only after the fix. [Notifications through Cloudflare's email](../guides/03-notifications.md) avoids that. If the send stays scheduled past its time, the schedule isn't running, and section 7 shows how to check.
+
 ## 5. Unsubscribe
 
 Every email carries an unsubscribe link, and a header that lets mail clients show their own **Unsubscribe** button. Both work in one step, with no login.
 
-1. Open the post from section 4 in your mail client. It shows an **Unsubscribe** button next to the sender.
+1. Open the post from section 4 in your mail client. It shows an **Unsubscribe** button next to the sender. If your client shows none, use the **Unsubscribe** link in the email's footer, which asks you to confirm on a page.
 
 1. Select it. In the editor, **Subscribers** shows the address as **Unsubscribed**, and later sends leave it out.
 
@@ -88,13 +90,15 @@ When an address bounces or marks your mail as spam, SES tells the app through SN
 
 If the bounce address has no flag, or the complaint address is still pending, SES's events aren't reaching the app. Check the configuration set in [Send bounces and complaints to the app](05-ses.md#4-send-bounces-and-complaints-to-the-app), and the subscription in [Subscribe the app to the topic](05-ses.md#7-subscribe-the-app-to-the-topic).
 
+SES also emails its bounce and complaint notices to your From address, so they can reach the publisher's inbox or its spam folder. That's expected. The app doesn't need them.
+
 ## 7. Read the logs
 
 The app writes a log line for each thing it does, and Cloudflare keeps them for a few days, depending on your plan. Nothing else tells you if the once-a-minute schedule that sends posts stops, so it's worth knowing where to look.
 
 1. In the Cloudflare dashboard, go to **Workers & Pages**, select your Worker, the `name` in the `production` block of `wrangler.jsonc`, and select **Observability**.
 
-1. Filter on `event` equal to `sweep.tick`. A line arrives every minute.
+1. Filter on `event` equal to `sweep.tick`. A line arrives every minute. If none arrive, the schedule isn't running. Check that the Worker's **Triggers** tab lists it, and if it doesn't, deploy again with `--env production`.
 
 1. Filter on `event` equal to `send.completed`. Your send from section 4 is there.
 

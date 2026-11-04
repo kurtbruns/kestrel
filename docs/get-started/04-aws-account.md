@@ -65,4 +65,6 @@ AWS charges for what you use, with no spending limit, so a mistake or a leaked k
 
 1. Under **Budgets**, your budget is listed, and its email recipient shows as **Active**.
 
+    If it shows as **Pending**, open AWS's verification email while you're signed in to the account. If the link has expired, select **Resend verification** on the recipient's row.
+
 Next, [connect Amazon SES](05-ses.md).

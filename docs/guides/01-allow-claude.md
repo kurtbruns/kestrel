@@ -43,7 +43,7 @@ Managed OAuth lets an app such as Claude act with a person's account, the way th
     curl -si https://newsletter.example.com/api/whoami
     ```
 
-    You should see `401`, with a `www-authenticate` line that starts with `Bearer`. Access can take a few minutes more to start accepting sign-ins. Until it does, signing in shows `invalid_target`; wait, then try again.
+    You should see `401`, with a `www-authenticate` line that starts with `Bearer`. Access can take a few minutes more to start accepting sign-ins. Until it does, signing in shows `invalid_target` (`OAuth not enabled for the targeted resource`); wait, then try again.
 
 ## 2. Connect Claude, or send the publisher the address
 
@@ -65,4 +65,9 @@ Anyone the Access application's Allow policy lets into the dashboard can connect
 
 1. Ask Claude what the publication is called. It answers with the name the dashboard shows.
 
-If Claude can't connect, [Claude can't connect](../publishing/06-troubleshooting.md#claude-cant-connect) lists what it reports and the fix.
+If a check fails:
+
+- **Claude says it couldn't connect, or the sign-in failed.** Check that Managed OAuth is on, and that section 1's redirect address is listed if the publisher uses Claude Desktop or claude.ai. Check that the connector's address is the instance's address followed by `/api/mcp`, and that the instance is deployed, not running on your own computer.
+- `kestrel login` says the instance "doesn't offer a sign-in for programs". Managed OAuth is off. Turn it on, as section 1 describes.
+- `kestrel login` or `kestrel api` reports a `401`. Access signed the person in, but the app refused the sign-in. If you set `ACCESS_ALLOWED_EMAILS`, check that it includes the address they signed in with, and store the list again if it doesn't.
+- **The sign-in says Access let the person in, but didn't say who they are, or names `access_unidentified`.** Their login carried neither an email nor a service token, so some other kind of Access policy let it through, such as a certificate or device rule, or a login method that gives no email. The app accepts only an Allow policy on people's emails and a Service Auth policy on a service token. Remove the other policy from the Access application, or change it to one of those two kinds. A script that gets this needs a service token under a Service Auth policy, as [Allow the token in](02-automate.md#2-allow-the-token-in) describes.
