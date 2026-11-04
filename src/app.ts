@@ -717,7 +717,7 @@ export function createRouter({
           not_sent: [],
           provider: "fake",
           recipients: ["you@example.com"],
-          subject: "Template test — …",
+          subject: "Template test: how your posts will look",
           warnings: [],
         } satisfies TemplateTestResponse,
       },
