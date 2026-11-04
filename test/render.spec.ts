@@ -86,7 +86,7 @@ function image(over: Partial<ImageRow> = {}): ImageRow {
 
 /** The warning for an image uploaded to the post that it doesn't use. */
 function unused(name: string): string {
-  return `The image “${name}” is uploaded to this post but the post doesn’t use it, so it won’t be in the email. Reference it by that name if you meant to show it.`;
+  return `The uploaded image “${name}” isn’t used in this post.`;
 }
 
 describe("render (the single render path)", async () => {
