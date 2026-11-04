@@ -70,7 +70,9 @@ export function markdownToHtml(md: string, ctx: MarkdownContext): string {
   });
   const html = m.parse(md) as string;
   for (const image of ctx.images.values()) {
-    if (!referenced.has(image)) {
+    // Raw HTML and a link reach an image by its address without passing the image renderer.
+    const address = `${ctx.mediaBase}/${image.storage_key}`;
+    if (!referenced.has(image) && !html.includes(address)) {
       ctx.warnings.push(
         `The image “${image.filename}” is uploaded to this post but the post doesn’t use it, so it won’t be in the email. Reference it by that name if you meant to show it.`,
       );

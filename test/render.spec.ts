@@ -259,6 +259,31 @@ describe("render (the single render path)", async () => {
       }
     });
 
+    it("says nothing of an image the email reaches by its full address some other way", async () => {
+      const address = "https://media.example/posts/p1/cat.png";
+      for (const markdown of [
+        `<img src="${address}" alt="A cat">`,
+        `[See the cat](${address})`,
+        `<div style="background-image:url(${address})">A cat</div>`,
+      ]) {
+        const result = await render(
+          { post: post(), revision: revision(markdown), images: [image()] },
+          config,
+        );
+        expect(result.html, markdown).toContain(address);
+        expect(result.warnings, markdown).toEqual([]);
+      }
+    });
+
+    it("warns on a raw reference by bare name, which the render leaves unresolved", async () => {
+      const result = await render(
+        { post: post(), revision: revision('<img src="cat.png" alt="A cat">'), images: [image()] },
+        config,
+      );
+      expect(result.html).not.toContain("https://media.example/posts/p1/cat.png");
+      expect(result.warnings).toEqual([unused("cat.png")]);
+    });
+
     it("counts a name only in a code span as not using it, and an old name in angle brackets as using it", async () => {
       const inCode = await render(
         { post: post(), revision: revision("`![A cat](cat.png)`"), images: [image()] },
