@@ -41,33 +41,31 @@ export function getImage(
     .first<ImageRow>();
 }
 
-/** Insert, or update in place when this post already has an image of that name. */
-export async function upsertImage(db: D1Database, input: ImageInput): Promise<ImageRow> {
-  const existing = await getImage(db, input.postId, input.filename);
-  const now = Date.now();
-  if (existing) {
-    await db
-      .prepare(
-        "UPDATE images SET storage_key = ?, content_type = ?, width = ?, height = ?, created_at = ? WHERE id = ?",
-      )
-      .bind(input.storageKey, input.contentType, input.width, input.height, now, existing.id)
-      .run();
-  } else {
-    await db
-      .prepare(
-        "INSERT INTO images (id, post_id, filename, storage_key, content_type, width, height, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      )
-      .bind(
-        newId(),
-        input.postId,
-        input.filename,
-        input.storageKey,
-        input.contentType,
-        input.width,
-        input.height,
-        now,
-      )
-      .run();
+/**
+ * Insert an image under its name, or answer null when this post already has that name. The
+ * table's uniqueness decides, so of two uploads at once only one can take a name.
+ */
+export async function insertImageIfNameFree(
+  db: D1Database,
+  input: ImageInput,
+): Promise<ImageRow | null> {
+  const { meta } = await db
+    .prepare(
+      "INSERT INTO images (id, post_id, filename, storage_key, content_type, width, height, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (post_id, filename) DO NOTHING",
+    )
+    .bind(
+      newId(),
+      input.postId,
+      input.filename,
+      input.storageKey,
+      input.contentType,
+      input.width,
+      input.height,
+      Date.now(),
+    )
+    .run();
+  if (meta.changes === 0) {
+    return null;
   }
   return unwrap(await getImage(db, input.postId, input.filename), "image");
 }
