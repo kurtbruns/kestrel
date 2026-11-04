@@ -25,6 +25,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - The fix for a provider refusal, in the editor, the API's `advice` and `message`, and email, now says what to do and adds "If someone else set up Kestrel for you, pass this along to them." instead of "Whoever runs the deployment" (SPEC §12).
 - Kestrel no longer emails you when a service token imports a list. The import stays on the record with who committed it (SPEC §7).
 - The setup guide's checks now say what to do about the failures a real setup ran into, in a sentence beside the check, and Troubleshooting is a publisher's page again: it opens with a table of symptoms and where each fix is, and a section on where to look. Its section on Claude's Access setup moved to Allow Claude to connect.
+- The dashboard's **Finish setting up** card now says under its title that it stays until your first post goes out to the archive and that email-only sends don't count, and **Share your subscribe link** says to share it before then, so readers get that post.
 - A template test email now says what it is, under the subject "Template test: how your posts will look", instead of arriving as a made-up post about starlings under your own sign-off. Settings' previews of the reader pages show the same sample; the Template page's preview keeps its placeholder text.
 
 ### Fixed

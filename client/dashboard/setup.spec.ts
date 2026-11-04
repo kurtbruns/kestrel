@@ -166,8 +166,24 @@ describe("setup steps", () => {
       "Write your first post: done (“The integral sign”.)",
       `Schedule your first post: done (Goes out ${fmt(s.fire_at)}.)`,
       `Send a test email for your first post: todo (“The integral sign” goes out ${fmt(s.fire_at)}. Send yourself a test of it first.)`,
-      "Share your subscribe link: todo",
+      "Share your subscribe link: todo (Share it before your first post goes out, so readers get it.)",
     ]);
+  });
+
+  it("says to share before the first post once sharing can be taken, and to wait where it can't yet", () => {
+    const hint = (over: Partial<SetupFacts>) =>
+      setupSteps(facts(over)).find((s) => s.key === "share")?.hint;
+    const before = "Share it before your first post goes out, so readers get it.";
+    const wait = "Share it once AWS grants production access.";
+    const working = sending("working");
+    expect(hint({ provider: ses({ state: "production", sending: working }) })).toBe(before);
+    // A provider with no SES account has no sandbox to wait for.
+    expect(hint({ provider: null, sesAccount: false })).toBe(before);
+    expect(hint({ provider: ses({ sending: working }) })).toBe(wait);
+    expect(hint({ provider: providerStatus({ unknown_reason: "permission" }) })).toBe(wait);
+    expect(hint({ provider: null })).toBe(wait);
+    // Signups closed: it can't be taken at all, so the hint is the step it waits for.
+    expect(hint({ provider: ses({ signups: "not_open" }) })).toBe("After Send a test email");
   });
 
   it("ticks the first post's test from the scheduled send's tested_at, until a re-make makes the email new", () => {
@@ -227,8 +243,6 @@ describe("setup steps", () => {
     ]);
     // A provider with no SES account to ask about: no production-access step at all.
     const standIn = setupSteps(facts({ provider: null, sesAccount: false }));
-    // With no SES account there is no sandbox to wait for, so sharing says nothing.
-    expect(standIn.find((s) => s.key === "share")?.hint).toBeNull();
     expect(standIn.map((s) => s.key)).toEqual([
       "connect",
       "test",
@@ -265,6 +279,30 @@ describe("setup card", () => {
   const toggle = (el: HTMLElement) => el.querySelector<HTMLButtonElement>(".setup-fold");
   const titles = (el: HTMLElement) =>
     [...el.querySelectorAll(".setup-steps li strong")].map((s) => s.textContent);
+
+  it("says under the card's title when the card goes, in every phase, and not on the first-run checklist", () => {
+    const line =
+      "This card stays until your first post goes out to the archive. Email-only sends don’t count.";
+    for (const f of [
+      facts({ notConnected: true, sesAccount: false }),
+      facts({ provider: ses({ sending: sending("working") }) }),
+      facts({ firstPost: "The integral sign", firstSend: firstSend() }),
+    ]) {
+      const note = render(f).querySelector(".setup-title")?.nextElementSibling;
+      expect(note?.textContent).toBe(line);
+      expect(render(f, "checklist").textContent).not.toContain(line);
+    }
+  });
+
+  it("shows the Share hint above the address to copy once sharing can be taken", () => {
+    const el = render(facts({ provider: null, sesAccount: false }));
+    expect(el.querySelector(".setup-share .setup-hint")?.textContent).toBe(
+      "Share it before your first post goes out, so readers get it.",
+    );
+    expect(el.querySelector(".setup-share .setup-hint")?.nextElementSibling?.textContent).toBe(
+      "https://news.example.com/subscribe",
+    );
+  });
 
   it("hides finished steps behind one toggle, so the list starts at what's left", () => {
     const provider = ses({ review: "pending", sending: sending("working"), signups: "open" });

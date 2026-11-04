@@ -214,7 +214,9 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
 
   // Sharing can't be known, so it's never done; it waits only for signups to open. In the
   // sandbox it says to wait for production access and offers no address to copy, since a
-  // reader not verified in SES would get no confirmation.
+  // reader not verified in SES would get no confirmation. Once offered, it says to share before
+  // the first post: the card goes as soon as that send starts, and a post can't reach someone
+  // who subscribes after it.
   const closed = f.notConnected || (p !== null && p.signups !== "open");
   steps.push({
     key: "share",
@@ -223,7 +225,7 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
     hint: closed
       ? after(TEST)
       : shareable(f)
-        ? null
+        ? "Share it before your first post goes out, so readers get it."
         : // In the sandbox, or while the account can't be read: the access step says which.
           "Share it once AWS grants production access.",
   });
@@ -283,8 +285,8 @@ function stepAction(step: SetupStep, f: SetupFacts, primary: boolean): Html | nu
 /**
  * The setup steps, in one of two layouts: the first-run `checklist` that stands in for the
  * dashboard until the first post, and the compact `card` the regular dashboard carries until the
- * first post listed in the archive is published. One list, so the two can't drift. Finished steps
- * are hidden behind one "N done" toggle, so the list starts at what's left; `showDone` shows
+ * first post listed in the archive is published, as it says under its title. One list, so the two
+ * can't drift. Finished steps are hidden behind one "N done" toggle, so the list starts at what's left; `showDone` shows
  * them in place, so the list reads as the whole checklist in its order, each done step with the
  * fact that ticked it. On the checklist, where the head carries no New post, the first step that
  * can be taken now, past the optional list, has the view's Primary. The steps, their order, and
@@ -314,6 +316,11 @@ export function setupStepsHtml(
     }</div>${stepAction(s, f, layout === "checklist" && s === current)}</li>`;
   return html`<div class="card setup${layout === "card" ? " setup-card" : ""}">
     <h2 class="setup-title">${layout === "card" ? "Finish setting up" : "Set up your publication"}</h2>
+    ${
+      layout === "card"
+        ? html`<p class="muted setup-note">This card stays until your first post goes out to the archive. Email-only sends don’t count.</p>`
+        : null
+    }
     ${
       done.length
         ? html`<button type="button" class="setup-fold" data-act="toggle-done" aria-controls="setupSteps" aria-expanded="${showDone ? "true" : "false"}" aria-label="${showDone ? "Hide" : "Show"} ${done.length} done ${done.length === 1 ? "step" : "steps"}"><span class="setup-fold-mark" aria-hidden="true">✓</span><span>${done.length} done</span></button>`
