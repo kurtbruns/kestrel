@@ -24,6 +24,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - A reader's address in your provider's words shows only as its domain in an email, and in full on the send's page (SPEC §12).
 - The fix for a provider refusal, in the editor, the API's `advice` and `message`, and email, now says what to do and adds "If someone else set up Kestrel for you, pass this along to them." instead of "Whoever runs the deployment" (SPEC §12).
 - Kestrel no longer emails you when a service token imports a list. The import stays on the record with who committed it (SPEC §7).
+- The dashboard's **Finish setting up** card now says under its title that it stays until your first post goes out to the archive and that email-only sends don't count, and **Share your subscribe link** says to share it before then, so readers get that post.
 - A template test email now says what it is, under the subject "Template test: how your posts will look", instead of arriving as a made-up post about starlings under your own sign-off. Settings' previews of the reader pages show the same sample; the Template page's preview keeps its placeholder text.
 
 ### Fixed
