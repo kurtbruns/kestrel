@@ -10,8 +10,20 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+**Upgrading.** Run the new database migration, as [Upgrade to a new release](docs/guides/07-upgrade.md) says.
+
+### Added
+
+- Kestrel emails you when your provider has sent no receipts for six hours after a send, once until a receipt arrives, since a broken connection stops bounces and complaints from suppressing anyone (SPEC §8).
+
 ### Changed
 
+- Notification emails are rewritten to say whether anyone has to act, and how, with the details left to the dashboard: Sent is one sentence and a link, every problem reads in one order, links are named for what you'd do there, and each email says why you got it (SPEC §8).
+- One outage now sends one email instead of a per-day notice beside a per-post one, naming the posts it holds, plus one more if a post is first held after an email that named none (SPEC §8). The notification status's `kind` gains `no_receipts` and `not_sending_held`.
+- A send that goes out late says so in its Sent email instead of a separate one, and a finished send no one accepted is now told as a problem, since it can't be sent again (SPEC §8).
+- A reader's address in your provider's words shows only as its domain in an email, and in full on the send's page (SPEC §12).
+- The fix for a provider refusal, in the editor, the API's `advice` and `message`, and email, now says what to do and adds "If someone else set up Kestrel for you, pass this along to them." instead of "Whoever runs the deployment" (SPEC §12).
+- Kestrel no longer emails you when a service token imports a list. The import stays on the record with who committed it (SPEC §7).
 - The setup guide's checks now say what to do when they fail, from what a real setup ran into, and Troubleshooting is a publisher's page again: it opens with a table of symptoms and where each fix is, and a section on where to look. Its section on Claude's Access setup moved to Allow Claude to connect.
 
 ## [1.19.0] - 2026-11-02

@@ -442,7 +442,6 @@ export async function commitImport(
     addConfirmed: [],
     suppress: [],
     erase: [],
-    notice: principal.kind === "service",
   };
   const tokens = newTokens(plan.counts.added_confirmed + plan.counts.added_unsubscribed);
   const token = (): string => tokens.pop() ?? "";
