@@ -330,7 +330,7 @@ function templateSampleCtx(id: TemplateIdentity): Record<string, string> {
   const name = id.name || "Your publication";
   return {
     ".Post.Body": EMAIL_TEMPLATE_SAMPLE_BODY,
-    ".Post.Subject": "The starlings are back",
+    ".Post.Subject": "How your posts will look",
     ".Publication.Name": name,
     ".Publication.Tagline": id.tagline || "Your tagline",
     ".Publication.LogoURL": id.logoUrl,

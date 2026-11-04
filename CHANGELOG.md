@@ -24,7 +24,17 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - A reader's address in your provider's words shows only as its domain in an email, and in full on the send's page (SPEC §12).
 - The fix for a provider refusal, in the editor, the API's `advice` and `message`, and email, now says what to do and adds "If someone else set up Kestrel for you, pass this along to them." instead of "Whoever runs the deployment" (SPEC §12).
 - Kestrel no longer emails you when a service token imports a list. The import stays on the record with who committed it (SPEC §7).
+- A template test email now says what it is, under the subject "Template test: how your posts will look", instead of arriving as a made-up post about starlings under your own sign-off. Settings' previews of the reader pages show the same sample; the Template page's preview keeps its placeholder text.
 - The setup guide's Go live page is now a checkpoint on where to go next: one path if you're writing the newsletter, one if someone else is, and the optional guides, each named by when you'd want it. How to let someone else into the editor moves to its own section of Lock the dashboard with Access.
+
+### Fixed
+
+- An image uploaded with spaces in its name, as every macOS screenshot has, or with other characters that break a Markdown reference, now shows in the email instead of its `![…](…)` text: the upload stores it with hyphens in their place and answers that `filename` to reference, and images already stored keep their names. The preview now warns when text that reads as an image reference didn't become an image, and when an image uploaded to the post isn't used by it (SPEC §4), and the editor's Preview tab now shows a render's warnings, which it used to show only after a test. The operator's Claude context (`template/claude/CLAUDE.md`) now says to reference the `filename` the upload answers, since it may differ from the name sent, says how to swap an image, and names the new warnings.
+- Two images pasted into one post no longer become one image: a browser names every pasted image the same, so the second replaced the first, both references showed it, and the preview could show a stale copy.
+
+### Breaking
+
+- An upload no longer replaces an image of the same name. A name the post already has gets a number, so a second `cover.jpg` is stored as `cover-2.jpg`, and the response's `filename` says which (SPEC §4). A client that replaced an image by uploading its name again now uploads the new one, references its `filename`, and deletes the old one.
 
 ## [1.19.0] - 2026-11-02
 
