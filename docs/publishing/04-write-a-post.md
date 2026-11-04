@@ -10,7 +10,7 @@ The editor takes Markdown, and Kestrel saves as you type. The same Markdown beco
 
 - A blank line starts a new paragraph.
 - The opening lines are the preview a mail client shows beside the subject.
-- Paste or drop an image to add it: PNG, JPEG, WebP, or GIF, up to 5 MB. Spaces in its file name become hyphens, and Kestrel inserts the new name for you.
+- Paste or drop an image to add it: PNG, JPEG, WebP, or GIF, up to 5 MB. Kestrel may change its file name, turning spaces into hyphens and numbering a name the post already has, and inserts the new name for you.
 
 ## Schedule and send
 

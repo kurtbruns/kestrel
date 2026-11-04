@@ -49,6 +49,15 @@ function cleanName(name: string): string {
   return baseName(name).replace(UNREFERENCEABLE, "-").replace(/^-+$/, "");
 }
 
+/** A name's nth candidate on a post: `image.png`, `image-2.png`, `image-3.png`. */
+function numberedName(filename: string, n: number): string {
+  if (n === 1) {
+    return filename;
+  }
+  const dot = filename.lastIndexOf(".");
+  return dot > 0 ? `${filename.slice(0, dot)}-${n}${filename.slice(dot)}` : `${filename}-${n}`;
+}
+
 function publicImage(c: RequestContext, row: ImageRow): PostImage {
   return {
     filename: row.filename,
@@ -110,17 +119,29 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
     );
   }
 
-  const key = storageKey(post.id, filename);
-  await c.env.MEDIA.put(key, bytes, { httpMetadata: { contentType } });
+  // An upload never replaces an image (SPEC §4). A browser names every pasted image the same,
+  // so replacing would leave each reference showing the last paste, at an address a browser
+  // may have cached the first under. The name is claimed before the bytes are written, since
+  // the editor uploads a paste's or a drop's files at the same time.
   const dims = probeImageDimensions(new Uint8Array(bytes));
-  const row = await images.upsertImage(c.env.DB, {
-    postId: post.id,
-    filename,
-    storageKey: key,
-    contentType,
-    width: dims?.width ?? null,
-    height: dims?.height ?? null,
-  });
+  let row: ImageRow | null = null;
+  for (let n = 1; !row; n++) {
+    const candidate = numberedName(filename, n);
+    row = await images.insertImageIfNameFree(c.env.DB, {
+      postId: post.id,
+      filename: candidate,
+      storageKey: storageKey(post.id, candidate),
+      contentType,
+      width: dims?.width ?? null,
+      height: dims?.height ?? null,
+    });
+  }
+  try {
+    await c.env.MEDIA.put(row.storage_key, bytes, { httpMetadata: { contentType } });
+  } catch (e) {
+    await images.deleteImageRow(c.env.DB, post.id, row.filename);
+    throw e;
+  }
   const body: ImageUploadResponse = { image: publicImage(c, row) };
   return json(body, 201);
 }

@@ -1,7 +1,10 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import type { AppEnv } from "../src/env";
 import { AUTH, base, PNG_1x1, readJson } from "./support/http";
+import { allowErrorLogs } from "./support/log";
+import { fetchOn } from "./support/worker_env";
 
 async function newDraft(title: string): Promise<string> {
   const created = await readJson(
@@ -223,6 +226,98 @@ describe("images", () => {
     });
     expect(del.status).toBe(200);
     expect((await SELF.fetch(`${base}/media/posts/${id}/${image.filename}`)).status).toBe(404);
+  });
+
+  describe("a name the post already has (SPEC §4)", () => {
+    const sendBytes = async (id: string, name: string, size: number) => {
+      const bytes = new Uint8Array(size);
+      bytes.set(PNG_1x1);
+      const fd = new FormData();
+      fd.append("file", new File([bytes], name, { type: "image/png" }));
+      const res = await SELF.fetch(`${base}/api/posts/${id}/images`, {
+        method: "POST",
+        headers: AUTH,
+        body: fd,
+      });
+      expect(res.status).toBe(201);
+      return (await readJson(res)).image.filename as string;
+    };
+    const servedSize = async (id: string, name: string) =>
+      (await (await SELF.fetch(`${base}/media/posts/${id}/${name}`)).arrayBuffer()).byteLength;
+
+    it("gets a number, and the image it would have replaced keeps its bytes", async () => {
+      const id = await newDraft("Pasted Twice");
+      const size = PNG_1x1.length;
+      expect(await sendBytes(id, "image.png", size + 1)).toBe("image.png");
+      expect(await sendBytes(id, "image.png", size + 2)).toBe("image-2.png");
+      expect(await sendBytes(id, "image.png", size + 3)).toBe("image-3.png");
+      expect(await servedSize(id, "image.png")).toBe(size + 1);
+      expect(await servedSize(id, "image-2.png")).toBe(size + 2);
+      expect(await servedSize(id, "image-3.png")).toBe(size + 3);
+    });
+
+    it("gets a number after cleaning, and on a name with no extension", async () => {
+      const id = await newDraft("Same Once Clean");
+      expect(await sendBytes(id, "my shot.png", PNG_1x1.length)).toBe("my-shot.png");
+      expect(await sendBytes(id, "my-shot.png", PNG_1x1.length)).toBe("my-shot-2.png");
+      expect(await sendBytes(id, "chart", PNG_1x1.length)).toBe("chart");
+      expect(await sendBytes(id, "chart", PNG_1x1.length)).toBe("chart-2");
+    });
+
+    it("gives uploads sent at once a name each, with their own bytes", async () => {
+      const id = await newDraft("Dropped Together");
+      const sizes = [1, 2, 3, 4, 5].map((extra) => PNG_1x1.length + extra);
+      const names = await Promise.all(sizes.map((size) => sendBytes(id, "image.png", size)));
+      expect([...names].sort()).toEqual([
+        "image-2.png",
+        "image-3.png",
+        "image-4.png",
+        "image-5.png",
+        "image.png",
+      ]);
+      for (const [i, name] of names.entries()) {
+        expect(await servedSize(id, name)).toBe(sizes[i]);
+      }
+    });
+
+    it("isn't taken from another post, whose images have names of their own", async () => {
+      const [one, two] = [await newDraft("One"), await newDraft("Two")];
+      expect(await sendBytes(one, "image.png", PNG_1x1.length)).toBe("image.png");
+      expect(await sendBytes(two, "image.png", PNG_1x1.length)).toBe("image.png");
+    });
+
+    it("is free again once the image holding it is deleted", async () => {
+      const id = await newDraft("Freed");
+      await sendBytes(id, "image.png", PNG_1x1.length);
+      await SELF.fetch(`${base}/api/posts/${id}/images/image.png`, {
+        method: "DELETE",
+        headers: AUTH,
+      });
+      expect(await sendBytes(id, "image.png", PNG_1x1.length)).toBe("image.png");
+    });
+  });
+
+  it("gives back the name it claimed when storing the bytes fails", async () => {
+    allowErrorLogs("request.error");
+    const id = await newDraft("Storage Down");
+    const failing = {
+      ...env,
+      MEDIA: {
+        put: () => Promise.reject(new Error("R2 is down")),
+      },
+    } as unknown as AppEnv;
+    const fd = new FormData();
+    fd.append("file", new File([PNG_1x1], "image.png", { type: "image/png" }));
+    const res = await fetchOn(failing, `/api/posts/${id}/images`, {
+      method: "POST",
+      headers: AUTH,
+      body: fd,
+    });
+    expect(res.status).toBe(500);
+    const list = await readJson(
+      await SELF.fetch(`${base}/api/posts/${id}/images`, { headers: AUTH }),
+    );
+    expect(list.images).toEqual([]);
   });
 
   it("rejects upload on a non-draft post (409)", async () => {

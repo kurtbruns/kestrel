@@ -27,7 +27,12 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
-- An image uploaded with spaces in its name, as every macOS screenshot has, or with other characters that break a Markdown reference, now shows in the email instead of its `![…](…)` text: the upload stores it with hyphens in their place and answers that `filename` to reference, and images already stored keep their names. The preview now warns when text that reads as an image reference didn't become an image, and when an image uploaded to the post isn't used by it (SPEC §4), and the editor's Preview tab now shows a render's warnings, which it used to show only after a test. The operator's Claude context (`template/claude/CLAUDE.md`) now says to reference the `filename` the upload answers, since it may differ from the name sent, and names the new warnings.
+- An image uploaded with spaces in its name, as every macOS screenshot has, or with other characters that break a Markdown reference, now shows in the email instead of its `![…](…)` text: the upload stores it with hyphens in their place and answers that `filename` to reference, and images already stored keep their names. The preview now warns when text that reads as an image reference didn't become an image, and when an image uploaded to the post isn't used by it (SPEC §4), and the editor's Preview tab now shows a render's warnings, which it used to show only after a test. The operator's Claude context (`template/claude/CLAUDE.md`) now says to reference the `filename` the upload answers, since it may differ from the name sent, says how to swap an image, and names the new warnings.
+- Two images pasted into one post no longer become one image: a browser names every pasted image the same, so the second replaced the first, both references showed it, and the preview could show a stale copy.
+
+### Breaking
+
+- An upload no longer replaces an image of the same name. A name the post already has gets a number, so a second `cover.jpg` is stored as `cover-2.jpg`, and the response's `filename` says which (SPEC §4). A client that replaced an image by uploading its name again now uploads the new one, references its `filename`, and deletes the old one.
 
 ## [1.19.0] - 2026-11-02
 

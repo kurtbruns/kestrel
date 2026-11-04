@@ -1017,12 +1017,12 @@ export function createRouter({
       title: "Upload an image",
       summary: "Upload an image to a draft, as a form or the raw bytes.",
       description:
-        "The post's Markdown references the image by the `filename` the response gives, `![a short description](cover.jpg)`, never by its `url`, and the render resolves that name to the stored image. That name may differ from the one sent: each run of whitespace or of characters that would break a reference (`<>()[]`, a backtick, `#`, `?`, `%`) becomes a hyphen, keeping the case, so `My Cover.png` is stored as `My-Cover.png`. The preview warns on a reference by `url`, on one that didn't become an image, and on an image the post doesn't reference. Uploading a name that comes out the same replaces the image.",
+        "The post's Markdown references the image by the `filename` the response gives, `![a short description](cover.jpg)`, never by its `url`, and the render resolves that name to the stored image. That name may differ from the one sent: each run of whitespace or of characters that would break a reference (`<>()[]`, a backtick, `#`, `?`, `%`) becomes a hyphen, keeping the case, so `My Cover.png` is stored as `My-Cover.png`. The preview warns on a reference by `url`, on one that didn't become an image, and on an image the post doesn't reference. An upload never replaces an image: a name the post already has gets a number, so a second `cover.jpg` is stored as `cover-2.jpg`. To swap an image, upload the new one, reference its `filename`, and delete the old one.",
       query: [
         {
           name: "filename",
           description:
-            "For a raw upload (the image's own type as `Content-Type`, the bytes as the body), the name to store it under, cleaned as above; required then.",
+            "For a raw upload (the image's own type as `Content-Type`, the bytes as the body), the name to store it under, cleaned and numbered as above; required then.",
         },
       ],
       body: [
@@ -1035,7 +1035,8 @@ export function createRouter({
         {
           name: "filename",
           type: "string",
-          description: "The name to store it under, cleaned as above, in place of the file's own.",
+          description:
+            "The name to store it under, cleaned and numbered as above, in place of the file's own.",
         },
       ],
       errors: [notDraft],
