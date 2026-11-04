@@ -204,6 +204,7 @@ function scheduledPost(fireAt = Date.now() + 3_600_000, remadeAt: number | null 
       postRoute,
       // A scheduled post opens on Preview, its frozen email.
       { path: "/api/posts/p1/preview", reply: () => new Response("<p>Owls</p>") },
+      { path: "/api/posts/p1/preview.json", reply: () => ({ warnings: [] }) },
       ...sends.routes,
     ],
     /** The sweep starts it. */
@@ -1061,6 +1062,7 @@ describe("editor view", () => {
         path: "/api/posts/p1/preview",
         reply: () => new Response("<p>rendered</p>", { headers: { "content-type": "text/html" } }),
       },
+      { path: "/api/posts/p1/preview.json", reply: () => ({ warnings: [] }) },
     ]);
     typeInto(body(), "changed");
     $(".ctab[data-tab='preview']").click();
@@ -1078,6 +1080,28 @@ describe("editor view", () => {
       "allow-popups-to-escape-sandbox",
     ]);
     expect(body().hidden).toBe(true);
+  });
+
+  it("shows what the render found wrong beside the preview, and clears it once the render finds nothing (SPEC §4)", async () => {
+    const server = draftServer();
+    let warnings = ["“![a](b c)” won’t show as an image."];
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+      { path: "/api/posts/p1/preview", reply: () => new Response("<p>rendered</p>") },
+      { path: "/api/posts/p1/preview.json", reply: () => ({ warnings }) },
+    ]);
+    expect($("#warnings").textContent).toBe("");
+    $(".ctab[data-tab='preview']").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#warnings").textContent).toBe("Warnings: “![a](b c)” won’t show as an image.");
+
+    warnings = [];
+    $(".ctab[data-tab='edit']").click();
+    $(".ctab[data-tab='preview']").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#warnings").textContent).toBe("");
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("says why the preview can't be shown in the server's words", async () => {
@@ -1156,6 +1180,7 @@ describe("editor view", () => {
         { path: "/api/posts/p1", reply: server.get },
         { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
         { path: "/api/posts/p1/preview", reply: () => new Response("<p>rendered</p>") },
+        { path: "/api/posts/p1/preview.json", reply: () => ({ warnings: [] }) },
       ]);
       $(".ctab[data-tab='preview']").click();
       await vi.advanceTimersByTimeAsync(0);
@@ -2300,6 +2325,24 @@ describe("editor view", () => {
     expect(body().value).toMatch(/^\n!\[owl\.png\]\(owl\.png\)\n# Owls/);
     expect($("#toasts").textContent).toMatch(/Image added/);
     expect($("#saveStatus").textContent).toBe("Unsaved changes");
+  });
+
+  it("inserts an uploaded image by the name the upload answered, not the name it sent (SPEC §4)", async () => {
+    await open([
+      { path: "/api/posts/p1", reply: () => draft() },
+      {
+        method: "POST",
+        path: "/api/posts/p1/images",
+        reply: () => ({ image: { filename: "my-owl-1-.png", url: "http://m/my-owl-1-.png" } }),
+      },
+    ]);
+    body().setSelectionRange(0, 0);
+    const input = $<HTMLInputElement>("#imgInput");
+    const file = new File(["png"], "my owl ]1[.png", { type: "image/png" });
+    Object.defineProperty(input, "files", { value: [file], configurable: true });
+    input.dispatchEvent(new Event("change"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(body().value).toMatch(/^\n!\[my-owl-1-\.png\]\(my-owl-1-\.png\)\n# Owls/);
   });
 
   it("mounts a scheduled post read-only, with no autosave", async () => {

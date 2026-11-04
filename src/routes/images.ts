@@ -30,6 +30,25 @@ function baseName(name: string): string {
   return parts[parts.length - 1] ?? "";
 }
 
+/**
+ * What a name can't hold and still work as a reference: whitespace of any kind (macOS puts a
+ * narrow no-break space before "AM" in a screenshot's name) and control characters, which
+ * end a Markdown link destination; the brackets and backtick that have meanings of their own
+ * in Markdown; and the characters that change what the address built from the name asks for.
+ */
+const UNREFERENCEABLE = /[\s\p{Cc}<>()[\]`#?%]+/gu;
+
+/**
+ * The name to store an upload under, so that `![alt](name)` always becomes an image (SPEC §4):
+ * each run of characters that would break the reference becomes a hyphen, and the case stays.
+ * A name with nothing else in it comes back empty, for the caller's refusal. Only an upload
+ * names an image this way: an image stored before this rule keeps its name, and a delete
+ * looks up exactly the name the post has.
+ */
+function cleanName(name: string): string {
+  return baseName(name).replace(UNREFERENCEABLE, "-").replace(/^-+$/, "");
+}
+
 function publicImage(c: RequestContext, row: ImageRow): PostImage {
   return {
     filename: row.filename,
@@ -59,14 +78,14 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
     }
     imageField = { field: "file" };
     const override = form.get("filename");
-    filename = baseName(
+    filename = cleanName(
       typeof override === "string" && override ? override : file.name || "upload",
     );
     contentType = mediaType(file.type);
     bytes = await file.arrayBuffer();
   } else {
     // Raw body upload: filename via query, content-type via header.
-    filename = baseName(c.url.searchParams.get("filename") ?? "");
+    filename = cleanName(c.url.searchParams.get("filename") ?? "");
     if (!filename) {
       throw badRequest("filename query param required for a raw upload", { field: "filename" });
     }

@@ -10,6 +10,7 @@ import type {
   PostSavedResponse,
   PostSettingsBody,
   PostSettingsResponse,
+  PreviewResponse,
   TestSendResponse,
 } from "../../shared/posts";
 import {
@@ -467,6 +468,16 @@ export async function renderEditor(
     }
   }
 
+  const warningsEl = $("#warnings");
+  function showWarnings(ws: string[] | null | undefined) {
+    setHtml(
+      warningsEl,
+      ws?.length
+        ? html`<div class="warnings"><strong>Warnings:</strong> ${ws.join(" ")}</div>`
+        : html``,
+    );
+  }
+
   async function showPreview() {
     showTab("preview");
     try {
@@ -488,6 +499,10 @@ export async function renderEditor(
           }
         } catch {}
       };
+      // The page carries only the email, so what the render found wrong with it is read apart,
+      // once the email is showing: a broken image reference reads as text in the email itself.
+      const { warnings } = await api<PreviewResponse>(`/api/posts/${id}/preview.json`, { signal });
+      showWarnings(warnings);
     } catch (e) {
       if (signal.aborted || foundGone(e)) {
         return;
@@ -1183,7 +1198,8 @@ export async function renderEditor(
         body: fd,
       });
       const s = ta.selectionStart;
-      const snippet = `\n![${file.name}](${image.filename})\n`;
+      // The stored name on both sides: the name sent can hold a bracket that would end the alt text.
+      const snippet = `\n![${image.filename}](${image.filename})\n`;
       ta.value = ta.value.slice(0, s) + snippet + ta.value.slice(s);
       ta.selectionStart = ta.selectionEnd = s + snippet.length;
       markEdited();
@@ -1257,16 +1273,6 @@ export async function renderEditor(
       e.preventDefault();
       nudge();
     });
-  }
-
-  const warningsEl = $("#warnings");
-  function showWarnings(ws: string[] | null | undefined) {
-    setHtml(
-      warningsEl,
-      ws?.length
-        ? html`<div class="warnings"><strong>Warnings:</strong> ${ws.join("; ")}</div>`
-        : html``,
-    );
   }
 
   // --- send test (modal) ---

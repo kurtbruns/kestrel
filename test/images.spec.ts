@@ -122,6 +122,109 @@ describe("images", () => {
     expect((await SELF.fetch(`${base}/media/posts/${id}/b.png`)).status).toBe(200);
   });
 
+  it("stores an upload under a name a reference can use, keeping its case (SPEC §4)", async () => {
+    const id = await newDraft("Names");
+    for (const [sent, stored] of [
+      // A macOS screenshot: spaces, and a narrow no-break space before "AM".
+      ["Screenshot 2026-10-30 at 9.41.12 AM.png", "Screenshot-2026-10-30-at-9.41.12-AM.png"],
+      ["My Cover (2).PNG", "My-Cover-2-.PNG"],
+      ["tab\tand nbsp.png", "tab-and-nbsp.png"],
+      ["<a>[b]`c`.png", "-a-b-c-.png"],
+      ["50% #1?.png", "50-1-.png"],
+      ["clean_name-1.png", "clean_name-1.png"],
+      ["café.png", "café.png"],
+    ] as const) {
+      const res = await upload(id, sent, AUTH);
+      expect(res.status, sent).toBe(201);
+      const { image } = await readJson(res);
+      expect(image.filename, sent).toBe(stored);
+      expect(new URL(image.url).pathname).toBe(`/media/posts/${id}/${encodeURI(stored)}`);
+    }
+  });
+
+  it("cleans a raw upload's name and a form's named one as it does the file's own (SPEC §4)", async () => {
+    const id = await newDraft("Other Names");
+    const raw = await SELF.fetch(
+      `${base}/api/posts/${id}/images?filename=${encodeURIComponent("raw shot.png")}`,
+      { method: "POST", headers: { ...AUTH, "content-type": "image/png" }, body: PNG_1x1 },
+    );
+    expect((await readJson(raw)).image.filename).toBe("raw-shot.png");
+
+    const fd = new FormData();
+    fd.append("file", new File([PNG_1x1], "ignored.png", { type: "image/png" }));
+    fd.append("filename", "dir/named shot.png");
+    const named = await SELF.fetch(`${base}/api/posts/${id}/images`, {
+      method: "POST",
+      headers: AUTH,
+      body: fd,
+    });
+    expect((await readJson(named)).image.filename).toBe("named-shot.png");
+  });
+
+  it("refuses a name with nothing in it but what cleaning removes", async () => {
+    const id = await newDraft("Blank Name");
+    const raw = await SELF.fetch(`${base}/api/posts/${id}/images?filename=%20%20`, {
+      method: "POST",
+      headers: { ...AUTH, "content-type": "image/png" },
+      body: PNG_1x1,
+    });
+    expect(raw.status).toBe(400);
+    expect(await readJson(raw)).toMatchObject({ field: "filename" });
+  });
+
+  it("a reference by the name an upload answered becomes an image in the preview, and the stored bytes serve at its address (SPEC §4)", async () => {
+    const id = await newDraft("Screenshot");
+    const { image } = await readJson(await upload(id, "Shot 9.41 AM.png", AUTH));
+    const { post } = await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH }));
+    const saved = await SELF.fetch(`${base}/api/posts/${id}`, {
+      method: "PUT",
+      headers: { ...AUTH, "content-type": "application/json" },
+      body: JSON.stringify({
+        markdown: `![A screenshot](${image.filename})`,
+        base_revision: post.current_revision,
+      }),
+    });
+    expect(saved.status).toBe(200);
+    const preview = await readJson(
+      await SELF.fetch(`${base}/api/posts/${id}/preview.json`, { headers: AUTH }),
+    );
+    expect(preview.warnings).toEqual([]);
+    expect((await SELF.fetch(`${base}/media/posts/${id}/${image.filename}`)).status).toBe(200);
+  });
+
+  it("deletes an image stored before names were cleaned, by the name it kept (SPEC §4)", async () => {
+    const id = await newDraft("Old Name");
+    const key = `posts/${id}/old shot.png`;
+    await env.MEDIA.put(key, PNG_1x1, { httpMetadata: { contentType: "image/png" } });
+    await env.DB.prepare(
+      "INSERT INTO images (id, post_id, filename, storage_key, content_type, created_at) VALUES ('i1', ?, 'old shot.png', ?, 'image/png', 0)",
+    )
+      .bind(id, key)
+      .run();
+    const listed = await readJson(
+      await SELF.fetch(`${base}/api/posts/${id}/images`, { headers: AUTH }),
+    );
+    expect(listed.images.map((i: any) => i.filename)).toEqual(["old shot.png"]);
+
+    const del = await SELF.fetch(
+      `${base}/api/posts/${id}/images/${encodeURIComponent("old shot.png")}`,
+      { method: "DELETE", headers: AUTH },
+    );
+    expect(del.status).toBe(200);
+    expect(await env.MEDIA.get(key)).toBeNull();
+  });
+
+  it("deletes an upload by the name it answered, which is not the name sent (SPEC §4)", async () => {
+    const id = await newDraft("New Name");
+    const { image } = await readJson(await upload(id, "new shot.png", AUTH));
+    const del = await SELF.fetch(`${base}/api/posts/${id}/images/${image.filename}`, {
+      method: "DELETE",
+      headers: AUTH,
+    });
+    expect(del.status).toBe(200);
+    expect((await SELF.fetch(`${base}/media/posts/${id}/${image.filename}`)).status).toBe(404);
+  });
+
   it("rejects upload on a non-draft post (409)", async () => {
     const id = await newDraft("Locked Images");
     await env.DB.prepare("UPDATE posts SET status = 'scheduled' WHERE id = ?").bind(id).run();
