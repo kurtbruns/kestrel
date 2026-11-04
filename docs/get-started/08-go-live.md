@@ -1,6 +1,6 @@
 # Go live
 
-Your instance is deployed and verified, and SES can send to anyone. What's left is the newsletter itself, so where you go next depends on who's writing it.
+At this point, your instance should be deployed and verified. Before anyone subscribes, check that AWS granted production access, as [Check that AWS granted it](06-production-access.md#4-check-that-aws-granted-it) describes, so SES can send to anyone. What's left is the newsletter itself, so where you go next depends on who's writing it.
 
 ## If you're writing it
 
