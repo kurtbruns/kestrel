@@ -174,6 +174,8 @@ Cancel and Save (Primary): nothing is saved until Save, and Cancel, Escape, or a
 
 On a draft's Preview tab, the toolbar and the image foot dim and take no clicks, since either would change text that isn't on screen. Dropping an image still works and switches to Edit, so the insert is seen.
 
+The render's warnings show under the composer in the server's words, in amber, whenever Preview loads and after a test, so a broken image reference is named beside the email it spoils. A warning stays there until the next Preview or test reads the post again.
+
 **Testing.** Send test email opens a dialog that takes one or more addresses and sends each its own test, so one that fails doesn't stop the rest. When every address gets it, the dialog closes with a toast. When some don't, the dialog stays open with only those addresses left in the field and says so above its buttons ("Sent to 1 of 2.", then each reason once with the addresses it covers), so Send again tries just those and no one gets a second copy. The reason is the server's sentence as it stands: the provider's words and the fix, or that the test may have arrived, so the dialog adds no "try again" of its own to a refusal that sending again can't change.
 
 **Three copies, each named for what it is.** The Preview tab is the email; a test is the email in a real inbox; the **Web version ↗** is the post's public page. "View in browser" is not used for the last one: that is the email's own link, the post's unlisted link, worded by the publisher's template. In the Preview tab, that link opens the web version until the post is published, so a publisher who clicks it finds the page rather than "Nothing here yet".

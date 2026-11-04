@@ -8,13 +8,34 @@ export interface MarkdownContext {
   images: Map<string, ImageRow>;
   mediaBase: string;
   maxWidth: number;
-  /** Missing-alt and unresolved-image warnings are pushed here (surfaced at preview). */
+  /** Warnings about the post's images are pushed here (surfaced at preview). The HTML is the
+   *  same with or without them. */
   warnings: string[];
 }
 
+/**
+ * Text that reads as an image reference. An image Markdown did parse is its own token and
+ * never reaches this, nor does a code span or an escaped `\!`, so what matches is a reference
+ * the reader would see typed out. It needs no closing parenthesis, since an address in a
+ * broken reference ends the text token the check reads.
+ */
+const UNPARSED_IMAGE = /!\[.*?\]\([^)\n]*\)?/g;
+
 export function markdownToHtml(md: string, ctx: MarkdownContext): string {
   const m = new Marked({ gfm: true, breaks: false });
+  const referenced = new Set<ImageRow>();
   m.use({
+    walkTokens(token) {
+      // A list item's text carries inline tokens of its own, read as the walk reaches them.
+      if (token.type !== "text" || "tokens" in token) {
+        return;
+      }
+      for (const [written] of token.raw.matchAll(UNPARSED_IMAGE)) {
+        ctx.warnings.push(
+          `“${written}” won’t show as an image, so readers will see it as typed. Check it for a space or a stray bracket, and reference an uploaded image by its file name.`,
+        );
+      }
+    },
     renderer: {
       image(token) {
         const href = token.href ?? "";
@@ -25,6 +46,9 @@ export function markdownToHtml(md: string, ctx: MarkdownContext): string {
           );
         }
         const { url, image, ownMedia } = resolveImageSrc(href, ctx.images, ctx.mediaBase);
+        if (image) {
+          referenced.add(image);
+        }
         if (image && ownMedia) {
           ctx.warnings.push(
             `The image “${href}” should be referenced as “${image.filename}”. Use its file name, not its address.`,
@@ -44,7 +68,17 @@ export function markdownToHtml(md: string, ctx: MarkdownContext): string {
       },
     },
   });
-  return m.parse(md) as string;
+  const html = m.parse(md) as string;
+  for (const image of ctx.images.values()) {
+    // Raw HTML and a link reach an image by its address without passing the image renderer, and
+    // what they write may be percent-encoded, HTML-escaped, or both.
+    const address = `${ctx.mediaBase}/${image.storage_key}`;
+    const written = [address, encodeURI(address)].flatMap((a) => [a, escapeHtmlAttr(a)]);
+    if (!referenced.has(image) && !written.some((a) => html.includes(a))) {
+      ctx.warnings.push(`The uploaded image “${image.filename}” isn’t used in this post.`);
+    }
+  }
+  return html;
 }
 
 /** Constrain declared dimensions to the email column width (byte-resizing deferred). */

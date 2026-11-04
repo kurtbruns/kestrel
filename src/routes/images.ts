@@ -30,6 +30,38 @@ function baseName(name: string): string {
   return parts[parts.length - 1] ?? "";
 }
 
+/**
+ * What a name can't hold and still work as a reference: whitespace of any kind (macOS puts a
+ * narrow no-break space before "AM" in a screenshot's name) and control characters, which
+ * end a Markdown link destination; the brackets and backtick that have meanings of their own
+ * in Markdown; and the characters that change what the address built from the name asks for.
+ */
+const UNREFERENCEABLE = /[\s\p{Cc}<>()[\]`#?%]+/gu;
+
+/**
+ * The name to store an upload under, so that `![alt](name)` always becomes an image (SPEC §4):
+ * each run of characters that would break the reference becomes a hyphen, and the case stays.
+ * A hyphen at either end of the name or before a dot goes, since the name shows in a public
+ * address. A name with nothing else in it comes back empty, for the caller's refusal. Only an
+ * upload names an image this way: an image stored before this rule keeps its name, and a
+ * delete looks up exactly the name the post has.
+ */
+function cleanName(name: string): string {
+  return baseName(name)
+    .replace(UNREFERENCEABLE, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-+\./g, ".");
+}
+
+/** A name's nth candidate on a post: `image.png`, `image-2.png`, `image-3.png`. */
+function numberedName(filename: string, n: number): string {
+  if (n === 1) {
+    return filename;
+  }
+  const dot = filename.lastIndexOf(".");
+  return dot > 0 ? `${filename.slice(0, dot)}-${n}${filename.slice(dot)}` : `${filename}-${n}`;
+}
+
 function publicImage(c: RequestContext, row: ImageRow): PostImage {
   return {
     filename: row.filename,
@@ -59,17 +91,14 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
     }
     imageField = { field: "file" };
     const override = form.get("filename");
-    filename = baseName(
+    filename = cleanName(
       typeof override === "string" && override ? override : file.name || "upload",
     );
     contentType = mediaType(file.type);
     bytes = await file.arrayBuffer();
   } else {
     // Raw body upload: filename via query, content-type via header.
-    filename = baseName(c.url.searchParams.get("filename") ?? "");
-    if (!filename) {
-      throw badRequest("filename query param required for a raw upload", { field: "filename" });
-    }
+    filename = cleanName(c.url.searchParams.get("filename") ?? "");
     contentType = mediaType(ct);
     bytes = await c.req.arrayBuffer();
   }
@@ -91,17 +120,30 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
     );
   }
 
-  const key = storageKey(post.id, filename);
-  await c.env.MEDIA.put(key, bytes, { httpMetadata: { contentType } });
+  // An upload never replaces an image (SPEC §4). A browser names every pasted image the same,
+  // so replacing would leave each reference showing the last paste, at an address a browser
+  // may have cached the first under. The name is claimed before the bytes are written, since
+  // the editor uploads a paste's or a drop's files at the same time. A Worker lost between
+  // the two leaves a row with no bytes, which a reference to it would send as a broken image.
   const dims = probeImageDimensions(new Uint8Array(bytes));
-  const row = await images.upsertImage(c.env.DB, {
-    postId: post.id,
-    filename,
-    storageKey: key,
-    contentType,
-    width: dims?.width ?? null,
-    height: dims?.height ?? null,
-  });
+  let row: ImageRow | null = null;
+  for (let n = 1; !row; n++) {
+    const candidate = numberedName(filename, n);
+    row = await images.insertImageIfNameFree(c.env.DB, {
+      postId: post.id,
+      filename: candidate,
+      storageKey: storageKey(post.id, candidate),
+      contentType,
+      width: dims?.width ?? null,
+      height: dims?.height ?? null,
+    });
+  }
+  try {
+    await c.env.MEDIA.put(row.storage_key, bytes, { httpMetadata: { contentType } });
+  } catch (e) {
+    await images.deleteImageRow(c.env.DB, post.id, row.filename);
+    throw e;
+  }
   const body: ImageUploadResponse = { image: publicImage(c, row) };
   return json(body, 201);
 }

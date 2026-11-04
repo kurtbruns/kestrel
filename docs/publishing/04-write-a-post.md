@@ -6,11 +6,11 @@ Write in Markdown, schedule it, then send yourself a test. Scheduling makes the 
 
 ## Write
 
-The editor takes Markdown, and Kestrel saves as you type. The same Markdown becomes the email, in your [email template](11-email-template.md), and the post's page in your archive. **Preview** shows the email.
+The editor takes Markdown, and Kestrel saves as you type. The same Markdown becomes the email, in your [email template](11-email-template.md), and the post's page in your archive. **Preview** shows the email, and warns under it about anything it found wrong.
 
 - A blank line starts a new paragraph.
 - The opening lines are the preview a mail client shows beside the subject.
-- Paste or drop an image to add it: PNG, JPEG, WebP, or GIF, up to 5 MB.
+- Paste or drop an image to add it: PNG, JPEG, WebP, or GIF, up to 5 MB. Kestrel may change its file name, turning spaces into hyphens and numbering a name the post already has, and inserts the new name for you.
 
 ## Schedule and send
 
