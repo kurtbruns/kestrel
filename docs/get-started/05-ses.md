@@ -47,13 +47,7 @@ The same form sets a custom MAIL FROM domain, so SPF also passes for your domain
 
 1. Wait until SES shows **Identity status** as **Verified**, and both **DKIM configuration** and **MAIL FROM configuration** as **Successful**.
 
-    If they stay pending, check a DKIM record, using its name from SES. This prints a value ending in `dkim.amazonses.com`:
-
-    ```bash
-    dig +short CNAME REPLACE_WITH_NAME_1
-    ```
-
-    If it prints nothing, the record is missing or proxied. Set its proxy status to **DNS only** in Cloudflare. SES checks again on its own.
+    If they stay pending, check that each record's proxy status is **DNS only**.
 
 ## 2. Add a DMARC record
 
@@ -244,8 +238,6 @@ Until now the app has run with no email provider connected, refusing to send. Se
 1. In the editor, open **Template** and select **Send test email**, to an address you verified in [Verify your test addresses](#3-verify-your-test-addresses). It arrives. Signups stay closed until SES takes an email, so the **Not proven yet** pill beside Amazon SES in **Settings → Email sender** is gone once it has. If SES refuses it, the test's line says why and what fixes it.
 
 1. In a browser, `https://newsletter.example.com/subscribe` shows the subscribe form, where it said signups aren't open yet.
-
-    If it says signups are paused, SES refused the test. The dashboard says why and what fixes it. Once that's fixed, send another test, and signups reopen when SES takes it.
 
 ## 7. Subscribe the app to the topic
 
