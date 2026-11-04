@@ -19,52 +19,40 @@ describe("a refusal's advice", () => {
     [
       "credentials",
       ["SES access key", "ses:SendTemplatedEmail", "ses:SendBulkTemplatedEmail"],
-      "whoever runs the deployment",
+      "pass this along",
     ],
-    ["opt_in", ["enables SES for the account"], "whoever runs the deployment"],
+    ["opt_in", ["enable SES for the account"], "pass this along"],
     [
       "configuration",
       ["SES_CONFIGURATION_SET", "the sending identity’s default", "create the set"],
-      "whoever runs the deployment",
+      "pass this along",
     ],
-    ["sending_pool", ["dedicated IP pool", "sending options"], "whoever runs the deployment"],
-    ["unsupported", ["AWS_REGION", "updates Kestrel"], "whoever runs the deployment"],
-    [
-      "sender",
-      ["verifies the From address, or its domain", "AWS_REGION"],
-      "whoever runs the deployment",
-    ],
-    [
-      "mail_from",
-      ["MAIL FROM domain", "MX record", "Behavior on MX failure"],
-      "whoever runs the deployment",
-    ],
+    ["sending_pool", ["dedicated IP pool", "sending options"], "pass this along"],
+    ["unsupported", ["AWS_REGION", "update Kestrel"], "pass this along"],
+    ["sender", ["Verify the From address, or its domain", "AWS_REGION"], "pass this along"],
+    ["mail_from", ["MAIL FROM domain", "MX record", "Behavior on MX failure"], "pass this along"],
     [
       "sandbox",
-      ["sandbox", "requests production access", "verify the reader’s address"],
-      "whoever runs the deployment",
+      ["sandbox", "request production access", "verify the reader’s address"],
+      "pass this along",
     ],
     [
       "quota",
-      ["In the sandbox (200 a day)", "requests production access", "Service Quotas"],
-      "whoever runs the deployment",
+      ["In the sandbox (200 a day)", "request production access", "Service Quotas"],
+      "pass this along",
     ],
-    ["suspended", ["only AWS can lift it", "AWS Support"], "whoever runs the deployment"],
+    ["suspended", ["only AWS can lift it", "AWS Support"], "pass this along"],
     [
       "paused",
       ["under review", "put-account-sending-attributes --sending-enabled"],
-      "whoever runs the deployment",
+      "pass this along",
     ],
     [
       "set_paused",
       ["SES_CONFIGURATION_SET", "put-configuration-set-sending-options --sending-enabled"],
-      "whoever runs the deployment",
+      "pass this along",
     ],
-    [
-      "content",
-      ["can’t change once its send has started", "AWS Support"],
-      "whoever runs the deployment",
-    ],
+    ["content", ["can’t change once its send has started", "AWS Support"], "pass this along"],
     [
       "invalid_request",
       ["remove that subscriber", "skips anyone no longer on the list"],
@@ -139,9 +127,9 @@ describe("a rate limit the deployment causes itself", () => {
     expect(isSelfThrottled(halt(SELF_THROTTLE_HALTS, "outage"))).toBe(false);
   });
 
-  it("points whoever runs the deployment at SES_MAX_SEND_RATE, and a burst at nothing to do", () => {
+  it("points whoever set Kestrel up at SES_MAX_SEND_RATE, and a burst at nothing to do", () => {
     expect(unavailableMessage(halt(SELF_THROTTLE_HALTS))).toContain(
-      "Whoever runs the deployment sets SES_MAX_SEND_RATE to the maximum send rate on the SES console’s account dashboard",
+      "Set SES_MAX_SEND_RATE to the maximum send rate on the SES console’s account dashboard",
     );
     expect(unavailableMessage(halt(1))).toBe(
       "The provider is unavailable: ses 429 TooManyRequestsException: Maximum sending rate exceeded. The send retries on its own, spaced out the longer this lasts, and no one has been marked unsent because of this.",
