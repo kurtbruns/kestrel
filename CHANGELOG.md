@@ -24,9 +24,11 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - A reader's address in your provider's words shows only as its domain in an email, and in full on the send's page (SPEC §12).
 - The fix for a provider refusal, in the editor, the API's `advice` and `message`, and email, now says what to do and adds "If someone else set up Kestrel for you, pass this along to them." instead of "Whoever runs the deployment" (SPEC §12).
 - Kestrel no longer emails you when a service token imports a list. The import stays on the record with who committed it (SPEC §7).
+- The setup guide's checks now say what to do about the failures a real setup ran into, in a sentence beside the check, and Troubleshooting is a publisher's page again: it opens with a table of symptoms and where each fix is, and a section on where to look. Its section on Claude's Access setup moved to Allow Claude to connect.
 - The dashboard's **Finish setting up** card now says under its title that it stays until your first post goes out to the archive and that email-only sends don't count, and **Share your subscribe link** says to share it before then, so readers get that post.
 - A template test email now says what it is, under the subject "Template test: how your posts will look", instead of arriving as a made-up post about starlings under your own sign-off. Settings' previews of the reader pages show the same sample; the Template page's preview keeps its placeholder text.
 - Kestrel now needs wrangler 4.156.0 or later, which carries fixes for security advisories in the local runtime it bundles. A new instance starts on it, and installing this release moves an existing instance's wrangler up on its own, with no change to its `package.json`.
+- The setup guide's Go live page is now a checkpoint on where to go next: one path if you're writing the newsletter, one if someone else is, and the optional guides, each named by when you'd want it. How to let someone else into the editor moves to its own section of Lock the dashboard with Access.
 
 ### Fixed
 

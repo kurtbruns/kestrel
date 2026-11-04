@@ -17,7 +17,7 @@ A test email goes through the same code as a real send. If the test looks right,
 
 1. In the editor at `https://newsletter.example.com/dashboard/`, create a post with a subject, a short body, and an image.
 
-1. Select **Send test email**, enter your address, and send it.
+1. Select **Send test email**, enter your address, and send it. If SES refuses it, the test's line says why and what fixes it.
 
 1. Open the email. It arrives in your inbox, not in spam, the image loads, and the subject reads as you wrote it. Its links work, but a test email unsubscribes no one; section 5 unsubscribes for real.
 
@@ -45,7 +45,7 @@ Kestrel emails each notifications address when a send finishes, and right away w
 
 1. In the editor, open **Settings → Notifications**, type that address under **Send notifications to**, select **Add inbox**, and then **Save**.
 
-1. Select **Send a test notification**. It arrives at that address.
+1. Select **Send a test notification**. It arrives at that address. If it doesn't, **Last notification**, on the same page, says what happened.
 
 The publisher sets their own address in [Check your setup](../publishing/10-check-your-setup.md).
 
@@ -65,11 +65,13 @@ This is a real send, to a list of one. It proves the whole path: subscribing, co
 
 1. When the send finishes, the post arrives at your second address. A notification arrives at your first, with the subject `Sent:` and the post's title.
 
+If the send shows in red under **Sent**, its line names the fix. Once that's fixed, the send resumes on its own.
+
 ## 5. Unsubscribe
 
-Every email carries an unsubscribe link, and a header that lets mail clients show their own **Unsubscribe** button. Both work in one step, with no login.
+Every email carries an unsubscribe link, and a header that lets mail clients show their own **Unsubscribe** button. The button works in one step, and the link asks you to confirm first. Neither needs a login.
 
-1. Open the post from section 4 in your mail client. It shows an **Unsubscribe** button next to the sender.
+1. Open the post from section 4 in your mail client. It shows an **Unsubscribe** button next to the sender. If your client shows none, use the **Unsubscribe** link in the email's footer, which asks you to confirm on a page.
 
 1. Select it. In the editor, **Subscribers** shows the address as **Unsubscribed**, and later sends leave it out.
 
@@ -94,7 +96,7 @@ The app writes a log line for each thing it does, and Cloudflare keeps them for 
 
 1. In the Cloudflare dashboard, go to **Workers & Pages**, select your Worker, the `name` in the `production` block of `wrangler.jsonc`, and select **Observability**.
 
-1. Filter on `event` equal to `sweep.tick`. A line arrives every minute.
+1. Filter on `event` equal to `sweep.tick`. A line arrives every minute. If none arrive, the schedule probably isn't running, and deploying again with `--env production` registers it.
 
 1. Filter on `event` equal to `send.completed`. Your send from section 4 is there.
 

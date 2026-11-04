@@ -65,4 +65,6 @@ AWS charges for what you use, with no spending limit, so a mistake or a leaked k
 
 1. Under **Budgets**, your budget is listed, and its email recipient shows as **Active**.
 
+    If it shows as **Pending**, select **Resend verification** on its row, and verify the address as section 4 describes.
+
 Next, [connect Amazon SES](05-ses.md).

@@ -116,14 +116,16 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
     // The Markdown links pages by relative path (`02-deploy.md`) so the same file works on
     // GitHub; the Worker rewrites each to `#/docs/<slug>`. A link left as a `.md` path names
     // a file that is not a doc (a typo, or a page since renamed), and would 404 in the app.
-    const { docs } = renderDocs();
-    const slugs = new Set(docs.map((d) => d.slug));
+    const { docs, sets } = renderDocs();
+    // A page may also link a set's landing, which the room serves at the set's id.
+    const targets = new Set([...docs.map((d) => d.slug), ...sets.map((s) => s.id)]);
     for (const d of docs) {
       expect(d.html, d.slug).not.toMatch(/href="[^"]*\.md[#"]/);
       for (const [, slug] of d.html.matchAll(/href="#\/docs\/([^"/]+)(?:\/[^"]*)?"/g)) {
-        expect(slugs, `${d.slug} links to ${slug}`).toContain(slug);
+        expect(targets, `${d.slug} links to ${slug}`).toContain(slug);
       }
     }
+    expect(docs.find((d) => d.slug === "go-live")?.html).toContain('href="#/docs/publishing"');
     const start = docs.find((d) => d.slug === "deploy");
     expect(start?.html).toContain('href="#/docs/ses"');
     expect(start?.html).toContain('href="#/docs/configuration"');

@@ -43,7 +43,7 @@ Managed OAuth lets an app such as Claude act with a person's account, the way th
     curl -si https://newsletter.example.com/api/whoami
     ```
 
-    You should see `401`, with a `www-authenticate` line that starts with `Bearer`. Access can take a few minutes more to start accepting sign-ins. Until it does, signing in shows `invalid_target`; wait, then try again.
+    You should see `401`, with a `www-authenticate` line that starts with `Bearer`. Access can take a few minutes more to start accepting sign-ins. Until it does, signing in shows `invalid_target` (`OAuth not enabled for the targeted resource`); wait, then try again.
 
 ## 2. Connect Claude, or send the publisher the address
 
@@ -65,4 +65,9 @@ Anyone the Access application's Allow policy lets into the dashboard can connect
 
 1. Ask Claude what the publication is called. It answers with the name the dashboard shows.
 
-If Claude can't connect, [Claude can't connect](../publishing/06-troubleshooting.md#claude-cant-connect) lists what it reports and the fix.
+If a check fails:
+
+- **Claude can't connect, or the sign-in fails.** Check section 1's settings, and that the connector's address is the instance's address followed by `/api/mcp`.
+- `kestrel login` says the instance "doesn't offer a sign-in for programs". Managed OAuth is off. Turn it on, as section 1 describes.
+- `kestrel login` or `kestrel api` reports a `401`. If you set `ACCESS_ALLOWED_EMAILS`, check that it includes the person's address.
+- **The sign-in says Access didn't say who the person is.** The same goes for a `401` naming `access_unidentified`. The app accepts only an Allow policy on people's emails and a Service Auth policy on a service token. Remove or change any other kind.
