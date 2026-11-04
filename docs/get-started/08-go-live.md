@@ -2,11 +2,11 @@
 
 At this point, your instance should be deployed and verified. Before anyone subscribes, [check that AWS granted production access](06-production-access.md#4-check-that-aws-granted-it), so SES can send to anyone. From here, where you go next depends on who's writing the newsletter.
 
-## If you're writing it
+## Start publishing yourself
 
 Open the editor at `https://newsletter.example.com/dashboard/`. The dashboard's setup steps show what's left, and [Publishing](../publishing/README.md) covers each one.
 
-## If someone else is writing it
+## Hand off to someone else
 
 [Let them into the editor](03-access.md#allow-someone-else-in), and add their address beside yours under **Settings → Notifications**, so a problem reaches both of you. Then send them the editor's address and a link to [Publishing](../publishing/README.md). The dashboard's setup steps show them what's left.
 
