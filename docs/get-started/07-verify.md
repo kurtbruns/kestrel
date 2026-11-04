@@ -69,7 +69,7 @@ If the send shows in red under **Sent**, its line names the fix. Once that's fix
 
 ## 5. Unsubscribe
 
-Every email carries an unsubscribe link, and a header that lets mail clients show their own **Unsubscribe** button. Both work in one step, with no login.
+Every email carries an unsubscribe link, and a header that lets mail clients show their own **Unsubscribe** button. The button works in one step, and the link asks you to confirm first. Neither needs a login.
 
 1. Open the post from section 4 in your mail client. It shows an **Unsubscribe** button next to the sender. If your client shows none, use the **Unsubscribe** link in the email's footer, which asks you to confirm on a page.
 
@@ -96,7 +96,7 @@ The app writes a log line for each thing it does, and Cloudflare keeps them for 
 
 1. In the Cloudflare dashboard, go to **Workers & Pages**, select your Worker, the `name` in the `production` block of `wrangler.jsonc`, and select **Observability**.
 
-1. Filter on `event` equal to `sweep.tick`. A line arrives every minute. If none arrive, the schedule isn't running, and deploying again with `--env production` registers it.
+1. Filter on `event` equal to `sweep.tick`. A line arrives every minute. If none arrive, the schedule probably isn't running, and deploying again with `--env production` registers it.
 
 1. Filter on `event` equal to `send.completed`. Your send from section 4 is there.
 

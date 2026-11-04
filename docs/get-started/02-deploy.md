@@ -195,7 +195,7 @@ npx wrangler delete --name newsletter-dev
     {"status":"ok","service":"kestrel"}
     ```
 
-    If `curl` reports a certificate error or can't resolve the host, Cloudflare is still setting up the hostname, or your computer remembers it from before it existed. Try again over the next 30 minutes.
+    If `curl` reports a certificate error or can't resolve the host, Cloudflare is still setting up the hostname. Or your computer remembers it from before it existed. Try again over the next 30 minutes.
 
 1. The editor is locked. Until you set up Access in the next step, the app can't tell who is asking, so it lets no one in:
 

@@ -112,7 +112,7 @@ When a line doesn't settle it, these say the most about what happened:
 - The top of the dashboard: what needs someone now, in Kestrel's own words.
 - The send's page, under **Sent**: what happened on that send, when it next retries, and its record of each reader.
 - **Settings → Email sender**: the state of your Amazon SES account, and your **Send rate**.
-- **Settings → Notifications**: **Last notification** says whether the last one arrived.
+- **Settings → Notifications**: **Last notification** says whether the last one was delivered, or why not.
 - A subscriber's page, under **Subscribers**: every send they were in, and what happened on each.
 - The app's logs, in your instance's Cloudflare account: [Read the logs](../get-started/07-verify.md#7-read-the-logs) describes them. If someone else set up Kestrel for you, pass this along to them.
 

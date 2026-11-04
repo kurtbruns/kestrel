@@ -37,7 +37,7 @@ The editor lives under `/dashboard`, and the API under `/api`. One application c
 
     Each path covers everything under it. Leave every other path out. The home page, the archive, subscribing, unsubscribing, images, and your email provider's webhooks must stay public.
 
-1. Add only these two public hostnames. If the form also shows an empty private hostname or IP row, remove it, or saving fails with an error naming `use_clientless_isolation_app_launcher_url`, saying it needs private destinations.
+1. Add only these two public hostnames. If the form also shows an empty private hostname or IP row, remove it. Otherwise saving fails with an error naming `use_clientless_isolation_app_launcher_url`, saying it needs private destinations.
 
 1. Name the application after your app's hostname, `newsletter.example.com`. Cloudflare suggests a name made from the subdomain, which won't tell two newsletters apart.
 
