@@ -19,7 +19,7 @@ A test email goes through the same code as a real send. If the test looks right,
 
 1. Select **Send test email**, enter your address, and send it. If SES refuses it, the test's line says why and what fixes it.
 
-1. Open the email. It arrives in your inbox, not in spam, though Gmail may put it under Promotions. The image loads, and the subject reads as you wrote it. Its links work, but a test email unsubscribes no one; section 5 unsubscribes for real.
+1. Open the email. It arrives in your inbox, not in spam, the image loads, and the subject reads as you wrote it. Its links work, but a test email unsubscribes no one; section 5 unsubscribes for real.
 
 1. Send a test email to your second address, not the publisher's inbox, and reply to it from there, as a reader would. The reply arrives in the publisher's inbox, the one you chose in [Connect Amazon SES](05-ses.md#8-receive-replies-at-your-from-address), or in your From address's own mailbox if you skipped forwarding. If it bounces, check the routing rule and the destination address there.
 
