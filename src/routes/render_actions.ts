@@ -13,6 +13,7 @@
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
 import type { PreviewResponse, TestSendResponse } from "../../shared/posts";
+import { SAMPLE_POST_MARKDOWN, TEMPLATE_TEST_SUBJECT } from "../../shared/sample_post";
 import type { TemplateTestResponse } from "../../shared/settings";
 import * as images from "../db/images";
 import type { PostRow, RevisionRow } from "../db/posts";
@@ -231,32 +232,11 @@ export async function test(c: RequestContext): Promise<Response> {
 /** How many addresses one template test may fan out to (matches the settings cap). */
 export const MAX_TEMPLATE_TEST_RECIPIENTS = 20;
 
-// A synthetic post that stands in for {{ .Post.Body }} when testing the TEMPLATE
-// itself — there's no real post to render, so this sample supplies one. It flows
-// through the same render() as a real send (I5); only the body's source differs.
-// The prose mirrors the on-page sample preview so the inbox test matches what the
-// editor showed.
-const TEMPLATE_TEST_SUBJECT = "Template test — the starlings are back";
-const TEMPLATE_TEST_MARKDOWN = [
-  "# The starlings are back",
-  "",
-  "A cold front slid off the lake overnight, and with it the first big roost of the season — a few thousand birds turning over the water at dusk.",
-  "",
-  "Three things I noticed this week, and one question for you.",
-  "",
-  "- The light is going gold a full hour earlier.",
-  "- The maples on Marsh Lane have finally turned.",
-  "- Someone left a note in the little free library, addressed to no one.",
-  "",
-  "This is a **sample post**: [links](https://example.com) render like this, and a real post's Markdown fills this space.",
-].join("\n");
-
-/** The sample post as it is headed outside a template test: Settings' preview of a post
- *  page (`routes/reader_pages.ts`). */
-export const SAMPLE_POST_SUBJECT = "The starlings are back";
-
-/** Build the synthetic render input for a sample post, with no post and no images. A template
- *  test's subject says it is one; a preview passes its own. */
+/** Build the synthetic render input for a sample post, with no post and no images: it stands
+ *  in for {{ .Post.Body }} when testing the template itself, since there's no real post to
+ *  render. It flows through the same render() as a real send (I5); only the body's source
+ *  differs, and the copy is the one the on-page preview shows. A template test's subject says
+ *  it is one; a preview passes its own. */
 export function sampleRenderInput(subject = TEMPLATE_TEST_SUBJECT): RenderInput {
   const now = Date.now();
   const post: PostRow = {
@@ -275,7 +255,7 @@ export function sampleRenderInput(subject = TEMPLATE_TEST_SUBJECT): RenderInput 
   const revision: RevisionRow = {
     id: "sample-rev",
     post_id: "sample",
-    markdown: TEMPLATE_TEST_MARKDOWN,
+    markdown: SAMPLE_POST_MARKDOWN,
     metadata: JSON.stringify({ subject, slug: post.slug }),
     author: null,
     client: null,

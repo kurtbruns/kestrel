@@ -12,6 +12,7 @@
  */
 
 import { findReaderPage } from "../../shared/reader_pages";
+import { SAMPLE_POST_SUBJECT } from "../../shared/sample_post";
 import { getSettings } from "../db/settings";
 import { notFound } from "../lib/errors";
 import { archiveIndexPage, landingPage } from "../lib/page";
@@ -33,7 +34,7 @@ import {
   unsubscribeInvalidPage,
 } from "./public";
 import { archiveHomeUrl, readerIdentity } from "./reader";
-import { SAMPLE_POST_SUBJECT, sampleRenderInput } from "./render_actions";
+import { sampleRenderInput } from "./render_actions";
 
 /** The address a preview shows where a reader's own would be. */
 const SAMPLE_EMAIL = "reader@example.com";

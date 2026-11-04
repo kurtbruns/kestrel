@@ -3,6 +3,7 @@
 
 import { emailLogoHtml } from "../../shared/email_logo";
 import { publicationName } from "../../shared/publication";
+import { SAMPLE_POST_HTML, TEMPLATE_TEST_SUBJECT } from "../../shared/sample_post";
 import {
   ADDRESS_NOT_PRINTED,
   type SettingsPatchBody,
@@ -287,16 +288,16 @@ export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
 };
 const isExampleKey = (k: string): k is ExampleKey => Object.hasOwn(EMAIL_TEMPLATE_EXAMPLES, k);
 
-// Sample post body for the preview — representative prose inside a called-out slot,
+// Sample post body for the preview: the template test's copy inside a called-out slot,
 // so it's unmistakable where a real post's rendered Markdown lands. Its typography
 // comes from the template's own .email rules (the callout frame + label are a
-// preview device, not part of the email). In a real send {{ .Post.Body }} is the
-// rendered Markdown.
+// preview device, not part of the email), and the copy's own margins space it inside
+// the frame, as they do in the email. In a real send {{ .Post.Body }} is the rendered
+// Markdown.
 const EMAIL_TEMPLATE_SAMPLE_BODY =
-  '<div style="position:relative;border:1px dashed #93a7e6;border-radius:8px;padding:20px 14px 8px;margin:0 0 6px">' +
+  '<div style="position:relative;border:1px dashed #93a7e6;border-radius:8px;padding:1px 14px;margin:0 0 6px">' +
   "<span style=\"position:absolute;top:-8px;left:10px;font:650 10px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#3355cc;background:#fff;padding:0 6px\">Your post’s Markdown renders here</span>" +
-  '<h2 style="margin:0 0 10px">Lorem ipsum,</h2>' +
-  '<p style="margin:0">Dolor sit amet, consectetur adipiscing elit. Proin sed ex ipsum. Suspendisse vulputate nisi et odio dapibus, quis pellentesque felis sollicitudin. Proin vel cursus enim. Phasellus sollicitudin malesuada elementum. Suspendisse euismod eros turpis, ut mollis est imperdiet ut. Sed luctus accumsan erat, at eleifend purus eleifend quis.</p>' +
+  SAMPLE_POST_HTML +
   "</div>";
 
 // Fill logic-less {{ token }} placeholders from a flat context. {{ .Post.Body }} (the
@@ -330,7 +331,7 @@ function templateSampleCtx(id: TemplateIdentity): Record<string, string> {
   const name = id.name || "Your publication";
   return {
     ".Post.Body": EMAIL_TEMPLATE_SAMPLE_BODY,
-    ".Post.Subject": "The starlings are back",
+    ".Post.Subject": TEMPLATE_TEST_SUBJECT,
     ".Publication.Name": name,
     ".Publication.Tagline": id.tagline || "Your tagline",
     ".Publication.LogoURL": id.logoUrl,

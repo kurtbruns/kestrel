@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TEMPLATE_TEST_SUBJECT } from "../../shared/sample_post";
 import { ADDRESS_NOT_PRINTED, type SettingsResponse } from "../../shared/settings";
 import { appState } from "../state";
 import { sendView } from "../test/send_server";
@@ -526,6 +527,15 @@ describe("sample email preview", () => {
     }
     return slot;
   }
+
+  it("shows the template test's subject and copy, in the slot where a post's Markdown lands", () => {
+    const slot = preview("", '<div class="email"><i>{{ .Post.Subject }}</i>{{ .Post.Body }}</div>');
+    expect(slot.querySelector("i")?.textContent).toBe(TEMPLATE_TEST_SUBJECT);
+    expect(slot.querySelector("h1")?.textContent).toBe("How your posts will look");
+    const box = slot.querySelector("h1")?.parentElement;
+    expect(box?.querySelector("span")?.textContent).toBe("Your post’s Markdown renders here");
+    expect(box?.textContent).toContain("This is a test of your email template");
+  });
 
   it("shows no logo, and no stand-in, when none is set: the sign-off the email will carry", () => {
     const slot = preview("");
