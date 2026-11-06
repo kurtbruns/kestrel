@@ -3,11 +3,12 @@
 // every section wears.
 
 import type { ProviderStatusView } from "../../shared/provider";
-import type {
-  ConfirmationEmailCopy,
-  SettingsResponse,
-  SettingsSection,
-  SettingsView,
+import {
+  type ConfirmationEmailCopy,
+  type SettingsResponse,
+  type SettingsSection,
+  type SettingsView,
+  settingsSectionTitle,
 } from "../../shared/settings";
 import { describeError } from "../api";
 import { type Html, html } from "../ui/html";
@@ -75,13 +76,8 @@ export function sectionHeadId(section: SettingsSection): string {
 }
 
 /** A section's head: its title, its chips, and the rule that runs to the edge. */
-export function secHead(
-  section: SettingsSection,
-  title: string,
-  chipHtml: Html,
-  extra: Html | null = null,
-): Html {
-  return html`<div class="set-sec-head" id="${sectionHeadId(section)}"><h2 class="set-sec-title">${title}</h2>${chipHtml}${extra}<span class="set-rule"></span></div>`;
+export function secHead(section: SettingsSection, chipHtml: Html, extra: Html | null = null): Html {
+  return html`<div class="set-sec-head" id="${sectionHeadId(section)}"><h2 class="set-sec-title">${settingsSectionTitle(section)}</h2>${chipHtml}${extra}<span class="set-rule"></span></div>`;
 }
 
 /** The letter an inbox row shows for a sender with no avatar. */

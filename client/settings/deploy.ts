@@ -73,7 +73,7 @@ export function senderSection(page: SettingsPage): Html {
   const rate = status ? sendRateHtml(status) : null;
   return html`
     <section class="set-sec">
-      ${secHead("email-sender", "Email sender", chip("readonly", "Read-only · set at deploy"))}
+      ${secHead("email-sender", chip("readonly", "Read-only · set at deploy"))}
       <div class="set-card sunken">
         <div class="set-ro-note">${icon("readonly")}<span>The sender is set at deploy in <code>wrangler.jsonc</code>, with the AWS keys stored as secrets, so it can’t be edited here. Change it in the <a class="set-link" href="#/docs/self-hosting">setup guide</a>, then redeploy. Credentials are never shown.</span></div>
         <div class="set-preview-bar" style="background:transparent">
@@ -105,7 +105,7 @@ export function instanceSection(page: SettingsPage): Html {
   const archiveIsDefault = d.archive_origin === d.app_origin;
   return html`
     <section class="set-sec">
-      ${secHead("instance", "Instance", chip("readonly", "Read-only · set at deploy"))}
+      ${secHead("instance", chip("readonly", "Read-only · set at deploy"))}
       <div class="set-card sunken">
         <div class="set-ro-note">${icon("info")}<span>Deploy-time infrastructure, shown for reference. These live in your Worker config and never pass through the API. See the <a class="set-link" href="#/docs/configuration">setup guide</a> to change them.</span></div>
         <div class="set-kv">

@@ -5,7 +5,8 @@
 // the page by then is reading it, and any later growth is left to the browser.
 const HOLD_MS = 5000;
 
-// What a reader does to take the scroll over. A scrollbar drag is a pointerdown.
+// What a reader does to take the scroll over. A scrollbar drag counts where the browser reports
+// it as a pointerdown; where it doesn't, the hold only moves the page if the page resizes.
 const TAKEOVER = ["wheel", "touchstart", "pointerdown", "keydown"];
 
 /**

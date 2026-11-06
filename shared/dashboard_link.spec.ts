@@ -1,10 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { dashboardLink, dashboardRouteFromSearch } from "./dashboard_link";
-import { settingsRoute } from "./settings";
+import { SETTINGS_SECTIONS, settingsRoute } from "./settings";
 
 const route = (url: string) => dashboardRouteFromSearch(new URL(url).search);
 
 describe("links into the editor from outside it", () => {
+  it("keeps every Settings section's name, which a delivered email may hold", () => {
+    // Renaming one breaks the links already sent: retitle the section instead.
+    expect(SETTINGS_SECTIONS).toEqual([
+      "publication-identity",
+      "ways-to-subscribe",
+      "confirmation-email",
+      "reader-pages",
+      "email-template",
+      "default-test-recipients",
+      "notifications",
+      "email-sender",
+      "instance",
+    ]);
+  });
+
   it("carries the route in the query, which a login keeps, and reads as the page it opens", () => {
     const url = dashboardLink("https://newsletter.example.com", "/sent/s1");
     expect(url).toBe("https://newsletter.example.com/dashboard/?to=/sent/s1");

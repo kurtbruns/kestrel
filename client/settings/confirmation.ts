@@ -13,7 +13,7 @@ export function confirmationSection(page: SettingsPage): Html {
   const { state, fromName } = page;
   return html`
     <section class="set-sec">
-      ${secHead("confirmation-email", "Confirmation email", chip("editable", "Editable"))}
+      ${secHead("confirmation-email", chip("editable", "Editable"))}
       <p class="set-lede">The email that asks a new subscriber to confirm. Edit the wording as you see fit. Kestrel adds the confirmation link.</p>
       <div class="set-preview">
         <div class="set-preview-bar set-ce-bar">

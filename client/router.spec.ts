@@ -3,6 +3,7 @@ import { describeFormat } from "../shared/imports";
 import type { ReferenceResponse } from "../shared/reference";
 import type { ViewHandle } from "./lifecycle";
 import { adoptLinkedRoute, installRouter, route } from "./router";
+import { setNavOpen } from "./shell";
 import { sendServer } from "./test/send_server";
 import {
   $,
@@ -239,6 +240,14 @@ describe("router", () => {
     expect(beforeLeave).toHaveBeenCalledTimes(1);
     expect(confirm).toHaveBeenCalledTimes(1);
     expect(location.hash).toBe("#/settings/notifications");
+  });
+
+  it("closes the phone's nav drawer when a view shows the new address itself", async () => {
+    await at("#/drafts");
+    await editorLike({ navigate: () => true });
+    setNavOpen(true);
+    await at("#/settings/notifications");
+    expect(document.body.classList.contains("nav-open")).toBe(false);
   });
 
   it("takes a linked route over a hash beside it", () => {

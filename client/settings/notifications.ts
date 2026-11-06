@@ -77,7 +77,7 @@ export function notificationsSection(page: SettingsPage): Html {
   const d = page.data.deployment;
   return html`
     <section class="set-sec">
-      ${secHead("notifications", "Notifications", chip("editable", "Editable"))}
+      ${secHead("notifications", chip("editable", "Editable"))}
       <p class="set-lede">Kestrel emails you when a send goes out, and right away if a send runs into a problem.</p>
       <div class="set-card">
         <div class="set-recip">

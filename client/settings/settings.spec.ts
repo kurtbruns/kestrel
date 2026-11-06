@@ -1598,12 +1598,11 @@ describe("settings view", () => {
       );
     });
 
-    it("names each section for its title, which is how the docs find it", async () => {
+    it("shows each section's title, the one the docs find it by", async () => {
       await openAt();
-      for (const head of $$(".set-sec-head")) {
-        const section = settingsSectionTitled($(".set-sec-title", head).textContent ?? "");
-        expect(head.id).toBe(`settings-${section}`);
-      }
+      expect($$(".set-sec-title").map((t) => settingsSectionTitled(t.textContent ?? ""))).toEqual(
+        SETTINGS_SECTIONS,
+      );
     });
 
     it("opens at the section the address names", async () => {
@@ -1611,6 +1610,8 @@ describe("settings view", () => {
       expect(targets).toEqual(["settings-notifications"]);
     });
 
+    // A guard: this held before sections had addresses, and fails if a page with no section
+    // to show starts moving.
     it.each([undefined, "no-such-section"])(
       "opens at the top for %s, without a jump",
       async (s) => {
@@ -1631,9 +1632,41 @@ describe("settings view", () => {
       expect(tagline.value).toBe("Edited, not saved");
     });
 
-    it("hands any other address back to the router", async () => {
+    it("lets go of one section on moving to another, so a late resize stays on the new one", async () => {
+      // Only what watches the page itself; the previews have observers of their own.
+      const watchers = new Set<{ el: Element; fire: () => void }>();
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          entry: { el: Element; fire: () => void } | null = null;
+          constructor(private fn: () => void) {}
+          observe(el: Element) {
+            this.entry = { el, fire: this.fn };
+            watchers.add(this.entry);
+          }
+          unobserve() {}
+          disconnect() {
+            if (this.entry) {
+              watchers.delete(this.entry);
+            }
+          }
+        },
+      );
+      const { targets } = await openAt("notifications");
+      mounted()?.navigate?.("#/settings/instance");
+      targets.length = 0;
+      for (const w of watchers) {
+        if (w.el.classList.contains("view")) {
+          w.fire();
+        }
+      }
+      expect(targets).toEqual(["settings-instance"]);
+    });
+
+    it("hands any other address back to the router, a mangled one of its own included", async () => {
       await openAt();
       expect(mounted()?.navigate?.("#/drafts")).toBe(false);
+      expect(mounted()?.navigate?.("#/settings/..")).toBe(false);
     });
   });
 });

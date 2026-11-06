@@ -4,6 +4,7 @@
 // its own module; this one loads the settings, holds the live state against the saved
 // baseline, and commits it.
 
+import { isDashboardRoute } from "../../shared/dashboard_link";
 import { fromDisplayName } from "../../shared/publication";
 import {
   type ConfirmationEmailCopy,
@@ -155,7 +156,7 @@ export async function renderSettings(
     body,
     html`
       ${group("publication", [identitySection(page)])}
-      ${group("readers", [subscribeSection(page), confirmationSection(page), readerPagesSection(secHead("reader-pages", "Reader pages", chip("preview", "Preview")))])}
+      ${group("readers", [subscribeSection(page), confirmationSection(page), readerPagesSection(secHead("reader-pages", chip("preview", "Preview")))])}
       ${group("emails", [templateSection(page), recipientsSection()])}
       ${group("you", [notificationsSection(page)])}
       ${group("deploy", [senderSection(page), instanceSection(page)])}
@@ -267,7 +268,8 @@ export async function renderSettings(
   return {
     navigate(hash) {
       const [, view, name] = hash.split("/");
-      if (view !== "settings") {
+      // The router's own rule for an address, so a mangled one leaves as a fresh load of it does.
+      if (view !== "settings" || !isDashboardRoute(hash.slice(1))) {
         return false;
       }
       show(name);

@@ -8,23 +8,29 @@ import type { TestNotSent } from "./posts";
 import type { RefusingCause } from "./provider";
 import type { SendView } from "./sends";
 
-/** The Settings page's sections, by the name each goes by in a link: its title in lowercase
- *  with hyphens, which is how the Docs tab finds the section a page names. An email or a note
- *  outside the app may hold one of these, so a retitled section keeps its name, and a spec
- *  says when the docs' wording no longer finds it. */
-export const SETTINGS_SECTIONS = [
-  "publication-identity",
-  "ways-to-subscribe",
-  "confirmation-email",
-  "reader-pages",
-  "email-template",
-  "default-test-recipients",
-  "notifications",
-  "email-sender",
-  "instance",
-] as const;
+/** The Settings page's sections in page order, each name with the title the page shows and
+ *  the docs write. A name is stable: a delivered email holds it in a link, so a retitled
+ *  section changes its title here and keeps its name. */
+const SETTINGS_SECTION_TITLES = {
+  "publication-identity": "Publication identity",
+  "ways-to-subscribe": "Ways to subscribe",
+  "confirmation-email": "Confirmation email",
+  "reader-pages": "Reader pages",
+  "email-template": "Email template",
+  "default-test-recipients": "Default test recipients",
+  notifications: "Notifications",
+  "email-sender": "Email sender",
+  instance: "Instance",
+} as const;
 
-export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
+export type SettingsSection = keyof typeof SETTINGS_SECTION_TITLES;
+
+export const SETTINGS_SECTIONS = Object.keys(SETTINGS_SECTION_TITLES) as SettingsSection[];
+
+/** The title a section shows. */
+export function settingsSectionTitle(section: SettingsSection): string {
+  return SETTINGS_SECTION_TITLES[section];
+}
 
 /** The route to a section of Settings, without its `#` (`/settings/notifications`). */
 export function settingsRoute(section: SettingsSection): string {
@@ -36,10 +42,9 @@ export function isSettingsSection(segment: string | undefined): segment is Setti
   return SETTINGS_SECTIONS.includes(segment as SettingsSection);
 }
 
-/** The section a title names, as the page and the docs write it; null when none. */
+/** The section with exactly this title; null when none has it. */
 export function settingsSectionTitled(title: string): SettingsSection | null {
-  const name = title.trim().toLowerCase().replaceAll(" ", "-");
-  return isSettingsSection(name) ? name : null;
+  return SETTINGS_SECTIONS.find((s) => SETTINGS_SECTION_TITLES[s] === title) ?? null;
 }
 
 /** One address a template test missed, and why. */

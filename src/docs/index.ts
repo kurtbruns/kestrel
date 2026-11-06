@@ -231,15 +231,17 @@ const MD_HREF = /href="([^"#:]+\.md)(?:#([^"]*))?"/g;
 // A link to a heading on the same page: `[Check it](#check-it)`.
 const SAME_PAGE_LINK = /href="#([^"/][^"]*)"/g;
 // A page naming a section of Settings by the dashboard's own words: **Settings → Notifications**,
-// or a place inside one, **Settings → Ways to subscribe → Embed a form**.
-const SETTINGS_NAME = /<strong>Settings → ([^<→]+?)(?: → [^<]*)?<\/strong>/g;
+// or a place inside one, **Settings → Ways to subscribe → Embed a form**. An existing link is
+// matched first, whole, so a name inside one is passed over: an anchor can't hold an anchor.
+const SETTINGS_NAME =
+  /<a\b[^>]*>[\s\S]*?<\/a>|<strong>Settings → ([^<→]+?)(?: → [^<]*)?<\/strong>/g;
 
 /** Link each section of Settings a page names to that section. This is done here, not in the
  *  Markdown, because only the Docs tab has a dashboard to open: the same words on GitHub, on
  *  getkestrel.dev, and in an agent's copy stay plain rather than becoming links to nowhere. */
-function linkSettingsNames(html: string): string {
-  return html.replace(SETTINGS_NAME, (whole, title: string) => {
-    const section = settingsSectionTitled(title);
+export function linkSettingsNames(html: string): string {
+  return html.replace(SETTINGS_NAME, (whole, title: string | undefined) => {
+    const section = title ? settingsSectionTitled(title) : null;
     return section ? `<a href="#${settingsRoute(section)}">${whole}</a>` : whole;
   });
 }
