@@ -464,7 +464,7 @@ describe("confirmation email masthead (SPEC §7)", () => {
     // …and a dark @media block darkens the frame + ink (it can't be inlined here anyway).
     expect(r.html).toContain("prefers-color-scheme: dark");
     expect(r.html).toContain("#ededed"); // ink in dark mode
-    expect(r.html).toContain("#232327"); // card surface in dark mode
+    expect(r.html).toContain(".k-sys-bg { background:#18181b !important; }"); // the page, as a post's
   });
 
   it("escapes operator copy and identity into the HTML (no injection)", () => {
