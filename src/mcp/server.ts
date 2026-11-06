@@ -216,14 +216,22 @@ const CLIENT_TEXT_MAX = 128;
 // off a body of any length.
 const CLIENT_TEXT_READ = CLIENT_TEXT_MAX + 254;
 
-// What the read stops inside: its last unbroken run, or a quoted local part still open. Cleaning
-// shrinks the text before it, so a fragment left here could slide inside the limit, and a piece of
-// an address or token is what the cleaning can't recognize.
-const READ_STOPPED_IN = /"[^"]*$|\S+$/;
+// How much is looked at to find that much: a few reads, room for the characters the first two steps
+// below take out, and a limit on what those steps cost on a body of any length.
+const CLIENT_TEXT_TAKEN = CLIENT_TEXT_READ * 4;
 
 // Control, format, and line-separating characters: nothing an operator can read, and each able to
 // hide an address or token from the cleaning, so they go first.
 const UNREADABLE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
+
+// A quoted string, closed or open through to the end. An address's local part may be one, spaces
+// and all, which no name, title, or version has a use for. With them gone, every local part left
+// is an unbroken run, the one thing a cut has to reason about.
+const QUOTED = /"[^"]*(?:"|$)/g;
+
+// What a cut stops inside. Cleaning shrinks the text before it, so a fragment left here could slide
+// inside the limit, and a piece of an address or token is what the cleaning can't recognize.
+const LAST_RUN = /\S+$/;
 
 // Everything from a `?` or `#` on in an unbroken run, whatever its keys are called: `scrub` knows
 // only `token=`. A real name or version has no use for one, and `C#` keeps its own.
@@ -243,12 +251,16 @@ const TOKEN_RUN = /(?=[\w+/=-]*\d)[\w+/=-]{32,}/g;
  * to recognize reads as a name.
  */
 function clientText(value: unknown): string | undefined {
-  const text = typeof value === "string" ? value.replace(UNREADABLE, "").trim() : "";
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const taken = value.slice(0, CLIENT_TEXT_TAKEN);
+  const text = taken.replace(UNREADABLE, "").replace(QUOTED, "…").trim();
   if (text === "") {
     return undefined;
   }
-  const over = text.length > CLIENT_TEXT_READ;
-  const read = over ? text.slice(0, CLIENT_TEXT_READ).replace(READ_STOPPED_IN, "") : text;
+  const over = value.length > CLIENT_TEXT_TAKEN || text.length > CLIENT_TEXT_READ;
+  const read = over ? text.slice(0, CLIENT_TEXT_READ).replace(LAST_RUN, "") : text;
   // By code point, so the cut can't split a character.
   const clean = Array.from(scrub(read).replace(QUERY, "…").replace(TOKEN_RUN, "…"));
   return over || clean.length > CLIENT_TEXT_MAX

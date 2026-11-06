@@ -1232,6 +1232,46 @@ describe("each initialize is one line of what the client says it is (SPEC §12)"
   );
 
   it.each([
+    ["an address with its local part in quotes", '"jane doe"@example.com', "…@example.com"],
+    ["a quoted string well inside the read", 'Claude "jane doe" Code', "Claude … Code"],
+    ["a quote left open", 'Claude "jane doe', "Claude …"],
+    [
+      "a quoted address the read stops just past",
+      `${"aB3".repeat(125).slice(0, 365)} "jane doe"@example.com`,
+      "… …@example.com",
+    ],
+    [
+      "a quoted address with text after it, past where the read would stop",
+      `${"aB3".repeat(125).slice(0, 350)} "jane van doe"@example.com tail tail`,
+      "… …@example.com tail tail",
+    ],
+  ])("takes out %s", async (_what, name, kept) => {
+    const { line } = await initialize({ name });
+    expect(line.clientInfoName).toBe(kept);
+  });
+
+  it("looks past characters it takes out to find the text, within what it takes", async () => {
+    const { line } = await initialize({
+      name: `${"\u200b".repeat(1000)}Claude`,
+      title: `"${"a".repeat(1000)}" Claude`,
+    });
+    expect(line.clientInfoName).toBe("Claude");
+    expect(line.clientInfoTitle).toBe("… Claude");
+  });
+
+  it("keeps no piece of what the first look stops inside, however little comes before it", async () => {
+    // 1528 characters are looked at, which stops this address after `jane.doe`.
+    const { line } = await initialize({
+      name: `${"\u200b".repeat(1520)}jane.doe@example.com`,
+      title: `"${"a".repeat(1518)}" jane.doe@example.com`,
+      version: "x".repeat(8_000_000),
+    });
+    expect(line.clientInfoName).toBe("…");
+    expect(line.clientInfoTitle).toBe("… …");
+    expect(line.clientInfoVersion).toBe("…");
+  });
+
+  it.each([
     [
       "a token in a link",
       "https://news.example.com/confirm?token=abc123",
@@ -1273,10 +1313,7 @@ describe("each initialize is one line of what the client says it is (SPEC §12)"
 
   it("keeps a name written as a log line inside its own field", async () => {
     const { line } = await initialize({ name: 'x"}\n{"event":"send.wedged","level":"error' });
-    expect(line).toEqual({
-      ...ASKED,
-      clientInfoName: 'x"}{"event":"send.wedged","level":"error',
-    });
+    expect(line).toEqual({ ...ASKED, clientInfoName: "x…event…send.wedged…level…error" });
     expect(logged(...spies).filter((l) => l.event === "send.wedged")).toEqual([]);
   });
 
