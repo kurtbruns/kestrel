@@ -1077,10 +1077,17 @@ describe("each initialize is one line of what the client says it is (SPEC §12)"
     principal: "human",
     protocolVersion: "2025-11-25",
   };
+  /** The line of an initialize that asked for the version `initialize` above asks for. */
+  const ASKED = { ...LINE, protocolVersionAsked: "2025-11-25" };
 
-  it("logs the name and version a client sent, the principal's kind, and the protocol agreed", async () => {
-    const { line } = await initialize({ name: "claude-ai", version: "0.1.0" });
-    expect(line).toEqual({ ...LINE, clientInfoName: "claude-ai", clientInfoVersion: "0.1.0" });
+  it("logs the name, title, and version a client sent, the principal's kind, and the protocol asked for and agreed", async () => {
+    const { line } = await initialize({ name: "claude-ai", title: "Claude", version: "0.1.0" });
+    expect(line).toEqual({
+      ...ASKED,
+      clientInfoName: "claude-ai",
+      clientInfoTitle: "Claude",
+      clientInfoVersion: "0.1.0",
+    });
   });
 
   it("logs one line for each initialize, none for any other message", async () => {
@@ -1096,13 +1103,20 @@ describe("each initialize is one line of what the client says it is (SPEC §12)"
     ]);
   });
 
-  it("logs the protocol version the answer agreed, never the one a client asked for", async () => {
+  it("logs the protocol version a client asked for beside the one the answer agreed", async () => {
     const auth = await adminAuth(PERSON);
     await rpc("initialize", { protocolVersion: "2025-06-18" }, auth);
     await rpc("initialize", { protocolVersion: "2026-07-28" }, auth);
     await rpc("initialize", { protocolVersion: { asked: "anything" } }, auth);
-    const lines = logged(...spies).filter((l) => l.event === "mcp.initialize");
-    expect(lines.map((l) => l.protocolVersion)).toEqual(["2025-06-18", "2025-11-25", "2025-11-25"]);
+    await rpc("initialize", { protocolVersion: "" }, auth);
+    await rpc("initialize", { protocolVersion: "jane.doe@example.com" }, auth);
+    expect(logged(...spies).filter((l) => l.event === "mcp.initialize")).toEqual([
+      { ...LINE, protocolVersion: "2025-06-18", protocolVersionAsked: "2025-06-18" },
+      { ...LINE, protocolVersionAsked: "2026-07-28" },
+      LINE,
+      LINE,
+      { ...LINE, protocolVersionAsked: "…@example.com" },
+    ]);
   });
 
   it("logs no name or version when the params say nothing usable, and answers the same", async () => {
@@ -1123,7 +1137,10 @@ describe("each initialize is one line of what the client says it is (SPEC §12)"
     ["a null name and a true version", { name: null, version: true }, {}],
     ["an empty name and version", { name: "", version: "" }, {}],
     ["a blank name and version", { name: "   ", version: "\n\t" }, {}],
+    ["only invisible characters", { name: "\u200b\u202e", version: "\u200b", title: "\u2028" }, {}],
+    ["a title not a string", { title: 7 }, {}],
     ["a name with no version", { name: "claude" }, { clientInfoName: "claude" }],
+    ["a title alone", { title: "Claude" }, { clientInfoTitle: "Claude" }],
     ["a version with no name", { version: "1.0" }, { clientInfoVersion: "1.0" }],
     ["a good name and a bad version", { name: "claude", version: 1 }, { clientInfoName: "claude" }],
     [
@@ -1134,55 +1151,108 @@ describe("each initialize is one line of what the client says it is (SPEC §12)"
   ])("takes clientInfo as %s, and answers the same", async (_what, clientInfo, fields) => {
     const plain = await plainAnswer();
     const { result, line } = await initialize(clientInfo);
-    expect(line).toEqual({ ...LINE, ...fields });
+    expect(line).toEqual({ ...ASKED, ...fields });
     expect(result).toEqual(plain);
   });
 
-  it("cuts a long name or version to its bound, marking the cut, and answers the same", async () => {
+  it("cuts long text to its limit, marking the cut, and answers the same", async () => {
     const plain = await plainAnswer();
-    const { result, line } = await initialize({ name: "a".repeat(5000), version: "b".repeat(129) });
-    expect(line.clientInfoName).toBe(`${"a".repeat(128)}…`);
-    expect(line.clientInfoVersion).toBe(`${"b".repeat(128)}…`);
+    const { result, line } = await initialize({
+      name: "word ".repeat(1000),
+      title: "c".repeat(129),
+      version: "b".repeat(5000),
+    });
+    expect(line.clientInfoName).toBe(`${"word ".repeat(25)}wor…`);
+    expect(line.clientInfoTitle).toBe(`${"c".repeat(128)}…`);
+    // One unbroken run past all that is read: nothing of it was read whole, so nothing is kept.
+    expect(line.clientInfoVersion).toBe("…");
     expect(result).toEqual(plain);
   });
 
-  it("leaves a name exactly at the bound whole", async () => {
+  it("leaves text exactly at the limit whole", async () => {
     const { line } = await initialize({ name: "a".repeat(128) });
     expect(line.clientInfoName).toBe("a".repeat(128));
   });
 
-  it("reduces an address to its domain, in either field, and answers the same", async () => {
+  it("counts and cuts by character, so a cut can't split one", async () => {
+    const { line } = await initialize({ name: "😀".repeat(128), version: "😀".repeat(129) });
+    expect(line.clientInfoName).toBe("😀".repeat(128));
+    expect(line.clientInfoVersion).toBe(`${"😀".repeat(128)}…`);
+  });
+
+  it("takes out invisible characters, which could otherwise hide an address or a token", async () => {
+    const { line } = await initialize({
+      name: "Clau\u202ede\u200b Co\u2028de\u0007",
+      title: "jane.doe\u200b@example.com",
+      version: `${"aB3".repeat(8)}\u200b${"aB3".repeat(8)}`,
+    });
+    expect(line.clientInfoName).toBe("Claude Code");
+    expect(line.clientInfoTitle).toBe("…@example.com");
+    expect(line.clientInfoVersion).toBe("…");
+  });
+
+  it("reduces an address to its domain, in any field, and answers the same", async () => {
     const plain = await plainAnswer();
     const { result, line } = await initialize({
       name: "jane.doe@example.com",
+      title: "for jane.doe@example.com",
       version: "built by jane.doe%40example.com",
     });
     expect(line.clientInfoName).toBe("…@example.com");
+    expect(line.clientInfoTitle).toBe("for …@example.com");
     expect(line.clientInfoVersion).toBe("built by …@example.com");
     expect(result).toEqual(plain);
   });
 
-  it("reduces an address the bound would have cut before its @, which scrubbing after could not", async () => {
+  it("reduces an address the limit would have cut before its @, which scrubbing after could not", async () => {
     const name = `${"x ".repeat(60)}jane.doe@example.com`;
     const { line } = await initialize({ name });
     expect(JSON.stringify(line)).not.toContain("jane");
     expect(line.clientInfoName).toBe(`${"x ".repeat(60)}…@exampl…`);
   });
 
+  it("reads far enough to see an address whole that starts inside the limit, however long", async () => {
+    const start = "x ".repeat(60);
+    const local = "l".repeat(382 - start.length - "@example.com".length);
+    const { line } = await initialize({ name: `${start}${local}@example.com` });
+    expect(line.clientInfoName).toBe(`${start}…@exampl…`);
+  });
+
+  it.each([
+    ["an address", `${"aB3".repeat(125).slice(0, 373)} jane.doe@example.com`, "jane"],
+    ["a token", `${"aB3".repeat(125).slice(0, 351)} ${"cD4".repeat(17).slice(0, 49)}`, "cD4"],
+    ["a quoted address", `${"aB3".repeat(125).slice(0, 373)} "jane doe"@example.com`, "jane"],
+  ])(
+    "keeps no piece of %s the read stopped inside, once what's before it shrinks",
+    async (_what, name, piece) => {
+      const { line } = await initialize({ name });
+      expect(line.clientInfoName).not.toContain(piece);
+      expect(line.clientInfoName).toBe("… …");
+    },
+  );
+
   it.each([
     [
       "a token in a link",
       "https://news.example.com/confirm?token=abc123",
-      "https://news.example.com/confirm?token=…",
+      "https://news.example.com/confirm…",
     ],
+    [
+      "a link's whole query",
+      "https://x.example/mcp?access_token=abc123&key=s3cr3t&code=xyz",
+      "https://x.example/mcp…",
+    ],
+    ["a link's fragment", "https://x.example/cb#access_token=abc123", "https://x.example/cb…"],
+    ["a query with no scheme", "x.example/mcp?key=s3cr3t", "x.example/mcp…"],
     ["an access key ID", "AKIAIOSFODNN7EXAMPLE", "…"],
     ["a reader's token", `k ${"aB3".repeat(15)}`, "k …"],
     ["a signed token's parts", `${"aB3".repeat(12)}.${"cD4".repeat(12)}`, "….…"],
-    ["a token cut by the bound", `${"x ".repeat(62)}${"aB3".repeat(15)}`, `${"x ".repeat(62)}…`],
+    ["a token cut by the limit", `${"x ".repeat(62)}${"aB3".repeat(15)}`, `${"x ".repeat(62)}…`],
   ])("takes out %s, and answers the same", async (_what, name, kept) => {
     const plain = await plainAnswer();
-    const { result, line } = await initialize({ name, version: name });
+    const { result, line } = await initialize({ name, title: name, version: name });
     expect(line.clientInfoName).toBe(kept);
+    expect(line.clientInfoTitle).toBe(kept);
     expect(line.clientInfoVersion).toBe(kept);
     expect(result).toEqual(plain);
   });
@@ -1193,15 +1263,20 @@ describe("each initialize is one line of what the client says it is (SPEC §12)"
     "modelcontextprotocol-inspector-client",
     "Anthropic/ClaudeAI",
     "2025.11.25-beta.1",
+    "C# client",
+    "Is this Claude?",
+    "Клод",
   ])("keeps %s whole, since it is a name and not a token", async (name) => {
     const { line } = await initialize({ name });
     expect(line.clientInfoName).toBe(name);
   });
 
   it("keeps a name written as a log line inside its own field", async () => {
-    const name = 'x"}\n{"event":"send.wedged","level":"error';
-    const { line } = await initialize({ name });
-    expect(line).toEqual({ ...LINE, clientInfoName: name });
+    const { line } = await initialize({ name: 'x"}\n{"event":"send.wedged","level":"error' });
+    expect(line).toEqual({
+      ...ASKED,
+      clientInfoName: 'x"}{"event":"send.wedged","level":"error',
+    });
     expect(logged(...spies).filter((l) => l.event === "send.wedged")).toEqual([]);
   });
 

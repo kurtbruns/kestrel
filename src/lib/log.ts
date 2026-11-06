@@ -91,7 +91,7 @@ export const LOG_EVENTS = {
   "auth.unidentified": "warn",
   // A tool call through the MCP server, and the refusal code of one that failed (SPEC §11).
   "mcp.call": "info",
-  // A client opening the MCP server, and what it says it is, which nothing checks (SPEC §11).
+  // A client opening the MCP server, and what it says it is, which nothing checks (SPEC §12).
   "mcp.initialize": "info",
   // Configuration and the schema (SPEC §9).
   "schema.unchecked": "warn",

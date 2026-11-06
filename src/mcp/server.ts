@@ -169,7 +169,7 @@ async function dispatch(
     case "initialize": {
       const asked = typeof params.protocolVersion === "string" ? params.protocolVersion : "";
       const protocolVersion = SUPPORTED.includes(asked) ? asked : MCP_PROTOCOL_VERSIONS[0];
-      logInitialize(c, protocolVersion, params.clientInfo);
+      logInitialize(c, protocolVersion, params);
       return result(id, {
         protocolVersion,
         capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
@@ -206,50 +206,78 @@ async function dispatch(
   }
 }
 
-/** The longest a field of `clientInfo` runs on a log line: past any real name or version. */
-const CLIENT_INFO_MAX = 128;
+/** The longest, in characters, that text a client typed runs on a log line: past any real name
+ *  or version. */
+const CLIENT_TEXT_MAX = 128;
 
-// How much of a field is read to clean it: the bound, and the longest an address can be past it.
-// An address that starts inside the bound must be seen whole, its @ included, or cutting it would
-// leave its local part looking like a name. Stopping here also keeps `scrub`, whose address
-// pattern rescans a long string with no @ from every position, off a body of any length.
-const CLIENT_INFO_READ = CLIENT_INFO_MAX + 254;
+// How much of that text is read to clean it: the limit, and the longest an address can run past
+// it. An address that starts inside the limit has to be seen whole, its @ included. Stopping here
+// also keeps `scrub`, whose address pattern rescans a long string with no @ from every position,
+// off a body of any length.
+const CLIENT_TEXT_READ = CLIENT_TEXT_MAX + 254;
+
+// What the read stops inside: its last unbroken run, or a quoted local part still open. Cleaning
+// shrinks the text before it, so a fragment left here could slide inside the limit, and a piece of
+// an address or token is what the cleaning can't recognize.
+const READ_STOPPED_IN = /"[^"]*$|\S+$/;
+
+// Control, format, and line-separating characters: nothing an operator can read, and each able to
+// hide an address or token from the cleaning, so they go first.
+const UNREADABLE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
+
+// Everything from a `?` or `#` on in an unbroken run, whatever its keys are called: `scrub` knows
+// only `token=`. A real name or version has no use for one, and `C#` keeps its own.
+const QUERY = /[?#]\S+/g;
 
 // A long unbroken run of a key's characters with a digit in it: a bare token or a part of a signed
-// one, which `scrub` leaves, since it knows a token only by the link that carries it, and which it
-// can't be told to look for on every line, where ids run as long. A name is free to be long with
-// no digit. A version that is a commit hash blurs to the mark, which costs a line only that hash.
+// one, which `scrub` leaves, since it knows a token only by what surrounds it, and which it can't
+// be told to look for on every line, where ids run as long. A name is free to be long with no
+// digit. A version that is a commit hash reads as the mark, which costs a line only that hash.
 const TOKEN_RUN = /(?=[\w+/=-]*\d)[\w+/=-]{32,}/g;
 
 /**
- * A field of `clientInfo` as its line carries it: text a client typed, so nothing but non-blank
- * text is kept, an address or token in it is taken out, and it is bound, marked by `…` where cut.
- * Cleaned before it is cut, so the cut can't hide from `scrub` what it would have taken out.
+ * Text a client typed, as its line carries it: anything but non-blank text is absent, an address
+ * or token the cleaning recognizes is taken out, and the rest is bounded, with `…` where it was
+ * cut. It is cleaned before the cut, over only what was read whole, so a cut leaves no piece of
+ * something the cleaning would have taken out. Best effort: a short secret with nothing around it
+ * to recognize reads as a name.
  */
-function clientInfoText(value: unknown): string | undefined {
-  const text = typeof value === "string" ? value.trim() : "";
+function clientText(value: unknown): string | undefined {
+  const text = typeof value === "string" ? value.replace(UNREADABLE, "").trim() : "";
   if (text === "") {
     return undefined;
   }
-  const clean = scrub(text.slice(0, CLIENT_INFO_READ)).replace(TOKEN_RUN, "…");
-  return clean.length > CLIENT_INFO_MAX ? `${clean.slice(0, CLIENT_INFO_MAX)}…` : clean;
+  const over = text.length > CLIENT_TEXT_READ;
+  const read = over ? text.slice(0, CLIENT_TEXT_READ).replace(READ_STOPPED_IN, "") : text;
+  // By code point, so the cut can't split a character.
+  const clean = Array.from(scrub(read).replace(QUERY, "…").replace(TOKEN_RUN, "…"));
+  return over || clean.length > CLIENT_TEXT_MAX
+    ? `${clean.slice(0, CLIENT_TEXT_MAX).join("")}…`
+    : clean.join("");
 }
 
 /**
- * An `initialize`'s one line: what the client says it is (SPEC §11), self-reported and granting
- * nothing, so a field it left out or made unusable is simply absent and the answer never depends
- * on it. The kind of principal only, not `whoActed`: that `client` is the name a request gives in
- * its header, and on this line it would read as the connector's client, which `clientInfo` is the
- * evidence about. This server keeps no session, so this line is about this one message: nothing
- * joins it to the calls that follow, which log on their own and carry none of it.
+ * An `initialize`'s one line (SPEC §12): what the client says it is and the version it asks for,
+ * self-reported and granting nothing, so a field it left out or made unusable is simply absent and
+ * the answer never depends on it. The kind of principal only, not `whoActed`: that `client` is the
+ * name a request gives in its header, and on this line it would read as the connector's client,
+ * which `clientInfo` is the evidence about. This server keeps no session, so this line is about
+ * this one message: nothing joins it to the calls that follow, which log on their own and carry
+ * none of it.
  */
-function logInitialize(c: RequestContext, protocolVersion: string, clientInfo: unknown): void {
-  const info = isObject(clientInfo) ? clientInfo : {};
+function logInitialize(
+  c: RequestContext,
+  protocolVersion: string,
+  params: Record<string, unknown>,
+): void {
+  const info = isObject(params.clientInfo) ? params.clientInfo : {};
   log.info("mcp.initialize", {
     principal: c.principal?.kind,
     protocolVersion,
-    clientInfoName: clientInfoText(info.name),
-    clientInfoVersion: clientInfoText(info.version),
+    protocolVersionAsked: clientText(params.protocolVersion),
+    clientInfoName: clientText(info.name),
+    clientInfoTitle: clientText(info.title),
+    clientInfoVersion: clientText(info.version),
   });
 }
 
