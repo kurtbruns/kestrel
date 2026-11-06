@@ -668,7 +668,78 @@ describe("kestrel api against a signed-in instance", () => {
     ]);
   });
 
+  describe("the client it names (SPEC §11, Who acted)", () => {
+    const SESSION = "CLAUDE_CODE_CHILD_SESSION";
+    const EACH_SESSION = [["1"], [undefined], ["0"], ["true"], [""]];
+
+    /** The name a `GET /api/whoami` with `flags` sends, with the variable set to `value`. */
+    async function named(value, flags = []) {
+      vi.stubEnv(SESSION, value);
+      serve(() => new Response("{}"));
+      await apiCommand(["GET", "/api/whoami", ...flags]);
+      return calls.at(-1).headers["kestrel-client"];
+    }
+
+    it("names Claude Code when Claude Code runs it", async () => {
+      expect(await named("1")).toBe("claude-code");
+    });
+
+    it("names itself when the variable is unset, so a person's command isn't Claude's", async () => {
+      expect(await named(undefined)).toBe("kestrel-cli");
+    });
+
+    it.each([["0"], ["true"], [""], [" 1"], ["1 "]])(
+      "names itself when the variable is %j, not 1",
+      async (value) => {
+        expect(await named(value)).toBe("kestrel-cli");
+      },
+    );
+
+    it("doesn't take CLAUDECODE for Claude Code, since IDE terminals set it too", async () => {
+      vi.stubEnv("CLAUDECODE", "1");
+      expect(await named(undefined)).toBe("kestrel-cli");
+    });
+
+    it.each(EACH_SESSION)("lets --client win with the variable %j", async (value) => {
+      expect(await named(value, ["--client", "my-script"])).toBe("my-script");
+    });
+
+    it("takes either of its own names when given it", async () => {
+      expect(await named("1", ["--client", "kestrel-cli"])).toBe("kestrel-cli");
+      expect(await named(undefined, ["--client", "claude-code"])).toBe("claude-code");
+    });
+
+    it.each(EACH_SESSION)(
+      "refuses --client editor with the variable %j, sending nothing",
+      async (value) => {
+        await expect(named(value, ["--client", "editor"])).rejects.toThrow("exit 1");
+        expect(calls).toEqual([]);
+        expect(err[0]).toMatch(/^kestrel api: --client editor is refused/);
+      },
+    );
+
+    it("names itself against a local dev server too, with no sign-in", async () => {
+      vi.stubEnv(SESSION, undefined);
+      vi.stubEnv("KESTREL_URL", "http://localhost:8799");
+      vi.stubGlobal("fetch", async (url, init = {}) => {
+        calls.push({ url: String(url), headers: init.headers });
+        return String(url).includes("/api/dev/token")
+          ? new Response(JSON.stringify({ token: "dev-token", run_id: "run-a" }))
+          : new Response("{}");
+      });
+      await apiCommand(["GET", "/api/whoami"]);
+      expect(calls.at(-1).headers["kestrel-client"]).toBe("kestrel-cli");
+    });
+
+    it("says both defaults in its usage", () => {
+      expect(() => parseApiArgs(["GET"])).toThrow(
+        /default claude-code\s+when Claude Code runs this, otherwise kestrel-cli/,
+      );
+    });
+  });
+
   it("reads a loopback instance's document as its dev server's stand-in person, with no sign-in", async () => {
+    vi.stubEnv("CLAUDE_CODE_CHILD_SESSION", "1");
     vi.stubEnv("KESTREL_URL", "http://localhost:8799");
     vi.stubGlobal("fetch", async (url, init = {}) => {
       calls.push({ url: String(url), headers: init.headers });

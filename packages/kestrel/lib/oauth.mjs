@@ -19,8 +19,25 @@ import { createServer } from "node:http";
 /** The path discovery and the sign-in's check ask: protected, and it answers who signed in. */
 export const PROTECTED_PATH = "/api/whoami";
 
-/** The name `kestrel api` gives its requests, unless told another (SPEC §11, Who acted). */
-export const DEFAULT_CLIENT = "claude-code";
+// The names `kestrel api` gives itself (SPEC §11, Who acted). Mirrored from shared/who_acted.ts,
+// since the client is plain Node; a spec holds them equal.
+export const CLAUDE_CODE_CLIENT = "claude-code";
+export const KESTREL_CLI_CLIENT = "kestrel-cli";
+
+/**
+ * The name a request carries unless told another: Claude Code's when Claude Code ran this
+ * process, and the command's own otherwise, so what a person runs never reads as Claude's.
+ * CLAUDE_CODE_CHILD_SESSION is set only by Claude Code, on what its tools launch. CLAUDECODE
+ * won't do: IDE extensions also set it in their integrated terminals, where a person types.
+ *
+ * That makes the name truthful in the normal case, not proven, as with every client name. Claude
+ * Code older than v2.1.172 doesn't set the variable, so its calls read as the command's own; and
+ * a `screen` session or a background launcher Claude Code started passes it on, so what a person
+ * later runs inside one reads as Claude Code's.
+ */
+export function defaultClient() {
+  return process.env.CLAUDE_CODE_CHILD_SESSION === "1" ? CLAUDE_CODE_CLIENT : KESTREL_CLI_CLIENT;
+}
 
 // How long before its expiry an access token is refreshed rather than sent.
 const REFRESH_MARGIN_MS = 60_000;

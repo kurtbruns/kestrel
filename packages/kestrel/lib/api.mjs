@@ -5,11 +5,12 @@
  * Deployed, it sends the access token `kestrel login` stored, refreshing it from the
  * refresh token when it is about to expire or Access has turned it away, and storing what
  * comes back. Locally there is no Access: the target is this directory's dev server, and
- * the credential is the dev server's human token, so a local run is a person via Claude
- * Code just as a deployed one is. Every request carries `Kestrel-Client: claude-code`
- * unless `--client` names another program, so a person's own script can name itself. It
- * never names the editor: the server trusts the name it is sent (SPEC, Trusted, not guarded),
- * and the editor's name lifts a step only a person in the editor may take (SPEC §7).
+ * the credential is the dev server's human token, so a local run is a person through a
+ * client just as a deployed one is. Every request names its client in `Kestrel-Client`:
+ * `defaultClient` says which, unless `--client` names another program, so a person's own script
+ * can name itself. It never names the editor: the server trusts the name it is sent (SPEC,
+ * Trusted, not guarded), and the editor's name lifts a step only a person in the editor may take
+ * (SPEC §7).
  *
  * It prints the answer's body as it came, so a script or Claude reads a refusal whole; a
  * non-2xx answer also prints its status, and a refusal's code, message, field, and next move,
@@ -26,9 +27,11 @@ import { readSignIn, readSignIns, withCredentialsLock, writeSignInHeld } from ".
 import { devTarget } from "./dev-api.mjs";
 import { fileMediaType } from "./media-types.mjs";
 import {
-  DEFAULT_CLIENT,
+  CLAUDE_CODE_CLIENT,
+  defaultClient,
   instanceOrigin,
   isLoopback,
+  KESTREL_CLI_CLIENT,
   needsRefresh,
   refreshTokens,
   SignInError,
@@ -55,8 +58,9 @@ const USAGE = `Usage: kestrel api <method> <path> [options]
   --form <name=value>           a multipart field, repeatable; name=@file attaches a file
   --url <url>                   the instance (default: KESTREL_URL, else the only one you're signed in to)
   --local                       this directory's dev server, started by kestrel dev
-  --client <name>               your own script's Kestrel-Client name (default ${DEFAULT_CLIENT});
-                                never editor, which only the editor names itself
+  --client <name>               your own script's Kestrel-Client name (default ${CLAUDE_CODE_CLIENT}
+                                when Claude Code runs this, otherwise ${KESTREL_CLI_CLIENT}); never
+                                editor, which only the editor names itself
 
 The routes, fields, and refusals come from the instance's own /api/openapi.json, so they
 match the release it runs. A field the route doesn't take is refused before the request.`;
@@ -419,7 +423,7 @@ export async function apiCommand(argv) {
   let call;
   try {
     const args = parseApiArgs(argv);
-    const client = args.client ?? DEFAULT_CLIENT;
+    const client = args.client ?? defaultClient();
     call = await openTarget(args, client);
     if (args.mode === "list") {
       console.log(listRoutes(await readOpenApi(call), args.resource));

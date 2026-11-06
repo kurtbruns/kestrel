@@ -10,7 +10,12 @@ describe("whoActed (SPEC §11, Who acted)", () => {
   it("names the client a person came through by its own name, or as it named itself", () => {
     expect(whoActed("you@example.com", "claude-code")).toBe("you@example.com via Claude Code");
     expect(whoActed("you@example.com", "claude")).toBe("you@example.com via Claude");
+    expect(whoActed("you@example.com", "kestrel-cli")).toBe("you@example.com via the Kestrel CLI");
     expect(whoActed("you@example.com", "my-script")).toBe("you@example.com via my-script");
+  });
+
+  it("reads a client named like something an object inherits as it named itself", () => {
+    expect(whoActed("you@example.com", "constructor")).toBe("you@example.com via constructor");
   });
 
   it("knows each of Kestrel's own clients by a name of its own", () => {
