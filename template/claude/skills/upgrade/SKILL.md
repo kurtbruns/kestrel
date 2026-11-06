@@ -11,7 +11,7 @@ An upgrade moves the instance to a newer release of `@kurtbruns/kestrel`. The gu
 ## What's yours to judge
 
 - **Which release, and what it asks.** The installed version is in `package.json`. Read every changelog section between it and the target (the release notes at `https://github.com/kurtbruns/kestrel/releases`, or the new `CHANGELOG.md` once installed). Name each **Breaking** entry and each step in an *Upgrading* paragraph, and say what it means for this instance.
-- **Anything not yet committed.** When the page's `git status` lists uncommitted or untracked files, show the person what's there, and with their say commit them first, on their own. Never let them go into the upgrade's commit: the page's **Go back** reverts that commit, and would undo them with it.
+- **Anything not yet committed.** If the page's `git status` lists anything, show the person and ask whether to commit it first, as its own commit. If they'd rather not, the upgrade waits until the repository is clean. Never let it go into the upgrade's commit: the page's **Go back** reverts that commit, and would undo it too.
 - **The context check.** `npm run check-context` compares this repository's Claude files with the release's. Show the person what it reports. When Kestrel changed a file the person has edited, show what changed, merge it with their edits, and run the command it suggests to record the merge. A change marked as bearing on safety comes first.
 - **The local try.** Ask the person to try what they care about on `npm run dev` before anything reaches production.
 - **The checks.** Report each one's result. A failure stops the upgrade until it's fixed or the person decides.

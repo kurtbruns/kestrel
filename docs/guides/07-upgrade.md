@@ -16,13 +16,13 @@ A release can ask you to change a setting or a record before it runs. The change
 
 Each step here changes only your instance's repository. Nothing reaches your deployed app until section 5.
 
-1. Check for work that isn't committed yet:
+1. Start from a clean repository, so the upgrade's commit holds only the upgrade and going back undoes nothing else:
 
     ```bash
     git status
     ```
 
-    If it lists anything, commit that first, as its own commit. The upgrade's commit then holds the upgrade and nothing else, which is what going back, below, relies on.
+    If it lists anything, commit it first, as its own commit, or move it out of the repository.
 
 1. Install the release. Replace `X.Y.Z` with its version:
 
