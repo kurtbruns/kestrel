@@ -69,7 +69,7 @@
     "@css-inline/css-inline-wasm": "^0.21.2",
     "aws4fetch": "^1.0.20",
     "jose": "^6.2.14",
-    "marked": "^18.0.12"
+    "marked": "^18.1.3"
   },
   "peerDependencies": {
     "wrangler": "^4.156.0"
