@@ -25,7 +25,7 @@ import type { ReferenceResponse } from "../../shared/reference";
 import { buildInfo } from "../build";
 import { readJsonValue } from "../lib/body";
 import { HttpError, json, logUncaught } from "../lib/errors";
-import { log, scrub } from "../lib/log";
+import { log } from "../lib/log";
 import { openApiDocument } from "../reference/openapi";
 import type { RequestContext, Router } from "../router";
 import { MCP_INSTRUCTIONS } from "./instructions";
@@ -206,76 +206,30 @@ async function dispatch(
   }
 }
 
-/** The longest, in characters, that text a client typed runs on a log line: past any real name
- *  or version. */
-const CLIENT_TEXT_MAX = 128;
+// What text a client typed must be to reach the log whole: a plain name or version, so an address,
+// a link, a quoted string, or a long token never matches, and nothing has to look for them. A short
+// plain word that happens to be private still reads as a name, which no rule can tell apart.
+const PLAIN_TEXT = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/;
 
-// How much of that text is read to clean it: the limit, and the longest an address can run past
-// it. An address that starts inside the limit has to be seen whole, its @ included. Stopping here
-// also keeps `scrub`, whose address pattern rescans a long string with no @ from every position,
-// off a body of any length.
-const CLIENT_TEXT_READ = CLIENT_TEXT_MAX + 254;
+// Stands in for text that isn't plain, none of which is logged. The pattern can't match it, so a
+// client can't send it as its own name.
+const NOT_PLAIN = "(other)";
 
-// How much is looked at to find that much: a few reads, room for the characters the first two steps
-// below take out, and a limit on what those steps cost on a body of any length.
-const CLIENT_TEXT_TAKEN = CLIENT_TEXT_READ * 4;
-
-// Control, format, and line-separating characters: nothing an operator can read, and each able to
-// hide an address or token from the cleaning, so they go first.
-const UNREADABLE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
-
-// A quoted string, closed or open through to the end. An address's local part may be one, spaces
-// and all, which no name, title, or version has a use for. With them gone, every local part left
-// is an unbroken run, the one thing a cut has to reason about.
-const QUOTED = /"[^"]*(?:"|$)/g;
-
-// What a cut stops inside. Cleaning shrinks the text before it, so a fragment left here could slide
-// inside the limit, and a piece of an address or token is what the cleaning can't recognize.
-const LAST_RUN = /\S+$/;
-
-// Everything from a `?` or `#` on in an unbroken run, whatever its keys are called: `scrub` knows
-// only `token=`. A real name or version has no use for one, and `C#` keeps its own.
-const QUERY = /[?#]\S+/g;
-
-// A long unbroken run of a key's characters with a digit in it: a bare token or a part of a signed
-// one, which `scrub` leaves, since it knows a token only by what surrounds it, and which it can't
-// be told to look for on every line, where ids run as long. A name is free to be long with no
-// digit. A version that is a commit hash reads as the mark, which costs a line only that hash.
-const TOKEN_RUN = /(?=[\w+/=-]*\d)[\w+/=-]{32,}/g;
-
-/**
- * Text a client typed, as its line carries it: anything but non-blank text is absent, an address
- * or token the cleaning recognizes is taken out, and the rest is bounded, with `…` where it was
- * cut. It is cleaned before the cut, over only what was read whole, so a cut leaves no piece of
- * something the cleaning would have taken out. Best effort: a short secret with nothing around it
- * to recognize reads as a name.
- */
+/** Text a client typed as its line carries it; absent when it isn't text at all. */
 function clientText(value: unknown): string | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
-  const taken = value.slice(0, CLIENT_TEXT_TAKEN);
-  const text = taken.replace(UNREADABLE, "").replace(QUOTED, "…").trim();
-  if (text === "") {
-    return undefined;
-  }
-  const over = value.length > CLIENT_TEXT_TAKEN || text.length > CLIENT_TEXT_READ;
-  const read = over ? text.slice(0, CLIENT_TEXT_READ).replace(LAST_RUN, "") : text;
-  // By code point, so the cut can't split a character.
-  const clean = Array.from(scrub(read).replace(QUERY, "…").replace(TOKEN_RUN, "…"));
-  return over || clean.length > CLIENT_TEXT_MAX
-    ? `${clean.slice(0, CLIENT_TEXT_MAX).join("")}…`
-    : clean.join("");
+  return PLAIN_TEXT.test(value) ? value : NOT_PLAIN;
 }
 
 /**
  * An `initialize`'s one line (SPEC §12): what the client says it is and the version it asks for,
- * self-reported and granting nothing, so a field it left out or made unusable is simply absent and
- * the answer never depends on it. The kind of principal only, not `whoActed`: that `client` is the
- * name a request gives in its header, and on this line it would read as the connector's client,
- * which `clientInfo` is the evidence about. This server keeps no session, so this line is about
- * this one message: nothing joins it to the calls that follow, which log on their own and carry
- * none of it.
+ * self-reported and granting nothing, so the answer never depends on it. The kind of principal
+ * only, not `whoActed`: that `client` is the name a request gives in its header, and on this line
+ * it would read as the connector's client, which `clientInfo` is the evidence about. This server
+ * keeps no session, so this line is about this one message: nothing joins it to the calls that
+ * follow, which log on their own and carry none of it.
  */
 function logInitialize(
   c: RequestContext,
