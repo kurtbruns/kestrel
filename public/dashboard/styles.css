@@ -1942,6 +1942,24 @@ th.num .th-sort {
   cursor: default;
 }
 
+/* A labelled block (a code block, or the API reference's query and content-type tables):
+   its label line, then the block. Ahead of the sections below, which refine it. */
+.block {
+  margin-top: 10px;
+}
+.block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 8px 0 4px;
+}
+.block-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
 /* A route's or an object's sections (query, body, returns, refusals, fields) as Stripe's and
    Mux's references set theirs: a heading over a rule, then unboxed rows, each with the name,
    its type, and Required on one line and what it means under it, so a long name never
@@ -4148,6 +4166,11 @@ button.api-filter-clear svg {
   max-width: 1440px;
   line-height: 1.5;
 }
+/* A resource: its heading over a rule, scrolling with its routes. */
+.api-res {
+  margin-top: 16px;
+  scroll-margin-top: var(--bar-h);
+}
 /* One reading measure for the page, a doc page's (720px): the intro, the topics, and each
    route's and object's prose and tables keep it, and only a route's examples, beside its
    prose on a wide screen, reach past it. */
@@ -4191,11 +4214,6 @@ button.api-filter-clear svg {
 .api-blurb {
   margin: 0 0 10px;
   font-size: 14px;
-}
-/* A resource: its heading over a rule, scrolling with its routes. */
-.api-res {
-  margin-top: 16px;
-  scroll-margin-top: var(--bar-h);
 }
 /* A resource's heading, set like the page's other headings, flush with the text: it only
    pins under the bar, its vertical padding the band the rows scroll beneath. */
@@ -4992,20 +5010,10 @@ button.copy-btn.api-copy-path {
 }
 
 /* --- copying text out of the app (DESIGN §7, ui/copy.ts) ---
-   A labelled block (a code block, or the API reference's query and content-type tables):
-   its label line, then the block. The Copy is a control outside the five roles: the word
-   and its glyph, no fill or border, quiet on the line it shares; the glyph turns to a
-   check in the ok hue for a moment once a copy has landed, and the word stays. A Copy
-   beside a single value (an address) is the same control. --- */
-.block {
-  margin-top: 10px;
-}
-.block-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin: 8px 0 4px;
-}
+   The Copy is a control outside the five roles: the word and its glyph, no fill or border,
+   quiet on the line it shares; the glyph turns to a check in the ok hue for a moment once a
+   copy has landed, and the word stays. A Copy beside a single value (an address) is the same
+   control. --- */
 button.copy-btn {
   display: inline-flex;
   align-items: center;
@@ -5036,12 +5044,6 @@ button.copy-btn svg {
 /* Any Copy that has just landed, whatever button it rides (ui/copy.ts). */
 button.copied svg {
   color: var(--ok-fg);
-}
-.block-label {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
 }
 /* A code block (an example, a curl command, a template): a raised card with its label and Copy
    in a header inside it, so the code stands apart from the page in both themes. */

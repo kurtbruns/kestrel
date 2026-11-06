@@ -24,6 +24,12 @@ Each step here changes only your instance's repository. Nothing reaches your dep
 
     Your `package.json` now names exactly that version. Kestrel's versions aren't semantic versioning, so your instance never moves to a release you didn't choose.
 
+    If npm stops with `ERESOLVE` and names wrangler, your `package.json` pins a wrangler older than the release needs. The error's `peer wrangler@` line gives the range it needs. Install both together, with that range in place of `WRANGLER_RANGE`:
+
+    ```bash
+    npm install @kurtbruns/kestrel@X.Y.Z "wrangler@WRANGLER_RANGE"
+    ```
+
 1. Bring in the release's database migrations:
 
     ```bash

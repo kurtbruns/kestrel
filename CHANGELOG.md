@@ -10,6 +10,12 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+**Upgrading.** If your instance's `package.json` pins wrangler to an exact version below 4.156.0, install the release with `npm install @kurtbruns/kestrel@X.Y.Z "wrangler@^4.156.0"`, as [Upgrade to a new release](docs/guides/07-upgrade.md) says, since npm otherwise refuses with `ERESOLVE`.
+
+### Changed
+
+- Kestrel now needs wrangler 4.156.0 or later, which carries fixes for security advisories in the local runtime it bundles. A new instance starts on it, and installing this release moves an existing instance's wrangler up on its own, with no change to its `package.json`, unless that `package.json` pins an exact version.
+
 ## [1.20.0] - 2026-11-04
 
 **Upgrading from 1.19.0.** In your instance's repository, run `npm run sync-migrations`, which brings in one database migration, `0021_notifications_outage_receipts`: it rebuilds the notifications table for the new notices, carrying every row over, and closes any import notice not yet sent, since this release sends none. Run `npm run check-context`: this release changes the operator's Claude context, and a copy you've edited is merged by hand. Apply the migration before you deploy, with `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development). Then deploy with `npx wrangler deploy --env production`. A script of yours that replaced an image by uploading its name again needs changing (see Breaking); nothing else does.
