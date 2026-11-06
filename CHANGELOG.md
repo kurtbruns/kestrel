@@ -21,7 +21,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
-- On a phone, an email's text and images now sit about 24px from each edge rather than 44px, in mail apps that read a stylesheet's screen-width rules, such as Mail on iPhone and the Gmail app with a Google account; other apps and wide displays show what they did (SPEC §9). It applies to emails made from now on, along with their post pages: sent posts keep theirs, and a scheduled post keeps its email unless it is scheduled again or re-made.
+- On a phone, an email's text and images sit closer to the edges, in mail apps that support it, such as Mail on iPhone; other apps and wide displays show what they did (SPEC §9). This applies to emails made from now on and their post pages: sent and scheduled posts keep theirs.
 - `npx kestrel api ... --form file=@cover.png` uploads a post image or a logo, where every file was refused as not a PNG, JPEG, WebP, or GIF: it now states the file's type, read from its extension.
 
 ### Breaking

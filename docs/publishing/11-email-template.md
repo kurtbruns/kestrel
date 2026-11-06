@@ -31,6 +31,6 @@ A variable is replaced with its value in each email. Type it exactly as shown, o
 
 ## Test it
 
-**Send test email** on the **Template** page sends a sample post through your saved template, so you see it in a real inbox. It's also how to check the email's margins. Kestrel places your template in a column of its own, 44 pixels from each side on a wide display and about 24 on a phone, in mail apps that allow it. The sample on the page leaves that column out, and a post's preview shows it at the width of its window. With unsaved edits, the button reads **Save & send test**, since a test always uses the saved template.
+**Send test email** on the **Template** page sends a sample post through your saved template, so you see it in a real inbox. It's also how to check the email's margins, since the sample on the page leaves out the column Kestrel places your template in. With unsaved edits, the button reads **Save & send test**, since a test always uses the saved template.
 
 A change to the template, or to a publication detail it shows, re-makes the email of every scheduled post, with the same content and send time. Kestrel asks before it saves, and each re-made post then asks you to send a new test. A change is refused while a post is within its last few minutes before sending. Posts already sending or sent never change.

@@ -19,8 +19,11 @@ const NARROW_RULE =
   "@media (max-width:560px) { .k-pad { padding-left:12px !important; padding-right:12px !important; } }";
 /** The outer cell, whose inline side padding (12px) stays at every width. */
 const OUTER_CELL = '<td align="center" style="padding:8px 12px 48px;">';
-/** The start of the inner cell: the rule's target, its inline values today's 32px. */
-const INNER_CELL = '<td class="k-pad" style="padding:24px 32px 32px;';
+/** The inner cell whole: the rule's target, its inline values today's 32px. */
+const INNER_CELL =
+  '<td class="k-pad" style="padding:24px 32px 32px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#18181b;word-break:break-word;">';
+/** The same cell in a copy frozen before the rule. */
+const OLDER_INNER_CELL = INNER_CELL.replace(' class="k-pad"', "");
 
 const config = { mediaPublicBase: "https://media.example" } as Config;
 
@@ -61,7 +64,9 @@ async function postTest(id: string, to: string): Promise<string> {
   });
   expect(res.status).toBe(200);
   const sent = fakeOutbox().find((m) => m.to === to);
-  return sent?.html ?? "";
+  // A 200 can still mean it wasn't sent, and an empty string contains no rule either.
+  expect(sent).toBeDefined();
+  return sent!.html;
 }
 
 beforeEach(async () => {
@@ -78,6 +83,8 @@ describe("the email's side padding on a narrow display (SPEC §9)", () => {
     // …and a client that drops <style> shows the inline values as they were: 44px a side.
     expect(html).toContain(OUTER_CELL);
     expect(html).toContain(INNER_CELL);
+    // The rule's class is on that one cell and nothing else.
+    expect(html.split('class="k-pad"').length - 1).toBe(1);
     // The dark rule sits beside it, unchanged.
     expect(html).toContain("@media (prefers-color-scheme: dark) { .k-bg");
   });
@@ -134,8 +141,13 @@ describe("the email's side padding on a narrow display (SPEC §9)", () => {
     const preview = await SELF.fetch(`${base}/api/posts/${send.post_id}/preview`, {
       headers: AUTH,
     });
-    expect(await preview.text()).not.toContain(NARROW_RULE);
-    expect(await postTest(send.post_id, "frozen-test@example.com")).not.toContain(NARROW_RULE);
+    expect(preview.status).toBe(200);
+    const previewed = await preview.text();
+    expect(previewed).toContain(OLDER_INNER_CELL);
+    expect(previewed).not.toContain(NARROW_RULE);
+    const tested = await postTest(send.post_id, "frozen-test@example.com");
+    expect(tested).toContain(OLDER_INNER_CELL);
+    expect(tested).not.toContain(NARROW_RULE);
     const stillFrozen = await sends.getSend(env.DB, send.id);
     expect(stillFrozen?.rendered_html).toBe(older);
 
@@ -165,9 +177,12 @@ describe("the email's side padding on a narrow display (SPEC §9)", () => {
     await sweep(env);
 
     const delivered = fakeOutbox().find((m) => m.to === "reader@example.com");
-    expect(delivered?.html).toContain("padding:24px 32px 32px;");
+    expect(delivered?.html).toContain(OLDER_INNER_CELL);
     expect(delivered?.html).not.toContain(NARROW_RULE);
     const page = await SELF.fetch(`${base}/api/posts/${send.post_id}/web`, { headers: AUTH });
-    expect(await page.text()).not.toContain(NARROW_RULE);
+    expect(page.status).toBe(200);
+    const served = await page.text();
+    expect(served).toContain(OLDER_INNER_CELL);
+    expect(served).not.toContain(NARROW_RULE);
   });
 });
