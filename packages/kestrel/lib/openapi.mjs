@@ -278,7 +278,7 @@ export function describeRoute(doc, method, path) {
     }
     const raw = types.filter((t) => t !== "application/json" && t !== "multipart/form-data");
     if (raw.length) {
-      how.push(`the file itself, with --data @file --type ${raw[0]}`);
+      how.push(`the file itself, with --data @file --type <its own type> (${raw.join(", ")})`);
     }
     out.push(`  Send it as ${how.join("; or ")}.`);
     const example = op.requestBody.content["application/json"]?.example;

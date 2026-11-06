@@ -63,7 +63,7 @@ import {
   readJsonObject,
 } from "../lib/body";
 import { badRequest, HttpError, json } from "../lib/errors";
-import { mediaType, RASTER_IMAGE_TYPES } from "../lib/image_types";
+import { imageLabelConflict, imageTypeOf } from "../lib/image_types";
 import { errorText } from "../lib/log";
 import { unwrap } from "../lib/unwrap";
 import { getNotifier } from "../notify/channel";
@@ -325,18 +325,22 @@ export async function uploadLogo(c: RequestContext): Promise<Response> {
   if (!(file instanceof File)) {
     throw fieldError("file", "missing 'file' field");
   }
-  // The post images' allowlist: the logo rides in every email's sign-off, and most email
-  // apps don't show an SVG. A logo stored before this rule was set keeps serving.
-  const type = mediaType(file.type);
-  if (!RASTER_IMAGE_TYPES.includes(type)) {
+  const bytes = await file.arrayBuffer();
+  if (bytes.byteLength === 0) {
+    throw fieldError("file", "The logo file is empty.");
+  }
+  // The post images' allowlist, read from the bytes: the logo rides in every email's sign-off,
+  // and most email apps don't show an SVG. A logo stored before this rule was set keeps serving.
+  const type = imageTypeOf(new Uint8Array(bytes));
+  if (!type) {
     throw fieldError(
       "file",
       "The logo must be a PNG, JPEG, WebP, or GIF. Most email apps don’t show SVG.",
     );
   }
-  const bytes = await file.arrayBuffer();
-  if (bytes.byteLength === 0) {
-    throw fieldError("file", "The logo file is empty.");
+  const conflict = imageLabelConflict(type, { name: file.name, declared: file.type });
+  if (conflict) {
+    throw fieldError("file", conflict);
   }
   if (bytes.byteLength > MAX_LOGO_BYTES) {
     throw fieldError("file", `The logo must be ${MAX_LOGO_BYTES / 1024} KB or smaller.`);

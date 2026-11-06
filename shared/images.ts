@@ -20,3 +20,20 @@ export interface ImageUploadResponse {
 export interface ImageListResponse {
   images: PostImage[];
 }
+
+/** The extensions of the raster image formats an upload may be, and the type each names. */
+export const IMAGE_TYPE_BY_EXTENSION: Readonly<Record<string, string>> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+};
+
+/**
+ * The image type a file's name claims, in any case, or undefined when it claims none. Only
+ * these extensions count: a screenshot's `9.41.00` has a dot in it and makes no claim.
+ */
+export function imageTypeOfName(name: string): string | undefined {
+  return IMAGE_TYPE_BY_EXTENSION[name.slice(name.lastIndexOf(".")).toLowerCase()];
+}

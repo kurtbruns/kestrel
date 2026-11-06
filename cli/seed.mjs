@@ -22,6 +22,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { devTarget, fail, parseArgs } from "../packages/kestrel/lib/dev-api.mjs";
+import { fileMediaType } from "../packages/kestrel/lib/media-types.mjs";
 
 // The demo ships beside the CLI, in this repository and in the package.
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -43,13 +44,6 @@ export async function seedDemo(base, token, { size, seed } = {}, tag = "seed") {
   const url = `${base}/api/dev/seed${qs ? `?${qs}` : ""}`;
 
   const form = new FormData();
-  const CONTENT_TYPE = {
-    ".webp": "image/webp",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".png": "image/png",
-    ".gif": "image/gif",
-  };
   // The images are the files in `demo/` that the demo refers to, so those files are the only
   // place to change them. The worker parses the posts and front matter for everything else.
   const demoDir = join(root, "demo");
@@ -65,7 +59,7 @@ export async function seedDemo(base, token, { size, seed } = {}, tag = "seed") {
       console.warn(`[${tag}] no demo/${rel} — seeding without the ${what}.`);
       return;
     }
-    const type = CONTENT_TYPE[rel.slice(rel.lastIndexOf("."))] || "application/octet-stream";
+    const type = fileMediaType(rel);
     form.append(field, new Blob([await readFile(path)], { type }), name);
   };
 
