@@ -24,6 +24,7 @@ import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { readSignIn, readSignIns, withCredentialsLock, writeSignInHeld } from "./credentials.mjs";
 import { devTarget } from "./dev-api.mjs";
+import { fileMediaType } from "./media-types.mjs";
 import {
   DEFAULT_CLIENT,
   instanceOrigin,
@@ -227,7 +228,8 @@ async function requestBody({ data, type, forms }) {
       const value = field.slice(at + 1);
       if (value.startsWith("@")) {
         const file = value.slice(1);
-        form.append(name, new Blob([readFileSync(file)]), basename(file));
+        const type = fileMediaType(file);
+        form.append(name, new Blob([readFileSync(file)], { type }), basename(file));
       } else {
         form.append(name, value);
       }

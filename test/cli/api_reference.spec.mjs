@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiCommand, parseApiArgs } from "../../packages/kestrel/lib/api.mjs";
 import { writeSignIn } from "../../packages/kestrel/lib/credentials.mjs";
+import { fileMediaType, IMAGE_TYPE_BY_EXTENSION } from "../../packages/kestrel/lib/media-types.mjs";
 import {
   buildFields,
   describeRefusal,
@@ -20,6 +21,11 @@ import {
   nextMove,
   typedValue,
 } from "../../packages/kestrel/lib/openapi.mjs";
+import {
+  imageTypeOfName,
+  IMAGE_TYPE_BY_EXTENSION as SERVER_EXTENSIONS,
+} from "../../shared/images.ts";
+import { RASTER_IMAGE_TYPES } from "../../src/lib/image_types.ts";
 
 const ORIGIN = "https://news.example.com";
 
@@ -124,6 +130,7 @@ const DOC = {
               schema: { type: "object", properties: { file: { type: "string" } } },
             },
             "image/png": { schema: { type: "string", contentMediaType: "image/png" } },
+            "image/jpeg": { schema: { type: "string", contentMediaType: "image/jpeg" } },
           },
         },
         responses: { default: SHARED },
@@ -291,7 +298,7 @@ describe("describing one route", () => {
 
   it("says how to send a body that isn't JSON", () => {
     expect(describeRoute(DOC, "POST", "/api/posts/p_1/images")).toContain(
-      "  Send it as --form name=value or name=@file; or the file itself, with --data @file --type image/png.",
+      "  Send it as --form name=value or name=@file; or the file itself, with --data @file --type <its own type> (image/png, image/jpeg).",
     );
   });
 
@@ -399,7 +406,7 @@ describe("building a body from -f and -F", () => {
 
   it("refuses fields for a route that takes no JSON body, saying how to send what it does take", () => {
     expect(() => buildFields(DOC, route("POST", "/api/posts/p_1/images"), [f("a=b")])).toThrow(
-      /takes no JSON body; it takes multipart\/form-data, image\/png: send it with --form/,
+      /takes no JSON body; it takes multipart\/form-data, image\/png, image\/jpeg: send it with --form/,
     );
     expect(() => buildFields(DOC, route("POST", "/api/sends/s_1/cancel"), [f("a=b")])).toThrow(
       /^POST \/api\/sends\/\{id\}\/cancel takes no body\./,
@@ -591,6 +598,66 @@ describe("kestrel api against a signed-in instance", () => {
     expect(err.at(-1)).toBe(
       "kestrel api: Send the body one way: --data, --form, or -f and -F fields, not two.",
     );
+  });
+
+  /** Upload a file of this name through --form, and read the part back as a server would. */
+  async function uploaded(name) {
+    const path = join(dir, name);
+    writeFileSync(path, "the image's bytes");
+    serve(() => new Response("{}", { status: 201 }));
+    await apiCommand(["POST", "/api/posts/p_1/images", "--form", `file=@${path}`]);
+    const sent = calls.find((c) => c.path === "/api/posts/p_1/images");
+    const form = await new Response(sent.body).formData();
+    return form.get("file");
+  }
+
+  it.each([
+    ["cover.png", "image/png"],
+    ["cover.jpg", "image/jpeg"],
+    ["cover.jpeg", "image/jpeg"],
+    ["cover.webp", "image/webp"],
+    ["cover.gif", "image/gif"],
+    ["IMG_0042.JPG", "image/jpeg"],
+  ])("attaches %s to a form as %s, the type an upload route checks", async (name, type) => {
+    const file = await uploaded(name);
+    expect(file.type).toBe(type);
+    expect(file.name).toBe(name);
+    expect(await file.text()).toBe("the image's bytes");
+  });
+
+  it("attaches a screenshot under the name macOS gives it, spaces and narrow no-break space", async () => {
+    const name = "Screenshot 2026-11-05 at 9.41.00\u202fAM.png";
+    const file = await uploaded(name);
+    expect(file.type).toBe("image/png");
+    expect(file.name).toBe(name);
+  });
+
+  it("knows an extension for each type the Worker takes as an image, and no other", () => {
+    expect([...new Set(Object.values(IMAGE_TYPE_BY_EXTENSION))].sort()).toEqual(
+      [...RASTER_IMAGE_TYPES].sort(),
+    );
+    expect(IMAGE_TYPE_BY_EXTENSION).toEqual(SERVER_EXTENSIONS);
+  });
+
+  // A name both sides read differently would send a type the server then refuses as a conflict.
+  it.each([
+    ["cover.png", "image/png"],
+    ["COVER.JPEG", "image/jpeg"],
+    [".png", "image/png"],
+    ["a.jpg.png", "image/png"],
+    ["a.png.txt", "application/octet-stream"],
+    ["cover.", "application/octet-stream"],
+    ["cover", "application/octet-stream"],
+    ["Screenshot 9.41.00", "application/octet-stream"],
+    ["photos.png/cover", "application/octet-stream"],
+  ])("reads the name %s as %s, as the server does", (name, type) => {
+    expect(fileMediaType(name)).toBe(type);
+    expect(imageTypeOfName(name) ?? "application/octet-stream").toBe(type);
+  });
+
+  it.each(["cover", "cover.tiff"])("attaches %s as bytes of no stated kind", async (name) => {
+    const file = await uploaded(name);
+    expect(file.type).toBe("application/octet-stream");
   });
 
   it("says an instance with no OpenAPI document runs an older release", async () => {
