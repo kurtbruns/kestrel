@@ -4,7 +4,7 @@
 import type { Post, PostListResponse } from "../../shared/posts";
 import type { ProviderStatusView } from "../../shared/provider";
 import type { SendListResponse, SendView } from "../../shared/sends";
-import type { NotificationStatusView } from "../../shared/settings";
+import { type NotificationStatusView, settingsRoute } from "../../shared/settings";
 import type { SubscriberCounts, SubscriberListResponse } from "../../shared/subscribers";
 import { CLAUDE_CLIENT, CLAUDE_CODE_CLIENT } from "../../shared/who_acted";
 import { api, describeError } from "../api";
@@ -231,7 +231,7 @@ function computeHealth(
   if (notifyFailure) {
     alerts.push({
       level: "amber",
-      text: html`<span class="dash-notify-failed">Kestrel’s last notification didn’t arrive: ${notifyFailure.error.replace(/[.!?]?$/, ".")} Check <a href="#/settings">Settings → Notifications</a>.</span>`,
+      text: html`<span class="dash-notify-failed">Kestrel’s last notification didn’t arrive: ${notifyFailure.error.replace(/[.!?]?$/, ".")} Check <a href="#${settingsRoute("notifications")}">Settings → Notifications</a>.</span>`,
     });
   }
   return alerts;

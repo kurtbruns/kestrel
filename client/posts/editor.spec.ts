@@ -227,8 +227,10 @@ function scheduledPost(fireAt = Date.now() + 3_600_000, remadeAt: number | null 
   };
 }
 
-/** The editor offers every member; a missing one is a test failure, not a branch. */
-function unwrapHandle(h: ViewHandle | null): Required<ViewHandle> {
+/** The editor offers every member it uses; a missing one is a test failure, not a branch. */
+function unwrapHandle(
+  h: ViewHandle | null,
+): Required<Pick<ViewHandle, "dirty" | "beforeLeave" | "manualSave">> {
   if (!h?.dirty || !h.beforeLeave || !h.manualSave) {
     throw new Error("the editor offered no handle");
   }

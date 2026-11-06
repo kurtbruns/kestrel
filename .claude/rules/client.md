@@ -24,7 +24,7 @@ Framework-free, strict TypeScript in `client/`. The build is `.claude/rules/clie
 - Bind what a view starts to its signal so nothing outlives it: `every()` for a ticker, `poll()` for a repeating read, the signal for a borrowed control, `modal`, or `openMenu`, and `{ signal }` on an `api()` read that paints.
 - A write never takes the signal: a save the reader started must land whether or not they stayed.
 - After an `await`, `if (signal.aborted) return;` before a `location.hash =`: a paint into a stale root is harmless, a redirect is not.
-- A view offers the app only the `ViewHandle` it returns (`dirty()`, `beforeLeave()`, `manualSave()`).
+- A view offers the app only the `ViewHandle` it returns (`dirty()`, `beforeLeave()`, `manualSave()`, `navigate()`).
 
 ## Following sends
 

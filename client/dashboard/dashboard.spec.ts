@@ -485,7 +485,7 @@ describe("dashboard", () => {
     expect($(".setup-title").textContent).toBe("Set up your publication");
     expect(document.querySelector(".tiles")).toBeNull();
     expect($(".setup-url").textContent).toBe("https://app.birds.example/subscribe");
-    expect($(".setup [data-nav='#/settings']").textContent).toBe("Settings");
+    expect($(".setup [data-nav='#/settings/notifications']").textContent).toBe("Settings");
     expect($(".pub-links a").textContent?.trim()).toBe("Connect Claude →");
     $(".setup [data-act='new-post']").click();
     await vi.advanceTimersByTimeAsync(0);
@@ -772,7 +772,9 @@ describe("dashboard", () => {
       expect($(".dash-notify-failed").textContent).toBe(
         "Kestrel’s last notification didn’t arrive: Email Routing refused it. Check Settings → Notifications.",
       );
-      expect($<HTMLAnchorElement>(".dash-notify-failed a").getAttribute("href")).toBe("#/settings");
+      expect($<HTMLAnchorElement>(".dash-notify-failed a").getAttribute("href")).toBe(
+        "#/settings/notifications",
+      );
       const step = $(".setup-card .setup-notify");
       expect(step.classList.contains("setup-attention")).toBe(true);
       expect($(".setup-hint", step).textContent).toBe(

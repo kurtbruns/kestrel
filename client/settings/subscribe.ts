@@ -90,7 +90,7 @@ export function subscribeSection(page: SettingsPage): Html {
   const subscribeUrl = `${appOriginOf(page)}/subscribe`;
   return html`
     <section class="set-sec set-sec-subscribe">
-      ${secHead("Ways to subscribe", chip("copyout", "Copy-out"))}
+      ${secHead("ways-to-subscribe", chip("copyout", "Copy-out"))}
       <p class="set-lede">Two ways for readers to join your list. Either way, a reader is added only once they confirm by email.</p>
       ${
         // Signups are closed while no provider is connected (SPEC §13): the page says so and

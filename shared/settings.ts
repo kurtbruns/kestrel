@@ -8,6 +8,45 @@ import type { TestNotSent } from "./posts";
 import type { RefusingCause } from "./provider";
 import type { SendView } from "./sends";
 
+/** The Settings page's sections in page order, each name with the title the page shows and
+ *  the docs write. A name is stable: a delivered email holds it in a link, so a retitled
+ *  section changes its title here and keeps its name. */
+const SETTINGS_SECTION_TITLES = {
+  "publication-identity": "Publication identity",
+  "ways-to-subscribe": "Ways to subscribe",
+  "confirmation-email": "Confirmation email",
+  "reader-pages": "Reader pages",
+  "email-template": "Email template",
+  "default-test-recipients": "Default test recipients",
+  notifications: "Notifications",
+  "email-sender": "Email sender",
+  instance: "Instance",
+} as const;
+
+export type SettingsSection = keyof typeof SETTINGS_SECTION_TITLES;
+
+export const SETTINGS_SECTIONS = Object.keys(SETTINGS_SECTION_TITLES) as SettingsSection[];
+
+/** The title a section shows. */
+export function settingsSectionTitle(section: SettingsSection): string {
+  return SETTINGS_SECTION_TITLES[section];
+}
+
+/** The route to a section of Settings, without its `#` (`/settings/notifications`). */
+export function settingsRoute(section: SettingsSection): string {
+  return `/settings/${section}`;
+}
+
+/** Whether a route's segment names a section of Settings. */
+export function isSettingsSection(segment: string | undefined): segment is SettingsSection {
+  return SETTINGS_SECTIONS.includes(segment as SettingsSection);
+}
+
+/** The section with exactly this title; null when none has it. */
+export function settingsSectionTitled(title: string): SettingsSection | null {
+  return SETTINGS_SECTIONS.find((s) => SETTINGS_SECTION_TITLES[s] === title) ?? null;
+}
+
 /** One address a template test missed, and why. */
 export interface TemplateTestMiss extends TestNotSent {
   email: string;

@@ -5,7 +5,13 @@ import troubleshooting from "../docs/publishing/06-troubleshooting.md";
 import publishingIndex from "../docs/publishing/README.md";
 import selfHostingIndex from "../docs/README.md";
 import { type DocsResponse, headingAnchors } from "../shared/docs";
-import { bundledPages, docMarkdown, markdownLinksForAgents, renderDocs } from "../src/docs";
+import {
+  bundledPages,
+  docMarkdown,
+  linkSettingsNames,
+  markdownLinksForAgents,
+  renderDocs,
+} from "../src/docs";
 import { AUTH, base } from "./support/http";
 
 describe("docs registry (the two sets' index files and the pages they list)", () => {
@@ -138,6 +144,47 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
     expect(docs.find((d) => d.slug === "connect-claude")?.html).toContain(
       'href="#/docs/allow-claude"',
     );
+  });
+
+  it("links each section of Settings a page names, in the Docs tab only", () => {
+    const { docs } = renderDocs();
+    const page = (slug: string) => docs.find((d) => d.slug === slug)?.html;
+    expect(page("troubleshooting")).toContain(
+      '<a href="#/settings/notifications"><strong>Settings → Notifications</strong></a>',
+    );
+    // A place inside a section opens that section.
+    expect(page("share-your-subscribe-link")).toContain(
+      '<a href="#/settings/ways-to-subscribe"><strong>Settings → Ways to subscribe → Embed a form</strong></a>',
+    );
+    // Every page, and each set's landing, whose intro and blurbs render the same way.
+    const { sets } = renderDocs();
+    const rendered = [
+      ...docs.map((d) => ({ name: d.slug, html: d.html })),
+      ...sets.map((set) => ({
+        name: set.id,
+        html: [set.intro, ...set.sections.map((sec) => sec.blurb)].join(""),
+      })),
+    ];
+    for (const { name, html } of rendered) {
+      const source = docMarkdown(name) ?? "";
+      // Every name finds its section, so a retitled section, a typo, or a name written inside
+      // a link of its own (which .claude/rules/docs.md rules out) fails here.
+      const named = source.match(/\*\*Settings → /g)?.length ?? 0;
+      const linked = html.match(/<a href="#\/settings\/[a-z-]+"><strong>Settings → /g)?.length ?? 0;
+      expect(linked, name).toBe(named);
+      // GitHub, getkestrel.dev, and an agent read this source, with no dashboard to open.
+      expect(source, name).not.toContain("#/settings");
+    }
+  });
+
+  it("leaves a Settings name that is already in a link, or names no section, as it is", () => {
+    const inLink = '<a href="#/docs/notifications"><strong>Settings → Notifications</strong></a>';
+    const free = "<strong>Settings → Instance</strong>";
+    expect(linkSettingsNames(`${inLink} ${free}`)).toBe(
+      `${inLink} <a href="#/settings/instance">${free}</a>`,
+    );
+    const unknown = "<strong>Settings → No such section</strong>";
+    expect(linkSettingsNames(unknown)).toBe(unknown);
   });
 
   it("opens the page Settings and the dashboard send the publisher to for production access", () => {
