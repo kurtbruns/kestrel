@@ -139,6 +139,17 @@ describe("dashboard", () => {
     vi.useRealTimers();
   });
 
+  it.each([
+    [1, "1 recipient"],
+    [2, "2 recipients"],
+  ])("counts a scheduled card's %i in agreeing words", async (count, words) => {
+    fake = world([post()], sendServer([scheduled({ recipient_count: count })]));
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#dashScheduled .sched-card .muted").textContent?.split(" · ").at(-1)).toBe(words);
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
   it("renders the identity, the tiles into the roster, the queue, the drafts, the sent table, and the publication and API cards", async () => {
     const posts = [
       post(),

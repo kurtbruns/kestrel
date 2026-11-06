@@ -44,7 +44,7 @@ import { appState } from "../state";
 import { addSubscriberModal } from "../subscribers/dialogs";
 import { copyButton, wireCopy } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
-import { fmt } from "../ui/format";
+import { fmt, recipientCount } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { badge, renderError } from "../ui/widgets";
@@ -602,7 +602,7 @@ function dashScheduledHtml(scheduled: SendView[]): Html {
   const held = heldWhenFiresHtml("card");
   return html`${scheduled.map(
     (s) =>
-      html`<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${s.audience.count} recipients${emailOnlyNote(s)}</div>${held}${has(s, "remade") ? html`<div class="sched-remade-mark">Look changed since your last test</div>` : null}</div></div>`,
+      html`<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${recipientCount(s.audience.count)}${emailOnlyNote(s)}</div>${held}${has(s, "remade") ? html`<div class="sched-remade-mark">Look changed since your last test</div>` : null}</div></div>`,
   )}`;
 }
 function wireDashScheduledCards(root: HTMLElement): void {

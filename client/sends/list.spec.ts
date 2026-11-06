@@ -223,6 +223,17 @@ describe("sent view", () => {
     expect(feedReads(fake)).toHaveLength(2);
   });
 
+  it.each([
+    [1, "1 recipient"],
+    [2, "2 recipients"],
+  ])("counts a scheduled card's %i in agreeing words", async (count, words) => {
+    fake = world(sendServer([scheduled({ recipient_count: count })]));
+    await mount(renderSent);
+    await vi.advanceTimersByTimeAsync(0);
+    expect($(".sched-card .muted").textContent?.split(" · ").at(-1)).toBe(words);
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
   it("marks only an email-only post, with an envelope and muted words in Sent posts and a line on its scheduled card (DESIGN §3, §4)", async () => {
     const srv = sendServer();
     srv.put(scheduled(), { email_only: true });
