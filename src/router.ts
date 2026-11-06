@@ -338,12 +338,37 @@ export class Router {
     return this.compiled;
   }
 
+  /**
+   * Answer a request. A `HEAD` is answered as the `GET` for its path without the body, whether
+   * that is the page, a refusal, or the 404: the whole `GET` runs, gate and all, so its status
+   * and headers can't differ, and a path with only a `POST` is never reached. The request itself
+   * stays a `HEAD`, for whatever reads or logs it.
+   */
   async handle(req: Request, env: AppEnv, ctx: ExecutionContext): Promise<Response> {
+    if (req.method !== "HEAD") {
+      return this.dispatch(req, req.method, env, ctx);
+    }
+    const res = await this.dispatch(req, "GET", env, ctx);
+    const head = new Response(null, res);
+    // A null body has no length for the runtime to state, so state the one the GET's body has.
+    // Every body but an image's is already in memory, and an image's is capped.
+    if (res.body) {
+      head.headers.set("content-length", String((await res.arrayBuffer()).byteLength));
+    }
+    return head;
+  }
+
+  private async dispatch(
+    req: Request,
+    method: string,
+    env: AppEnv,
+    ctx: ExecutionContext,
+  ): Promise<Response> {
     const url = new URL(req.url);
     const config = getConfig(env);
 
     for (const route of this.compiled) {
-      if (route.def.method !== req.method) {
+      if (route.def.method !== method) {
         continue;
       }
       const match = route.pattern.exec(url);
