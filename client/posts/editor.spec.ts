@@ -2346,6 +2346,58 @@ describe("editor view", () => {
     expect(body().value).toMatch(/^\n!\[my-owl-1\.png\]\(my-owl-1\.png\)\n# Owls/);
   });
 
+  it.each([
+    ["image.png", "image/jpeg", "image.jpg"],
+    ["image.png", "image/webp", "image.webp"],
+    ["image.png", "image/png", "image.png"],
+    ["shot.JPG", "image/jpeg", "shot.JPG"],
+    ["my photo", "image/gif", "my photo"],
+  ])(
+    "sends a pasted %s of type %s as %s, so a browser's name is never refused (SPEC §4)",
+    async (name, type, sent) => {
+      await open([
+        { path: "/api/posts/p1", reply: () => draft() },
+        {
+          method: "POST",
+          path: "/api/posts/p1/images",
+          reply: () => ({ image: { filename: sent, url: `http://m/${sent}` } }),
+        },
+      ]);
+      const paste = new Event("paste", { cancelable: true });
+      const item = { type, getAsFile: () => new File(["bytes"], name, { type }) };
+      Object.defineProperty(paste, "clipboardData", { value: { items: [item] } });
+      body().dispatchEvent(paste);
+      await vi.advanceTimersByTimeAsync(0);
+      const upload = fake.calls.find(
+        (c) => c.method === "POST" && c.url.pathname.endsWith("/images"),
+      );
+      const file = upload?.form?.get("file") as File;
+      expect(file.name).toBe(sent);
+      expect(file.type).toBe(type);
+      expect(await file.text()).toBe("bytes");
+    },
+  );
+
+  it("leaves a picked file's name alone, since its name is the publisher's to change", async () => {
+    await open([
+      { path: "/api/posts/p1", reply: () => draft() },
+      {
+        method: "POST",
+        path: "/api/posts/p1/images",
+        reply: () => ({ image: { filename: "photo.png", url: "http://m/photo.png" } }),
+      },
+    ]);
+    const input = $<HTMLInputElement>("#imgInput");
+    const file = new File(["jpeg"], "photo.png", { type: "image/jpeg" });
+    Object.defineProperty(input, "files", { value: [file], configurable: true });
+    input.dispatchEvent(new Event("change"));
+    await vi.advanceTimersByTimeAsync(0);
+    const upload = fake.calls.find(
+      (c) => c.method === "POST" && c.url.pathname.endsWith("/images"),
+    );
+    expect((upload!.form!.get("file") as File).name).toBe("photo.png");
+  });
+
   it("mounts a scheduled post read-only, with no autosave", async () => {
     await open(scheduledPost().routes);
     expect(body().readOnly).toBe(true);

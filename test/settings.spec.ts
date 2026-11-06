@@ -20,7 +20,7 @@ import {
   sendingWorks,
   tick,
 } from "./support/fixtures";
-import { AUTH, base, JSON_AUTH, PNG_1x1 } from "./support/http";
+import { AUTH, base, JPEG_1x1, JSON_AUTH, PNG_1x1 } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
 
 // Each test starts from no settings row, so none sees a name, logo, or address another left.
@@ -62,9 +62,9 @@ async function getSettings() {
   };
 }
 
-async function putLogo(bytes: Uint8Array, type: string) {
+async function putLogo(bytes: Uint8Array, type: string, name = "logo") {
   const fd = new FormData();
-  fd.append("file", new File([bytes], "logo", { type }));
+  fd.append("file", new File([bytes], name, { type }));
   return SELF.fetch(`${base}/api/settings/logo`, {
     method: "POST",
     headers: AUTH,
@@ -579,9 +579,45 @@ describe("publication logo", () => {
     // Nothing was stored: no logo is set and no bytes were written.
     expect((await getSettings()).body.settings.publication.logo_url).toBe("");
     expect(await logoKeys()).toEqual([]);
-    // A PNG still uploads, and so does one whose declared type carries case or parameters.
+    // A PNG still uploads.
     expect((await putLogo(PNG_1x1, "image/png")).status).toBe(200);
+  });
+
+  it("refuses bytes that aren't an image, whatever they are declared to be (SPEC §4)", async () => {
+    const res = await putLogo(new TextEncoder().encode("not an image at all"), "image/png");
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { field: string }).field).toBe("file");
+    expect(await logoKeys()).toEqual([]);
+  });
+
+  it("stores a logo with no useful declared type as what its bytes show (SPEC §4)", async () => {
+    expect((await putLogo(JPEG_1x1, "application/octet-stream")).status).toBe(200);
+    const [key] = await logoKeys();
+    const stored = await env.MEDIA.head(key!);
+    expect(stored?.httpMetadata?.contentType).toBe("image/jpeg");
+  });
+
+  it("refuses a logo declared as a format its bytes aren't, reading the type's bare form (SPEC §4)", async () => {
+    const res = await putLogo(JPEG_1x1, "Image/PNG; x=y");
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      field: "file",
+      message:
+        "This file is a JPEG, but its declared type says PNG, which a client may have read from the file's own name. Rename the file or send its real type, or convert it.",
+    });
+    expect(await logoKeys()).toEqual([]);
     expect((await putLogo(PNG_1x1, "Image/PNG; x=y")).status).toBe(200);
+  });
+
+  it("refuses a logo named as a format its bytes aren't (SPEC §4)", async () => {
+    const res = await putLogo(JPEG_1x1, "application/octet-stream", "logo.png");
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      field: "file",
+      message: "This file is a JPEG, but its name says PNG. Rename it to match, or convert it.",
+    });
+    expect(await logoKeys()).toEqual([]);
+    expect((await putLogo(JPEG_1x1, "application/octet-stream", "logo.jpg")).status).toBe(200);
   });
 });
 

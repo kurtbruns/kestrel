@@ -38,6 +38,19 @@ export const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
 /** A response's JSON body, untyped: a spec asserts on its shape. */
 export const readJson = async (r: Response): Promise<any> => r.json();
 
+const decoded = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
+
+/** A real 1×1 JPEG, for the specs about an upload's format. */
+export const JPEG_1x1 = decoded(
+  "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=",
+);
+
+/** A real 1×1 WebP, for the specs about an upload's format. */
+export const WEBP_1x1 = decoded("UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA");
+
+/** A real 1×1 GIF, for the specs about an upload's format. */
+export const GIF_1x1 = decoded("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7");
+
 /** A real 1×1 PNG, for the specs that upload an image. */
 export const PNG_1x1 = Uint8Array.from(
   atob(

@@ -671,7 +671,7 @@ export function createRouter({
           name: "file",
           type: "file",
           required: true,
-          description: `The logo: a PNG, JPEG, WebP, or GIF, at most ${settingsRoutes.MAX_LOGO_BYTES / 1024} KB, square and at least 256 × 256 px, since every surface shows it as a square and an email stretches one that isn't.`,
+          description: `The logo: a PNG, JPEG, WebP, or GIF, at most ${settingsRoutes.MAX_LOGO_BYTES / 1024} KB, square and at least 256 × 256 px, since every surface shows it as a square and an email stretches one that isn't. Its format is read from its bytes, and a name or declared type that names another of these formats is refused.`,
         },
       ],
       errors: remakeRefusals,
@@ -1030,7 +1030,7 @@ export function createRouter({
           name: "file",
           type: "file",
           required: true,
-          description: `The image: a PNG, JPEG, WebP, or GIF, at most ${imageRoutes.MAX_POST_IMAGE_BYTES / (1024 * 1024)} MB.`,
+          description: `The image: a PNG, JPEG, WebP, or GIF, at most ${imageRoutes.MAX_POST_IMAGE_BYTES / (1024 * 1024)} MB. Its format is read from its bytes, and a name or declared type that names another of these formats is refused.`,
         },
         {
           name: "filename",
