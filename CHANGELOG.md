@@ -10,7 +10,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading.** If your instance's `package.json` pins wrangler to an exact version below 4.156.0, install the release with `npm install @kurtbruns/kestrel@X.Y.Z "wrangler@^4.156.0"`, as [Upgrade to a new release](docs/guides/07-upgrade.md) says, since npm otherwise refuses with `ERESOLVE`. Run `npm run check-context`: this release changes the operator's Claude context, and a copy you've edited is merged by hand.
+**Upgrading.** If your instance's `package.json` pins wrangler to an exact version below 4.156.0, install the release with `npm install @kurtbruns/kestrel@X.Y.Z "wrangler@^4.156.0"`, as [Upgrade to a new release](docs/guides/07-upgrade.md) says, since npm otherwise refuses with `ERESOLVE`. Run `npm run check-context`: this release changes the operator's Claude context, and a copy you've edited is merged by hand. If a script of yours uploads images or a logo, read the Breaking entry below: a file's name and declared type now have to match what it really is.
 
 ### Changed
 
@@ -19,6 +19,14 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - A brief D1 stall in work the next sweep tick does again now logs one `d1.unavailable` line at `warn`, with `during` set to `sweep`, `receipts`, `notify`, or `account`, instead of `sweep.error`, `receipt.release_error`, `notify.error`, or `provider.account_error` at `error` and, from the sweep's own reads, an invocation exception. Filter on `d1.unavailable` to find one, and alert on it repeating, since an outage or a statement that keeps failing may log no `error` line. A stall during a send, while recording whether email is getting out, or while answering a request still logs at `error`, and one reading the account to pace a send or checking the migrations keeps its own `provider.pacing_unread` or `schema.unchecked` at `warn`. A failure the sweep catches also logs a `stack` field showing the function that ran the failed statement or its caller, scrubbed like every other field (SPEC §12).
 - The setup guide's Connect Amazon SES and Sending-domain DNS pages now say that `p=none` only monitors, so it doesn't stop anyone sending as your domain, and that DMARC reports (`rua`) are optional, and the optional step that forwards reports now has you check that they arrive.
 - An update to the Markdown parser can change a new render in a few edge cases: a link with an unbalanced parenthesis, such as `[a](https://example.com/foo(bar)`, now shows as typed instead of as a link that lost its last parenthesis; a numeric character reference such as `&#8212;` shows as its character in the plain-text part too; `www.` inside a word no longer links; and lazy lines after a blockquote, a `#` with no space in a list item, and HTML right after a paragraph can land in a different block. A post already sent or scheduled keeps its email, unless a template or identity change re-makes a scheduled one (SPEC §6).
+
+### Fixed
+
+- `npx kestrel api ... --form file=@cover.png` uploads a post image or a logo, where every file was refused as not a PNG, JPEG, WebP, or GIF: it now states the file's type, read from its extension.
+
+### Breaking
+
+- Image and logo uploads read a file's format from its bytes (SPEC §4). A file that isn't a PNG, JPEG, WebP, or GIF is refused even under an image's name, where it used to upload and show as a broken image, and so is one named or declared as a different one of those formats than it is, like a JPEG called `photo.png`, with a message saying what it really is. A script that always sends `--type image/png`, or always names its uploads `cover.png`, now sends each file's real type and a name that matches it.
 
 ## [1.20.0] - 2026-11-04
 
