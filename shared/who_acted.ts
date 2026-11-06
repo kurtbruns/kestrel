@@ -15,6 +15,13 @@ export const CLAUDE_CODE_CLIENT = "claude-code";
 /** The name the instance's MCP server gives the calls it makes, for Claude Desktop and claude.ai. */
 export const CLAUDE_CLIENT = "claude";
 
+/**
+ * Every name a client of Kestrel's own gives. The reference and the other copies of these names
+ * are prose, so `test/reference.spec.ts` holds them to this list, and `packages/kestrel/`, which
+ * imports nothing from here, is held to it by `test/cli/sign_in.spec.mjs`.
+ */
+export const KESTREL_CLIENTS = [EDITOR_CLIENT, CLAUDE_CODE_CLIENT, CLAUDE_CLIENT] as const;
+
 /** The longest client name taken: a short word, never a sentence. */
 export const CLIENT_NAME_MAX = 32;
 

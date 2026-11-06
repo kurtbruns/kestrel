@@ -61,8 +61,9 @@ const USAGE = `Usage: kestrel api <method> <path> [options]
 The routes, fields, and refusals come from the instance's own /api/openapi.json, so they
 match the release it runs. A field the route doesn't take is refused before the request.`;
 
-// The name only the editor sends; `kestrel api` refuses to claim it (SPEC §7, §11).
-const EDITOR_CLIENT = "editor";
+// The name only the editor sends; `kestrel api` refuses to claim it (SPEC §7, §11). Mirrored
+// from shared/who_acted.ts, since the CLI is plain Node; a spec holds the two equal.
+export const EDITOR_CLIENT = "editor";
 
 // The server's rule for a client name (shared/who_acted.ts), mirrored since the CLI is plain
 // Node; a spec holds the two equal. Checking it here, after the trim fetch applies to a header
