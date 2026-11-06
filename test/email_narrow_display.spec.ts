@@ -2,6 +2,8 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import * as sends from "../src/db/sends";
+import { DEFAULT_CONFIRMATION_EMAIL } from "../src/db/settings";
+import { confirmationEmail } from "../src/emails/system";
 import type { Config } from "../src/env";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { render } from "../src/render/render";
@@ -10,9 +12,10 @@ import { sweep } from "../src/send/sweep";
 import { dueSend, frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 
-// The email's side padding on a narrow display (SPEC §9): what the render produces, every
-// path that carries it, and what it leaves alone. Each string is written out rather than
-// imported from the shell, so moving a number or dropping the rule here fails.
+// An email's side padding on a narrow display: what the render produces, every path that
+// carries it, what it leaves alone, and the confirmation email's matching margins. Each
+// string is written out rather than imported from the shell, so moving a number or dropping
+// the rule here fails.
 
 /** The rule as the final HTML must carry it, outside any inlined style. */
 const NARROW_RULE =
@@ -74,7 +77,32 @@ beforeEach(async () => {
   clearFakeOutbox();
 });
 
-describe("the email's side padding on a narrow display (SPEC §9)", () => {
+describe("the confirmation email's side padding on a narrow display", () => {
+  const CONFIRMATION_RULE =
+    "@media (max-width:560px) { .k-sys-body { padding-left:12px !important; padding-right:12px !important; } }";
+  const CARD_CELL =
+    '<td class="k-sys-body" style="padding:32px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#18181b;">';
+  const PAGE_CELL = '<td align="center" style="padding:24px 12px;">';
+
+  it("matches a post's 24px a side where the rule applies, over the same 44px inline", () => {
+    const { html } = confirmationEmail(`${base}/confirm?token=abc123`, DEFAULT_CONFIRMATION_EMAIL, {
+      name: "",
+      tagline: "",
+      logoUrl: "",
+    });
+    // The rule lands in the head, where a client that keeps <style> reads it…
+    expect(html.indexOf(CONFIRMATION_RULE)).toBeGreaterThan(html.indexOf("<head>"));
+    expect(html.indexOf(CONFIRMATION_RULE)).toBeLessThan(html.indexOf("</head>"));
+    // …and a client that drops <style> shows the inline values: 12px outside, 32px inside.
+    expect(html).toContain(PAGE_CELL);
+    expect(html).toContain(CARD_CELL);
+    // The class that takes the rule is on that one cell. The masthead's name and the body
+    // copy take other classes, so nothing else moves.
+    expect(html.split('class="k-sys-body"').length - 1).toBe(1);
+  });
+});
+
+describe("the email's side padding on a narrow display", () => {
   it("carries a rule through the inliner that brings the padding to 24px a side, over today's inline values", async () => {
     const { html } = await renderPost();
     // The rule lands in the head, where a client that keeps <style> reads it…

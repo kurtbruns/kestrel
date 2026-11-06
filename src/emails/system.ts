@@ -13,21 +13,26 @@ const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial
 // The palette is a neutral zinc, light→dark: page #f4f4f5→#18181b, card #fff→#232327,
 // ink #18181b→#ededed, muted #71717a/#52525b→#a1a1aa, rule #e4e4e7→#2e2e33, button
 // #18181b/#fff → #e5e7eb/#18181b.
-const DARK_STYLE = `<style>@media (prefers-color-scheme: dark) {
+//
+// The narrow rule gives this email the margins a post has on a phone (render/template.ts):
+// the card's inner padding comes in to 12px, so the text sits 24px from the edge, and a
+// client that drops <style> keeps the inline 32px.
+const HEAD_STYLE = `<style>@media (prefers-color-scheme: dark) {
   .k-sys-bg { background:#18181b !important; }
   .k-sys-card { background:#232327 !important; }
   .k-sys-body, .k-sys-name { color:#ededed !important; }
   .k-sys-tagline, .k-sys-muted { color:#a1a1aa !important; }
   .k-sys-rule { border-color:#2e2e33 !important; }
   .k-sys-btn { background:#e5e7eb !important; color:#18181b !important; }
-}</style>`;
+}
+@media (max-width:560px) { .k-sys-body { padding-left:12px !important; padding-right:12px !important; } }</style>`;
 
 function systemEmailLayout(subject: string, innerHtml: string): string {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">
 <title>${escapeHtml(subject)}</title>
-${DARK_STYLE}</head>
+${HEAD_STYLE}</head>
 <body class="k-sys-bg" style="margin:0;padding:0;background:#f4f4f5;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="k-sys-bg" style="background:#f4f4f5;"><tr><td align="center" style="padding:24px 12px;">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" class="k-sys-card" style="max-width:600px;width:100%;background:#ffffff;border-radius:8px;">
