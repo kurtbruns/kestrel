@@ -10,8 +10,11 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+**Upgrading.** If your instance's `package.json` pins wrangler to an exact version below 4.156.0, install the release with `npm install @kurtbruns/kestrel@X.Y.Z "wrangler@^4.156.0"`, as [Upgrade to a new release](docs/guides/07-upgrade.md) says, since npm otherwise refuses with `ERESOLVE`.
+
 ### Changed
 
+- Kestrel now needs wrangler 4.156.0 or later, which carries fixes for security advisories in the local runtime it bundles. A new instance starts on it, and installing this release moves an existing instance's wrangler up on its own, with no change to its `package.json`, unless that `package.json` pins an exact version.
 - Upgrade to a new release now starts by committing anything `git status` lists, on its own, and the operator's Claude context (`template/claude/skills/upgrade/SKILL.md`) says the same, since this bears on safety: unrelated work swept into the upgrade's commit would be undone by going back.
 
 ## [1.20.0] - 2026-11-04
