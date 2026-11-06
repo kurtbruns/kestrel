@@ -338,12 +338,35 @@ export class Router {
     return this.compiled;
   }
 
+  /**
+   * Answer a request. A `HEAD` is answered as the `GET` for its path without the body, whether
+   * that is the page, a refusal, or the 404: the whole `GET` runs, gate and all, so its status
+   * and headers can't differ, and a path with only a `POST` is never reached. The request itself
+   * stays a `HEAD`, for whatever reads or logs it.
+   */
   async handle(req: Request, env: AppEnv, ctx: ExecutionContext): Promise<Response> {
+    if (req.method !== "HEAD") {
+      return this.dispatch(req, req.method, env, ctx);
+    }
+    const res = await this.dispatch(req, "GET", env, ctx);
+    // Never read: a body can be large, or never end. So a length is stated only where the GET's
+    // response already states one. RFC 9110 lets a HEAD leave it out, but not state one other
+    // than what the GET would send, as a count of the bytes could behind compression.
+    await res.body?.cancel();
+    return new Response(null, res);
+  }
+
+  private async dispatch(
+    req: Request,
+    method: string,
+    env: AppEnv,
+    ctx: ExecutionContext,
+  ): Promise<Response> {
     const url = new URL(req.url);
     const config = getConfig(env);
 
     for (const route of this.compiled) {
-      if (route.def.method !== req.method) {
+      if (route.def.method !== method) {
         continue;
       }
       const match = route.pattern.exec(url);
