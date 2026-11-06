@@ -10,6 +10,12 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+**Upgrading.** If your instance's `package.json` pins wrangler to an exact version below 4.156.0, install the release with `npm install @kurtbruns/kestrel@X.Y.Z wrangler@latest`, as [Upgrade to a new release](docs/guides/07-upgrade.md) says, since npm otherwise refuses with `ERESOLVE`.
+
+### Changed
+
+- Kestrel now needs wrangler 4.156.0 or later, which carries fixes for security advisories in the local runtime it bundles. A new instance starts on it, and installing this release moves an existing instance's wrangler up on its own, with no change to its `package.json`, unless that `package.json` pins an exact version.
+
 ## [1.20.0] - 2026-11-04
 
 **Upgrading from 1.19.0.** In your instance's repository, run `npm run sync-migrations`, which brings in one database migration, `0021_notifications_outage_receipts`: it rebuilds the notifications table for the new notices, carrying every row over, and closes any import notice not yet sent, since this release sends none. Run `npm run check-context`: this release changes the operator's Claude context, and a copy you've edited is merged by hand. Apply the migration before you deploy, with `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development). Then deploy with `npx wrangler deploy --env production`. A script of yours that replaced an image by uploading its name again needs changing (see Breaking); nothing else does.
@@ -29,7 +35,6 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - The setup guide's checks now say what to do about the failures a real setup ran into, in a sentence beside the check, and Troubleshooting is a publisher's page again: it opens with a table of symptoms and where each fix is, and a section on where to look. Its section on Claude's Access setup moved to Allow Claude to connect, the one on Cloudflare refusing to save the Access application to Lock the dashboard with Access, and the one on outgrowing Workers Free now points to As your list grows.
 - The dashboard's **Finish setting up** card now says under its title that it stays until your first post goes out to the archive and that email-only sends don't count, and **Share your subscribe link** says to share it before then, so readers get that post.
 - A template test email now says what it is, under the subject "Template test: how your posts will look", instead of arriving as a made-up post about starlings under your own sign-off. Settings' previews of the reader pages show the same sample; the Template page's preview keeps its placeholder text.
-- Kestrel now needs wrangler 4.156.0 or later, which carries fixes for security advisories in the local runtime it bundles. A new instance starts on it, and installing this release moves an existing instance's wrangler up on its own, with no change to its `package.json`.
 - The setup guide's Go live page is now a checkpoint on where to go next: one path if you're writing the newsletter, one if someone else is, and the optional guides, each named by when you'd want it. How to let someone else into the editor moves to its own section of Lock the dashboard with Access.
 - The operator's Claude context (`template/claude/CLAUDE.md`) now says to reference an image by the `filename` the upload answers, since it may differ from the name sent, says how to swap an image, and names the preview's new warnings.
 

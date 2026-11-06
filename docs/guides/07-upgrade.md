@@ -24,6 +24,12 @@ Each step here changes only your instance's repository. Nothing reaches your dep
 
     Your `package.json` now names exactly that version. Kestrel's versions aren't semantic versioning, so your instance never moves to a release you didn't choose.
 
+    If npm stops with `ERESOLVE` and names wrangler, your `package.json` pins a wrangler older than the release needs. Install both together:
+
+    ```bash
+    npm install @kurtbruns/kestrel@X.Y.Z wrangler@latest
+    ```
+
 1. Bring in the release's database migrations:
 
     ```bash
