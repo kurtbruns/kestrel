@@ -13,8 +13,8 @@ import { AUTH, base } from "./support/http";
 // The response headers that keep post content from running script on the app's own
 // origin, keep the pages from being framed, and keep admin responses out of caches.
 
-/** The page carries the strict policy: no script, no framing (SPEC §5), and its address
- *  never leaves the browser as a referrer (SPEC §12). */
+/** The page carries the strict policy: no script, no framing, and its address never leaves
+ *  the browser as a referrer (SPEC §5). */
 function expectHardenedPage(res: Response): void {
   const csp = res.headers.get("content-security-policy") ?? "";
   for (const directive of [
@@ -84,7 +84,7 @@ describe("reader and preview pages", () => {
   });
 });
 
-describe("a page whose address holds a secret sends no referrer (SPEC §12)", () => {
+describe("a page whose address holds a secret sends no referrer (SPEC §5, §12)", () => {
   const CONFIRM_TOKEN = "cfm-referrer-test";
   const UNSUB_TOKEN = "uns-referrer-test";
   const READER = "reader@example.com";

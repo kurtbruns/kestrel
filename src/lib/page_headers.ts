@@ -5,9 +5,9 @@
  * it is served from the app's own origin, beside the admin API. The render's sanitizer
  * is not a security boundary, so this policy is: no script of any kind runs on these
  * pages, and none of them can be framed by another site. None of them sends its address
- * as a referrer either (SPEC §12): the confirm and unsubscribe pages and an unlisted link
+ * as a referrer either (SPEC §5): the confirm and unsubscribe pages and an unlisted link
  * hold a secret in theirs, and the platform's request log keeps the `Referer` header in
- * plain text, where `scrub` can't reach it.
+ * plain text, where `scrub` can't reach it (SPEC §12).
  */
 
 import { pagePolicy } from "../../shared/page_policy";

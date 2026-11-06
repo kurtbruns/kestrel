@@ -19,7 +19,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
-- A reader's confirm or unsubscribe token, and a post's unlisted link, no longer reach Cloudflare's invocation log in the `Referer` header their browser sent from those pages. Every page now tells the browser to send no referrer, so a site a post page links to also stops seeing where the visit came from. Lines already stored age out with log retention (SPEC §12).
+- A reader's confirm or unsubscribe token, and a post's unlisted link, no longer reach Cloudflare's invocation log in the `Referer` header their browser sent from those pages. Reader pages, post pages included, now tell the browser to send no referrer, so a site a post page links to also stops seeing where the visit came from. Lines already stored age out with log retention (SPEC §5, §12).
 
 ## [1.20.0] - 2026-11-04
 
