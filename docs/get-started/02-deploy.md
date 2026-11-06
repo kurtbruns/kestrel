@@ -167,7 +167,7 @@ Create Kestrel's tables in the production database:
 npx wrangler d1 migrations apply DB --remote --env production
 ```
 
-It lists the migrations it's about to apply and asks you to confirm. It applies only the ones the database hasn't seen, so running it again is harmless.
+It lists the migrations it's about to apply and asks you to confirm. Run by Claude, or in any other shell that isn't interactive, it answers its own prompt and applies them without asking. It applies only the ones the database hasn't seen, so running it again is harmless.
 
 ## 6. Deploy
 
@@ -175,7 +175,7 @@ It lists the migrations it's about to apply and asks you to confirm. It applies 
 npx wrangler deploy --env production
 ```
 
-This deploys the release your instance runs, with your settings. The output ends with the hostname the app now answers on. Deploying also registers the once-a-minute schedule that sends posts, which you can see under the Worker's **Triggers** tab in the Cloudflare dashboard.
+This deploys the release your instance runs, with your settings. Near its end, the output names the hostname the app now answers on, then its schedule and a version ID. Deploying also registers the once-a-minute schedule that sends posts, which you can see under the Worker's **Triggers** tab in the Cloudflare dashboard.
 
 Always name `--env production`, here and on every wrangler command that stores a secret. Without it, wrangler deploys the top level, local development, as a second Worker that answers nowhere and never sends. It takes the top level's `name` in `wrangler.jsonc`, such as `newsletter-dev`. If that happens, remove it by that name:
 

@@ -10,6 +10,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Changed
+
+- Upgrade to a new release now starts by committing anything `git status` lists, on its own, and the operator's Claude context (`template/claude/skills/upgrade/SKILL.md`) says the same, since this bears on safety: unrelated work swept into the upgrade's commit would be undone by going back.
+
 ## [1.20.0] - 2026-11-04
 
 **Upgrading from 1.19.0.** In your instance's repository, run `npm run sync-migrations`, which brings in one database migration, `0021_notifications_outage_receipts`: it rebuilds the notifications table for the new notices, carrying every row over, and closes any import notice not yet sent, since this release sends none. Run `npm run check-context`: this release changes the operator's Claude context, and a copy you've edited is merged by hand. Apply the migration before you deploy, with `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development). Then deploy with `npx wrangler deploy --env production`. A script of yours that replaced an image by uploading its name again needs changing (see Breaking); nothing else does.

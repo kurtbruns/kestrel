@@ -16,6 +16,14 @@ A release can ask you to change a setting or a record before it runs. The change
 
 Each step here changes only your instance's repository. Nothing reaches your deployed app until section 5.
 
+1. Check for work that isn't committed yet:
+
+    ```bash
+    git status
+    ```
+
+    If it lists anything, commit that first, as its own commit. The upgrade's commit then holds the upgrade and nothing else, which is what going back, below, relies on.
+
 1. Install the release. Replace `X.Y.Z` with its version:
 
     ```bash
@@ -91,7 +99,7 @@ A release changes the database only by adding a migration. Applying it keeps eve
 npx wrangler d1 migrations apply DB --remote --env production
 ```
 
-It lists the migrations it's about to apply, and asks you to confirm. When a release has none, it says there's nothing to apply. Run it on every upgrade.
+It lists the migrations it's about to apply, and asks you to confirm. Run by Claude, or in any other shell that isn't interactive, it answers its own prompt and applies them without asking. When a release has none, it says there's nothing to apply. Run it on every upgrade.
 
 ## 5. Deploy
 
@@ -99,7 +107,7 @@ It lists the migrations it's about to apply, and asks you to confirm. When a rel
 npx wrangler deploy --env production
 ```
 
-The output ends with your app's hostname.
+Near its end, the output names your app's hostname, then its schedule and a version ID.
 
 ## Check it
 
