@@ -51,7 +51,7 @@ The same form sets a custom MAIL FROM domain, so SPF also passes for your domain
 
 ## 2. Add a DMARC record
 
-DMARC tells inboxes what to do with mail that fails its checks, and can ask them to send you reports. SES doesn't add this record, so you add it yourself. It starts in monitor mode, `p=none`, which blocks nothing, your own mail included. It only monitors: inboxes still deliver mail that fails, so it doesn't stop anyone sending as your domain.
+DMARC tells inboxes what to do with mail that fails its checks, and can ask them to send you reports. The `rua` tag that asks for them is optional, and the policy works without it. SES doesn't add this record, so you add it yourself. It starts in monitor mode, `p=none`, which blocks nothing, your own mail included. It only monitors: inboxes still deliver mail that fails, so it doesn't stop anyone sending as your domain.
 
 1. In the Cloudflare dashboard, open your domain's DNS records, and add a record:
 
@@ -59,12 +59,7 @@ DMARC tells inboxes what to do with mail that fails its checks, and can ask them
     - **Name:** `_dmarc.send`
     - **Content:** `v=DMARC1; p=none; rua=mailto:dmarc@example.com`
 
-1. Decide whether to collect reports. They show who sends as your domain, and whether that mail passes. The `rua` part of the record is optional, and the policy works without it.
-
-    - **Collect them.** Replace `dmarc@example.com` with an address on your own domain that receives mail, such as one forwarded to your inbox with Cloudflare Email Routing. Reports arrive there as attachments. An address on another domain, such as a Gmail address, gets no reports unless that domain publishes a record allowing them, which Gmail doesn't.
-    - **Go without them.** Remove `rua` and its address, so the record's content is `v=DMARC1; p=none`.
-
-    Reports forwarded to a consumer inbox such as Gmail can be throttled as unsolicited mail, and may never arrive. An empty inbox isn't proof that nothing is failing.
+1. Replace `dmarc@example.com` with an address on your own domain that receives mail, such as one forwarded to your inbox with Cloudflare Email Routing. Reports arrive there as attachments. An address on another domain, such as a Gmail address, gets no reports unless that domain publishes a record allowing them, which Gmail doesn't.
 
 1. Check that the record is published. This prints it:
 
@@ -314,7 +309,7 @@ Replies to a post go to your From address, `newsletter@send.example.com`, which 
 
 1. Under **Routing Rules**, select **Create routing rule**. For **Email pattern**, enter `newsletter`, the part of your From address before the `@`, and select `send.example.com`. Set **Action** to **Send to an email**, select the publisher's inbox as the **Destination**, and save.
 
-1. **(Optional)** Forward your DMARC reports too, if you collect them and the address in your DMARC record doesn't receive mail. Add a rule that forwards `dmarc` the same way. Then change the record's `rua` to `mailto:dmarc@send.example.com`. Reports forwarded to a consumer inbox such as Gmail can be throttled as unsolicited mail, and may never arrive. An empty inbox isn't proof that nothing is failing. Email Routing's **Activity log** shows each forward's status.
+1. **(Optional)** Forward your DMARC reports too, if you collect them and the address in your DMARC record doesn't receive mail. Add a rule that forwards `dmarc` the same way. Then change the record's `rua` to `mailto:dmarc@send.example.com`. Reports come about once a day from each inbox provider that received your mail. A day or two after your next email goes out, check that they arrive. Email Routing's **Activity log** shows each forward's status.
 
 1. Check that your From address receives mail. This now lists Cloudflare's three `route` mail servers:
 
