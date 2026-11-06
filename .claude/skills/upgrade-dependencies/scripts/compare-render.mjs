@@ -2,6 +2,8 @@
 // upgrade-dependencies skill, since a parser change can move an email with every test green.
 // Usage: compare-render.mjs <old-version> <new-version> <file or directory>...
 // Installs both versions in a temporary directory, without their scripts, and removes it after.
+// This is the parser alone: src/render/markdown.ts also has its own image renderer and warnings,
+// which only the render specs exercise, so no difference here doesn't clear those.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -60,6 +62,28 @@ async function loadMarked(root, side, version) {
   return (await import(url.href)).Marked;
 }
 
+/** Prints the stretch between the lines both sides share at each end, so a reordered or repeated line still shows. */
+function printChange(before, after) {
+  let start = 0;
+  while (start < before.length && before[start] === after[start]) {
+    start++;
+  }
+  let end = 0;
+  while (
+    end < before.length - start &&
+    end < after.length - start &&
+    before[before.length - 1 - end] === after[after.length - 1 - end]
+  ) {
+    end++;
+  }
+  for (const line of before.slice(start, before.length - end)) {
+    console.log(`- ${line}`);
+  }
+  for (const line of after.slice(start, after.length - end)) {
+    console.log(`+ ${line}`);
+  }
+}
+
 const root = mkdtempSync(join(tmpdir(), "compare-render-"));
 try {
   const OldMarked = await loadMarked(root, "old", oldVersion);
@@ -79,15 +103,8 @@ try {
   const cases = Object.keys(EDGE_CASES).length;
   console.log(`edge cases: ${cases}, of which ${differing.length - realFiles} differ`);
   for (const { name, before, after } of differing) {
-    const beforeLines = before.split("\n");
-    const afterLines = after.split("\n");
     console.log(`\n### ${name}`);
-    for (const line of beforeLines.filter((candidate) => !afterLines.includes(candidate))) {
-      console.log(`- ${line}`);
-    }
-    for (const line of afterLines.filter((candidate) => !beforeLines.includes(candidate))) {
-      console.log(`+ ${line}`);
-    }
+    printChange(before.split("\n"), after.split("\n"));
   }
 } finally {
   rmSync(root, { recursive: true, force: true });
