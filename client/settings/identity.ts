@@ -63,7 +63,7 @@ export function identitySection(page: SettingsPage): Html {
               <button type="button" class="danger-subtle" id="logoRemove"${state.logoUrl ? null : HIDDEN}>Remove</button>
             </div>
             <div class="set-logo-notes">
-              <p class="field-hint">Shown as a square. Pick an image at least ${String(LOGO_SIZE)}&nbsp;×&nbsp;${String(LOGO_SIZE)}&nbsp;px; a wider or taller one is cropped to its center square.</p>
+              <p class="field-hint">Shown as a square. Pick or drop an image at least ${String(LOGO_SIZE)}&nbsp;×&nbsp;${String(LOGO_SIZE)}&nbsp;px; a wider or taller one is cropped to its center square.</p>
               <p class="set-field-warn" id="logoShape" hidden>Your logo isn’t square, so emails show it stretched. Replace it to have it cropped square.</p>
               <div class="field-error" id="logoError" role="alert" hidden><span class="field-error-ico" aria-hidden="true">!</span><span></span></div>
             </div>
@@ -213,12 +213,9 @@ export function mountIdentity(
   };
   // The logo has no save bar, so whatever kept it from saving is said under its tile.
   const logoFailed = (err: unknown) => showLogoError(message(err));
-  logoInput.onchange = async () => {
-    const file = logoInput.files?.[0];
-    logoInput.value = "";
-    if (!file) {
-      return;
-    }
+  // Choosing a file and dropping one are the same upload. What isn't an image is refused
+  // by the squaring, which can't decode it, so a drop gets the picker's message.
+  const uploadLogo = async (file: File) => {
     showLogoError("");
     try {
       // Squared before it uploads: every surface shows the logo square, and an email
@@ -244,6 +241,43 @@ export function mountIdentity(
       logoFailed(err);
     }
   };
+  logoInput.onchange = () => {
+    const file = logoInput.files?.[0];
+    logoInput.value = "";
+    if (file) {
+      void uploadLogo(file);
+    }
+  };
+  // The whole slot takes a drop, buttons and notes included, so a near miss still lands;
+  // the tile shows the target, since that's where the logo will appear. Only a file drag
+  // is offered one: a dragged selection or link has nothing to upload.
+  const logoSlot = $(".set-logo-slot", root);
+  logoSlot.addEventListener("dragover", (e) => {
+    if (!e.dataTransfer?.types.includes("Files")) {
+      return;
+    }
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    logoTile.classList.add("dragover");
+  });
+  // Moving between the slot's children fires this too, so only leaving the slot clears it.
+  logoSlot.addEventListener("dragleave", (e) => {
+    if (!(e.relatedTarget instanceof Node && logoSlot.contains(e.relatedTarget))) {
+      logoTile.classList.remove("dragover");
+    }
+  });
+  logoSlot.addEventListener("drop", (e) => {
+    e.preventDefault();
+    logoTile.classList.remove("dragover");
+    const files = e.dataTransfer?.files;
+    // Several files are refused rather than the first one taken: a logo goes live the
+    // moment it uploads, and which file a browser lists first isn't the publisher's choice.
+    if (files && files.length > 1) {
+      showLogoError("Drop one image at a time.");
+    } else if (files?.[0]) {
+      void uploadLogo(files[0]);
+    }
+  });
   logoRemove.onclick = () =>
     busy(logoRemove, "Removing…", async () => {
       showLogoError("");

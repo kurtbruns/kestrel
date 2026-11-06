@@ -12,6 +12,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 **Upgrading.** If your instance's `package.json` pins wrangler to an exact version below 4.156.0, install the release with `npm install @kurtbruns/kestrel@X.Y.Z "wrangler@^4.156.0"`, as [Upgrade to a new release](docs/guides/07-upgrade.md) says, since npm otherwise refuses with `ERESOLVE`. Run `npm run check-context`: this release changes the operator's Claude context, and a copy you've edited is merged by hand.
 
+### Added
+
+- You can drop an image on the logo under Settings → Publication identity to upload it, the same as choosing it in the file picker, and Name your publication now says what format, size, and shape a logo works best in.
+
 ### Changed
 
 - Kestrel now needs wrangler 4.156.0 or later, which carries fixes for security advisories in the local runtime it bundles. A new instance starts on it, and installing this release moves an existing instance's wrangler up on its own, with no change to its `package.json`, unless that `package.json` pins an exact version.
