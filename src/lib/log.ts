@@ -211,16 +211,12 @@ export function errorText(err: unknown): string {
   return String((err as Error)?.message ?? err);
 }
 
-/** An error's stack as a field value, which `undefined` drops for a thrown value with none. */
-export function errorStack(err: unknown): string | undefined {
-  return err instanceof Error ? err.stack : undefined;
-}
-
 /**
  * A caught error as the fields of its line: its message, and the stack that names the statement
- * it came from, which the message alone can't. The stack goes as a string through the logger,
- * never the error object to the console, which the platform would print whole and past `scrub`.
+ * it came from, which the message alone can't (a thrown value with none logs no `stack`). The
+ * stack goes as a string through the logger, never the error object to the console, which the
+ * platform would print whole and past `scrub`.
  */
 export function errorFields(err: unknown): { error: string; stack: string | undefined } {
-  return { error: errorText(err), stack: errorStack(err) };
+  return { error: errorText(err), stack: err instanceof Error ? err.stack : undefined };
 }

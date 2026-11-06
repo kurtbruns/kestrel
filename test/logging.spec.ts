@@ -5,7 +5,7 @@ import * as sends from "../src/db/sends";
 import type { AppEnv } from "../src/env";
 import worker from "../src/index";
 import { isD1Stall } from "../src/lib/d1_stall";
-import { errorStack, log, scrub, withRun } from "../src/lib/log";
+import { log, scrub, withRun } from "../src/lib/log";
 import { STUCK_THRESHOLD_MS } from "../src/lib/time";
 import * as providers from "../src/providers";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
@@ -319,6 +319,12 @@ describe("a database failure the sweep catches names the statement that failed (
   it.each([
     { event: "sweep.error", vars: {}, sql: /status = 'scheduled'/, statement: "dueSends" },
     {
+      event: "receipt.release_error",
+      vars: {},
+      sql: /FROM held_receipts h/,
+      statement: "heldReceipts",
+    },
+    {
       event: "notify.error",
       vars: {},
       sql: /INSERT OR IGNORE INTO notifications/,
@@ -352,6 +358,30 @@ describe("a database failure the sweep catches names the statement that failed (
     expect(line.stack).toContain("dispatchFresh");
   });
 
+  it("sending.record_failed carries a stack through the write it couldn't make", async () => {
+    allowErrorLogs("sending.record_failed");
+    await seedConfirmed(AUDIENCE);
+    await dueSend();
+
+    await sweep(failingOn(/INSERT INTO sending/, REFUSED));
+
+    const line = lines().find((l) => l.event === "sending.record_failed")!;
+    expect(line).toMatchObject({ purpose: "list", error: REFUSED });
+    expect(line.stack).toContain("recordAccepted");
+  });
+
+  it("provider.pacing_unread carries a stack through the read it couldn't make", async () => {
+    vi.spyOn(providers, "getProvider").mockReturnValue(new BatchProvider());
+    await seedConfirmed(AUDIENCE);
+    await dueSend();
+
+    await sweep(failingOn(/FROM provider_account/, REFUSED, SES_DEPLOY));
+
+    const line = lines().find((l) => l.event === "provider.pacing_unread")!;
+    expect(line).toMatchObject({ level: "warn", error: REFUSED });
+    expect(line.stack).toContain("readProviderAccount");
+  });
+
   it("scrubs the stack as it scrubs any field: no address, token, or credential gets through (§9)", async () => {
     allowErrorLogs("notify.error");
     const words =
@@ -369,9 +399,15 @@ describe("a database failure the sweep catches names the statement that failed (
     }
   });
 
-  it("a thrown value with no stack logs the line without the field", () => {
-    expect(errorStack("not an error")).toBeUndefined();
-    expect(errorStack(new Error("an error"))).toContain("an error");
+  it("a thrown value with no stack logs the line without the field", async () => {
+    allowErrorLogs("sweep.error");
+    vi.spyOn(sends, "dueSends").mockRejectedValue("not an error");
+
+    await expect(sweep(env)).rejects.toBe("not an error");
+
+    const line = lines().find((l) => l.event === "sweep.error")!;
+    expect(line.error).toBe("not an error");
+    expect(line).not.toHaveProperty("stack");
   });
 });
 
