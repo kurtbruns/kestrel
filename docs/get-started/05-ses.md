@@ -51,7 +51,7 @@ The same form sets a custom MAIL FROM domain, so SPF also passes for your domain
 
 ## 2. Add a DMARC record
 
-DMARC tells inboxes what to do with mail that fails its checks, and sends you reports about it. SES doesn't add this record, so you add it yourself. It starts in monitor mode, which reports without blocking anything.
+DMARC tells inboxes what to do with mail that fails its checks, and can ask them to send you reports. The `rua` tag that asks for them is optional, and the policy works without it. SES doesn't add this record, so you add it yourself. It starts in monitor mode, `p=none`, which blocks nothing, your own mail included. It only monitors: inboxes still deliver mail that fails, so it doesn't stop anyone sending as your domain.
 
 1. In the Cloudflare dashboard, open your domain's DNS records, and add a record:
 
@@ -309,7 +309,7 @@ Replies to a post go to your From address, `newsletter@send.example.com`, which 
 
 1. Under **Routing Rules**, select **Create routing rule**. For **Email pattern**, enter `newsletter`, the part of your From address before the `@`, and select `send.example.com`. Set **Action** to **Send to an email**, select the publisher's inbox as the **Destination**, and save.
 
-1. **(Optional)** Give your DMARC reports an inbox too. If the address in your DMARC record doesn't receive mail, add a rule that forwards `dmarc` the same way. Then change the record's `rua` to `mailto:dmarc@send.example.com`.
+1. **(Optional)** Forward your DMARC reports too, if you collect them and the address in your DMARC record doesn't receive mail. Add a rule that forwards `dmarc` the same way. Then change the record's `rua` to `mailto:dmarc@send.example.com`. Reports come about once a day from each inbox provider that received your mail. A day or two after your next email goes out, check that they arrive. Email Routing's **Activity log** shows each forward's status.
 
 1. Check that your From address receives mail. This now lists Cloudflare's three `route` mail servers:
 
