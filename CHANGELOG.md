@@ -16,6 +16,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 - Kestrel now needs wrangler 4.156.0 or later, which carries fixes for security advisories in the local runtime it bundles. A new instance starts on it, and installing this release moves an existing instance's wrangler up on its own, with no change to its `package.json`, unless that `package.json` pins an exact version.
 - Upgrade to a new release now starts from a clean repository, with anything `git status` lists committed on its own or moved out first, and the operator's Claude context (`template/claude/skills/upgrade/SKILL.md`) has Claude ask before committing it and otherwise wait. This bears on safety: unrelated work swept into the upgrade's commit would be undone by going back.
+- The setup guide's Connect Amazon SES and Sending-domain DNS pages now say that `p=none` only monitors, so it doesn't stop anyone sending as your domain, that DMARC reports (`rua`) are optional, and that reports forwarded to a consumer inbox such as Gmail can be throttled and may never arrive.
 
 ## [1.20.0] - 2026-11-04
 
