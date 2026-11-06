@@ -8,7 +8,7 @@ import { app } from "./shell";
 
 /**
  * What a mounted view offers the app around it. Every member is optional: a list view
- * offers nothing; the editor offers all three.
+ * offers nothing.
  */
 export interface ViewHandle {
   /** Unsaved work the browser should warn about before the tab unloads. */
@@ -21,6 +21,11 @@ export interface ViewHandle {
   beforeLeave?(): "leave" | "confirm";
   /** ⌘S / Ctrl-S. */
   manualSave?(): void;
+  /**
+   * The hash moved to `hash`. Answers true when the view shows that address itself, so it
+   * stays mounted and keeps what is on the page; false has the router route as usual.
+   */
+  navigate?(hash: string): boolean;
 }
 
 // What a view hands back: a handle, or nothing (the async ones resolve to nothing, so

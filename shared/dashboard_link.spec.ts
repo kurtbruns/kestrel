@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { dashboardLink, dashboardRouteFromSearch } from "./dashboard_link";
+import { settingsRoute } from "./settings";
 
 const route = (url: string) => dashboardRouteFromSearch(new URL(url).search);
 
@@ -10,6 +11,9 @@ describe("links into the editor from outside it", () => {
     expect(new URL(url).hash).toBe("");
     expect(route(url)).toBe("#/sent/s1");
     expect(route(dashboardLink("https://x.example", "/settings"))).toBe("#/settings");
+    expect(route(dashboardLink("https://x.example", settingsRoute("notifications")))).toBe(
+      "#/settings/notifications",
+    );
   });
 
   it("keeps an encoded segment encoded, both ways", () => {

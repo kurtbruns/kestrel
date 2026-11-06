@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SettingsResponse, SettingsView } from "../../shared/settings";
+import {
+  SETTINGS_SECTIONS,
+  type SettingsResponse,
+  type SettingsView,
+  settingsSectionTitled,
+} from "../../shared/settings";
+import { mounted } from "../lifecycle";
 import { appState } from "../state";
 import { sendView } from "../test/send_server";
 import {
@@ -1560,6 +1566,74 @@ describe("settings view", () => {
       ]);
       expect(fake.calls.some((c) => c.url.pathname === "/api/provider")).toBe(false);
       expect(document.querySelector("#sendRate")).toBeNull();
+    });
+  });
+
+  describe("section addresses", () => {
+    /** Mount Settings as the router does for `#/settings/<section>`, recording each scroll. */
+    async function openAt(section?: string) {
+      fake = fakeApi([
+        { path: "/api/settings", reply: () => response() },
+        { path: "/api/provider", reply: () => providerStatus() },
+        readerPage,
+      ]);
+      const targets: string[] = [];
+      vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(function (this: Element) {
+        targets.push(this.id);
+      });
+      const toTop = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+      await mount((root, signal) => renderSettings(root, signal, section));
+      await vi.advanceTimersByTimeAsync(0);
+      return { targets, toTop };
+    }
+    afterEach(() => {
+      vi.restoreAllMocks();
+      unmount();
+    });
+
+    it("gives every section head its name, in page order", async () => {
+      await openAt();
+      expect($$(".set-sec-head").map((h) => h.id)).toEqual(
+        SETTINGS_SECTIONS.map((s) => `settings-${s}`),
+      );
+    });
+
+    it("names each section for its title, which is how the docs find it", async () => {
+      await openAt();
+      for (const head of $$(".set-sec-head")) {
+        const section = settingsSectionTitled($(".set-sec-title", head).textContent ?? "");
+        expect(head.id).toBe(`settings-${section}`);
+      }
+    });
+
+    it("opens at the section the address names", async () => {
+      const { targets } = await openAt("notifications");
+      expect(targets).toEqual(["settings-notifications"]);
+    });
+
+    it.each([undefined, "no-such-section"])(
+      "opens at the top for %s, without a jump",
+      async (s) => {
+        const { targets } = await openAt(s);
+        expect(targets).toEqual([]);
+      },
+    );
+
+    it("moves between sections on the same mount, keeping unsaved edits", async () => {
+      const { targets, toTop } = await openAt("notifications");
+      const tagline = $<HTMLInputElement>("#setTagline");
+      typeInto(tagline, "Edited, not saved");
+      expect(mounted()?.navigate?.("#/settings/instance")).toBe(true);
+      expect(targets).toEqual(["settings-notifications", "settings-instance"]);
+      expect(mounted()?.navigate?.("#/settings")).toBe(true);
+      expect(toTop).toHaveBeenCalledWith(0, 0);
+      expect($<HTMLInputElement>("#setTagline")).toBe(tagline);
+      expect(tagline.value).toBe("Edited, not saved");
+    });
+
+    it("hands any other address back to the router", async () => {
+      await openAt();
+      expect(mounted()?.navigate?.("#/drafts")).toBe(false);
     });
   });
 });

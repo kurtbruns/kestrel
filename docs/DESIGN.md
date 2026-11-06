@@ -72,7 +72,7 @@ The browser tab names the screen open with one title, then Kestrel, so a tab amo
 | Subscriber | `#/subscribers/:subscriber` | One person: how they joined, their suppression, why they left, and every send they were in. |
 | Import subscribers | `#/subscribers/import` | What bringing a list in would do, before it does it. |
 | Template | `#/template` | The one email template every post is sent in. |
-| Settings | `#/settings` | The publication's preferences, and the deploy facts read-only. |
+| Settings | `#/settings`, `#/settings/:section` | The publication's preferences, and the deploy facts read-only. A section's address opens the page at that section. |
 | Docs and API | `#/docs`, `#/api-reference` | The docs, as two sets (Publishing and Self-hosting), and the API reference, served by the instance. An old `#/reference` link opens the same place under `#/api-reference`. |
 
 The admin UI may link out to public pages (View publication, Archive ↗, View published post ↗). No public page links or redirects into `/dashboard` (SPEC §11), apart from the dev-only pill above.
@@ -309,7 +309,7 @@ One page of sections, grouped by whom they serve, editable first and set-at-depl
 | The publisher | Notifications |
 | Set at deploy | Email sender, Instance |
 
-The groups have no headings, only a wider gap: each section's title, its **intent chip** (Editable, Preview, Copy-out, or Read-only · set at deploy), and its one-line lede already say what it is. Editable sections sit on raised cards; read-only facts sit on recessed ones. One save bar commits every editable section (§6). Rules for each section:
+The groups have no headings, only a wider gap: each section's title, its **intent chip** (Editable, Preview, Copy-out, or Read-only · set at deploy), and its one-line lede already say what it is. Editable sections sit on raised cards; read-only facts sit on recessed ones. One save bar commits every editable section (§6). Each section has an address of its own, its title in lowercase with hyphens (`#/settings/notifications`), and whatever sends the publisher to one section links to that address rather than the top of the page, as the dashboard's failed-notification line, the **Get notified** step, the test notification's **Open Settings**, and a docs page naming a section (**Settings → Notifications**) in the Docs tab do. Opening one holds the section at the top of the window while the previews above it load, until the publisher scrolls. Moving between addresses on the page stays on the page, so it keeps unsaved edits. An unknown section opens the page at the top. Rules for each section:
 
 **Publication identity.** Its note says it is "Shown in every email" and, while posts are scheduled, how many emails a save would update and that the publisher confirms first, and, while one is about to send, when it sends and that you can save once it has. The sample email beside it shows which fields the template prints, so the note doesn't list them. It carries no in-use chip, since the identity is in every email.
 

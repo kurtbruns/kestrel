@@ -3,7 +3,12 @@
 // every section wears.
 
 import type { ProviderStatusView } from "../../shared/provider";
-import type { ConfirmationEmailCopy, SettingsResponse, SettingsView } from "../../shared/settings";
+import type {
+  ConfirmationEmailCopy,
+  SettingsResponse,
+  SettingsSection,
+  SettingsView,
+} from "../../shared/settings";
 import { describeError } from "../api";
 import { type Html, html } from "../ui/html";
 import { type IconName, icon } from "../ui/icons";
@@ -64,9 +69,19 @@ export function chip(kind: IconName, label: string): Html {
   return html`<span class="set-chip ${kind}">${icon(kind)}${label}</span>`;
 }
 
+/** The element id of a section's head, which a link to the section scrolls to. */
+export function sectionHeadId(section: SettingsSection): string {
+  return `settings-${section}`;
+}
+
 /** A section's head: its title, its chips, and the rule that runs to the edge. */
-export function secHead(title: string, chipHtml: Html, extra: Html | null = null): Html {
-  return html`<div class="set-sec-head"><h2 class="set-sec-title">${title}</h2>${chipHtml}${extra}<span class="set-rule"></span></div>`;
+export function secHead(
+  section: SettingsSection,
+  title: string,
+  chipHtml: Html,
+  extra: Html | null = null,
+): Html {
+  return html`<div class="set-sec-head" id="${sectionHeadId(section)}"><h2 class="set-sec-title">${title}</h2>${chipHtml}${extra}<span class="set-rule"></span></div>`;
 }
 
 /** The letter an inbox row shows for a sender with no avatar. */

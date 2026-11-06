@@ -8,6 +8,40 @@ import type { TestNotSent } from "./posts";
 import type { RefusingCause } from "./provider";
 import type { SendView } from "./sends";
 
+/** The Settings page's sections, by the name each goes by in a link: its title in lowercase
+ *  with hyphens, which is how the Docs tab finds the section a page names. An email or a note
+ *  outside the app may hold one of these, so a retitled section keeps its name, and a spec
+ *  says when the docs' wording no longer finds it. */
+export const SETTINGS_SECTIONS = [
+  "publication-identity",
+  "ways-to-subscribe",
+  "confirmation-email",
+  "reader-pages",
+  "email-template",
+  "default-test-recipients",
+  "notifications",
+  "email-sender",
+  "instance",
+] as const;
+
+export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
+
+/** The route to a section of Settings, without its `#` (`/settings/notifications`). */
+export function settingsRoute(section: SettingsSection): string {
+  return `/settings/${section}`;
+}
+
+/** Whether a route's segment names a section of Settings. */
+export function isSettingsSection(segment: string | undefined): segment is SettingsSection {
+  return SETTINGS_SECTIONS.includes(segment as SettingsSection);
+}
+
+/** The section a title names, as the page and the docs write it; null when none. */
+export function settingsSectionTitled(title: string): SettingsSection | null {
+  const name = title.trim().toLowerCase().replaceAll(" ", "-");
+  return isSettingsSection(name) ? name : null;
+}
+
 /** One address a template test missed, and why. */
 export interface TemplateTestMiss extends TestNotSent {
   email: string;

@@ -1,24 +1,27 @@
 // The Settings page: its sections in groups by whom they serve (the publication, its
 // readers, its emails, the publisher), editable first and set-at-deploy last, under one
-// save bar. Each section is its own module; this one loads
-// the settings, holds the live state against the saved baseline, and commits it.
+// save bar, each with an address of its own (`#/settings/notifications`). Each section is
+// its own module; this one loads the settings, holds the live state against the saved
+// baseline, and commits it.
 
 import { fromDisplayName } from "../../shared/publication";
-import type {
-  ConfirmationEmailCopy,
-  SettingsPatchBody,
-  SettingsResponse,
-  SettingsSavedResponse,
-  SettingsView,
+import {
+  type ConfirmationEmailCopy,
+  isSettingsSection,
+  type SettingsPatchBody,
+  type SettingsResponse,
+  type SettingsSavedResponse,
+  type SettingsView,
 } from "../../shared/settings";
 import { ApiError, api } from "../api";
 import { renderSidebarBrand } from "../brand";
-import { mount, setTitle } from "../lifecycle";
+import { mount, setTitle, type ViewHandle } from "../lifecycle";
 import { readProviderStatus } from "../provider_status";
 import { appState } from "../state";
 import { $ } from "../ui/dom";
 import { type Html, html, setHtml } from "../ui/html";
 import { savebar } from "../ui/savebar";
+import { holdInView } from "../ui/scroll";
 import { fieldError, renderError, toast } from "../ui/widgets";
 import { confirmationSection, mountConfirmation } from "./confirmation";
 import { instanceSection, senderSection } from "./deploy";
@@ -33,6 +36,7 @@ import {
   type SettingsFormState,
   type SettingsPage,
   secHead,
+  sectionHeadId,
 } from "./page";
 import { mountReaderPages, readerPagesSection } from "./reader_pages";
 import { expireRemakeWait, remakeIdentity, savedToast, withRemakeConfirm } from "./remake";
@@ -63,7 +67,15 @@ const sameCopy = (a: ConfirmationEmailCopy, b: ConfirmationEmailCopy) =>
   a.button_label === b.button_label &&
   a.reassurance === b.reassurance;
 
-export async function renderSettings(root: HTMLElement, signal: AbortSignal): Promise<void> {
+/**
+ * The Settings view. `section` is the route's segment after `settings`: a section's name
+ * opens the page at that section, and anything else opens it at the top.
+ */
+export async function renderSettings(
+  root: HTMLElement,
+  signal: AbortSignal,
+  section?: string,
+): Promise<ViewHandle | undefined> {
   setTitle(signal, "Settings");
   setHtml(
     root,
@@ -74,7 +86,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
   try {
     data = await api<SettingsResponse>("/api/settings", { signal });
   } catch (e) {
-    renderError(body, message(e), () => mount(renderSettings));
+    renderError(body, message(e), () => mount((r, s) => renderSettings(r, s, section)));
     return;
   }
   const provider = await readProviderStatus(data.deployment, signal);
@@ -143,7 +155,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     body,
     html`
       ${group("publication", [identitySection(page)])}
-      ${group("readers", [subscribeSection(page), confirmationSection(page), readerPagesSection(secHead("Reader pages", chip("preview", "Preview")))])}
+      ${group("readers", [subscribeSection(page), confirmationSection(page), readerPagesSection(secHead("reader-pages", "Reader pages", chip("preview", "Preview")))])}
       ${group("emails", [templateSection(page), recipientsSection()])}
       ${group("you", [notificationsSection(page)])}
       ${group("deploy", [senderSection(page), instanceSection(page)])}
@@ -235,6 +247,33 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
   }
 
   page.changed();
+
+  // The previews above a section size themselves as they load, so the jump holds the section
+  // in place until the page settles rather than scrolling once. Moving between sections
+  // stays on this mount, so a link within the page never costs the unsaved edits.
+  let release = () => {};
+  const show = (name: string | undefined) => {
+    release();
+    if (isSettingsSection(name)) {
+      release = holdInView($(`#${sectionHeadId(name)}`, root), root, signal);
+    } else {
+      release = () => {};
+      window.scrollTo(0, 0);
+    }
+  };
+  if (isSettingsSection(section)) {
+    show(section);
+  }
+  return {
+    navigate(hash) {
+      const [, view, name] = hash.split("/");
+      if (view !== "settings") {
+        return false;
+      }
+      show(name);
+      return true;
+    },
+  };
 }
 
 // The input each settings field the API can name is edited in, by its wire name.

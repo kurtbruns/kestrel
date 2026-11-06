@@ -140,6 +140,28 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
     );
   });
 
+  it("links each section of Settings a page names, in the Docs tab only", () => {
+    const { docs } = renderDocs();
+    const page = (slug: string) => docs.find((d) => d.slug === slug)?.html;
+    expect(page("troubleshooting")).toContain(
+      '<a href="#/settings/notifications"><strong>Settings → Notifications</strong></a>',
+    );
+    // A place inside a section opens that section.
+    expect(page("share-your-subscribe-link")).toContain(
+      '<a href="#/settings/ways-to-subscribe"><strong>Settings → Ways to subscribe → Embed a form</strong></a>',
+    );
+    for (const d of docs) {
+      const source = docMarkdown(d.slug) ?? "";
+      // Every name finds its section, so a retitled section or a typo fails here.
+      const named = source.match(/\*\*Settings → /g)?.length ?? 0;
+      const linked =
+        d.html.match(/<a href="#\/settings\/[a-z-]+"><strong>Settings → /g)?.length ?? 0;
+      expect(linked, d.slug).toBe(named);
+      // GitHub, getkestrel.dev, and an agent read this source, with no dashboard to open.
+      expect(source, d.slug).not.toContain("#/settings");
+    }
+  });
+
   it("opens the page Settings and the dashboard send the publisher to for production access", () => {
     const { docs } = renderDocs();
     expect(editorSources["../client/provider_status.ts"]).toContain('"#/docs/production-access"');

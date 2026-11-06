@@ -50,7 +50,7 @@ export function identitySection(page: SettingsPage): Html {
   const addressOpen = Boolean(state.address);
   return html`
     <section class="set-sec">
-      ${secHead("Publication identity", chip("editable", "Editable"))}
+      ${secHead("publication-identity", "Publication identity", chip("editable", "Editable"))}
       <div class="set-card">
         <div class="set-id-grid">
           <div class="set-logo-slot">

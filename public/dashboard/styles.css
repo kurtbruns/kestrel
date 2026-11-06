@@ -5124,6 +5124,13 @@ button.copied svg {
   align-items: center;
   gap: 12px;
   margin: 0 0 14px;
+  scroll-margin-top: 20px; /* a link to the section leaves its title room at the top */
+}
+@media (max-width: 539px) {
+  /* The phone's floating menu button, 52px tall from the top, would cover the title. */
+  .set-sec-head {
+    scroll-margin-top: 60px;
+  }
 }
 .set-sec-title {
   margin: 0;

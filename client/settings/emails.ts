@@ -15,7 +15,7 @@ import { mountSampleEmailPreview } from "./template";
 export function templateSection(page: SettingsPage): Html {
   return html`
     <section class="set-sec">
-      ${secHead("Email template", chip("editable", "Editable"), inUseChip(page.data.in_use))}
+      ${secHead("email-template", "Email template", chip("editable", "Editable"), inUseChip(page.data.in_use))}
       <p class="set-lede">The template controls the look and feel of the emails you send. Edit it on the Template page.${remakeWaitHtml(page.data.in_use)}</p>
       <div class="set-preview set-tpl-sample">
         <div class="set-preview-bar">
@@ -52,7 +52,7 @@ const RECIPIENT_IDS = { chips: "recipChips", input: "recipInput", add: "recipAdd
 export function recipientsSection(): Html {
   return html`
     <section class="set-sec">
-      ${secHead("Default test recipients", chip("editable", "Editable"))}
+      ${secHead("default-test-recipients", "Default test recipients", chip("editable", "Editable"))}
       <div class="set-card">
         <div class="set-recip">
           <p class="field-hint" style="margin:0">Pre-filled into <strong>Send test email</strong> so you can proof a post against your own inboxes before scheduling. These are your addresses, and they don’t go through the subscribe-and-confirm flow.</p>
