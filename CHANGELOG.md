@@ -14,6 +14,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Added
 
+- A new log line, `mcp.initialize` (info), records what a connector says it is each time it opens: the name and version it sends, as `clientInfoName` and `clientInfoVersion`, cleaned and bound since they are only its own say-so, with the `principal` kind and the agreed `protocolVersion`. It changes nothing a call records, so a change made through the connector still reads as `claude` (SPEC §12).
 - You can drop an image on the logo under Settings → Publication identity to upload it, the same as choosing it in the file picker, and Name your publication now says what format, size, and shape a logo works best in.
 
 ### Changed
