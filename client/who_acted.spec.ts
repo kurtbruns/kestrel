@@ -14,6 +14,10 @@ describe("whoActed (SPEC §11, Who acted)", () => {
     expect(whoActed("you@example.com", "my-script")).toBe("you@example.com via my-script");
   });
 
+  it("reads a client named like something an object inherits as it named itself", () => {
+    expect(whoActed("you@example.com", "constructor")).toBe("you@example.com via constructor");
+  });
+
   it("knows each of Kestrel's own clients by a name of its own", () => {
     for (const client of KESTREL_CLIENTS.filter((c) => c !== EDITOR_CLIENT)) {
       expect(whoActed("you@example.com", client), client).not.toBe(`you@example.com via ${client}`);

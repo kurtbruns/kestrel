@@ -12,11 +12,13 @@ import {
 } from "../shared/who_acted";
 
 // Clients the editor knows by words of their own. Any other reads as it named itself.
-const VIA_CLIENT: Record<string, string> = {
-  [CLAUDE_CODE_CLIENT]: "via Claude Code",
-  [KESTREL_CLI_CLIENT]: "via the Kestrel CLI",
-  [CLAUDE_CLIENT]: "via Claude",
-};
+// A Map, since a client's name is its own word: `constructor` is well formed, and a plain object
+// would find what it inherits under that key.
+const VIA_CLIENT = new Map([
+  [CLAUDE_CODE_CLIENT, "via Claude Code"],
+  [KESTREL_CLI_CLIENT, "via the Kestrel CLI"],
+  [CLAUDE_CLIENT, "via Claude"],
+]);
 
 /**
  * Who made a change, as the editor shows it: `who` is a person's email or `service`, and
@@ -40,7 +42,7 @@ export function whoActed(
   if (client === null) {
     return `${who} via the API`;
   }
-  return `${who} ${VIA_CLIENT[client] ?? `via ${client}`}`;
+  return `${who} ${VIA_CLIENT.get(client) ?? `via ${client}`}`;
 }
 
 /** Who acted, as the API reports it on a record (`Actor`), in the editor's words. */

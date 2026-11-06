@@ -495,7 +495,7 @@ There is **one identity contract**: the app verifies a signed token and resolves
 
 ### Who acted
 
-Wherever the app records who made a change, it records one shape: a **person or a service token**, plus the **client** it came through. The person and the token come from the access layer, never from what the caller says: a person by their email, a token by its name. The client is the program the request came from, and it names itself on each request in one short lowercase word: the editor names itself, and so does Claude. A request that names nothing came through some other program, such as a script the publisher runs with their own sign-in. A malformed name is refused, so a typo is never recorded as a client no one knows; a name the app doesn't know is recorded as given.
+Wherever the app records who made a change, it records one shape: a **person or a service token**, plus the **client** it came through. The person and the token come from the access layer, never from what the caller says: a person by their email, a token by its name. The client is the program the request came from, and it names itself on each request in one short lowercase word: the editor names itself, and so do Claude and Kestrel's command line. A request that names nothing came through some other program, such as a script of the publisher's that calls the API directly with their own sign-in. A malformed name is refused, so a typo is never recorded as a client no one knows; a name the app doesn't know is recorded as given.
 
 | Who acted | The API reports | The editor shows |
 | --- | --- | --- |

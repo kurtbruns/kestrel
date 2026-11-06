@@ -688,7 +688,7 @@ describe("kestrel api against a signed-in instance", () => {
       expect(await named(undefined)).toBe("kestrel-cli");
     });
 
-    it.each([["0"], ["true"], [""]])(
+    it.each([["0"], ["true"], [""], [" 1"], ["1 "]])(
       "names itself when the variable is %j, not 1",
       async (value) => {
         expect(await named(value)).toBe("kestrel-cli");
