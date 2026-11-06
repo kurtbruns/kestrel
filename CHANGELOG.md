@@ -17,6 +17,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - Kestrel now needs wrangler 4.156.0 or later, which carries fixes for security advisories in the local runtime it bundles. A new instance starts on it, and installing this release moves an existing instance's wrangler up on its own, with no change to its `package.json`, unless that `package.json` pins an exact version.
 - Upgrade to a new release now starts from a clean repository, with anything `git status` lists committed on its own or moved out first, and the operator's Claude context (`template/claude/skills/upgrade/SKILL.md`) has Claude ask before committing it and otherwise wait. This bears on safety: unrelated work swept into the upgrade's commit would be undone by going back.
 
+### Fixed
+
+- A reader's confirm or unsubscribe token, and a post's unlisted link, no longer reach Cloudflare's invocation log in the `Referer` header their browser sent from those pages. Every page now tells the browser to send no referrer, so a site a post page links to also stops seeing where the visit came from. Lines already stored age out with log retention (SPEC §12).
+
 ## [1.20.0] - 2026-11-04
 
 **Upgrading from 1.19.0.** In your instance's repository, run `npm run sync-migrations`, which brings in one database migration, `0021_notifications_outage_receipts`: it rebuilds the notifications table for the new notices, carrying every row over, and closes any import notice not yet sent, since this release sends none. Run `npm run check-context`: this release changes the operator's Claude context, and a copy you've edited is merged by hand. Apply the migration before you deploy, with `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development). Then deploy with `npx wrangler deploy --env production`. A script of yours that replaced an image by uploading its name again needs changing (see Breaking); nothing else does.
