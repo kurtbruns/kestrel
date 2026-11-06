@@ -1,9 +1,9 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.6/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.6.4/schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!package-lock.json", "!**/*.svg"]
+    "includes": ["**", "!package-lock.json", "!**/*.svg", "!**/*.md"]
   },
   "formatter": {
     "enabled": true,
@@ -16,6 +16,7 @@
     "rules": {
       "preset": "recommended",
       "style": {
+        "noDescendingSpecificity": "off",
         "useBlockStatements": "error"
       }
     }
