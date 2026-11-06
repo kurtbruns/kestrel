@@ -12,7 +12,7 @@ import * as posts from "../db/posts";
 import { readForm } from "../lib/body";
 import { badRequest, json, notFound } from "../lib/errors";
 import { probeImageDimensions } from "../lib/image_dims";
-import { mediaType, RASTER_IMAGE_TYPES } from "../lib/image_types";
+import { imageLabelConflict, imageTypeOf } from "../lib/image_types";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { requireDraft } from "./posts";
@@ -77,7 +77,7 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
   const ct = c.req.headers.get("content-type") ?? "";
 
   let filename: string;
-  let contentType: string;
+  let declared: string;
   let bytes: ArrayBuffer;
   // What a refusal of the image itself names: the form's `file`, or, for a raw upload, the
   // body as a whole, which is no field.
@@ -94,24 +94,29 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
     filename = cleanName(
       typeof override === "string" && override ? override : file.name || "upload",
     );
-    contentType = mediaType(file.type);
+    declared = file.type;
     bytes = await file.arrayBuffer();
   } else {
     // Raw body upload: filename via query, content-type via header.
     filename = cleanName(c.url.searchParams.get("filename") ?? "");
-    contentType = mediaType(ct);
+    declared = ct;
     bytes = await c.req.arrayBuffer();
   }
 
   if (!filename) {
     throw badRequest("a filename is required", { field: "filename" });
   }
-  // Raster images only (lib/image_types says why), and not too large.
-  if (!RASTER_IMAGE_TYPES.includes(contentType)) {
-    throw badRequest("An image must be a PNG, JPEG, WebP, or GIF.", imageField);
-  }
   if (bytes.byteLength === 0) {
     throw badRequest("The image file is empty.", imageField);
+  }
+  // Raster images only, read from the bytes (lib/image_types says why), and not too large.
+  const contentType = imageTypeOf(new Uint8Array(bytes));
+  if (!contentType) {
+    throw badRequest("An image must be a PNG, JPEG, WebP, or GIF.", imageField);
+  }
+  const conflict = imageLabelConflict(contentType, { name: filename, declared });
+  if (conflict) {
+    throw badRequest(conflict, imageField);
   }
   if (bytes.byteLength > MAX_POST_IMAGE_BYTES) {
     throw badRequest(

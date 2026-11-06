@@ -3,7 +3,11 @@
 // scheduled post's banner, which follows its send until the send page takes over.
 
 import { DAILY_WRITES_SEND_RECIPIENTS, dailyWritesSendWarning } from "../../shared/free_plan";
-import type { ImageUploadResponse } from "../../shared/images";
+import {
+  IMAGE_TYPE_BY_EXTENSION,
+  type ImageUploadResponse,
+  imageTypeOfName,
+} from "../../shared/images";
 import type {
   PostEditBody,
   PostResponse,
@@ -1189,6 +1193,20 @@ export async function renderEditor(
   }
 
   // --- image upload: drag/drop, paste, click ---
+  // A browser names a pasted image itself, so a name that disagrees with the image's type is no
+  // claim the publisher made, and no name they could change. The server refuses one, so a paste
+  // goes under a name that agrees.
+  function pasteNamed(file: File): File {
+    const named = imageTypeOfName(file.name);
+    const extension = Object.keys(IMAGE_TYPE_BY_EXTENSION).find(
+      (e) => IMAGE_TYPE_BY_EXTENSION[e] === file.type,
+    );
+    if (!named || named === file.type || !extension) {
+      return file;
+    }
+    return new File([file], `image${extension}`, { type: file.type });
+  }
+
   async function uploadAndInsert(file: File) {
     if (!file.type.startsWith("image/")) {
       return;
@@ -1240,7 +1258,7 @@ export async function renderEditor(
           const f = it.getAsFile();
           if (f) {
             e.preventDefault();
-            uploadAndInsert(f);
+            uploadAndInsert(pasteNamed(f));
           }
         }
       }

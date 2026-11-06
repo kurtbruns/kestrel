@@ -19,7 +19,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
-- `npx kestrel api ... --form file=@cover.png` uploads a post image or a logo, where every file was refused as not a PNG, JPEG, WebP, or GIF: it now states the file's type, read from its extension (`.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, in any case). A file with any other extension still goes untyped, and a refusal of it now says so.
+- Image and logo uploads read a file's format from its bytes (SPEC §4). `npx kestrel api ... --form file=@cover.png`, which every file failed as not a PNG, JPEG, WebP, or GIF, now works. A file that isn't one of those formats is refused even under an image's name, where it used to upload and show as a broken image, and so is one named or declared as a different format than it is, like a JPEG called `photo.png`, which now needs renaming first.
 
 ## [1.20.0] - 2026-11-04
 

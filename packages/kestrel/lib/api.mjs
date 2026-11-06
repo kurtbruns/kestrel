@@ -24,7 +24,7 @@ import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { readSignIn, readSignIns, withCredentialsLock, writeSignInHeld } from "./credentials.mjs";
 import { devTarget } from "./dev-api.mjs";
-import { fileMediaType, IMAGE_TYPE_BY_EXTENSION, UNKNOWN_MEDIA_TYPE } from "./media-types.mjs";
+import { fileMediaType } from "./media-types.mjs";
 import {
   DEFAULT_CLIENT,
   instanceOrigin,
@@ -52,8 +52,7 @@ const USAGE = `Usage: kestrel api <method> <path> [options]
                                 or name=@file for a file's text. name.sub nests; name[] lists
   --data <json|@file|->         the request body: inline, from a file, or from stdin
   --type <media type>           the body's type (default application/json)
-  --form <name=value>           a multipart field, repeatable; name=@file attaches a file,
-                                typed by its extension
+  --form <name=value>           a multipart field, repeatable; name=@file attaches a file
   --url <url>                   the instance (default: KESTREL_URL, else the only one you're signed in to)
   --local                       this directory's dev server, started by kestrel dev
   --client <name>               your own script's Kestrel-Client name (default ${DEFAULT_CLIENT});
@@ -417,10 +416,8 @@ export async function apiCommand(argv) {
   let doc;
   let found;
   let call;
-  let forms = [];
   try {
     const args = parseApiArgs(argv);
-    forms = args.forms;
     const client = args.client ?? DEFAULT_CLIENT;
     call = await openTarget(args, client);
     if (args.mode === "list") {
@@ -462,7 +459,7 @@ export async function apiCommand(argv) {
   }
   if (!res.ok) {
     console.error(`kestrel api: HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ""}`);
-    for (const line of (await refusalLines(text, { doc, found, call, forms })) ?? []) {
+    for (const line of (await refusalLines(text, { doc, found, call })) ?? []) {
       console.error(`  ${line}`);
     }
     process.exit(1);
@@ -474,7 +471,7 @@ export async function apiCommand(argv) {
  * call didn't already), or undefined when the body isn't a refusal. A document that can't be
  * read only leaves the move out: the refusal itself is already printed.
  */
-async function refusalLines(text, { doc, found, call, forms }) {
+async function refusalLines(text, { doc, found, call }) {
   let body;
   try {
     body = JSON.parse(text);
@@ -488,21 +485,5 @@ async function refusalLines(text, { doc, found, call, forms }) {
   if (!known) {
     known = await readOpenApi(call).catch(() => undefined);
   }
-  const lines = describeRefusal(body, { doc: known, op: found?.op });
-  const note = untypedFileNote(forms, body.field);
-  return note ? [...lines, note] : lines;
-}
-
-/**
- * What the client sent, when a refusal names a form file it could state no type for. A route's
- * "must be a PNG" would otherwise blame a good PNG that is only misnamed, and the fix is the
- * file's name, which the route can't know the client read.
- */
-function untypedFileNote(forms, field) {
-  const attached = forms.find((form) => form.startsWith(`${field}=@`));
-  if (!attached || fileMediaType(attached) !== UNKNOWN_MEDIA_TYPE) {
-    return undefined;
-  }
-  const known = new Intl.ListFormat("en").format(Object.keys(IMAGE_TYPE_BY_EXTENSION));
-  return `${field} went as ${UNKNOWN_MEDIA_TYPE}: this client reads a file's type from its extension, and knows only ${known}.`;
+  return describeRefusal(body, { doc: known, op: found?.op });
 }

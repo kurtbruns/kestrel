@@ -274,7 +274,7 @@ export function describeRoute(doc, method, path) {
       how.push("-f/-F name=value or --data '<json>'");
     }
     if (types.includes("multipart/form-data")) {
-      how.push("--form name=value or name=@file (typed by its extension)");
+      how.push("--form name=value or name=@file");
     }
     const raw = types.filter((t) => t !== "application/json" && t !== "multipart/form-data");
     if (raw.length) {
