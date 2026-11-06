@@ -10,28 +10,33 @@ const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial
 // light+dark support (render/template.ts). Unlike the newsletter render path this email
 // carries no CSS-inlining pass — it is authored inline — so these class rules use
 // `!important` to beat the inline light styles (the standard email dark-mode technique).
-// The palette is a neutral zinc, light→dark: page #f4f4f5→#18181b, card #fff→#232327,
-// ink #18181b→#ededed, muted #71717a/#52525b→#a1a1aa, rule #e4e4e7→#2e2e33, button
-// #18181b/#fff → #e5e7eb/#18181b.
-const DARK_STYLE = `<style>@media (prefers-color-scheme: dark) {
+// The palette is a neutral zinc, light→dark: page #fff→#18181b, ink #18181b→#ededed,
+// muted #71717a/#52525b→#a1a1aa, rule #e4e4e7→#2e2e33, button #18181b/#fff →
+// #e5e7eb/#18181b.
+//
+// A reader's first email should look like the posts that follow it, so this frame copies a
+// post's (render/template.ts): the page, the column, and the padding, with the same narrow
+// rule bringing the text to 24px a side on a phone. A client that drops <style> keeps the
+// inline 44px, as a post does.
+const HEAD_STYLE = `<style>@media (prefers-color-scheme: dark) {
   .k-sys-bg { background:#18181b !important; }
-  .k-sys-card { background:#232327 !important; }
   .k-sys-body, .k-sys-name { color:#ededed !important; }
   .k-sys-tagline, .k-sys-muted { color:#a1a1aa !important; }
   .k-sys-rule { border-color:#2e2e33 !important; }
   .k-sys-btn { background:#e5e7eb !important; color:#18181b !important; }
-}</style>`;
+}
+@media (max-width:560px) { .k-sys-body { padding-left:12px !important; padding-right:12px !important; } }</style>`;
 
 function systemEmailLayout(subject: string, innerHtml: string): string {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">
 <title>${escapeHtml(subject)}</title>
-${DARK_STYLE}</head>
-<body class="k-sys-bg" style="margin:0;padding:0;background:#f4f4f5;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="k-sys-bg" style="background:#f4f4f5;"><tr><td align="center" style="padding:24px 12px;">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" class="k-sys-card" style="max-width:600px;width:100%;background:#ffffff;border-radius:8px;">
-<tr><td class="k-sys-body" style="padding:32px;font-family:${FONT};font-size:16px;line-height:1.6;color:#18181b;">
+${HEAD_STYLE}</head>
+<body class="k-sys-bg" style="margin:0;padding:0;background:#ffffff;">
+<table class="k-sys-bg" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;"><tr><td align="center" style="padding:8px 12px 48px;">
+<table class="k-sys-bg" role="presentation" width="664" cellpadding="0" cellspacing="0" style="max-width:664px;width:100%;background:#ffffff;">
+<tr><td class="k-sys-body" style="padding:24px 32px 32px;font-family:${FONT};font-size:16px;line-height:1.6;color:#18181b;word-break:break-word;">
 ${innerHtml}
 </td></tr>
 </table>

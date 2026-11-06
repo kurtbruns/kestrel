@@ -3,7 +3,8 @@
  *  only the document, the hidden preheader, and the inert archive anchors. The body
  *  holds an anchor comment the archive route swaps for a browser-only masthead
  *  (`archiveMasthead`) — invisible in every email, present only on the hosted page
- *  (I3). Styling lives in the template (inlined at render); the shell carries none. */
+ *  (I3). Styling lives in the template (inlined at render); the shell carries only its
+ *  frame's: the column's padding and background. */
 import { escapeHtml, escapeHtmlAttr } from "../lib/html";
 
 // The per-recipient delivery sentinels (UNSUB_SENTINEL / SENTTO_SENTINEL) live with the
@@ -114,17 +115,24 @@ export function emailLayout(i: LayoutInput): string {
   // and are consolidated into <head>; their dark overrides use !important to beat the
   // inlined light styles — the standard email dark-mode technique. The body cell sets
   // a base font/color as a fallback for content the template doesn't wrap.
+  //
+  // The side padding is 44px inline (12px outer, 32px inner), which every client shows,
+  // so a client that drops <style> keeps the wide look rather than losing its margins. The
+  // narrow rule brings the inner cell to 12px, 24px a side in all, where the reader pages'
+  // own text sits, and at the width where they reflow (lib/page.ts), past any phone held
+  // upright. Lower inline values would reach every client, but move every wide display too.
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">
 <title>${escapeHtml(i.subject)}</title>${ARCHIVE_HEAD_ANCHOR}
-<style>@media (prefers-color-scheme: dark) { .k-bg { background: #18181b !important; } }</style>
+<style>@media (prefers-color-scheme: dark) { .k-bg { background: #18181b !important; } }
+@media (max-width:560px) { .k-pad { padding-left:12px !important; padding-right:12px !important; } }</style>
 </head>
 <body class="k-bg" style="margin:0;padding:0;background:#ffffff;">
 ${preheader}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="k-bg" style="background:#ffffff;"><tr><td align="center" style="padding:8px 12px 48px;">
 <table role="presentation" width="664" cellpadding="0" cellspacing="0" class="k-bg" style="max-width:664px;width:100%;background:#ffffff;">
-<tr><td style="padding:24px 32px 32px;font-family:${FONT};font-size:16px;line-height:1.6;color:#18181b;word-break:break-word;">
+<tr><td class="k-pad" style="padding:24px 32px 32px;font-family:${FONT};font-size:16px;line-height:1.6;color:#18181b;word-break:break-word;">
 ${ARCHIVE_MASTHEAD_ANCHOR}${i.bodyHtml}
 </td></tr>
 </table>
