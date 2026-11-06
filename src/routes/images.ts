@@ -12,7 +12,7 @@ import * as posts from "../db/posts";
 import { readForm } from "../lib/body";
 import { badRequest, json, notFound } from "../lib/errors";
 import { probeImageDimensions } from "../lib/image_dims";
-import { imageLabelConflict, imageTypeOf } from "../lib/image_types";
+import { imageLabelConflict, imageTypeOf, mediaType, RASTER_IMAGE_TYPES } from "../lib/image_types";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { requireDraft } from "./posts";
@@ -72,6 +72,8 @@ function publicImage(c: RequestContext, row: ImageRow): PostImage {
   };
 }
 
+const NOT_AN_IMAGE = "An image must be a PNG, JPEG, WebP, or GIF.";
+
 export async function uploadImage(c: RequestContext): Promise<Response> {
   const post = await requireDraft(c);
   const ct = c.req.headers.get("content-type") ?? "";
@@ -83,7 +85,8 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
   // body as a whole, which is no field.
   let imageField: { field: string } | undefined;
 
-  if (ct.includes("multipart/form-data")) {
+  const isForm = ct.includes("multipart/form-data");
+  if (isForm) {
     const form = await readForm(c.req);
     const file = form.get("file");
     if (!(file instanceof File)) {
@@ -106,13 +109,18 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
   if (!filename) {
     throw badRequest("a filename is required", { field: "filename" });
   }
+  // A raw body declares its image type. The router passes one that declares nothing, a binary
+  // body a page on another site could send without a preflight, so it stops here.
+  if (!isForm && !RASTER_IMAGE_TYPES.includes(mediaType(declared))) {
+    throw badRequest(NOT_AN_IMAGE);
+  }
   if (bytes.byteLength === 0) {
     throw badRequest("The image file is empty.", imageField);
   }
   // Raster images only, read from the bytes (lib/image_types says why), and not too large.
   const contentType = imageTypeOf(new Uint8Array(bytes));
   if (!contentType) {
-    throw badRequest("An image must be a PNG, JPEG, WebP, or GIF.", imageField);
+    throw badRequest(NOT_AN_IMAGE, imageField);
   }
   const conflict = imageLabelConflict(contentType, { name: filename, declared });
   if (conflict) {

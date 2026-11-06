@@ -1,7 +1,9 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { IMAGE_TYPE_BY_EXTENSION } from "../shared/images";
 import type { AppEnv } from "../src/env";
+import { FORMAT_NAMES, RASTER_IMAGE_TYPES } from "../src/lib/image_types";
 import { AUTH, base, GIF_1x1, JPEG_1x1, PNG_1x1, readJson, WEBP_1x1 } from "./support/http";
 import { allowErrorLogs } from "./support/log";
 import { fetchOn } from "./support/worker_env";
@@ -132,7 +134,7 @@ describe("images", () => {
     const JPEG_NAMED_PNG =
       "This file is a JPEG, but its name says PNG. Rename it to match, or convert it.";
     const JPEG_DECLARED_PNG =
-      "This file is a JPEG, but its declared type says PNG. Send its real type, or convert it.";
+      "This file is a JPEG, but its declared type says PNG, which a client may have read from the file's own name. Rename the file or send its real type, or convert it.";
 
     it.each([
       ["its name", "photo.png", "image/jpeg", JPEG_NAMED_PNG],
@@ -169,11 +171,10 @@ describe("images", () => {
       expect(honest.status).toBe(201);
     });
 
-    it("holds the stored name to the bytes, not a form's file name it replaces", async () => {
-      const id = await newDraft("Named");
-      const send = (filename: string) => {
+    describe("a form's filename, which replaces the file's own name", () => {
+      const send = (file: File, filename: string, id: string) => {
         const fd = new FormData();
-        fd.append("file", new File([JPEG_1x1], "ignored.png"));
+        fd.append("file", file);
         fd.append("filename", filename);
         return SELF.fetch(`${base}/api/posts/${id}/images`, {
           method: "POST",
@@ -181,10 +182,65 @@ describe("images", () => {
           body: fd,
         });
       };
-      expect((await send("hero.jpg")).status).toBe(201);
-      const refused = await send("hero.png");
-      expect(refused.status).toBe(400);
-      expect((await readJson(refused)).message).toBe(JPEG_NAMED_PNG);
+
+      it("is held to the bytes", async () => {
+        const id = await newDraft("Named");
+        const file = new File([JPEG_1x1], "photo.jpg", { type: "image/jpeg" });
+        expect((await send(file, "hero.jpg", id)).status).toBe(201);
+        const refused = await send(file, "hero.png", id);
+        expect(refused.status).toBe(400);
+        expect((await readJson(refused)).message).toBe(JPEG_NAMED_PNG);
+      });
+
+      it("excuses the file's own name when the client states the real type", async () => {
+        // curl can: -F "file=@photo.png;type=image/jpeg" -F filename=hero.jpg
+        const id = await newDraft("Named");
+        const file = new File([JPEG_1x1], "photo.png", { type: "image/jpeg" });
+        expect((await send(file, "hero.jpg", id)).status).toBe(201);
+      });
+
+      it("tells a client that read the type from a misnamed file to rename it", async () => {
+        // The CLI and a browser type a part from its file's name, so --form file=@photo.png
+        // --form filename=photo.jpg declares a PNG, and they have no flag to say otherwise.
+        const id = await newDraft("Named");
+        const file = new File([JPEG_1x1], "photo.png", { type: "image/png" });
+        const refused = await send(file, "photo.jpg", id);
+        expect(refused.status).toBe(400);
+        expect((await readJson(refused)).message).toBe(JPEG_DECLARED_PNG);
+      });
+    });
+
+    it("refuses a raw upload that declares no type, whatever its bytes", async () => {
+      const id = await newDraft("Typeless");
+      const res = await SELF.fetch(`${base}/api/posts/${id}/images?filename=cover.png`, {
+        method: "POST",
+        headers: AUTH,
+        body: PNG_1x1,
+      });
+      expect(res.status).toBe(400);
+      expect((await readJson(res)).message).toBe("An image must be a PNG, JPEG, WebP, or GIF.");
+      const list = await readJson(
+        await SELF.fetch(`${base}/api/posts/${id}/images`, { headers: AUTH }),
+      );
+      expect(list.images).toEqual([]);
+    });
+
+    it("takes both versions of the GIF signature, and no other", async () => {
+      const id = await newDraft("Gifs");
+      const gif = (version: string) =>
+        new File([new TextEncoder().encode(`${version}\x01\0\x01\0\0\0\0;`)], "anim", {
+          type: "application/octet-stream",
+        });
+      const old = await sendFile(id, gif("GIF87a"));
+      expect(old.status).toBe(201);
+      expect((await readJson(old)).image.content_type).toBe("image/gif");
+      expect((await sendFile(id, gif("GIF88a"))).status).toBe(400);
+    });
+
+    it("has a name for every format an extension or a type can claim", () => {
+      const claimed = [...new Set(Object.values(IMAGE_TYPE_BY_EXTENSION))].sort();
+      expect(claimed).toEqual([...RASTER_IMAGE_TYPES].sort());
+      expect(Object.keys(FORMAT_NAMES).sort()).toEqual(claimed);
     });
 
     it.each([

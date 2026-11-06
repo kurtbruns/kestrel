@@ -62,9 +62,9 @@ async function getSettings() {
   };
 }
 
-async function putLogo(bytes: Uint8Array, type: string) {
+async function putLogo(bytes: Uint8Array, type: string, name = "logo") {
   const fd = new FormData();
-  fd.append("file", new File([bytes], "logo", { type }));
+  fd.append("file", new File([bytes], name, { type }));
   return SELF.fetch(`${base}/api/settings/logo`, {
     method: "POST",
     headers: AUTH,
@@ -603,10 +603,21 @@ describe("publication logo", () => {
     expect(await res.json()).toMatchObject({
       field: "file",
       message:
-        "This file is a JPEG, but its declared type says PNG. Send its real type, or convert it.",
+        "This file is a JPEG, but its declared type says PNG, which a client may have read from the file's own name. Rename the file or send its real type, or convert it.",
     });
     expect(await logoKeys()).toEqual([]);
     expect((await putLogo(PNG_1x1, "Image/PNG; x=y")).status).toBe(200);
+  });
+
+  it("refuses a logo named as a format its bytes aren't (SPEC §4)", async () => {
+    const res = await putLogo(JPEG_1x1, "application/octet-stream", "logo.png");
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      field: "file",
+      message: "This file is a JPEG, but its name says PNG. Rename it to match, or convert it.",
+    });
+    expect(await logoKeys()).toEqual([]);
+    expect((await putLogo(JPEG_1x1, "application/octet-stream", "logo.jpg")).status).toBe(200);
   });
 });
 

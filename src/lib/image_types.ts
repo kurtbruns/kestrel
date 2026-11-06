@@ -20,7 +20,7 @@ export const RASTER_IMAGE_TYPES: readonly string[] = [
 ];
 
 /** A declared content type as its bare media type: `Image/PNG; x=y` is `image/png`. */
-function mediaType(declared: string): string {
+export function mediaType(declared: string): string {
   return (declared.split(";")[0] ?? "").trim().toLowerCase();
 }
 
@@ -53,7 +53,7 @@ export function imageTypeOf(b: Uint8Array): string | undefined {
   return undefined;
 }
 
-const FORMAT_NAMES: Readonly<Record<string, string>> = {
+export const FORMAT_NAMES: Readonly<Record<string, string>> = {
   "image/png": "PNG",
   "image/jpeg": "JPEG",
   "image/webp": "WebP",
@@ -77,7 +77,9 @@ export function imageLabelConflict(
   }
   const declared = mediaType(label.declared);
   if (RASTER_IMAGE_TYPES.includes(declared) && declared !== shown) {
-    return `${is}, but its declared type says ${FORMAT_NAMES[declared]}. Send its real type, or convert it.`;
+    // A form client can't set a type: the CLI and a browser read it from the file's own name,
+    // which a form's `filename` doesn't change, so renaming that file is its way to fix this.
+    return `${is}, but its declared type says ${FORMAT_NAMES[declared]}, which a client may have read from the file's own name. Rename the file or send its real type, or convert it.`;
   }
   return undefined;
 }

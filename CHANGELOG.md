@@ -10,7 +10,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading.** If your instance's `package.json` pins wrangler to an exact version below 4.156.0, install the release with `npm install @kurtbruns/kestrel@X.Y.Z "wrangler@^4.156.0"`, as [Upgrade to a new release](docs/guides/07-upgrade.md) says, since npm otherwise refuses with `ERESOLVE`. Run `npm run check-context`: this release changes the operator's Claude context, and a copy you've edited is merged by hand.
+**Upgrading.** If your instance's `package.json` pins wrangler to an exact version below 4.156.0, install the release with `npm install @kurtbruns/kestrel@X.Y.Z "wrangler@^4.156.0"`, as [Upgrade to a new release](docs/guides/07-upgrade.md) says, since npm otherwise refuses with `ERESOLVE`. Run `npm run check-context`: this release changes the operator's Claude context, and a copy you've edited is merged by hand. If a script of yours uploads images or a logo, read the Breaking entry below: a file's name and declared type now have to match what it really is.
 
 ### Changed
 
@@ -19,7 +19,11 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
-- Image and logo uploads read a file's format from its bytes (SPEC §4). `npx kestrel api ... --form file=@cover.png`, which every file failed as not a PNG, JPEG, WebP, or GIF, now works. A file that isn't one of those formats is refused even under an image's name, where it used to upload and show as a broken image, and so is one named or declared as a different format than it is, like a JPEG called `photo.png`, which now needs renaming first.
+- `npx kestrel api ... --form file=@cover.png` uploads a post image or a logo, where every file was refused as not a PNG, JPEG, WebP, or GIF: it now states the file's type, read from its extension.
+
+### Breaking
+
+- Image and logo uploads read a file's format from its bytes (SPEC §4). A file that isn't a PNG, JPEG, WebP, or GIF is refused even under an image's name, where it used to upload and show as a broken image, and so is one named or declared as a different one of those formats than it is, like a JPEG called `photo.png`, with a message saying what it really is. A script that always sends `--type image/png`, or always names its uploads `cover.png`, now sends each file's real type and a name that matches it.
 
 ## [1.20.0] - 2026-11-04
 

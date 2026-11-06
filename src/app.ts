@@ -1022,7 +1022,7 @@ export function createRouter({
         {
           name: "filename",
           description:
-            "For a raw upload (an image type as `Content-Type`, the bytes as the body), the name to store it under, cleaned and numbered as above; required then.",
+            "For a raw upload (the image's own type as `Content-Type`, the bytes as the body), the name to store it under, cleaned and numbered as above; required then.",
         },
       ],
       body: [
