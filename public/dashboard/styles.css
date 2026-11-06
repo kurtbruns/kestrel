@@ -5554,7 +5554,10 @@ button.set-field-remove {
    LITERALS matching its light and dark palettes (its `prefers-color-scheme` block). The
    light literals are here; a dark @media block below overrides them, so the preview tracks
    the dashboard theme and shows what a light- or dark-mode inbox receives. */
+/* The top border is the app's, not the email's: it keeps the inbox row above from reading as
+   part of an email whose page is the same white. */
 .set-ce-stage {
+  border-top: 1px solid var(--line);
   background: #ffffff;
   padding: 8px 12px 48px;
 }

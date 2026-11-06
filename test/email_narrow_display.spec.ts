@@ -98,7 +98,9 @@ describe("the confirmation email's frame", () => {
     expect(post).toContain('width="664"');
     expect(html).toContain(COLUMN);
     // A white page in light, and the page's one color in dark, as a post has.
-    expect(html).toContain('<body class="k-sys-bg" style="margin:0;padding:0;background:#ffffff;">');
+    expect(html).toContain(
+      '<body class="k-sys-bg" style="margin:0;padding:0;background:#ffffff;">',
+    );
     expect(html).toContain(".k-sys-bg { background:#18181b !important; }");
     // None of the card or its gray page is left.
     for (const gone of ["k-sys-card", "#f4f4f5", "#232327", "border-radius:8px"]) {
