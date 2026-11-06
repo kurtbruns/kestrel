@@ -91,12 +91,12 @@ export default defineConfig(async () => {
             // Every client spec starts with the real admin shell in the document (the
             // shell module reads its roots at import time) and a scripted fetch at hand.
             setupFiles: ["./client/test/setup.ts"],
-            // happy-dom loads an inserted <link rel=stylesheet> / <script src> for real by
-            // default, so a swap test would do DNS + TCP; these are DOM tests, not fetch tests.
+            // happy-dom loads an inserted <script src> for real by default, so a test would do
+            // DNS + TCP; these are DOM tests, not fetch tests. A stylesheet stays unloaded by its
+            // own default.
             environmentOptions: {
               happyDOM: {
                 settings: {
-                  disableCSSFileLoading: true,
                   disableJavaScriptFileLoading: true,
                   // ...and a disabled load is a silent `load`, not a logged `error`.
                   handleDisabledFileLoadingAsSuccess: true,
