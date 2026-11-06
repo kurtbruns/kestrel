@@ -2,7 +2,7 @@
 
 import type { ApiErrorBody } from "../../shared/errors";
 import { REFUSAL_STATUS, type RefusalCode } from "../reference/refusals";
-import { errorText, log } from "./log";
+import { errorFields, log } from "./log";
 
 /**
  * A refusal the API answers with. Its code is one the reference's registry lists
@@ -55,8 +55,7 @@ export function json(data: unknown, status = 200, headers?: HeadersInit): Respon
 export function logUncaught(err: unknown): void {
   log.error("request.error", {
     name: err instanceof Error ? err.name : typeof err,
-    error: errorText(err),
-    stack: err instanceof Error ? err.stack : undefined,
+    ...errorFields(err),
   });
 }
 

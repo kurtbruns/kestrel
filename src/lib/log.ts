@@ -31,6 +31,9 @@ export const LOG_EVENTS = {
   // The sweep (SPEC §6).
   "sweep.tick": "info",
   "sweep.error": "error",
+  // A database stall the next tick makes up for, with `during` saying where: `sweep`, `receipts`,
+  // `notify`, or `account`. `d1_stall.ts` says what every other stall logs (SPEC §12).
+  "d1.unavailable": "warn",
   // A send's lifecycle (SPEC §6, §12).
   "send.scheduled": "info",
   "send.fired": "info",
@@ -179,8 +182,9 @@ function emit(level: LogLevel, event: string, fields: LogFields): void {
  *   - `error`: something could mail a person twice (I4), a send that should have gone out
  *     has not (missed, stuck, wedged), or a failure nothing else handled. Worth a look.
  *   - `warn`: the app is waiting something out that it recovers from on its own (a halt,
- *     a refusal, a lost lease, a notification to retry), but a person may want to know; and
- *     a person's manual call on recipients whose fate was unknown (Resolve).
+ *     a refusal, a lost lease, a notification to retry, a database stall the next tick makes
+ *     up for), but a person may want to know; and a person's manual call on recipients whose
+ *     fate was unknown (Resolve).
  *   - `info`: the ordinary lifecycle, and the counts of work done.
  * Work over many recipients is one line of counts, never a line each.
  */
@@ -206,4 +210,14 @@ export function whoActed(by: { kind: "human" | "service"; client?: string | null
 /** An error's message as a field value (scrubbed like any string on the way out). */
 export function errorText(err: unknown): string {
   return String((err as Error)?.message ?? err);
+}
+
+/**
+ * A caught error as the fields of its line: its message, and the stack that names the statement
+ * it came from, which the message alone can't (a thrown value with none logs no `stack`). The
+ * stack goes as a string through the logger, never the error object to the console, which the
+ * platform would print whole and past `scrub`.
+ */
+export function errorFields(err: unknown): { error: string; stack: string | undefined } {
+  return { error: errorText(err), stack: err instanceof Error ? err.stack : undefined };
 }
