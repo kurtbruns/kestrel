@@ -104,11 +104,13 @@ The app writes a log line for each thing it does, and Cloudflare keeps them for 
 
 1. Filter on `level` equal to `error`. A healthy instance shows nothing.
 
-A brief database stall in the once-a-minute run usually shows as one `d1.unavailable` line at `warn`. Its `during` field says what it interrupted: `sweep`, `receipts`, `notify`, or `account`. Its `stack` field names the statement that failed. The next run does that work again, so an occasional line needs nothing.
+A brief database stall in the once-a-minute run usually shows as one `d1.unavailable` line at `warn`. Its `during` field says what it interrupted: `sweep`, `receipts`, `notify`, or `account`. Its `stack` field shows the function that ran the failed statement, or the one that called it. The next run does that work again, so an occasional line needs nothing.
 
 The same line every minute means that work isn't getting done, and the `error` filter can stay empty. With `during` equal to `sweep`, the database is probably down, so no send fires and no notification goes out until it's back. With any other value, that step alone may be failing, and sends can still go out. If you set up alerts on these logs, alert on `d1.unavailable` repeating as well as on `error`.
 
 A stall during a send (`send.error`), while recording whether email is getting out (`sending.record_failed`), or while answering a request still logs at `error`. The next run doesn't make up for those.
+
+Two stalls keep their own line at `warn`, and the work goes ahead. Reading the provider's account just before a send logs `provider.pacing_unread`. Checking the database's migrations before a run logs `schema.unchecked`.
 
 To follow one send, narrow the time range and filter on its `sendId`, since a long range may show only a sample. On the Free plan, Cloudflare stops keeping logs for the rest of the day once its daily allowance is used, as [its pricing page](https://developers.cloudflare.com/observability/pricing/) describes.
 
