@@ -1,8 +1,8 @@
 // Settings' Confirmation email section (SPEC §7): the double opt-in email, preview-first
 // with a Preview | Edit toggle. Words only: Kestrel owns the layout and inserts the confirm
-// link, so the fields can never break double opt-in. The rendered card is byte-honest to
-// the transactional layout in src/emails/system.ts, in both themes (the card's dark palette
-// lives in styles.css, tracking the dashboard theme).
+// link, so the fields can never break double opt-in. The preview copies the frame of the
+// transactional layout in src/emails/system.ts, in both themes and at a phone's width (its
+// dark palette and narrow rule live in styles.css, tracking the dashboard theme).
 
 import { $ } from "../ui/dom";
 import { type Html, html, setHtml } from "../ui/html";
@@ -31,7 +31,7 @@ export function confirmationSection(page: SettingsPage): Html {
             </div>
           </div>
           <div class="set-ce-stage">
-            <div class="set-ce-card">
+            <div class="set-ce-col">
               <div class="set-ce-mast" id="cePvMast" hidden>
                 <div class="set-ce-mast-logo" id="cePvMastLogo"></div>
                 <div>

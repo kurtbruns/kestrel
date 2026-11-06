@@ -13,9 +13,9 @@ import { dueSend, frozenSend, resetDatabase, seedConfirmed } from "./support/fix
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 
 // An email's side padding on a narrow display: what the render produces, every path that
-// carries it, what it leaves alone, and the confirmation email's matching margins. Each
-// string is written out rather than imported from the shell, so moving a number or dropping
-// the rule here fails.
+// carries it, what it leaves alone, and the confirmation email's frame, which copies a
+// post's. Each string is written out rather than imported from the shell, so moving a number
+// or dropping the rule here fails.
 
 /** The rule as the final HTML must carry it, outside any inlined style. */
 const NARROW_RULE =
@@ -77,12 +77,34 @@ beforeEach(async () => {
   clearFakeOutbox();
 });
 
-describe("the confirmation email's side padding on a narrow display", () => {
+describe("the confirmation email's frame", () => {
   const CONFIRMATION_RULE =
     "@media (max-width:560px) { .k-sys-body { padding-left:12px !important; padding-right:12px !important; } }";
-  const CARD_CELL =
-    '<td class="k-sys-body" style="padding:32px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#18181b;">';
-  const PAGE_CELL = '<td align="center" style="padding:24px 12px;">';
+  const BODY_CELL =
+    '<td class="k-sys-body" style="padding:24px 32px 32px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#18181b;">';
+  const COLUMN =
+    '<table role="presentation" width="664" cellpadding="0" cellspacing="0" class="k-sys-bg" style="max-width:664px;width:100%;background:#ffffff;">';
+
+  it("matches a post's page, column, and padding, with no card", async () => {
+    const { html } = confirmationEmail(`${base}/confirm?token=abc123`, DEFAULT_CONFIRMATION_EMAIL, {
+      name: "",
+      tagline: "",
+      logoUrl: "",
+    });
+    // The same outer cell and column width as a post's own render, read from that render.
+    const post = (await renderPost()).html;
+    expect(post).toContain(OUTER_CELL);
+    expect(html).toContain(OUTER_CELL);
+    expect(post).toContain('width="664"');
+    expect(html).toContain(COLUMN);
+    // A white page in light, and the page's one color in dark, as a post has.
+    expect(html).toContain('<body class="k-sys-bg" style="margin:0;padding:0;background:#ffffff;">');
+    expect(html).toContain(".k-sys-bg { background:#18181b !important; }");
+    // None of the card or its gray page is left.
+    for (const gone of ["k-sys-card", "#f4f4f5", "#232327", "border-radius:8px"]) {
+      expect(html).not.toContain(gone);
+    }
+  });
 
   it("matches a post's 24px a side where the rule applies, over the same 44px inline", () => {
     const { html } = confirmationEmail(`${base}/confirm?token=abc123`, DEFAULT_CONFIRMATION_EMAIL, {
@@ -94,8 +116,8 @@ describe("the confirmation email's side padding on a narrow display", () => {
     expect(html.indexOf(CONFIRMATION_RULE)).toBeGreaterThan(html.indexOf("<head>"));
     expect(html.indexOf(CONFIRMATION_RULE)).toBeLessThan(html.indexOf("</head>"));
     // …and a client that drops <style> shows the inline values: 12px outside, 32px inside.
-    expect(html).toContain(PAGE_CELL);
-    expect(html).toContain(CARD_CELL);
+    expect(html).toContain(OUTER_CELL);
+    expect(html).toContain(BODY_CELL);
     // The class that takes the rule is on that one cell. The masthead's name and the body
     // copy take other classes, so nothing else moves.
     expect(html.split('class="k-sys-body"').length - 1).toBe(1);
