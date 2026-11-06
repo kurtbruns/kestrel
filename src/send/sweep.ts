@@ -29,17 +29,18 @@
  * Notifying gets what the sends leave plus a reserve held back up front, so a long send
  * spending every tick's budget can't starve the notification that says it is stuck.
  *
- * Each tick ends with one `sweep.tick` line counting what it did, even when it throws
- * (then with `ok: false`, after a `sweep.error`), and each anomaly is its own `error` line
- * per send (`send.missed`, `send.stuck`, `send.wedged`), repeated every tick the condition
- * lasts, after the check that found it: the log describes the tick, it never steers it
- * (SPEC §12).
+ * Each tick ends with one `sweep.tick` line counting what it did, even when it fails
+ * (then with `ok: false`, after a `sweep.error`, or a `d1.unavailable` for a database stall),
+ * and each anomaly is its own `error` line per send (`send.missed`, `send.stuck`,
+ * `send.wedged`), repeated every tick the condition lasts, after the check that found it: the
+ * log describes the tick, it never steers it (SPEC §12).
  */
 
 import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
 import { getConfig } from "../env";
-import { errorText, log } from "../lib/log";
+import { isD1Stall } from "../lib/d1_stall";
+import { errorFields, log } from "../lib/log";
 import { HALT_RETRY_SLACK_MS, MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
 import { NOTIFY_RESERVE, notifyPublisher } from "../notify/notify";
 import { getProvider } from "../providers";
@@ -81,11 +82,31 @@ export async function sweep(env: AppEnv): Promise<void> {
     await runTick(env, now, tick);
     ok = true;
   } catch (err) {
-    log.error("sweep.error", { error: errorText(err) });
+    // The next tick comes from the cron whether or not this one throws, so throwing a stall
+    // would only add an exception to the log.
+    if (loggedStall("sweep", err)) {
+      return;
+    }
+    log.error("sweep.error", errorFields(err));
     throw err;
   } finally {
     log.info("sweep.tick", { ...tick, ok, durationMs: Date.now() - now });
   }
+}
+
+/**
+ * Log a database stall in work the next tick does again, and answer whether `err` was one, so
+ * the caller logs anything else at its own level. Nothing is tried again here: the next tick
+ * starts from the record, while a retry on the spot could repeat a write that committed with
+ * only its answer lost (SPEC §12). `safeRun` doesn't come here, because a stall during a send
+ * can leave recipients waiting on Resolve, which stays an error.
+ */
+function loggedStall(during: "sweep" | "receipts" | "notify" | "account", err: unknown): boolean {
+  if (!isD1Stall(err)) {
+    return false;
+  }
+  log.warn("d1.unavailable", { during, ...errorFields(err) });
+  return true;
 }
 
 async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void> {
@@ -110,7 +131,7 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
         ? accountForPacing(db, config).then(
             (a) => sesSendRate(config, a).value,
             (err: unknown) => {
-              log.warn("provider.pacing_unread", { error: errorText(err) });
+              log.warn("provider.pacing_unread", errorFields(err));
               return config.sesMaxSendRate;
             },
           )
@@ -166,7 +187,9 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
     try {
       await applyHeldReceipts(db, now, Math.min(heldRoom, HELD_RECEIPTS_PER_TICK));
     } catch (err) {
-      log.error("receipt.release_error", { error: errorText(err) });
+      if (!loggedStall("receipts", err)) {
+        log.error("receipt.release_error", errorFields(err));
+      }
     }
   }
 
@@ -194,7 +217,9 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
   try {
     await notifyPublisher(env, rest, contacts);
   } catch (err) {
-    log.error("notify.error", { error: errorText(err) });
+    if (!loggedStall("notify", err)) {
+      log.error("notify.error", errorFields(err));
+    }
   }
 
   // What the tick's emails said about whether email is getting out (SPEC §13), in one
@@ -211,7 +236,9 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
     try {
       await refreshProviderAccount(env, config, rest, now);
     } catch (err) {
-      log.error("provider.account_error", { error: errorText(err) });
+      if (!loggedStall("account", err)) {
+        log.error("provider.account_error", errorFields(err));
+      }
     }
   }
 
@@ -236,6 +263,6 @@ async function safeRun(
     contacts.add("list", runOutcome(run.accepted, run.refusal), run.answeredAt ?? Date.now());
   } catch (err) {
     // One bad send must not stop the sweep; it will be retried next tick.
-    log.error("send.error", { sendId, error: errorText(err) });
+    log.error("send.error", { sendId, ...errorFields(err) });
   }
 }

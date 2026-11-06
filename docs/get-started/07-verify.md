@@ -102,7 +102,7 @@ The app writes a log line for each thing it does, and Cloudflare keeps them for 
 
 1. Filter on `event` equal to `send.scheduled`. Your two sends from section 4 are there, and `send.canceled` shows the one you canceled. Each line that records an action says who took it. Its `principal` is `human` or `service`, and its `client` names the program a person used, such as `editor`.
 
-1. Filter on `level` equal to `error`. A healthy instance shows nothing.
+1. Filter on `level` equal to `error`. A healthy instance shows nothing. An occasional `d1.unavailable` line at `warn` is a brief database stall the next run makes up for, and needs nothing. The same line every minute means work isn't getting done, so if you set up alerts, alert on it repeating as well as on `error`.
 
 To follow one send, narrow the time range and filter on its `sendId`, since a long range may show only a sample. On the Free plan, Cloudflare stops keeping logs for the rest of the day once its daily allowance is used, as [its pricing page](https://developers.cloudflare.com/observability/pricing/) describes.
 

@@ -2,26 +2,32 @@ import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test"
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import * as sends from "../src/db/sends";
+import type { AppEnv } from "../src/env";
 import worker from "../src/index";
+import { isD1Stall } from "../src/lib/d1_stall";
 import { log, scrub, withRun } from "../src/lib/log";
 import { STUCK_THRESHOLD_MS } from "../src/lib/time";
 import * as providers from "../src/providers";
-import { clearFakeOutbox } from "../src/providers/fake";
+import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { runSend } from "../src/send/loop";
 import { cancel } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { BatchProvider } from "./support/batching";
 import { toNextTick } from "./support/clock";
+import { failingD1 } from "./support/d1_failure";
+import { SES_DEPLOY } from "./support/deploy";
 import {
   dueSend,
   frozenSend,
   resetDatabase,
+  SEEDED_SEND_ID,
   seedConfirmed,
+  seedDelivery,
   sendingWorks,
 } from "./support/fixtures";
 import { allowErrorLogs, type LoggedLine, logged } from "./support/log";
-import { fetchWith } from "./support/worker_env";
+import { fetchWith, withVars } from "./support/worker_env";
 
 // The structured log (SPEC §12): every line one JSON object, a send's lifecycle in order
 // under its sendId, the lines of a tick or a request under one run, and never a
@@ -64,6 +70,16 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
+
+/** A failure the app doesn't recognize as anything in particular. */
+const REFUSED = "D1_ERROR: the database refused the query";
+/** The words D1 gives for a stall: an internal error, and a reference to it. */
+const STALL = "D1_ERROR: internal error; reference = abc123def456";
+
+/** The suite's env under `vars`, on a database whose statements matching `sql` fail. */
+function failingOn(sql: RegExp, message: string, vars: Record<string, string> = {}): AppEnv {
+  return { ...withVars(vars), DB: failingD1(env.DB, sql, message) };
+}
 
 describe("the send lifecycle in the log", () => {
   it("a send through the sweep logs fired, batch, completed in order under its sendId, and no address", async () => {
@@ -298,6 +314,280 @@ describe("the send lifecycle in the log", () => {
       expect.objectContaining({ event: "send.scheduled", sendId: send.id, postId: send.post_id }),
       expect.objectContaining({ event: "send.canceled", sendId: send.id, postId: send.post_id }),
     ]);
+  });
+});
+
+describe("a database failure the sweep catches names the statement that failed (SPEC §12)", () => {
+  it.each([
+    { event: "sweep.error", vars: {}, sql: /status = 'scheduled'/, statement: "dueSends" },
+    {
+      event: "receipt.release_error",
+      vars: {},
+      sql: /FROM held_receipts h/,
+      statement: "heldReceipts",
+    },
+    {
+      event: "notify.error",
+      vars: {},
+      sql: /INSERT OR IGNORE INTO notifications/,
+      statement: "recordNotifications",
+    },
+    {
+      event: "provider.account_error",
+      vars: SES_DEPLOY,
+      sql: /FROM provider_account/,
+      statement: "readProviderAccount",
+    },
+  ])("$event carries a stack through $statement", async ({ event, vars, sql, statement }) => {
+    allowErrorLogs(event);
+
+    await sweep(failingOn(sql, REFUSED, vars)).catch(() => undefined);
+
+    const line = lines().find((l) => l.event === event)!;
+    expect(line.error).toBe(REFUSED);
+    expect(line.stack).toContain(statement);
+  });
+
+  it("send.error carries a stack too, since a send's own failure is the one most worth placing", async () => {
+    allowErrorLogs("send.error");
+    await seedConfirmed(AUDIENCE);
+    const send = await dueSend();
+
+    await sweep(failingOn(/UPDATE deliveries SET status = 'dispatched'/, REFUSED));
+
+    const line = lines().find((l) => l.event === "send.error")!;
+    expect(line.sendId).toBe(send.id);
+    expect(line.stack).toContain("dispatchFresh");
+  });
+
+  it("sending.record_failed carries a stack through the write it couldn't make", async () => {
+    allowErrorLogs("sending.record_failed");
+    await seedConfirmed(AUDIENCE);
+    await dueSend();
+
+    await sweep(failingOn(/INSERT INTO sending/, REFUSED));
+
+    const line = lines().find((l) => l.event === "sending.record_failed")!;
+    expect(line).toMatchObject({ purpose: "list", error: REFUSED });
+    expect(line.stack).toContain("recordAccepted");
+  });
+
+  it("provider.pacing_unread carries a stack through the read it couldn't make", async () => {
+    vi.spyOn(providers, "getProvider").mockReturnValue(new BatchProvider());
+    await seedConfirmed(AUDIENCE);
+    await dueSend();
+
+    await sweep(failingOn(/FROM provider_account/, REFUSED, SES_DEPLOY));
+
+    const line = lines().find((l) => l.event === "provider.pacing_unread")!;
+    expect(line).toMatchObject({ level: "warn", error: REFUSED });
+    expect(line.stack).toContain("readProviderAccount");
+  });
+
+  it("scrubs the stack as it scrubs any field: no address, token, or credential gets through (§9)", async () => {
+    allowErrorLogs("notify.error");
+    const words =
+      "D1_ERROR: bad row for ada@example.com at /unsubscribe?token=uns-abc123 with Credential=AKIAIOSFODNN7EXAMPLE/20261016/us-east-1/ses/aws4_request";
+
+    await sweep(failingOn(/INSERT OR IGNORE INTO notifications/, words));
+
+    const line = lines().find((l) => l.event === "notify.error")!;
+    expect(line.stack).toContain("D1_ERROR: bad row for …@example.com");
+    expect(line.stack).toContain("recordNotifications");
+    for (const spy of spies) {
+      for (const call of spy.mock.calls) {
+        expect(call.map(String).join(" ")).not.toMatch(/ada@|uns-abc123|AKIAIOSFODNN7EXAMPLE/);
+      }
+    }
+  });
+
+  it("a thrown value with no stack logs the line without the field", async () => {
+    allowErrorLogs("sweep.error");
+    vi.spyOn(sends, "dueSends").mockRejectedValue("not an error");
+
+    await expect(sweep(env)).rejects.toBe("not an error");
+
+    const line = lines().find((l) => l.event === "sweep.error")!;
+    expect(line.error).toBe("not an error");
+    expect(line).not.toHaveProperty("stack");
+  });
+});
+
+describe("a database stall the next tick makes up for is a warning (SPEC §12)", () => {
+  const PLACES = [
+    {
+      during: "sweep",
+      event: "sweep.error",
+      vars: {},
+      sql: /status = 'scheduled'/,
+      statement: "dueSends",
+      ok: false,
+    },
+    {
+      during: "receipts",
+      event: "receipt.release_error",
+      vars: {},
+      sql: /FROM held_receipts h/,
+      statement: "heldReceipts",
+      ok: true,
+    },
+    {
+      during: "notify",
+      event: "notify.error",
+      vars: {},
+      sql: /INSERT OR IGNORE INTO notifications/,
+      statement: "recordNotifications",
+      ok: true,
+    },
+    {
+      during: "account",
+      event: "provider.account_error",
+      vars: SES_DEPLOY,
+      sql: /FROM provider_account/,
+      statement: "readProviderAccount",
+      ok: true,
+    },
+  ];
+
+  it.each(PLACES)(
+    "a stall during $during logs d1.unavailable at warn, and the tick doesn't throw",
+    async ({ during, vars, sql, statement, ok }) => {
+      // No allowErrorLogs: an error line from any of these fails the test.
+      await expect(sweep(failingOn(sql, STALL, vars))).resolves.toBeUndefined();
+
+      const all = lines();
+      const line = all.find((l) => l.event === "d1.unavailable")!;
+      expect(line).toMatchObject({ level: "warn", during, error: STALL });
+      expect(line.stack).toContain(statement);
+      expect(all.filter((l) => l.level === "error")).toEqual([]);
+      expect(all.at(-1)).toMatchObject({ event: "sweep.tick", ok });
+    },
+  );
+
+  it.each(PLACES)(
+    "any other failure during $during still logs $event at error",
+    async ({ event, vars, sql, ok }) => {
+      allowErrorLogs(event);
+
+      const tick = sweep(failingOn(sql, REFUSED, vars));
+
+      // A failure in the sweep itself still throws; a step's is caught, as it always was.
+      await (ok ? expect(tick).resolves.toBeUndefined() : expect(tick).rejects.toThrow(REFUSED));
+      expect(lines().find((l) => l.event === event)).toMatchObject({
+        level: "error",
+        error: REFUSED,
+      });
+      expect(lines().filter((l) => l.event === "d1.unavailable")).toEqual([]);
+    },
+  );
+
+  it("the invocation shows no exception for a stall, and still shows one for any other failure", async () => {
+    allowErrorLogs("sweep.error");
+    const invoke = async (message: string) => {
+      const ctx = createExecutionContext();
+      await worker.scheduled(
+        {} as ScheduledController,
+        failingOn(/status = 'scheduled'/, message),
+        ctx,
+      );
+      return waitOnExecutionContext(ctx);
+    };
+
+    await expect(invoke(STALL)).resolves.toBeUndefined();
+    await expect(invoke(REFUSED)).rejects.toThrow(REFUSED);
+  });
+
+  it("a stall during a send stays send.error at error: it can leave recipients waiting on Resolve", async () => {
+    allowErrorLogs("send.error");
+    await seedConfirmed(AUDIENCE);
+    const send = await dueSend();
+
+    await sweep(failingOn(/UPDATE deliveries SET status = 'dispatched'/, STALL));
+
+    expect(lines().find((l) => l.event === "send.error")).toMatchObject({
+      level: "error",
+      sendId: send.id,
+      error: STALL,
+    });
+    expect(lines().filter((l) => l.event === "d1.unavailable")).toEqual([]);
+  });
+
+  it("a stall recording whether email is getting out stays an error: nothing asks the provider again", async () => {
+    allowErrorLogs("sending.record_failed");
+    await seedConfirmed(AUDIENCE);
+    const send = await dueSend();
+
+    await expect(sweep(failingOn(/INSERT INTO sending/, STALL))).resolves.toBeUndefined();
+
+    expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
+    expect(lines().find((l) => l.event === "sending.record_failed")).toMatchObject({
+      level: "error",
+      error: STALL,
+    });
+    expect(lines().filter((l) => l.event === "d1.unavailable")).toEqual([]);
+  });
+
+  it("a held receipt a stall interrupted lands once on the next tick, with its counts unmoved", async () => {
+    await seedDelivery("held@example.com", null);
+    await env.DB.prepare("UPDATE deliveries SET status = 'dispatched'").run();
+    await applyDeliveryEvents(env.DB, [
+      { type: "bounced", providerId: "msg-lost", email: "held@example.com", hard: false },
+    ]);
+    // Resolve's "assume sent", so the pass applies the receipt.
+    await env.DB.prepare("UPDATE deliveries SET status = 'accepted'").run();
+    const held = () => env.DB.prepare("SELECT COUNT(*) AS n FROM held_receipts").first<number>("n");
+    const events = () => env.DB.prepare("SELECT event, bounce_kind FROM deliveries").all();
+    const counters = () => sends.getSend(env.DB, SEEDED_SEND_ID);
+    expect(await held()).toBe(1);
+
+    // The worst moment: the receipt landed, and the write releasing it never answered.
+    await sweep(failingOn(/DELETE FROM held_receipts/, STALL));
+
+    expect(lines().find((l) => l.event === "d1.unavailable")).toMatchObject({
+      during: "receipts",
+      level: "warn",
+    });
+    expect(await held()).toBe(1);
+    const landed = (await events()).results;
+    expect(landed).toEqual([{ event: "bounced", bounce_kind: "soft" }]);
+    const before = await counters();
+
+    await sweep(env);
+
+    expect(await held()).toBe(0);
+    expect((await events()).results).toEqual(landed);
+    expect(await counters()).toEqual(before);
+  });
+
+  it("a stall that keeps a send from firing leaves it scheduled, and the next tick fires it", async () => {
+    await seedConfirmed(AUDIENCE);
+    const send = await dueSend();
+
+    await sweep(failingOn(/status = 'scheduled'/, STALL));
+    expect((await sends.getSend(env.DB, send.id))!.status).toBe("scheduled");
+    expect(fakeOutbox()).toEqual([]);
+
+    await sweep(env);
+    expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
+    expect(
+      fakeOutbox()
+        .map((m) => m.to)
+        .sort(),
+    ).toEqual(AUDIENCE);
+  });
+
+  it("recognizes only the words D1 gives for a stall, so changed wording stays an error", () => {
+    expect(isD1Stall(new Error(STALL))).toBe(true);
+    for (const other of [
+      REFUSED,
+      "D1_ERROR: internal error",
+      "D1_ERROR: Internal Error; reference = abc123def456",
+      "internal error; reference = abc123def456",
+      `sending failed: ${STALL}`,
+    ]) {
+      expect(isD1Stall(new Error(other))).toBe(false);
+    }
+    expect(isD1Stall(undefined)).toBe(false);
   });
 });
 
