@@ -5236,6 +5236,7 @@ button.copied svg {
   min-width: 0;
 }
 .set-logo-tile {
+  position: relative;
   width: 100%;
   aspect-ratio: 1;
   border-radius: 10px;
@@ -5254,6 +5255,22 @@ button.copied svg {
 }
 .set-logo-tile:hover {
   border-color: var(--accent);
+}
+.set-logo-tile.dragover::after {
+  content: "Drop to upload";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border: 2px dashed var(--ring);
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--ring) 14%, var(--card));
+  color: var(--fg);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
 }
 .set-logo-ph {
   display: flex;

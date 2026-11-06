@@ -1025,6 +1025,257 @@ describe("settings view", () => {
     expect(logoPosts()).toHaveLength(0);
   });
 
+  // A drag event as the browser fires it: `types` says a file is being carried from the
+  // moment it enters, while `files` can only be read on the drop.
+  const drag = (
+    type: "dragover" | "dragleave" | "drop",
+    on: HTMLElement,
+    {
+      files = [],
+      types = ["Files"],
+      relatedTarget = null,
+    }: { files?: File[]; types?: string[]; relatedTarget?: EventTarget | null } = {},
+  ) => {
+    const e = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperties(e, {
+      dataTransfer: { value: { types, files, dropEffect: "none" } },
+      relatedTarget: { value: relatedTarget },
+    });
+    on.dispatchEvent(e);
+    return e;
+  };
+  const dropTargetShows = () => $("#logoTile").classList.contains("dragover");
+  const logoWrite: FakeRoute = {
+    method: "POST",
+    path: "/api/settings/logo",
+    reply: () => ({ settings: settings(), remade: [] }),
+  };
+
+  it("uploads a logo dropped on the tile just as a picked one, squared", async () => {
+    await open([{ path: "/api/settings", reply: () => response() }, logoWrite]);
+    pickedImage(800, 600);
+    const dropped = new File(["photo"], "photo.jpg", { type: "image/jpeg" });
+    const e = drag("drop", $("#logoTile"), { files: [dropped] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(e.defaultPrevented).toBe(true); // the browser doesn't open the file instead
+    expect(vi.mocked(squareImage).mock.lastCall).toEqual([dropped, 256]);
+    const sent = logoPosts()[0]?.form?.get("file");
+    expect(sent instanceof File && [sent.name, sent.type, sent.size]).toEqual([
+      "logo.png",
+      "image/png",
+      SQUARED_PNG.size,
+    ]);
+    expect($("#toasts").textContent).toBe("Logo updated, cropped to its center square");
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("takes a drop anywhere on the logo field, not only on the tile", async () => {
+    await open([{ path: "/api/settings", reply: () => response() }, logoWrite]);
+    pickedImage(512, 512);
+    drag("drop", $("#logoReplace"), {
+      files: [new File(["png"], "logo.png", { type: "image/png" })],
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(logoPosts()).toHaveLength(1);
+  });
+
+  it("refuses a dropped non-image with the picker's message, under the tile", async () => {
+    await open();
+    vi.mocked(squareImage).mockRejectedValue(new UnreadableImage());
+    drag("drop", $("#logoTile"), {
+      files: [new File(["%PDF"], "notes.pdf", { type: "application/pdf" })],
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#logoError").hidden).toBe(false);
+    expect($("#logoError").textContent).toContain(
+      "Couldn’t read that image. Pick a PNG, JPEG, WebP, or GIF.",
+    );
+    expect(logoPosts()).toHaveLength(0);
+  });
+
+  it("refuses a drop of several files rather than choosing one, and clears that on the next try", async () => {
+    await open([{ path: "/api/settings", reply: () => response() }, logoWrite]);
+    pickedImage(512, 512);
+    vi.mocked(squareImage).mockClear();
+    const png = (name: string) => new File(["png"], name, { type: "image/png" });
+    drag("drop", $("#logoTile"), { files: [png("a.png"), png("b.png")] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#logoError").hidden).toBe(false);
+    expect($("#logoError").textContent).toContain("Drop one image at a time.");
+    expect(squareImage).not.toHaveBeenCalled();
+    expect(logoPosts()).toHaveLength(0);
+    drag("drop", $("#logoTile"), { files: [png("a.png")] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#logoError").hidden).toBe(true);
+    expect(logoPosts()).toHaveLength(1);
+  });
+
+  it("shows the drop target while a file is over the logo field, and clears it on leaving or dropping", async () => {
+    await open([{ path: "/api/settings", reply: () => response() }, logoWrite]);
+    pickedImage(512, 512);
+    expect(dropTargetShows()).toBe(false);
+    const over = drag("dragover", $("#logoTile"));
+    expect(over.defaultPrevented).toBe(true); // what makes the slot a place a file can land
+    expect(dropTargetShows()).toBe(true);
+    // Crossing from the tile to a button inside the field keeps it showing…
+    drag("dragleave", $("#logoTile"), { relatedTarget: $("#logoReplace") });
+    expect(dropTargetShows()).toBe(true);
+    // …and leaving the field, from whichever child it was over, clears it.
+    drag("dragleave", $("#logoReplace"), { relatedTarget: document.body });
+    expect(dropTargetShows()).toBe(false);
+    drag("dragover", $("#logoTile"));
+    drag("dragleave", $("#logoTile"));
+    expect(dropTargetShows()).toBe(false); // no related target: the drag left the window
+    drag("dragover", $("#logoTile"));
+    drag("drop", $("#logoTile"), { files: [new File(["png"], "logo.png")] });
+    expect(dropTargetShows()).toBe(false);
+    await vi.advanceTimersByTimeAsync(0);
+  });
+
+  it("shows the drop target on the tile while a file is over any part of the logo field", async () => {
+    await open();
+    for (const part of [$("#logoTile"), $("#logoReplace"), $(".set-logo-notes")]) {
+      expect(drag("dragover", part).defaultPrevented).toBe(true);
+      expect(dropTargetShows()).toBe(true);
+      drag("dragleave", part);
+      expect(dropTargetShows()).toBe(false);
+    }
+  });
+
+  it("offers no drop target for a drag that carries no file", async () => {
+    await open();
+    const over = drag("dragover", $("#logoTile"), { types: ["text/plain"] });
+    expect(over.defaultPrevented).toBe(false);
+    expect(dropTargetShows()).toBe(false);
+  });
+
+  it("says what to do when a drop promised a file and holds none, and uploads nothing", async () => {
+    await open();
+    vi.mocked(squareImage).mockClear();
+    const e = drag("drop", $("#logoTile"), { files: [] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(e.defaultPrevented).toBe(true);
+    expect($("#logoError").hidden).toBe(false);
+    expect($("#logoError").textContent).toContain(
+      "Couldn’t read a file from that drop. Save the image first, then pick it.",
+    );
+    expect(squareImage).not.toHaveBeenCalled();
+    expect(logoPosts()).toHaveLength(0);
+  });
+
+  const LOGO_STILL_SAVING = "The last logo change is still saving. Try again once it’s done.";
+  const png = (name: string) => new File(["png"], name, { type: "image/png" });
+
+  it("refuses a drop, a pick, or Remove while an upload is under way, so an earlier choice can't land last", async () => {
+    await open([
+      {
+        path: "/api/settings",
+        reply: () =>
+          response({
+            settings: {
+              publication: {
+                name: "Birds Weekly",
+                tagline: "",
+                address: "",
+                logo_url: "https://app.birds.example/media/branding/logo?v=1",
+              },
+            },
+          }),
+      },
+      logoWrite,
+    ]);
+    // A large photo still decoding, as the publisher sees the mistake and tries again.
+    let decoded = (_: Awaited<ReturnType<typeof squareImage>>) => {};
+    vi.mocked(squareImage).mockReset();
+    vi.mocked(squareImage).mockReturnValueOnce(
+      new Promise((resolve) => {
+        decoded = resolve;
+      }),
+    );
+    const photo = png("photo.png");
+    drag("drop", $("#logoTile"), { files: [photo] });
+    await vi.advanceTimersByTimeAsync(0);
+
+    drag("drop", $("#logoTile"), { files: [png("right.png")] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#logoError").textContent).toContain(LOGO_STILL_SAVING);
+    pickLogo();
+    await vi.advanceTimersByTimeAsync(0);
+    $("#logoRemove").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#logoRemove").textContent).toBe("Remove");
+    expect(vi.mocked(squareImage).mock.calls.map((c) => c[0])).toEqual([photo]);
+    expect(logoPosts()).toHaveLength(0);
+    expect(fake.calls.some((c) => c.method === "DELETE")).toBe(false);
+
+    // The one under way lands, its refusals no longer hold, and the next one goes.
+    decoded({ png: SQUARED_PNG, width: 512, height: 512 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(logoPosts()).toHaveLength(1);
+    expect($("#logoError").hidden).toBe(true);
+    pickedImage(512, 512);
+    drag("drop", $("#logoTile"), { files: [png("right.png")] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(logoPosts()).toHaveLength(2);
+    expect($("#logoError").hidden).toBe(true);
+  });
+
+  it("refuses a drop while Remove is under way", async () => {
+    let removed = (_: unknown) => {};
+    await open([
+      {
+        path: "/api/settings",
+        reply: () =>
+          response({
+            settings: {
+              publication: {
+                name: "Birds Weekly",
+                tagline: "",
+                address: "",
+                logo_url: "https://app.birds.example/media/branding/logo?v=1",
+              },
+            },
+          }),
+      },
+      {
+        method: "DELETE",
+        path: "/api/settings/logo",
+        reply: () =>
+          new Promise((resolve) => {
+            removed = resolve;
+          }),
+      },
+      logoWrite,
+    ]);
+    pickedImage(512, 512);
+    $("#logoRemove").click();
+    await vi.advanceTimersByTimeAsync(0);
+    drag("drop", $("#logoTile"), { files: [png("logo.png")] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#logoError").textContent).toContain(LOGO_STILL_SAVING);
+    expect(logoPosts()).toHaveLength(0);
+    removed({ settings: settings(), remade: [] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#toasts").textContent).toMatch(/Logo removed/);
+    expect($("#logoError").hidden).toBe(true);
+    drag("drop", $("#logoTile"), { files: [png("logo.png")] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(logoPosts()).toHaveLength(1);
+  });
+
+  it("lets the next logo change through after one fails, keeping the failure's own message until then", async () => {
+    await open([{ path: "/api/settings", reply: () => response() }, logoWrite]);
+    vi.mocked(squareImage).mockRejectedValueOnce(new UnreadableImage());
+    drag("drop", $("#logoTile"), { files: [png("bad.png")] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#logoError").textContent).toContain("Couldn’t read that image.");
+    pickedImage(512, 512);
+    drag("drop", $("#logoTile"), { files: [png("good.png")] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(logoPosts()).toHaveLength(1);
+    expect($("#logoError").hidden).toBe(true);
+  });
+
   it("notes that a logo uploaded before the crop step isn't square, since emails stretch it, until a square one replaces it", async () => {
     // The page reads the current logo as any <img> does; a stand-in reports its size.
     const sizes: Record<string, [number, number]> = {
