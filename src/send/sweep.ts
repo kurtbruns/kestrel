@@ -39,7 +39,7 @@
 import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
 import { getConfig } from "../env";
-import { errorText, log } from "../lib/log";
+import { errorFields, log } from "../lib/log";
 import { HALT_RETRY_SLACK_MS, MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
 import { NOTIFY_RESERVE, notifyPublisher } from "../notify/notify";
 import { getProvider } from "../providers";
@@ -81,7 +81,7 @@ export async function sweep(env: AppEnv): Promise<void> {
     await runTick(env, now, tick);
     ok = true;
   } catch (err) {
-    log.error("sweep.error", { error: errorText(err) });
+    log.error("sweep.error", errorFields(err));
     throw err;
   } finally {
     log.info("sweep.tick", { ...tick, ok, durationMs: Date.now() - now });
@@ -110,7 +110,7 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
         ? accountForPacing(db, config).then(
             (a) => sesSendRate(config, a).value,
             (err: unknown) => {
-              log.warn("provider.pacing_unread", { error: errorText(err) });
+              log.warn("provider.pacing_unread", errorFields(err));
               return config.sesMaxSendRate;
             },
           )
@@ -166,7 +166,7 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
     try {
       await applyHeldReceipts(db, now, Math.min(heldRoom, HELD_RECEIPTS_PER_TICK));
     } catch (err) {
-      log.error("receipt.release_error", { error: errorText(err) });
+      log.error("receipt.release_error", errorFields(err));
     }
   }
 
@@ -194,7 +194,7 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
   try {
     await notifyPublisher(env, rest, contacts);
   } catch (err) {
-    log.error("notify.error", { error: errorText(err) });
+    log.error("notify.error", errorFields(err));
   }
 
   // What the tick's emails said about whether email is getting out (SPEC §13), in one
@@ -211,7 +211,7 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
     try {
       await refreshProviderAccount(env, config, rest, now);
     } catch (err) {
-      log.error("provider.account_error", { error: errorText(err) });
+      log.error("provider.account_error", errorFields(err));
     }
   }
 
@@ -236,6 +236,6 @@ async function safeRun(
     contacts.add("list", runOutcome(run.accepted, run.refusal), run.answeredAt ?? Date.now());
   } catch (err) {
     // One bad send must not stop the sweep; it will be retried next tick.
-    log.error("send.error", { sendId, error: errorText(err) });
+    log.error("send.error", { sendId, ...errorFields(err) });
   }
 }

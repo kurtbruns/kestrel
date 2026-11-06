@@ -28,7 +28,7 @@ import {
 import { refusalAdvice } from "../../shared/sends";
 import { readSending, recordAccepted, recordRefusal, type SendingRow } from "../db/sending";
 import type { Config } from "../env";
-import { errorText, log } from "../lib/log";
+import { errorFields, log } from "../lib/log";
 import type { BatchHalt, SendBatchResult } from "../providers/types";
 
 /** What one answer from the provider says about the account: it took an email, it refuses
@@ -112,7 +112,7 @@ export async function noteContact(
       tell,
     );
   } catch (err) {
-    log.error("sending.record_failed", { purpose, error: errorText(err) });
+    log.error("sending.record_failed", { purpose, ...errorFields(err) });
   }
 }
 

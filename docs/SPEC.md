@@ -567,6 +567,8 @@ Beside the record, the app keeps a **log** that explains it. The record decides 
 
 The level carries the meaning: **error** for anything that threatens a send going out at most once to each person (I4), or a send that should have gone out and has not (the missed fire time and the send in flight too long, above), and for any failure nothing else handled; **warn** for a halt or a refusal the app is waiting out, and for a person's manual call on recipients whose fate was unknown (Resolve, above); **info** for the ordinary lifecycle. Every event and its level are listed once, in the code that writes the log, so a line can't name an event that isn't listed or carry another level.
 
+A failure the sweep catches names where it came from: its line carries the statement that failed, through the same scrubbing as every other field, so what the failure could have caused can be read from the line alone.
+
 ## 13. Setting up the email provider
 
 Setting up the email provider takes a new instance from deployed to open for readers, in phases. The phase isn't stored or reported on its own: it follows from two answers the app reports, whether email is getting out and what the provider's account says of itself (The phases, below), and the editor and Claude read the same two. Three things hold through every phase. A reader is never told a confirmation is on its way when none can go (§7). Every phase is read from evidence the app has: an email the provider took or refused, or what the provider's account says of itself. Nothing ticks a phase by hand. And every phase but the last has one act that moves it on, which the admin surface names. How to take each step is the setup guide's (§11); this section says what the app does at each one.

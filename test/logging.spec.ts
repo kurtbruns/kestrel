@@ -2,8 +2,9 @@ import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test"
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import * as sends from "../src/db/sends";
+import type { AppEnv } from "../src/env";
 import worker from "../src/index";
-import { log, scrub, withRun } from "../src/lib/log";
+import { errorStack, log, scrub, withRun } from "../src/lib/log";
 import { STUCK_THRESHOLD_MS } from "../src/lib/time";
 import * as providers from "../src/providers";
 import { clearFakeOutbox } from "../src/providers/fake";
@@ -13,6 +14,8 @@ import { sweep } from "../src/send/sweep";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { BatchProvider } from "./support/batching";
 import { toNextTick } from "./support/clock";
+import { failingD1 } from "./support/d1_failure";
+import { SES_DEPLOY } from "./support/deploy";
 import {
   dueSend,
   frozenSend,
@@ -21,7 +24,7 @@ import {
   sendingWorks,
 } from "./support/fixtures";
 import { allowErrorLogs, type LoggedLine, logged } from "./support/log";
-import { fetchWith } from "./support/worker_env";
+import { fetchWith, withVars } from "./support/worker_env";
 
 // The structured log (SPEC §12): every line one JSON object, a send's lifecycle in order
 // under its sendId, the lines of a tick or a request under one run, and never a
@@ -64,6 +67,14 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
+
+/** A failure the app doesn't recognize as anything in particular. */
+const REFUSED = "D1_ERROR: the database refused the query";
+
+/** The suite's env under `vars`, on a database whose statements matching `sql` fail. */
+function failingOn(sql: RegExp, message: string, vars: Record<string, string> = {}): AppEnv {
+  return { ...withVars(vars), DB: failingD1(env.DB, sql, message) };
+}
 
 describe("the send lifecycle in the log", () => {
   it("a send through the sweep logs fired, batch, completed in order under its sendId, and no address", async () => {
@@ -298,6 +309,66 @@ describe("the send lifecycle in the log", () => {
       expect.objectContaining({ event: "send.scheduled", sendId: send.id, postId: send.post_id }),
       expect.objectContaining({ event: "send.canceled", sendId: send.id, postId: send.post_id }),
     ]);
+  });
+});
+
+describe("a database failure the sweep catches names the statement that failed (SPEC §12)", () => {
+  it.each([
+    { event: "sweep.error", vars: {}, sql: /status = 'scheduled'/, statement: "dueSends" },
+    {
+      event: "notify.error",
+      vars: {},
+      sql: /INSERT OR IGNORE INTO notifications/,
+      statement: "recordNotifications",
+    },
+    {
+      event: "provider.account_error",
+      vars: SES_DEPLOY,
+      sql: /FROM provider_account/,
+      statement: "readProviderAccount",
+    },
+  ])("$event carries a stack through $statement", async ({ event, vars, sql, statement }) => {
+    allowErrorLogs(event);
+
+    await sweep(failingOn(sql, REFUSED, vars)).catch(() => undefined);
+
+    const line = lines().find((l) => l.event === event)!;
+    expect(line.error).toBe(REFUSED);
+    expect(line.stack).toContain(statement);
+  });
+
+  it("send.error carries a stack too, since a send's own failure is the one most worth placing", async () => {
+    allowErrorLogs("send.error");
+    await seedConfirmed(AUDIENCE);
+    const send = await dueSend();
+
+    await sweep(failingOn(/UPDATE deliveries SET status = 'dispatched'/, REFUSED));
+
+    const line = lines().find((l) => l.event === "send.error")!;
+    expect(line.sendId).toBe(send.id);
+    expect(line.stack).toContain("dispatchFresh");
+  });
+
+  it("scrubs the stack as it scrubs any field: no address, token, or credential gets through (§9)", async () => {
+    allowErrorLogs("notify.error");
+    const words =
+      "D1_ERROR: bad row for ada@example.com at /unsubscribe?token=uns-abc123 with Credential=AKIAIOSFODNN7EXAMPLE/20261016/us-east-1/ses/aws4_request";
+
+    await sweep(failingOn(/INSERT OR IGNORE INTO notifications/, words));
+
+    const line = lines().find((l) => l.event === "notify.error")!;
+    expect(line.stack).toContain("D1_ERROR: bad row for …@example.com");
+    expect(line.stack).toContain("recordNotifications");
+    for (const spy of spies) {
+      for (const call of spy.mock.calls) {
+        expect(call.map(String).join(" ")).not.toMatch(/ada@|uns-abc123|AKIAIOSFODNN7EXAMPLE/);
+      }
+    }
+  });
+
+  it("a thrown value with no stack logs the line without the field", () => {
+    expect(errorStack("not an error")).toBeUndefined();
+    expect(errorStack(new Error("an error"))).toContain("an error");
   });
 });
 
