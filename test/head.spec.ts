@@ -1,9 +1,9 @@
 import { createExecutionContext, SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppEnv } from "../src/env";
 import { type Handler, type RouteDef, Router } from "../src/router";
-import { resetDatabase, seedConfirmed } from "./support/fixtures";
+import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, base, readJson } from "./support/http";
 
 // A HEAD is answered as the GET for its path, without the body (docs/API.md, Requests): what an
@@ -12,19 +12,15 @@ import { AUTH, base, readJson } from "./support/http";
 const IMAGE_KEY = "head-spec/cover.png";
 const IMAGE_BYTES = new Uint8Array(1234);
 
-/** Ask for a path both ways and hold the HEAD to the GET: its status, every header, and the
- *  length of the body it leaves out. Returns the HEAD. */
+/** Ask for a path both ways and hold the HEAD to the GET: its status and every header, with no
+ *  body. Returns the HEAD. */
 async function expectHeadLikeGet(path: string, headers: HeadersInit = {}): Promise<Response> {
   const get = await SELF.fetch(`${base}${path}`, { headers });
-  const length = (await get.arrayBuffer()).byteLength;
   const head = await SELF.fetch(`${base}${path}`, { method: "HEAD", headers });
 
   expect(head.status).toBe(get.status);
   expect(head.body).toBeNull();
-  expect(head.headers.get("content-length")).toBe(String(length));
-  const without = new Headers(head.headers);
-  without.delete("content-length");
-  expect(Object.fromEntries(without)).toEqual(Object.fromEntries(get.headers));
+  expect(Object.fromEntries(head.headers)).toEqual(Object.fromEntries(get.headers));
   return head;
 }
 
@@ -61,6 +57,10 @@ describe("HEAD", () => {
     await env.MEDIA.put(IMAGE_KEY, IMAGE_BYTES, { httpMetadata: { contentType: "image/png" } });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("answers /health as GET does, so a monitor sees the instance up", async () => {
     const head = await expectHeadLikeGet("/health");
     expect(head.status).toBe(200);
@@ -83,6 +83,7 @@ describe("HEAD", () => {
   it("answers an image that isn't there as GET does", async () => {
     const head = await expectHeadLikeGet("/media/head-spec/none.png");
     expect(head.status).toBe(404);
+    expect(head.headers.get("content-length")).toBe(null);
   });
 
   it("is refused on an admin route without sign-in, showing nothing behind the gate", async () => {
@@ -101,6 +102,19 @@ describe("HEAD", () => {
   it("is held to what the route declares, as GET is", async () => {
     const head = await expectHeadLikeGet("/api/posts?nonsense=1", AUTH);
     expect(head.status).toBe(400);
+  });
+
+  it("answers 304 as GET does when the client's copy is current", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const send = await frozenSend(Date.now() + 2_000);
+    const path = `/api/sends/${send.id}`;
+    const etag = (await SELF.fetch(`${base}${path}`, { headers: AUTH })).headers.get("etag") ?? "";
+
+    const head = await expectHeadLikeGet(path, { ...AUTH, "if-none-match": etag });
+
+    expect(head.status).toBe(304);
+    expect(head.headers.get("etag")).toBe(etag);
+    expect(head.headers.get("content-length")).toBe(null);
   });
 
   it("answers a path with no route as GET does", async () => {
@@ -156,17 +170,46 @@ describe("HEAD", () => {
     expect(seen).toBe("HEAD");
     expect(head.status).toBe(200);
     expect(head.body).toBeNull();
-    expect(head.headers.get("content-length")).toBe("5");
   });
 
-  it("keeps a redirect's address and states no length for a GET with no body", async () => {
+  it("never reads the GET's body, so a large or endless one costs it nothing", async () => {
+    let pulled = 0;
+    let canceled = false;
+    // Finite only so that a HEAD reading it fails these assertions rather than hanging the run.
+    const stream = new ReadableStream(
+      {
+        pull(controller) {
+          pulled += 1;
+          if (pulled === 3) {
+            controller.close();
+          } else {
+            controller.enqueue(new Uint8Array(1024));
+          }
+        },
+        cancel() {
+          canceled = true;
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    const { handle } = routerWith("GET", () => new Response(stream));
+
+    const head = await handle("HEAD");
+
+    expect(head.status).toBe(200);
+    expect(head.body).toBeNull();
+    expect(head.headers.get("content-length")).toBe(null);
+    expect(pulled).toBe(0);
+    expect(canceled).toBe(true);
+  });
+
+  it("keeps a redirect's address", async () => {
     const { handle } = routerWith("GET", () => Response.redirect(`${base}/elsewhere`, 302));
 
     const head = await handle("HEAD");
 
     expect(head.status).toBe(302);
     expect(head.headers.get("location")).toBe(`${base}/elsewhere`);
-    expect(head.headers.get("content-length")).toBe(null);
   });
 
   it("leaves another method's answer and body as they are", async () => {

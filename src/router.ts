@@ -349,13 +349,11 @@ export class Router {
       return this.dispatch(req, req.method, env, ctx);
     }
     const res = await this.dispatch(req, "GET", env, ctx);
-    const head = new Response(null, res);
-    // A null body has no length for the runtime to state, so state the one the GET's body has.
-    // Every body but an image's is already in memory, and an image's is capped.
-    if (res.body) {
-      head.headers.set("content-length", String((await res.arrayBuffer()).byteLength));
-    }
-    return head;
+    // Never read: a body can be large, or never end. So a length is stated only where the GET's
+    // response already states one. RFC 9110 lets a HEAD leave it out, but not state one other
+    // than what the GET would send, as a count of the bytes could behind compression.
+    await res.body?.cancel();
+    return new Response(null, res);
   }
 
   private async dispatch(

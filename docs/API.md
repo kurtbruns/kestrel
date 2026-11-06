@@ -44,7 +44,9 @@ Every JSON field name and every enum value is snake_case: `fire_at`, `email_only
 
 ## Requests
 
-**A read is a GET.** A route that changes nothing is a GET, whatever it answers, so a client, a proxy, or a person can tell from the method alone that it is safe to send, repeat, or prefetch. Describing a post's rendered email is a read, at the preview's own path plus `.json`, beside the page itself. The one exception is a read whose input is a file, which doesn't fit in a URL: planning an import writes nothing, and is a `POST` that takes the list as its body. A `HEAD` to any path answers as its `GET` does, gate included, with no body, so no route declares one.
+**A read is a GET.** A route that changes nothing is a GET, whatever it answers, so a client, a proxy, or a person can tell from the method alone that it is safe to send, repeat, or prefetch. Describing a post's rendered email is a read, at the preview's own path plus `.json`, beside the page itself. The one exception is a read whose input is a file, which doesn't fit in a URL: planning an import writes nothing, and is a `POST` that takes the list as its body.
+
+A `HEAD` to any path answers as its `GET` does, gate included, with no body, so no route declares one.
 
 **An address goes in the body or the query, never the path.** A path names a resource, and is recorded as that resource's name wherever requests are counted or traced, so a subscriber's address is never part of one: a subscriber is named by its id, and lifting a suppression takes the address in the body. A query string may carry an address, and the lookup by address (`?email=`) and the searches (`?search=`) take one there, since a read has no body. The request URLs Cloudflare records stay in the operator's own account for a few days, visible only to people who can already read the list, and an operator who exports their logs is responsible for what that pipeline keeps. Kestrel's part is what it writes itself, and its log lines cut an address down to its domain (`src/lib/log.ts`).
 

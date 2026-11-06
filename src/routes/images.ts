@@ -197,6 +197,8 @@ export async function serveMedia(c: RequestContext): Promise<Response> {
   obj.writeHttpMetadata(headers);
   headers.set("etag", obj.httpEtag);
   headers.set("cache-control", "public, max-age=3600");
+  // Stated here because storage knows it for free, so a HEAD, which never reads the body, has it.
+  headers.set("content-length", String(obj.size));
   // Harden against a crafted SVG executing script on direct navigation:
   // never sniff a declared type away, and sandbox the response so scripts and
   // same-origin access are disabled when the bytes are rendered as a document.
