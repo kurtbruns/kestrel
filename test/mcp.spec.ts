@@ -1,6 +1,6 @@
 import { createExecutionContext, SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import type { McpTool } from "../shared/mcp";
 import { createRouter } from "../src/app";
 import { type AppEnv, getConfig } from "../src/env";
@@ -1036,6 +1036,196 @@ describe("each tool call is one line, a failed one with its refusal code (SPEC �
         tool: "schedule_send",
         error: true,
         code: "fire_at_too_soon",
+      },
+    ]);
+  });
+});
+
+describe("each initialize is one line of what the client says it is (SPEC §12)", () => {
+  let spies: MockInstance[] = [];
+  beforeEach(() => {
+    spies = [vi.spyOn(console, "log"), vi.spyOn(console, "warn"), vi.spyOn(console, "error")];
+  });
+
+  const initLines = () => logged(...spies).filter((l) => l.event === "mcp.initialize");
+
+  const LINE = {
+    event: "mcp.initialize",
+    level: "info",
+    run: expect.any(String),
+    principal: "human",
+    protocolVersion: "2025-11-25",
+  };
+
+  /** An initialize with `params`: its result, and the one line it logged. */
+  async function initialize(params: unknown) {
+    const res = await rpc("initialize", params, await adminAuth(PERSON));
+    expect(res.status).toBe(200);
+    const lines = initLines();
+    expect(lines.length).toBe(1);
+    return { result: (await readJson(res)).result, line: lines[0]! };
+  }
+
+  /** The answer to an initialize that sends nothing, which every other one must match. Its own
+   *  line is cleared, so a spec reads only the line of the initialize it is about. */
+  async function plainAnswer(): Promise<unknown> {
+    const { result } = await initialize(undefined);
+    for (const spy of spies) {
+      spy.mockClear();
+    }
+    return result;
+  }
+
+  /** `value` in all four fields a client types, each of which takes the one rule. */
+  const everyField = (value: unknown) => ({
+    protocolVersion: value,
+    clientInfo: { name: value, title: value, version: value },
+  });
+
+  it("logs what a client sent, the principal's kind, and the protocol asked for and agreed", async () => {
+    const { line } = await initialize({
+      protocolVersion: "2025-06-18",
+      clientInfo: { name: "claude-ai", title: "Claude", version: "0.1.0" },
+    });
+    expect(line).toEqual({
+      ...LINE,
+      protocolVersion: "2025-06-18",
+      protocolVersionAsked: "2025-06-18",
+      clientInfoName: "claude-ai",
+      clientInfoTitle: "Claude",
+      clientInfoVersion: "0.1.0",
+    });
+  });
+
+  it("logs one line for each initialize, none for any other message", async () => {
+    const auth = await adminAuth(PERSON);
+    await rpc("initialize", {}, auth);
+    await rpc("ping", {}, auth);
+    await rpc("tools/list", {}, auth);
+    await rpc("initialize", {}, auth);
+    expect(initLines()).toEqual([LINE, LINE]);
+  });
+
+  it.each([
+    "claude-ai",
+    "Claude Desktop",
+    "2.1.172",
+    "2026-07-28",
+    "claude_code",
+    "7",
+    "a".repeat(40),
+  ])("logs %s whole, and answers the same", async (value) => {
+    const plain = await plainAnswer();
+    const { result, line } = await initialize(everyField(value));
+    expect(line).toEqual({
+      ...LINE,
+      protocolVersionAsked: value,
+      clientInfoName: value,
+      clientInfoTitle: value,
+      clientInfoVersion: value,
+    });
+    expect(result).toEqual(plain);
+  });
+
+  it.each([
+    ["an address", "jane.doe@example.com"],
+    ["an encoded address", "jane.doe%40example.com"],
+    ["a link with a query", "https://x.example/mcp?access_token=abc123"],
+    ["a quoted address", '"jane doe"@example.com'],
+    ["a key and its value", "key=s3cr3t"],
+    ["a signed token", `${"aB3".repeat(12)}.${"cD4".repeat(12)}`],
+    ["a reader's token", "aB3".repeat(21)],
+    ["text one character too long", "a".repeat(41)],
+    ["a very long string", "a".repeat(100_000)],
+    ["non-ASCII text", "Клод"],
+    ["an invisible character", "claude\u200b"],
+    ["an empty string", ""],
+    ["a blank string", "   "],
+    ["text not starting with a letter or digit", "-claude"],
+    ["text ending in a newline", "claude\n"],
+    ["a log line", 'x"}\n{"event":"send.wedged","level":"error'],
+  ])("logs the marker and none of %s, and answers the same", async (_what, value) => {
+    const plain = await plainAnswer();
+    const { result, line } = await initialize(everyField(value));
+    expect(line).toEqual({
+      ...LINE,
+      protocolVersionAsked: "(other)",
+      clientInfoName: "(other)",
+      clientInfoTitle: "(other)",
+      clientInfoVersion: "(other)",
+    });
+    expect(result).toEqual(plain);
+  });
+
+  it.each([
+    ["a number", 7],
+    ["a boolean", true],
+    ["null", null],
+    ["an object", { major: 1 }],
+    ["an array", ["claude"]],
+  ])("logs no field for %s, and answers the same", async (_what, value) => {
+    const plain = await plainAnswer();
+    const { result, line } = await initialize(everyField(value));
+    expect(line).toEqual(LINE);
+    expect(result).toEqual(plain);
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["null", null],
+    ["a string", "claude"],
+    ["an array", ["claude", "1"]],
+    ["empty", {}],
+  ])(
+    "logs no client fields when clientInfo is %s, and answers the same",
+    async (_what, clientInfo) => {
+      const plain = await plainAnswer();
+      const { result, line } = await initialize({ clientInfo });
+      expect(line).toEqual(LINE);
+      expect(result).toEqual(plain);
+    },
+  );
+
+  it("logs the protocol version a client asked for beside the one the answer agreed", async () => {
+    const { result, line } = await initialize({ protocolVersion: "2026-07-28" });
+    expect(result.protocolVersion).toBe("2025-11-25");
+    expect(line).toEqual({ ...LINE, protocolVersionAsked: "2026-07-28" });
+  });
+
+  it("names a person's kind and not the person, nor the client their request named", async () => {
+    const { vars, assertion } = await accessDeployment();
+    const headers = {
+      ...(await assertion({ email: "you@example.com" })),
+      "Kestrel-Client": "editor",
+    };
+    await rpc("initialize", { clientInfo: { name: "x" } }, headers, (init) =>
+      fetchWith(vars, "/api/mcp", init),
+    );
+    expect(initLines()).toEqual([{ ...LINE, clientInfoName: "x" }]);
+  });
+
+  it("names a service token's kind and not the token", async () => {
+    const { vars, assertion } = await accessDeployment();
+    const headers = await assertion({ common_name: "abc123.access" });
+    await rpc("initialize", { clientInfo: { name: "x" } }, headers, (init) =>
+      fetchWith(vars, "/api/mcp", init),
+    );
+    expect(initLines()).toEqual([{ ...LINE, principal: "service", clientInfoName: "x" }]);
+  });
+
+  it("changes nothing about who acted: a call after it still reads as Claude, in its one line", async () => {
+    const auth = await adminAuth(PERSON);
+    await rpc("initialize", { clientInfo: { name: "editor", version: "1" } }, auth);
+    const { post } = await callOk("save_draft", { subject: "After connecting" });
+    expect(post.author_client).toBe("claude");
+    expect(logged(...spies).filter((l) => l.event.startsWith("mcp."))).toEqual([
+      { ...LINE, clientInfoName: "editor", clientInfoVersion: "1" },
+      {
+        event: "mcp.call",
+        level: "info",
+        run: expect.any(String),
+        tool: "save_draft",
+        error: false,
       },
     ]);
   });

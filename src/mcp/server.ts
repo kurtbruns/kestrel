@@ -168,8 +168,10 @@ async function dispatch(
   switch (method) {
     case "initialize": {
       const asked = typeof params.protocolVersion === "string" ? params.protocolVersion : "";
+      const protocolVersion = SUPPORTED.includes(asked) ? asked : MCP_PROTOCOL_VERSIONS[0];
+      logInitialize(c, protocolVersion, params);
       return result(id, {
-        protocolVersion: SUPPORTED.includes(asked) ? asked : MCP_PROTOCOL_VERSIONS[0],
+        protocolVersion,
         capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
         serverInfo: { name: "kestrel", title: "Kestrel", version: buildInfo().version },
         instructions: MCP_INSTRUCTIONS,
@@ -202,6 +204,47 @@ async function dispatch(
         `${method} isn't a method this server takes`,
       );
   }
+}
+
+// What text a client typed must be to reach the log whole: a plain name or version, so an address,
+// a link, a quoted string, or a long token never matches, and nothing has to look for them. A short
+// plain word that happens to be private still reads as a name, which no rule can tell apart.
+const PLAIN_TEXT = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/;
+
+// Stands in for text that isn't plain, none of which is logged. The pattern can't match it, so a
+// client can't send it as its own name.
+const NOT_PLAIN = "(other)";
+
+/** Text a client typed as its line carries it; absent when it isn't text at all. */
+function clientText(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  return PLAIN_TEXT.test(value) ? value : NOT_PLAIN;
+}
+
+/**
+ * An `initialize`'s one line (SPEC §12): what the client says it is and the version it asks for,
+ * self-reported and granting nothing, so the answer never depends on it. The kind of principal
+ * only, not `whoActed`: that `client` is the name a request gives in its header, and on this line
+ * it would read as the connector's client, which `clientInfo` is the evidence about. This server
+ * keeps no session, so this line is about this one message: nothing joins it to the calls that
+ * follow, which log on their own and carry none of it.
+ */
+function logInitialize(
+  c: RequestContext,
+  protocolVersion: string,
+  params: Record<string, unknown>,
+): void {
+  const info = isObject(params.clientInfo) ? params.clientInfo : {};
+  log.info("mcp.initialize", {
+    principal: c.principal?.kind,
+    protocolVersion,
+    protocolVersionAsked: clientText(params.protocolVersion),
+    clientInfoName: clientText(info.name),
+    clientInfoTitle: clientText(info.title),
+    clientInfoVersion: clientText(info.version),
+  });
 }
 
 /** The JSON-RPC code MCP gives a resource that isn't there. */
