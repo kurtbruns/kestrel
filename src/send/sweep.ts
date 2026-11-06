@@ -95,13 +95,13 @@ export async function sweep(env: AppEnv): Promise<void> {
 }
 
 /**
- * Log a database stall that interrupted the tick outside a send, and answer whether `err` was
- * one, so the caller logs anything else at its own level. Nothing is tried again: the next tick
- * does the work, and a second try here isn't safe, since a write may have committed with only
- * its answer lost (SPEC §12). `safeRun` doesn't come here, because a stall during a send can
- * leave recipients waiting on Resolve, which stays an error.
+ * Log a database stall in work the next tick does again, and answer whether `err` was one, so
+ * the caller logs anything else at its own level. Nothing is tried again here: the next tick
+ * starts from the record, while a retry on the spot could repeat a write that committed with
+ * only its answer lost (SPEC §12). `safeRun` doesn't come here, because a stall during a send
+ * can leave recipients waiting on Resolve, which stays an error.
  */
-function loggedStall(during: "sweep" | "notify" | "account", err: unknown): boolean {
+function loggedStall(during: "sweep" | "receipts" | "notify" | "account", err: unknown): boolean {
   if (!isD1Stall(err)) {
     return false;
   }
@@ -187,7 +187,9 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
     try {
       await applyHeldReceipts(db, now, Math.min(heldRoom, HELD_RECEIPTS_PER_TICK));
     } catch (err) {
-      log.error("receipt.release_error", errorFields(err));
+      if (!loggedStall("receipts", err)) {
+        log.error("receipt.release_error", errorFields(err));
+      }
     }
   }
 

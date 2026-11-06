@@ -112,6 +112,8 @@ export async function noteContact(
       tell,
     );
   } catch (err) {
+    // An error even on a database stall (SPEC §12): nothing asks the provider again, so this
+    // answer is gone, and email can read wrong and signups stay wrong until another email.
     log.error("sending.record_failed", { purpose, ...errorFields(err) });
   }
 }

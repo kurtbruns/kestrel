@@ -21,7 +21,9 @@ import {
   dueSend,
   frozenSend,
   resetDatabase,
+  SEEDED_SEND_ID,
   seedConfirmed,
+  seedDelivery,
   sendingWorks,
 } from "./support/fixtures";
 import { allowErrorLogs, type LoggedLine, logged } from "./support/log";
@@ -411,7 +413,7 @@ describe("a database failure the sweep catches names the statement that failed (
   });
 });
 
-describe("a database stall the next tick retries is a warning, except during a send (SPEC §12)", () => {
+describe("a database stall the next tick makes up for is a warning (SPEC §12)", () => {
   const PLACES = [
     {
       during: "sweep",
@@ -420,6 +422,14 @@ describe("a database stall the next tick retries is a warning, except during a s
       sql: /status = 'scheduled'/,
       statement: "dueSends",
       ok: false,
+    },
+    {
+      during: "receipts",
+      event: "receipt.release_error",
+      vars: {},
+      sql: /FROM held_receipts h/,
+      statement: "heldReceipts",
+      ok: true,
     },
     {
       during: "notify",
@@ -502,7 +512,54 @@ describe("a database stall the next tick retries is a warning, except during a s
     expect(lines().filter((l) => l.event === "d1.unavailable")).toEqual([]);
   });
 
-  it("the next tick is the retry: a send a stall kept from firing goes out once (I4)", async () => {
+  it("a stall recording whether email is getting out stays an error: nothing asks the provider again", async () => {
+    allowErrorLogs("sending.record_failed");
+    await seedConfirmed(AUDIENCE);
+    const send = await dueSend();
+
+    await expect(sweep(failingOn(/INSERT INTO sending/, STALL))).resolves.toBeUndefined();
+
+    expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
+    expect(lines().find((l) => l.event === "sending.record_failed")).toMatchObject({
+      level: "error",
+      error: STALL,
+    });
+    expect(lines().filter((l) => l.event === "d1.unavailable")).toEqual([]);
+  });
+
+  it("a held receipt a stall interrupted lands once on the next tick, with its counts unmoved", async () => {
+    await seedDelivery("held@example.com", null);
+    await env.DB.prepare("UPDATE deliveries SET status = 'dispatched'").run();
+    await applyDeliveryEvents(env.DB, [
+      { type: "bounced", providerId: "msg-lost", email: "held@example.com", hard: false },
+    ]);
+    // Resolve's "assume sent", so the pass applies the receipt.
+    await env.DB.prepare("UPDATE deliveries SET status = 'accepted'").run();
+    const held = () => env.DB.prepare("SELECT COUNT(*) AS n FROM held_receipts").first<number>("n");
+    const events = () => env.DB.prepare("SELECT event, bounce_kind FROM deliveries").all();
+    const counters = () => sends.getSend(env.DB, SEEDED_SEND_ID);
+    expect(await held()).toBe(1);
+
+    // The worst moment: the receipt landed, and the write releasing it never answered.
+    await sweep(failingOn(/DELETE FROM held_receipts/, STALL));
+
+    expect(lines().find((l) => l.event === "d1.unavailable")).toMatchObject({
+      during: "receipts",
+      level: "warn",
+    });
+    expect(await held()).toBe(1);
+    const landed = (await events()).results;
+    expect(landed).toEqual([{ event: "bounced", bounce_kind: "soft" }]);
+    const before = await counters();
+
+    await sweep(env);
+
+    expect(await held()).toBe(0);
+    expect((await events()).results).toEqual(landed);
+    expect(await counters()).toEqual(before);
+  });
+
+  it("a stall that keeps a send from firing leaves it scheduled, and the next tick fires it", async () => {
     await seedConfirmed(AUDIENCE);
     const send = await dueSend();
 
