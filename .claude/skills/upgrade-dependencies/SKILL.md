@@ -5,20 +5,22 @@ description: Checks and upgrades Kestrel's npm dependencies and clears security 
 
 # Upgrade dependencies
 
-Look first and change nothing until the user has said which packages move, unless their request already named them. A question such as "are we up to date?" ends at the report in step 2, with no test run and no file changed.
+Look first and change nothing until the user has said which packages move, unless their request already named them. A question such as "are we up to date?" ends at the report in step 2, with no test run and no tracked file changed.
 
 ```
-- [ ] 1. Each candidate looked at and sorted
+- [ ] 1. npm version checked, each candidate looked at and sorted
 - [ ] 2. Reported, and the user said go
-- [ ] 3. npm version checked, baseline recorded
-- [ ] 4. Applied
+- [ ] 3. Baseline recorded
+- [ ] 4. Applied, with any css-inline comparison around the install
 - [ ] 5. What moved reviewed
 - [ ] 6. Gate run on the final tree
 ```
 
 ## 1. Look at each candidate
 
-These only read. If `node_modules` is missing, run `npm ci` first.
+Run `npm -v` first. Install nothing below npm 12, not even `npm ci`. npm 10, which CI's Node 22 bundles, was tried with `--min-release-age` and installed a too-new version without a word. Before npm 12, an install script not listed under `allowScripts` still runs. If the version is lower, the commands below still answer, so report that and stop before any install.
+
+These commands only read. If `node_modules` is missing, run `npm ci` first, which writes only ignored files.
 
 ```bash
 node .claude/skills/upgrade-dependencies/scripts/candidates.mjs
@@ -39,23 +41,16 @@ npm audit --omit=dev
 **Sort each one:**
 
 - **Routine:** the change stays in `package.json` and the lockfile, and nothing below applies.
-- **Reaches the email:** `marked` and `@css-inline/css-inline-wasm` shape the render path (I5), so a bump can change what subscribers get with every test green. Each gets its own pull request, a comparison (below), and a changelog line. A difference may be a welcome fix, so report each one instead of treating it as failure. Sent and scheduled posts keep their frozen render (I3), so only later renders change.
+- **Reaches the email:** `marked` and `@css-inline/css-inline-wasm` shape the render path (I5), so a bump can change what subscribers get with every test green. Each gets its own pull request, a comparison, and a changelog line. A difference may be a welcome fix, so report each one instead of treating it as failure. Sent and scheduled posts keep their frozen render (I3), so only later renders change.
 - **A project:** a new major, a change that reaches config or source, or a formatter or linter that rewrites the tree. Each gets its own pull request, and the release notes come first. A Biome version of any size can bring new formatting and warnings, so report it as unknown until tried. After the go-ahead, try it with step 6's `npm run check` and `git status`.
 
-**Comparing `marked`.** This is the parser alone. `src/render/markdown.ts` adds its own image renderer and warnings, which only the render specs exercise.
+**Comparing `marked`.** Run this now, since it installs nothing in the project. It's the parser alone: `src/render/markdown.ts` adds its own image renderer and warnings, which only the render specs exercise.
 
 ```bash
 node .claude/skills/upgrade-dependencies/scripts/compare-render.mjs <old> <new> docs template demo/posts README.md CHANGELOG.md
 ```
 
-**Comparing `css-inline`.** Save a draft's email before and after, restarting the dev server between them, then diff the two files. Use a draft, since a sent or scheduled post returns its frozen copy. `preview.json` won't do, since it carries no HTML.
-
-```bash
-npm run dev                                             # in its own terminal
-npm run seed                                            # resets the local database
-node bin/kestrel.mjs api --local GET /api/posts         # the id of the post with the slug try-editing-this-draft
-node bin/kestrel.mjs api --local GET /api/posts/<id>/preview > <scratchpad>/before.html
-```
+`css-inline`'s comparison needs the package installed, so it waits for step 4.
 
 **Packages that move together:**
 
@@ -68,9 +63,7 @@ node bin/kestrel.mjs api --local GET /api/posts/<id>/preview > <scratchpad>/befo
 
 Give each package's from and to, its publish age, what its notes and advisories mean here, and how it's sorted. List what you'd leave out and why. Then wait, unless the request already covers it.
 
-## 3. Check npm and record a baseline
-
-Run `npm -v`, which has to be 12 or later. Older npm, including what CI's Node 22 bundles, silently ignores `--min-release-age` and runs every install script, so stop and tell the user rather than installing with it.
+## 3. Record a baseline
 
 On a clean tree, run `npm test` and note the file and test counts. If it's red or the tree is dirty, stop and say so. A later pass is "the same counts or more", since a skipped suite is also green.
 
@@ -82,6 +75,17 @@ Use one pull request per story, so a change to the email can be reverted without
 npm install --min-release-age=3 <pkg>@<version>
 npm install --min-release-age=3 --save-exact -D <pkg>@<version>   # for a package pinned exactly in package.json
 ```
+
+**Comparing `css-inline`.** Save a draft's email before installing, and again after. Use a draft, since a sent or scheduled post returns its frozen copy. `preview.json` won't do, since it carries no HTML. A fresh worktree needs `cp .dev.vars.example .dev.vars` and `npm run migrate:local` first.
+
+```bash
+npm run dev                                             # in its own terminal
+npm run seed                                            # resets the local database, so run it once
+node bin/kestrel.mjs api --local GET /api/posts         # the id of the post with the slug try-editing-this-draft
+node bin/kestrel.mjs api --local GET /api/posts/<id>/preview > <scratchpad>/before.html
+```
+
+Install the package and restart `npm run dev`. Then run the last command again into `after.html`, without seeding, and diff the two files.
 
 Never delete `package-lock.json`, which re-resolves the whole tree unreviewed. Never run `npm audit fix --force`: it can take a major without a look, and it can downgrade a package.
 

@@ -29,12 +29,40 @@ function packageName(path, entry) {
   return entry.name ?? path.split("node_modules/").pop();
 }
 
-/** The lock's real packages: its root, its links, and anything bundled inside a tarball hold no download of their own. */
-function downloaded(packages) {
-  return Object.entries(packages).filter(([path, entry]) => path && !entry.link && !entry.inBundle);
+/**
+ * Whether a link or bundled entry really holds no download of its own. The flag alone can't
+ * decide, since npm still fetches a flagged entry that has an address, so it has to agree with
+ * the rest of the lockfile: a link's target has an entry, and a bundled package sits under one
+ * that declares bundling.
+ */
+function holdsNoDownload(packages, path, entry) {
+  if (entry.link) {
+    return Boolean(packages[entry.resolved]);
+  }
+  if (!entry.inBundle) {
+    return false;
+  }
+  for (let cut = path.lastIndexOf("/node_modules/"); cut !== -1; ) {
+    const bundled = packages[path.slice(0, cut)]?.bundleDependencies;
+    if (bundled === true || bundled?.length) {
+      return true;
+    }
+    cut = path.lastIndexOf("/node_modules/", cut - 1);
+  }
+  return false;
 }
 
-/** Each package's name mapped to its sorted versions, with what each name@version downloads, and the names running install scripts. */
+function downloaded(packages) {
+  return Object.entries(packages).filter(
+    ([path, entry]) => path && !holdsNoDownload(packages, path, entry),
+  );
+}
+
+function signature(entry) {
+  return `${entry.integrity} ${entry.resolved}`;
+}
+
+/** Each package's name mapped to its sorted versions, every copy's download by name@version, and the names running install scripts. */
 function index(packages) {
   const versions = new Map();
   const downloads = new Map();
@@ -42,8 +70,9 @@ function index(packages) {
   const platform = new Set();
   for (const [path, entry] of downloaded(packages)) {
     const name = packageName(path, entry);
+    const id = `${name}@${entry.version}`;
     versions.set(name, [...(versions.get(name) ?? []), entry.version].sort());
-    downloads.set(`${name}@${entry.version}`, entry);
+    downloads.set(id, (downloads.get(id) ?? new Set()).add(signature(entry)));
     if (entry.hasInstallScript) {
       scripts.add(name);
     }
@@ -56,6 +85,15 @@ function index(packages) {
 
 const before = index(base);
 const after = index(next);
+
+// Every platform binary some package asks for at that exact version.
+const askedFor = new Set();
+for (const [, entry] of downloaded(next)) {
+  for (const [dependency, wanted] of Object.entries(entry.optionalDependencies ?? {})) {
+    askedFor.add(`${dependency}@${wanted}`);
+  }
+}
+
 let platformMoves = 0;
 console.log(`comparing with ${ref}`);
 console.log(`entries: ${Object.keys(base).length} -> ${Object.keys(next).length}`);
@@ -65,9 +103,10 @@ for (const name of [...new Set([...before.versions.keys(), ...after.versions.key
   if (from?.join() === to?.join()) {
     continue;
   }
-  // A platform binary's version moves with its parent, so only its count is worth a line. One
-  // that appears or disappears is listed like any other package.
-  if (from && to && before.platform.has(name) && after.platform.has(name)) {
+  // A platform binary moving to exactly what its parent asks for is only worth a count. Anything
+  // else is listed: one that appears or disappears, or moves where no parent sent it.
+  const followsParent = to?.every((version) => askedFor.has(`${name}@${version}`));
+  if (from && followsParent && before.platform.has(name) && after.platform.has(name)) {
     platformMoves++;
   } else {
     console.log(`${name}: ${from?.join(", ") ?? "(none)"} -> ${to?.join(", ") ?? "(none)"}`);
@@ -89,11 +128,12 @@ for (const [path, entry] of downloaded(next)) {
   }
 }
 
-// The same name and version must download the same bytes from the same place.
-for (const [id, entry] of after.downloads) {
+// The same name and version must download the same bytes from the same place, in every copy.
+for (const [path, entry] of downloaded(next)) {
+  const id = `${packageName(path, entry)}@${entry.version}`;
   const was = before.downloads.get(id);
-  if (was && (was.integrity !== entry.integrity || was.resolved !== entry.resolved)) {
-    findings.push(`${id} changed its hash or address without changing its version`);
+  if (was && !was.has(signature(entry))) {
+    findings.push(`${path} (${id}) changed its hash or address without changing its version`);
   }
 }
 
@@ -121,17 +161,14 @@ function resolveFrom(from, dependency) {
 
 for (const [path, entry] of downloaded(next)) {
   const runsOnCI = !entry.os || entry.os.includes("linux");
-  if (!runsOnCI || !entry.optionalDependencies) {
-    continue;
-  }
-  for (const [dependency, wanted] of Object.entries(entry.optionalDependencies)) {
-    if (!CI_BINARY.test(dependency)) {
-      continue;
-    }
+  for (const [dependency, wanted] of Object.entries(entry.optionalDependencies ?? {})) {
     const found = resolveFrom(path, dependency);
     const owner = `${packageName(path, entry)}@${entry.version}`;
     if (!found) {
-      findings.push(`${dependency}, which CI needs for ${owner}, is missing`);
+      // A lockfile may leave out another platform's optional package, but not one CI loads.
+      if (runsOnCI && CI_BINARY.test(dependency)) {
+        findings.push(`${dependency}, which CI needs for ${owner}, is missing`);
+      }
     } else if (/^\d/.test(wanted) && found.version !== wanted) {
       findings.push(`${owner} asks for ${dependency} ${wanted}, and finds ${found.version}`);
     }
