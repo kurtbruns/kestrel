@@ -300,7 +300,7 @@ const CLIENT_PARAMETER: Parameter = {
   in: "header",
   required: false,
   description:
-    "The program the request came from, in one short lowercase word (`editor`, `claude-code`), recorded beside who made a change. A malformed name is a 400 naming this header; a service token's is ignored.",
+    "The program the request came from, in one short lowercase word (`editor`, `claude-code`, `claude`), recorded beside who made a change. A malformed name is a 400 naming this header; a service token's is ignored.",
   schema: { type: "string", pattern: CLIENT_NAME_PATTERN, maxLength: CLIENT_NAME_MAX },
 };
 

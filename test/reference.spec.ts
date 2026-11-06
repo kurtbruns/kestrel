@@ -11,6 +11,7 @@ import {
   SUBSCRIBER_ACTIONS,
   SUPPRESSED_MEANING,
 } from "../shared/subscriber_meanings";
+import * as whoActed from "../shared/who_acted";
 import { createRouter } from "../src/app";
 import { requireAuth } from "../src/auth/middleware";
 import { type AppEnv, getConfig } from "../src/env";
@@ -21,6 +22,7 @@ import {
   resourceMarkdown,
 } from "../src/reference";
 import { OBJECTS } from "../src/reference/objects";
+import { openApiDocument } from "../src/reference/openapi";
 import { REFUSAL_STATUS, refusalGroups, STATUSES } from "../src/reference/refusals";
 import { type RouteDef, Router } from "../src/router";
 import { AUTH, base } from "./support/http";
@@ -733,5 +735,48 @@ describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
     const index = referenceIndexMarkdown(ref, "https://newsletter.example.com").length;
     const whole = index + [...resourceDocs(ref).values()].join("").length;
     expect(index / whole).toBeLessThan(0.3);
+  });
+});
+
+describe("the reference names Kestrel's own clients (SPEC §11, Who acted)", () => {
+  const { CLAUDE_CLIENT, CLAUDE_CODE_CLIENT, EDITOR_CLIENT, KESTREL_CLIENTS } = whoActed;
+  const defs = createRouter(getConfig(env as AppEnv)).routes.map((r) => r.def);
+  const ref = buildReferenceResponse(defs);
+  const authentication = ref.concepts.find((c) => c.key === "authentication")?.text ?? "";
+
+  it("counts every client name the shared module defines", () => {
+    const defined = Object.entries(whoActed)
+      .filter(([name]) => name.endsWith("_CLIENT"))
+      .map(([, value]) => value);
+    expect(defined.sort()).toEqual([...KESTREL_CLIENTS].sort());
+  });
+
+  it("says what each name means in the Authentication topic, and of no other name", () => {
+    const explained = [...authentication.matchAll(/`([^`]+)` means /g)].map(([, name]) => name);
+    expect(explained).toEqual([...KESTREL_CLIENTS]);
+  });
+
+  it("says no client of Kestrel's but the web editor claims the editor's name", () => {
+    expect(authentication).toContain(
+      `no client of Kestrel's but the web editor claims \`${EDITOR_CLIENT}\``,
+    );
+  });
+
+  it("gives all the names wherever a field or header lists them", () => {
+    const everything = [
+      referenceIndexMarkdown(ref, base),
+      ...resourceDocs(ref).values(),
+      JSON.stringify(openApiDocument(ref, base, "test")),
+    ].join("\n");
+    const lists = everything.match(new RegExp(`\`${EDITOR_CLIENT}\`(?:, \`[a-z0-9-]+\`)+`, "g"));
+    expect(new Set(lists)).toEqual(new Set([KESTREL_CLIENTS.map((n) => `\`${n}\``).join(", ")]));
+  });
+
+  it("agrees with docs/API.md, which keeps the rule behind the names", () => {
+    expect(apiDoc).toContain(
+      `the editor sends \`${EDITOR_CLIENT}\`, Claude Code \`${CLAUDE_CODE_CLIENT}\`, and the MCP server \`${CLAUDE_CLIENT}\` on every call`,
+    );
+    expect(apiDoc).toContain(`the MCP server names \`${CLAUDE_CLIENT}\` whatever it is sent`);
+    expect(apiDoc).toContain(`\`kestrel api\` refuses \`--client ${EDITOR_CLIENT}\``);
   });
 });

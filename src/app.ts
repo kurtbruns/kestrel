@@ -303,7 +303,7 @@ export function createRouter({
             name: "principal",
             type: "{ kind, email, token_id, client }",
             description:
-              "`kind` `human`, signed in as `email`, or `service`, a service token, the credential for scripts and other automation, with no `email` and its Client ID as `token_id` when the token names one. `client` is the client a person's request came through, as it named itself in `Kestrel-Client` (`editor`, `claude-code`), or null when it named none; a service token's is always null, since the token already names the program.",
+              "`kind` `human`, signed in as `email`, or `service`, a service token, the credential for scripts and other automation, with no `email` and its Client ID as `token_id` when the token names one. `client` is the client a person's request came through, as it named itself in `Kestrel-Client` (`editor`, `claude-code`, `claude`), or null when it named none; a service token's is always null, since the token already names the program.",
           },
           {
             name: "auth.mode",

@@ -30,6 +30,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Fixed
 
 - A `HEAD` request now answers like the `GET` for the same path, without the body, where every path answered 404: an uptime monitor pointed at `/health` no longer reports the instance down, and link checkers and `curl -I` see pages and images as they are.
+- The API reference now says what each client name read back as `client` or `author_client` means, including `claude`, the name a change made through the connector is recorded under, so Claude can tell a publisher who scheduled a send; it also says no client of Kestrel's but the web editor claims `editor`.
 - On a phone, the text and images in a post's email sit closer to the edges, in mail apps that support it, such as Mail on iPhone; other apps and wide displays show what they did. This applies to emails made from now on and their post pages: sent and scheduled posts keep theirs.
 - `npx kestrel api ... --form file=@cover.png` uploads a post image or a logo, where every file was refused as not a PNG, JPEG, WebP, or GIF: it now states the file's type, read from its extension.
 - A send to one person now reads "1 recipient", not "1 recipients", on its scheduled card on the dashboard and the Sends page, and on its page while sending and once sent.
