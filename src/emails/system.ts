@@ -34,9 +34,9 @@ function systemEmailLayout(subject: string, innerHtml: string): string {
 <title>${escapeHtml(subject)}</title>
 ${HEAD_STYLE}</head>
 <body class="k-sys-bg" style="margin:0;padding:0;background:#ffffff;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="k-sys-bg" style="background:#ffffff;"><tr><td align="center" style="padding:8px 12px 48px;">
-<table role="presentation" width="664" cellpadding="0" cellspacing="0" class="k-sys-bg" style="max-width:664px;width:100%;background:#ffffff;">
-<tr><td class="k-sys-body" style="padding:24px 32px 32px;font-family:${FONT};font-size:16px;line-height:1.6;color:#18181b;">
+<table class="k-sys-bg" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;"><tr><td align="center" style="padding:8px 12px 48px;">
+<table class="k-sys-bg" role="presentation" width="664" cellpadding="0" cellspacing="0" style="max-width:664px;width:100%;background:#ffffff;">
+<tr><td class="k-sys-body" style="padding:24px 32px 32px;font-family:${FONT};font-size:16px;line-height:1.6;color:#18181b;word-break:break-word;">
 ${innerHtml}
 </td></tr>
 </table>
