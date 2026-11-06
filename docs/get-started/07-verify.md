@@ -104,6 +104,8 @@ The app writes a log line for each thing it does, and Cloudflare keeps them for 
 
 1. Filter on `level` equal to `error`. A healthy instance shows nothing.
 
+A brief database stall shows as one `d1.unavailable` line at `warn`. Its `during` field says what it interrupted, and its `stack` field names the statement that failed. The next run, a minute later, does the work again, so an occasional line needs nothing. The same line every minute means the database is down. Until it's back, no send fires and no notification goes out, and the `error` filter can stay empty. If you set up alerts on these logs, alert on `d1.unavailable` repeating as well as on `error`.
+
 To follow one send, narrow the time range and filter on its `sendId`, since a long range may show only a sample. On the Free plan, Cloudflare stops keeping logs for the rest of the day once its daily allowance is used, as [its pricing page](https://developers.cloudflare.com/observability/pricing/) describes.
 
 ## 8. Clean up the test subscribers
