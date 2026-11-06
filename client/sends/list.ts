@@ -21,7 +21,7 @@ import {
   stageOf,
 } from "../send_state";
 import { $, $$ } from "../ui/dom";
-import { fmt } from "../ui/format";
+import { fmt, recipientCount } from "../ui/format";
 import { html, setHtml } from "../ui/html";
 import {
   type ListState,
@@ -292,7 +292,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
       }
       const { sends } = res;
       const schedCard = (s: SendView) =>
-        html`<div class="card spread clickable sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${s.audience.count} recipients${emailOnlyNote(s)}</div></div>${windowControls(s)}</div>`;
+        html`<div class="card spread clickable sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${recipientCount(s.audience.count)}${emailOnlyNote(s)}</div></div>${windowControls(s)}</div>`;
       const [first, ...rest] = sends;
       if (!first) {
         setHtml(schedEl, html`<p class="muted">Nothing scheduled.</p>`);

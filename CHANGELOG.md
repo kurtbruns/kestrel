@@ -10,7 +10,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading.** If your instance's `package.json` pins wrangler to an exact version below 4.156.0, install the release with `npm install @kurtbruns/kestrel@X.Y.Z "wrangler@^4.156.0"`, as [Upgrade to a new release](docs/guides/07-upgrade.md) says, since npm otherwise refuses with `ERESOLVE`. Run `npm run check-context`: this release changes the operator's Claude context, and a copy you've edited is merged by hand.
+**Upgrading.** If your instance's `package.json` pins wrangler to an exact version below 4.156.0, install the release with `npm install @kurtbruns/kestrel@X.Y.Z "wrangler@^4.156.0"`, as [Upgrade to a new release](docs/guides/07-upgrade.md) says, since npm otherwise refuses with `ERESOLVE`. Run `npm run check-context`: this release changes the operator's Claude context, and a copy you've edited is merged by hand. If a script of yours uploads images or a logo, read the Breaking entry below: a file's name and declared type now have to match what it really is.
 
 ### Changed
 
@@ -21,7 +21,13 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
+- `npx kestrel api ... --form file=@cover.png` uploads a post image or a logo, where every file was refused as not a PNG, JPEG, WebP, or GIF: it now states the file's type, read from its extension.
+- A send to one person now reads "1 recipient", not "1 recipients", on its scheduled card on the dashboard and the Sends page, and on its page while sending and once sent.
 - A reader's confirm or unsubscribe token, and a post's unlisted link, no longer reach Cloudflare's invocation log in the `Referer` header their browser sent from those pages. Reader pages, post pages included, now tell the browser to send no referrer, so a site a post page links to also stops seeing where the visit came from. Lines already stored age out with log retention (SPEC §5, §12).
+
+### Breaking
+
+- Image and logo uploads read a file's format from its bytes (SPEC §4). A file that isn't a PNG, JPEG, WebP, or GIF is refused even under an image's name, where it used to upload and show as a broken image, and so is one named or declared as a different one of those formats than it is, like a JPEG called `photo.png`, with a message saying what it really is. A script that always sends `--type image/png`, or always names its uploads `cover.png`, now sends each file's real type and a name that matches it.
 
 ## [1.20.0] - 2026-11-04
 

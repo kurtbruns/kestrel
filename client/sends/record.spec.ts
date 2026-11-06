@@ -175,6 +175,25 @@ describe("sent record", () => {
     reply: () => ({ deliveries: [], view: "failures", page: { ...page, total: 0 } }),
   };
 
+  it.each([
+    [1, "1 recipient"],
+    [2, "2 recipients"],
+  ])("counts a sent record's %i in agreeing words", async (count, words) => {
+    const sent = sendView(send({ recipient_count: count }));
+    fake = fakeApi([
+      {
+        path: "/api/sends/x1",
+        reply: () => ({ send: sent, outcomes: outcomes({ recipients: count }), cursor: "1.1" }),
+      },
+      feedOf(() => sent),
+      noRows,
+    ]);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(0);
+    expect($(".rec-meta").textContent?.split(" · ").at(-1)).toBe(words);
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
   it("reads Settling while receipts arrive, and turns Complete in place when the last lands", async () => {
     const sent = sentSend(SETTLING);
     fake = fakeApi([...sent.routes, noRows]);
@@ -1096,11 +1115,12 @@ describe("sent record", () => {
     }
   });
 
-  it("says a post held on another send's halt is waiting and has handed no one off (SPEC §12)", async () => {
+  // A send held from the start by another send's halt, retrying in 45 minutes.
+  const heldFromStart = (count: number) => {
     const retryAt = Date.now() + 45 * 60_000;
-    const held = sendView(send({ status: "sending", completed_at: null }), {
+    return sendView(send({ status: "sending", completed_at: null }), {
       phase: "needs_attention",
-      audience: { count: 157, fixed: false, fixed_at: null },
+      audience: { count, fixed: false, fixed_at: null },
       provider: {
         name: "ses",
         halt: {
@@ -1114,13 +1134,11 @@ describe("sent record", () => {
       },
       conditions: [condition.refused("quota exceeded", retryAt)],
     });
-    fake = fakeApi([
-      {
-        path: "/api/sends/x1",
-        reply: () => ({ send: held, outcomes: outcomes({ accepted: 0 }), cursor: "1.1" }),
-      },
-      feedOf(() => held),
-    ]);
+  };
+
+  it("says a post held on another send's halt is waiting and has handed no one off (SPEC §12)", async () => {
+    const held = heldFromStart(157);
+    fake = watching(() => held);
     await mount((r, s) => renderSentRecord("x1", r, s));
     await vi.advanceTimersByTimeAsync(0);
     expect($("#watchMeta").textContent).toMatch(
@@ -1129,6 +1147,25 @@ describe("sent record", () => {
     expect($(".wbar-sub").textContent).toBe(
       "The provider is refusing this account, so this post waits with the send already held and hasn’t handed anyone off; next retry in 45 min.",
     );
+  });
+
+  it.each([
+    [1, "1 recipient"],
+    [2, "2 recipients"],
+  ])("counts a watched send's %i in agreeing words, in flight and held", async (count, words) => {
+    const audience = { count, fixed: false, fixed_at: null };
+    const flying = sendView(send({ status: "sending", completed_at: null }), { audience });
+    for (const [view, expected] of [
+      [flying, words],
+      [heldFromStart(count), `about ${words}`],
+    ] as const) {
+      fake = watching(() => view);
+      await mount((r, s) => renderSentRecord("x1", r, s));
+      await vi.advanceTimersByTimeAsync(0);
+      expect($("#watchMeta").textContent?.split(" · ").at(-1)).toBe(expected);
+      unmount();
+      fake.restore();
+    }
   });
 
   it("counts a halt's next retry down on the clock while no report arrives", async () => {

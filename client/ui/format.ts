@@ -1,7 +1,12 @@
 // Pure formatting and parsing, with no DOM: dates, countdowns, the datetime-local value,
-// and the recipient list.
+// the recipient list, and a send's recipient count.
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
+
+/** A send's audience in words, which reads "1 recipient" on a list of one (DESIGN's copy rules). */
+export function recipientCount(n: number): string {
+  return `${n.toLocaleString()} ${n === 1 ? "recipient" : "recipients"}`;
+}
 
 /**
  * A short local date-time, or an em dash for none. The year shows only when it isn't the
