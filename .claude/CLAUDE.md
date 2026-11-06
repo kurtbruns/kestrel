@@ -46,7 +46,7 @@ npm run format                      # biome format --write .
 
 ## Lint
 
-Biome's `recommended` preset is enforced at `error` everywhere and the tree is lint-clean. Specs (`test/**`, `client/**/*.spec.ts`, `shared/**/*.spec.ts`) may use `!` and `any`; `src/` and the client modules may not. A deliberate exception elsewhere carries an inline `biome-ignore` that says why. Everything under `src/` logs through `src/lib/log.ts` (`log.info` / `log.warn` / `log.error` with a dotted event from its `LOG_EVENTS` catalog, which gives each its level), never a bare `console.*`, which `noConsole` refuses there. For a row read back right after writing it, use `unwrap(value, what)` (`src/lib/unwrap.ts`) instead of `!`: it fails loud with a name.
+Biome's `recommended` preset is enforced at `error` and the tree is lint-clean, with two exceptions: Markdown is left out of Biome, since its formatter would rewrite the docs and adopting it is undecided, and `noDescendingSpecificity` is off, with the reason in the header of `public/dashboard/styles.css`. Specs (`test/**`, `client/**/*.spec.ts`, `shared/**/*.spec.ts`) may use `!` and `any`; `src/` and the client modules may not. Any other deliberate exception carries an inline `biome-ignore` that says why. Everything under `src/` logs through `src/lib/log.ts` (`log.info` / `log.warn` / `log.error` with a dotted event from its `LOG_EVENTS` catalog, which gives each its level), never a bare `console.*`, which `noConsole` refuses there. For a row read back right after writing it, use `unwrap(value, what)` (`src/lib/unwrap.ts`) instead of `!`: it fails loud with a name.
 
 ## Boundaries the code does not state
 

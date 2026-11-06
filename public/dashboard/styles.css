@@ -2,7 +2,13 @@
    prefers-color-scheme (see the dark block below). This is the admin surface's own
    palette — independent of, and never loaded alongside, the reader/email-card
    `TOKENS` in src/lib/page.ts. The two reuse names like --muted and --bg with
-   different values on purpose; don't assume they share meaning. */
+   different values on purpose; don't assume they share meaning.
+
+   Specificity, not source order, decides this file's cascade, so rules stay grouped by
+   component. That is why Biome's noDescendingSpecificity is off in biome.json, which takes no
+   comments: it compares selectors by their last element alone, so `#settingsBtn svg` outranks
+   every later `svg` rule, components that never nest included, and satisfying it would mean
+   moving rules out of their sections, changing the cascade to fix nothing. */
 :root {
   color-scheme: light dark;
   /* Layering — one named z-index ladder (DESIGN §9). Every fixed or floating surface
@@ -1197,7 +1203,6 @@ body.tool-mode .content {
   }
 }
 
-/* biome-ignore lint/style/noDescendingSpecificity: specificity (not source order) decides the cascade; base rule grouped here intentionally */
 button {
   font-family: inherit;
   font-size: 14px;
@@ -1524,7 +1529,6 @@ td a {
   text-decoration: none;
   font-weight: 500;
 }
-/* biome-ignore lint/style/noDescendingSpecificity: specificity (not source order) decides the cascade; hover rule grouped with its base */
 td a:hover {
   text-decoration: underline;
 }
