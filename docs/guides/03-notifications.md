@@ -43,7 +43,7 @@ A `send_email` binding named `NOTIFY` moves notifications to Cloudflare's email.
     "env": {
       "production": {
         // ...
-        "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "kestrel-media-production" }],
+        "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "newsletter-media-production" }],
         "send_email": [{ "name": "NOTIFY" }],
         "vars": {
           // ...
