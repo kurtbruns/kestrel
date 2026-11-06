@@ -10,6 +10,7 @@
 import { dashboardLink } from "../../shared/dashboard_link";
 import type { SendingRefusal } from "../../shared/provider";
 import { isSendOwnHalt, PASS_THIS_ALONG, refusalAdvice } from "../../shared/sends";
+import { settingsRoute } from "../../shared/settings";
 import type { DueNotification } from "../db/notifications";
 import type { Config } from "../env";
 import { escapeHtml, escapeHtmlAttr } from "../lib/html";
@@ -279,7 +280,10 @@ export function sampleNotification(config: Config): RenderedEmail {
     subject: "Test: notifications from Kestrel",
     happened: "If you’re reading this, notifications reach this address. Nothing else was sent.",
     more: "Kestrel writes here when a post finishes sending, and right away if something needs attention.",
-    link: { label: "Open Settings", url: dashboardLink(config.appOrigin, "/settings") },
+    link: {
+      label: "Open Settings",
+      url: dashboardLink(config.appOrigin, settingsRoute("notifications")),
+    },
   });
 }
 

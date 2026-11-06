@@ -4,7 +4,7 @@
 
 import type { ProviderStatusView } from "../../shared/provider";
 import type { SendView } from "../../shared/sends";
-import type { DeploymentView } from "../../shared/settings";
+import { type DeploymentView, settingsRoute } from "../../shared/settings";
 import { CONNECT_PROVIDER_HREF } from "../deployment";
 import {
   inSandbox,
@@ -261,8 +261,9 @@ function stepAction(step: SetupStep, f: SetupFacts, primary: boolean): Html | nu
     case "test":
       return html`<button class="${cls}" data-nav="${TEMPLATE_TEST_HREF}">Send test email</button>`;
     case "name":
-    case "notify":
       return html`<button class="${cls}" data-nav="#/settings">Settings</button>`;
+    case "notify":
+      return html`<button class="${cls}" data-nav="#${settingsRoute("notifications")}">Settings</button>`;
     case "access":
       return html`<button class="${cls}" data-nav="${PRODUCTION_ACCESS_HREF}">Docs</button>`;
     case "list":

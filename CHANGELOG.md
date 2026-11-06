@@ -14,6 +14,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Added
 
+- Each section of Settings has its own address, such as `#/settings/notifications`, and the dashboard's failed-notification line, the Get notified step, the test notification's Open Settings link, and the sections the Docs tab's pages name now open the section they mean.
 - You can drop an image on the logo under Settings → Publication identity to upload it, the same as choosing it in the file picker, and Name your publication now says what format, size, and shape a logo works best in.
 
 ### Changed

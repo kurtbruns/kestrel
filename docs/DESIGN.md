@@ -72,7 +72,7 @@ The browser tab names the screen open with one title, then Kestrel, so a tab amo
 | Subscriber | `#/subscribers/:subscriber` | One person: how they joined, their suppression, why they left, and every send they were in. |
 | Import subscribers | `#/subscribers/import` | What bringing a list in would do, before it does it. |
 | Template | `#/template` | The one email template every post is sent in. |
-| Settings | `#/settings` | The publication's preferences, and the deploy facts read-only. |
+| Settings | `#/settings`, `#/settings/:section` | The publication's preferences, and the deploy facts read-only. A section's address opens the page at that section. |
 | Docs and API | `#/docs`, `#/api-reference` | The docs, as two sets (Publishing and Self-hosting), and the API reference, served by the instance. An old `#/reference` link opens the same place under `#/api-reference`. |
 
 The admin UI may link out to public pages (View publication, Archive ↗, View published post ↗). No public page links or redirects into `/dashboard` (SPEC §11), apart from the dev-only pill above.
@@ -309,7 +309,7 @@ One page of sections, grouped by whom they serve, editable first and set-at-depl
 | The publisher | Notifications |
 | Set at deploy | Email sender, Instance |
 
-The groups have no headings, only a wider gap: each section's title, its **intent chip** (Editable, Preview, Copy-out, or Read-only · set at deploy), and its one-line lede already say what it is. Editable sections sit on raised cards; read-only facts sit on recessed ones. One save bar commits every editable section (§6). Rules for each section:
+The groups have no headings, only a wider gap: each section's title, its **intent chip** (Editable, Preview, Copy-out, or Read-only · set at deploy), and its one-line lede already say what it is. Editable sections sit on raised cards; read-only facts sit on recessed ones. One save bar commits every editable section (§6). Each section has an address of its own (`#/settings/notifications`), and whatever sends the publisher to one section links there. Moving between sections stays on the page and keeps unsaved edits. An unknown section opens the page at the top. Rules for each section:
 
 **Publication identity.** Its note says it is "Shown in every email" and, while posts are scheduled, how many emails a save would update and that the publisher confirms first, and, while one is about to send, when it sends and that you can save once it has. The sample email beside it shows which fields the template prints, so the note doesn't list them. It carries no in-use chip, since the identity is in every email.
 
@@ -434,7 +434,7 @@ The **health block** on the dashboard, the **attention cards** on Sent, and an *
 | No provider connected | amber, or red once it holds a send | Below. |
 | SES still in the sandbox | amber | Health line, "Amazon SES is still in the sandbox, so it mails only addresses verified in SES", with **Request production access**. Left out while the setup card's step of that name says it (§3). |
 | Email not going out | red | Health line, "Email isn’t going out, and signups are paused.", then SES's words (or the account check's finding), the fix, and "Then send a test email: once SES takes one, signups reopen.", linking the Template screen. It stands for the connection warnings that are errors, which say the same cause, so they aren't shown twice while it lasts. Subscribers carries a red line of its own (§3). Below. |
-| A notification that didn't arrive | amber | Health line, "Kestrel’s last notification didn’t arrive:", the channel's words, and "Check Settings → Notifications.", linking Settings, while the last try failed with none delivered since. The setup steps' **Get notified** points up at it (§3). |
+| A notification that didn't arrive | amber | Health line, "Kestrel’s last notification didn’t arrive:", the channel's words, and "Check Settings → Notifications.", linking that section, while the last try failed with none delivered since. The setup steps' **Get notified** points up at it (§3). |
 | A warning about the provider's connection | red for an `error`, amber for a `warn` | Health line in the server's words, linking the guide step that fixes it. Red: a configuration set that's missing or paused, a key SES rejects, sending turned off, or a sender that isn't verified, each of which stops every email. Amber: bounces and complaints that won't reach the app, or an account under AWS's review. Never holds a send. |
 
 A send that needs the operator leaves the active-send cards and In progress, so it is reported once. A provider that is only unavailable is not an attention item: the send reads as in progress, its phase gloss says the provider is unavailable and when the next retry is, and the in-flight-too-long flag raises it if it lasts.

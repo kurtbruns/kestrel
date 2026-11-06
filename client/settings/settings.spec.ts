@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SettingsResponse, SettingsView } from "../../shared/settings";
+import {
+  SETTINGS_SECTIONS,
+  type SettingsResponse,
+  type SettingsView,
+  settingsSectionTitled,
+} from "../../shared/settings";
+import { mounted } from "../lifecycle";
 import { appState } from "../state";
 import { sendView } from "../test/send_server";
 import {
@@ -1560,6 +1566,107 @@ describe("settings view", () => {
       ]);
       expect(fake.calls.some((c) => c.url.pathname === "/api/provider")).toBe(false);
       expect(document.querySelector("#sendRate")).toBeNull();
+    });
+  });
+
+  describe("section addresses", () => {
+    /** Mount Settings as the router does for `#/settings/<section>`, recording each scroll. */
+    async function openAt(section?: string) {
+      fake = fakeApi([
+        { path: "/api/settings", reply: () => response() },
+        { path: "/api/provider", reply: () => providerStatus() },
+        readerPage,
+      ]);
+      const targets: string[] = [];
+      vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(function (this: Element) {
+        targets.push(this.id);
+      });
+      const toTop = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+      await mount((root, signal) => renderSettings(root, signal, section));
+      await vi.advanceTimersByTimeAsync(0);
+      return { targets, toTop };
+    }
+    afterEach(() => {
+      vi.restoreAllMocks();
+      unmount();
+    });
+
+    it("gives every section head its name, in page order", async () => {
+      await openAt();
+      expect($$(".set-sec-head").map((h) => h.id)).toEqual(
+        SETTINGS_SECTIONS.map((s) => `settings-${s}`),
+      );
+    });
+
+    it("shows each section's title, the one the docs find it by", async () => {
+      await openAt();
+      expect($$(".set-sec-title").map((t) => settingsSectionTitled(t.textContent ?? ""))).toEqual(
+        SETTINGS_SECTIONS,
+      );
+    });
+
+    it("opens at the section the address names", async () => {
+      const { targets } = await openAt("notifications");
+      expect(targets).toEqual(["settings-notifications"]);
+    });
+
+    // A guard: this held before sections had addresses, and fails if a page with no section
+    // to show starts moving.
+    it.each([undefined, "no-such-section"])(
+      "opens at the top for %s, without a jump",
+      async (s) => {
+        const { targets } = await openAt(s);
+        expect(targets).toEqual([]);
+      },
+    );
+
+    it("moves between sections on the same mount, keeping unsaved edits", async () => {
+      const { targets, toTop } = await openAt("notifications");
+      const tagline = $<HTMLInputElement>("#setTagline");
+      typeInto(tagline, "Edited, not saved");
+      expect(mounted()?.navigate?.("#/settings/instance")).toBe(true);
+      expect(targets).toEqual(["settings-notifications", "settings-instance"]);
+      expect(mounted()?.navigate?.("#/settings")).toBe(true);
+      expect(toTop).toHaveBeenCalledWith(0, 0);
+      expect($<HTMLInputElement>("#setTagline")).toBe(tagline);
+      expect(tagline.value).toBe("Edited, not saved");
+    });
+
+    it("lets go of one section on moving to another, so a late resize stays on the new one", async () => {
+      // Only what watches the page itself; the previews have observers of their own.
+      const watchers = new Set<{ el: Element; fire: () => void }>();
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          entry: { el: Element; fire: () => void } | null = null;
+          constructor(private fn: () => void) {}
+          observe(el: Element) {
+            this.entry = { el, fire: this.fn };
+            watchers.add(this.entry);
+          }
+          unobserve() {}
+          disconnect() {
+            if (this.entry) {
+              watchers.delete(this.entry);
+            }
+          }
+        },
+      );
+      const { targets } = await openAt("notifications");
+      mounted()?.navigate?.("#/settings/instance");
+      targets.length = 0;
+      for (const w of watchers) {
+        if (w.el.classList.contains("view")) {
+          w.fire();
+        }
+      }
+      expect(targets).toEqual(["settings-instance"]);
+    });
+
+    it("hands any other address back to the router, a mangled one of its own included", async () => {
+      await openAt();
+      expect(mounted()?.navigate?.("#/drafts")).toBe(false);
+      expect(mounted()?.navigate?.("#/settings/..")).toBe(false);
     });
   });
 });

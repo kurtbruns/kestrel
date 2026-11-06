@@ -55,6 +55,7 @@ import {
   type DocsResponse,
   headingAnchor,
 } from "../../shared/docs";
+import { settingsRoute, settingsSectionTitled } from "../../shared/settings";
 import { markdownToHtml } from "../render/markdown";
 import { sanitizeEmailHtml } from "../render/sanitize";
 
@@ -229,6 +230,21 @@ export type { DocFragment };
 const MD_HREF = /href="([^"#:]+\.md)(?:#([^"]*))?"/g;
 // A link to a heading on the same page: `[Check it](#check-it)`.
 const SAME_PAGE_LINK = /href="#([^"/][^"]*)"/g;
+// A page naming a section of Settings by the dashboard's own words: **Settings → Notifications**,
+// or a place inside one, **Settings → Ways to subscribe → Embed a form**. An existing link is
+// matched first, whole, so a name inside one is passed over: an anchor can't hold an anchor.
+const SETTINGS_NAME =
+  /<a\b[^>]*>[\s\S]*?<\/a>|<strong>Settings → ([^<→]+?)(?: → [^<]*)?<\/strong>/g;
+
+/** Link each section of Settings a page names to that section. This is done here, not in the
+ *  Markdown, because only the Docs tab has a dashboard to open: the same words on GitHub, on
+ *  getkestrel.dev, and in an agent's copy stay plain rather than becoming links to nowhere. */
+export function linkSettingsNames(html: string): string {
+  return html.replace(SETTINGS_NAME, (whole, title: string | undefined) => {
+    const section = title ? settingsSectionTitled(title) : null;
+    return section ? `<a href="#${settingsRoute(section)}">${whole}</a>` : whole;
+  });
+}
 
 /** Point each link between docs at its in-app route, `#/docs/<slug>`, with its anchor as one
  *  more segment. The room gives each heading GitHub's id for it, so an anchor that works on
@@ -254,7 +270,7 @@ function renderFragment(markdown: string, from: string, slug: string): string {
     maxWidth: 720,
     warnings,
   });
-  return rewriteDocLinks(sanitizeEmailHtml(html), from, slug);
+  return linkSettingsNames(rewriteDocLinks(sanitizeEmailHtml(html), from, slug));
 }
 
 /** Each set's landing, from its index: its title, intro, and sections. */

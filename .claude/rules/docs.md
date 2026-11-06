@@ -94,6 +94,7 @@ A setup guide page, after Linode's guides:
 
 - **Between pages:** relative links to the file, `[Deploy the app](02-deploy.md)` or `[Notifications](../guides/03-notifications.md)`. They work on GitHub, the Worker rewrites them to the Docs tab's routes, and getkestrel.dev's sync rewrites them to its URLs. A spec fails on a link to a page that doesn't exist.
 - **Anchors work everywhere:** the Docs tab gives each heading GitHub's id, so `02-deploy.md#check-it` lands on the same heading on GitHub, in the app, and on the site. Link to a section when the reader needs that section.
+- **A section of Settings:** name it in bold by the dashboard's words, **Settings → Notifications**, never as a link. The Docs tab links the name to that section, while GitHub, getkestrel.dev, and an agent's copy, which have no dashboard to open, keep plain words. A spec fails on a name that matches no section.
 - **Outside the guide** (the README, provider docs): absolute URLs. They open in a new tab in the app.
 
 ## Facts

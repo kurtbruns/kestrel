@@ -87,7 +87,7 @@ export function route(): Promise<void> {
     return mount(renderTemplate);
   }
   if (view === "settings") {
-    return mount(renderSettings);
+    return mount((root, signal) => renderSettings(root, signal, arg));
   }
   if (view === "api-reference") {
     return mount((root, signal) => renderReference(root, signal, arg));
@@ -123,6 +123,12 @@ export function installRouter(): void {
   // the hash goes back, which is a hashchange to the mounted hash and so nothing to do.
   window.addEventListener("hashchange", () => {
     if (location.hash === mountedHash) {
+      return;
+    }
+    // An address the mounted view shows itself isn't a leave: nothing to ask, nothing torn down.
+    if (mounted()?.navigate?.(location.hash)) {
+      mountedHash = location.hash;
+      setNavOpen(false);
       return;
     }
     if (mounted()?.beforeLeave?.() === "confirm" && !confirm(LEAVE_MSG)) {
