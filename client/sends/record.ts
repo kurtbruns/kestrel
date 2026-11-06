@@ -21,7 +21,7 @@ import { followSend, readSendsNow } from "../send_state";
 import { copyFace, copyWith } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
 import { saveFile } from "../ui/download";
-import { fmt } from "../ui/format";
+import { fmt, recipientCount } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { type ListState, renderPager, th, wireSort } from "../ui/list_controls";
@@ -273,10 +273,10 @@ function actedByHtml(send: SendView): Html | null {
 
 function watchMetaHtml(send: SendView): Html {
   if (heldFromStart(send)) {
-    return html`Due ${fmt(send.fire_at)} · held before handing anyone off · about ${send.audience.count.toLocaleString()} recipients`;
+    return html`Due ${fmt(send.fire_at)} · held before handing anyone off · about ${recipientCount(send.audience.count)}`;
   }
   const started = send.started_at ? `Started ${fmt(send.started_at)}` : "Sending now";
-  return html`${started} · ${send.audience.count.toLocaleString()} recipients`;
+  return html`${started} · ${recipientCount(send.audience.count)}`;
 }
 function watchHtml(send: SendView): Html {
   const prog = send;
@@ -525,7 +525,7 @@ function renderFrozenRecord(
     </div>
     <div class="rec-head rec-head-page">
       <div class="watch-title"><h1>${send.subject || html`<em>untitled</em>`}</h1><span id="recPill">${phasePill(send.phase)}</span></div>
-      <div class="rec-meta">Sent ${fmt(sentAt)} · ${total.toLocaleString()} recipients</div>
+      <div class="rec-meta">Sent ${fmt(sentAt)} · ${recipientCount(total)}</div>
       ${actedByHtml(send)}
     </div>
     <section class="card rec-post" aria-labelledby="recPostTitle">

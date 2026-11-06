@@ -22,6 +22,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Fixed
 
 - `npx kestrel api ... --form file=@cover.png` uploads a post image or a logo, where every file was refused as not a PNG, JPEG, WebP, or GIF: it now states the file's type, read from its extension.
+- A send to one person now reads "1 recipient", not "1 recipients", on its scheduled card on the dashboard and the Sends page, and on its page while sending and once sent.
 
 ### Breaking
 
