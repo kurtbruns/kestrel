@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { EDITOR_CLIENT, KESTREL_CLIENTS } from "../shared/who_acted";
 import { actorLabel, bannerActedBy, sendActedBy, whoActed } from "./who_acted";
 
 describe("whoActed (SPEC §11, Who acted)", () => {
@@ -10,6 +11,12 @@ describe("whoActed (SPEC §11, Who acted)", () => {
     expect(whoActed("you@example.com", "claude-code")).toBe("you@example.com via Claude Code");
     expect(whoActed("you@example.com", "claude")).toBe("you@example.com via Claude");
     expect(whoActed("you@example.com", "my-script")).toBe("you@example.com via my-script");
+  });
+
+  it("knows each of Kestrel's own clients by a name of its own", () => {
+    for (const client of KESTREL_CLIENTS.filter((c) => c !== EDITOR_CLIENT)) {
+      expect(whoActed("you@example.com", client), client).not.toBe(`you@example.com via ${client}`);
+    }
   });
 
   it("shows a person whose client named nothing as through the API", () => {

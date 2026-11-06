@@ -22,6 +22,7 @@ import {
   CLIENT_NAME_MAX,
   CLIENT_NAME_PATTERN,
   chooseInstance,
+  EDITOR_CLIENT,
   parseApiArgs,
   signedInFetch,
 } from "../../packages/kestrel/lib/api.mjs";
@@ -38,6 +39,7 @@ import {
 import { signIn } from "../../packages/kestrel/lib/login.mjs";
 import {
   authorizeUrl,
+  DEFAULT_CLIENT,
   discover,
   instanceOrigin,
   listenForCode,
@@ -50,6 +52,8 @@ import {
   tokenFields,
 } from "../../packages/kestrel/lib/oauth.mjs";
 import {
+  CLAUDE_CODE_CLIENT,
+  EDITOR_CLIENT as SERVER_EDITOR_CLIENT,
   CLIENT_NAME_MAX as SERVER_MAX,
   CLIENT_NAME_PATTERN as SERVER_PATTERN,
 } from "../../shared/who_acted.ts";
@@ -348,6 +352,11 @@ describe("kestrel api's arguments", () => {
     }
     expect(CLIENT_NAME_PATTERN).toBe(SERVER_PATTERN);
     expect(CLIENT_NAME_MAX).toBe(SERVER_MAX);
+  });
+
+  it("gives and refuses the same names the server knows its clients by (SPEC §11)", () => {
+    expect(DEFAULT_CLIENT).toBe(CLAUDE_CODE_CLIENT);
+    expect(EDITOR_CLIENT).toBe(SERVER_EDITOR_CLIENT);
   });
 
   it("refuses a path without its slash, an unknown option, and a body sent two ways", () => {
