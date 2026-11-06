@@ -4,7 +4,10 @@
  * frozen email, whose HTML the author wrote (or Claude did, from whatever it read), and
  * it is served from the app's own origin, beside the admin API. The render's sanitizer
  * is not a security boundary, so this policy is: no script of any kind runs on these
- * pages, and none of them can be framed by another site.
+ * pages, and none of them can be framed by another site. None of them sends its address
+ * as a referrer either (SPEC §5): the confirm and unsubscribe pages and an unlisted link
+ * hold a secret in theirs, and the platform's request log keeps the `Referer` header in
+ * plain text, where `scrub` can't reach it (SPEC §12).
  */
 
 import { pagePolicy } from "../../shared/page_policy";
@@ -16,6 +19,10 @@ function headers(formAction: string): Readonly<Record<string, string>> {
     "content-security-policy": pagePolicy(formAction),
     "x-frame-options": "DENY",
     "x-content-type-options": "nosniff",
+    // On every page rather than the ones holding a secret today, so a new page can't forget
+    // it. A browser's form post from such a page says `Origin: null`, which only the admin
+    // surface's cross-site check would refuse, and no page here has a form that posts there.
+    "referrer-policy": "no-referrer",
   };
 }
 
