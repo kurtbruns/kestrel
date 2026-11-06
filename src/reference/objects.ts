@@ -439,7 +439,7 @@ const SEND_FIELDS: ReferenceField[] = [
     name: "scheduled_by",
     type: "{ kind, email, token_id, client } | null",
     description:
-      "Who scheduled it, by a schedule or Send now, in the shape `GET /api/whoami` answers: `kind` `human` with their `email`, or `service`, a service token, with its Client ID as `token_id` when it names one; `client` is the client a person came through as it named itself in `Kestrel-Client` (`editor`, `claude-code`, `claude`), null when it named none and on a service token. Null for a send scheduled before who acted was recorded.",
+      "Who scheduled it, by a schedule or Send now, in the shape `GET /api/whoami` answers: `kind` `human` with their `email`, or `service`, a service token, with its Client ID as `token_id` when it names one; `client` is the client a person came through as it named itself in `Kestrel-Client` (`editor`, `claude-code`, `kestrel-cli`, `claude`), null when it named none and on a service token. Null for a send scheduled before who acted was recorded.",
   },
   {
     name: "rescheduled_by",
@@ -652,7 +652,7 @@ const POST_FIELDS: ReferenceField[] = [
     name: "author_client",
     type: "string | null",
     description:
-      "The client the current revision's author came through, as it named itself in `Kestrel-Client` (`editor`, `claude-code`, `claude`, or another name as given). Null when the request named none, and on a service token's revision, since the token already names the program.",
+      "The client the current revision's author came through, as it named itself in `Kestrel-Client` (`editor`, `claude-code`, `kestrel-cli`, `claude`, or another name as given). Null when the request named none, and on a service token's revision, since the token already names the program.",
   },
   { name: "created_at", type: "number", description: "When it was made." },
   { name: "updated_at", type: "number", description: "When it last changed." },
@@ -697,7 +697,7 @@ const REVISION_FIELDS: ReferenceField[] = [
     name: "author_client",
     type: "string | null",
     description:
-      "The client its author came through, as it named itself in `Kestrel-Client` (`editor`, `claude-code`, `claude`, or another name as given). Null when the request named none, and on a service token's revision.",
+      "The client its author came through, as it named itself in `Kestrel-Client` (`editor`, `claude-code`, `kestrel-cli`, `claude`, or another name as given). Null when the request named none, and on a service token's revision.",
   },
   { name: "created_at", type: "number", description: "When it was saved." },
   { name: "metadata", type: "object", description: "The subject and slug it was saved with." },

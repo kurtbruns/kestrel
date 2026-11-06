@@ -13,7 +13,7 @@ import { signedInFetch } from "./api.mjs";
 import { credentialsFile, readSignIn, readSignIns, writeSignIn } from "./credentials.mjs";
 import {
   authorizeUrl,
-  DEFAULT_CLIENT,
+  defaultClient,
   discover,
   exchangeCode,
   instanceOrigin,
@@ -86,7 +86,7 @@ export async function signIn(origin, { browser }) {
   } finally {
     listener.close();
   }
-  const res = await signedInFetch(origin, PROTECTED_PATH, { client: DEFAULT_CLIENT });
+  const res = await signedInFetch(origin, PROTECTED_PATH, { client: defaultClient() });
   const body = await res.json().catch(() => null);
   if (!res.ok) {
     const move = unauthorizedMove(body);

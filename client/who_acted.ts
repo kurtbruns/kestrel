@@ -3,12 +3,19 @@
 // reads as one, since a service token is automation: Claude signs in as the person it works for.
 
 import type { SendView } from "../shared/sends";
-import { type Actor, CLAUDE_CLIENT, CLAUDE_CODE_CLIENT, EDITOR_CLIENT } from "../shared/who_acted";
+import {
+  type Actor,
+  CLAUDE_CLIENT,
+  CLAUDE_CODE_CLIENT,
+  EDITOR_CLIENT,
+  KESTREL_CLI_CLIENT,
+} from "../shared/who_acted";
 
-// Clients the editor knows by a name of their own. Any other reads as it named itself.
-const CLIENT_NAMES: Record<string, string> = {
-  [CLAUDE_CODE_CLIENT]: "Claude Code",
-  [CLAUDE_CLIENT]: "Claude",
+// Clients the editor knows by words of their own. Any other reads as it named itself.
+const VIA_CLIENT: Record<string, string> = {
+  [CLAUDE_CODE_CLIENT]: "via Claude Code",
+  [KESTREL_CLI_CLIENT]: "via the Kestrel CLI",
+  [CLAUDE_CLIENT]: "via Claude",
 };
 
 /**
@@ -33,7 +40,7 @@ export function whoActed(
   if (client === null) {
     return `${who} via the API`;
   }
-  return `${who} via ${CLIENT_NAMES[client] ?? client}`;
+  return `${who} ${VIA_CLIENT[client] ?? `via ${client}`}`;
 }
 
 /** Who acted, as the API reports it on a record (`Actor`), in the editor's words. */
@@ -82,8 +89,8 @@ export function isYouInEditor(actor: Actor, you: Actor | null): boolean {
 /**
  * Who last acted on a scheduled send, as its banner shows it (DESIGN §4, §10): the latest act,
  * a move when there was one and otherwise the schedule ("Rescheduled by you@example.com via Claude
- * Code"), and only when someone other than you in the editor took it (Claude Code, a script, a
- * service token, or another person). Nothing when you did, which you already know, or when none
+ * Code"), and only when someone other than you in the editor took it (Claude Code, the Kestrel
+ * CLI, a script, a service token, or another person). Nothing when you did, which you already know, or when none
  * is recorded. The send's page shows every act.
  */
 export function bannerActedBy(

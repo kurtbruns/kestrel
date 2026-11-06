@@ -39,9 +39,10 @@ import {
 import { signIn } from "../../packages/kestrel/lib/login.mjs";
 import {
   authorizeUrl,
-  DEFAULT_CLIENT,
+  CLAUDE_CODE_CLIENT,
   discover,
   instanceOrigin,
+  KESTREL_CLI_CLIENT,
   listenForCode,
   needsRefresh,
   pkcePair,
@@ -52,7 +53,8 @@ import {
   tokenFields,
 } from "../../packages/kestrel/lib/oauth.mjs";
 import {
-  CLAUDE_CODE_CLIENT,
+  CLAUDE_CODE_CLIENT as SERVER_CLAUDE_CODE_CLIENT,
+  KESTREL_CLI_CLIENT as SERVER_CLI_CLIENT,
   EDITOR_CLIENT as SERVER_EDITOR_CLIENT,
   CLIENT_NAME_MAX as SERVER_MAX,
   CLIENT_NAME_PATTERN as SERVER_PATTERN,
@@ -355,7 +357,8 @@ describe("kestrel api's arguments", () => {
   });
 
   it("gives and refuses the same names the server knows its clients by (SPEC §11)", () => {
-    expect(DEFAULT_CLIENT).toBe(CLAUDE_CODE_CLIENT);
+    expect(CLAUDE_CODE_CLIENT).toBe(SERVER_CLAUDE_CODE_CLIENT);
+    expect(KESTREL_CLI_CLIENT).toBe(SERVER_CLI_CLIENT);
     expect(EDITOR_CLIENT).toBe(SERVER_EDITOR_CLIENT);
   });
 
@@ -553,6 +556,21 @@ describe("kestrel login's sign-in", () => {
   }
 
   afterEach(() => vi.restoreAllMocks());
+
+  it.each([
+    ["1", "claude-code"],
+    [undefined, "kestrel-cli"],
+  ])(
+    "names its check of the sign-in as kestrel api would, with the variable %s (SPEC §11)",
+    async (value, name) => {
+      vi.stubEnv("CLAUDE_CODE_CHILD_SESSION", value);
+      const calls = stubAccess();
+      approveWhenAsked();
+      await signIn(ORIGIN, { browser: false });
+      const check = calls.findLast((c) => c.url === `${ORIGIN}/api/whoami`);
+      expect(check?.init.headers?.["kestrel-client"]).toBe(name);
+    },
+  );
 
   it("registers a public loopback client, then trades the code with its verifier, the redirect, and the resource", async () => {
     const calls = stubAccess();

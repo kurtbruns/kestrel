@@ -261,6 +261,15 @@ describe("dashboard", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("doesn't call a revision from the Kestrel CLI Claude, since a person's own command doesn't show Claude is connected (SPEC §11)", async () => {
+    fake = world([post({ author: "you@example.com", author_client: "kestrel-cli" })], sendServer());
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.querySelector(".conn-status")).toBeNull();
+    expect($(".pub-links a").textContent?.trim()).toBe("Connect Claude →");
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("doesn't call a service token's revision Claude, since a service token is automation (SPEC §11)", async () => {
     fake = world([post({ author: "service", author_client: null })], sendServer());
     await mount(renderDashboard);

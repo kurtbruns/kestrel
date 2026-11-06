@@ -9,8 +9,11 @@ export const CLIENT_HEADER = "Kestrel-Client";
 /** The name the web editor sends on every call. */
 export const EDITOR_CLIENT = "editor";
 
-/** The name Claude Code sends. */
+/** The name `kestrel api` sends when Claude Code runs it. */
 export const CLAUDE_CODE_CLIENT = "claude-code";
+
+/** The name `kestrel api` sends when anything else runs it: a person, or a script of theirs. */
+export const KESTREL_CLI_CLIENT = "kestrel-cli";
 
 /** The name the instance's MCP server, the connector, gives every call it makes. */
 export const CLAUDE_CLIENT = "claude";
@@ -20,7 +23,12 @@ export const CLAUDE_CLIENT = "claude";
  * are prose, so `test/reference.spec.ts` holds them to this list, and `packages/kestrel/`, which
  * imports nothing from here, is held to it by `test/cli/sign_in.spec.mjs`.
  */
-export const KESTREL_CLIENTS = [EDITOR_CLIENT, CLAUDE_CODE_CLIENT, CLAUDE_CLIENT] as const;
+export const KESTREL_CLIENTS = [
+  EDITOR_CLIENT,
+  CLAUDE_CODE_CLIENT,
+  KESTREL_CLI_CLIENT,
+  CLAUDE_CLIENT,
+] as const;
 
 /** The longest client name taken: a short word, never a sentence. */
 export const CLIENT_NAME_MAX = 32;

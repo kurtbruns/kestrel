@@ -29,6 +29,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
+- `kestrel api` now names Claude Code only when Claude Code runs it, where it named Claude Code whoever ran it. Run any other way, by you in a terminal or by a script of yours, its changes read "via the Kestrel CLI" in the editor and its client is `kestrel-cli`. Changes already recorded keep the name they have.
 - The API reference now says what each client name read back as `client` or `author_client` means, including `claude`, the name a change made through the connector is recorded under, so Claude can tell a publisher who scheduled a send; it also says no client of Kestrel's but the web editor claims `editor`.
 - On a phone, the text and images in a post's email sit closer to the edges, in mail apps that support it, such as Mail on iPhone; other apps and wide displays show what they did. This applies to emails made from now on and their post pages: sent and scheduled posts keep theirs.
 - `npx kestrel api ... --form file=@cover.png` uploads a post image or a logo, where every file was refused as not a PNG, JPEG, WebP, or GIF: it now states the file's type, read from its extension.

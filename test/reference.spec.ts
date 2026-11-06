@@ -739,7 +739,8 @@ describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
 });
 
 describe("the reference names Kestrel's own clients (SPEC §11, Who acted)", () => {
-  const { CLAUDE_CLIENT, CLAUDE_CODE_CLIENT, EDITOR_CLIENT, KESTREL_CLIENTS } = whoActed;
+  const { CLAUDE_CLIENT, CLAUDE_CODE_CLIENT, EDITOR_CLIENT, KESTREL_CLI_CLIENT, KESTREL_CLIENTS } =
+    whoActed;
   const defs = createRouter(getConfig(env as AppEnv)).routes.map((r) => r.def);
   const ref = buildReferenceResponse(defs);
   const authentication = ref.concepts.find((c) => c.key === "authentication")?.text ?? "";
@@ -774,7 +775,7 @@ describe("the reference names Kestrel's own clients (SPEC §11, Who acted)", () 
 
   it("agrees with docs/API.md, which keeps the rule behind the names", () => {
     expect(apiDoc).toContain(
-      `the editor sends \`${EDITOR_CLIENT}\`, Claude Code \`${CLAUDE_CODE_CLIENT}\`, and the MCP server \`${CLAUDE_CLIENT}\` on every call`,
+      `the editor sends \`${EDITOR_CLIENT}\`, the MCP server \`${CLAUDE_CLIENT}\` on every call it makes, and \`kestrel api\` \`${CLAUDE_CODE_CLIENT}\` when Claude Code runs it and \`${KESTREL_CLI_CLIENT}\` otherwise`,
     );
     expect(apiDoc).toContain(`the MCP server names \`${CLAUDE_CLIENT}\` whatever it is sent`);
     expect(apiDoc).toContain(`\`kestrel api\` refuses \`--client ${EDITOR_CLIENT}\``);

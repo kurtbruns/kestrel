@@ -429,7 +429,8 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   // server that Claude Desktop and claude.ai connect to, flips the API-access card to
   // "connected" (SPEC §11, Who acted). Uses the client already on each list row, so no extra
   // fetch; a post re-edited in the editor since no longer counts. A service token is
-  // automation, not Claude, so its revisions don't.
+  // automation, not Claude, so its revisions don't, and nor do a person's own `kestrel api`
+  // commands, which name the Kestrel CLI.
   const claudeConnected = posts.some(
     (p) => p.author_client === CLAUDE_CODE_CLIENT || p.author_client === CLAUDE_CLIENT,
   );
