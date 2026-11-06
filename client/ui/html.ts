@@ -24,7 +24,7 @@ export function escapeHtml(value: string | number): string {
  * what is set.
  */
 export class Html {
-  private declare readonly brand: undefined;
+  declare private readonly brand: undefined;
   readonly markup: string;
   constructor(markup: string) {
     this.markup = markup;
