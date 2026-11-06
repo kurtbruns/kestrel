@@ -19,7 +19,7 @@ Cloudflare's email sends only from a domain set up with Email Routing. Use your 
 
 1. Add `newsletter.example.com` to Email Routing. Cloudflare adds subdomains from your domain's own settings: select `example.com`, then **Settings**, and add `newsletter` under **Subdomains**.
 
-1. Wait until the new row reads **Status: Enabled** and **DNS records: Locked**. Cloudflare adds MX records and an SPF record for `newsletter.example.com`. You may not see a DKIM record for the hostname. The test in [Check it](#check-it) shows whether notifications get through.
+1. Cloudflare adds the DNS records it needs for `newsletter.example.com`. Wait until the new row reads **Status: Enabled** and **DNS records: Locked**.
 
 Avoid turning on Email Routing for a domain that already receives mail elsewhere, such as `example.com` with Google Workspace. Email Routing takes over that domain's MX records. Don't send notifications from `send.example.com` either, since your email provider sends from it. Email Routing there to forward readers' replies, as [Connect Amazon SES](../get-started/05-ses.md#8-receive-replies-at-your-from-address) sets up, is fine, since it only receives.
 
@@ -27,9 +27,9 @@ Avoid turning on Email Routing for a domain that already receives mail elsewhere
 
 Cloudflare's email delivers only to addresses you've verified with it. Sending to a verified address is free on any plan. Notifications can go to several addresses, such as the publisher's and yours, and each one needs verifying.
 
-1. Under **Email Routing**, go to **Destination addresses**, and add each address saved for notifications. An address already verified, such as for forwarding readers' replies, needs nothing more.
+1. Under **Email Routing**, go to **Destination addresses**, and add each address saved for notifications that isn't already verified there.
 
-1. Open the email Cloudflare sends to each address, and select **Verify email address**. If it's the publisher's address, ask them to do this step.
+1. Open the email Cloudflare sends to each one, and select **Verify email address**. If it's the publisher's address, ask them to do this step.
 
 A verified address belongs to your Cloudflare account, so every environment in it can use it. If the publisher adds or changes a notifications address later, verify the new one too.
 
@@ -37,19 +37,10 @@ A verified address belongs to your Cloudflare account, so every environment in i
 
 A `send_email` binding named `NOTIFY` moves notifications to Cloudflare's email. Without it, they go through your provider.
 
-1. In `wrangler.jsonc`, add `send_email` to `env.production`, beside `r2_buckets`. It doesn't go inside `vars`, or at the top level of the file:
+1. In `wrangler.jsonc`, add the binding to `env.production`, beside `r2_buckets` and not inside `vars`:
 
     ```jsonc
-    "env": {
-      "production": {
-        // ...
-        "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "newsletter-media-production" }],
-        "send_email": [{ "name": "NOTIFY" }],
-        "vars": {
-          // ...
-        }
-      }
-    }
+    "send_email": [{ "name": "NOTIFY" }],
     ```
 
     Give the binding only its name. This file is committed to your repository, so keep the notifications addresses out of it.
@@ -80,17 +71,17 @@ A `send_email` binding named `NOTIFY` moves notifications to Cloudflare's email.
     npx wrangler deploy --env production
     ```
 
-    Among the bindings, wrangler lists `env.NOTIFY (unrestricted)`. That's expected, since Cloudflare still delivers only to verified destination addresses. If the line is missing, the binding isn't in `env.production`.
+    The output lists the binding as `env.NOTIFY (unrestricted)`. Cloudflare still delivers only to the addresses you verified.
 
 ## Check it
 
 1. In the editor, open **Settings → Notifications**. **Sent through** reads "Cloudflare Email, separate from your newsletter's provider", and **From address** shows `Kestrel <kestrel@newsletter.example.com>`.
 
-1. Select **Send a test notification**. It arrives at each notifications address, and **Last notification** shows it as delivered. Check each address's spam folder too. If the test is there, mark it **Not spam**.
+1. Select **Send a test notification**. **Last notification** shows it as delivered.
 
-If the test isn't delivered to an address, **Last notification** shows Cloudflare's reason, such as an address that isn't verified, after the address when there are several. The other addresses still get it.
+1. Check that the test arrives at each notifications address. If it's in the spam folder, mark it **Not spam**.
 
-To see a notification's status on Cloudflare's side, open Email Routing's **Activity log**, where a delivered one reads **Delivered**. Go by that rather than Email Routing's summary, which [Cloudflare says](https://developers.cloudflare.com/email-service/platform/limits/) can list these emails as dropped even when they're delivered.
+1. In Email Routing's **Activity log**, the test shows as **Delivered**. Go by this rather than Email Routing's summary, which [Cloudflare says](https://developers.cloudflare.com/email-service/platform/limits/) can list it as dropped even when it's delivered.
 
 ## What notifications don't cover
 
