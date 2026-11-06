@@ -83,7 +83,7 @@ If the test isn't delivered to an address, **Last notification** shows Cloudflar
 ## What notifications don't cover
 
 - **The schedule stopping.** The same once-a-minute schedule that sends posts also notices problems. If the schedule itself stops, nothing tells you. [Read the logs](../get-started/07-verify.md#7-read-the-logs) to check that `sweep.tick` still arrives every minute.
-- **The database being down.** Noticing a problem and telling you both need the database. While it's down, nothing tells you, and the logs show `d1.unavailable` every minute, as [Read the logs](../get-started/07-verify.md#7-read-the-logs) describes.
+- **The database being down.** Noticing a problem and telling you both need the database. [Read the logs](../get-started/07-verify.md#7-read-the-logs) to check for `d1.unavailable` repeating.
 - **A notification that can't get through.** The app tries each one up to five times, a minute apart. A failure shows under **Settings → Notifications**, and in the logs as `notify.failed`.
 - **Problems while no address is set.** With the address blank, the app sends nothing, and saves nothing up for later.
 

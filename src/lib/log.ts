@@ -31,8 +31,8 @@ export const LOG_EVENTS = {
   // The sweep (SPEC §6).
   "sweep.tick": "info",
   "sweep.error": "error",
-  // A database stall in work the next tick does again, with `during` saying which: `sweep`,
-  // `receipts`, `notify`, or `account` (SPEC §12).
+  // A database stall the next tick makes up for, with `during` saying where: `sweep`, `receipts`,
+  // `notify`, or `account`. `d1_stall.ts` says what every other stall logs (SPEC §12).
   "d1.unavailable": "warn",
   // A send's lifecycle (SPEC §6, §12).
   "send.scheduled": "info",
