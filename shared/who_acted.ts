@@ -12,7 +12,7 @@ export const EDITOR_CLIENT = "editor";
 /** The name Claude Code sends. */
 export const CLAUDE_CODE_CLIENT = "claude-code";
 
-/** The name the instance's MCP server gives the calls it makes, for Claude Desktop and claude.ai. */
+/** The name the instance's MCP server, the connector, gives every call it makes. */
 export const CLAUDE_CLIENT = "claude";
 
 /**
