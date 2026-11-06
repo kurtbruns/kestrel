@@ -213,11 +213,31 @@ export function mountIdentity(
   };
   // The logo has no save bar, so whatever kept it from saving is said under its tile.
   const logoFailed = (err: unknown) => showLogoError(message(err));
-  // Choosing a file and dropping one are the same upload. What isn't an image is refused
-  // by the squaring, which can't decode it, so a drop gets the picker's message.
-  const uploadLogo = async (file: File) => {
+  // One logo change at a time, however it starts. Two at once can finish in either order,
+  // so the one chosen first could land last and stay live, in scheduled emails too. A later
+  // one is refused rather than queued: a queued change couldn't be taken back, and the
+  // publisher can simply try again once this one is done.
+  let logoChanging = false;
+  const changeLogo = async (change: () => Promise<void>) => {
+    if (logoChanging) {
+      showLogoError("The last logo change is still saving. Try again once it’s done.");
+      return;
+    }
+    logoChanging = true;
     showLogoError("");
     try {
+      await change();
+      showLogoError(""); // a refusal said while this ran no longer holds
+    } catch (err) {
+      logoFailed(err);
+    } finally {
+      logoChanging = false;
+    }
+  };
+  // Choosing a file and dropping one are the same upload. What isn't an image is refused
+  // by the squaring, which can't decode it, so a drop gets the picker's message.
+  const uploadLogo = (file: File) =>
+    changeLogo(async () => {
       // Squared before it uploads: every surface shows the logo square, and an email
       // stretches one that isn't. The tile shows the result; Replace is the way back.
       const squared = await squareImage(file, LOGO_SIZE);
@@ -237,10 +257,7 @@ export function mountIdentity(
       if (r) {
         logoSaved(r, cropped ? "Logo updated, cropped to its center square" : "Logo updated");
       }
-    } catch (err) {
-      logoFailed(err);
-    }
-  };
+    });
   logoInput.onchange = () => {
     const file = logoInput.files?.[0];
     logoInput.value = "";
@@ -269,19 +286,23 @@ export function mountIdentity(
   logoSlot.addEventListener("drop", (e) => {
     e.preventDefault();
     logoTile.classList.remove("dragover");
-    const files = e.dataTransfer?.files;
+    const files = e.dataTransfer?.files ?? [];
+    const file = files[0];
     // Several files are refused rather than the first one taken: a logo goes live the
     // moment it uploads, and which file a browser lists first isn't the publisher's choice.
-    if (files && files.length > 1) {
+    if (files.length > 1) {
       showLogoError("Drop one image at a time.");
-    } else if (files?.[0]) {
-      void uploadLogo(files[0]);
+    } else if (file) {
+      void uploadLogo(file);
+    } else {
+      // The drag promised a file and the drop holds none: an image dragged out of a web
+      // page, or an app handing over a link. The tile offered to take it, so say why not.
+      showLogoError("Couldn’t read a file from that drop. Save the image first, then pick it.");
     }
   });
   logoRemove.onclick = () =>
-    busy(logoRemove, "Removing…", async () => {
-      showLogoError("");
-      try {
+    changeLogo(() =>
+      busy(logoRemove, "Removing…", async () => {
         const r = await withRemakeConfirm(
           (ack) => {
             const q = ack ? `?remake=${encodeURIComponent(ack.join(","))}` : "";
@@ -293,10 +314,8 @@ export function mountIdentity(
         if (r) {
           logoSaved(r, "Logo removed");
         }
-      } catch (err) {
-        logoFailed(err);
-      }
-    });
+      }),
+    );
 
   applyLogoUi();
   applyAddressUi();

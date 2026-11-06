@@ -8,7 +8,7 @@ Write the tagline as one line that says what the newsletter covers and how often
 
 ## Choose a logo
 
-**Use a square PNG, JPEG, WebP, or GIF, at least 256 × 256 pixels, on a solid background.** Drop it on the logo under **Settings → Publication identity**, or choose **Upload**, which reads **Replace** once you have a logo. It saves right away, without **Save changes**.
+**Use a square PNG, JPEG, WebP, or GIF, at least 256 × 256 pixels, on a solid background.** Drop it on the logo under **Settings → Publication identity**, or choose **Upload**, which reads **Replace** once you have a logo. It saves right away, without **Save changes**. If that would change scheduled emails, Kestrel asks you to confirm first.
 
 Kestrel makes a 256 × 256 PNG from your image before uploading it, so the original's file size doesn't matter. A wider or taller image is cropped to its center square, and a smaller one is scaled up and looks soft. An animated GIF keeps its first frame. Emails show the logo at 44 × 44 pixels, so a simple mark reads better than fine detail.
 
