@@ -52,14 +52,14 @@ In Cloudflare, set every `CNAME` for DKIM to **DNS only**, not proxied. SES repo
 
 ### DMARC: publish a policy and collect reports
 
-DMARC tells an inbox what to do with mail that fails both SPF and DKIM, and asks it to send you reports. It's a `TXT` record at `_dmarc.send.example.com`:
+DMARC tells an inbox what to do with mail that fails both SPF and DKIM, and can ask it to send you reports. It's a `TXT` record at `_dmarc.send.example.com`:
 
 ```
 _dmarc.send.example.com.  TXT  "v=DMARC1; p=none; rua=mailto:dmarc@example.com"
 ```
 
-- `p=none` is monitor mode. Inboxes report on failing mail, but deliver it as usual.
-- `rua` is where reports go. They arrive as attachments, usually one a day from each inbox provider.
+- `p=none` is monitor mode, and it only monitors. Inboxes deliver failing mail as usual, so it doesn't stop anyone sending as your domain. It's where to start because it blocks nothing, your own mail included.
+- `rua` is where reports go. It's optional, and the policy works without it, though [Google's DMARC setup page](https://knowledge.workspace.google.com/admin/security/set-up-dmarc) recommends including it. Reports arrive as attachments, usually one a day from each inbox provider.
 
 Leave alignment relaxed, the default, with no `aspf=s` or `adkim=s`. With a custom MAIL FROM domain, your return path is a subdomain of your sending name, so strict SPF alignment would fail.
 
