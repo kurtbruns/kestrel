@@ -77,7 +77,6 @@ describe("boot, before the probe answers", () => {
 
   it("puts up the sign-in wall when whoami's 200 isn't the app's answer, never a blank page", async () => {
     fake = fakeApi([
-      { path: "/api/dev/token", reply: () => jsonResponse({ error: "not_found" }, 404) },
       // A proxy or an edge page in front of the app, answering for it.
       {
         path: "/api/whoami",
@@ -94,7 +93,6 @@ describe("boot, before the probe answers", () => {
     // happy-dom has no reportError, so the spec stands in for the browser's.
     const reportError = vi.fn();
     fake = fakeApi([
-      { path: "/api/dev/token", reply: () => jsonResponse({ error: "not_found" }, 404) },
       { path: "/api/whoami", reply: () => SESSION },
       // Read as settings, a body without them throws while the sidebar's brand is drawn.
       { path: "/api/settings", reply: () => ({}) },
@@ -111,7 +109,6 @@ describe("boot, before the probe answers", () => {
   it("shows the chrome, with its brand, once there is a session", async () => {
     const whoami = held();
     fake = fakeApi([
-      { path: "/api/dev/token", reply: () => jsonResponse({ error: "not_found" }, 404) },
       { path: "/api/whoami", reply: whoami.reply },
       { path: "/api/settings", reply: () => settingsResponse() },
     ]);

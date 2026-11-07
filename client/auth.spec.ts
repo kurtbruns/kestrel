@@ -25,14 +25,37 @@ describe("the boot probe", () => {
 
   const calls = () => fake.calls.map((c) => `${c.method} ${c.url.pathname}`);
 
-  it("answers the session a probe finds, minting the dev token first", async () => {
+  it("asks nothing of a dev route when the Access cookie already signs the operator in", async () => {
+    fake = fakeApi([{ path: "/api/whoami", reply: () => SESSION }]);
+    expect(await probeSession()).toEqual(SESSION);
+    expect(calls()).toEqual(["GET /api/whoami"]);
+    expect(fake.calls[0]?.headers.get("authorization")).toBeNull();
+    expect(appState.token).toBe("");
+  });
+
+  it("mints a dev token and probes again when local development has none yet", async () => {
     fake = fakeApi([
       { path: "/api/dev/token", reply: () => ({ token: "t0k", kind: "human" }) },
-      { path: "/api/whoami", reply: () => SESSION },
+      {
+        path: "/api/whoami",
+        reply: (req) =>
+          req.headers.has("authorization") ? SESSION : jsonResponse({ error: "unauthorized" }, 401),
+      },
     ]);
     expect(await probeSession()).toEqual(SESSION);
-    expect(fake.calls[1]?.headers.get("authorization")).toBe("Bearer t0k");
-    expect(fake.unhandled).toEqual([]);
+    expect(calls()).toEqual(["GET /api/whoami", "GET /api/dev/token", "GET /api/whoami"]);
+    expect(fake.calls[2]?.headers.get("authorization")).toBe("Bearer t0k");
+    expect(appState.token).toBe("t0k");
+    expect(document.querySelector("#app #reauth")).toBeNull();
+  });
+
+  it("keeps a stored dev token that still works, minting nothing", async () => {
+    setToken("t0k");
+    fake = fakeApi([{ path: "/api/whoami", reply: () => SESSION }]);
+    expect(await probeSession()).toEqual(SESSION);
+    expect(calls()).toEqual(["GET /api/whoami"]);
+    expect(fake.calls[0]?.headers.get("authorization")).toBe("Bearer t0k");
+    expect(appState.token).toBe("t0k");
   });
 
   it("shows the refused configuration, not the sign-in wall, when deployed (SPEC §9)", async () => {
@@ -43,7 +66,7 @@ describe("the boot probe", () => {
     expect(await probeSession()).toBeNull();
     expect($("#app .config-wall .config-wall-problem").textContent).toBe(REFUSED.message);
     expect(document.querySelector("#app #reauth")).toBeNull();
-    expect(calls()).toEqual(["GET /api/dev/token", "GET /api/whoami"]);
+    expect(calls()).toEqual(["GET /api/whoami", "GET /api/dev/token"]);
   });
 
   it("shows it too after local development clears a stored token and mints again", async () => {
