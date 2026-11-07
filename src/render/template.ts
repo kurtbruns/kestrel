@@ -121,6 +121,7 @@ export function emailLayout(i: LayoutInput): string {
   // narrow rule brings the inner cell to 12px, 24px a side in all, where the reader pages'
   // own text sits, and at the width where they reflow (lib/page.ts), past any phone held
   // upright. Lower inline values would reach every client, but move every wide display too.
+  // The Template page's sample email copies these figures (client/settings/template.ts).
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">

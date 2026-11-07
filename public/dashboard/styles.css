@@ -6253,9 +6253,8 @@ button.set-embed-copy svg {
    here — only safe container defaults. */
 /* The sample email renders in an isolated <iframe> — so the template's own <style>
    block applies exactly as it would in a mail client and can't leak into the
-   dashboard, and the reading measure is constrained to the email column
-   (~640px, matching the view-in-browser render). Its height is sized to content
-   from script. */
+   dashboard, and the document inside draws the email's page and column. Its height
+   is sized to content from script. */
 .set-email-frame {
   display: block;
   width: 100%;
@@ -6265,19 +6264,42 @@ button.set-embed-copy svg {
 }
 
 /* --- Template page: sample-email header actions, dropdown, variables --- */
+/* The bar stays one row at every width: the titles wrap beside the controls, and the toggle
+   gives way in the two steps below, so narrowing the pane changes the layout only there. */
+.set-tpl-sample {
+  container-type: inline-size;
+}
+/* A tablet's pane: the toggle keeps its use, since Phone still looks different, but only its
+   icons, so the bar stays one row. */
+@container (max-width: 640px) {
+  .set-tpl-sample .wtog-lbl {
+    display: none;
+  }
+}
+/* A pane this narrow is close to a phone's width already, so Desktop and Phone would look
+   alike, and the toggle goes. */
+@container (max-width: 480px) {
+  .set-tpl-sample .set-wtog {
+    display: none;
+  }
+  .set-email-stage .set-email-frame.phone {
+    max-width: 100%;
+  }
+}
 .set-preview-titles {
   display: flex;
+  flex: 1 1 0;
   flex-direction: column;
   gap: 1px;
   min-width: 0;
 }
 .set-preview-actions {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
 }
-/* Preview width toggle (640 / 375) — proof both inbox measures; 640 is the default. */
+/* Preview width toggle — proof both inbox measures; Desktop is the default. */
 .set-wtog {
   display: inline-flex;
   gap: 2px;
@@ -6379,24 +6401,26 @@ button.set-embed-copy svg {
 .set-req-pill.bad .dot {
   background: var(--danger-fg);
 }
-/* The sample email sits on a sunken stage so the (width-capped) email card reads as a
-   message on a surface; the width toggle sets its max-width. */
+/* The sample email fills its pane, as a post's Preview does, since an email arrives as a page
+   and not as a card on a surface. So the stage shows only beside the width toggle's Phone, where
+   its color says the frame ends there. --chip, since --sunken is all but the email's own page
+   in dark mode. */
 .set-email-stage {
   display: flex;
   justify-content: center;
-  padding: 16px;
-  background: var(--sunken);
+  background: var(--chip);
 }
 .set-email-stage .set-email-frame {
   width: 100%;
-  max-width: 640px;
+  max-width: 100%;
   /* Floor the auto-sized frame at the default template's height, so emptying or
      shortening the template doesn't collapse the preview and yank the page scroll
-     (the frame can still grow taller for a longer template or the 375 measure). */
-  min-height: 392px;
-  border-radius: 6px;
-  box-shadow: 0 1px 4px rgba(15, 18, 25, 0.1);
+     (the frame can still grow taller for a longer template or the Phone measure). */
+  min-height: 452px;
   transition: max-width 0.16s ease;
+}
+.set-email-stage .set-email-frame.phone {
+  max-width: 375px;
 }
 /* "Start from example": the trigger of a shared menu (openMenu). */
 .set-menu-btn {
@@ -6609,12 +6633,14 @@ button.set-embed-copy svg {
 .set-rp .set-wtog {
   flex: 0 0 auto;
 }
-.set-rp .wtog-btn {
+.set-rp .wtog-btn,
+.set-tpl-sample .wtog-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
 }
-.set-rp .wtog-btn svg {
+.set-rp .wtog-btn svg,
+.set-tpl-sample .wtog-btn svg {
   width: 13px;
   height: 13px;
 }
