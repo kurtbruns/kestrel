@@ -4,9 +4,10 @@
  * to its `max-width` with no size attributes.
  *
  * A zero in the answer is a header stating a size its format can't show (a PNG's, a lossy
- * WebP's), which the upload refuses (SPEC §4). A zero in a JPEG or GIF is unknown instead, since either
- * can still be a working image: a JPEG may state its height in a later marker, and decoders
- * size a GIF that states a screen of zero from its first frame.
+ * WebP's, a JPEG's width), which the upload refuses (SPEC §4). A JPEG stating a height of zero
+ * or a GIF stating a zero is unknown instead, since either can still be a working image: a JPEG
+ * may state its height in a later marker, and decoders size a GIF that states a screen of zero
+ * from its first frame.
  */
 export interface Dimensions {
   width: number;
@@ -97,7 +98,9 @@ function probeJpeg(b: Uint8Array, dv: DataView): Dimensions | null {
     ) {
       const width = dv.getUint16(off + 7);
       const height = dv.getUint16(off + 5);
-      return width && height ? { width, height } : null;
+      // The format lets a frame's height be 0, with the real one in a later DNL marker, so that's
+      // unknown. It requires a width of at least 1, so a zero there stays in the answer.
+      return width > 0 && height === 0 ? null : { width, height };
     }
     // Otherwise skip this segment using its length field.
     const len = dv.getUint16(off + 2);

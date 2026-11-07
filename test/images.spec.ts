@@ -665,6 +665,16 @@ describe("an image's size comes from its header (SPEC §4)", () => {
     },
   );
 
+  // A JPEG's frame header stating these sizes, with nothing after it.
+  const jpegFrame = (height: number, width: number): Uint8Array => {
+    const header = new Uint8Array(32);
+    header.set([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08]);
+    const dv = new DataView(header.buffer);
+    dv.setUint16(7, height);
+    dv.setUint16(9, width);
+    return header;
+  };
+
   const NO_SIZE = (format: string) =>
     `This file is a ${format}, but its header gives it no size, so it can’t be shown. Export it again, or convert it.`;
 
@@ -673,6 +683,8 @@ describe("an image's size comes from its header (SPEC §4)", () => {
     ["a PNG of no height", "x.png", "PNG", edited(PNG_1x1, (dv) => dv.setUint32(20, 0))],
     ["a VP8 of no width", "x.webp", "WebP", edited(WEBP_VP8, (dv) => dv.setUint16(26, 0, true))],
     ["a VP8 of no height", "x.webp", "WebP", edited(WEBP_VP8, (dv) => dv.setUint16(28, 0, true))],
+    ["a JPEG of no width", "x.jpg", "JPEG", jpegFrame(8, 0)],
+    ["a JPEG of no width or height", "x.jpg", "JPEG", jpegFrame(0, 0)],
     // The scale bits are not a size: this one still states a width of zero.
     [
       "a VP8 of only scale",
@@ -707,14 +719,15 @@ describe("an image's size comes from its header (SPEC §4)", () => {
     expect(body.field).toBeUndefined();
   });
 
-  // A frame header with a height of zero, which a JPEG may follow with its height in a later marker.
-  const JPEG_NO_HEIGHT = new Uint8Array(32);
-  JPEG_NO_HEIGHT.set([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x00, 0x00, 0x00, 0x08]);
   // A real image, which decoders size from its first frame: an 8 × 8 GIF stating a screen of 0 × 0.
   const GIF_NO_SCREEN = bytesOf("R0lGODlhAAAAAPAAAP8AAAAAACH5BAAAAAAALAAAAAAIAAgAAAIHhI+py+1dAAA7");
 
   it.each([
-    ["a JPEG whose frame header says height 0", "x.jpg", JPEG_NO_HEIGHT],
+    [
+      "a JPEG whose frame header says height 0, for a later marker to state",
+      "x.jpg",
+      jpegFrame(0, 8),
+    ],
     ["a GIF whose logical screen is 0 × 0", "x.gif", GIF_NO_SCREEN],
   ] as const)(
     "uploads %s with no size, since that can still be a working image",
