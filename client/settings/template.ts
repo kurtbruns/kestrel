@@ -353,7 +353,7 @@ export function sampleEmailHtml(template: string, id: TemplateIdentity): string 
 // can't import: its outer cell is the outer wrapper here, and its 664px table and inner cell
 // are the column. The email holds those figures inline on its cells, where a template's <style>
 // can't reach them, so here they sit on classes rather than the body, which a template's own
-// `body` rule would undo. The narrow rule reads the frame's width, so the 375 view has a
+// `body` rule would undo. The narrow rule reads the frame's width, so the Phone view has a
 // phone's margins. A copy is enough for a sample, which proves the layout while a test proves
 // the render (DESIGN §1.4); template.spec.ts pins these figures and
 // test/email_narrow_display.spec.ts the real ones.
@@ -394,7 +394,7 @@ export function mountSampleEmailPreview(
     try {
       // Measure the BODY, which is content-sized. documentElement.scrollHeight is floored
       // at the iframe's own height, so it can grow but never shrink — which is what left
-      // the frame too tall after 375 → 640 and clipped the footer at 640 → 375.
+      // the frame too tall after widening it and clipped the footer after narrowing it.
       const h = iframe.contentDocument?.body?.scrollHeight;
       if (h) {
         iframe.style.height = `${Math.max(200, h)}px`;
@@ -497,8 +497,8 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
         </span>
         <span class="set-preview-actions">
           <span class="set-wtog" role="group" aria-label="Preview width">
-            <button type="button" class="wtog-btn" data-w="640" aria-pressed="true">640</button>
-            <button type="button" class="wtog-btn" data-w="375" aria-pressed="false">375</button>
+            <button type="button" class="wtog-btn" data-width="desktop" aria-pressed="true">${icon("desktop")}Desktop</button>
+            <button type="button" class="wtog-btn" data-width="phone" aria-pressed="false">${icon("phone")}Phone</button>
           </span>
           <button type="button" class="secondary" id="tplTest">${icon("send")}<span id="tplTestLbl">Send test email</span></button>
         </span>
@@ -710,16 +710,16 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
       { align: "start" },
     );
 
-  // Preview width toggle (640 / 375) — proof both inbox measures; 640 is the default. At 640
-  // the frame fills its pane and the email's own column caps what's in it; 375 narrows the
-  // frame itself to a phone's width.
+  // Preview width toggle — proof both inbox measures; Desktop is the default. At Desktop the
+  // frame fills its pane and the email's own column caps what's in it; Phone narrows the frame
+  // itself to a phone's width.
   const frameEl = $<HTMLIFrameElement>("#tplPreview");
   for (const wb of $$<HTMLButtonElement>(".wtog-btn", bodyEl)) {
     wb.onclick = () => {
       for (const o of $$<HTMLButtonElement>(".wtog-btn", bodyEl)) {
         o.setAttribute("aria-pressed", String(o === wb));
       }
-      frameEl.classList.toggle("narrow", wb.dataset.w === "375");
+      frameEl.classList.toggle("phone", wb.dataset.width === "phone");
       preview.repaint();
     };
   }

@@ -6276,7 +6276,7 @@ button.set-embed-copy svg {
   gap: 8px;
   flex-wrap: wrap;
 }
-/* Preview width toggle (640 / 375) — proof both inbox measures; 640 is the default. */
+/* Preview width toggle — proof both inbox measures; Desktop is the default. */
 .set-wtog {
   display: inline-flex;
   gap: 2px;
@@ -6379,7 +6379,7 @@ button.set-embed-copy svg {
   background: var(--danger-fg);
 }
 /* The sample email fills its pane, as a post's Preview does, since an email arrives as a page
-   and not as a card on a surface. So the stage shows only beside the width toggle's 375, where
+   and not as a card on a surface. So the stage shows only beside the width toggle's Phone, where
    its color says the frame ends there. --chip, since --sunken is all but the email's own page
    in dark mode. */
 .set-email-stage {
@@ -6392,11 +6392,11 @@ button.set-embed-copy svg {
   max-width: 100%;
   /* Floor the auto-sized frame at the default template's height, so emptying or
      shortening the template doesn't collapse the preview and yank the page scroll
-     (the frame can still grow taller for a longer template or the 375 measure). */
+     (the frame can still grow taller for a longer template or the Phone measure). */
   min-height: 452px;
   transition: max-width 0.16s ease;
 }
-.set-email-stage .set-email-frame.narrow {
+.set-email-stage .set-email-frame.phone {
   max-width: 375px;
 }
 /* "Start from example": the trigger of a shared menu (openMenu). */
@@ -6610,12 +6610,14 @@ button.set-embed-copy svg {
 .set-rp .set-wtog {
   flex: 0 0 auto;
 }
-.set-rp .wtog-btn {
+.set-rp .wtog-btn,
+.set-tpl-sample .wtog-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
 }
-.set-rp .wtog-btn svg {
+.set-rp .wtog-btn svg,
+.set-tpl-sample .wtog-btn svg {
   width: 13px;
   height: 13px;
 }

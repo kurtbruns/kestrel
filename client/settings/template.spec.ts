@@ -492,17 +492,19 @@ describe("template view", () => {
     expect($("#tplEditorWrap").classList.contains("show-lines")).toBe(true);
   });
 
-  it("proofs both inbox widths: the frame fills its pane, and narrows only at 375", async () => {
+  it("proofs both inbox widths: the frame fills its pane, and narrows only for Phone", async () => {
     await open();
     const frame = $<HTMLIFrameElement>("#tplPreview");
     const pressed = () => $$(".wtog-btn").map((b) => b.getAttribute("aria-pressed"));
+    // The names the Reader pages toggle gives the same choice.
+    expect($$(".wtog-btn").map((b) => b.textContent?.trim())).toEqual(["Desktop", "Phone"]);
     expect(pressed()).toEqual(["true", "false"]);
-    expect(frame.classList.contains("narrow")).toBe(false);
-    $(".wtog-btn[data-w='375']").click();
-    expect(frame.classList.contains("narrow")).toBe(true);
+    expect(frame.classList.contains("phone")).toBe(false);
+    $(".wtog-btn[data-width='phone']").click();
+    expect(frame.classList.contains("phone")).toBe(true);
     expect(pressed()).toEqual(["false", "true"]);
-    $(".wtog-btn[data-w='640']").click();
-    expect(frame.classList.contains("narrow")).toBe(false);
+    $(".wtog-btn[data-width='desktop']").click();
+    expect(frame.classList.contains("phone")).toBe(false);
     expect(pressed()).toEqual(["true", "false"]);
   });
 });

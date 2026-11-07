@@ -12,7 +12,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
-- The Template page's sample email no longer sits on a gray stage with rounded corners and a shadow, which read as though an email arrives as a card. It and Settings' sample now have the real email's margins.
+- The Template page's sample email no longer sits on a gray stage with rounded corners and a shadow, which read as though an email arrives as a card. It and Settings' sample now have the real email's margins, and its width toggle reads Desktop | Phone, as Reader pages' does, in place of 640 / 375.
 
 ## [1.21.0] - 2026-11-06
 
