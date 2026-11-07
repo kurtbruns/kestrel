@@ -10,6 +10,14 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Added
+
+- Each section's title in Settings is now a link to that section's address, so you can copy a link to a section and send it to someone else.
+
+### Fixed
+
+- The link icon beside a heading in the API reference now shows in dark mode, where it was black on a near-black page.
+
 ## [1.21.0] - 2026-11-06
 
 **Upgrading from 1.20.0.** No database migrations, so `npm run sync-migrations` brings in nothing and there's nothing to apply. In your instance's repository, start with nothing uncommitted, as [Upgrade to a new release](https://github.com/kurtbruns/kestrel/blob/v1.21.0/docs/guides/07-upgrade.md) now says, and install the release with `npm install @kurtbruns/kestrel@1.21.0`. If your `package.json` holds wrangler below 4.156.0, with an exact version or a `~` range, npm refuses that with `ERESOLVE`, so run `npm install @kurtbruns/kestrel@1.21.0 "wrangler@^4.156.0"` instead. Run `npm run check-context`: this release changes two files of the operator's Claude context, `CLAUDE.md` and the upgrade skill, the skill's change bearing on safety, and a copy you've edited is merged by hand. If a script of yours uploads images or a logo, make it send each file's real type and a name that matches it before you deploy (see Breaking). Then run `npm run typecheck`, commit the upgrade, note a restore point, and deploy with `npx wrangler deploy --env production`, as the guide lays out. If you alert on `error` in your logs, alert on `d1.unavailable` repeating as well, since a database outage can now show only as that warning. If you use Claude Code, update it to v2.1.172 or later, or its changes read "via the Kestrel CLI" and the dashboard can stop saying Claude is connected.

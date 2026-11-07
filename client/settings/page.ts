@@ -8,6 +8,7 @@ import {
   type SettingsResponse,
   type SettingsSection,
   type SettingsView,
+  settingsRoute,
   settingsSectionTitle,
 } from "../../shared/settings";
 import { describeError } from "../api";
@@ -75,9 +76,10 @@ export function sectionHeadId(section: SettingsSection): string {
   return `settings-${section}`;
 }
 
-/** A section's head: its title, its chips, and the rule that runs to the edge. */
+/** A section's head: its title, a link to the section's own address so it can be copied, as
+ *  the API reference's headings are, then its chips and the rule that runs to the edge. */
 export function secHead(section: SettingsSection, chipHtml: Html, extra: Html | null = null): Html {
-  return html`<div class="set-sec-head" id="${sectionHeadId(section)}"><h2 class="set-sec-title">${settingsSectionTitle(section)}</h2>${chipHtml}${extra}<span class="set-rule"></span></div>`;
+  return html`<div class="set-sec-head" id="${sectionHeadId(section)}"><h2 class="set-sec-title"><a class="set-sec-link" href="#${settingsRoute(section)}">${icon("link")}${settingsSectionTitle(section)}</a></h2>${chipHtml}${extra}<span class="set-rule"></span></div>`;
 }
 
 /** The letter an inbox row shows for a sender with no avatar. */
