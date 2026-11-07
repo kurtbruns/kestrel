@@ -10,6 +10,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+## [1.22.0] - 2026-11-06
+
+**Upgrading from 1.21.0.** No database migrations, so `npm run sync-migrations` brings in nothing and there's nothing to apply. In your instance's repository, start with nothing uncommitted, as [Upgrade to a new release](https://github.com/kurtbruns/kestrel/blob/v1.21.0/docs/guides/07-upgrade.md) says, and install the release with `npm install @kurtbruns/kestrel@1.22.0`. This release's gate before the first change arrives with that install, so this upgrade runs on the page and skill you have now, and the next one on the new. Run `npm run check-context`: this release changes one file of the operator's Claude context, the upgrade skill, whose change bears on safety, since it now has Claude stop until `git status` lists nothing and ask for a go-ahead before any change, and a copy you've edited is merged by hand. Then run `npm run typecheck`, commit the upgrade, note a restore point, and deploy with `npx wrangler deploy --env production`, as the guide lays out.
+
 ### Added
 
 - Each section's title in Settings is now a link to that section's address, so you can copy a link to a section and send it to someone else.
@@ -814,7 +818,8 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
-[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.21.0...HEAD
+[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.22.0...HEAD
+[1.22.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.22.0
 [1.21.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.21.0
 [1.20.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.20.0
 [1.19.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.19.0
