@@ -350,20 +350,23 @@ export function sampleEmailHtml(template: string, id: TemplateIdentity): string 
 // The isolated preview document: the email's page and frame, so a template's own <style>
 // applies as a mail client would and never leaks out, and its content sits where the email's
 // does. The figures copy the shell's (emailLayout in src/render/template.ts), which the client
-// can't import: its outer cell's padding is the body's here, and its 664px table and inner
-// cell are the column. The narrow rule reads the frame's width, so the 375 view has a phone's
-// margins. A copy is enough for a sample, which proves the layout while a test proves the
-// render (DESIGN §1.4); template.spec.ts pins these figures and
+// can't import: its outer cell is the outer wrapper here, and its 664px table and inner cell
+// are the column. The email holds those figures inline on its cells, where a template's <style>
+// can't reach them, so here they sit on classes rather than the body, which a template's own
+// `body` rule would undo. The narrow rule reads the frame's width, so the 375 view has a
+// phone's margins. A copy is enough for a sample, which proves the layout while a test proves
+// the render (DESIGN §1.4); template.spec.ts pins these figures and
 // test/email_narrow_display.spec.ts the real ones.
 const TEMPLATE_FRAME_DOC =
   '<!doctype html><html><head><meta charset="utf-8">' +
   '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-  "<style>html,body{margin:0}body{background:#fff;padding:8px 12px 48px}" +
+  "<style>html,body{margin:0}body{background:#fff}" +
   "@media (prefers-color-scheme:dark){body{background:#18181b}}" +
+  ".kestrel-email-outer{padding:8px 12px 48px}" +
   ".kestrel-email{max-width:664px;margin:0 auto;padding:24px 32px 32px;box-sizing:border-box}" +
   "@media (max-width:560px){.kestrel-email{padding-left:12px;padding-right:12px}}" +
   ".kestrel-email img{max-width:100%}</style></head>" +
-  '<body><div class="kestrel-email"></div></body></html>';
+  '<body><div class="kestrel-email-outer"><div class="kestrel-email"></div></div></body></html>';
 
 /** A mounted sample-email preview; call `repaint` after the template or identity changes. */
 export interface SampleEmailPreview {

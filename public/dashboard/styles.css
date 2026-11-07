@@ -6379,17 +6379,13 @@ button.set-embed-copy svg {
   background: var(--danger-fg);
 }
 /* The sample email fills its pane, as a post's Preview does, since an email arrives as a page
-   and not as a card on a surface. The stage's colors are LITERALS matching the email's page in
-   both modes, so all that's beside the narrower frame is more of that page. */
+   and not as a card on a surface. So the stage shows only beside the width toggle's 375, where
+   its color says the frame ends there. --chip, since --sunken is all but the email's own page
+   in dark mode. */
 .set-email-stage {
   display: flex;
   justify-content: center;
-  background: #ffffff;
-}
-@media (prefers-color-scheme: dark) {
-  .set-email-stage {
-    background: #18181b;
-  }
+  background: var(--chip);
 }
 .set-email-stage .set-email-frame {
   width: 100%;
@@ -6400,11 +6396,8 @@ button.set-embed-copy svg {
   min-height: 452px;
   transition: max-width 0.16s ease;
 }
-/* The width toggle's 375. An outline, which takes no room, so the frame stays exactly a
-   phone's width; its top and bottom lie on the lines already above and below the stage. */
 .set-email-stage .set-email-frame.narrow {
   max-width: 375px;
-  outline: 1px solid var(--line);
 }
 /* "Start from example": the trigger of a shared menu (openMenu). */
 .set-menu-btn {

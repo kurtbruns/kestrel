@@ -538,13 +538,23 @@ describe("sample email preview", () => {
     );
     // The real email's figures (test/email_narrow_display.spec.ts holds those): 12px outer and
     // 32px inner a side, 44px in all, with the inner brought to 12px on a phone, 24px in all.
-    expect(frame.srcdoc).toContain("body{background:#fff;padding:8px 12px 48px}");
+    expect(frame.srcdoc).toContain(".kestrel-email-outer{padding:8px 12px 48px}");
     expect(frame.srcdoc).toContain(
       ".kestrel-email{max-width:664px;margin:0 auto;padding:24px 32px 32px;box-sizing:border-box}",
     );
     expect(frame.srcdoc).toContain(
       "@media (max-width:560px){.kestrel-email{padding-left:12px;padding-right:12px}}",
     );
+  });
+
+  it("keeps the email's margins when a template's own <style> sets the body's padding", () => {
+    // As in the email, where these figures are inline on its cells and out of a template's reach.
+    const slot = preview("", `<style>body{padding:0}</style>${SIGNOFF}`);
+    const view = slot.ownerDocument.defaultView!;
+    // The template's rule lands, and takes nothing with it.
+    expect(view.getComputedStyle(slot.ownerDocument.body).padding).toBe("0px");
+    expect(view.getComputedStyle(slot.parentElement!).padding).toBe("8px 12px 48px");
+    expect(view.getComputedStyle(slot).padding).toBe("24px 32px 32px");
   });
 
   it("shows no logo, and no stand-in, when none is set: the sign-off the email will carry", () => {
