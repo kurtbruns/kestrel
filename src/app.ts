@@ -1031,7 +1031,7 @@ export function createRouter({
           name: "file",
           type: "file",
           required: true,
-          description: `The image: a PNG, JPEG, WebP, or GIF, at most ${imageRoutes.MAX_POST_IMAGE_BYTES / (1024 * 1024)} MB. Its format is read from its bytes, and a name or declared type that names another of these formats is refused.`,
+          description: `The image: a PNG, JPEG, WebP, or GIF, at most ${imageRoutes.MAX_POST_IMAGE_BYTES / (1024 * 1024)} MB. Its format is read from its bytes, and a name or declared type that names another of these formats is refused, as is a PNG or WebP whose header states a width or height of zero, or a JPEG whose header states a width of zero.`,
         },
         {
           name: "filename",
