@@ -12,7 +12,13 @@ import * as posts from "../db/posts";
 import { readForm } from "../lib/body";
 import { badRequest, json, notFound } from "../lib/errors";
 import { probeImageDimensions } from "../lib/image_dims";
-import { imageLabelConflict, imageTypeOf, mediaType, RASTER_IMAGE_TYPES } from "../lib/image_types";
+import {
+  FORMAT_NAMES,
+  imageLabelConflict,
+  imageTypeOf,
+  mediaType,
+  RASTER_IMAGE_TYPES,
+} from "../lib/image_types";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { requireDraft } from "./posts";
@@ -132,13 +138,21 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
       imageField,
     );
   }
+  // A header stating no size is a file no one can be shown (SPEC §4). A size that can't be read
+  // is another matter: it stays unknown, and the image uploads.
+  const dims = probeImageDimensions(new Uint8Array(bytes));
+  if (dims && (dims.width === 0 || dims.height === 0)) {
+    throw badRequest(
+      `This file is a ${FORMAT_NAMES[contentType]}, but its header gives it no size, so it can’t be shown. Export it again, or convert it.`,
+      imageField,
+    );
+  }
 
   // An upload never replaces an image (SPEC §4). A browser names every pasted image the same,
   // so replacing would leave each reference showing the last paste, at an address a browser
   // may have cached the first under. The name is claimed before the bytes are written, since
   // the editor uploads a paste's or a drop's files at the same time. A Worker lost between
   // the two leaves a row with no bytes, which a reference to it would send as a broken image.
-  const dims = probeImageDimensions(new Uint8Array(bytes));
   let row: ImageRow | null = null;
   for (let n = 1; !row; n++) {
     const candidate = numberedName(filename, n);
