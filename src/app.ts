@@ -84,8 +84,9 @@ const FORM_UPLOAD = ["multipart/form-data"];
 /**
  * Whether a path belongs to the reader surface, for the answers given in its own form rather
  * than the API's JSON: the refusal given before any route is matched, while deploy config is
- * refused or the database is behind the release (SPEC §9), and the page for an error nothing
- * handled on a reader route (SPEC §12). The paths a reader never opens keep their JSON: the API (the admin surface, which
+ * refused or the database is behind the release (SPEC §9), the page for an error nothing
+ * handled on a reader route (SPEC §12), and the page a browser gets for an address that names
+ * none (SPEC §5). The paths a reader never opens keep their JSON: the API (the admin surface, which
  * names the setting to fix, and the dev tooling), the liveness probe, and the provider
  * webhooks. Every other path, a reader route below or no route at all, is a page a person
  * may have opened, so it gets a page that names nothing.
@@ -267,7 +268,7 @@ export function createRouter({
     { name: "limit", description: "Page size (default 50, max 200)." },
     { name: "offset", description: "Rows to skip." },
   ];
-  const r = new Router(isReaderPath);
+  const r = new Router(isReaderPath, archiveRoutes.nothingHereYetPage);
 
   const manifest: RouteDef[] = [
     // --- system ---
@@ -2468,11 +2469,10 @@ export function createRouter({
     // pages, and the emitted archive URLs always share one source. Self-contained by
     // default; an apex zone can additionally route <base>/* to this Worker (SPEC §11).
     // The index is registered before `:slug` so `/archive` resolves to the list, not
-    // a slug lookup; the optional trailing slash (`{/}?`) means `/archive` and
-    // `/archive/` both land on the index while `/archive/:slug` still serves posts.
+    // a slug lookup.
     {
       method: "GET",
-      path: `${archiveBasePath}{/}?`,
+      path: archiveBasePath,
       access: "public",
       resource: "archive",
       title: "Show the archive",

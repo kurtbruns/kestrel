@@ -132,7 +132,8 @@ export function webVersion(
     .join(ARCHIVE_POST_HEAD + readerIconLink(opts.identity.logoUrl) + dev.head);
 }
 
-/** One page for every archive address with no published post (see `archivePage`). */
+/** One page for every archive address with no published post (see `archivePage`), and for any
+ *  other public address that names no page, opened in a browser (the router's fallback). */
 export function nothingHereYetPage(c: RequestContext): Promise<Response> {
   return readerMessage(c, {
     title: "Nothing here yet",

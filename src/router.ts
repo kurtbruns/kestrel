@@ -16,9 +16,10 @@
  * Middleware run in order; the first one to return a `Response` short-circuits
  * (this is how auth returns 401 before the handler runs). Handlers and middleware
  * share a `RequestContext`. All errors funnel through `toErrorResponse`, so
- * handlers can just `throw new HttpError(...)`. The one exception is an error nothing
- * handled on a page a reader opens (`readerPage`), which is logged the same way and answered
- * with an HTML page rather than the API's JSON body.
+ * handlers can just `throw new HttpError(...)`. The exceptions are on a path a reader opens
+ * (`readerPage`): an error nothing handled, which is logged the same way and answered with an
+ * HTML page rather than the API's JSON body, and an address that names no page, which a browser
+ * is answered with the reader's own page (`noSuchPage`).
  */
 import type {
   Access,
@@ -41,7 +42,7 @@ import {
   toErrorResponse,
   unsupportedMediaType,
 } from "./lib/errors";
-import { serverErrorPage } from "./lib/page";
+import { asksForHtml, serverErrorPage } from "./lib/page";
 import { refuseUndeclared } from "./lib/strict";
 import type { RefusalCode } from "./reference/refusals";
 
@@ -315,8 +316,12 @@ export class Router {
   private compiled: CompiledRoute[] = [];
 
   /** `readerPage` says whether a path is one a reader opens in a browser, where an error
-   *  nothing handled is answered with a page rather than JSON. */
-  constructor(private readonly readerPage: (pathname: string) => boolean = () => false) {}
+   *  nothing handled is answered with a page rather than JSON; `notFoundPage` is what a browser
+   *  gets there for an address that names no page. */
+  constructor(
+    private readonly readerPage: (pathname: string) => boolean = () => false,
+    private readonly notFoundPage?: Handler,
+  ) {}
 
   /** Register a route from its manifest entry; the `access` tier decides the gate. */
   register(def: RouteDef): this {
@@ -325,7 +330,12 @@ export class Router {
     const strict =
       def.access !== "webhook" && !this.readerPage(def.path) ? [refuseUndeclared(def)] : [];
     const middleware = [...gateFor(def), ...strict, ...(def.middleware ?? [])];
-    this.compiled.push({ def, pattern: new URLPattern({ pathname: def.path }), middleware });
+    // A public page's address takes a trailing slash too, since a shared link often gains one,
+    // and answers the same page (SPEC §5). Here rather than on each path, so no page can leave it
+    // out and the reference keeps naming the address a person types.
+    const slash = def.access === "public" && this.readerPage(def.path) && !def.path.endsWith("/");
+    const pathname = slash ? `${def.path}{/}?` : def.path;
+    this.compiled.push({ def, pattern: new URLPattern({ pathname }), middleware });
     return this;
   }
 
@@ -394,10 +404,31 @@ export class Router {
           logUncaught(err);
           return guard(route.def.access, serverErrorPage());
         }
-        return guard(route.def.access, toErrorResponse(err));
+        // An address that can't be read names no page either, as a route's own 404 says.
+        const noPage = err === badParam || (err instanceof HttpError && err.code === "not_found");
+        const page = noPage ? await this.noSuchPage(c) : undefined;
+        return guard(route.def.access, page ?? toErrorResponse(err));
       }
     }
 
-    return json({ error: "not_found" }, 404);
+    const c: RequestContext = { req, env, ctx, url, params: {}, config };
+    return (await this.noSuchPage(c)) ?? json({ error: "not_found" }, 404);
+  }
+
+  /**
+   * The reader's page for an address that names none, when a browser asked for it on a reader
+   * path (SPEC §5); `undefined` leaves the JSON, which the API's clients read and anything not
+   * asking for a page may. A failure here is one nothing handled, so it gets that page.
+   */
+  private async noSuchPage(c: RequestContext): Promise<Response | undefined> {
+    if (!this.notFoundPage || !this.readerPage(c.url.pathname) || !asksForHtml(c.req)) {
+      return undefined;
+    }
+    try {
+      return await this.notFoundPage(c);
+    } catch (err) {
+      logUncaught(err);
+      return serverErrorPage();
+    }
   }
 }

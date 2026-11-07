@@ -403,6 +403,11 @@ export function unavailablePage(): Response {
   return res;
 }
 
+/** Whether a request asks for a page, as a browser's navigation does; taking anything isn't asking. */
+export function asksForHtml(req: Request): boolean {
+  return (req.headers.get("accept") ?? "").includes("text/html");
+}
+
 /**
  * What a reader gets when a reader route fails on something nothing handled (SPEC §12): a
  * plain 500 page saying something went wrong, never the API's JSON error body. Like
