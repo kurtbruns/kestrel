@@ -268,7 +268,7 @@ export function createRouter({
     { name: "limit", description: "Page size (default 50, max 200)." },
     { name: "offset", description: "Rows to skip." },
   ];
-  const r = new Router(isReaderPath, archiveRoutes.nothingHereYetPage);
+  const r = new Router(isReaderPath, archiveRoutes.noPageHerePage);
 
   const manifest: RouteDef[] = [
     // --- system ---

@@ -23,7 +23,10 @@ const BROWSER = {
     "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
 };
 
+/** An archive address, where what's missing is a post that may be on its way. */
 const NOTHING_HERE = "Nothing here yet";
+/** Anywhere else, where nothing says what the reader was after. */
+const NO_PAGE = "There’s no page at this address.";
 
 const open = (path: string, headers: HeadersInit = BROWSER, init: RequestInit = {}) =>
   SELF.fetch(`${base}${path}`, { redirect: "manual", headers, ...init });
@@ -88,28 +91,35 @@ describe("a public page's address with a trailing slash (SPEC §5)", () => {
   });
 
   it.each([
-    ["/subscribe/", "email=new@example.com"],
-    ["/confirm/", "token=none"],
-    ["/unsubscribe/?test=1", ""],
-  ])("takes a form posted to %s", async (path, body) => {
+    ["/subscribe/", "email=new@example.com", 200, "Check your inbox"],
+    ["/confirm/", "token=none", 400, "This link is invalid"],
+    ["/unsubscribe/?test=1", "", 200, "You’re unsubscribed"],
+  ])("takes a form posted to %s", async (path, body, status, words) => {
     const res = await open(
       path,
       { ...BROWSER, "content-type": "application/x-www-form-urlencoded" },
       { method: "POST", body },
     );
 
-    expect(res.status).toBeLessThan(500);
-    expect(res.status).not.toBe(404);
+    expect(res.status).toBe(status);
     expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(await res.text()).toContain(words);
   });
 });
 
 describe("a public address that names no page, opened in a browser (SPEC §5)", () => {
+  it.each([["/archive/nope"], ["/archive/nope/"], ["/email/nope"], ["/email/nope/"]])(
+    "%s keeps the archive's page, with a 404",
+    async (path) => {
+      const res = await open(path);
+
+      expect(res.status).toBe(404);
+      expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+      expect(await res.text()).toContain(NOTHING_HERE);
+    },
+  );
+
   it.each([
-    ["/archive/nope"],
-    ["/archive/nope/"],
-    ["/email/nope"],
-    ["/email/nope/"],
     ["/email"],
     ["/email/"],
     ["/nope"],
@@ -124,15 +134,25 @@ describe("a public address that names no page, opened in a browser (SPEC §5)", 
 
     expect(res.status).toBe(404);
     expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
-    expect(await res.text()).toContain(NOTHING_HERE);
+    expect(await res.text()).toContain(NO_PAGE);
   });
 
-  it("answers the same page as a post that isn't there", async () => {
-    const unknown = await open("/nope");
-    const missing = await open("/archive/nope");
+  it("promises a post only at an archive address, and offers the same way onward at both", async () => {
+    const archive = await open("/archive/nope");
+    const other = await open("/subscribe/nope");
+    const archiveBody = await archive.text();
+    const otherBody = await other.text();
 
-    expect(await unknown.text()).toBe(await missing.text());
-    expect(Object.fromEntries(unknown.headers)).toEqual(Object.fromEntries(missing.headers));
+    expect(archiveBody).toContain("A post appears here as soon as it’s sent.");
+    expect(archiveBody).not.toContain(NO_PAGE);
+    expect(otherBody).toContain(NO_PAGE);
+    expect(otherBody).not.toContain(NOTHING_HERE);
+    expect(otherBody).not.toContain("A post appears here");
+
+    const links = (page: string) => page.match(/<a [^>]*href="[^"]*"/g) ?? [];
+    expect(links(otherBody)).toEqual(links(archiveBody));
+    expect(links(otherBody).length).toBeGreaterThan(0);
+    expect(Object.fromEntries(other.headers)).toEqual(Object.fromEntries(archive.headers));
   });
 
   it("is never kept by a cache or offered to search engines", async () => {
@@ -156,7 +176,7 @@ describe("a public address that names no page, opened in a browser (SPEC §5)", 
 
     expect(res.status).toBe(404);
     expect(res.headers.get("location")).toBe(null);
-    expect(body).toContain(NOTHING_HERE);
+    expect(body).toContain(NO_PAGE);
     expect(body).not.toContain("/dashboard");
     expect(body).not.toContain("/api");
   });
@@ -165,7 +185,7 @@ describe("a public address that names no page, opened in a browser (SPEC §5)", 
     for (const path of ["/media/none.png", "/media/"]) {
       const res = await open(path);
       expect(res.status, path).toBe(404);
-      expect(await res.text(), path).toContain(NOTHING_HERE);
+      expect(await res.text(), path).toContain(NO_PAGE);
     }
   });
 
@@ -173,7 +193,7 @@ describe("a public address that names no page, opened in a browser (SPEC §5)", 
     for (const path of ["/archive/%E0", `${UNLISTED_PATH}/%E0`]) {
       const res = await open(path);
       expect(res.status, path).toBe(404);
-      expect(await res.text(), path).toContain(NOTHING_HERE);
+      expect(await res.text(), path).toContain(NO_PAGE);
     }
   });
 

@@ -36,6 +36,7 @@ const SHOWS: Record<string, string[]> = {
   ],
   "reading/archive-empty": ["No posts yet."],
   "reading/not-found": ["Nothing here yet"],
+  "reading/no-page": ["No page here", "There’s no page at this address."],
 };
 
 beforeEach(async () => {

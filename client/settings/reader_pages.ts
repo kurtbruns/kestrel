@@ -61,7 +61,8 @@ const STATE_NOTES: StateNotes = {
     post: "The web version of a post that went out. Readers reach it from View in browser in its email, or from your archive.",
     "landing-empty": `Your newsletter’s website before your first post goes out. ${SHOWN_OPEN}`,
     "archive-empty": `Your archive before your first post goes out. ${SHOWN_OPEN}`,
-    "not-found": "When a reader follows a link to a page that isn’t there.",
+    "not-found": "When a reader follows a link to a post that isn’t there, or isn’t out yet.",
+    "no-page": "When a reader opens any other address with no page, such as a mistyped link.",
   },
 };
 
