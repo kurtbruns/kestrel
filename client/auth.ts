@@ -11,12 +11,12 @@ import { appState, type Session, TOKEN_KEY } from "./state";
 import { $ } from "./ui/dom";
 import { html, setHtml } from "./ui/html";
 
-/** Remember the dev token; an empty one forgets it, so the next boot mints instead of probing with a dead value. */
+/** Remember the dev token; an empty one forgets it, so the next boot probes with no credential rather than a dead one. */
 export function setToken(t: string | null | undefined): void {
   appState.token = (t || "").trim();
   try {
-    // Clearing (empty token) removes the key rather than storing "", so the next
-    // boot takes the "no token → mint" path instead of probing with a dead value.
+    // Clearing (empty token) removes the key rather than storing "", which would read back
+    // as a credential on the next boot.
     if (appState.token) {
       localStorage.setItem(TOKEN_KEY, appState.token);
     } else {
@@ -87,7 +87,8 @@ export function showReauth(): void {
 }
 
 // Mint a dev token into localStorage. Returns false when deployed, where the endpoint 404s
-// (or is unreachable) and the Access cookie authenticates instead.
+// (or is unreachable) and the Access cookie authenticates instead. The browser logs that 404
+// whatever a script does with it, so this runs only after a probe has failed.
 async function mintDevToken(): Promise<boolean> {
   try {
     const r = await fetch("/api/dev/token?kind=human");
@@ -117,20 +118,17 @@ function isSession(data: unknown): data is Session {
 }
 
 /**
- * The boot probe: who is signed in, minting a dev token first in local development. Answers
- * the session, or null once it has put up the wall the probe landed on: the refused
- * configuration's when the server names a setting to fix (SPEC §9), the locked editor's when
- * the deployment has no Access yet (SPEC §11), since signing in again cannot help with
- * either, and the sign-in wall otherwise.
+ * The boot probe: who is signed in, minting a dev token only once a probe has failed, which
+ * is local development with no token or a stale one. Answers the session, or null once it has
+ * put up the wall the probe landed on: the refused configuration's when the server names a
+ * setting to fix (SPEC §9), the locked editor's when the deployment has no Access yet (SPEC
+ * §11), since signing in again cannot help with either, and the sign-in wall otherwise.
  */
 export async function probeSession(): Promise<Session | null> {
-  if (!appState.token) {
-    await mintDevToken();
-  }
   let res = await whoami();
-  // Stale stored token in dev: clear it, mint a fresh one, and probe again so a leftover
-  // credential self-heals. In Access mode the re-mint fails and `res` stays as it was.
-  if (!res?.ok && appState.token) {
+  // In dev: forget any stale token, mint a fresh one, and probe again, so a first load signs
+  // in and a leftover credential self-heals. Deployed the mint fails and `res` stays as it was.
+  if (!res?.ok) {
     setToken("");
     if (await mintDevToken()) {
       res = await whoami();

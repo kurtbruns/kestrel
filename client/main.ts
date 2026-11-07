@@ -1,10 +1,10 @@
 // Kestrel editor — a small vanilla SPA over the same HTTP API Claude uses.
 // Auth is edge-centric: in production Cloudflare Access gates this surface, so the
 // browser's Access session cookie authenticates every same-origin call and there is
-// nothing to paste. In local dev there is no edge, so the editor mints a dev token
-// on boot (/api/dev/token) and sends it as a bearer. Either way the boot probe
-// (/api/whoami) tells us who we are and which mode we're in; the identity chip and
-// the failure handling follow from that.
+// nothing to paste. In local dev there is no edge, so when the boot probe finds no
+// session the editor mints a dev token (/api/dev/token) and sends it as a bearer.
+// Either way the probe (/api/whoami) tells us who we are and which mode we're in; the
+// identity chip and the failure handling follow from that.
 
 import type { SettingsResponse } from "../shared/settings";
 import { api } from "./api";
