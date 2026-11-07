@@ -14,6 +14,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 - Each section's title in Settings is now a link to that section's address, so you can copy a link to a section and send it to someone else.
 
+### Changed
+
+- Upgrade to a new release now has a gate before its first change: its first section reads what changed and requires a clean repository, leaving how to get there to you, and the operator's Claude context (`template/claude/skills/upgrade/SKILL.md`) has Claude report what `git status` lists and stop until it lists nothing, with no offer to commit it, then name what the upgrade involves and ask whether to go ahead, where "not now" ends the upgrade with nothing changed. This bears on safety: Claude could see uncommitted work listed and still run the install. The gate arrives with the install, so the upgrade to the release that brings it still runs on the old page and skill.
+
 ### Fixed
 
 - A reader who opens a public address that doesn't exist now gets a "No page here" page in the publication's own look with a 404, not raw JSON, and a public page's address works with a trailing slash, so a shared `/subscribe/` opens the subscribe page. `/api` paths, and anything that doesn't ask for a page, still answer JSON.

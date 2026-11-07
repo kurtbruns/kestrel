@@ -2,27 +2,29 @@
 
 A new release of Kestrel is a new version of the `@kurtbruns/kestrel` package. Upgrading changes the version your instance's repository names, brings in the release's database changes, and deploys. The app can't undo a database change, so you note a restore point first.
 
-In this guide, you read what changed, install the release, and note where your database stands. Then you apply the database changes, deploy, and check the new version. If you run a staging environment, upgrade it first, and repeat each step for production once it checks out.
+In this guide, you first read what changed and check that your repository is clean, which changes nothing. Then you install the release, note where your database stands, apply the database changes, deploy, and check the new version. If you run a staging environment, upgrade it first, and repeat each step for production once it checks out.
 
-## 1. Read what changed
+## 1. Check before you change anything
 
-A release can ask you to change a setting or a record before it runs. The changelog says so, release by release.
+A release can ask you to change a setting or a record before it runs. The changelog says so, release by release. The upgrade also has to start from a clean repository.
 
 1. Find the version you run. In the editor, open the **Docs** or **API** tab. The foot of its contents list shows the version, then the commit. Your instance's `package.json` names it too, as the version of `@kurtbruns/kestrel`.
 
 1. Read the [release notes](https://github.com/kurtbruns/kestrel/releases) for every version after yours, up to the one you're moving to. Each release opens with an **Upgrading from…** paragraph that says what to do. Its **Breaking** entries say what changed underneath you.
 
-## 2. Install the release
-
-Each step here changes only your instance's repository. Nothing reaches your deployed app until section 5.
-
-1. Start from a clean repository, so the upgrade's commit holds only the upgrade and going back undoes nothing else:
+1. Check that your repository is clean, so the upgrade's commit holds only the upgrade and going back undoes nothing else:
 
     ```bash
     git status
     ```
 
-    If it lists anything, commit it first, as its own commit, or move it out of the repository.
+    It has to say `nothing to commit, working tree clean`. If it lists anything, untracked files included, the upgrade waits until it doesn't.
+
+Nothing has changed yet. If you aren't going on, stop here.
+
+## 2. Install the release
+
+Each step here changes only your instance's repository. Nothing reaches your deployed app until section 5.
 
 1. Install the release. Replace `X.Y.Z` with its version:
 
