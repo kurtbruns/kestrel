@@ -34,22 +34,23 @@ export interface UnauthorizedBody {
   dev_token_available?: true;
 }
 
+/**
+ * A body as an admin 401's, when its code says it is one. Only the code is checked, so a reader
+ * still tests the value of any field it reads.
+ */
+export function unauthorizedBody(data: unknown): UnauthorizedBody | null {
+  return typeof data === "object" && (data as { error?: unknown } | null)?.error === "unauthorized"
+    ? (data as UnauthorizedBody)
+    : null;
+}
+
 /** Whether a body is an admin 401 saying a dev token can be minted here (SPEC §11). */
 export function devTokenAvailable(data: unknown): boolean {
-  const d = data as { error?: unknown; dev_token_available?: unknown } | null;
-  return d?.error === "unauthorized" && d.dev_token_available === true;
+  return unauthorizedBody(data)?.dev_token_available === true;
 }
 
 /** The reason a body gives, when it is an admin 401 that gives one. */
 export function unauthorizedReason(data: unknown): UnauthorizedReason | null {
-  if (!data || typeof data !== "object") {
-    return null;
-  }
-  const d = data as { error?: unknown; reason?: unknown };
-  if (d.error !== "unauthorized") {
-    return null;
-  }
-  return d.reason === "access_not_configured" || d.reason === "access_unidentified"
-    ? d.reason
-    : null;
+  const reason = unauthorizedBody(data)?.reason;
+  return reason === "access_not_configured" || reason === "access_unidentified" ? reason : null;
 }

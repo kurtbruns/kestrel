@@ -107,18 +107,27 @@ describe("the boot probe", () => {
     expect(document.querySelector("#app .config-wall")).not.toBeNull();
   });
 
-  it("lands on the sign-in wall with no stale token left when an offered mint fails", async () => {
-    setToken("stale");
-    fake = fakeApi([
-      { path: "/api/dev/token", reply: () => jsonResponse({ error: "internal_error" }, 500) },
-      { path: "/api/whoami", reply: () => jsonResponse(DEV_401, 401) },
-    ]);
-    expect(await probeSession()).toBeNull();
-    expect(calls()).toEqual(["GET /api/whoami", "GET /api/dev/token"]);
-    expect(appState.token).toBe("");
-    expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
-    expect($("#app #reauth").textContent).toBe("Sign in");
-  });
+  it.each([
+    ["is refused", () => jsonResponse({ error: "internal_error" }, 500)],
+    ["answers no token", () => jsonResponse({ kind: "human" })],
+    ["answers an empty token", () => jsonResponse({ token: "", kind: "human" })],
+    ["answers a token that isn't a string", () => jsonResponse({ token: 42, kind: "human" })],
+    ["answers something other than JSON", () => new Response("<html>", { status: 200 })],
+  ])(
+    "lands on the sign-in wall with no stale token left when an offered mint %s",
+    async (_, reply) => {
+      setToken("stale");
+      fake = fakeApi([
+        { path: "/api/dev/token", reply },
+        { path: "/api/whoami", reply: () => jsonResponse(DEV_401, 401) },
+      ]);
+      expect(await probeSession()).toBeNull();
+      expect(calls()).toEqual(["GET /api/whoami", "GET /api/dev/token"]);
+      expect(appState.token).toBe("");
+      expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
+      expect($("#app #reauth").textContent).toBe("Sign in");
+    },
+  );
 
   it("asks no dev route when the probe's fetch fails (SPEC §11)", async () => {
     fake = fakeApi([

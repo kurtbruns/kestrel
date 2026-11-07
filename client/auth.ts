@@ -87,13 +87,17 @@ export function showReauth(): void {
 }
 
 // Mint a dev token into localStorage. Only a 401 that offers one leads here, so this never
-// runs where the route is absent, and false means the local server refused it.
+// runs where the route is absent, and false means the local server refused it or answered
+// with no token.
 async function mintDevToken(): Promise<boolean> {
   try {
     const r = await fetch("/api/dev/token?kind=human");
     if (r.ok) {
-      setToken(((await r.json()) as { token: string }).token);
-      return true;
+      const { token } = (await r.json()) as { token?: unknown };
+      if (typeof token === "string" && token) {
+        setToken(token);
+        return true;
+      }
     }
   } catch {
     /* the local server went away; the probe's own answer stands */
