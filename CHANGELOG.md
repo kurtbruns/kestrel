@@ -19,6 +19,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - The Template page's sample email no longer sits on a gray stage with rounded corners and a shadow, which read as though an email arrives as a card. It and Settings' sample now have the real email's margins, and its width toggle reads Desktop | Phone, as Reader pages' does, in place of 640 / 375.
 - A signed-in operator on a deployed instance now loads the editor with a clean console, where every load used to log a 404 for a local development token.
 - A WebP post image now gets its width and height, so its email states a size as a PNG's or JPEG's does; one uploaded earlier has none until it's deleted and uploaded again. An image whose file says it has no size is refused with a message saying to export it again, where it used to answer a server error or be stored and not load (SPEC §4).
+- Troubleshooting now covers `claude mcp login` failing with `Dynamic Client Registration rejected (HTTP 404)`: nothing on the instance is wrong, and signing in through `/mcp` inside Claude Code connects.
 - The link icon beside a heading in the API reference now shows in dark mode, where it was black on a near-black page.
 
 ## [1.21.0] - 2026-11-06

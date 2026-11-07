@@ -179,6 +179,30 @@ export function stubClipboard() {
   return writeText;
 }
 
+/** A ResizeObserver that never fires and reports what is still being watched, since
+ *  happy-dom has none; `vi.unstubAllGlobals()` in afterEach puts it back. */
+export function stubResizeObserver(): { watching(): Element[] } {
+  const watched = new Set<{ el: Element }>();
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      entries: { el: Element }[] = [];
+      observe(el: Element) {
+        const entry = { el };
+        this.entries.push(entry);
+        watched.add(entry);
+      }
+      unobserve() {}
+      disconnect() {
+        for (const entry of this.entries) {
+          watched.delete(entry);
+        }
+      }
+    },
+  );
+  return { watching: () => [...watched].map((entry) => entry.el) };
+}
+
 /**
  * What `GET /api/settings` answers, for a view that reads it: a publication on the dev fake
  * transport, with a template the server would take and nothing scheduled. `settings` and

@@ -14,7 +14,9 @@ import {
   sendSummary,
   settingsResponse,
   stubClipboard,
+  stubResizeObserver,
   typeInto,
+  unmount,
 } from "../test/support";
 import { fmt } from "../ui/format";
 import {
@@ -77,6 +79,7 @@ describe("template view", () => {
   });
   afterEach(() => {
     fake?.restore();
+    vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 
@@ -509,12 +512,28 @@ describe("template view", () => {
     expect(frame.classList.contains("phone")).toBe(false);
     expect(pressed()).toEqual(["true", "false"]);
   });
+
+  it("stops watching the sample email's frame on leaving the page", async () => {
+    const observers = stubResizeObserver();
+    await open();
+    const frame = $<HTMLIFrameElement>("#tplPreview");
+    frame.dispatchEvent(new Event("load"));
+    const body = frame.contentDocument?.body;
+    expect(body).toBeInstanceOf(HTMLElement);
+    expect(observers.watching()).toEqual([body]);
+    unmount();
+    expect(observers.watching()).toEqual([]);
+  });
 });
 
 describe("sample email preview", () => {
   const SIGNOFF =
     '<div class="email">{{ .Post.Body }}<table><tr><td class="logo-cell">{{ .Publication.Logo }}</td><td>{{ .Publication.Name }}</td></tr></table></div>';
   const identity = { name: "Birds Weekly", tagline: "", address: "" };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
   function preview(logoUrl: string, template = SIGNOFF): HTMLElement {
     resetShell();
@@ -524,6 +543,7 @@ describe("sample email preview", () => {
       frame,
       () => template,
       () => ({ ...identity, logoUrl }),
+      new AbortController().signal,
     );
     frame.dispatchEvent(new Event("load"));
     const slot = frame.contentDocument?.querySelector<HTMLElement>(".kestrel-email");
@@ -539,6 +559,7 @@ describe("sample email preview", () => {
       frame,
       () => SIGNOFF,
       () => ({ ...identity, logoUrl: "" }),
+      new AbortController().signal,
     );
     // The real email's figures (test/email_narrow_display.spec.ts holds those): 12px outer and
     // 32px inner a side, 44px in all, with the inner brought to 12px on a phone, 24px in all.
@@ -582,12 +603,59 @@ describe("sample email preview", () => {
       frame,
       () => SIGNOFF,
       () => ({ ...identity, logoUrl: "" }),
+      new AbortController().signal,
     );
     expect(frame.getAttribute("sandbox")?.split(" ")).toEqual([
       "allow-same-origin",
       "allow-popups",
       "allow-popups-to-escape-sandbox",
     ]);
+  });
+
+  describe("what it watches", () => {
+    function mountFrame(signal: AbortSignal): HTMLIFrameElement {
+      resetShell();
+      const frame = document.createElement("iframe");
+      document.body.append(frame);
+      mountSampleEmailPreview(
+        frame,
+        () => SIGNOFF,
+        () => ({ ...identity, logoUrl: "" }),
+        signal,
+      );
+      return frame;
+    }
+
+    it("watches the frame's body until the signal aborts, then nothing", () => {
+      const observers = stubResizeObserver();
+      const view = new AbortController();
+      const frame = mountFrame(view.signal);
+      frame.dispatchEvent(new Event("load"));
+      expect(observers.watching()).toEqual([frame.contentDocument?.body]);
+      view.abort();
+      expect(observers.watching()).toEqual([]);
+    });
+
+    it("keeps one observer through a second load of the frame, which the signal still ends", () => {
+      const observers = stubResizeObserver();
+      const view = new AbortController();
+      const frame = mountFrame(view.signal);
+      frame.dispatchEvent(new Event("load"));
+      frame.dispatchEvent(new Event("load"));
+      expect(observers.watching()).toEqual([frame.contentDocument?.body]);
+      view.abort();
+      expect(observers.watching()).toEqual([]);
+    });
+
+    it("starts nothing when the frame loads after the view has gone", () => {
+      const observers = stubResizeObserver();
+      const view = new AbortController();
+      const frame = mountFrame(view.signal);
+      view.abort();
+      frame.dispatchEvent(new Event("load"));
+      expect(observers.watching()).toEqual([]);
+      expect(frame.contentDocument?.querySelector(".kestrel-email")?.innerHTML).toBe("");
+    });
   });
 
   it("opens the template's links in a new tab, so following one never blanks the frame", () => {
