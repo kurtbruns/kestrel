@@ -60,10 +60,7 @@ describe("boot, before the probe answers", () => {
 
   it("keeps the chrome hidden on a locked editor, from the first paint to the wall", async () => {
     const whoami = held();
-    fake = fakeApi([
-      { path: "/api/dev/token", reply: () => jsonResponse({ error: "not_found" }, 404) },
-      { path: "/api/whoami", reply: whoami.reply },
-    ]);
+    fake = fakeApi([{ path: "/api/whoami", reply: whoami.reply }]);
     await boot();
     await settle();
     expect(signedOut()).toBe(true);

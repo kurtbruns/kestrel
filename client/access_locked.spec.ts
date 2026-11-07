@@ -29,11 +29,7 @@ describe("the locked editor, before Access is set up (SPEC §11)", () => {
   });
 
   it("is what the boot probe shows on a deployment with no Access, not a session that expired", async () => {
-    fake = fakeApi([
-      // Deployed: the dev token route is absent.
-      { path: "/api/dev/token", reply: () => jsonResponse({ error: "not_found" }, 404) },
-      { path: "/api/whoami", reply: () => jsonResponse(LOCKED, 401) },
-    ]);
+    fake = fakeApi([{ path: "/api/whoami", reply: () => jsonResponse(LOCKED, 401) }]);
     expect(await probeSession()).toBeNull();
     expect(document.body.classList.contains("signed-out")).toBe(true);
     const wall = $("#app .access-wall");
@@ -53,7 +49,6 @@ describe("the locked editor, before Access is set up (SPEC §11)", () => {
 
   it("keeps the session-expired wall for any other 401", async () => {
     fake = fakeApi([
-      { path: "/api/dev/token", reply: () => jsonResponse({ error: "not_found" }, 404) },
       { path: "/api/whoami", reply: () => jsonResponse({ error: "unauthorized" }, 401) },
     ]);
     expect(await probeSession()).toBeNull();
@@ -131,10 +126,7 @@ describe("the locked editor, when Access let in a login that names no one (SPEC 
   });
 
   it("is what the boot probe shows, with the two policies Kestrel accepts and the Access guide", async () => {
-    fake = fakeApi([
-      { path: "/api/dev/token", reply: () => jsonResponse({ error: "not_found" }, 404) },
-      { path: "/api/whoami", reply: () => jsonResponse(UNIDENTIFIED, 401) },
-    ]);
+    fake = fakeApi([{ path: "/api/whoami", reply: () => jsonResponse(UNIDENTIFIED, 401) }]);
     expect(await probeSession()).toBeNull();
     expect(document.body.classList.contains("signed-out")).toBe(true);
     const wall = $("#app .access-wall");
