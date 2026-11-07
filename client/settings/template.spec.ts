@@ -495,15 +495,21 @@ describe("template view", () => {
     expect($("#tplEditorWrap").classList.contains("show-lines")).toBe(true);
   });
 
-  it("proofs both inbox widths", async () => {
+  it("proofs both inbox widths: the frame fills its pane, and narrows only for Phone", async () => {
     await open();
+    const frame = $<HTMLIFrameElement>("#tplPreview");
     const pressed = () => $$(".wtog-btn").map((b) => b.getAttribute("aria-pressed"));
+    // The names the Reader pages toggle gives the same choice.
+    expect($$(".wtog-btn").map((b) => b.textContent?.trim())).toEqual(["Desktop", "Phone"]);
+    // Named without the words too, since a tablet's width shows only the icons (DESIGN §11).
+    expect($$(".wtog-btn").map((b) => b.getAttribute("aria-label"))).toEqual(["Desktop", "Phone"]);
     expect(pressed()).toEqual(["true", "false"]);
-    $(".wtog-btn[data-w='375']").click();
-    expect($<HTMLIFrameElement>("#tplPreview").style.maxWidth).toBe("375px");
+    expect(frame.classList.contains("phone")).toBe(false);
+    $(".wtog-btn[data-width='phone']").click();
+    expect(frame.classList.contains("phone")).toBe(true);
     expect(pressed()).toEqual(["false", "true"]);
-    $(".wtog-btn[data-w='640']").click();
-    expect($<HTMLIFrameElement>("#tplPreview").style.maxWidth).toBe("640px");
+    $(".wtog-btn[data-width='desktop']").click();
+    expect(frame.classList.contains("phone")).toBe(false);
     expect(pressed()).toEqual(["true", "false"]);
   });
 
@@ -546,6 +552,34 @@ describe("sample email preview", () => {
     }
     return slot;
   }
+
+  it("draws the email's frame, with its side padding at both widths", () => {
+    const frame = document.createElement("iframe");
+    mountSampleEmailPreview(
+      frame,
+      () => SIGNOFF,
+      () => ({ ...identity, logoUrl: "" }),
+    );
+    // The real email's figures (test/email_narrow_display.spec.ts holds those): 12px outer and
+    // 32px inner a side, 44px in all, with the inner brought to 12px on a phone, 24px in all.
+    expect(frame.srcdoc).toContain(".kestrel-email-outer{padding:8px 12px 48px}");
+    expect(frame.srcdoc).toContain(
+      ".kestrel-email{max-width:664px;margin:0 auto;padding:24px 32px 32px;box-sizing:border-box}",
+    );
+    expect(frame.srcdoc).toContain(
+      "@media (max-width:560px){.kestrel-email{padding-left:12px;padding-right:12px}}",
+    );
+  });
+
+  it("keeps the email's margins when a template's own <style> sets the body's padding", () => {
+    // As in the email, where these figures are inline on its cells and out of a template's reach.
+    const slot = preview("", `<style>body{padding:0}</style>${SIGNOFF}`);
+    const view = slot.ownerDocument.defaultView!;
+    // The template's rule lands, and takes nothing with it.
+    expect(view.getComputedStyle(slot.ownerDocument.body).padding).toBe("0px");
+    expect(view.getComputedStyle(slot.parentElement!).padding).toBe("8px 12px 48px");
+    expect(view.getComputedStyle(slot).padding).toBe("24px 32px 32px");
+  });
 
   it("shows no logo, and no stand-in, when none is set: the sign-off the email will carry", () => {
     const slot = preview("");

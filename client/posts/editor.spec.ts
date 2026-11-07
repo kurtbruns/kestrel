@@ -2400,6 +2400,27 @@ describe("editor view", () => {
     expect((upload!.form!.get("file") as File).name).toBe("photo.png");
   });
 
+  it("shows an upload's refusal in the server's words, and inserts nothing", async () => {
+    const refusal =
+      "This file is a PNG, but its header gives it no size, so it can’t be shown. Export it again, or convert it.";
+    await open([
+      { path: "/api/posts/p1", reply: () => draft() },
+      {
+        method: "POST",
+        path: "/api/posts/p1/images",
+        reply: () => jsonResponse({ error: "bad_request", message: refusal, field: "file" }, 400),
+      },
+    ]);
+    const before = body().value;
+    const input = $<HTMLInputElement>("#imgInput");
+    const file = new File(["png"], "broken.png", { type: "image/png" });
+    Object.defineProperty(input, "files", { value: [file], configurable: true });
+    input.dispatchEvent(new Event("change"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#toasts").textContent).toContain(refusal);
+    expect(body().value).toBe(before);
+  });
+
   it("mounts a scheduled post read-only, with no autosave", async () => {
     await open(scheduledPost().routes);
     expect(body().readOnly).toBe(true);

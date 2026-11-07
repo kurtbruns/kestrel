@@ -3,8 +3,18 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { IMAGE_TYPE_BY_EXTENSION } from "../shared/images";
 import type { AppEnv } from "../src/env";
+import { probeImageDimensions } from "../src/lib/image_dims";
 import { FORMAT_NAMES, RASTER_IMAGE_TYPES } from "../src/lib/image_types";
-import { AUTH, base, GIF_1x1, JPEG_1x1, PNG_1x1, readJson, WEBP_1x1 } from "./support/http";
+import {
+  AUTH,
+  base,
+  GIF_1x1,
+  JPEG_1x1,
+  JSON_AUTH,
+  PNG_1x1,
+  readJson,
+  WEBP_1x1,
+} from "./support/http";
 import { allowErrorLogs } from "./support/log";
 import { fetchOn } from "./support/worker_env";
 
@@ -546,4 +556,187 @@ describe("images", () => {
     const up = await upload(id, "x.png"); // no auth header
     expect(up.status).toBe(401);
   });
+});
+
+describe("an image's size comes from its header (SPEC §4)", () => {
+  const bytesOf = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
+
+  // The opening bytes of real `cwebp` output: one 1200 × 675 image in each of WebP's three forms.
+  const WEBP_VP8 = bytesOf("UklGRjISAABXRUJQVlA4ICYSAAAQHwGdASqwBKMCPrVaqlCnJSOioA==");
+  const WEBP_VP8L = bytesOf("UklGRtoBAABXRUJQVlA4TM0BAAAvr4SoADmASNofe4mI/qd2AEH43w==");
+  const WEBP_VP8X = bytesOf("UklGRn4SAABXRUJQVlA4WAoAAAAQAAAArwQAogIAQUxQSDIAAAABBw==");
+
+  // A copy of `bytes` with `write` applied, for a header that states something else.
+  const edited = (bytes: Uint8Array, write: (dv: DataView) => void): Uint8Array => {
+    const copy = bytes.slice();
+    write(new DataView(copy.buffer));
+    return copy;
+  };
+
+  // A bare WebP container: `chunk` names its first chunk, and the rest of the header is zeros.
+  const webpChunk = (chunk: string): Uint8Array => {
+    const header = new Uint8Array(32);
+    header.set(new TextEncoder().encode(`RIFF\0\0\0\0WEBP${chunk}`));
+    return header;
+  };
+
+  const send = (id: string, name: string, bytes: Uint8Array) => {
+    const fd = new FormData();
+    fd.append("file", new File([bytes], name));
+    return SELF.fetch(`${base}/api/posts/${id}/images`, {
+      method: "POST",
+      headers: AUTH,
+      body: fd,
+    });
+  };
+
+  const listed = async (id: string) =>
+    (await readJson(await SELF.fetch(`${base}/api/posts/${id}/images`, { headers: AUTH }))).images;
+
+  it.each([
+    ["VP8 (lossy)", WEBP_VP8],
+    ["VP8L (lossless)", WEBP_VP8L],
+    ["VP8X (extended)", WEBP_VP8X],
+  ] as const)("stores a %s WebP's size", async (_form, bytes) => {
+    const id = await newDraft("WebP");
+    const res = await send(id, "chart.webp", bytes);
+    expect(res.status).toBe(201);
+    const { image } = await readJson(res);
+    expect(image.content_type).toBe("image/webp");
+    expect([image.width, image.height]).toEqual([1200, 675]);
+  });
+
+  it("sizes a WebP in the email as it sizes any other image, capped to the column", async () => {
+    const created = await readJson(
+      await SELF.fetch(`${base}/api/posts`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ subject: "WebP Email", markdown: "![A chart](chart.webp)" }),
+      }),
+    );
+    const id = created.post.id;
+    await send(id, "chart.webp", WEBP_VP8);
+    const html = await (
+      await SELF.fetch(`${base}/api/posts/${id}/preview`, { headers: AUTH })
+    ).text();
+    expect(html).toMatch(/<img[^>]*alt="A chart"[^>]*width="600" height="338"/);
+  });
+
+  it("ignores the scale VP8 keeps in the top bits of its size fields", () => {
+    const scaled = edited(WEBP_VP8, (dv) => {
+      dv.setUint16(26, 0xc000 | 1200, true);
+      dv.setUint16(28, 0x4000 | 675, true);
+    });
+    expect(probeImageDimensions(scaled)).toEqual({ width: 1200, height: 675 });
+  });
+
+  it("reads the largest size each lossless and extended WebP can state", () => {
+    const lossless = edited(webpChunk("VP8L"), (dv) => {
+      dv.setUint8(20, 0x2f);
+      dv.setUint32(21, 0x0fffffff, true);
+    });
+    expect(probeImageDimensions(lossless)).toEqual({ width: 16384, height: 16384 });
+    const extended = edited(webpChunk("VP8X"), (dv) => {
+      dv.setUint16(24, 0xffff, true);
+      dv.setUint8(26, 0xff);
+      dv.setUint16(27, 0xffff, true);
+      dv.setUint8(29, 0xff);
+    });
+    expect(probeImageDimensions(extended)).toEqual({ width: 16777216, height: 16777216 });
+  });
+
+  it.each([
+    ["a VP8 cut off before its width", WEBP_VP8.slice(0, 26)],
+    ["a VP8 cut off inside its height", WEBP_VP8.slice(0, 29)],
+    ["a VP8L cut off before its size", WEBP_VP8L.slice(0, 24)],
+    ["a VP8X cut off inside its height", WEBP_VP8X.slice(0, 29)],
+    ["a WebP cut off inside its first chunk's name", WEBP_VP8.slice(0, 14)],
+    ["a VP8 with no start code", webpChunk("VP8 ")],
+    ["a VP8L with no signature", webpChunk("VP8L")],
+    ["a first chunk that names no image", webpChunk("ICCP")],
+  ] as const)(
+    "uploads %s with no size, since a size it can't read is unknown",
+    async (_what, bytes) => {
+      const id = await newDraft("Unreadable");
+      const res = await send(id, "cut.webp", bytes);
+      expect(res.status).toBe(201);
+      const { image } = await readJson(res);
+      expect([image.width, image.height]).toEqual([null, null]);
+    },
+  );
+
+  // A JPEG's frame header stating these sizes, with nothing after it.
+  const jpegFrame = (height: number, width: number): Uint8Array => {
+    const header = new Uint8Array(32);
+    header.set([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08]);
+    const dv = new DataView(header.buffer);
+    dv.setUint16(7, height);
+    dv.setUint16(9, width);
+    return header;
+  };
+
+  const NO_SIZE = (format: string) =>
+    `This file is a ${format}, but its header gives it no size, so it can’t be shown. Export it again, or convert it.`;
+
+  it.each([
+    ["a PNG of no width", "x.png", "PNG", edited(PNG_1x1, (dv) => dv.setUint32(16, 0))],
+    ["a PNG of no height", "x.png", "PNG", edited(PNG_1x1, (dv) => dv.setUint32(20, 0))],
+    ["a VP8 of no width", "x.webp", "WebP", edited(WEBP_VP8, (dv) => dv.setUint16(26, 0, true))],
+    ["a VP8 of no height", "x.webp", "WebP", edited(WEBP_VP8, (dv) => dv.setUint16(28, 0, true))],
+    ["a JPEG of no width", "x.jpg", "JPEG", jpegFrame(8, 0)],
+    ["a JPEG of no width or height", "x.jpg", "JPEG", jpegFrame(0, 0)],
+    // The scale bits are not a size: this one still states a width of zero.
+    [
+      "a VP8 of only scale",
+      "x.webp",
+      "WebP",
+      edited(WEBP_VP8, (dv) => dv.setUint16(26, 0xc000, true)),
+    ],
+  ] as const)(
+    "refuses %s, naming the file field, and stores nothing",
+    async (_what, name, format, bytes) => {
+      const id = await newDraft("No Size");
+      const res = await send(id, name, bytes);
+      expect(res.status).toBe(400);
+      const body = await readJson(res);
+      expect(body.message).toBe(NO_SIZE(format));
+      expect(body.field).toBe("file");
+      expect(await listed(id)).toEqual([]);
+      expect(await env.MEDIA.get(`posts/${id}/${name}`)).toBeNull();
+    },
+  );
+
+  it("refuses a raw upload of no size, with no field to name", async () => {
+    const id = await newDraft("Raw No Size");
+    const res = await SELF.fetch(`${base}/api/posts/${id}/images?filename=x.png`, {
+      method: "POST",
+      headers: { ...AUTH, "content-type": "image/png" },
+      body: edited(PNG_1x1, (dv) => dv.setUint32(16, 0)),
+    });
+    expect(res.status).toBe(400);
+    const body = await readJson(res);
+    expect(body.message).toBe(NO_SIZE("PNG"));
+    expect(body.field).toBeUndefined();
+  });
+
+  // A real image, which decoders size from its first frame: an 8 × 8 GIF stating a screen of 0 × 0.
+  const GIF_NO_SCREEN = bytesOf("R0lGODlhAAAAAPAAAP8AAAAAACH5BAAAAAAALAAAAAAIAAgAAAIHhI+py+1dAAA7");
+
+  it.each([
+    [
+      "a JPEG whose frame header says height 0, for a later marker to state",
+      "x.jpg",
+      jpegFrame(0, 8),
+    ],
+    ["a GIF whose logical screen is 0 × 0", "x.gif", GIF_NO_SCREEN],
+  ] as const)(
+    "uploads %s with no size, since that can still be a working image",
+    async (_what, name, bytes) => {
+      const id = await newDraft("Zero That Works");
+      const res = await send(id, name, bytes);
+      expect(res.status).toBe(201);
+      const { image } = await readJson(res);
+      expect([image.width, image.height]).toEqual([null, null]);
+    },
+  );
 });
