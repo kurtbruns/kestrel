@@ -559,6 +559,7 @@ describe("sample email preview", () => {
       frame,
       () => SIGNOFF,
       () => ({ ...identity, logoUrl: "" }),
+      new AbortController().signal,
     );
     // The real email's figures (test/email_narrow_display.spec.ts holds those): 12px outer and
     // 32px inner a side, 44px in all, with the inner brought to 12px on a phone, 24px in all.
