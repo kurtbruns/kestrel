@@ -48,7 +48,7 @@ Every JSON field name and every enum value is snake_case: `fire_at`, `email_only
 
 A `HEAD` to any path answers as its `GET` does, gate included, with no body, so no route declares one.
 
-**A path with no route answers `404` with `{"error":"not_found"}`.** Under `/api` that holds whatever the request asks for. On the public reader surface it holds unless the request's `Accept` names `text/html`, which gets the reader's own not-found page, still a `404` (SPEC §5).
+**A path with no route answers `404` with `{"error":"not_found"}`.** Under `/api` that holds whatever the request asks for. On the public reader surface it holds unless the request's `Accept` names `text/html`, which gets the reader's own not-found page, still a `404` (SPEC §5). A request that names `text/html` there gets that page, too, for an image key that names nothing, otherwise a `404` with the error body, and for a path parameter that can't be decoded, otherwise a `400`.
 
 **An address goes in the body or the query, never the path.** A path names a resource, and is recorded as that resource's name wherever requests are counted or traced, so a subscriber's address is never part of one: a subscriber is named by its id, and lifting a suppression takes the address in the body. A query string may carry an address, and the lookup by address (`?email=`) and the searches (`?search=`) take one there, since a read has no body. The request URLs Cloudflare records stay in the operator's own account for a few days, visible only to people who can already read the list, and an operator who exports their logs is responsible for what that pipeline keeps. Kestrel's part is what it writes itself, and its log lines cut an address down to its domain (`src/lib/log.ts`).
 
