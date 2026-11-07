@@ -347,17 +347,26 @@ export function sampleEmailHtml(template: string, id: TemplateIdentity): string 
   return fillEmailTemplate(template, templateSampleCtx(id));
 }
 
-// The isolated preview document: a white (dark in dark mode) email canvas whose
-// reading column is capped at the email measure (~640px, matching view-in-browser),
-// so a template's own <style> applies as a mail client would and never leaks out.
+// The isolated preview document: the email's page and frame, so a template's own <style>
+// applies as a mail client would and never leaks out, and its content sits where the email's
+// does. The figures copy the shell's (emailLayout in src/render/template.ts), which the client
+// can't import: its outer cell is the outer wrapper here, and its 664px table and inner cell
+// are the column. The email holds those figures inline on its cells, where a template's <style>
+// can't reach them, so here they sit on classes rather than the body, which a template's own
+// `body` rule would undo. The narrow rule reads the frame's width, so the Phone view has a
+// phone's margins. A copy is enough for a sample, which proves the layout while a test proves
+// the render (DESIGN §1.4); template.spec.ts pins these figures and
+// test/email_narrow_display.spec.ts the real ones.
 const TEMPLATE_FRAME_DOC =
   '<!doctype html><html><head><meta charset="utf-8">' +
   '<meta name="viewport" content="width=device-width,initial-scale=1">' +
   "<style>html,body{margin:0}body{background:#fff}" +
   "@media (prefers-color-scheme:dark){body{background:#18181b}}" +
-  ".kestrel-email{max-width:640px;margin:0 auto;padding:26px 20px;box-sizing:border-box}" +
+  ".kestrel-email-outer{padding:8px 12px 48px}" +
+  ".kestrel-email{max-width:664px;margin:0 auto;padding:24px 32px 32px;box-sizing:border-box}" +
+  "@media (max-width:560px){.kestrel-email{padding-left:12px;padding-right:12px}}" +
   ".kestrel-email img{max-width:100%}</style></head>" +
-  '<body><div class="kestrel-email"></div></body></html>';
+  '<body><div class="kestrel-email-outer"><div class="kestrel-email"></div></div></body></html>';
 
 /** A mounted sample-email preview; call `repaint` after the template or identity changes. */
 export interface SampleEmailPreview {
@@ -385,7 +394,7 @@ export function mountSampleEmailPreview(
     try {
       // Measure the BODY, which is content-sized. documentElement.scrollHeight is floored
       // at the iframe's own height, so it can grow but never shrink — which is what left
-      // the frame too tall after 375 → 640 and clipped the footer at 640 → 375.
+      // the frame too tall after widening it and clipped the footer after narrowing it.
       const h = iframe.contentDocument?.body?.scrollHeight;
       if (h) {
         iframe.style.height = `${Math.max(200, h)}px`;
@@ -488,8 +497,8 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
         </span>
         <span class="set-preview-actions">
           <span class="set-wtog" role="group" aria-label="Preview width">
-            <button type="button" class="wtog-btn" data-w="640" aria-pressed="true">640</button>
-            <button type="button" class="wtog-btn" data-w="375" aria-pressed="false">375</button>
+            <button type="button" class="wtog-btn" data-width="desktop" aria-label="Desktop" aria-pressed="true">${icon("desktop")}<span class="wtog-lbl">Desktop</span></button>
+            <button type="button" class="wtog-btn" data-width="phone" aria-label="Phone" aria-pressed="false">${icon("phone")}<span class="wtog-lbl">Phone</span></button>
           </span>
           <button type="button" class="secondary" id="tplTest">${icon("send")}<span id="tplTestLbl">Send test email</span></button>
         </span>
@@ -701,14 +710,16 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
       { align: "start" },
     );
 
-  // Preview width toggle (640 / 375) — proof both inbox measures; 640 is the default.
+  // Preview width toggle — proof both inbox measures; Desktop is the default. At Desktop the
+  // frame fills its pane and the email's own column caps what's in it; Phone narrows the frame
+  // itself to a phone's width.
   const frameEl = $<HTMLIFrameElement>("#tplPreview");
   for (const wb of $$<HTMLButtonElement>(".wtog-btn", bodyEl)) {
     wb.onclick = () => {
       for (const o of $$<HTMLButtonElement>(".wtog-btn", bodyEl)) {
         o.setAttribute("aria-pressed", String(o === wb));
       }
-      frameEl.style.maxWidth = `${wb.dataset.w}px`;
+      frameEl.classList.toggle("phone", wb.dataset.width === "phone");
       preview.repaint();
     };
   }
