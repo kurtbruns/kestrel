@@ -4337,7 +4337,9 @@ button.api-filter-clear svg {
 }
 /* A heading is a link to its own address, in the heading's own ink, with a link icon in the
    margin to its left while it is hovered or focused, as GitHub's headings show theirs. The
-   API reference's headings and the Settings sections' titles wear the same. */
+   API reference's headings and the Settings sections' titles wear the same. The icon's padding
+   runs its box up to the text, so moving between the two never leaves the link: no gap for the
+   cursor to change in or the icon to vanish in. */
 a.api-self,
 a.set-sec-link {
   position: relative;
@@ -4349,8 +4351,10 @@ a.set-sec-link svg {
   position: absolute;
   left: -20px;
   top: 50%;
-  width: 14px;
+  box-sizing: border-box;
+  width: 20px;
   height: 14px;
+  padding-right: 6px;
   transform: translateY(-50%);
   fill: var(--muted);
   opacity: 0;
@@ -5143,8 +5147,9 @@ button.copied svg {
   /* The page's gutter here is narrower than the link icon's place in the margin. */
   a.set-sec-link svg {
     left: -15px;
-    width: 12px;
+    width: 15px;
     height: 12px;
+    padding-right: 3px;
   }
 }
 .set-sec-title {
