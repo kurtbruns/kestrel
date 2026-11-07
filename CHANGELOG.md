@@ -16,7 +16,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
-- Upgrade to a new release now has a gate before its first change: its first section reads what changed and requires a clean repository, leaving how to get there to you, and the operator's Claude context (`template/claude/skills/upgrade/SKILL.md`) has Claude report what `git status` lists and stop until it lists nothing, with no offer to commit it, then name what the upgrade involves and ask whether to go ahead, where "not now" ends the upgrade with nothing changed. This bears on safety: Claude could see uncommitted work listed and still run the install. The gate arrives with the install, so the upgrade to the release that brings it still runs on the old page and skill.
+- Upgrade to a new release now requires a clean repository before any change, and leaves how to get there to you. In the operator's Claude context, a change that bears on safety, the upgrade skill (`template/claude/skills/upgrade/SKILL.md`) has Claude stop until `git status` lists nothing, then name what the upgrade involves and ask whether to go ahead. The gate arrives with the install, so the upgrade to the release that brings it runs on the old page and skill.
 
 ### Fixed
 
