@@ -12,6 +12,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
+- A signed-in operator on a deployed instance now loads the editor with a clean console, where every load used to log a 404 for a local development token.
 - A WebP post image now gets its width and height, so its email states a size as a PNG's or JPEG's does; one uploaded earlier has none until it's deleted and uploaded again. An image whose file says it has no size is refused with a message saying to export it again, where it used to answer a server error or be stored and not load (SPEC §4).
 
 ## [1.21.0] - 2026-11-06
