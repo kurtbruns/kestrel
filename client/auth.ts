@@ -129,7 +129,7 @@ export async function probeSession(): Promise<Session | null> {
   let { ok, data } = await whoami();
   // Forget any stale token, mint a fresh one, and probe again, so a first load signs in and a
   // leftover credential self-heals. If the mint fails, the first answer stands.
-  if (devTokenAvailable(data)) {
+  if (!ok && devTokenAvailable(data)) {
     setToken("");
     if (await mintDevToken()) {
       ({ ok, data } = await whoami());

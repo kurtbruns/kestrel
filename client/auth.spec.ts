@@ -120,7 +120,7 @@ describe("the boot probe", () => {
     expect($("#app #reauth").textContent).toBe("Sign in");
   });
 
-  it("asks no dev route when an expired Access session redirects the probe (SPEC §11)", async () => {
+  it("asks no dev route when the probe's fetch fails (SPEC §11)", async () => {
     fake = fakeApi([
       {
         path: "/api/whoami",
@@ -129,6 +129,20 @@ describe("the boot probe", () => {
         },
       },
     ]);
+    expect(await probeSession()).toBeNull();
+    expect(calls()).toEqual(["GET /api/whoami"]);
+    expect($("#app #reauth").textContent).toBe("Sign in");
+  });
+
+  it("lands on the sign-in wall, asking no dev route, when a 200 isn't the app's JSON", async () => {
+    fake = fakeApi([{ path: "/api/whoami", reply: () => new Response("<html>", { status: 200 }) }]);
+    expect(await probeSession()).toBeNull();
+    expect(calls()).toEqual(["GET /api/whoami"]);
+    expect($("#app #reauth").textContent).toBe("Sign in");
+  });
+
+  it("takes an offer only from a failed probe, so a 200 carrying one mints nothing", async () => {
+    fake = fakeApi([{ path: "/api/whoami", reply: () => DEV_401 }]);
     expect(await probeSession()).toBeNull();
     expect(calls()).toEqual(["GET /api/whoami"]);
     expect($("#app #reauth").textContent).toBe("Sign in");
