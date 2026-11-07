@@ -20,7 +20,7 @@ import { archiveUrl, render } from "../render/render";
 import { resolveBranding } from "../render/template_engine";
 import type { RequestContext } from "../router";
 import { param } from "../router";
-import { formatPublishedDate, nothingHereYetPage, webVersion } from "./archive";
+import { formatPublishedDate, noPageHerePage, nothingHereYetPage, webVersion } from "./archive";
 import {
   confirmStatePage,
   subscribeCheckInboxPage,
@@ -138,6 +138,8 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
     }
     case "reading/not-found":
       return nothingHereYetPage(c);
+    case "reading/no-page":
+      return noPageHerePage(c);
   }
   throw notFound("reader page");
 }

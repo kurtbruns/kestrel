@@ -13,6 +13,7 @@ import { escapeHtml, escapeHtmlAttr } from "../lib/html";
 import { log } from "../lib/log";
 import {
   archiveLink,
+  asksForHtml,
   pageTitle,
   type ReaderBanner,
   type ReaderIdentity,
@@ -30,10 +31,9 @@ import {
 import { archiveHomeUrl, devDashboardUrl, readerIdentity, readerMessage } from "./reader";
 
 function wantsHtml(c: RequestContext): boolean {
-  const accept = c.req.headers.get("accept") ?? "";
   const ct = c.req.headers.get("content-type") ?? "";
   return (
-    accept.includes("text/html") ||
+    asksForHtml(c.req) ||
     ct.includes("application/x-www-form-urlencoded") ||
     ct.includes("multipart/form-data")
   );

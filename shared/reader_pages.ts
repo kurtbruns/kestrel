@@ -91,6 +91,12 @@ export const READER_JOURNEYS = [
         offPath: true,
         at: { base: "archive", path: "/…" },
       },
+      {
+        id: "no-page",
+        label: "No page here",
+        offPath: true,
+        at: { base: "app", path: "/…" },
+      },
     ],
   },
 ] as const satisfies readonly {

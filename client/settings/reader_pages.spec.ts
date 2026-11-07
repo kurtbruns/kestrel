@@ -93,6 +93,7 @@ describe("reader pages section (SPEC §5)", () => {
       { mark: "", off: true },
       { mark: "", off: true },
       { mark: "", off: true },
+      { mark: "", off: true },
     ]);
     // The thread joins only a journey's steps: never Reading's peers, never an off-path page.
     const threaded = (journey: string) =>
@@ -134,8 +135,8 @@ describe("reader pages section (SPEC §5)", () => {
     row("reading", "Archive").click();
     await settle();
     expect($("#rpNote").textContent).toMatch(/Shown with signups open/);
-    // A post page and Nothing here yet carry no Subscribe link or form, so say nothing of signups.
-    for (const label of ["Post page", "Nothing here yet"]) {
+    // A post page and the two not-found pages carry no Subscribe link or form, so say nothing of signups.
+    for (const label of ["Post page", "Nothing here yet", "No page here"]) {
       row("reading", label).click();
       await settle();
       expect($("#rpNote").textContent).not.toMatch(/signups/);
@@ -205,6 +206,7 @@ describe("reader pages section (SPEC §5)", () => {
       "Landing, no posts yet",
       "Archive, no posts yet",
       "Nothing here yet",
+      "No page here",
     ]);
     select.value = "unsubscribe/invalid";
     select.dispatchEvent(new Event("change"));
