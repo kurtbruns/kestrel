@@ -265,17 +265,29 @@ export async function renderSettings(
   if (isSettingsSection(section)) {
     show(section);
   }
-  return {
-    navigate(hash) {
-      const [, view, name] = hash.split("/");
-      // The router's own rule for an address, so a mangled one leaves as a fresh load of it does.
-      if (view !== "settings" || !isDashboardRoute(hash.slice(1))) {
-        return false;
-      }
-      show(name);
-      return true;
-    },
+  const navigate = (hash: string) => {
+    const [, view, name] = hash.split("/");
+    // The router's own rule for an address, so a mangled one leaves as a fresh load of it does.
+    if (view !== "settings" || !isDashboardRoute(hash.slice(1))) {
+      return false;
+    }
+    show(name);
+    return true;
   };
+  // A title's link moves the hash and comes back through `navigate`, except the one for the
+  // address already in the bar, which fires no hashchange: that click still lands on its section.
+  body.addEventListener(
+    "click",
+    (ev) => {
+      const link = ev.target instanceof Element ? ev.target.closest(".set-sec-link") : null;
+      const plain = !(ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey);
+      if (plain && link?.getAttribute("href") === location.hash) {
+        navigate(location.hash);
+      }
+    },
+    { signal },
+  );
+  return { navigate };
 }
 
 // The input each settings field the API can name is edited in, by its wire name.

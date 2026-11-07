@@ -150,7 +150,9 @@ describe("settings view", () => {
   it("orders the sections by whom they serve, editable first and set at deploy last", async () => {
     await open();
     // Each group keeps its sections together, with no heading of its own.
-    const groups = $$(".set-group").map((g) => $$(".set-sec-title", g).map((t) => t.textContent));
+    const groups = $$(".set-group").map((g) =>
+      $$(".set-sec-title", g).map((t) => t.textContent?.trim()),
+    );
     expect(groups).toEqual([
       ["Publication identity"],
       ["Ways to subscribe", "Confirmation email", "Reader pages"],
@@ -1613,9 +1615,56 @@ describe("settings view", () => {
 
     it("shows each section's title, the one the docs find it by", async () => {
       await openAt();
-      expect($$(".set-sec-title").map((t) => settingsSectionTitled(t.textContent ?? ""))).toEqual(
-        SETTINGS_SECTIONS,
+      expect(
+        $$(".set-sec-title").map((t) => settingsSectionTitled(t.textContent?.trim() ?? "")),
+      ).toEqual(SETTINGS_SECTIONS);
+    });
+
+    it("links each section's title to its address, and following it lands on that section", async () => {
+      const { targets } = await openAt();
+      expect($$("h2.set-sec-title > a").map((a) => a.getAttribute("href"))).toEqual(
+        SETTINGS_SECTIONS.map((s) => `#/settings/${s}`),
       );
+      for (const a of $$("h2.set-sec-title > a")) {
+        expect(mounted()?.navigate?.(a.getAttribute("href") ?? "")).toBe(true);
+      }
+      expect(targets).toEqual(SETTINGS_SECTIONS.map((s) => `settings-${s}`));
+    });
+
+    describe("clicking a title with a section's address in the bar", () => {
+      const title = () => $<HTMLAnchorElement>("#settings-notifications a");
+      beforeEach(() => {
+        history.replaceState(null, "", "#/settings/notifications");
+      });
+      afterEach(() => {
+        history.replaceState(null, "", "#");
+      });
+
+      // No hashchange comes of it, so the view has to go there itself.
+      it("lands on the section when the title is that section's", async () => {
+        const { targets } = await openAt("notifications");
+        title().click();
+        expect(targets).toEqual(["settings-notifications", "settings-notifications"]);
+      });
+
+      it.each(["metaKey", "ctrlKey", "shiftKey", "altKey"])(
+        "leaves a click with %s, a new tab or window, to the browser",
+        async (modifier) => {
+          const { targets } = await openAt("notifications");
+          title().dispatchEvent(new MouseEvent("click", { bubbles: true, [modifier]: true }));
+          expect(targets).toEqual(["settings-notifications"]);
+        },
+      );
+
+      // That click's landing is the hash's to bring: the view going there too would hold twice.
+      it("leaves a plain click on another section's title to the hash", async () => {
+        const { targets } = await openAt("notifications");
+        $<HTMLAnchorElement>("#settings-instance a").click();
+        expect(targets).toEqual(["settings-notifications"]);
+        // What the router does with the hashchange that click causes.
+        expect(mounted()?.navigate?.("#/settings/instance")).toBe(true);
+        expect(targets).toEqual(["settings-notifications", "settings-instance"]);
+      });
     });
 
     it("opens at the section the address names", async () => {
