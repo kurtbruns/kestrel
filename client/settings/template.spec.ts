@@ -498,6 +498,8 @@ describe("template view", () => {
     const pressed = () => $$(".wtog-btn").map((b) => b.getAttribute("aria-pressed"));
     // The names the Reader pages toggle gives the same choice.
     expect($$(".wtog-btn").map((b) => b.textContent?.trim())).toEqual(["Desktop", "Phone"]);
+    // Named without the words too, since a tablet's width shows only the icons (DESIGN §11).
+    expect($$(".wtog-btn").map((b) => b.getAttribute("aria-label"))).toEqual(["Desktop", "Phone"]);
     expect(pressed()).toEqual(["true", "false"]);
     expect(frame.classList.contains("phone")).toBe(false);
     $(".wtog-btn[data-width='phone']").click();

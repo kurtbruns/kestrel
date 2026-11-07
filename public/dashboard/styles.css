@@ -6272,8 +6272,15 @@ button.set-embed-copy svg {
 .set-tpl-sample .set-preview-bar {
   flex-wrap: wrap;
 }
-/* A pane this narrow is about a phone's width already, so Desktop and Phone would show the
-   same thing, and the toggle goes, as Reader pages' does. */
+/* A tablet's pane: the toggle keeps its use, since Phone still looks different, but only its
+   icons, so the bar stays one row. */
+@container (max-width: 640px) {
+  .set-tpl-sample .wtog-lbl {
+    display: none;
+  }
+}
+/* A pane this narrow is close to a phone's width already, so Desktop and Phone would look
+   alike, and the toggle goes. */
 @container (max-width: 480px) {
   .set-tpl-sample .set-wtog {
     display: none;

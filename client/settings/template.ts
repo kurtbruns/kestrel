@@ -497,8 +497,8 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
         </span>
         <span class="set-preview-actions">
           <span class="set-wtog" role="group" aria-label="Preview width">
-            <button type="button" class="wtog-btn" data-width="desktop" aria-pressed="true">${icon("desktop")}Desktop</button>
-            <button type="button" class="wtog-btn" data-width="phone" aria-pressed="false">${icon("phone")}Phone</button>
+            <button type="button" class="wtog-btn" data-width="desktop" aria-label="Desktop" aria-pressed="true">${icon("desktop")}<span class="wtog-lbl">Desktop</span></button>
+            <button type="button" class="wtog-btn" data-width="phone" aria-label="Phone" aria-pressed="false">${icon("phone")}<span class="wtog-lbl">Phone</span></button>
           </span>
           <button type="button" class="secondary" id="tplTest">${icon("send")}<span id="tplTestLbl">Send test email</span></button>
         </span>
