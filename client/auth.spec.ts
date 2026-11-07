@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { probeSession, setToken } from "./auth";
-import { appState } from "./state";
+import { appState, TOKEN_KEY } from "./state";
 import { $, type FakeApi, fakeApi, jsonResponse, resetShell } from "./test/support";
 
 const REFUSED = {
@@ -26,8 +26,9 @@ describe("the boot probe", () => {
   const calls = () => fake.calls.map((c) => `${c.method} ${c.url.pathname}`);
 
   it("asks nothing of a dev route when the Access cookie already signs the operator in", async () => {
-    fake = fakeApi([{ path: "/api/whoami", reply: () => SESSION }]);
-    expect(await probeSession()).toEqual(SESSION);
+    const access = { ...SESSION, auth: { mode: "access" } };
+    fake = fakeApi([{ path: "/api/whoami", reply: () => access }]);
+    expect(await probeSession()).toEqual(access);
     expect(calls()).toEqual(["GET /api/whoami"]);
     expect(fake.calls[0]?.headers.get("authorization")).toBeNull();
     expect(appState.token).toBe("");
@@ -56,6 +57,35 @@ describe("the boot probe", () => {
     expect(calls()).toEqual(["GET /api/whoami"]);
     expect(fake.calls[0]?.headers.get("authorization")).toBe("Bearer t0k");
     expect(appState.token).toBe("t0k");
+  });
+
+  it("replaces a stale dev token with one fresh mint and ends signed in", async () => {
+    setToken("stale");
+    let minted = 0;
+    fake = fakeApi([
+      {
+        path: "/api/dev/token",
+        reply: () => {
+          minted += 1;
+          return { token: "fresh", kind: "human" };
+        },
+      },
+      {
+        path: "/api/whoami",
+        reply: (req) =>
+          req.headers.get("authorization") === "Bearer fresh"
+            ? SESSION
+            : jsonResponse({ error: "unauthorized" }, 401),
+      },
+    ]);
+    expect(await probeSession()).toEqual(SESSION);
+    expect(minted).toBe(1);
+    expect(calls()).toEqual(["GET /api/whoami", "GET /api/dev/token", "GET /api/whoami"]);
+    expect(fake.calls[0]?.headers.get("authorization")).toBe("Bearer stale");
+    expect(fake.calls[2]?.headers.get("authorization")).toBe("Bearer fresh");
+    expect(appState.token).toBe("fresh");
+    expect(localStorage.getItem(TOKEN_KEY)).toBe("fresh");
+    expect(document.querySelector("#app #reauth")).toBeNull();
   });
 
   it("shows the refused configuration, not the sign-in wall, when deployed (SPEC §9)", async () => {

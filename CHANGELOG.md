@@ -12,7 +12,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
-- A signed-in operator on a deployed instance now loads the editor with a clean console. Every load used to log a 404 from asking for a local development token before checking who was signed in. In local development, the first load with no token logs one 401 instead, and still ends signed in.
+- A signed-in operator on a deployed instance now loads the editor with a clean console, where every load used to log a 404 for a local development token.
 
 ## [1.21.0] - 2026-11-06
 
