@@ -23,11 +23,21 @@ export interface ApiErrorBody {
  */
 export type UnauthorizedReason = "access_not_configured" | "access_unidentified";
 
-/** An admin 401's body: `unauthorized`, with a `reason` only when signing in again can't help. */
+/**
+ * An admin 401's body: `unauthorized`, with a `reason` only when signing in again can't help,
+ * and `dev_token_available` only on a local dev server, where a client can mint a dev token.
+ */
 export interface UnauthorizedBody {
   error: "unauthorized";
   message: string;
   reason?: UnauthorizedReason;
+  dev_token_available?: true;
+}
+
+/** Whether a body is an admin 401 saying a dev token can be minted here (SPEC §11). */
+export function devTokenAvailable(data: unknown): boolean {
+  const d = data as { error?: unknown; dev_token_available?: unknown } | null;
+  return d?.error === "unauthorized" && d.dev_token_available === true;
 }
 
 /** The reason a body gives, when it is an admin 401 that gives one. */

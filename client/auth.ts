@@ -1,7 +1,7 @@
 // Auth on the client: the boot probe, the dev token, the bearer header, the identity chip,
 // and the re-auth wall a dead session lands on.
 
-import { unauthorizedReason } from "../shared/errors";
+import { devTokenAvailable, unauthorizedReason } from "../shared/errors";
 import { CLIENT_HEADER, EDITOR_CLIENT } from "../shared/who_acted";
 import { showAccessLocked } from "./access_locked";
 import { configRefusal, showConfigProblem } from "./config_problem";
@@ -86,9 +86,8 @@ export function showReauth(): void {
   $<HTMLElement>(".reauth-wall h2", app).focus();
 }
 
-// Mint a dev token into localStorage. Returns false when deployed, where the endpoint 404s
-// (or is unreachable) and the Access cookie authenticates instead. The browser logs that 404
-// whatever a script does with it, so this runs only after a probe has failed.
+// Mint a dev token into localStorage. Only a 401 that offers one leads here, so this never
+// runs where the route is absent, and false means the local server refused it.
 async function mintDevToken(): Promise<boolean> {
   try {
     const r = await fetch("/api/dev/token?kind=human");
@@ -97,18 +96,19 @@ async function mintDevToken(): Promise<boolean> {
       return true;
     }
   } catch {
-    /* deployed: the endpoint is absent; the Access cookie authenticates instead */
+    /* the local server went away; the probe's own answer stands */
   }
   return false;
 }
 
 // Probe identity. A network error or an opaque Access redirect can't be recovered here, so
-// it surfaces as a null result (the sign-in wall).
-async function whoami(): Promise<Response | null> {
+// it answers no body (the sign-in wall), as does a 200 that isn't the app's JSON.
+async function whoami(): Promise<{ ok: boolean; data: unknown }> {
   try {
-    return await fetch("/api/whoami", { headers: authHeaders(), redirect: "manual" });
+    const res = await fetch("/api/whoami", { headers: authHeaders(), redirect: "manual" });
+    return { ok: res.ok, data: await res.json().catch(() => null) };
   } catch {
-    return null;
+    return { ok: false, data: null };
   }
 }
 
@@ -118,26 +118,26 @@ function isSession(data: unknown): data is Session {
 }
 
 /**
- * The boot probe: who is signed in, minting a dev token only once a probe has failed, which
- * is local development with no token or a stale one. Answers the session, or null once it has
- * put up the wall the probe landed on: the refused configuration's when the server names a
- * setting to fix (SPEC §9), the locked editor's when the deployment has no Access yet (SPEC
- * §11), since signing in again cannot help with either, and the sign-in wall otherwise.
+ * The boot probe: who is signed in, minting a dev token only when the server's 401 offers
+ * one, which is a local dev server with no token or a stale one (SPEC §11). Answers the
+ * session, or null once it has put up the wall the probe landed on: the refused
+ * configuration's when the server names a setting to fix (SPEC §9), the locked editor's when
+ * the deployment has no Access yet (SPEC §11), since signing in again cannot help with
+ * either, and the sign-in wall otherwise.
  */
 export async function probeSession(): Promise<Session | null> {
-  let res = await whoami();
-  // In dev: forget any stale token, mint a fresh one, and probe again, so a first load signs
-  // in and a leftover credential self-heals. Deployed the mint fails and `res` stays as it was.
-  if (!res?.ok) {
+  let { ok, data } = await whoami();
+  // Forget any stale token, mint a fresh one, and probe again, so a first load signs in and a
+  // leftover credential self-heals. If the mint fails, the first answer stands.
+  if (devTokenAvailable(data)) {
     setToken("");
     if (await mintDevToken()) {
-      res = await whoami();
+      ({ ok, data } = await whoami());
     }
   }
   // A 200 that isn't the app's JSON (a proxy's page, say) names no one, so it lands on the
   // sign-in wall below rather than leaving the page blank.
-  const data: unknown = res ? await res.json().catch(() => null) : null;
-  if (res?.ok && isSession(data)) {
+  if (ok && isSession(data)) {
     return data;
   }
   const refusal = configRefusal(data);

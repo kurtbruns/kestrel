@@ -251,9 +251,10 @@ describe("dev credential is inert in a deployed-shaped env", () => {
 
 // Before Access is set up on a deployment, no admin request can authenticate, and the 401
 // says so, so the editor can show that state rather than a session that ended (SPEC §11).
-// Under a configured Access, or in local development, a 401 says nothing more.
+// Under a configured Access a 401 says nothing more; on a local dev server it offers a dev token.
 // Every 401 carries words to show, as any refusal does; one signing in again can't fix says why.
 const PLAIN_401 = { error: "unauthorized", message: expect.stringMatching(/^Sign in: /) };
+const DEV_401 = { ...PLAIN_401, dev_token_available: true };
 const NOT_CONFIGURED = {
   error: "unauthorized",
   reason: "access_not_configured",
@@ -286,14 +287,25 @@ describe("the admin 401 says when no Access is configured", () => {
     expect(await res.json()).toEqual(PLAIN_401);
   });
 
-  it("stays a plain 401 in a dev-shaped env, with or without the dev secret", async () => {
+  it("offers a dev token on a local dev server, with no credential or a dead one (SPEC §11)", async () => {
     const res = await SELF.fetch(`${base}/api/whoami`);
     expect(res.status).toBe(401);
-    expect(await res.json()).toEqual(PLAIN_401);
-    // Local dev missing `.dev.vars`: Access is not what it lacks.
+    expect(await res.json()).toEqual(DEV_401);
+    const stale = await SELF.fetch(`${base}/api/whoami`, {
+      headers: { Authorization: "Bearer stale" },
+    });
+    expect(stale.status).toBe(401);
+    expect(await stale.json()).toEqual(DEV_401);
+    // The offer stands because the route is there to take it.
+    expect((await SELF.fetch(`${base}/api/dev/token`)).status).toBe(200);
+  });
+
+  it("offers none where the dev routes are absent (SPEC §11)", async () => {
+    // Local dev missing `.dev.vars`: dev-shaped, but with no secret, so no route to mint from.
     const noSecret = await fetchWith({ DEV_AUTH_SECRET: "" }, "/api/whoami");
     expect(noSecret.status).toBe(401);
     expect(await noSecret.json()).toEqual(PLAIN_401);
+    expect((await fetchWith({ DEV_AUTH_SECRET: "" }, "/api/dev/token")).status).toBe(404);
   });
 });
 

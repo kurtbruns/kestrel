@@ -13,7 +13,8 @@
  * 401 says so (`reason: "access_not_configured"`) so the editor can tell that apart
  * from a session that ended; so does one whose Access login names neither a person nor
  * a service token (`reason: "access_unidentified"`), which signing in the same way again
- * can't fix either (SPEC §11).
+ * can't fix either (SPEC §11). A local dev server's 401 says a dev token can be minted
+ * (`dev_token_available`), so a client asks for one only where the route exists.
  */
 import type { UnauthorizedBody, UnauthorizedReason } from "../../shared/errors";
 import { CLIENT_HEADER, isClientName } from "../../shared/who_acted";
@@ -80,7 +81,11 @@ export const requireAuth: Middleware = async (c) => {
     const reason = principal ?? lockedReason(c.config);
     const body: UnauthorizedBody = reason
       ? { error: "unauthorized", message: UNAUTHORIZED_MESSAGE[reason], reason }
-      : { error: "unauthorized", message: SIGN_IN_MESSAGE };
+      : {
+          error: "unauthorized",
+          message: SIGN_IN_MESSAGE,
+          ...(c.config.devMode ? { dev_token_available: true } : {}),
+        };
     return json(body, 401, { "WWW-Authenticate": 'Bearer realm="kestrel"' });
   }
   const client = c.req.headers.get(CLIENT_HEADER);

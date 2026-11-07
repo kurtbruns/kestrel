@@ -320,6 +320,11 @@ describe("the refusal schema", () => {
     });
     const res = await SELF.fetch(`${base}/api/whoami`);
     expect(res.status).toBe(401);
-    expect(Object.keys((await res.json()) as object).sort()).toEqual(["error", "message"]);
+    expect(Object.keys((await res.json()) as object).sort()).toEqual([
+      "dev_token_available",
+      "error",
+      "message",
+    ]);
+    expect(error.properties?.dev_token_available).toMatchObject({ type: "boolean" });
   });
 });

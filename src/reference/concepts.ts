@@ -54,6 +54,12 @@ const ERROR_BODY: ReferenceField[] = [
       "On `unauthorized` only, when signing in again can't help: `access_not_configured`, the deployment has no Cloudflare Access yet, so no request can sign in; `access_unidentified`, Access let the sign-in through but sent neither a person's email nor a service token, so its Access policies need changing. Any other 401 carries none.",
   },
   {
+    name: "dev_token_available",
+    type: "boolean",
+    description:
+      "On `unauthorized` only, and only on a local dev server, where it is `true`: a client may mint a dev token and try again. Absent everywhere else, where no dev route exists.",
+  },
+  {
     name: "retry_after",
     type: "epoch ms",
     description: "When waiting is the remedy: when to try again.",

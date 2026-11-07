@@ -9,6 +9,9 @@ const REFUSED = {
   variable: "APP_ORIGIN",
 };
 
+// A local dev server's 401, the one answer a mint follows.
+const DEV_401 = { error: "unauthorized", dev_token_available: true };
+
 const SESSION = {
   principal: { kind: "human", email: "you@example.com", client: "editor" },
   auth: { mode: "dev" },
@@ -39,8 +42,7 @@ describe("the boot probe", () => {
       { path: "/api/dev/token", reply: () => ({ token: "t0k", kind: "human" }) },
       {
         path: "/api/whoami",
-        reply: (req) =>
-          req.headers.has("authorization") ? SESSION : jsonResponse({ error: "unauthorized" }, 401),
+        reply: (req) => (req.headers.has("authorization") ? SESSION : jsonResponse(DEV_401, 401)),
       },
     ]);
     expect(await probeSession()).toEqual(SESSION);
@@ -75,7 +77,7 @@ describe("the boot probe", () => {
         reply: (req) =>
           req.headers.get("authorization") === "Bearer fresh"
             ? SESSION
-            : jsonResponse({ error: "unauthorized" }, 401),
+            : jsonResponse(DEV_401, 401),
       },
     ]);
     expect(await probeSession()).toEqual(SESSION);
@@ -88,48 +90,48 @@ describe("the boot probe", () => {
     expect(document.querySelector("#app #reauth")).toBeNull();
   });
 
-  it("shows the refused configuration, not the sign-in wall, when deployed (SPEC §9)", async () => {
-    fake = fakeApi([
-      { path: "/api/dev/token", reply: () => jsonResponse(REFUSED, 500) },
-      { path: "/api/whoami", reply: () => jsonResponse(REFUSED, 500) },
-    ]);
+  it("shows the refused configuration, not the sign-in wall, and asks no dev route (SPEC §9)", async () => {
+    fake = fakeApi([{ path: "/api/whoami", reply: () => jsonResponse(REFUSED, 500) }]);
     expect(await probeSession()).toBeNull();
     expect($("#app .config-wall .config-wall-problem").textContent).toBe(REFUSED.message);
     expect(document.querySelector("#app #reauth")).toBeNull();
-    expect(calls()).toEqual(["GET /api/whoami", "GET /api/dev/token"]);
+    expect(calls()).toEqual(["GET /api/whoami"]);
   });
 
-  it("shows it too after local development clears a stored token and mints again", async () => {
+  it("keeps a stored token through a refused configuration, which a token can't fix", async () => {
+    setToken("t0k");
+    fake = fakeApi([{ path: "/api/whoami", reply: () => jsonResponse(REFUSED, 500) }]);
+    expect(await probeSession()).toBeNull();
+    expect(calls()).toEqual(["GET /api/whoami"]);
+    expect(appState.token).toBe("t0k");
+    expect(document.querySelector("#app .config-wall")).not.toBeNull();
+  });
+
+  it("lands on the sign-in wall with no stale token left when an offered mint fails", async () => {
     setToken("stale");
-    let minted = 0;
+    fake = fakeApi([
+      { path: "/api/dev/token", reply: () => jsonResponse({ error: "internal_error" }, 500) },
+      { path: "/api/whoami", reply: () => jsonResponse(DEV_401, 401) },
+    ]);
+    expect(await probeSession()).toBeNull();
+    expect(calls()).toEqual(["GET /api/whoami", "GET /api/dev/token"]);
+    expect(appState.token).toBe("");
+    expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
+    expect($("#app #reauth").textContent).toBe("Sign in");
+  });
+
+  it("asks no dev route when an expired Access session redirects the probe (SPEC §11)", async () => {
     fake = fakeApi([
       {
-        path: "/api/dev/token",
+        path: "/api/whoami",
         reply: () => {
-          minted += 1;
-          return { token: "fresh", kind: "human" };
+          throw new TypeError("Failed to fetch");
         },
       },
-      { path: "/api/whoami", reply: () => jsonResponse(REFUSED, 500) },
     ]);
     expect(await probeSession()).toBeNull();
-    expect(minted).toBe(1);
-    expect(calls()).toEqual(["GET /api/whoami", "GET /api/dev/token", "GET /api/whoami"]);
-    expect(fake.calls[2]?.headers.get("authorization")).toBe("Bearer fresh");
-    expect(document.querySelector("#app .config-wall")).not.toBeNull();
-    expect(document.querySelector("#app #reauth")).toBeNull();
-  });
-
-  it("shows it when the re-mint is refused as well, leaving no stale token behind", async () => {
-    setToken("stale");
-    fake = fakeApi([
-      { path: "/api/dev/token", reply: () => jsonResponse(REFUSED, 500) },
-      { path: "/api/whoami", reply: () => jsonResponse(REFUSED, 500) },
-    ]);
-    expect(await probeSession()).toBeNull();
-    expect(appState.token).toBe("");
-    expect(document.querySelector("#app .config-wall")).not.toBeNull();
-    expect(document.querySelector("#app #reauth")).toBeNull();
+    expect(calls()).toEqual(["GET /api/whoami"]);
+    expect($("#app #reauth").textContent).toBe("Sign in");
   });
 
   it("shows a database behind the release as the refusal wall, never the Access-locked or sign-in wall (SPEC §9)", async () => {
@@ -138,10 +140,7 @@ describe("the boot probe", () => {
       missing: ["0003_post_slug_auto.sql"],
       message: "The database is missing a migration this release needs (0003_post_slug_auto.sql).",
     };
-    fake = fakeApi([
-      { path: "/api/dev/token", reply: () => jsonResponse(behind, 500) },
-      { path: "/api/whoami", reply: () => jsonResponse(behind, 500) },
-    ]);
+    fake = fakeApi([{ path: "/api/whoami", reply: () => jsonResponse(behind, 500) }]);
     expect(await probeSession()).toBeNull();
     expect($("#app .config-wall h2").textContent).toBe("The database needs updating");
     expect($("#app .config-wall .config-wall-problem").textContent).toBe(behind.message);
@@ -149,13 +148,13 @@ describe("the boot probe", () => {
     expect(document.querySelector("#app #reauth")).toBeNull();
   });
 
-  it("sends anything else that fails to the sign-in wall", async () => {
+  it("sends anything else that fails to the sign-in wall, asking no dev route (SPEC §11)", async () => {
     fake = fakeApi([
-      { path: "/api/dev/token", reply: () => jsonResponse({ error: "not_found" }, 404) },
       { path: "/api/whoami", reply: () => jsonResponse({ error: "unauthorized" }, 401) },
     ]);
     expect(await probeSession()).toBeNull();
     expect($("#app #reauth").textContent).toBe("Sign in");
     expect(document.querySelector("#app .config-wall")).toBeNull();
+    expect(calls()).toEqual(["GET /api/whoami"]);
   });
 });
