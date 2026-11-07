@@ -26,14 +26,15 @@ export const KESTREL_CLI_CLIENT = "kestrel-cli";
 
 /**
  * The name a request carries unless told another: Claude Code's when Claude Code ran this
- * process, and the command's own otherwise, so what a person runs never reads as Claude's.
- * CLAUDE_CODE_CHILD_SESSION is set only by Claude Code, on what its tools launch. CLAUDECODE
+ * process, and the command's own otherwise, as in a terminal a person opened themselves.
+ * CLAUDE_CODE_CHILD_SESSION is set only by Claude Code, on what it launches. CLAUDECODE
  * won't do: IDE extensions also set it in their integrated terminals, where a person types.
  *
  * That makes the name truthful in the normal case, not proven, as with every client name. Claude
- * Code older than v2.1.172 doesn't set the variable, so its calls read as the command's own; and
- * a `screen` session or a background launcher Claude Code started passes it on, so what a person
- * later runs inside one reads as Claude Code's.
+ * Code older than v2.1.172 doesn't set the variable, so its calls read as the command's own; a
+ * command typed after Claude Code's `!` runs in its shell, with output landing in the transcript,
+ * so it reads as Claude Code's; and a `screen` session or a background launcher Claude Code
+ * started passes the variable on, so what a person later runs inside one reads as Claude Code's.
  */
 export function defaultClient() {
   return process.env.CLAUDE_CODE_CHILD_SESSION === "1" ? CLAUDE_CODE_CLIENT : KESTREL_CLI_CLIENT;
