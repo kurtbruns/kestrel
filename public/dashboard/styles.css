@@ -6264,8 +6264,27 @@ button.set-embed-copy svg {
 }
 
 /* --- Template page: sample-email header actions, dropdown, variables --- */
+/* The titles give way first, wrapping beside the controls, which stay on one line. In a pane
+   too narrow for that, the controls take their own row under the titles. */
+.set-tpl-sample {
+  container-type: inline-size;
+}
+.set-tpl-sample .set-preview-bar {
+  flex-wrap: wrap;
+}
+/* A pane this narrow is about a phone's width already, so Desktop and Phone would show the
+   same thing, and the toggle goes, as Reader pages' does. */
+@container (max-width: 480px) {
+  .set-tpl-sample .set-wtog {
+    display: none;
+  }
+  .set-email-stage .set-email-frame.phone {
+    max-width: 100%;
+  }
+}
 .set-preview-titles {
   display: flex;
+  flex: 1 1 260px;
   flex-direction: column;
   gap: 1px;
   min-width: 0;
@@ -6274,7 +6293,6 @@ button.set-embed-copy svg {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
 }
 /* Preview width toggle — proof both inbox measures; Desktop is the default. */
 .set-wtog {
