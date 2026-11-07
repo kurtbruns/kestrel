@@ -6253,9 +6253,8 @@ button.set-embed-copy svg {
    here — only safe container defaults. */
 /* The sample email renders in an isolated <iframe> — so the template's own <style>
    block applies exactly as it would in a mail client and can't leak into the
-   dashboard, and the reading measure is constrained to the email column
-   (~640px, matching the view-in-browser render). Its height is sized to content
-   from script. */
+   dashboard, and the document inside draws the email's page and column. Its height
+   is sized to content from script. */
 .set-email-frame {
   display: block;
   width: 100%;
@@ -6379,24 +6378,33 @@ button.set-embed-copy svg {
 .set-req-pill.bad .dot {
   background: var(--danger-fg);
 }
-/* The sample email sits on a sunken stage so the (width-capped) email card reads as a
-   message on a surface; the width toggle sets its max-width. */
+/* The sample email fills its pane, as a post's Preview does, since an email arrives as a page
+   and not as a card on a surface. The stage's colors are LITERALS matching the email's page in
+   both modes, so all that's beside the narrower frame is more of that page. */
 .set-email-stage {
   display: flex;
   justify-content: center;
-  padding: 16px;
-  background: var(--sunken);
+  background: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  .set-email-stage {
+    background: #18181b;
+  }
 }
 .set-email-stage .set-email-frame {
   width: 100%;
-  max-width: 640px;
+  max-width: 100%;
   /* Floor the auto-sized frame at the default template's height, so emptying or
      shortening the template doesn't collapse the preview and yank the page scroll
      (the frame can still grow taller for a longer template or the 375 measure). */
-  min-height: 392px;
-  border-radius: 6px;
-  box-shadow: 0 1px 4px rgba(15, 18, 25, 0.1);
+  min-height: 452px;
   transition: max-width 0.16s ease;
+}
+/* The width toggle's 375. An outline, which takes no room, so the frame stays exactly a
+   phone's width; its top and bottom lie on the lines already above and below the stage. */
+.set-email-stage .set-email-frame.narrow {
+  max-width: 375px;
+  outline: 1px solid var(--line);
 }
 /* "Start from example": the trigger of a shared menu (openMenu). */
 .set-menu-btn {

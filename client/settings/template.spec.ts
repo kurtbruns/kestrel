@@ -492,15 +492,17 @@ describe("template view", () => {
     expect($("#tplEditorWrap").classList.contains("show-lines")).toBe(true);
   });
 
-  it("proofs both inbox widths", async () => {
+  it("proofs both inbox widths: the frame fills its pane, and narrows only at 375", async () => {
     await open();
+    const frame = $<HTMLIFrameElement>("#tplPreview");
     const pressed = () => $$(".wtog-btn").map((b) => b.getAttribute("aria-pressed"));
     expect(pressed()).toEqual(["true", "false"]);
+    expect(frame.classList.contains("narrow")).toBe(false);
     $(".wtog-btn[data-w='375']").click();
-    expect($<HTMLIFrameElement>("#tplPreview").style.maxWidth).toBe("375px");
+    expect(frame.classList.contains("narrow")).toBe(true);
     expect(pressed()).toEqual(["false", "true"]);
     $(".wtog-btn[data-w='640']").click();
-    expect($<HTMLIFrameElement>("#tplPreview").style.maxWidth).toBe("640px");
+    expect(frame.classList.contains("narrow")).toBe(false);
     expect(pressed()).toEqual(["true", "false"]);
   });
 });
@@ -526,6 +528,24 @@ describe("sample email preview", () => {
     }
     return slot;
   }
+
+  it("draws the email's frame, with its side padding at both widths", () => {
+    const frame = document.createElement("iframe");
+    mountSampleEmailPreview(
+      frame,
+      () => SIGNOFF,
+      () => ({ ...identity, logoUrl: "" }),
+    );
+    // The real email's figures (test/email_narrow_display.spec.ts holds those): 12px outer and
+    // 32px inner a side, 44px in all, with the inner brought to 12px on a phone, 24px in all.
+    expect(frame.srcdoc).toContain("body{background:#fff;padding:8px 12px 48px}");
+    expect(frame.srcdoc).toContain(
+      ".kestrel-email{max-width:664px;margin:0 auto;padding:24px 32px 32px;box-sizing:border-box}",
+    );
+    expect(frame.srcdoc).toContain(
+      "@media (max-width:560px){.kestrel-email{padding-left:12px;padding-right:12px}}",
+    );
+  });
 
   it("shows no logo, and no stand-in, when none is set: the sign-off the email will carry", () => {
     const slot = preview("");

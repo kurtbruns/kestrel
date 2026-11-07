@@ -347,15 +347,21 @@ export function sampleEmailHtml(template: string, id: TemplateIdentity): string 
   return fillEmailTemplate(template, templateSampleCtx(id));
 }
 
-// The isolated preview document: a white (dark in dark mode) email canvas whose
-// reading column is capped at the email measure (~640px, matching view-in-browser),
-// so a template's own <style> applies as a mail client would and never leaks out.
+// The isolated preview document: the email's page and frame, so a template's own <style>
+// applies as a mail client would and never leaks out, and its content sits where the email's
+// does. The figures copy the shell's (emailLayout in src/render/template.ts), which the client
+// can't import: its outer cell's padding is the body's here, and its 664px table and inner
+// cell are the column. The narrow rule reads the frame's width, so the 375 view has a phone's
+// margins. A copy is enough for a sample, which proves the layout while a test proves the
+// render (DESIGN §1.4); template.spec.ts pins these figures and
+// test/email_narrow_display.spec.ts the real ones.
 const TEMPLATE_FRAME_DOC =
   '<!doctype html><html><head><meta charset="utf-8">' +
   '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-  "<style>html,body{margin:0}body{background:#fff}" +
+  "<style>html,body{margin:0}body{background:#fff;padding:8px 12px 48px}" +
   "@media (prefers-color-scheme:dark){body{background:#18181b}}" +
-  ".kestrel-email{max-width:640px;margin:0 auto;padding:26px 20px;box-sizing:border-box}" +
+  ".kestrel-email{max-width:664px;margin:0 auto;padding:24px 32px 32px;box-sizing:border-box}" +
+  "@media (max-width:560px){.kestrel-email{padding-left:12px;padding-right:12px}}" +
   ".kestrel-email img{max-width:100%}</style></head>" +
   '<body><div class="kestrel-email"></div></body></html>';
 
@@ -701,14 +707,16 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
       { align: "start" },
     );
 
-  // Preview width toggle (640 / 375) — proof both inbox measures; 640 is the default.
+  // Preview width toggle (640 / 375) — proof both inbox measures; 640 is the default. At 640
+  // the frame fills its pane and the email's own column caps what's in it; 375 narrows the
+  // frame itself to a phone's width.
   const frameEl = $<HTMLIFrameElement>("#tplPreview");
   for (const wb of $$<HTMLButtonElement>(".wtog-btn", bodyEl)) {
     wb.onclick = () => {
       for (const o of $$<HTMLButtonElement>(".wtog-btn", bodyEl)) {
         o.setAttribute("aria-pressed", String(o === wb));
       }
-      frameEl.style.maxWidth = `${wb.dataset.w}px`;
+      frameEl.classList.toggle("narrow", wb.dataset.w === "375");
       preview.repaint();
     };
   }
