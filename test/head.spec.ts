@@ -122,6 +122,24 @@ describe("HEAD", () => {
     expect(head.status).toBe(404);
   });
 
+  it("answers a page's address with a trailing slash as GET does", async () => {
+    const head = await expectHeadLikeGet("/subscribe/", { accept: "text/html" });
+    expect(head.status).toBe(200);
+    expect(head.headers.get("content-type")).toBe("text/html; charset=utf-8");
+  });
+
+  it("answers a browser's path with no route as GET does, with the reader's page (SPEC §5)", async () => {
+    const head = await expectHeadLikeGet("/nope", { accept: "text/html" });
+    expect(head.status).toBe(404);
+    expect(head.headers.get("content-type")).toBe("text/html; charset=utf-8");
+  });
+
+  it("answers a path under /api with no route as GET does, with JSON", async () => {
+    const head = await expectHeadLikeGet("/api/nope", { accept: "text/html" });
+    expect(head.status).toBe(404);
+    expect(head.headers.get("content-type")).toBe("application/json");
+  });
+
   it("doesn't run a route that only takes a POST", async () => {
     await seedConfirmed("reader@example.com");
 

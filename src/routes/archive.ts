@@ -144,6 +144,20 @@ export function nothingHereYetPage(c: RequestContext): Promise<Response> {
   });
 }
 
+/** What a browser gets at any other public address that names no page (the router's fallback,
+ *  SPEC §5). It could be anything a reader was after, not a post on its way, so it says only
+ *  that nothing is here, in the same shell with the same way onward. */
+export function noPageHerePage(c: RequestContext): Promise<Response> {
+  return readerMessage(c, {
+    title: "No page here",
+    eyebrow: "Not found",
+    headline: "No page here",
+    ledeHtml: "There’s no page at this address.",
+    afterHtml: archiveLink(archiveHomeUrl(c.config), "Browse the archive"),
+    status: 404,
+  });
+}
+
 /** A published post's page, from its send's frozen copy (`webVersion`). `noindex` for an
  *  email-only post: anyone with its link can open it, but no list or search engine is
  *  offered it (SPEC §5). A header, not a meta tag, so the frozen copy is served unchanged (I3). */

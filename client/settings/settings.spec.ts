@@ -21,6 +21,7 @@ import {
   sendSummary,
   settingsResponse,
   stubClipboard,
+  stubResizeObserver,
   typeInto,
   unmount,
 } from "../test/support";
@@ -1567,6 +1568,18 @@ describe("settings view", () => {
       expect(fake.calls.some((c) => c.url.pathname === "/api/provider")).toBe(false);
       expect(document.querySelector("#sendRate")).toBeNull();
     });
+  });
+
+  it("stops watching the sample email's frame on leaving the page", async () => {
+    const observers = stubResizeObserver();
+    await open();
+    const frame = $<HTMLIFrameElement>("#tplPreview");
+    frame.dispatchEvent(new Event("load"));
+    const body = frame.contentDocument?.body;
+    expect(body).toBeInstanceOf(HTMLElement);
+    expect(observers.watching()).toContain(body);
+    unmount();
+    expect(observers.watching()).toEqual([]);
   });
 
   describe("section addresses", () => {

@@ -29,7 +29,11 @@ export function templateSection(page: SettingsPage): Html {
 }
 
 /** The sample follows the identity fields as they are typed. */
-export function mountTemplate(root: HTMLElement, page: SettingsPage): SectionHandle {
+export function mountTemplate(
+  root: HTMLElement,
+  page: SettingsPage,
+  signal: AbortSignal,
+): SectionHandle {
   const template = page.data.settings.email_template || "";
   const preview = mountSampleEmailPreview(
     $<HTMLIFrameElement>("#tplPreview", root),
@@ -40,6 +44,7 @@ export function mountTemplate(root: HTMLElement, page: SettingsPage): SectionHan
       logoUrl: page.state.logoUrl,
       address: page.state.address,
     }),
+    signal,
   );
   $("#tplEditLink", root).onclick = () => {
     location.hash = "#/template";

@@ -166,7 +166,7 @@ export async function renderSettings(
     mountIdentity(body, page, signal),
     mountSubscribe(body, page),
     mountConfirmation(body, page),
-    mountTemplate(body, page),
+    mountTemplate(body, page, signal),
     mountRecipients(body, page),
     mountNotifications(body, page),
   );
