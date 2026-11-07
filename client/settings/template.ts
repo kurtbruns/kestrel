@@ -12,7 +12,7 @@ import {
 } from "../../shared/settings";
 import { api, describeError } from "../api";
 import { notConnectedTestLine, providerNotConnected, withNoProviderNote } from "../deployment";
-import { mount, setTitle } from "../lifecycle";
+import { mount, onAbort, setTitle } from "../lifecycle";
 import { appState } from "../state";
 import { copyFace, copyWith } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
@@ -371,16 +371,21 @@ export interface SampleEmailPreview {
  * Preview tab's sandbox: the template is HTML Claude may write too (`PUT /api/settings`),
  * and markup set into a same-origin frame runs an inline handler (`onerror`) though it
  * leaves a `<script>` inert, so without the sandbox a template could act as the
- * publisher (SPEC §5).
+ * publisher (SPEC §5). The signal is the mount's: nothing here outlives the view.
  */
 export function mountSampleEmailPreview(
   iframe: HTMLIFrameElement,
   getTemplate: () => string,
   getIdentity: () => TemplateIdentity,
+  signal: AbortSignal,
 ): SampleEmailPreview {
   // Before the srcdoc below: a sandbox applies from the frame's next navigation.
   iframe.setAttribute("sandbox", EMAIL_FRAME_SANDBOX);
   let ready = false;
+  // Left observing, it holds the removed frame's document and raises a ResizeObserver
+  // loop error on the window every frame until it happens to be collected.
+  let watch: ResizeObserver | null = null;
+  onAbort(signal, () => watch?.disconnect());
   const size = () => {
     try {
       // Measure the BODY, which is content-sized. documentElement.scrollHeight is floored
@@ -406,6 +411,9 @@ export function mountSampleEmailPreview(
     size();
   };
   iframe.addEventListener("load", () => {
+    if (signal.aborted) {
+      return;
+    }
     ready = true;
     repaint();
     // Keep the frame fitted to its content through every change: an edit, the width
@@ -414,7 +422,9 @@ export function mountSampleEmailPreview(
     try {
       const doc = iframe.contentDocument;
       if (doc?.body && typeof ResizeObserver !== "undefined") {
-        new ResizeObserver(size).observe(doc.body);
+        watch?.disconnect();
+        watch = new ResizeObserver(size);
+        watch.observe(doc.body);
       }
     } catch {}
   });
@@ -542,6 +552,7 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
     $<HTMLIFrameElement>("#tplPreview"),
     () => tplEditor.value,
     () => identity,
+    signal,
   );
   const tplMsgsEl = $("#tplMsgs");
   const tplTestEl = $<HTMLButtonElement>("#tplTest");
