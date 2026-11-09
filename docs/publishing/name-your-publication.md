@@ -2,9 +2,9 @@
 
 Give your publication a name and a look before your first post. Set the name, tagline, and logo under **Settings → Publication identity**. They appear in every email your template prints them in, on the public pages readers see, and in the confirmation email new subscribers get. The name is also what readers see as the sender of every email, beside the From address, so set one before your first post: without it, your emails arrive with no name, from the address alone.
 
-All three are optional, and you can change them at any time. How they appear in each email comes from your email template, which you can [edit](11-email-template.md). Renaming the publication while posts are scheduled updates their emails, and Kestrel asks you to confirm first. Readers recognize a newsletter by its sender's name, and some filter on it, so rename rarely.
+All three are optional, and you can change them at any time. How they appear in each email comes from your email template, which you can [edit](email-template.md). Renaming the publication while posts are scheduled updates their emails, and Kestrel asks you to confirm first. Readers recognize a newsletter by its sender's name, and some filter on it, so rename rarely.
 
-Write the tagline as one line that says what the newsletter covers and how often it goes out, such as "Monthly notes on the birds of the Hudson Valley." Until your first post, it's the only line on your home page that says what readers are signing up for. It's also what AWS sees if it reviews your site when you [request production access](../get-started/06-production-access.md).
+Write the tagline as one line that says what the newsletter covers and how often it goes out, such as "Monthly notes on the birds of the Hudson Valley." Until your first post, it's the only line on your home page that says what readers are signing up for. It's also what AWS sees if it reviews your site when you [request production access](../get-started/production-access.md).
 
 ## Choose a logo
 
@@ -22,9 +22,9 @@ US law (CAN-SPAM) asks for a postal address in commercial email. The FTC [treats
 
 A P.O. box or a registered private mailbox counts, so you never have to publish your home address. To add one, choose **Add a mailing address** under **Settings → Publication identity**. The built-in templates print it in the email footer and keep it off your public pages.
 
-This is general information, not legal advice. The FTC's [CAN-SPAM compliance guide](https://www.ftc.gov/business-guidance/resources/can-spam-act-compliance-guide-business) has the detail, and [Sending rules](02-sending-rules.md) covers the rest of what the law asks of a newsletter.
+This is general information, not legal advice. The FTC's [CAN-SPAM compliance guide](https://www.ftc.gov/business-guidance/resources/can-spam-act-compliance-guide-business) has the detail, and [Sending rules](sending-rules.md) covers the rest of what the law asks of a newsletter.
 
 ## Who sets the From name and address
 
-The From address your emails come from is set when Kestrel is deployed, so **Settings → Email sender** shows it read-only, with how readers see the sender: your publication's name beside that address. To change the address, follow [Deploy the app](../get-started/02-deploy.md#4-configure-production). If whoever deployed Kestrel wrote a name into the address, that name is the sender whatever you call the publication here; **Settings → Email sender** says so, and the deploy is where it changes.
+The From address your emails come from is set when Kestrel is deployed, so **Settings → Email sender** shows it read-only, with how readers see the sender: your publication's name beside that address. To change the address, follow [Deploy the app](../get-started/deploy.md#4-configure-production). If whoever deployed Kestrel wrote a name into the address, that name is the sender whatever you call the publication here; **Settings → Email sender** says so, and the deploy is where it changes.
 

@@ -10,7 +10,7 @@ SES caps how many emails your account sends a day, and how many a second. A send
 
 1. Ask AWS for a higher daily quota and a maximum send rate of 50, as AWS's [Increasing your Amazon SES sending quotas](https://docs.aws.amazon.com/ses/latest/dg/manage-sending-quotas-request-increase.html) describes.
 
-1. When AWS grants it, the app takes the new rate from your account within about ten minutes, and **Settings → Email sender** shows it under **Send rate**. If `SES_MAX_SEND_RATE` is set in `wrangler.jsonc`, the app keeps to the lower of the two, so remove it or raise it to match, then deploy, as [Configuration](../reference/01-configuration.md#vars) describes.
+1. When AWS grants it, the app takes the new rate from your account within about ten minutes, and **Settings → Email sender** shows it under **Send rate**. If `SES_MAX_SEND_RATE` is set in `wrangler.jsonc`, the app keeps to the lower of the two, so remove it or raise it to match, then deploy, as [Configuration](../reference/configuration.md#vars) describes.
 
 ## 2. Upgrade to Workers Paid
 
@@ -23,7 +23,7 @@ Cloudflare's $5 Workers Paid plan helps in two ways, at any size of list.
 
 1. Upgrade your Cloudflare account to the $5 [Workers Paid plan](https://developers.cloudflare.com/workers/platform/pricing/), which has no daily limit on writes.
 
-1. In `wrangler.jsonc`, add `"SUBREQUEST_BUDGET": "10000"` to the `production` block's `vars`. It tells the app it's on Workers Paid, so each minute sends far more. [Configuration](../reference/01-configuration.md#vars) describes `SUBREQUEST_BUDGET`.
+1. In `wrangler.jsonc`, add `"SUBREQUEST_BUDGET": "10000"` to the `production` block's `vars`. It tells the app it's on Workers Paid, so each minute sends far more. [Configuration](../reference/configuration.md#vars) describes `SUBREQUEST_BUDGET`.
 
 1. Commit the change, and push it:
 

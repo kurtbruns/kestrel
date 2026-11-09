@@ -2,9 +2,9 @@
 
 Your publication's subscribe page is at `/subscribe` on your publication's address, such as `https://newsletter.example.com/subscribe`. Copy it from the dashboard's checklist or **Settings → Ways to subscribe**, and share it wherever your readers are. A reader joins only once they confirm by email.
 
-**Signups open only once email is working.** Until an email provider is connected and has sent an email, such as a test from **Template → Send test email**, the page says the newsletter isn't taking subscribers yet. If your provider starts refusing your email, the page says signups are paused, and the dashboard says what to fix. Either way every visitor gets the same page and nothing is saved. You can share the link anyway, and it opens once email works ([Connect Amazon SES](../get-started/05-ses.md)).
+**Signups open only once email is working.** Until an email provider is connected and has sent an email, such as a test from **Template → Send test email**, the page says the newsletter isn't taking subscribers yet. If your provider starts refusing your email, the page says signups are paused, and the dashboard says what to fix. Either way every visitor gets the same page and nothing is saved. You can share the link anyway, and it opens once email works ([Connect Amazon SES](../get-started/ses.md)).
 
-**On Amazon SES, share it once AWS grants production access.** Until then, SES mails only addresses verified in it, so a reader who signs up never gets their confirmation email. The dashboard's checklist and an empty **Subscribers** list say so, and link [Request production access](../get-started/06-production-access.md). Importing your list is safe meanwhile, since an import sends no email.
+**On Amazon SES, share it once AWS grants production access.** Until then, SES mails only addresses verified in it, so a reader who signs up never gets their confirmation email. The dashboard's checklist and an empty **Subscribers** list say so, and link [Request production access](../get-started/production-access.md). Importing your list is safe meanwhile, since an import sends no email.
 
 ## How a reader joins
 
@@ -24,4 +24,4 @@ Change its subject, message, button label, and reassurance line under **Settings
 
 **Settings → Ways to subscribe → Embed a form** gives you HTML to paste into any page you control. **Styled** looks like your subscribe page, and **Plain** takes your site's own styles. A reader who submits it confirms by email, as on the subscribe page.
 
-**Settings → Reader pages** shows every page a reader can land on, at desktop and phone widths, without walking through the steps. You can also limit how often anyone submits the form, which slows down abuse ([Rate-limit the subscribe form](../guides/05-rate-limit.md)).
+**Settings → Reader pages** shows every page a reader can land on, at desktop and phone widths, without walking through the steps. You can also limit how often anyone submits the form, which slows down abuse ([Rate-limit the subscribe form](../guides/rate-limit.md)).

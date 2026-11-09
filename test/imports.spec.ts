@@ -1,7 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import referencePage from "../docs/publishing/01-your-list.md?raw";
+import referencePage from "../docs/publishing/your-list.md?raw";
 import {
   EXPORT_PAGE_ROWS,
   type ExportResponse,

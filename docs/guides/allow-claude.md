@@ -4,13 +4,13 @@ Connecting Claude to the instance lets the publisher draft, test, and schedule p
 
 In this guide, you turn on Cloudflare's Managed OAuth for the Access application that locks the dashboard, then connect Claude, or send the publisher the address to connect to.
 
-To run a script or scheduled job with no one present, use a service token instead, as [Automate with a service token](02-automate.md) describes.
+To run a script or scheduled job with no one present, use a service token instead, as [Automate with a service token](automate.md) describes.
 
 ## Before you begin
 
 You need:
 
-- The dashboard locked with Access, from [Lock the dashboard with Access](../get-started/03-access.md).
+- The dashboard locked with Access, from [Lock the dashboard with Access](../get-started/access.md).
 - A deployed instance. Claude Desktop and claude.ai reach it from Anthropic's servers, so they can't reach one running on your own computer.
 
 ## 1. Turn on Managed OAuth
@@ -53,7 +53,7 @@ The publisher connects at the instance's address followed by `/api/mcp`:
 https://newsletter.example.com/api/mcp
 ```
 
-If you're the publisher, connect now, as [Connect Claude](../publishing/08-connect-claude.md) describes. If someone else is, send them that address and a link to the same page.
+If you're the publisher, connect now, as [Connect Claude](../publishing/connect-claude.md) describes. If someone else is, send them that address and a link to the same page.
 
 ## Who can connect
 
@@ -61,7 +61,7 @@ Anyone the Access application's Allow policy lets into the dashboard can connect
 
 ## Check it
 
-1. Connect Claude Desktop or claude.ai, as [Connect Claude](../publishing/08-connect-claude.md) describes. The connector lists Kestrel's tools, such as **Get the publication** and **Save a draft**.
+1. Connect Claude Desktop or claude.ai, as [Connect Claude](../publishing/connect-claude.md) describes. The connector lists Kestrel's tools, such as **Get the publication** and **Save a draft**.
 
 1. Ask Claude what the publication is called. It answers with the name the dashboard shows.
 

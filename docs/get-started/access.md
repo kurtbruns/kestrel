@@ -127,4 +127,4 @@ To let someone else into the editor, such as the publisher or a co-editor, add t
 
 If they don't have a Cloudflare account, add another way to sign in, such as a one-time code by email, under **Zero Trust → Integrations → Identity providers**.
 
-Next, [create an AWS account](04-aws-account.md).
+Next, [create an AWS account](aws-account.md).

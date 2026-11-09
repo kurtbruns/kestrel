@@ -2,13 +2,13 @@
 
 This page checks your instance end to end with real email, while the list is empty and every email goes only to you. You confirm that inboxes trust your mail, that posts look right in a mail client, and that bounces, complaints, and unsubscribes reach the app.
 
-You can do all of this while SES is still in the sandbox, since every email goes to the addresses you verified in [Connect Amazon SES](05-ses.md#3-verify-your-test-addresses) or to SES's test addresses.
+You can do all of this while SES is still in the sandbox, since every email goes to the addresses you verified in [Connect Amazon SES](ses.md#3-verify-your-test-addresses) or to SES's test addresses.
 
 In this guide, you send yourself a test email, reply to it, and check that it passes authentication. You check that notifications arrive, send a real post to yourself as a subscriber, and unsubscribe. Finally, you check that bounces and complaints reach the app, read the app's logs, and clean up the test subscribers.
 
 ## Before you begin
 
-- The two addresses you verified in SES in [Connect Amazon SES](05-ses.md#3-verify-your-test-addresses). Some steps use both.
+- The two addresses you verified in SES in [Connect Amazon SES](ses.md#3-verify-your-test-addresses). Some steps use both.
 - A Gmail address, or another mail client that shows a message's original source and an **Unsubscribe** button.
 
 ## 1. Send yourself a test email
@@ -21,7 +21,7 @@ A test email goes through the same code as a real send. If the test looks right,
 
 1. Open the email. It arrives in your inbox, not in spam, the image loads, and the subject reads as you wrote it. Its links work, but a test email unsubscribes no one; section 5 unsubscribes for real.
 
-1. Send a test email to your second address, not the publisher's inbox, and reply to it from there, as a reader would. The reply arrives in the publisher's inbox, the one you chose in [Connect Amazon SES](05-ses.md#8-receive-replies-at-your-from-address), or in your From address's own mailbox if you skipped forwarding. If it bounces, check the routing rule and the destination address there.
+1. Send a test email to your second address, not the publisher's inbox, and reply to it from there, as a reader would. The reply arrives in the publisher's inbox, the one you chose in [Connect Amazon SES](ses.md#8-receive-replies-at-your-from-address), or in your From address's own mailbox if you skipped forwarding. If it bounces, check the routing rule and the destination address there.
 
 ## 2. Check that it passes authentication
 
@@ -35,9 +35,9 @@ Inboxes trust mail that passes DKIM and DMARC for the domain it's from. Passing 
     - `dmarc=pass` for `send.example.com`
     - `spf=pass`, for a hostname under `send.example.com`
 
-    If SPF passes for `amazonses.com` instead, SES couldn't read your custom MAIL FROM domain's MX record, and used its own. DMARC still passes, but check the MAIL FROM records from [Connect Amazon SES](05-ses.md#1-verify-your-sending-hostname).
+    If SPF passes for `amazonses.com` instead, SES couldn't read your custom MAIL FROM domain's MX record, and used its own. DMARC still passes, but check the MAIL FROM records from [Connect Amazon SES](ses.md#1-verify-your-sending-hostname).
 
-If a check fails, compare your DNS records with the ones in [Connect Amazon SES](05-ses.md#1-verify-your-sending-hostname). [Sending-domain DNS](../reference/02-sending-domain-dns.md#verify-alignment) explains each result.
+If a check fails, compare your DNS records with the ones in [Connect Amazon SES](ses.md#1-verify-your-sending-hostname). [Sending-domain DNS](../reference/sending-domain-dns.md#verify-alignment) explains each result.
 
 ## 3. Check that notifications arrive
 
@@ -49,7 +49,7 @@ Kestrel emails each notifications address when a send finishes, and right away w
 
 Notifications travel through SES like the newsletter, so they can't tell anyone when SES refuses the account. Section 8 covers that.
 
-The publisher sets their own address in [Check your setup](../publishing/10-check-your-setup.md).
+The publisher sets their own address in [Check your setup](../publishing/check-your-setup.md).
 
 ## 4. Send a real post to yourself
 
@@ -90,7 +90,7 @@ When an address bounces or marks your mail as spam, SES tells the app through SN
 
 1. In the editor, **Subscribers** lists the bounce address as **Pending** with a **bounced** flag, and the complaint address as **Unsubscribed**. Open its row: its page says it left by a complaint. The app mails neither again.
 
-If the bounce address has no flag, or the complaint address is still pending, SES's events aren't reaching the app. Check the configuration set in [Send bounces and complaints to the app](05-ses.md#4-send-bounces-and-complaints-to-the-app), and the subscription in [Subscribe the app to the topic](05-ses.md#7-subscribe-the-app-to-the-topic).
+If the bounce address has no flag, or the complaint address is still pending, SES's events aren't reaching the app. Check the configuration set in [Send bounces and complaints to the app](ses.md#4-send-bounces-and-complaints-to-the-app), and the subscription in [Subscribe the app to the topic](ses.md#7-subscribe-the-app-to-the-topic).
 
 ## 7. Read the logs
 
@@ -118,4 +118,4 @@ Erasing keeps only the address, so it's never mailed again, but the person can s
 
 When every section gives the result it describes and AWS grants production access, your instance is ready to go live.
 
-Next, [go live](08-go-live.md).
+Next, [go live](go-live.md).

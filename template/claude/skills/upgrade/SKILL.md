@@ -6,7 +6,7 @@ argument-hint: "[X.Y.Z]"
 
 # Upgrade the instance
 
-An upgrade moves the instance to a newer release of `@kurtbruns/kestrel`. The guide's upgrade page is the procedure: `node_modules/@kurtbruns/kestrel/docs/guides/07-upgrade.md`. Read it now, and again after installing the new release, whose page then replaces it from the step after the install. Follow it section by section, running each step's commands as written. This skill holds only what the page leaves to you, and never adds or replaces a step. If anything here seems to disagree with the page, the page wins; say so.
+An upgrade moves the instance to a newer release of `@kurtbruns/kestrel`. The guide's upgrade page is the procedure: `node_modules/@kurtbruns/kestrel/docs/guides/upgrade.md`. Read it now, and again after installing the new release, whose page then replaces it from the step after the install. Follow it section by section, running each step's commands as written. This skill holds only what the page leaves to you, and never adds or replaces a step. If anything here seems to disagree with the page, the page wins; say so.
 
 ## What's yours to judge
 

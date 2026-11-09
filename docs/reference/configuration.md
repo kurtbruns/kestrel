@@ -10,7 +10,7 @@ In local development, `npm run dev` reads the top level of `wrangler.jsonc` and 
 
 None of these can be read or changed from inside the app, by the editor or by Claude. Settings in the editor shows the public ones, read-only.
 
-This is the `production` block a new instance starts with, here for an instance named `newsletter`. [Deploy the app](../get-started/02-deploy.md) fills in its database and hostnames:
+This is the `production` block a new instance starts with, here for an instance named `newsletter`. [Deploy the app](../get-started/deploy.md) fills in its database and hostnames:
 
 ```jsonc
 "production": {
@@ -46,9 +46,9 @@ Vars go in the environment block's `vars`. Every value is a string.
 
 - `PROVIDER` optional
 
-    The email provider: `ses`, or `fake` for local development. Default: none, so no provider is connected. Refused unless it's exactly `ses`, `fake`, or `none`: a misspelling, or `SES`, is never taken for another. `resend`, which earlier releases supported, is refused with a pointer to [Connect Amazon SES](../get-started/05-ses.md).
+    The email provider: `ses`, or `fake` for local development. Default: none, so no provider is connected. Refused unless it's exactly `ses`, `fake`, or `none`: a misspelling, or `SES`, is never taken for another. `resend`, which earlier releases supported, is refused with a pointer to [Connect Amazon SES](../get-started/ses.md).
 
-    Until it's set, or while it's empty, the app runs with no provider connected. Posts can be written and previewed, but everything that would send email is refused: scheduling, sending now, test emails, and the confirmation emails that signups need. The subscribe page says signups aren't open yet, and Settings shows **No email provider connected**. Setting it to `none` means the same. A new instance's `production` block declares it empty, so wrangler doesn't warn that the top level's value is missing there. [Connect Amazon SES](../get-started/05-ses.md) changes it to `ses`.
+    Until it's set, or while it's empty, the app runs with no provider connected. Posts can be written and previewed, but everything that would send email is refused: scheduling, sending now, test emails, and the confirmation emails that signups need. The subscribe page says signups aren't open yet, and Settings shows **No email provider connected**. Setting it to `none` means the same. A new instance's `production` block declares it empty, so wrangler doesn't warn that the top level's value is missing there. [Connect Amazon SES](../get-started/ses.md) changes it to `ses`.
 
     Change it, or move to another SES account or region, only while no send is sending. The dashboard lists any send in progress.
 
@@ -102,7 +102,7 @@ Vars go in the environment block's `vars`. Every value is a string.
 
     Never set it above your plan's limit. A minute that hits the cap is cut off mid-batch, and the send stalls until a later minute picks it up.
 
-    At the default, the app runs on Workers Free's limits. One import takes up to 1,000 rows, since Free's 10 ms of CPU a request can't plan and commit more, and an export reads 1,000 rows a page. Above it, both take 10,000 ([Limits in detail](../publishing/01-your-list.md#limits-in-detail)). Workers Free suits a list of up to about 1,000 subscribers. Past about 5,000, one send can use up the day's database writes and stop the newsletter until midnight UTC. So the Dashboard and the Subscribers screen recommend Workers Paid once the confirmed list passes 1,000, and so does an import plan that would take it past. The app also warns before a send to more than 5,000 recipients ([As your list grows](../guides/09-as-your-list-grows.md)). None of these stops you. Above the default, none appears, so set it on an account already on Workers Paid.
+    At the default, the app runs on Workers Free's limits. One import takes up to 1,000 rows, since Free's 10 ms of CPU a request can't plan and commit more, and an export reads 1,000 rows a page. Above it, both take 10,000 ([Limits in detail](../publishing/your-list.md#limits-in-detail)). Workers Free suits a list of up to about 1,000 subscribers. Past about 5,000, one send can use up the day's database writes and stop the newsletter until midnight UTC. So the Dashboard and the Subscribers screen recommend Workers Paid once the confirmed list passes 1,000, and so does an import plan that would take it past. The app also warns before a send to more than 5,000 recipients ([As your list grows](../guides/as-your-list-grows.md)). None of these stops you. Above the default, none appears, so set it on an account already on Workers Paid.
 
 - `MIN_LEAD_SECONDS` optional
 
@@ -128,7 +128,7 @@ Store each with `npx wrangler secret put NAME --env production`, which prompts f
 
 - `ACCESS_TEAM_DOMAIN` required
 
-    Your Zero Trust team domain, such as `your-team.cloudflareaccess.com`. An `https://` or `http://` in front and a trailing slash are dropped, but anything else, such as a path or a port, is refused, since it would fail every sign-in. [Lock the dashboard with Access](../get-started/03-access.md#4-give-the-app-its-two-values) shows where to find it.
+    Your Zero Trust team domain, such as `your-team.cloudflareaccess.com`. An `https://` or `http://` in front and a trailing slash are dropped, but anything else, such as a path or a port, is refused, since it would fail every sign-in. [Lock the dashboard with Access](../get-started/access.md#4-give-the-app-its-two-values) shows where to find it.
 
 - `ACCESS_AUD` required
 
@@ -178,7 +178,7 @@ Wrangler doesn't carry bindings or vars over from the top level of `wrangler.jso
 
 - `observability` optional
 
-    Workers Logs, where the app's log lines land. On in the template. Kestrel sets no sampling, since sampling could drop the one minute that reports a stuck or missed send, so leave `head_sampling_rate` at its default of 1. Cloudflare's own daily limit on the Free plan can still stop new logs for the rest of the day, as [Read the logs](../get-started/07-verify.md#7-read-the-logs) describes.
+    Workers Logs, where the app's log lines land. On in the template. Kestrel sets no sampling, since sampling could drop the one minute that reports a stuck or missed send, so leave `head_sampling_rate` at its default of 1. Cloudflare's own daily limit on the Free plan can still stop new logs for the rest of the day, as [Read the logs](../get-started/verify.md#7-read-the-logs) describes.
 
 - `DB` required
 

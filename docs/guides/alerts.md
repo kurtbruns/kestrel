@@ -72,7 +72,7 @@ Each line the SES alert counts carries a `cause`, which says why email can't get
 - `quota`, for a send held because the daily sending quota is spent
 - `test`, from **Send a test alert**
 
-A later release can add a cause, and the Monitor alerts on it with no change, since its query counts every `alert.sending` line. Filter on `event` equal to `alert.sending` in the Worker's **Observability** tab to read the causes, as in [Read the logs](../get-started/07-verify.md#7-read-the-logs). Count over minutes, never a day: over long ranges the log's counts are estimated from a sample.
+A later release can add a cause, and the Monitor alerts on it with no change, since its query counts every `alert.sending` line. Filter on `event` equal to `alert.sending` in the Worker's **Observability** tab to read the causes, as in [Read the logs](../get-started/verify.md#7-read-the-logs). Count over minutes, never a day: over long ranges the log's counts are estimated from a sample.
 
 ## Limits
 

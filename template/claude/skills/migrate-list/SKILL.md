@@ -8,7 +8,7 @@ argument-hint: "[path to the export]"
 
 An import adds people to the list, and a wrong guess about who agreed to be emailed can't be taken back. So this skill holds no facts about any service's export, which change without notice. It holds a method that checks itself against the file in hand and against Kestrel's own plan.
 
-The authority on the import format is the "The file format" section of the publisher's page "Bring your existing list": `GET /api/docs/your-list.md` on the instance, or `node_modules/@kurtbruns/kestrel/docs/publishing/01-your-list.md`. If anything here seems to disagree with it or with the API, they win; say so.
+The authority on the import format is the "The file format" section of the publisher's page "Bring your existing list": `GET /api/docs/your-list.md` on the instance, or `node_modules/@kurtbruns/kestrel/docs/publishing/your-list.md`. If anything here seems to disagree with it or with the API, they win; say so.
 
 ## Before you start
 

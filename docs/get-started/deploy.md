@@ -9,7 +9,7 @@ In this guide, you choose your hostnames, create your instance's repository, cre
 - A [Cloudflare account](https://dash.cloudflare.com/sign-up), with your domain's DNS on Cloudflare. Your app's hostname and its login both live there.
 - [Node.js](https://nodejs.org/) 22 or later, and [Git](https://git-scm.com/).
 - A GitHub account, or another Git host, for your instance's repository.
-- An AWS account for the newsletter, before [Connect Amazon SES](05-ses.md). [Create an AWS account](04-aws-account.md) walks through it. You can start it now. Signing up needs an email address that receives mail, and AWS can take a while to activate a new account.
+- An AWS account for the newsletter, before [Connect Amazon SES](ses.md). [Create an AWS account](aws-account.md) walks through it. You can start it now. Signing up needs an email address that receives mail, and AWS can take a while to activate a new account.
 
 ## Choose your hostnames
 
@@ -22,7 +22,7 @@ Kestrel uses two hostnames: one for the app, and one your email is sent from.
 
 These guides put the app on a subdomain, which leaves any website you already have on `example.com` untouched. If `example.com` has no website of its own, the app can live there instead. Use `example.com` wherever these guides say `newsletter.example.com`.
 
-It's recommended to send from a subdomain rather than from `example.com` itself. Your apex domain carries the reputation of your regular email, and a newsletter shouldn't put that at risk. These guides assume a sending subdomain throughout. Avoid `mail.` as the sending name too, since mail servers read it as an inbound host. [Sending-domain DNS](../reference/02-sending-domain-dns.md#choose-your-sending-name) explains both.
+It's recommended to send from a subdomain rather than from `example.com` itself. Your apex domain carries the reputation of your regular email, and a newsletter shouldn't put that at risk. These guides assume a sending subdomain throughout. Avoid `mail.` as the sending name too, since mail servers read it as an inbound host. [Sending-domain DNS](../reference/sending-domain-dns.md#choose-your-sending-name) explains both.
 
 Throughout these guides, replace the example names with your own, and any value written as `REPLACE_WITH_…`.
 
@@ -138,13 +138,13 @@ Each prints a snippet to add to your configuration. There's nothing to paste: `-
     What each one does:
 
     - `routes` puts the app on your hostname when you deploy. Cloudflare creates the DNS record and the certificate. Your domain must be in the same Cloudflare account, and the hostname can't already have a CNAME record; delete one if it does. The block also turns off the `workers.dev` addresses, so the app answers only on your hostname.
-    - `PROVIDER` stays empty until [Connect Amazon SES](05-ses.md) sets it. Until then the app runs without an email provider: posts can be written and previewed, but scheduling, test emails, and signups are refused. Never set it to `fake`, the top level's value, even when a wrangler warning suggests copying it: `fake` delivers nothing, and the app refuses it on your hostname.
+    - `PROVIDER` stays empty until [Connect Amazon SES](ses.md) sets it. Until then the app runs without an email provider: posts can be written and previewed, but scheduling, test emails, and signups are refused. Never set it to `fake`, the top level's value, even when a wrangler warning suggests copying it: `fake` delivers nothing, and the app refuses it on your hostname.
     - `ARCHIVE_BASE_PATH` is permanent once the first post goes out. Every post sent carries its `/archive/…` link, and changing the prefix later breaks the links already mailed. Keep `/archive` unless you have a reason not to.
-    - `FROM_ADDRESS` is the address every email comes from. Keep it on your sending hostname, and set `SENDING_DOMAIN` to the part after the `@`. The name readers see beside it is the publication's name, which the publisher sets in the editor under **Settings → Publication identity**, with no deploy. To send under a fixed name instead, write it in front of the address, like `Name <address>` ([Configuration](../reference/01-configuration.md) says what that does).
+    - `FROM_ADDRESS` is the address every email comes from. Keep it on your sending hostname, and set `SENDING_DOMAIN` to the part after the `@`. The name readers see beside it is the publication's name, which the publisher sets in the editor under **Settings → Publication identity**, with no deploy. To send under a fixed name instead, write it in front of the address, like `Name <address>` ([Configuration](../reference/configuration.md) says what that does).
 
     Change every `example.com` value, the route included. The app refuses to run while any of its settings still names `example.com`.
 
-    Every other setting has a working default. [Configuration](../reference/01-configuration.md) lists them all, and what the app refuses.
+    Every other setting has a working default. [Configuration](../reference/configuration.md) lists them all, and what the app refuses.
 
 1. Check the file. It fails if the configuration doesn't parse:
 
@@ -215,4 +215,4 @@ If the public pages instead say the newsletter is temporarily unavailable, and `
 
 If the public pages say the same, but `/health` answers `500` with `{"error":"schema_behind","missing":[…],…}`, the database hasn't run the migrations it lists, most often because step 5 was skipped or its prompt answered no. Run step 5's command, which the body's `message` repeats; the app answers as soon as it finishes, with no new deploy.
 
-Next, [lock the dashboard with Access](03-access.md).
+Next, [lock the dashboard with Access](access.md).

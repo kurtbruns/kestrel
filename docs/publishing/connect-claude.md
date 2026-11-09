@@ -2,7 +2,7 @@
 
 Connecting Claude to Kestrel lets you publish by asking Claude. It drafts, tests, and schedules posts as you, and its changes show as yours, via Claude.
 
-**Your Kestrel instance has to allow this first,** as [Allow Claude to connect](../guides/01-allow-claude.md) describes.
+**Your Kestrel instance has to allow this first,** as [Allow Claude to connect](../guides/allow-claude.md) describes.
 
 How you connect depends on where you talk to Claude:
 

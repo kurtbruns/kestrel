@@ -1,23 +1,23 @@
 # Connect Amazon SES
 
-This page connects the app to Amazon Simple Email Service (Amazon SES), which delivers the newsletter's email. A new SES account starts in a sandbox, where it can send only to addresses you've verified, until AWS reviews it. See [Request production access](06-production-access.md) to take it out of the sandbox.
+This page connects the app to Amazon Simple Email Service (Amazon SES), which delivers the newsletter's email. A new SES account starts in a sandbox, where it can send only to addresses you've verified, until AWS reviews it. See [Request production access](production-access.md) to take it out of the sandbox.
 
 In this guide, you set up how the app sends mail through SES and receives bounces and complaints, and how readers' replies reach the publisher.
 
 ## Before you begin
 
-- An AWS account for the newsletter, from [Create an AWS account](04-aws-account.md).
+- An AWS account for the newsletter, from [Create an AWS account](aws-account.md).
 - The publisher's inbox, for readers' replies.
 
 ## 1. Verify your sending hostname
 
 SES sends only from an identity you've verified. Verifying the whole hostname lets any address on it send, and sets up DKIM, which lets inboxes trust your mail.
 
-The same form sets a custom MAIL FROM domain, so SPF also passes for your domain. [SPF: authorize the return path](../reference/02-sending-domain-dns.md#spf-authorize-the-return-path) explains why it matters.
+The same form sets a custom MAIL FROM domain, so SPF also passes for your domain. [SPF: authorize the return path](../reference/sending-domain-dns.md#spf-authorize-the-return-path) explains why it matters.
 
 1. Open the [SES console](https://console.aws.amazon.com/ses/), and choose a region near you in the region menu at the top right.
 
-    SES keeps identities, quotas, and the sandbox separately in each region, so do every step on this page in the region you chose. [Configuration](../reference/01-configuration.md#vars) says more about choosing one, under `AWS_REGION`.
+    SES keeps identities, quotas, and the sandbox separately in each region, so do every step on this page in the region you chose. [Configuration](../reference/configuration.md#vars) says more about choosing one, under `AWS_REGION`.
 
 1. Note the region's code, such as `us-west-2`. The menu shows it beside the region's name, and [Amazon SES endpoints](https://docs.aws.amazon.com/general/latest/gr/ses.html) lists each one too. AWS names a region in more than one way, such as United States (Oregon) and US West (Oregon), so go by the code. Later steps use it.
 
@@ -67,11 +67,11 @@ DMARC tells inboxes what to do with mail that fails its checks, and can ask them
     dig +short TXT _dmarc.send.example.com
     ```
 
-[Sending-domain DNS](../reference/02-sending-domain-dns.md#dmarc-publish-a-policy-and-collect-reports) explains each record, and when to tighten DMARC.
+[Sending-domain DNS](../reference/sending-domain-dns.md#dmarc-publish-a-policy-and-collect-reports) explains each record, and when to tighten DMARC.
 
 ## 3. Verify your test addresses
 
-A new SES account starts in the sandbox: it sends only to addresses you've verified, up to 200 emails a day and one a second. The test emails in [Verify it works](07-verify.md) go to two addresses of your own, so verify those now. [Request production access](06-production-access.md) lifts the limit, once AWS grants it.
+A new SES account starts in the sandbox: it sends only to addresses you've verified, up to 200 emails a day and one a second. The test emails in [Verify it works](verify.md) go to two addresses of your own, so verify those now. [Request production access](production-access.md) lifts the limit, once AWS grants it.
 
 1. Choose two addresses you own, such as a personal address and a work address. Verify it works uses both.
 
@@ -204,7 +204,7 @@ Until now the app has run with no email provider connected, refusing to send. Se
     }
     ```
 
-    On Workers Paid, also add `"SUBREQUEST_BUDGET": "10000"`, the plan's limit, so each minute sends more. Leave it out on Workers Free. [As your list grows](../guides/09-as-your-list-grows.md) says when Workers Paid is worth it: for faster sends at any size, and for the daily database writes of a list past about 1,000 subscribers.
+    On Workers Paid, also add `"SUBREQUEST_BUDGET": "10000"`, the plan's limit, so each minute sends more. Leave it out on Workers Free. [As your list grows](../guides/as-your-list-grows.md) says when Workers Paid is worth it: for faster sends at any size, and for the daily database writes of a list past about 1,000 subscribers.
 
     The app reads its send rate from your SES account, so there's nothing to change when AWS grants production access. **Settings → Email sender** shows the rate and where it comes from.
 
@@ -325,4 +325,4 @@ Out-of-office and other automatic replies reach the publisher's inbox too. Bounc
 
 SES is now connected in the sandbox. Until AWS grants production access, it sends only to the addresses you verified in section 3. It also sends to the SES test addresses Verify it works uses. SES charges for each email it sends, test emails included, as [Amazon SES pricing](https://aws.amazon.com/ses/pricing/) lists.
 
-Next, [request production access](06-production-access.md).
+Next, [request production access](production-access.md).

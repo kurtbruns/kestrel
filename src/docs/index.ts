@@ -22,32 +22,32 @@
  */
 
 import { Lexer, type Token, type Tokens } from "marked";
-import deploy from "../../docs/get-started/02-deploy.md";
-import access from "../../docs/get-started/03-access.md";
-import awsAccount from "../../docs/get-started/04-aws-account.md";
-import ses from "../../docs/get-started/05-ses.md";
-import productionAccess from "../../docs/get-started/06-production-access.md";
-import verify from "../../docs/get-started/07-verify.md";
-import goLive from "../../docs/get-started/08-go-live.md";
-import allowClaude from "../../docs/guides/01-allow-claude.md";
-import automate from "../../docs/guides/02-automate.md";
-import alerts from "../../docs/guides/03-alerts.md";
-import rateLimit from "../../docs/guides/05-rate-limit.md";
-import upgrade from "../../docs/guides/07-upgrade.md";
-import listGrows from "../../docs/guides/09-as-your-list-grows.md";
-import yourList from "../../docs/publishing/01-your-list.md";
-import sendingRules from "../../docs/publishing/02-sending-rules.md";
-import nameYourPublication from "../../docs/publishing/03-name-your-publication.md";
-import writeAPost from "../../docs/publishing/04-write-a-post.md";
-import troubleshooting from "../../docs/publishing/06-troubleshooting.md";
-import connectClaude from "../../docs/publishing/08-connect-claude.md";
-import shareYourSubscribeLink from "../../docs/publishing/09-share-your-subscribe-link.md";
-import checkYourSetup from "../../docs/publishing/10-check-your-setup.md";
-import emailTemplate from "../../docs/publishing/11-email-template.md";
+import access from "../../docs/get-started/access.md";
+import awsAccount from "../../docs/get-started/aws-account.md";
+import deploy from "../../docs/get-started/deploy.md";
+import goLive from "../../docs/get-started/go-live.md";
+import productionAccess from "../../docs/get-started/production-access.md";
+import ses from "../../docs/get-started/ses.md";
+import verify from "../../docs/get-started/verify.md";
+import alerts from "../../docs/guides/alerts.md";
+import allowClaude from "../../docs/guides/allow-claude.md";
+import listGrows from "../../docs/guides/as-your-list-grows.md";
+import automate from "../../docs/guides/automate.md";
+import rateLimit from "../../docs/guides/rate-limit.md";
+import upgrade from "../../docs/guides/upgrade.md";
+import checkYourSetup from "../../docs/publishing/check-your-setup.md";
+import connectClaude from "../../docs/publishing/connect-claude.md";
+import emailTemplate from "../../docs/publishing/email-template.md";
+import nameYourPublication from "../../docs/publishing/name-your-publication.md";
 import publishingIndex from "../../docs/publishing/README.md";
+import sendingRules from "../../docs/publishing/sending-rules.md";
+import shareYourSubscribeLink from "../../docs/publishing/share-your-subscribe-link.md";
+import troubleshooting from "../../docs/publishing/troubleshooting.md";
+import writeAPost from "../../docs/publishing/write-a-post.md";
+import yourList from "../../docs/publishing/your-list.md";
 import selfHostingIndex from "../../docs/README.md";
-import configuration from "../../docs/reference/01-configuration.md";
-import sendingDomain from "../../docs/reference/02-sending-domain-dns.md";
+import configuration from "../../docs/reference/configuration.md";
+import sendingDomain from "../../docs/reference/sending-domain-dns.md";
 import {
   type DocFragment,
   type DocSection,
@@ -61,30 +61,30 @@ import { sanitizeEmailHtml } from "../render/sanitize";
 
 // Each page's Markdown by its path under docs/, the path an index links it by.
 const PAGES: Record<string, string> = {
-  "publishing/01-your-list.md": yourList,
-  "publishing/02-sending-rules.md": sendingRules,
-  "publishing/03-name-your-publication.md": nameYourPublication,
-  "publishing/04-write-a-post.md": writeAPost,
-  "publishing/06-troubleshooting.md": troubleshooting,
-  "publishing/08-connect-claude.md": connectClaude,
-  "publishing/11-email-template.md": emailTemplate,
-  "publishing/09-share-your-subscribe-link.md": shareYourSubscribeLink,
-  "publishing/10-check-your-setup.md": checkYourSetup,
-  "get-started/02-deploy.md": deploy,
-  "get-started/03-access.md": access,
-  "get-started/05-ses.md": ses,
-  "get-started/06-production-access.md": productionAccess,
-  "get-started/07-verify.md": verify,
-  "get-started/08-go-live.md": goLive,
-  "guides/01-allow-claude.md": allowClaude,
-  "guides/02-automate.md": automate,
-  "guides/03-alerts.md": alerts,
-  "get-started/04-aws-account.md": awsAccount,
-  "guides/05-rate-limit.md": rateLimit,
-  "guides/07-upgrade.md": upgrade,
-  "guides/09-as-your-list-grows.md": listGrows,
-  "reference/01-configuration.md": configuration,
-  "reference/02-sending-domain-dns.md": sendingDomain,
+  "publishing/your-list.md": yourList,
+  "publishing/sending-rules.md": sendingRules,
+  "publishing/name-your-publication.md": nameYourPublication,
+  "publishing/write-a-post.md": writeAPost,
+  "publishing/troubleshooting.md": troubleshooting,
+  "publishing/connect-claude.md": connectClaude,
+  "publishing/email-template.md": emailTemplate,
+  "publishing/share-your-subscribe-link.md": shareYourSubscribeLink,
+  "publishing/check-your-setup.md": checkYourSetup,
+  "get-started/deploy.md": deploy,
+  "get-started/access.md": access,
+  "get-started/ses.md": ses,
+  "get-started/production-access.md": productionAccess,
+  "get-started/verify.md": verify,
+  "get-started/go-live.md": goLive,
+  "guides/allow-claude.md": allowClaude,
+  "guides/automate.md": automate,
+  "guides/alerts.md": alerts,
+  "get-started/aws-account.md": awsAccount,
+  "guides/rate-limit.md": rateLimit,
+  "guides/upgrade.md": upgrade,
+  "guides/as-your-list-grows.md": listGrows,
+  "reference/configuration.md": configuration,
+  "reference/sending-domain-dns.md": sendingDomain,
 };
 
 // The sets, Publishing first: the editor's Docs tab is read once Kestrel is running, mostly
@@ -94,9 +94,9 @@ const SET_SOURCES: { id: string; name: string; index: string; path: string }[] =
   { id: "self-hosting", name: "Self-hosting", index: selfHostingIndex, path: "README.md" },
 ];
 
-// A page's path under docs/: its folder, then the file. The slug is the file's name without
-// its NN- prefix, so a link to a page never names its folder.
-const PAGE_PATH = /^([a-z0-9-]+)\/\d{2}-([a-z0-9-]+)\.md$/;
+// A page's path under docs/: its folder, then the file. The slug is the file's name, so a
+// link to a page never names its folder. File names carry no number: the index sets the order.
+const PAGE_PATH = /^([a-z0-9-]+)\/([a-z0-9-]+)\.md$/;
 
 /** `href` resolved against the folder of the file at `from` (both relative to docs/), or
  *  null when it climbs out of docs/. */
@@ -305,7 +305,7 @@ export function renderDocs(): DocsResponse {
   };
 }
 
-// A relative Markdown link to a Markdown file, `[text](../guides/01-allow-claude.md#x)`.
+// A relative Markdown link to a Markdown file, `[text](../guides/allow-claude.md#x)`.
 const MD_LINK = /\]\(([^)\s#:]+\.md)(#[^)\s]*)?\)/g;
 // Code, which shows link syntax as written and is never rewritten: a fenced block, or an
 // inline span.
