@@ -41,11 +41,13 @@ If a check fails, compare your DNS records with the ones in [Connect Amazon SES]
 
 ## 3. Check that notifications arrive
 
-Kestrel emails each notifications address when a send finishes, and right away when one runs into a problem. Check that they reach you, using one of the addresses you verified in SES. While SES is in the sandbox, every notifications address has to be verified there too, unless notifications go through [Cloudflare's email](../guides/03-notifications.md), where each is verified with Cloudflare instead. If you're setting Kestrel up for someone else, you can add their address beside yours later.
+Kestrel emails each notifications address when a send finishes, and right away when one runs into a problem. Check that they reach you, using one of the addresses you verified in SES. While SES is in the sandbox, every notifications address has to be verified there too. If you're setting Kestrel up for someone else, you can add their address beside yours later.
 
 1. In the editor, open **Settings → Notifications**, type that address under **Send notifications to**, select **Add inbox**, and then **Save**.
 
-1. Select **Send a test notification**. It arrives at that address. If it doesn't, **Last notification**, on the same page, says what happened.
+1. Select **Send a test notification**. It arrives at that address, from `Kestrel` until the publication has a name, and then from the publication's name followed by `via Kestrel`. If it doesn't arrive, **Last notification**, on the same page, says what happened.
+
+Notifications travel through SES like the newsletter, so they can't tell anyone when SES refuses the account. Section 8 covers that.
 
 The publisher sets their own address in [Check your setup](../publishing/10-check-your-setup.md).
 
@@ -92,19 +94,15 @@ If the bounce address has no flag, or the complaint address is still pending, SE
 
 ## 7. Read the logs
 
-The app writes a log line for each thing it does, and Cloudflare keeps them for a few days, depending on your plan. Nothing else tells you if the once-a-minute schedule that sends posts stops, so it's worth knowing where to look.
+The app writes a log line for each thing it does, and Cloudflare keeps them for a few days, depending on your plan. They're the one record of what the app did and when, the once-a-minute schedule that sends posts included, so it's worth knowing where to look before you need it.
 
 1. In the Cloudflare dashboard, go to **Workers & Pages**, select your Worker, the `name` in the `production` block of `wrangler.jsonc`, and select **Observability**.
 
-1. Filter on `event` equal to `sweep.tick`. A line arrives every minute. If none arrive, the schedule probably isn't running, and deploying again with `--env production` registers it.
+1. Filter on `event` equal to `send.completed`. The post you sent yourself in section 4 is there, with its `sendId`.
 
-1. Filter on `event` equal to `send.completed`. Your send from section 4 is there.
+1. Filter on `level` equal to `error`. A healthy instance shows nothing, and this is the first place to look when something seems wrong.
 
-1. Filter on `event` equal to `send.scheduled`. Your two sends from section 4 are there, and `send.canceled` shows the one you canceled. Each line that records an action says who took it. Its `principal` is `human` or `service`, and its `client` names the program a person used, such as `editor`.
-
-1. Filter on `level` equal to `error`. A healthy instance shows nothing. An occasional `d1.unavailable` line at `warn` is a brief database stall the next run makes up for, and needs nothing. The same line every minute means work isn't getting done, so if you set up alerts, alert on it repeating as well as on `error`.
-
-To follow one send, narrow the time range and filter on its `sendId`, since a long range may show only a sample. On the Free plan, Cloudflare stops keeping logs for the rest of the day once its daily allowance is used, as [its pricing page](https://developers.cloudflare.com/observability/pricing/) describes.
+A long time range may show only a sample, so narrow it when you follow one send by its `sendId`.
 
 ## 8. Clean up the test subscribers
 

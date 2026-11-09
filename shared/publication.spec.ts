@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { fromAddressOnly, fromDisplayName, fromHeader, sender, senderName } from "./publication";
+import {
+  fromAddressOnly,
+  fromDisplayName,
+  fromHeader,
+  notificationSender,
+  sender,
+  senderName,
+} from "./publication";
 
 describe("fromDisplayName (SPEC §9)", () => {
   it.each([
@@ -129,5 +136,32 @@ describe("fromHeader (SPEC §9)", () => {
     const header = fromHeader({ name, address: at });
     expect(words(header)).toHaveLength(2);
     expect(decoded(header)).toBe(name);
+  });
+});
+
+describe("notificationSender (SPEC §8)", () => {
+  it("is Kestrel until the publication has a name, then '<name> via Kestrel'", () => {
+    expect(notificationSender("", "news@send.birds.example")).toEqual({
+      name: "Kestrel",
+      address: "news@send.birds.example",
+    });
+    expect(notificationSender("  ", "news@send.birds.example").name).toBe("Kestrel");
+    expect(notificationSender(" Field Notes ", "news@send.birds.example").name).toBe(
+      "Field Notes via Kestrel",
+    );
+  });
+
+  it("takes the address of FROM_ADDRESS and never the name written there", () => {
+    expect(notificationSender("Field Notes", "Field Desk <news@send.birds.example>")).toEqual({
+      name: "Field Notes via Kestrel",
+      address: "news@send.birds.example",
+    });
+    expect(notificationSender("", "Field Desk <news@send.birds.example>").name).toBe("Kestrel");
+  });
+
+  it("is quoted in the header when the name needs it, so SES takes it", () => {
+    expect(fromHeader(notificationSender("Birds, Weekly", "news@send.birds.example"))).toBe(
+      '"Birds, Weekly via Kestrel" <news@send.birds.example>',
+    );
   });
 });

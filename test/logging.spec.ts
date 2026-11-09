@@ -149,9 +149,12 @@ describe("the send lifecycle in the log", () => {
     await toNextTick(env.DB);
     await sweep(env);
 
+    // The refusal begins with this send, so the operator's alert line is its own, before
+    // the writes that follow the answer (SPEC §12).
     expect(eventsFor(send.id)).toEqual([
       "send.scheduled",
       "send.fired",
+      "alert.sending",
       "send.batch",
       "send.halted",
       "send.batch",
@@ -614,7 +617,14 @@ describe("the entry points group a tick's or a request's lines under one run", (
     });
 
     expect(lines()).toEqual([
-      // Whether email is getting out, recorded in the same run (SPEC §13).
+      // The operator's alert line first, then whether email is getting out, recorded in the
+      // same run (SPEC §12, §13).
+      expect.objectContaining({
+        event: "alert.sending",
+        level: "warn",
+        run: "8c0ffee-LHR",
+        cause: "credentials",
+      }),
       expect.objectContaining({
         event: "sending.refusing",
         level: "warn",

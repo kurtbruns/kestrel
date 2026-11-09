@@ -33,6 +33,7 @@
  * and reads only what the run already holds, so logging costs no query and no decision.
  */
 
+import { isRefusingCause } from "../../shared/provider";
 import { haltRank } from "../../shared/sends";
 import type { DeliveryOutcome, DeliveryWork } from "../db/sends";
 import * as sends from "../db/sends";
@@ -47,8 +48,9 @@ import {
 } from "../lib/time";
 import { getProvider } from "../providers";
 import { drainSimulatedWebhooks } from "../providers/simulate";
-import type { BatchHalt, HaltReason } from "../providers/types";
+import type { BatchHalt, HaltCause, HaltReason } from "../providers/types";
 import { sendSender } from "../services/sender";
+import { alertRefusal } from "../services/sending";
 import { Budget, metered } from "./budget";
 import { SendWindow } from "./pace";
 
@@ -70,6 +72,32 @@ export interface SendLoopResult {
   answeredAt: number | null;
 }
 
+/**
+ * Log the operator's alert line (`alert.sending`) for a halt that begins email not getting out
+ * (SPEC §12), once when it begins. A refusal of the account alerts unless email already
+ * refuses for that cause (`alertRefusal`), which the sweep's later record of this run then
+ * doesn't log again. A spent quota holds every send though no refusal records it, so it
+ * alerts when the send didn't already carry a quota halt: a retry still over quota is the
+ * same halt, and another send joins that halt without asking the provider.
+ */
+async function alertHalt(
+  db: D1Database,
+  halt: BatchHalt,
+  carried: { reason: HaltReason; cause: HaltCause | null } | null,
+  tags: Record<string, string>,
+): Promise<void> {
+  if (halt.reason !== "account") {
+    return;
+  }
+  if (halt.cause === "quota") {
+    if (!(carried?.reason === "account" && carried.cause === "quota")) {
+      log.warn("alert.sending", { ...tags, cause: "quota" });
+    }
+  } else if (isRefusingCause(halt.cause)) {
+    await alertRefusal(db, { cause: halt.cause, foundBy: "list" }, tags);
+  }
+}
+
 /** The most recipients in one batch, whatever the provider allows. */
 const MAX_CHUNK = 500;
 
@@ -89,10 +117,11 @@ const GROUP_RECIPIENTS = 10;
  *  audience (2), list the fresh rows. */
 const OPEN_COST = 6;
 /** One group, besides a request for each of its batches: read its rows, close any no
- *  longer to be mailed (2), renew the lease, hand off (2), record the outcomes (2). A
+ *  longer to be mailed (2), renew the lease, hand off (2), record the outcomes (2), and, for
+ *  a refusal of the account, read whether email already refuses for it (`alertHalt`). A
  *  group with a halted batch also records the hold (3), but then the run only releases
  *  the lease, which leaves that much of the close unspent. */
-const GROUP_COST = 8;
+const GROUP_COST = 9;
 /** What a group usually costs, besides its requests: the read, the hand-off, and the
  *  record. Sizes the read of fresh rows, which may read more than a run gets to. */
 const GROUP_TYPICAL_COST = 5;
@@ -170,8 +199,18 @@ export async function runSend(
   }
   // The halt the send carried into this run, for the `send.halted` and `send.resumed`
   // lines: the first answered batch clears it.
-  let halted = send.halt_reason
-    ? { reason: send.halt_reason, retries: send.halt_retries, at: send.halted_at }
+  let halted: {
+    reason: HaltReason;
+    cause: HaltCause | null;
+    retries: number;
+    at: number | null;
+  } | null = send.halt_reason
+    ? {
+        reason: send.halt_reason,
+        cause: send.halt_cause,
+        retries: send.halt_retries,
+        at: send.halted_at,
+      }
     : null;
   let renewAt = now + LEASE_TTL_MS / 2;
   /** Keep the lease while the run works. False once another run holds it: it owns the
@@ -388,6 +427,11 @@ export async function runSend(
     // the publisher is told once (SPEC §12). Anything else held back, such as SES throttling
     // a few entries for the account's rate, is pace rather than a fault a person fixes: the
     // progress ends the halt and the hold starts afresh, a minute out.
+    if (halt) {
+      // Before this answer's first write (the settle, then the hold), so a database that
+      // fails either can't swallow the operator's alert (SPEC §12).
+      await alertHalt(db, halt, halted, tags);
+    }
     const cleared = progressed && halt?.reason !== "account";
     result.answeredAt = Date.now();
     await sends.settleDeliveries(db, sendId, lease, "dispatched", outcomes, Date.now(), {

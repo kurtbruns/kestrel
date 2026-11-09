@@ -2,6 +2,7 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { dashboardRouteFromSearch } from "../shared/dashboard_link";
+import { fromAddressOnly } from "../shared/publication";
 import { refusalAdvice } from "../shared/sends";
 import { MAX_NOTIFY_ADDRESSES, type SendNotificationKind } from "../shared/settings";
 import * as notifications from "../src/db/notifications";
@@ -13,7 +14,7 @@ import type { AppEnv } from "../src/env";
 import { getConfig } from "../src/env";
 import { MAX_NOTIFY_ATTEMPTS, MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../src/lib/time";
 import * as channel from "../src/notify/channel";
-import { CloudflareNotifier, ProviderNotifier } from "../src/notify/channel";
+import { ProviderNotifier } from "../src/notify/channel";
 import { composeNotification, sendLink } from "../src/notify/compose";
 import { clearFakeNotifications, failFakeNotify, fakeNotifications } from "../src/notify/fake";
 import { NOTIFY_RESERVE, notifyPublisher, stillHolds } from "../src/notify/notify";
@@ -36,7 +37,7 @@ import {
 } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
-import { fetchWith } from "./support/worker_env";
+import { fetchWith, withVars } from "./support/worker_env";
 
 // The publisher is told, by email, when a send goes out or runs into a problem (SPEC §8): once per
 // event, however many ticks the condition lasts, through a channel that is the fake here
@@ -887,38 +888,8 @@ describe("after the review", () => {
   });
 });
 
-describe("the channels", () => {
-  it("Cloudflare's binding gets one message to the publisher, from the configured sender", async () => {
-    const send = vi.fn(async () => ({ messageId: "m1" }));
-    const notifier = new CloudflareNotifier(
-      { send } as unknown as SendEmail,
-      "Kestrel <kestrel@newsletter.example.com>",
-    );
-    await notifier.send(PUBLISHER, { subject: "S", text: "T", html: "<p>T</p>" });
-    expect(send).toHaveBeenCalledWith({
-      from: { name: "Kestrel", email: "kestrel@newsletter.example.com" },
-      to: PUBLISHER,
-      subject: "S",
-      text: "T",
-      html: "<p>T</p>",
-    });
-  });
-
-  it("Cloudflare's refusal surfaces as the channel's words", async () => {
-    const notifier = new CloudflareNotifier(
-      {
-        send: async () => {
-          throw new Error("E_RECIPIENT_NOT_ALLOWED: destination address not verified");
-        },
-      } as unknown as SendEmail,
-      "kestrel@newsletter.example.com",
-    );
-    await expect(notifier.send(PUBLISHER, { subject: "S", text: "T", html: "" })).rejects.toThrow(
-      "destination address not verified",
-    );
-  });
-
-  it("the provider fallback delivers through the newsletter's provider, and fails with its words when it refuses", async () => {
+describe("the one path (SPEC §8, §12)", () => {
+  it("the provider notifier delivers through the newsletter's provider, and fails with its words when it refuses", async () => {
     const config = { ...getConfig(env), provider: "ses" as const };
     const notifier = new ProviderNotifier(config, env as AppEnv, {
       name: "Birds",
@@ -944,28 +915,56 @@ describe("the channels", () => {
   });
 });
 
-describe("the channel is deploy config", () => {
+describe("where notifications go is deploy config", () => {
   const cfg = (over: Record<string, unknown>) => getConfig({ ...env, ...over } as AppEnv);
-  const binding = { send: async () => ({}) } as unknown as SendEmail;
 
-  it("dev is always the fake, even with the binding declared", () => {
-    expect(cfg({ NOTIFY: binding }).notifyChannel).toBe("fake");
+  it("dev goes to the fake; the send simulation, the not-connected preview, and a deployment go through the provider", () => {
+    expect(channel.notifiesFake(cfg({}))).toBe(true);
+    expect(channel.notifiesFake(cfg({ SIMULATE_SENDS: "ses" }))).toBe(false);
+    expect(channel.notifiesFake(cfg({ SIMULATE_SENDS: "not-connected" }))).toBe(false);
+    expect(
+      channel.notifiesFake(cfg({ ...SES_DEPLOY, APP_ORIGIN: "https://newsletter.birds.example" })),
+    ).toBe(false);
   });
 
-  it("deployed: Cloudflare when bound, from kestrel@ the app's host unless NOTIFY_FROM says", () => {
-    const deployed = { ...SES_DEPLOY, APP_ORIGIN: "https://newsletter.birds.example" };
-    expect(cfg({ ...deployed, NOTIFY: binding })).toMatchObject({
-      notifyChannel: "cloudflare",
-      notifyFrom: "Kestrel <kestrel@newsletter.birds.example>",
+  it("a deployment that still declares the old NOTIFY binding sends through the provider all the same", () => {
+    const binding = { send: async () => ({}) };
+    const deployed = cfg({
+      ...SES_DEPLOY,
+      APP_ORIGIN: "https://newsletter.birds.example",
+      NOTIFY: binding,
+      NOTIFY_FROM: "alerts@newsletter.birds.example",
     });
-    expect(
-      cfg({ ...deployed, NOTIFY: binding, NOTIFY_FROM: "alerts@newsletter.birds.example" })
-        .notifyFrom,
-    ).toBe("alerts@newsletter.birds.example");
-    expect(cfg(deployed)).toMatchObject({
-      notifyChannel: "provider",
-      notifyFrom: SES_DEPLOY.FROM_ADDRESS,
+    const notifier = channel.getNotifier(deployed, env as AppEnv, {
+      name: "Kestrel",
+      address: "news@send.birds.example",
     });
+    expect(notifier.channel).toBe("provider");
+  });
+});
+
+describe("the notification sender (SPEC §8)", () => {
+  it("is Kestrel until the publication has a name, then '<name> via Kestrel', over FROM_ADDRESS's address and never its name", async () => {
+    const getNotifier = vi.spyOn(channel, "getNotifier");
+    await updateSettings(env.DB, { publication: { name: "" } });
+    await notifications.sandboxNotice(env.DB, Date.now());
+    const named = withVars({ FROM_ADDRESS: "Field Desk <news@send.birds.example>" });
+    await notifyPublisher(named, new Budget(50));
+    expect(getNotifier.mock.calls.at(-1)?.[2]).toEqual({
+      name: "Kestrel",
+      address: "news@send.birds.example",
+    });
+
+    await updateSettings(env.DB, { publication: { name: "Field Notes" } });
+    const later = Date.now() + 2 * 24 * 60 * 60 * 1000;
+    vi.setSystemTime(later);
+    await notifications.sandboxNotice(env.DB, later);
+    await notifyPublisher(named, new Budget(50));
+    expect(getNotifier.mock.calls.at(-1)?.[2]).toEqual({
+      name: "Field Notes via Kestrel",
+      address: "news@send.birds.example",
+    });
+    expect(fakeNotifications()).toHaveLength(2);
   });
 });
 
@@ -984,15 +983,14 @@ describe("the settings surface", () => {
       headers: AUTH,
     });
 
-  it("stores the addresses as a preference, normalized, and reflects the channel read-only", async () => {
+  it("stores the addresses as a preference, normalized, and reflects the notifications' sender read-only", async () => {
     const res = await put({
       notifications: { to: ["  Me@Example.COM ", "", "ops@example.com", "me@example.com"] },
     });
     expect(res.status).toBe(200);
     const body = await get();
     expect(body.settings.notifications).toEqual({ to: ["me@example.com", "ops@example.com"] });
-    expect(body.deployment.notify_channel).toBe("fake");
-    expect(body.deployment.notify_from).toBe(env.FROM_ADDRESS);
+    expect(body.deployment.notify_from).toBe(`Kestrel <${fromAddressOnly(env.FROM_ADDRESS)}>`);
     expect(body.notification_status).toEqual({ last_sent: null, last_failure: null });
   });
 
@@ -1049,7 +1047,7 @@ describe("the settings surface", () => {
     await updateSettings(env.DB, { notifications: { to: [PUBLISHER] } });
     const ok = await test();
     expect(ok.status).toBe(200);
-    expect(await ok.json()).toEqual({ to: [PUBLISHER], failed: [], channel: "fake" });
+    expect(await ok.json()).toEqual({ to: [PUBLISHER], failed: [] });
     expect(fakeNotifications().map((n) => n.to)).toEqual([PUBLISHER]);
     // Its link opens Settings, carried in the query so an Access login keeps it.
     expect(JSON.stringify(fakeNotifications()[0])).toContain(
@@ -1075,7 +1073,6 @@ describe("the settings surface", () => {
     expect(await some.json()).toEqual({
       to: [PUBLISHER, OPERATOR],
       failed: [{ email: PUBLISHER, error: "fake notification failure" }],
-      channel: "fake",
     });
     expect(fakeNotifications().map((n) => n.to)).toEqual([OPERATOR]);
     expect((await get()).notification_status.last_failure).toMatchObject({

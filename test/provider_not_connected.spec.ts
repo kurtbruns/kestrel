@@ -14,6 +14,7 @@ import * as sends from "../src/db/sends";
 import { updateSettings } from "../src/db/settings";
 import { type AppEnv, getConfig } from "../src/env";
 import { HALT_BACKOFF_MS, HALT_RETRY_SLACK_MS } from "../src/lib/time";
+import { notifiesFake } from "../src/notify/channel";
 import { composeNotification } from "../src/notify/compose";
 import { clearFakeNotifications, fakeNotifications } from "../src/notify/fake";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
@@ -177,7 +178,7 @@ describe("everything that would send is refused with provider_not_connected", ()
   it("refuses a test notification through the provider, and records no failure", async () => {
     await updateSettings(env.DB, { notifications: { to: ["me@birds.example"] } });
     const c = context(NOT_CONNECTED, "/api/settings/notifications/test");
-    expect(c.config.notifyChannel).toBe("provider");
+    expect(notifiesFake(c.config)).toBe(false);
     await expect(settingsRoutes.notificationTest(c)).rejects.toMatchObject(REFUSED);
     const status = await readJson(
       await settingsRoutes.get(context(NOT_CONNECTED, "/api/settings", { method: "GET" })),
@@ -410,8 +411,8 @@ describe("local dev's not-connected preview, SIMULATE_SENDS=not-connected (SPEC 
     expect(config.devMode).toBe(true);
     expect(config.simulation).toBeNull();
     expect(config.notConnectedPreview).toBe(true);
-    // A deployment with no provider and no NOTIFY binding notifies through the provider.
-    expect(config.notifyChannel).toBe("provider");
+    // A deployment with no provider notifies through the provider, which carries nothing.
+    expect(notifiesFake(config)).toBe(false);
   });
 
   it("is never honored outside local dev, and takes no fault suffix", () => {
@@ -438,7 +439,6 @@ describe("local dev's not-connected preview, SIMULATE_SENDS=not-connected (SPEC 
     const settings = await readJson(await fetchWith(PREVIEW, "/api/settings", { headers: AUTH }));
     expect(settings.deployment.provider).toBe("none");
     expect(settings.deployment.not_connected_preview).toBe(true);
-    expect(settings.deployment.notify_channel).toBe("provider");
 
     const { post } = await posts.createPost(env.DB, { subject: "Hi", markdown: "Hi" }, "test");
     const scheduled = await fetchWith(PREVIEW, `/api/posts/${post.id}/schedule`, {

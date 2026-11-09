@@ -2,7 +2,8 @@
 // `FROM_ADDRESS` give it (SPEC §9). One module for both runtimes, so the `From:` the Worker
 // hands a provider and the sender the editor shows are built by the same rule: the address
 // is deploy-time, the display name follows the publication name, and a name written into
-// `FROM_ADDRESS` overrides it.
+// `FROM_ADDRESS` overrides it. A notification to the publisher has its own name over the same
+// address (`notificationSender`).
 
 /** The display name of a `From:` header: `Birds Weekly <hello@birds.example>` and
  *  `"Birds Weekly" <hello@birds.example>` give `Birds Weekly`; a bare address, or an
@@ -44,6 +45,24 @@ export interface Sender {
 export function sender(publicationName: string, fromAddress: string): Sender {
   return {
     name: senderName(publicationName, fromAddress),
+    address: fromAddressOnly(fromAddress),
+  };
+}
+
+/** The name a notification to the publisher goes out as (SPEC §8): `Kestrel` until the
+ *  publication has a name, then `<publication name> via Kestrel`. It reads the publication's
+ *  name only, never a name written into `FROM_ADDRESS`, which is the reader's sender: a
+ *  notification is Kestrel writing to the publisher, not the newsletter writing to a reader. */
+export function notificationSenderName(publicationName: string): string {
+  const name = publicationName.trim();
+  return name ? `${name} via Kestrel` : "Kestrel";
+}
+
+/** The sender a notification goes out as: `notificationSenderName` over the address alone of
+ *  the deploy-time `FROM_ADDRESS`, the only address the provider will send from. */
+export function notificationSender(publicationName: string, fromAddress: string): Sender {
+  return {
+    name: notificationSenderName(publicationName),
     address: fromAddressOnly(fromAddress),
   };
 }

@@ -214,7 +214,7 @@ describe("what anyone can do, by phase (SPEC §6, §7, §13)", () => {
       sandbox: async (p) => expect(await signupAnswer(p)).toEqual([200, "check_inbox"]),
       production: async (p) => expect(await signupAnswer(p)).toEqual([200, "check_inbox"]),
     },
-    // Through the simulated SES, as on an instance without Cloudflare's email.
+    // Through the simulated SES, the one path a notification takes (SPEC §8).
     "send a test notification": {
       not_connected: async (p) => {
         const r = await admin(p, "POST", "/api/settings/notifications/test");
@@ -225,7 +225,7 @@ describe("what anyone can do, by phase (SPEC §6, §7, §13)", () => {
         expect((await admin(p, "POST", "/api/settings/notifications/test")).status).toBe(200);
         expect((await provider(p)).signups).toBe("open");
       },
-      // Refused, like every email: Cloudflare's email would still arrive.
+      // Refused, like every email: the Cloudflare alert on the log is what tells the operator.
       refusing: async (p) => {
         const r = await admin(p, "POST", "/api/settings/notifications/test");
         expect(r.status).toBe(502);

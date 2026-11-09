@@ -110,6 +110,8 @@ export async function noteContact(
       },
       at,
       tell,
+      // A list send's refusal was alerted by the send loop, before its writes (`alertHalt`).
+      { alerted: purpose === "list" },
     );
   } catch (err) {
     // An error even on a database stall (SPEC §12): nothing asks the provider again, so this
@@ -120,7 +122,7 @@ export async function noteContact(
 
 /**
  * The provider's answers over one stretch of work that records them together, a sweep tick,
- * so its sends and notifications cost one statement between them out of what notifying left,
+ * so its sends and notifications cost one write between them out of what notifying left,
  * rather than one each out of the budget the sends run on. Each answer keeps when the provider
  * gave it, and the latest that says anything is recorded with that time, so it never replaces
  * an answer given after it, such as a test sent while the tick ran.
@@ -135,7 +137,8 @@ export class Contacts {
     }
   }
 
-  /** Record the latest answer, if any: at most one statement. */
+  /** Record the latest answer, if any: at most two statements, the write and, for a refusal
+   *  not already alerted, the read that decides whether it begins one. */
   async record(db: D1Database, config: Config): Promise<void> {
     if (this.latest) {
       const { purpose, outcome, at } = this.latest;
@@ -145,15 +148,70 @@ export class Contacts {
   }
 }
 
-/** Record a refusal of the account, found by an email or by the account check. */
+/**
+ * Record a refusal of the account, found by an email or by the account check. The operator's
+ * alert line (`alert.sending`) goes first, so a database that fails the write can't swallow it
+ * (SPEC §12), and only when the refusal begins (`alertRefusal`); `sending.refusing` after says
+ * the record took it. `alerted` says the caller already logged the line; `row` is the sending
+ * row when the caller has just read it, which spares the read.
+ */
 export async function noteRefusal(
   db: D1Database,
   refusal: { cause: RefusingCause; foundBy: RefusalFoundBy; error: string },
   now: number,
   tell: boolean,
+  opts: { alerted?: boolean; row?: SendingRow | null } = {},
 ): Promise<void> {
+  if (!opts.alerted) {
+    await alertRefusal(db, refusal, {}, opts.row);
+  }
   await recordRefusal(db, refusal, now, tell);
   log.warn("sending.refusing", { cause: refusal.cause, foundBy: refusal.foundBy });
+}
+
+/**
+ * Whether a refusal for `cause`, found by `foundBy`, begins one rather than repeating the one
+ * `row` records (SPEC §12): email isn't refusing yet, or is refusing for another cause. The
+ * account check never takes over a refusal an email met (`refusalStatement`), so a finding of
+ * its own while one stands begins nothing either, or it would alert at every check.
+ */
+export function beginsRefusal(
+  row: SendingRow | null,
+  cause: RefusingCause,
+  foundBy: RefusalFoundBy,
+): boolean {
+  if (row?.state !== "refusing") {
+    return true;
+  }
+  if (foundBy === "account_check" && row.refusalFoundBy !== "account_check") {
+    return false;
+  }
+  return row.refusalCause !== cause;
+}
+
+/**
+ * Log the operator's alert line for a refusal, once when it begins and not at each repeat
+ * while it stands (`beginsRefusal`). Decided from the sending row as it stands before this
+ * refusal's write, read here unless the caller passes it. A read that fails alerts anyway:
+ * a repeated line costs the operator one more email, and a lost one costs them the outage.
+ */
+export async function alertRefusal(
+  db: D1Database,
+  refusal: { cause: RefusingCause; foundBy: RefusalFoundBy },
+  tags: Record<string, string> = {},
+  known?: SendingRow | null,
+): Promise<void> {
+  let row: SendingRow | null | undefined = known;
+  if (row === undefined) {
+    try {
+      row = await readSending(db);
+    } catch {
+      row = null;
+    }
+  }
+  if (beginsRefusal(row, refusal.cause, refusal.foundBy)) {
+    log.warn("alert.sending", { ...tags, cause: refusal.cause, foundBy: refusal.foundBy });
+  }
 }
 
 /** The state as both clients read it; null while no provider is connected. A missing row is

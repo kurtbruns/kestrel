@@ -195,9 +195,7 @@ export interface DeploymentView {
   /** How the reader of this reflection signed in: through Access, or with the local dev token. */
   auth_mode: "access" | "dev";
   build: BuildInfo;
-  /** How notifications reach the publisher: Cloudflare's own email, the newsletter's provider, or the dev fake that delivers nothing. */
-  notify_channel: "cloudflare" | "provider" | "fake";
-  /** The `From:` a notification carries. */
+  /** The `From:` a notification to the publisher carries (SPEC §8): `Kestrel` until the publication has a name, then `<publication name> via Kestrel`, over the address of `from_address`. Follows the saved publication name. */
   notify_from: string;
   /** The minimum lead (SPEC §6): every schedule, send now, and reschedule fires at least this long after the request. Never under `MIN_LEAD_FLOOR_MS` or over `MIN_LEAD_CEILING_MS`. */
   min_lead_ms: number;
@@ -322,13 +320,22 @@ export function missedAddresses(
   return missed.map((m) => `${m.email}: ${m.error}`).join("; ");
 }
 
-/** POST /api/settings/notifications/test: a sample notification to every saved address, through the live channel. */
+/** POST /api/settings/notifications/test: a sample notification to every saved address, through the provider. */
 export interface NotificationTestResponse {
   /** Every saved address it was sent to, in the order saved. */
   to: string[];
-  /** The addresses the channel refused, each with its words; empty when every one got it. */
+  /** The addresses the provider refused, each with its words; empty when every one got it. */
   failed: NotificationTestMiss[];
-  channel: DeploymentView["notify_channel"];
+}
+
+/** POST /api/settings/notifications/alert-test: one `alert.sending` log line with cause `test` (SPEC §12), so the operator can prove a Cloudflare Monitor on it end to end. Nothing else happens: no state changes and no email goes out. */
+export interface AlertTestResponse {
+  /** The event logged. */
+  event: "alert.sending";
+  /** The cause it carries. */
+  cause: "test";
+  /** When it was logged (ms since epoch). */
+  at: number;
 }
 
 /** The 409 a template or identity save gets until the client acknowledges the sends it re-makes (SPEC §9). */

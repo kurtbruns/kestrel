@@ -161,8 +161,9 @@ describe("the account check finds a refusal without sending (SPEC §8, §13)", (
     expect(row?.refusalError).toContain("SES has no configuration set by that name");
     expect(await signups(broken)).toBe("paused");
     await tick(broken);
-    // One notice for the day. Without Cloudflare's email it goes through SES, which refuses
-    // it as it refuses every email, so it can't arrive: the editor says it instead.
+    // One notice for the day. It goes through SES, which refuses it as it refuses every
+    // email, so it can't arrive: the editor says it instead, and the operator's Cloudflare
+    // alert on the log line (SPEC §12).
     const notices = await env.DB.prepare(
       "SELECT status, error FROM notifications WHERE kind = 'not_sending'",
     ).all<{ status: string; error: string }>();

@@ -57,7 +57,6 @@ export const REFERENCE_ANCHORS: Readonly<Record<string, string>> = {
   MIN_LEAD_SECONDS: "vars",
   ARCHIVE_ORIGIN: "vars",
   MEDIA_PUBLIC_BASE: "vars",
-  NOTIFY_FROM: "vars",
   ACCESS_TEAM_DOMAIN: "secrets",
   ACCESS_AUD: "secrets",
   ACCESS_ALLOWED_EMAILS: "secrets",

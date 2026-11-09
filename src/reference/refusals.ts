@@ -90,7 +90,7 @@ const FIX_DEPLOYMENT = {
     502,
     "The provider refused a confirmation, or never answered, with what to do about a refusal.",
   ],
-  notify_failed: [502, "The notifications channel refused a test, in its own words."],
+  notify_failed: [502, "The provider refused a test notification, in its own words."],
   provider_not_connected: [503, "No email provider is connected, so nothing can be sent."],
   signups_closed: [
     503,
@@ -198,7 +198,7 @@ export const STATUSES: ReferenceStatus[] = [
   {
     status: 502,
     name: "Bad Gateway",
-    meaning: "The email provider or the notifications channel refused, in its own words.",
+    meaning: "The email provider refused, in its own words.",
   },
   {
     status: 503,

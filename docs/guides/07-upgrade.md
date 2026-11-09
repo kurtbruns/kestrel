@@ -135,7 +135,7 @@ Near its end, the output names your app's hostname, then its schedule and a vers
 
 1. Send yourself a test email, as in [Verify it works](../get-started/07-verify.md#1-send-yourself-a-test-email). Don't send a real post to check an upgrade: on a live instance, it goes to your whole list.
 
-1. In the logs, `sweep.tick` still arrives every minute, as in [Verify it works](../get-started/07-verify.md#7-read-the-logs).
+1. In the logs, filter on `event` equal to `sweep.tick`: a line still arrives every minute. [Read the logs](../get-started/07-verify.md#7-read-the-logs) shows where the logs are.
 
 ## Go back
 

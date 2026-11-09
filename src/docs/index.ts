@@ -31,7 +31,7 @@ import verify from "../../docs/get-started/07-verify.md";
 import goLive from "../../docs/get-started/08-go-live.md";
 import allowClaude from "../../docs/guides/01-allow-claude.md";
 import automate from "../../docs/guides/02-automate.md";
-import notifications from "../../docs/guides/03-notifications.md";
+import alerts from "../../docs/guides/03-alerts.md";
 import rateLimit from "../../docs/guides/05-rate-limit.md";
 import upgrade from "../../docs/guides/07-upgrade.md";
 import listGrows from "../../docs/guides/09-as-your-list-grows.md";
@@ -78,7 +78,7 @@ const PAGES: Record<string, string> = {
   "get-started/08-go-live.md": goLive,
   "guides/01-allow-claude.md": allowClaude,
   "guides/02-automate.md": automate,
-  "guides/03-notifications.md": notifications,
+  "guides/03-alerts.md": alerts,
   "get-started/04-aws-account.md": awsAccount,
   "guides/05-rate-limit.md": rateLimit,
   "guides/07-upgrade.md": upgrade,

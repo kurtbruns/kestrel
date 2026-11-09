@@ -223,11 +223,12 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
     }
   }
 
-  // What the tick's emails said about whether email is getting out (SPEC §13), in one
-  // statement from what notifying left, which is nearly always room: notifying spends its
-  // reserve only on a tick with notices due and nothing else left. A tick without the room
-  // records nothing, and a later one records the provider's next answer. Caught inside.
-  if (rest.affords(1)) {
+  // What the tick's emails said about whether email is getting out (SPEC §13), in at most
+  // two statements from what notifying left (a refusal reads whether it begins one, for the
+  // operator's alert), which is nearly always room: notifying spends its reserve only on a
+  // tick with notices due and nothing else left. A tick without the room records nothing,
+  // and a later one records the provider's next answer. Caught inside.
+  if (rest.affords(2)) {
     await contacts.record(metered(env.DB, rest), config);
   }
 

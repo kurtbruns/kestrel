@@ -181,10 +181,13 @@ async function noteAccountRefusal(
 ): Promise<void> {
   const found = accountRefusals(config, row);
   if (found.length > 0) {
-    const contradicted = (await readSending(db))?.checkContradicted ?? [];
+    const row = await readSending(db);
+    const contradicted = row?.checkContradicted ?? [];
     const standing = found.find((f) => !contradicted.includes(f.cause));
     if (standing) {
-      await noteRefusal(db, { ...standing, foundBy: "account_check" }, at, true);
+      // The row just read also says whether this finding begins a refusal, so a standing
+      // one alerts the operator once, not at every check (SPEC §12).
+      await noteRefusal(db, { ...standing, foundBy: "account_check" }, at, true, { row });
     }
   } else if (row.outcome === "ok" && (await clearCheckRefusal(db, at))) {
     log.info("sending.cleared", { foundBy: "account_check" });

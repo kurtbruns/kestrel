@@ -6,6 +6,7 @@
  *   POST   /api/settings/logo → upload the publication logo (multipart `file`)
  *   DELETE /api/settings/logo → remove the publication logo
  *   POST   /api/settings/notifications/test → a sample notification to the saved address
+ *   POST   /api/settings/notifications/alert-test → log a test `alert.sending` line, nothing else
  *
  * `settings` are the mutable, in-app preferences (src/db/settings.ts) — including
  * the publication identity: name, tagline, address, and logo.
@@ -20,12 +21,14 @@
  * that reaches the email is refused until the client acknowledges those sends by id
  * (`remake`), and the response says what was re-made.
  * `notification_status` is how the notifications to the publisher have gone lately (SPEC
- * §8): the last delivered and any newer failure, so a channel that stopped working shows
- * where its destination is set.
+ * §8): the last delivered and any newer failure, so notifications that stopped arriving show
+ * where their destination is set.
  */
 
+import { fromHeader } from "../../shared/publication";
 import {
   ADDRESS_NOT_PRINTED,
+  type AlertTestResponse,
   type DeploymentView,
   type InUseView,
   type LogoResponse,
@@ -64,9 +67,9 @@ import {
 } from "../lib/body";
 import { badRequest, HttpError, json } from "../lib/errors";
 import { imageLabelConflict, imageTypeOf } from "../lib/image_types";
-import { errorText } from "../lib/log";
+import { errorText, log } from "../lib/log";
 import { unwrap } from "../lib/unwrap";
-import { getNotifier } from "../notify/channel";
+import { getNotifier, notifiesFake } from "../notify/channel";
 import { sampleNotification } from "../notify/compose";
 import { requireConnectedProvider } from "../providers";
 import {
@@ -79,7 +82,7 @@ import {
 import type { Principal, RequestContext } from "../router";
 import { viewSendsInOrder } from "../send/describe";
 import { insideLead, saveSettingsRemaking } from "../send/remake";
-import { senderFrom } from "../services/sender";
+import { notificationSenderFrom } from "../services/sender";
 import { Contacts } from "../services/sending";
 
 /** Logos are small brand assets; keep them well under any provider's object limits. */
@@ -87,7 +90,11 @@ export const MAX_LOGO_BYTES = 512 * 1024;
 
 /** The non-secret, deploy-time facts the editor shows read-only, and how the reader of
  *  them signed in (`auth_mode`, from the principal: a per-request fact, never config). */
-function deploymentView(cfg: Config, principal: Principal): DeploymentView {
+function deploymentView(
+  cfg: Config,
+  settings: Pick<AppSettings, "publication">,
+  principal: Principal,
+): DeploymentView {
   return {
     provider: cfg.provider,
     from_address: cfg.fromAddress,
@@ -103,10 +110,10 @@ function deploymentView(cfg: Config, principal: Principal): DeploymentView {
     // The running build (SPEC §9), so the editor can show/link it. Build metadata,
     // resolved at build (src/build.ts) — not deploy config, and never a secret.
     build: buildInfo(),
-    // How notifications reach the publisher, and their sender: deploy config, shown so
-    // the publisher knows which setup a failure points at. No credential rides either.
-    notify_channel: cfg.notifyChannel,
-    notify_from: cfg.notifyFrom,
+    // The `From:` a notification carries: Kestrel, on the publication's behalf, over the
+    // deploy-time address (SPEC §8). Derived from the settings with the deploy config, so it
+    // follows a rename at once, with no deploy.
+    notify_from: fromHeader(notificationSenderFrom(settings, cfg)),
     // The minimum lead (SPEC §6): deploy config, so the editor floors its pickers and words
     // its copy by the value this deployment enforces instead of a number of its own.
     min_lead_ms: cfg.minLeadMs,
@@ -195,7 +202,7 @@ export async function get(c: RequestContext): Promise<Response> {
   const settings = await getSettings(c.env.DB);
   const body: SettingsResponse = {
     settings: settingsView(settings, c.config),
-    deployment: deploymentView(c.config, unwrap(c.principal, "principal")),
+    deployment: deploymentView(c.config, settings, unwrap(c.principal, "principal")),
     in_use: await inUseView(c.env, settings, c.config),
     notification_status: await notificationStatus(c.env.DB),
   };
@@ -203,13 +210,12 @@ export async function get(c: RequestContext): Promise<Response> {
 }
 
 /**
- * Send a sample notification to each saved address through the live channel, so the
- * publisher proves the channel (a verified Cloudflare destination, say) before a send
- * runs into a problem. It goes to the saved addresses only, never one named in the
+ * Send a sample notification to each saved address through the provider, so the
+ * publisher proves notifications reach them before a send runs into a problem. It goes to the saved addresses only, never one named in the
  * request, so this cannot become a way to mail an arbitrary inbox. Each address is its
- * own try, so one the channel refuses doesn't keep the test from the others, and the
+ * own try, so one the provider refuses doesn't keep the test from the others, and the
  * answer names the ones it missed. Its outcome is recorded as the latest test, so a test
- * that gets through after a failure clears "Not delivered" on the status line. A channel
+ * that gets through after a failure clears "Not delivered" on the status line. A provider
  * that refuses every address is a 502 carrying its words.
  */
 export async function notificationTest(c: RequestContext): Promise<Response> {
@@ -220,11 +226,11 @@ export async function notificationTest(c: RequestContext): Promise<Response> {
       field: "notifications.to",
     });
   }
-  if (c.config.notifyChannel === "provider") {
+  if (!notifiesFake(c.config)) {
     // Through the newsletter's provider, which is not there yet: refused like any test.
     requireConnectedProvider(c.config);
   }
-  const notifier = getNotifier(c.config, c.env, senderFrom(settings, c.config));
+  const notifier = getNotifier(c.config, c.env, notificationSenderFrom(settings, c.config));
   const email = sampleNotification(c.config);
   const key = `test-${Date.now()}`;
   const failed: NotificationTestMiss[] = [];
@@ -242,7 +248,20 @@ export async function notificationTest(c: RequestContext): Promise<Response> {
   if (error !== null && failed.length === to.length) {
     throw new HttpError("notify_failed", error);
   }
-  const body: NotificationTestResponse = { to, failed, channel: notifier.channel };
+  const body: NotificationTestResponse = { to, failed };
+  return json(body);
+}
+
+/**
+ * Log one `alert.sending` line with cause `test`, and do nothing else: no state changes and
+ * no email goes out (SPEC §12). It proves the operator's Cloudflare Monitor end to end, from
+ * this Worker's log to the alert email, which Cloudflare's own Test button cannot, since it
+ * sends sample data.
+ */
+export function alertTest(_c: RequestContext): Response {
+  const at = Date.now();
+  log.warn("alert.sending", { cause: "test" });
+  const body: AlertTestResponse = { event: "alert.sending", cause: "test", at };
   return json(body);
 }
 
