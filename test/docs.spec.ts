@@ -96,6 +96,9 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
       ),
     ];
     expect(listed.sort()).toEqual(bundledPages().sort());
+    // Every listed page is a doc. A file name with a number in front (`07-verify.md`) is no
+    // page, since the index sets the order, so it drops out here.
+    expect(docs.length).toBe(bundledPages().length);
     expect(docs.filter((d) => d.set === "publishing").length).toBe(
       bundledPages().filter((p) => p.startsWith("publishing/")).length,
     );

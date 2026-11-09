@@ -95,8 +95,9 @@ const SET_SOURCES: { id: string; name: string; index: string; path: string }[] =
 ];
 
 // A page's path under docs/: its folder, then the file. The slug is the file's name, so a
-// link to a page never names its folder. File names carry no number: the index sets the order.
-const PAGE_PATH = /^([a-z0-9-]+)\/([a-z0-9-]+)\.md$/;
+// link to a page never names its folder. File names carry no number, since the index sets the
+// order, so a name that starts with a digit is no page and a spec fails on it.
+const PAGE_PATH = /^([a-z0-9-]+)\/([a-z][a-z0-9-]*)\.md$/;
 
 /** `href` resolved against the folder of the file at `from` (both relative to docs/), or
  *  null when it climbs out of docs/. */
