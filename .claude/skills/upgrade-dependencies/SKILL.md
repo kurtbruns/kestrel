@@ -18,7 +18,7 @@ Look first and change nothing until the user has said which packages move, unles
 
 ## 1. Look at each candidate
 
-Run `npm -v` first. Install nothing below npm 12, not even `npm ci`. npm 10, which CI's Node 22 bundles, was tried with `--min-release-age` and installed a too-new version without a word. Before npm 12, an install script not listed under `allowScripts` still runs. If the version is lower, the commands below still answer, so report that and stop before any install.
+Run `npm -v` first. Install nothing below npm 12, not even `npm ci`: npm 10, which CI's Node 22 bundles, doesn't honor `--min-release-age`, so it installs a too-new version without a word, and before npm 12 an install script not listed under `allowScripts` still runs. If the version is lower, the commands below still answer, so report that and stop before any install.
 
 These commands only read. If `node_modules` is missing, run `npm ci` first, which writes only ignored files.
 

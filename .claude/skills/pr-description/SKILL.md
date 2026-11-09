@@ -41,7 +41,7 @@ Review changes the change, so reread the description against the final diff, aft
 
 ## Examples
 
-A change that touches all three, problem first. The description of kurtbruns/kestrel#870 opened with its merge order ("Stacked on #868 at a76f03b3 … Merge #868 first, then retarget this to `main`"). With this skill it would open:
+A change that touches all three, problem first. A description that would otherwise have opened with its merge order opens instead with:
 
 > ## What changes for people
 >
@@ -55,7 +55,7 @@ The same change with a labeled line per person:
 > - **Publishers:** Settings shows whether the account is in the sandbox, where the production-access request stands, and the send rate. The dashboard's setup steps add Request production access, and a warning says when bounces would never reach the app.
 > - **Readers:** nothing changes.
 
-A one-line fix, kurtbruns/kestrel#875:
+A one-line fix:
 
 > ## What changes for people
 >

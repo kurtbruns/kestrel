@@ -57,7 +57,7 @@ The Publishing set gets a publisher going, and tells them about the decisions to
 
 ## Main path defaults
 
-- **Email provider:** Amazon SES, the only provider the guide covers. Step 3, Connect Amazon SES, walks through it.
+- **Email provider:** Amazon SES, the only provider the guide covers. The Connect Amazon SES step walks through it.
 - **App hostname:** a subdomain, `newsletter.example.com`. The apex works when it has no website of its own; Deploy the app says so in one sentence, in its Choose your hostnames section.
 - **Sending hostname:** `send.example.com`. Phrase it as a recommendation ("It's recommended to send from a subdomain…"), not a prohibition.
 
