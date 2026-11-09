@@ -10,6 +10,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Added
+
+- A post scheduled while Amazon SES is refusing your account now says so before it fires, with SES's words and the fix: it will be held when it fires, with no one mailed and no one marked unsent, and go out on its own once the account is fixed. The warning shows in the Schedule and Send now dialogs, on the editor's scheduled banner, and under the countdown on the dashboard's Scheduled card, and the API carries it as a condition on the send, so Claude sees it too. It goes as soon as SES takes an email again (SPEC §6, §13).
+
 ## [1.22.0] - 2026-11-06
 
 **Upgrading from 1.21.0.** No database migrations, so `npm run sync-migrations` brings in nothing and there's nothing to apply. In your instance's repository, start with nothing uncommitted, as [Upgrade to a new release](https://github.com/kurtbruns/kestrel/blob/v1.21.0/docs/guides/07-upgrade.md) says, and install the release with `npm install @kurtbruns/kestrel@1.22.0`. This release's gate before the first change arrives with that install, so it first applies to your next upgrade. This one starts on the guide and skill you have now. Once installed, the new guide's first section asks for a clean repository, which the install has just changed, so carry on from the step after the install, where the steps are the ones you had. Run `npm run check-context`: this release changes one file of the operator's Claude context, the upgrade skill, whose change bears on safety, since it now has Claude stop until `git status` lists nothing and ask for a go-ahead before any change, and a copy you've edited is merged by hand. Then run `npm run typecheck`, commit the upgrade, note a restore point, and deploy with `npx wrangler deploy --env production`, as the guide lays out.

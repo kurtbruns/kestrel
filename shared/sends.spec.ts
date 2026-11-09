@@ -8,6 +8,7 @@ import {
   MIN_LEAD_FLOOR_MS,
   refusalAdvice,
   refusedMessage,
+  refusingSendWarning,
   SELF_THROTTLE_HALTS,
   tooSoonMessage,
   unavailableMessage,
@@ -87,6 +88,23 @@ describe("a refusal's advice", () => {
     ] as const) {
       expect(refusalAdvice(cause)).not.toContain("'");
     }
+  });
+});
+
+describe("a scheduled send's warning while email is refusing", () => {
+  it("foretells the hold in the refused condition's terms and carries the cause's own fix, so the two never advise differently (SPEC §6, §13)", () => {
+    const met = { cause: "configuration", error: "Configuration set does not exist" } as const;
+    expect(refusingSendWarning({ ...met, found_by: "test" })).toBe(
+      `The provider is refusing the account: Configuration set does not exist. When this send fires it is held, with no one mailed and no one marked unsent, and it goes out on its own at its first retry once the account is fixed. ${refusalAdvice("configuration")}`,
+    );
+    // The account check's finding already ends in its fix, so none is appended.
+    const finding =
+      "SES_CONFIGURATION_SET names kestrel-mail, and SES has no configuration set by that name in us-east-1, so it refuses every email. Correct the name, or create the set in that region.";
+    expect(
+      refusingSendWarning({ cause: "configuration", error: finding, found_by: "account_check" }),
+    ).toBe(
+      `Kestrel’s check of the SES account found that SES refuses every email: ${finding} When this send fires it is held, with no one mailed and no one marked unsent, and it goes out on its own at its first retry once the account is fixed.`,
+    );
   });
 });
 

@@ -189,6 +189,19 @@ export const condition = {
       "Replace the SES access key in the instance’s secrets, or allow the key ses:SendEmail, ses:SendBulkEmail, ses:SendTemplatedEmail, and ses:SendBulkTemplatedEmail in its IAM policy. If someone else set up Kestrel for you, pass this along to them.",
     retry_at: retryAt,
   }),
+  /** Email refusing while the send is scheduled (SPEC §13): it will be held when it fires. */
+  refusing: (): SendCondition => ({
+    kind: "refusing",
+    severity: "warn",
+    since: 1_000,
+    message:
+      "The provider is refusing the account: Configuration set does not exist. When this send fires it is held, with no one mailed and no one marked unsent, and it goes out on its own at its first retry once the account is fixed. Check that the configuration set Kestrel sends with exists in the SES region. If someone else set up Kestrel for you, pass this along to them.",
+    action: null,
+    cause: "configuration",
+    error: "Configuration set does not exist",
+    advice:
+      "Check that the configuration set Kestrel sends with exists in the SES region. If someone else set up Kestrel for you, pass this along to them.",
+  }),
   noReceipts: (accepted: number): SendCondition => ({
     kind: "no_receipts",
     severity: "warn",

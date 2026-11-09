@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRouter } from "../src/app";
 import type { DueNotification } from "../src/db/notifications";
 import * as posts from "../src/db/posts";
+import { recordRefusal } from "../src/db/sending";
 import * as sends from "../src/db/sends";
 import { updateSettings } from "../src/db/settings";
 import { type AppEnv, getConfig } from "../src/env";
@@ -21,9 +22,17 @@ import * as renderRoutes from "../src/routes/render_actions";
 import * as scheduleRoutes from "../src/routes/schedule";
 import * as settingsRoutes from "../src/routes/settings";
 import * as subscriberRoutes from "../src/routes/subscribers";
+import { viewSend } from "../src/send/describe";
 import { condition } from "./support/conditions";
 import { NOT_CONNECTED_DEPLOY, SES_DEPLOY } from "./support/deploy";
-import { dueSend, resetDatabase, seedConfirmed, sendingWorks, tick } from "./support/fixtures";
+import {
+  dueSend,
+  frozenSend,
+  resetDatabase,
+  seedConfirmed,
+  sendingWorks,
+  tick,
+} from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 import { logged } from "./support/log";
 import { viewOf } from "./support/view";
@@ -261,6 +270,23 @@ describe("the public subscribe page while signups aren't open (SPEC §7, §13)",
 });
 
 describe("a send scheduled before the provider was disconnected", () => {
+  it("never warns a scheduled send that email is refusing, since the state is the provider's and there is none (SPEC §13)", async () => {
+    // A refusal recorded while a provider was connected, before it was removed: with none,
+    // whether email is getting out is null, so the held line for the missing provider and the
+    // refusing warning can never show together.
+    const send = await frozenSend(Date.now() + 3_600_000);
+    await recordRefusal(
+      env.DB,
+      { cause: "configuration", foundBy: "test", error: "no such set" },
+      Date.now(),
+      false,
+    );
+    const connected = await viewSend(env, send.id);
+    expect(connected?.conditions.map((c) => c.kind)).toEqual(["refusing", "untested"]);
+    const unconnected = await viewSend(withVars(NOT_CONNECTED), send.id);
+    expect(unconnected?.conditions.map((c) => c.kind)).toEqual(["untested"]);
+  });
+
   it("is held like a provider refusing the account: nobody consumed, nothing delivered", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     await seedConfirmed(["a@birds.example", "b@birds.example"]);

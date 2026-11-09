@@ -6,6 +6,7 @@
 // so neither can drift.
 
 import type { PageMeta } from "./list";
+import type { SendingRefusal } from "./provider";
 import type { Actor } from "./who_acted";
 
 /** A send's statuses, in their order, which the list's `status` filter takes. */
@@ -165,6 +166,25 @@ export function sentence(error: string | null): string {
 /** The `sandbox` condition's words (SPEC §6), the same before a send is scheduled and on it. */
 export const SANDBOX_SEND_WARNING =
   "Amazon SES is still in the sandbox, so when this send fires it reaches only addresses verified in SES. It waits for the rest, and other sends wait behind it, until AWS grants production access, then finishes on its own.";
+
+/**
+ * The `refusing` condition's words (SPEC §6, §13), the same before a send is scheduled and on
+ * it: what the provider said and what will happen to the send, then the fix. A refusal an
+ * email met carries the provider's words and the fix `refused` will carry once the send is
+ * held, so the warning and the condition it foretells never advise differently. One the
+ * account check found is the check's own finding, which already ends in its fix, so nothing is
+ * appended to it, or the fix would be said twice.
+ */
+export function refusingSendWarning(
+  refusal: Pick<SendingRefusal, "cause" | "error" | "found_by">,
+): string {
+  const held =
+    "When this send fires it is held, with no one mailed and no one marked unsent, and it goes out on its own at its first retry once the account is fixed.";
+  if (refusal.found_by === "account_check") {
+    return `Kestrel’s check of the SES account found that SES refuses every email: ${sentence(refusal.error)} ${held}`;
+  }
+  return `The provider is refusing the account: ${sentence(refusal.error)} ${held} ${refusalAdvice(refusal.cause)}`;
+}
 
 /**
  * The `refused` condition's words (SPEC §12), by whose refusal it is: no provider connected,
@@ -544,6 +564,9 @@ interface ConditionBase {
  * - `untested`: no test of the scheduled email has been sent, and it was never re-made.
  * - `sandbox`: the provider's account is in the SES sandbox, so the scheduled send will reach
  *   only addresses verified in SES and wait for the rest until AWS grants production access.
+ * - `refusing`: email is refusing (SPEC §13), so the scheduled send will be held when it fires
+ *   and resume on its own once the account is fixed; its `cause`, `error`, and the `advice`
+ *   for the fix, as `refused` will carry them.
  * - `daily_writes`: on Workers Free's limits, a scheduled send to more recipients than D1's
  *   daily writes comfortably cover (`DAILY_WRITES_SEND_RECIPIENTS`), judged by its audience
  *   alone; `recipients` is its audience as scheduled.
@@ -565,6 +588,7 @@ export type SendCondition =
   | (ConditionBase & { kind: "remade"; tested_at: number | null })
   | (ConditionBase & { kind: "untested" })
   | (ConditionBase & { kind: "sandbox" })
+  | (ConditionBase & { kind: "refusing"; cause: HaltCause; error: string; advice: string })
   | (ConditionBase & { kind: "daily_writes"; recipients: number });
 
 /** The kinds of condition. */

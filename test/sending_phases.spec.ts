@@ -9,7 +9,7 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ProviderStatusView, SignupsState } from "../shared/provider";
-import { refusalAdvice, SANDBOX_SEND_WARNING } from "../shared/sends";
+import { refusalAdvice, refusingSendWarning, SANDBOX_SEND_WARNING } from "../shared/sends";
 import * as subscribers from "../src/db/subscribers";
 import { clearFakeNotifications } from "../src/notify/fake";
 import { resetSimulation } from "../src/providers/simulate";
@@ -148,7 +148,26 @@ describe("what anyone can do, by phase (SPEC §6, §7, §13)", () => {
         expect(r.status).toBe(503);
       },
       unproven: async (p) => expect(await kinds(p)).toEqual(["untested"]),
-      refusing: async (p) => expect(await kinds(p)).toEqual(["untested"]),
+      // Allowed, and the send says it will be held when it fires, with the fix (SPEC §6).
+      refusing: async (p) => {
+        const r = await readJson(await schedule(p));
+        expect(r.send.conditions.map((c: { kind: string }) => c.kind)).toEqual([
+          "refusing",
+          "untested",
+        ]);
+        expect(r.send.conditions[0]).toMatchObject({
+          severity: "warn",
+          cause: "configuration",
+          advice: refusalAdvice("configuration"),
+        });
+        expect(r.send.conditions[0].message).toBe(
+          refusingSendWarning({
+            cause: "configuration",
+            error: r.send.conditions[0].error,
+            found_by: "test",
+          }),
+        );
+      },
       sandbox: async (p) => {
         const r = await readJson(await schedule(p));
         expect(r.send.conditions.map((c: { kind: string }) => c.kind)).toEqual([

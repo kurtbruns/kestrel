@@ -6,6 +6,8 @@ import {
   BOUNCE_SPIKE_RECENT_MS,
   NO_RECEIPTS_AFTER_MS,
   refusalAdvice,
+  refusingSendWarning,
+  SANDBOX_SEND_WARNING,
   SELF_THROTTLE_HALTS,
   type SendFeedResponse,
   type SendListResponse,
@@ -14,12 +16,14 @@ import {
   STUCK_THRESHOLD_MS,
 } from "../shared/sends";
 import * as posts from "../src/db/posts";
+import { recordAccepted } from "../src/db/sending";
 import * as sends from "../src/db/sends";
 import { MISSED_THRESHOLD_MS } from "../src/lib/time";
 import { clearFakeOutbox } from "../src/providers/fake";
 import { sendActions, sendConditions } from "../src/send/conditions";
 import { onTheMinute } from "../src/send/schedule";
-import { has } from "./support/conditions";
+import { noteRefusal } from "../src/services/sending";
+import { condition, has } from "./support/conditions";
 import { frozenSend, resetDatabase, setRow } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 
@@ -84,7 +88,7 @@ function row(over: Partial<SendSummary>): SendSummary {
 describe("conditions: one server rule for each kind", () => {
   const NOW = 1_800_000_000_000;
   const kinds = (s: SendSummary) =>
-    sendConditions(s, NOW, { freePlan: false, sandbox: false }).map((c) => c.kind);
+    sendConditions(s, NOW, { freePlan: false, sandbox: false, sending: null }).map((c) => c.kind);
 
   it("reads missed only past the tolerance, and remade only while the last test predates the re-make", () => {
     const sched = { status: "scheduled" as const, fire_at: NOW - 60_000, tested_at: NOW - 90_000 };
@@ -92,12 +96,16 @@ describe("conditions: one server rule for each kind", () => {
     const missed = sendConditions(row({ ...sched, fire_at: NOW - MISSED_THRESHOLD_MS - 1 }), NOW, {
       freePlan: false,
       sandbox: false,
+      sending: null,
     });
     expect(missed.map((c) => [c.kind, c.severity, c.action])).toEqual([["missed", "action", null]]);
     const remade = { status: "scheduled" as const, fire_at: NOW + 60_000, remade_at: NOW - 10 };
     expect(kinds(row(remade))).toEqual(["remade"]);
     // The editor shows this message as is, so its wording is pinned here, not only in the client's copy.
-    expect(sendConditions(row(remade), NOW, { freePlan: false, sandbox: false })[0]?.message).toBe(
+    expect(
+      sendConditions(row(remade), NOW, { freePlan: false, sandbox: false, sending: null })[0]
+        ?.message,
+    ).toBe(
       "The template or publication details changed this email’s look after your last test. Its content and send time are the same. Send a new test to check what will go out.",
     );
     expect(kinds(row({ ...remade, tested_at: NOW - 20 }))).toEqual(["remade"]);
@@ -106,7 +114,9 @@ describe("conditions: one server rule for each kind", () => {
 
   it("reads untested on a scheduled send never tested and never re-made, as info (SPEC §8)", () => {
     const sched = { status: "scheduled" as const, fire_at: NOW + 60_000, scheduled_at: NOW - 10 };
-    expect(sendConditions(row(sched), NOW, { freePlan: false, sandbox: false })).toEqual([
+    expect(
+      sendConditions(row(sched), NOW, { freePlan: false, sandbox: false, sending: null }),
+    ).toEqual([
       {
         kind: "untested",
         severity: "info",
@@ -133,7 +143,8 @@ describe("conditions: one server rule for each kind", () => {
       tested_at: NOW - 5,
       recipient_count: DAILY_WRITES_SEND_RECIPIENTS + 1,
     };
-    const free = (s: SendSummary) => sendConditions(s, NOW, { freePlan: true, sandbox: false });
+    const free = (s: SendSummary) =>
+      sendConditions(s, NOW, { freePlan: true, sandbox: false, sending: null });
     expect(free(row(sched))).toEqual([
       {
         kind: "daily_writes",
@@ -148,14 +159,85 @@ describe("conditions: one server rule for each kind", () => {
     // Judged by its audience alone: the threshold is the same whenever it fires.
     expect(free(row({ ...sched, recipient_count: DAILY_WRITES_SEND_RECIPIENTS }))).toEqual([]);
     expect(free(row({ ...sched, fire_at: NOW + 86_400_000 }))).toHaveLength(1);
-    expect(sendConditions(row(sched), NOW, { freePlan: false, sandbox: false })).toEqual([]);
+    expect(
+      sendConditions(row(sched), NOW, { freePlan: false, sandbox: false, sending: null }),
+    ).toEqual([]);
     expect(free(row({ ...sched, status: "sending", started_at: NOW - 60_000 }))).toEqual([]);
+  });
+
+  it("warns on a scheduled send that it will be held while email is refusing, with the fix, and not otherwise (SPEC §6, §13)", () => {
+    const refusal = {
+      cause: "configuration" as const,
+      found_by: "test" as const,
+      error: "Configuration set does not exist",
+      advice: refusalAdvice("configuration"),
+      // Met again since email became refusing: a test the publisher sent while fixing things.
+      at: NOW - 1,
+    };
+    const state = { state: "refusing" as const, since: NOW - 5, last_accepted: null, refusal };
+    const refusing = (s: SendSummary) =>
+      sendConditions(s, NOW, { freePlan: false, sandbox: false, sending: state });
+    const sched = {
+      status: "scheduled" as const,
+      fire_at: NOW + 60_000,
+      scheduled_at: NOW - 10,
+      tested_at: NOW - 5,
+    };
+    expect(refusing(row(sched))).toEqual([
+      {
+        kind: "refusing",
+        severity: "warn",
+        // Since both held: the send scheduled, and email refusing. Not since the refusal was
+        // last met, which would move with every refused test while the fix is made.
+        since: NOW - 5,
+        message: refusingSendWarning(refusal),
+        action: null,
+        cause: "configuration",
+        error: "Configuration set does not exist",
+        advice: refusalAdvice("configuration"),
+      },
+    ]);
+    // The editor and Claude show this message as is: what will happen, and the fix.
+    expect(refusing(row(sched))[0]?.message).toBe(
+      `The provider is refusing the account: Configuration set does not exist. When this send fires it is held, with no one mailed and no one marked unsent, and it goes out on its own at its first retry once the account is fixed. ${refusalAdvice("configuration")}`,
+    );
+    // A send scheduled after the refusal was found counts from its scheduling.
+    expect(refusing(row({ ...sched, scheduled_at: NOW - 2 }))[0]?.since).toBe(NOW - 2);
+    // Only a scheduled send: one already held says `refused`, and a sent one is done.
+    expect(refusing(row({ ...sched, status: "sending", started_at: NOW - 5 }))).toEqual([]);
+    expect(refusing(row({ ...sched, status: "sent", completed_at: NOW - 5 }))).toEqual([]);
+    expect(refusing(row({ ...sched, status: "canceled", completed_at: NOW - 5 }))).toEqual([]);
+    // A live reading: once email is working again, nothing is said; nor is anything said of a
+    // refusal the state no longer stands behind.
+    expect(kinds(row(sched))).toEqual([]);
+    expect(
+      sendConditions(row(sched), NOW, {
+        freePlan: false,
+        sandbox: false,
+        sending: { ...state, state: "working", since: NOW - 1 },
+      }),
+    ).toEqual([]);
+    // Sorted with the rest by severity, then by when each began: a miss (action) first, the
+    // warnings in the order they began, and an info last.
+    const everything = sendConditions(
+      row({ ...sched, fire_at: NOW - MISSED_THRESHOLD_MS - 1, tested_at: null }),
+      NOW,
+      { freePlan: false, sandbox: true, sending: state },
+    );
+    expect(everything.map((c) => [c.kind, c.severity, c.since])).toEqual([
+      ["missed", "action", NOW - 1],
+      ["sandbox", "warn", NOW - 10],
+      ["refusing", "warn", NOW - 5],
+      ["untested", "info", NOW - 10],
+    ]);
+    expect(everything[1]?.message).toBe(SANDBOX_SEND_WARNING);
   });
 
   it("reads wedged with its count and the Resolve action, refused with the fix and no action, and stuck only when nothing explains the wait", () => {
     const wedged = sendConditions(row({ c_in_flight: 3, started_at: NOW - 60_000 }), NOW, {
       freePlan: false,
       sandbox: false,
+      sending: null,
     });
     expect(wedged).toEqual([
       expect.objectContaining({
@@ -176,7 +258,7 @@ describe("conditions: one server rule for each kind", () => {
         halt_retry_at: NOW + 60_000,
       }),
       NOW,
-      { freePlan: false, sandbox: false },
+      { freePlan: false, sandbox: false, sending: null },
     );
     // Started long ago, but the refusal explains the wait until its retry: not also stuck.
     expect(refused.map((c) => c.kind)).toEqual(["refused"]);
@@ -194,7 +276,7 @@ describe("conditions: one server rule for each kind", () => {
     const outage = sendConditions(
       row({ c_pending: 5, halt_reason: "unavailable", halt_error: "503", halt_retry_at: NOW + 1 }),
       NOW,
-      { freePlan: false, sandbox: false },
+      { freePlan: false, sandbox: false, sending: null },
     );
     expect(outage.map((c) => [c.kind, c.severity])).toEqual([["provider_unavailable", "info"]]);
     // Nothing handed off for the threshold and no halt to explain it (SPEC §12).
@@ -205,7 +287,7 @@ describe("conditions: one server rule for each kind", () => {
         progress_at: NOW - STUCK_THRESHOLD_MS - 60_000,
       }),
       NOW,
-      { freePlan: false, sandbox: false },
+      { freePlan: false, sandbox: false, sending: null },
     );
     expect(idle.map((c) => [c.kind, c.severity])).toEqual([["stuck", "warn"]]);
     expect(idle[0]).toMatchObject({ since: NOW - 60_000, action: null });
@@ -227,7 +309,7 @@ describe("conditions: one server rule for each kind", () => {
           halt_retry_at: NOW + 60_000,
         }),
         NOW,
-        { freePlan: false, sandbox: false },
+        { freePlan: false, sandbox: false, sending: null },
       );
     const burst = throttled(SELF_THROTTLE_HALTS - 1);
     expect(burst.map((c) => [c.kind, c.severity])).toEqual([["provider_unavailable", "info"]]);
@@ -249,7 +331,7 @@ describe("conditions: one server rule for each kind", () => {
         halt_retry_at: NOW + 60_000,
       }),
       NOW,
-      { freePlan: false, sandbox: false },
+      { freePlan: false, sandbox: false, sending: null },
     );
     expect(refused).toMatchObject({ kind: "refused", cause: "content" });
     expect(refused?.message).toMatch(
@@ -267,7 +349,11 @@ describe("conditions: one server rule for each kind", () => {
       kinds(row({ ...sent, completed_at: NOW - BOUNCE_SPIKE_RECENT_MS - 1, c_bounced: 50 })),
     ).toEqual([]);
     expect(
-      sendConditions(row({ ...sent, c_bounced: 5 }), NOW, { freePlan: false, sandbox: false })[0],
+      sendConditions(row({ ...sent, c_bounced: 5 }), NOW, {
+        freePlan: false,
+        sandbox: false,
+        sending: null,
+      })[0],
     ).toMatchObject({
       severity: "warn",
       bounced: 5,
@@ -281,7 +367,11 @@ describe("conditions: one server rule for each kind", () => {
       completed_at: NOW - NO_RECEIPTS_AFTER_MS - 60_000,
       c_accepted: 40,
     };
-    const silent = sendConditions(row(sent), NOW, { freePlan: false, sandbox: false });
+    const silent = sendConditions(row(sent), NOW, {
+      freePlan: false,
+      sandbox: false,
+      sending: null,
+    });
     expect(silent.map((c) => [c.kind, c.severity])).toEqual([["no_receipts", "warn"]]);
     expect(silent[0]).toMatchObject({
       since: NOW - 60_000,
@@ -381,6 +471,68 @@ describe("every route reads a send the same way", () => {
     expect((await readJson(test)).frozen).toBe(true);
     expect((await sends.getSend(env.DB, send.id))?.tested_at).not.toBeNull();
     expect(has(await readView(send.id), "remade")).toBe(false);
+  });
+});
+
+describe("a send scheduled while email is refusing", () => {
+  it("carries refusing on the send, the list, and the feed until the provider takes an email again (SPEC §13)", async () => {
+    const readFeed = async (): Promise<SendFeedResponse> =>
+      readJson(await SELF.fetch(`${base}/api/sends/feed`, { headers: AUTH }));
+    const readList = async (): Promise<SendListResponse> =>
+      readJson(await SELF.fetch(`${base}/api/sends`, { headers: AUTH }));
+    const send = await frozenSend(Date.now() + 3_600_000, { subject: "Held later" });
+    await sends.markTested(env.DB, send.id, Date.now(), Date.now());
+    expect((await readView(send.id)).conditions).toEqual([]);
+    const at = Date.now();
+    await noteRefusal(
+      env.DB,
+      { cause: "configuration", foundBy: "test", error: "Configuration set does not exist" },
+      at,
+      false,
+    );
+    const refusal = {
+      cause: "configuration" as const,
+      error: "Configuration set does not exist",
+      found_by: "test" as const,
+    };
+    const one = await readView(send.id);
+    expect(one.conditions).toEqual([
+      {
+        kind: "refusing",
+        severity: "warn",
+        since: at,
+        message: refusingSendWarning(refusal),
+        action: null,
+        cause: "configuration",
+        error: "Configuration set does not exist",
+        advice: refusalAdvice("configuration"),
+      },
+    ]);
+    // Scheduling stays allowed: the window's controls are offered as before.
+    expect(one.actions.map((a) => a.name)).toEqual(["cancel", "reschedule"]);
+    expect((await readList()).sends.find((s) => s.id === send.id)?.conditions).toEqual(
+      one.conditions,
+    );
+    expect((await readFeed()).conditions.map((c) => [c.send_id, c.kind])).toEqual([
+      [send.id, "refusing"],
+    ]);
+    // Another refused email while the fix is made changes the refusal's words, not when the
+    // warning began: it keeps its place among the warnings.
+    await noteRefusal(
+      env.DB,
+      { cause: "configuration", foundBy: "test", error: "Still no configuration set" },
+      at + 500,
+      false,
+    );
+    expect(condition(await readView(send.id), "refusing")).toMatchObject({
+      since: at,
+      error: "Still no configuration set",
+    });
+    // Email working again, proven by an email the provider took: the warning is gone, with no
+    // write to the send.
+    await recordAccepted(env.DB, "test", at + 1_000);
+    expect((await readView(send.id)).conditions).toEqual([]);
+    expect((await readFeed()).conditions).toEqual([]);
   });
 });
 

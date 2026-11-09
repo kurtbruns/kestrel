@@ -36,7 +36,8 @@ export interface SendingRow {
   checkContradicted: RefusingCause[];
 }
 
-interface Raw {
+/** The row as D1 returns it, for a reader that runs the statement in a batch of its own. */
+export interface SendingRaw {
   state: SendingState;
   since: number;
   last_accepted_at: number | null;
@@ -48,9 +49,13 @@ interface Raw {
   check_contradicted: string;
 }
 
-/** The row, or null when there is none (read as not proven yet). */
-export async function readSending(db: D1Database): Promise<SendingRow | null> {
-  const r = await db.prepare("SELECT * FROM sending WHERE id = 1").first<Raw>();
+/** The read, as a statement, for a batch that reads other rows in the same round trip. */
+export function sendingStatement(db: D1Database): D1PreparedStatement {
+  return db.prepare("SELECT * FROM sending WHERE id = 1");
+}
+
+/** The row `sendingStatement` returned, parsed; null when there is none (read as not proven yet). */
+export function parseSending(r: SendingRaw | null | undefined): SendingRow | null {
   if (!r) {
     return null;
   }
@@ -65,6 +70,11 @@ export async function readSending(db: D1Database): Promise<SendingRow | null> {
     refusalAt: r.refusal_at,
     checkContradicted: JSON.parse(r.check_contradicted) as RefusingCause[],
   };
+}
+
+/** The row, or null when there is none (read as not proven yet). */
+export async function readSending(db: D1Database): Promise<SendingRow | null> {
+  return parseSending(await sendingStatement(db).first<SendingRaw>());
 }
 
 /** Whether the row is a refusal the account check found, in SQL. */

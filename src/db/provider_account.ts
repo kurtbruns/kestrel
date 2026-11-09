@@ -53,18 +53,25 @@ export interface ProviderAccountRow {
   answer: AccountAnswer | null;
 }
 
-interface RawRow {
+/** The row as D1 returns it, for a reader that runs the statement in a batch of its own. */
+export interface ProviderAccountRaw {
   attempted_at: number;
   outcome: AccountCheckOutcome;
   checked_at: number | null;
   answer: string | null;
 }
 
-/** The row, or null before the first check. */
-export async function readProviderAccount(db: D1Database): Promise<ProviderAccountRow | null> {
-  const r = await db
-    .prepare("SELECT attempted_at, outcome, checked_at, answer FROM provider_account WHERE id = 1")
-    .first<RawRow>();
+/** The read, as a statement, for a batch that reads other rows in the same round trip. */
+export function providerAccountStatement(db: D1Database): D1PreparedStatement {
+  return db.prepare(
+    "SELECT attempted_at, outcome, checked_at, answer FROM provider_account WHERE id = 1",
+  );
+}
+
+/** The row `providerAccountStatement` returned, parsed; null before the first check. */
+export function parseProviderAccount(
+  r: ProviderAccountRaw | null | undefined,
+): ProviderAccountRow | null {
   if (!r) {
     return null;
   }
@@ -74,6 +81,11 @@ export async function readProviderAccount(db: D1Database): Promise<ProviderAccou
     checkedAt: r.checked_at,
     answer: r.answer === null ? null : (JSON.parse(r.answer) as AccountAnswer),
   };
+}
+
+/** The row, or null before the first check. */
+export async function readProviderAccount(db: D1Database): Promise<ProviderAccountRow | null> {
+  return parseProviderAccount(await providerAccountStatement(db).first<ProviderAccountRaw>());
 }
 
 /** Record a check that got an answer, replacing the last one. */
