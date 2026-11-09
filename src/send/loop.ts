@@ -388,18 +388,18 @@ export async function runSend(
     // the publisher is told once (SPEC §12). Anything else held back, such as SES throttling
     // a few entries for the account's rate, is pace rather than a fault a person fixes: the
     // progress ends the halt and the hold starts afresh, a minute out.
+    if (halt?.cause === "quota") {
+      // A spent quota holds every send, yet no refusal of the account records it, so the
+      // operator's alert line is logged here, before this answer's first write (the settle,
+      // then the hold), so a database that fails either can't swallow it (SPEC §12).
+      log.warn("alert.sending", { ...tags, cause: "quota" });
+    }
     const cleared = progressed && halt?.reason !== "account";
     result.answeredAt = Date.now();
     await sends.settleDeliveries(db, sendId, lease, "dispatched", outcomes, Date.now(), {
       progressed,
       clears: cleared,
     });
-    if (halt?.cause === "quota") {
-      // A spent quota holds every send, yet no refusal of the account records it, so the
-      // operator's alert line is logged here, before the hold is written, so a database
-      // that fails the write can't swallow it (SPEC §12).
-      log.warn("alert.sending", { ...tags, cause: "quota" });
-    }
     // One reading of the clock for the hold and its log line, so the `retryAt` logged is
     // the retry time stored.
     const heldAt = Date.now();

@@ -157,7 +157,7 @@ The second Monitor can't be tested this way without stopping the app. In testing
 
 The two `[Resolved]` emails mean different things:
 
-- For `SES can't send email`, Resolved means no new alert, not that the problem is fixed. The Monitor counts the lines in each minute, so it resolves a few minutes after the last one, whether or not anything changed. Kestrel writes the line when something happens, not for as long as it lasts. To see whether email is getting out again, open the dashboard, which says so at the top while it isn't.
+- For `SES can't send email`, Resolved means no new alert, not that the problem is fixed. The Monitor counts the lines in each minute, so it resolves a few minutes after the last one, whether or not anything changed. Kestrel writes the line when something happens, not for as long as it lasts. To see whether the problem has cleared, open the dashboard: a refusal of the account shows as the red line at the top saying email isn't going out, and a spent quota as a red line naming the held send, which links to its page. Each line goes away once its problem has cleared.
 - For `Kestrel has stopped`, Resolved means the once-a-minute ticks have resumed.
 
 Each line the first Monitor counts carries a `cause`, which says why email can't get out. Today the causes are:
@@ -171,7 +171,7 @@ A later release can add a cause, and the Monitor alerts on it with no change, si
 Know these limits before you rely on the Monitors:
 
 - The SQL API and Monitors are in beta, so their screens and fields can change.
-- On the Workers Free plan, Cloudflare stops keeping logs for the rest of the day once 0.5 GB is used, and that allowance covers the whole Cloudflare account, not this Worker alone. With no logs coming in, the second Monitor fires falsely until 00:00 UTC. An idle instance's own lines use about 1.5% of it.
+- On the Workers Free plan, Cloudflare stops keeping logs for the rest of the day once the daily allowance is used, until it resets at 00:00 UTC. Until December 1, 2026, that allowance is 200,000 log events a day; from then, it is 0.5 GB a day, shared with traces. Either way it covers the whole Cloudflare account, not this Worker alone, and [Cloudflare's pricing page](https://developers.cloudflare.com/observability/pricing/) has the current terms. With no logs coming in, `Kestrel has stopped` fires falsely until the reset. An idle instance writes about 3,000 log events a day, far under either limit by Cloudflare's published average event size.
 - An outage at Cloudflare can silence both the logs and the alerts.
 - Kestrel can't see this setup, so the dashboard can't tell you whether the Monitors exist.
 - A destination address outside your Cloudflare account may have to be verified first. This hasn't been tested.

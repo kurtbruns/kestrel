@@ -64,25 +64,41 @@ describe("the lines operators' alerts depend on (SPEC §12)", () => {
     ]);
   });
 
-  it("a send halted on its quota logs alert.sending with cause quota, before the hold is written", async () => {
-    await seedConfirmed(["ada@example.com", "grace@example.com"]);
-    const send = await dueSend();
-    const transport = new BatchProvider();
-    transport.refuse = "ses 429 LimitExceededException: Daily message quota exceeded.";
-    transport.refuseCause = "quota";
-    vi.spyOn(providers, "getProvider").mockReturnValue(transport);
+  it.each([
+    ["settles the answer", /provider_id = COALESCE/],
+    ["holds the send", /halt_reason = \?/],
+  ])(
+    "a send halted on its quota logs alert.sending with cause quota, even when the write that %s fails",
+    async (_what, failing) => {
+      await seedConfirmed(["ada@example.com", "grace@example.com"]);
+      const send = await dueSend();
+      // SES taking one and holding the other back for the daily quota: an answer with
+      // outcomes to settle, then a hold to write.
+      const QUOTA = "ses 429 LimitExceededException: Daily message quota exceeded.";
+      const transport = new BatchProvider();
+      vi.spyOn(transport, "sendBatch").mockImplementation(async (_r, recipients) => ({
+        kind: "answered",
+        results: recipients.map((r, i) =>
+          i === 0
+            ? { email: r.email, accepted: true, providerId: "msg_1" }
+            : { email: r.email, accepted: false, retryable: true, held: true, error: QUOTA },
+        ),
+        halt: { reason: "account", cause: "quota", error: QUOTA },
+      }));
+      vi.spyOn(providers, "getProvider").mockReturnValue(transport);
 
-    const failing = { ...env, DB: failingD1(env.DB, /halt_reason = \?/, FAILED) };
-    await expect(runSend(failing, send.id)).rejects.toThrow(FAILED);
-    expect(alerts()).toEqual([
-      expect.objectContaining({
-        event: "alert.sending",
-        level: "warn",
-        cause: "quota",
-        sendId: send.id,
-      }),
-    ]);
-  });
+      const broken = { ...env, DB: failingD1(env.DB, failing, FAILED) };
+      await expect(runSend(broken, send.id)).rejects.toThrow(FAILED);
+      expect(alerts()).toEqual([
+        expect.objectContaining({
+          event: "alert.sending",
+          level: "warn",
+          cause: "quota",
+          sendId: send.id,
+        }),
+      ]);
+    },
+  );
 });
 
 describe("Send a test alert (SPEC §12)", () => {

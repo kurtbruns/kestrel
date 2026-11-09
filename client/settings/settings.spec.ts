@@ -528,6 +528,9 @@ describe("settings view", () => {
     expect($<HTMLAnchorElement>("a", note).getAttribute("href")).toBe(
       "#/docs/verify/8-create-the-cloudflare-alerts",
     );
+    expect(note.textContent?.trim()).toBe(
+      "These emails travel through Amazon SES like the newsletter, so they can’t tell you when SES refuses your account. Two Cloudflare alerts cover that, and Kestrel itself stopping. See Create the Cloudflare alerts.",
+    );
     $<HTMLButtonElement>("#alertTest").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(
@@ -535,6 +538,19 @@ describe("settings view", () => {
     ).toHaveLength(1);
     expect($("#alertTestHint").textContent).toMatch(
       /^Logged at .+\. Watch for Cloudflare’s alert email\.$/,
+    );
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("names the email provider in the alerts note as the Sent through row does, when it isn't SES", async () => {
+    const none = response();
+    none.deployment.provider = "none";
+    await open([{ path: "/api/settings", reply: () => none }]);
+    expect($$(".set-kv-v").map((v) => v.textContent?.trim())).toContain(
+      "Your email provider, once one is connected",
+    );
+    expect($("#alertsNote").textContent?.trim()).toBe(
+      "These emails travel through your email provider like the newsletter, so they can’t tell you when it refuses your account. Two Cloudflare alerts cover that, and Kestrel itself stopping. See Create the Cloudflare alerts.",
     );
     expect(fake.unhandled).toEqual([]);
   });

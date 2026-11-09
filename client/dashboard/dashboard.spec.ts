@@ -771,7 +771,7 @@ describe("dashboard", () => {
           kind: "test",
           subject: "",
           at: NOW - 1000,
-          error: "Email Routing refused it",
+          error: "SES refused it",
         },
       };
       fake = world([post()], sendServer(), counts);
@@ -779,7 +779,7 @@ describe("dashboard", () => {
       await vi.advanceTimersByTimeAsync(0);
       expect($("#dashHealth .health").classList.contains("amber")).toBe(true);
       expect($(".dash-notify-failed").textContent).toBe(
-        "Kestrel’s last notification didn’t arrive: Email Routing refused it. Check Settings → Notifications.",
+        "Kestrel’s last notification didn’t arrive: SES refused it. Check Settings → Notifications.",
       );
       expect($<HTMLAnchorElement>(".dash-notify-failed a").getAttribute("href")).toBe(
         "#/settings/notifications",
