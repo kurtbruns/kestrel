@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { UNLISTED_PATH } from "../shared/archive_url";
 import { createRouter } from "../src/app";
 import * as posts from "../src/db/posts";
+import { updateSettings } from "../src/db/settings";
 import type { AppEnv } from "../src/env";
 import { getConfig } from "../src/env";
 import { freeze } from "../src/send/schedule";
@@ -163,9 +164,8 @@ describe("a public address that names no page, opened in a browser (SPEC §5)", 
   });
 
   it("wears the publication's own name", async () => {
-    const res = await fetchWith({ FROM_ADDRESS: "Birds Weekly <news@birds.example>" }, "/nope", {
-      headers: BROWSER,
-    });
+    await updateSettings(env.DB, { publication: { name: "Birds Weekly" } });
+    const res = await SELF.fetch(`${base}/nope`, { headers: BROWSER });
 
     expect(await res.text()).toContain("Birds Weekly");
   });

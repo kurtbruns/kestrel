@@ -39,7 +39,7 @@ export function mountTemplate(
     $<HTMLIFrameElement>("#tplPreview", root),
     () => template,
     () => ({
-      name: page.state.name || page.fromDisplay,
+      name: page.state.name,
       tagline: page.state.tagline,
       logoUrl: page.state.logoUrl,
       address: page.state.address,

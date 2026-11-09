@@ -55,8 +55,9 @@ import { type EmailBranding, resolveBranding } from "../render/template_engine";
 import { sendAsItStands } from "./describe";
 
 /** The one render a freeze performs: the post's current content and images through
- *  the single render path (I5), inside `branding` (the template plus the identity).
- *  Shared by the schedule and the re-make, so the two cannot drift on what they render. */
+ *  the single render path (I5), inside `branding` (the template plus the identity), with
+ *  the display name the send goes out under frozen beside it (SPEC §9). Shared by the
+ *  schedule and the re-make, so the two cannot drift on what they freeze. */
 export async function renderPost(
   env: AppEnv,
   config: Config,
@@ -77,6 +78,7 @@ export async function renderPost(
     rendered_text: rendered.text,
     subject: rendered.subject,
     warnings: rendered.warnings,
+    from_name: branding.senderName,
   };
 }
 

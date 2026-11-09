@@ -12,11 +12,12 @@ import { chip, HIDDEN, message, type SectionHandle, type SettingsPage, secHead }
 import { remakeIdentity, remakeWaitHtml, savedToast, withRemakeConfirm } from "./remake";
 
 /** The note under the card: where the identity shows up (the sample email shows which
- *  fields), only while posts are scheduled that a save reaches them too, and only while
- *  one is about to send that a save has to wait for it (SPEC §9). The confirmation dialog
- *  carries the rest, at the moment it matters, so the standing note stays short. */
-function identityNote(inUse: InUseView): Html {
-  if (!(inUse.identity_fields || []).length) {
+ *  fields, and the name is every email's sender unless one was set at deploy), only while
+ *  posts are scheduled that a save reaches them too, and only while one is about to send
+ *  that a save has to wait for it (SPEC §9). The confirmation dialog carries the rest, at
+ *  the moment it matters, so the standing note stays short. */
+function identityNote(inUse: InUseView, nameIsSender: boolean): Html {
+  if (!(inUse.identity_fields || []).length && !nameIsSender) {
     return html`Your email template doesn’t show any of these.`;
   }
   const shown = "Shown in every email.";
@@ -44,7 +45,7 @@ const LOGO_SIZE = 256;
 // The logo tile's background image is set from the DOM (applyLogoUi), not written into
 // the markup: a URL has no place inside a style attribute the tag would escape as text.
 export function identitySection(page: SettingsPage): Html {
-  const { state, fromDisplay, fromName } = page;
+  const { state, fromOverride } = page;
   // The mailing address is optional (SPEC §9): with none saved it is an "Add" row, not an
   // empty field that reads as a missing required value.
   const addressOpen = Boolean(state.address);
@@ -71,11 +72,11 @@ export function identitySection(page: SettingsPage): Html {
           <div class="set-id-fields">
             <div class="set-field">
               <label for="setName">Name</label>
-              <input id="setName" value="${state.name}" placeholder="${fromName}" maxlength="120" autocomplete="off">
+              <input id="setName" value="${state.name}" placeholder="Your publication’s name" maxlength="120" autocomplete="off">
               <p class="field-hint">${
-                fromDisplay
-                  ? html`Blank falls back to the email “From” name (“${fromDisplay}”).`
-                  : "Blank leaves the publication unnamed, since the email “From” has no name."
+                fromOverride
+                  ? html`Your emails come from “${fromOverride}”, a name set at deploy, whatever you put here.`
+                  : "Also the name your emails come from. Blank sends them with no name."
               }</p>
             </div>
             <div class="set-field">
@@ -98,7 +99,7 @@ export function identitySection(page: SettingsPage): Html {
             </div>
           </div>
         </div>
-        <div class="set-note">${icon("info")}<span>${identityNote(page.data.in_use)}</span></div>
+        <div class="set-note">${icon("info")}<span>${identityNote(page.data.in_use, !fromOverride)}</span></div>
       </div>
     </section>`;
 }

@@ -130,7 +130,7 @@ Each prints a snippet to add to your configuration. There's nothing to paste: `-
         "APP_ORIGIN": "https://newsletter.example.com",            // ← your app's hostname
         "ARCHIVE_BASE_PATH": "/archive",
         "SENDING_DOMAIN": "send.example.com",                      // ← your sending hostname
-        "FROM_ADDRESS": "Newsletter <newsletter@send.example.com>" // ← who your mail is from
+        "FROM_ADDRESS": "newsletter@send.example.com"               // ← the address your mail is from
       }
     }
     ```
@@ -140,7 +140,7 @@ Each prints a snippet to add to your configuration. There's nothing to paste: `-
     - `routes` puts the app on your hostname when you deploy. Cloudflare creates the DNS record and the certificate. Your domain must be in the same Cloudflare account, and the hostname can't already have a CNAME record; delete one if it does. The block also turns off the `workers.dev` addresses, so the app answers only on your hostname.
     - `PROVIDER` stays empty until [Connect Amazon SES](05-ses.md) sets it. Until then the app runs without an email provider: posts can be written and previewed, but scheduling, test emails, and signups are refused. Never set it to `fake`, the top level's value, even when a wrangler warning suggests copying it: `fake` delivers nothing, and the app refuses it on your hostname.
     - `ARCHIVE_BASE_PATH` is permanent once the first post goes out. Every post sent carries its `/archive/…` link, and changing the prefix later breaks the links already mailed. Keep `/archive` unless you have a reason not to.
-    - `FROM_ADDRESS` is the address every email comes from. Keep it on your sending hostname, and set `SENDING_DOMAIN` to the part after the `@`. The name before the `<` is what readers see as the sender. It also names the publication on its public pages, until the publisher sets a name under **Settings → Publication identity**. You can change the name at any time, and deploy again.
+    - `FROM_ADDRESS` is the address every email comes from. Keep it on your sending hostname, and set `SENDING_DOMAIN` to the part after the `@`. The name readers see beside it is the publication's name, which the publisher sets in the editor under **Settings → Publication identity**, with no deploy. To send under a fixed name instead, write it in front of the address, like `Name <address>` ([Configuration](../reference/01-configuration.md) says what that does).
 
     Change every `example.com` value, the route included. The app refuses to run while any of its settings still names `example.com`.
 

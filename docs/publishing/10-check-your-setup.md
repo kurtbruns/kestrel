@@ -10,7 +10,7 @@ Three checks before your readers get anything: is email getting out, will you he
 
 Choose **Template** in the sidebar, then **Send test email**, and send a sample post to your own inboxes. This is the test that proves email gets out: signups stay closed until SES takes an email, and the step is checked off once it does. When it arrives, check:
 
-- **The From name and address,** which readers see first. They're set when your instance is deployed.
+- **The From name and address,** which readers see first. The name is your publication's ([Name your publication](03-name-your-publication.md)); the address is set when your instance is deployed.
 - **Where it lands:** the inbox, Promotions, or spam. If it lands in spam, check your sending domain's records, as [Sending-domain DNS](../reference/02-sending-domain-dns.md) describes.
 - **A reply.** Reply to the test, and check that it reaches your inbox. Kestrel never sees replies, so this depends on [forwarding your From address](../get-started/05-ses.md#8-receive-replies-at-your-from-address).
 

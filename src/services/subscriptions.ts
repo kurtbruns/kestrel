@@ -14,6 +14,7 @@ import { getProvider, requireConnectedProvider } from "../providers";
 import type { HaltCause, RenderedEmail, SendBatchResult } from "../providers/types";
 import { resolveBranding } from "../render/template_engine";
 import type { RequestContext } from "../router";
+import { currentSender } from "../services/sender";
 import { contactOutcome, noteContact } from "./sending";
 
 /**
@@ -151,7 +152,7 @@ async function sendConfirmation(
   | { delivered: "no"; error: string; cause?: HaltCause }
   | { delivered: "unknown"; error: string }
 > {
-  const provider = getProvider(c.config, c.env);
+  const provider = getProvider(c.config, c.env, await currentSender(c.env.DB, c.config));
   const recipients = [{ email: subscriber.email, unsubscribeUrl: "" }];
   let result: SendBatchResult;
   try {

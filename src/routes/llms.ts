@@ -11,7 +11,6 @@
  * themselves, and every URL from the same config the routes are registered at.
  */
 
-import { publicationName } from "../../shared/publication";
 import { getSettingsForDisplay } from "../db/settings";
 import { docSets } from "../docs";
 import type { RequestContext, RouteDef } from "../router";
@@ -126,7 +125,7 @@ export function llmsText({
 export async function llmsTxt(c: RequestContext, defs: readonly RouteDef[]): Promise<Response> {
   const { publication } = await getSettingsForDisplay(c.env.DB);
   const body = llmsText({
-    name: publicationName(publication.name, c.config.fromAddress),
+    name: publication.name,
     defs,
     appOrigin: c.config.appOrigin,
     archiveOrigin: c.config.archiveOrigin,

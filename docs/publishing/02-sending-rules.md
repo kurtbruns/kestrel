@@ -13,7 +13,7 @@ This page covers what Kestrel handles, what you handle, and how to act on a read
 
 ## What you handle
 
-- **An honest From name and subject line.** The From name should say who the email is from, and the subject should match what's inside. The From name and address are set when Kestrel is deployed ([Deploy the app](../get-started/02-deploy.md#4-configure-production)).
+- **An honest From name and subject line.** The From name should say who the email is from, and the subject should match what's inside. The From name is your publication's name ([Name your publication](03-name-your-publication.md)), and the address is set when Kestrel is deployed ([Deploy the app](../get-started/02-deploy.md#4-configure-production)).
 - **Marking ads as ads.** When an email is an advertisement, say so clearly. In a newsletter that's mostly writing, labeling a sponsor's section is enough.
 - **A mailing address, when an email is commercial.** Most newsletters don't need one. [When to provide a mailing address](03-name-your-publication.md#when-to-provide-a-mailing-address) says when you do, beside where you add one.
 - **Requests readers send you.** A reader who replies to a post writes to your From address. Replies reach you once that address forwards to an inbox you read, as [Connect Amazon SES](../get-started/05-ses.md#8-receive-replies-at-your-from-address) sets up. Kestrel never sees a reply, so carrying out what a reader asks is up to you.

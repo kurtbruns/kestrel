@@ -36,6 +36,12 @@
  * `email` service, so we set `service: "ses"` explicitly.
  */
 import { AwsClient } from "aws4fetch";
+import {
+  fromAddressOnly,
+  fromDisplayName,
+  fromHeader,
+  type Sender,
+} from "../../shared/publication";
 import { haltRank } from "../../shared/sends";
 import type { AppEnv, Config } from "../env";
 import { log } from "../lib/log";
@@ -44,7 +50,6 @@ import { unwrap } from "../lib/unwrap";
 import {
   type SesTemplateContent,
   sesAddressProblem,
-  sesFromAddress,
   sesTemplateContent,
   sesTemplateData,
 } from "./ses_template";
@@ -388,12 +393,24 @@ export class SesProvider implements EmailProvider {
 
   private readonly client: AwsClient;
   private readonly region: string;
+  /** The `From:` every request carries, built by the one sender rule (shared/publication.ts):
+   *  a free-text name quoted or encoded as a header takes it, so a comma or a character
+   *  outside ASCII can't make SES refuse the request. */
   private readonly from: string;
+  /** The sender's address alone, which SES's refusals name. */
+  private readonly address: string;
   private readonly configurationSet: string | undefined;
 
-  constructor(config: Config, env: AppEnv) {
+  /** `sender` is who the emails go out as (SPEC §9); without one, the deploy-time address
+   *  with whatever name was written into it, as a reader of traits or webhooks needs. */
+  constructor(config: Config, env: AppEnv, sender?: Sender) {
     this.region = config.awsRegion;
-    this.from = config.fromAddress;
+    const from = sender ?? {
+      name: fromDisplayName(config.fromAddress),
+      address: fromAddressOnly(config.fromAddress),
+    };
+    this.from = fromHeader(from);
+    this.address = from.address;
     const traits = sesTraits(config);
     this.maxBatch = traits.maxBatch;
     this.maxRequestRate = traits.maxRequestRate;
@@ -568,7 +585,7 @@ export class SesProvider implements EmailProvider {
     const bodyText = await res.text().catch(() => "");
     const { type, message } = parseSesError(bodyText, res.headers.get("x-amzn-ErrorType"));
     const error = sesErrorText(res.status, type, message);
-    const halt = classifySesError(res.status, type, message, this.from);
+    const halt = classifySesError(res.status, type, message, this.address);
     if (type === "BadRequestException") {
       // SES's own words, never an address in full: the log redacts each one (SPEC §12).
       log.warn("provider.bad_request", { status: res.status, error, cause: halt?.cause });
@@ -579,7 +596,7 @@ export class SesProvider implements EmailProvider {
   /** One SendEmail with the inline template, for a one-off message to one recipient. */
   private async sendSingle(content: SesTemplateContent, r: Recipient): Promise<SendBatchResult> {
     const res = await this.post("outbound-emails", {
-      FromEmailAddress: sesFromAddress(this.from),
+      FromEmailAddress: this.from,
       Destination: { ToAddresses: [r.email] },
       Content: {
         Template: {
@@ -613,7 +630,7 @@ export class SesProvider implements EmailProvider {
     batch: Recipient[],
   ): Promise<SendBatchResult> {
     const res = await this.post("outbound-bulk-emails", {
-      FromEmailAddress: sesFromAddress(this.from),
+      FromEmailAddress: this.from,
       // Every entry carries all of its data, so the default is empty: an entry SES read
       // without its own data would fail to render rather than go out with someone else's.
       DefaultContent: { Template: { TemplateContent: content, TemplateData: "{}" } },
@@ -670,7 +687,7 @@ export class SesProvider implements EmailProvider {
       }
       const words = entry.Error ?? "";
       const error = sesEntryErrorText(status || "no status", words);
-      const verdict = classifySesEntry(status, words, this.from);
+      const verdict = classifySesEntry(status, words, this.address);
       if (verdict.kind === "unknown") {
         // Left out like a missing result, so it waits for Resolve: never re-sent (I4), and
         // never recorded unsent on a guess.

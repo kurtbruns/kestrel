@@ -48,6 +48,7 @@ import {
 import { getProvider } from "../providers";
 import { drainSimulatedWebhooks } from "../providers/simulate";
 import type { BatchHalt, HaltReason } from "../providers/types";
+import { sendSender } from "../services/sender";
 import { Budget, metered } from "./budget";
 import { SendWindow } from "./pace";
 
@@ -153,7 +154,9 @@ export async function runSend(
   // The account's own send rate in place of the configured one, when the sweep read it.
   const deployed = getConfig(env);
   const config = sendRate === undefined ? deployed : { ...deployed, sesMaxSendRate: sendRate };
-  const provider = getProvider(config, env);
+  // Who the send goes out as: the name frozen with its render, which is what was reviewed
+  // (SPEC §9), so a rename since reaches it only through a confirmed re-make.
+  const provider = getProvider(config, env, await sendSender(db, config, send));
   const now = Date.now();
 
   // Acquire the lease (also moves scheduled -> sending). If we don't win, no-op.

@@ -7,6 +7,7 @@ import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { sweep } from "../src/send/sweep";
 import { clearLogos, logoKeys, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, PNG_1x1, readJson } from "./support/http";
+import { fetchWith } from "./support/worker_env";
 
 // A template or identity change re-makes every scheduled send at once, after the
 // client acknowledges them (SPEC §6, §9). One test per rule.
@@ -532,5 +533,86 @@ describe("a template or identity change re-makes the scheduled emails", () => {
     expect(landed.status).toBe(200);
     expect((await readJson(landed)).remade.map((s: any) => s.id)).toEqual([a.id]);
     expect((await getSend(a.id)).rendered_html).toContain("v2");
+  });
+});
+
+// The sender's display name follows the publication name and is frozen into each send, so
+// a rename reaches scheduled sends only through the same confirmation a template change takes
+// (SPEC §9). One test per rule.
+describe("the sender's name in a re-make (SPEC §9)", () => {
+  /** A valid template that prints no identity field at all. */
+  const plain = '<div>{{ .Post.Body }}<a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a></div>';
+  const fromName = async (id: string) =>
+    (
+      await env.DB.prepare("SELECT from_name FROM sends WHERE id = ?")
+        .bind(id)
+        .first<{ from_name: string | null }>()
+    )?.from_name;
+  /** The deploy config with a name written into the From address: the override. */
+  const NAMED_FROM = { FROM_ADDRESS: "Jane <newsletter@send.example.com>" };
+  const putSettingsAs = (vars: Record<string, string>, patch: unknown) =>
+    fetchWith(vars, "/api/settings", {
+      method: "PUT",
+      headers: JSON_AUTH,
+      body: JSON.stringify(patch),
+    });
+  async function scheduleAs(vars: Record<string, string>, postId: string): Promise<any> {
+    const res = await fetchWith(vars, `/api/posts/${postId}/schedule`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ fire_at: new Date(Date.now() + 10 * 60 * 1000).toISOString() }),
+    });
+    expect(res.status).toBe(201);
+    return (await readJson(res)).send;
+  }
+
+  it("a rename re-makes scheduled sends even when the template prints no identity field, and the re-made send goes out under the new name", async () => {
+    expect((await putSettings({ email_template: plain })).status).toBe(200);
+    expect((await putSettings({ publication: { name: "Field Notes" } })).status).toBe(200);
+    const a = await schedule(await makeDraft("Post A"));
+    expect(await fromName(a.id)).toBe("Field Notes");
+    expect((await getSettings()).in_use.identity_fields).toEqual([]);
+
+    const refused = await putSettings({ publication: { name: "Renamed" } });
+    expect(refused.status).toBe(409);
+    expect((await readJson(refused)).error).toBe("remake_required");
+    expect(await fromName(a.id)).toBe("Field Notes");
+
+    const ok = await putSettings({ publication: { name: "Renamed" }, remake: [a.id] });
+    expect(ok.status).toBe(200);
+    expect((await readJson(ok)).remade.map((s: any) => s.id)).toEqual([a.id]);
+    expect(await fromName(a.id)).toBe("Renamed");
+  });
+
+  it("a send frozen with no name goes out under none, and takes the name once one is set", async () => {
+    expect((await putSettings({ email_template: plain })).status).toBe(200);
+    const a = await schedule(await makeDraft("Post A"));
+    expect(await fromName(a.id)).toBe("");
+    expect(
+      (await putSettings({ publication: { name: "Field Notes" }, remake: [a.id] })).status,
+    ).toBe(200);
+    expect(await fromName(a.id)).toBe("Field Notes");
+  });
+
+  it("under a name written into the From address, a rename reaches no email the template doesn't print it in, and asks nothing", async () => {
+    expect((await putSettingsAs(NAMED_FROM, { email_template: plain })).status).toBe(200);
+    expect((await putSettingsAs(NAMED_FROM, { publication: { name: "Field Notes" } })).status).toBe(
+      200,
+    );
+    const a = await scheduleAs(NAMED_FROM, await makeDraft("Post A"));
+    expect(await fromName(a.id)).toBe("Jane");
+
+    const quiet = await putSettingsAs(NAMED_FROM, { publication: { name: "Renamed" } });
+    expect(quiet.status).toBe(200);
+    expect((await readJson(quiet)).remade).toEqual([]);
+    expect(await fromName(a.id)).toBe("Jane");
+
+    // Once the template prints the name, the rename reaches the email as any identity field does.
+    expect(
+      (await putSettingsAs(NAMED_FROM, { email_template: tpl("v1"), remake: [a.id] })).status,
+    ).toBe(200);
+    const asks = await putSettingsAs(NAMED_FROM, { publication: { name: "Renamed again" } });
+    expect(asks.status).toBe(409);
+    expect((await readJson(asks)).error).toBe("remake_required");
   });
 });

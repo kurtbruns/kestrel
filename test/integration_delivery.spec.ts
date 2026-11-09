@@ -21,6 +21,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRouter } from "../src/app";
 import * as sends from "../src/db/sends";
+import { updateSettings } from "../src/db/settings";
 import * as subscribers from "../src/db/subscribers";
 import type { AppEnv } from "../src/env";
 import { getConfig } from "../src/env";
@@ -314,5 +315,54 @@ describe("webhook routes are wired through the real router", () => {
     // SES: the envelope parses but carries no signature, so SNS verification refuses it.
     expect(sesRes.status).toBe(403);
     expect(await sesRes.text()).toBe("invalid signature");
+  });
+});
+
+// ============================================================================
+// The From line a list send carries (SPEC §9, I5): the name frozen with its render, so what
+// goes out is what the publisher reviewed, whatever the publication is called since.
+describe("the From line a list send carries", () => {
+  // A bare From address, so the name is the publication's (SPEC §9).
+  const bareSes = () =>
+    ({ ...sesEnv(), FROM_ADDRESS: "news@send.birds.example" }) as unknown as AppEnv;
+  const fromOf = (requests: { FromEmailAddress: string }[]) => requests[0]!.FromEmailAddress;
+
+  it("goes out under the name frozen at schedule, not the publication's name since (I5)", async () => {
+    await updateSettings(env.DB, { publication: { name: "Field Notes" } });
+    await seedConfirmed("s1@integ.test");
+    const send = await dueSend();
+    // A rename that reaches no re-make, as one made while the send was already going out.
+    await updateSettings(env.DB, { publication: { name: "Renamed" } });
+    const { requests } = answerSes();
+    await runSend(bareSes(), send.id);
+    expect(fromOf(requests)).toBe("Field Notes <news@send.birds.example>");
+  });
+
+  it("goes out with no display name when the publication had none at schedule", async () => {
+    await seedConfirmed("s1@integ.test");
+    const send = await dueSend();
+    const { requests } = answerSes();
+    await runSend(bareSes(), send.id);
+    expect(fromOf(requests)).toBe("news@send.birds.example");
+  });
+
+  it("a send frozen before the name was kept goes out under the rule as it stands when it fires", async () => {
+    await seedConfirmed("s1@integ.test");
+    const send = await dueSend();
+    await env.DB.prepare("UPDATE sends SET from_name = NULL WHERE id = ?").bind(send.id).run();
+    await updateSettings(env.DB, { publication: { name: "Field Notes" } });
+    const { requests } = answerSes();
+    await runSend(bareSes(), send.id);
+    expect(fromOf(requests)).toBe("Field Notes <news@send.birds.example>");
+  });
+
+  it("quotes a frozen name a comma would otherwise split, so SES takes the request", async () => {
+    await updateSettings(env.DB, { publication: { name: "Smith, Jane" } });
+    await seedConfirmed("s1@integ.test");
+    const send = await dueSend();
+    const { requests } = answerSes();
+    const result = await runSend(bareSes(), send.id);
+    expect(result.accepted).toBe(1);
+    expect(fromOf(requests)).toBe('"Smith, Jane" <news@send.birds.example>');
   });
 });

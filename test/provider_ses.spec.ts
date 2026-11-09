@@ -1698,3 +1698,81 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     expect(result.events).toHaveLength(0);
   });
 });
+
+// ============================================================================
+// The From line (SPEC §9): the sender handed to the adapter, built by the one sender rule so
+// a free-text name can't make SES refuse the request.
+describe("SesProvider's From line", () => {
+  const address = "news@send.example.com";
+  const withSender = (name: string) => new SesProvider(getConfig(env), sesEnv, { name, address });
+  const sendOne = (provider: SesProvider, purpose: "list" | "confirmation" = "list") =>
+    provider.sendBatch(
+      renderedFixture(),
+      [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
+      {
+        purpose,
+        tag: "send-1",
+      },
+    );
+
+  it("carries the sender it was given, on a bulk send and a single one alike", async () => {
+    const { requests } = answerSes();
+    await sendOne(withSender("Birds Weekly"));
+    await sendOne(withSender("Birds Weekly"), "confirmation");
+    expect(requests.map((r) => r.FromEmailAddress)).toEqual([
+      `Birds Weekly <${address}>`,
+      `Birds Weekly <${address}>`,
+    ]);
+    expect(requests.map((r) => r.endpoint)).toEqual(["bulk", "single"]);
+  });
+
+  it("sends with the address alone when the sender has no name", async () => {
+    const { requests } = answerSes();
+    await sendOne(withSender(""));
+    expect(requests[0]!.FromEmailAddress).toBe(address);
+  });
+
+  it("quotes a name with a comma in it, which SES would otherwise read as two addresses", async () => {
+    const { requests } = answerSes();
+    await sendOne(withSender("Smith, Jane"));
+    expect(requests[0]!.FromEmailAddress).toBe(`"Smith, Jane" <${address}>`);
+  });
+
+  it("encodes a long non-ASCII name as encoded-words of at most 75 characters each", async () => {
+    const { requests } = answerSes();
+    const name = "ÄÖÜ".repeat(20);
+    await sendOne(withSender(name));
+    const from = requests[0]!.FromEmailAddress;
+    expect(from.endsWith(` <${address}>`)).toBe(true);
+    const words = from.slice(0, from.lastIndexOf(" <")).split(" ");
+    expect(words.length).toBeGreaterThan(1);
+    for (const w of words) {
+      expect(w).toMatch(/^=\?utf-8\?B\?[A-Za-z0-9+/=]+\?=$/);
+      expect(w.length).toBeLessThanOrEqual(75);
+    }
+    const decoded = words
+      .map((w) =>
+        new TextDecoder().decode(Uint8Array.from(atob(w.slice(10, -2)), (c) => c.charCodeAt(0))),
+      )
+      .join("");
+    expect(decoded).toBe(name);
+  });
+
+  it("without a sender, uses the From address as written at deploy, name and all", async () => {
+    const { requests } = answerSes();
+    await sendOne(
+      new SesProvider({ ...getConfig(env), fromAddress: `"Smith, Jane" <${address}>` }, sesEnv),
+    );
+    await sendOne(new SesProvider({ ...getConfig(env), fromAddress: address }, sesEnv));
+    expect(requests.map((r) => r.FromEmailAddress)).toEqual([
+      `"Smith, Jane" <${address}>`,
+      address,
+    ]);
+  });
+
+  it("reads a refusal naming the sender against the address alone, whatever the name", async () => {
+    answerSes(() => notVerified(address));
+    const result = await sendOne(withSender("Smith, Jane"));
+    expect(result).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "sender" } });
+  });
+});

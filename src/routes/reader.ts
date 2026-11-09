@@ -6,20 +6,19 @@
  * them the same way.
  */
 
-import { publicationName } from "../../shared/publication";
 import { getSettingsForDisplay, publicationLogoUrl } from "../db/settings";
 import type { Config } from "../env";
 import { type MessagePageOptions, messagePage, type ReaderIdentity } from "../lib/page";
 import type { RequestContext } from "../router";
 
-/** The resolved publication identity for a reader page: the operator's settings, with
- *  the name resolved as the email resolves it, so it is "" when neither the publisher
- *  nor the `From:` header names the publication (shape in `lib/page.ts`). A corrupt
+/** The resolved publication identity for a reader page: the publisher's settings, the
+ *  name "" while they have set none, so a page words itself without one rather than
+ *  carrying a name they didn't choose (SPEC §9; shape in `lib/page.ts`). A corrupt
  *  settings row reads as the defaults, so a reader page never fails on it. */
 export async function readerIdentity(c: RequestContext, config: Config): Promise<ReaderIdentity> {
   const { publication: p } = await getSettingsForDisplay(c.env.DB);
   return {
-    name: publicationName(p.name, config.fromAddress),
+    name: p.name,
     tagline: p.tagline,
     logoUrl: publicationLogoUrl(config.mediaPublicBase, p.logo),
   };

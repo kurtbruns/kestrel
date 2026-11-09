@@ -199,7 +199,7 @@ Until now the app has run with no email provider connected, refusing to send. Se
       "APP_ORIGIN": "https://newsletter.example.com",
       "ARCHIVE_BASE_PATH": "/archive",
       "SENDING_DOMAIN": "send.example.com",
-      "FROM_ADDRESS": "Newsletter <newsletter@send.example.com>",
+      "FROM_ADDRESS": "newsletter@send.example.com",
       "AWS_REGION": "us-east-1"      // ← change: your region's code
     }
     ```

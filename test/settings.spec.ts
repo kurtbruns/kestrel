@@ -22,6 +22,7 @@ import {
 } from "./support/fixtures";
 import { AUTH, base, JPEG_1x1, JSON_AUTH, PNG_1x1 } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
+import { fetchWith } from "./support/worker_env";
 
 // Each test starts from no settings row, so none sees a name, logo, or address another left.
 beforeEach(async () => {
@@ -116,7 +117,7 @@ describe("settings surface", () => {
     const { res, body } = await getSettings();
     expect(res.status).toBe(200);
     expect(body.settings.test_recipients).toEqual([]);
-    // Publication identity starts empty (the reader falls back to the From name).
+    // Publication identity starts empty: unnamed until the publisher names it (SPEC §9).
     expect(body.settings.publication).toMatchObject({
       name: "",
       tagline: "",
@@ -235,7 +236,7 @@ describe("publication identity", () => {
     expect(body.settings.publication.tagline).toBe("Birding, weekly");
   });
 
-  it("themes the public archive index with the name + tagline (a blank name falls back)", async () => {
+  it("themes the public archive index with the name + tagline (a blank name leaves it unnamed)", async () => {
     await putSettings({
       publication: { name: "The Hovering Hunter", tagline: "Notes from the field" },
     });
@@ -243,12 +244,14 @@ describe("publication identity", () => {
     expect(html).toContain("The Hovering Hunter");
     expect(html).toContain("Notes from the field");
 
-    // A name saved blank falls back to the From address's display name (wrangler.jsonc's
-    // "Newsletter <newsletter@send.example.com>"), never an empty title.
+    // A name saved blank leaves the page unnamed, titled for what it is (SPEC §9): no name
+    // the publisher didn't choose, the sending address's included.
     expect((await putSettings({ publication: { name: "   " } })).status).toBe(200);
-    const fallback = await (await SELF.fetch(`${base}/`)).text();
-    expect(fallback).not.toContain("The Hovering Hunter");
-    expect(fallback).toMatch(/<title>[^<]*Newsletter[^<]*<\/title>/);
+    const unnamed = await (
+      await fetchWith({ FROM_ADDRESS: "Newsletter <newsletter@send.example.com>" }, "/")
+    ).text();
+    expect(unnamed).not.toContain("The Hovering Hunter");
+    expect(unnamed).toMatch(/<title>Home<\/title>/);
   });
 });
 

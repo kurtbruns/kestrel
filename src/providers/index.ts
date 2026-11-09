@@ -1,5 +1,6 @@
 /** Provider factory: pick the transport adapter from Config, and refuse what would send
  *  while no provider is connected. */
+import type { Sender } from "../../shared/publication";
 import type { AppEnv, Config } from "../env";
 import { refusal } from "../lib/errors";
 import { FakeProvider } from "./fake";
@@ -8,7 +9,13 @@ import { SesProvider } from "./ses";
 import { SimProvider } from "./simulate";
 import type { EmailProvider, PerRecipientResult, Recipient, SendBatchResult } from "./types";
 
-export function getProvider(config: Config, env: AppEnv): EmailProvider {
+/**
+ * The adapter for the configured provider. A caller that sends hands over the sender its
+ * emails go out as (`services/sender.ts`: the rule as it stands, or a send's frozen name,
+ * SPEC §9); one that only reads the adapter's traits or parses a webhook passes none, and
+ * gets the sender with no publication name, which never sends.
+ */
+export function getProvider(config: Config, env: AppEnv, sender?: Sender): EmailProvider {
   switch (config.provider) {
     case "none":
       return new NotConnectedProvider();
@@ -18,7 +25,7 @@ export function getProvider(config: Config, env: AppEnv): EmailProvider {
       // env never reaches it.
       return config.simulation ? new SimProvider(config.simulation, config) : new FakeProvider();
     case "ses":
-      return new SesProvider(config, env);
+      return new SesProvider(config, env, sender);
     default: {
       // getConfig admits only known names, so this is unreachable; the `never` makes a new
       // name a compile error here, and the throw keeps it from ever falling through to a

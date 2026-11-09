@@ -1,7 +1,5 @@
-// Publication identity for the sidebar brand: name, tagline, logo, and the From-name
-// fallback.
+// Publication identity for the sidebar brand: name, tagline, and logo.
 
-import { publicationName } from "../shared/publication";
 import type { SettingsResponse } from "../shared/settings";
 import { appState } from "./state";
 import { html, setHtml } from "./ui/html";
@@ -14,14 +12,13 @@ export interface Publication {
 
 /**
  * The publication's name / tagline / logo come from the settings surface
- * (settings.publication). Each field falls back sensibly when unset: the name as the
- * email resolves it, and with none a placeholder only the publisher sees, and a neutral
- * initial tile for the logo.
+ * (settings.publication). Each field falls back sensibly when unset: a placeholder only
+ * the publisher sees for the name, and a neutral initial tile for the logo.
  */
 export function derivePublication(data: SettingsResponse | null): Publication {
   const p = data?.settings.publication;
   return {
-    name: publicationName(p?.name || "", data?.deployment.from_address ?? "") || "Your publication",
+    name: p?.name || "Your publication",
     tagline: p?.tagline || "",
     logoUrl: p?.logo_url || null,
   };

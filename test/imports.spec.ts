@@ -333,8 +333,8 @@ describe("refusals name what was wrong and what was expected (SPEC §7)", () => 
     const p = await planOk({ file });
     expect(p.attestation).toEqual({
       version: 1,
-      text: "Everyone I’m importing as subscribed opted in to receive Newsletter. This isn’t a purchased, rented, or scraped list.",
-      publication: "Newsletter",
+      text: "Everyone I’m importing as subscribed opted in to receive this newsletter. This isn’t a purchased, rented, or scraped list.",
+      publication: "this newsletter",
     });
     const res = await commit({ file, plan_hash: p.plan_hash });
     expect(res.status).toBe(409);
@@ -354,7 +354,7 @@ describe("refusals name what was wrong and what was expected (SPEC §7)", () => 
     expect(p.attestation?.publication).toBe("Field Notes");
   });
 
-  it("names it by the sender's display name until a publication name is set (SPEC §9)", async () => {
+  it("calls it this newsletter while no publication name is set, whatever name the sending address carries (SPEC §9)", async () => {
     const res = await fetchWith(
       { FROM_ADDRESS: '"Birds Weekly" <news@send.example.com>' },
       "/api/imports/plan",
@@ -364,20 +364,6 @@ describe("refusals name what was wrong and what was expected (SPEC §7)", () => 
         body: JSON.stringify({ file: csvFile(["a@x.io,subscribed,single,sendy,,,,,,"]) }),
       },
     );
-    expect(res.status).toBe(200);
-    const p: ImportPlanResponse = await readJson(res);
-    expect(p.attestation?.text).toBe(
-      "Everyone I’m importing as subscribed opted in to receive Birds Weekly. This isn’t a purchased, rented, or scraped list.",
-    );
-    expect(p.attestation?.publication).toBe("Birds Weekly");
-  });
-
-  it("calls it this newsletter with neither a publication name nor a display name (SPEC §9)", async () => {
-    const res = await fetchWith({ FROM_ADDRESS: "news@send.example.com" }, "/api/imports/plan", {
-      method: "POST",
-      headers: JSON_AUTH,
-      body: JSON.stringify({ file: csvFile(["a@x.io,subscribed,single,sendy,,,,,,"]) }),
-    });
     expect(res.status).toBe(200);
     const p: ImportPlanResponse = await readJson(res);
     expect(p.attestation?.text).toBe(

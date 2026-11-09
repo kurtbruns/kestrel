@@ -5,7 +5,7 @@
 // baseline, and commits it.
 
 import { isDashboardRoute } from "../../shared/dashboard_link";
-import { fromDisplayName } from "../../shared/publication";
+import { fromDisplayName, sender } from "../../shared/publication";
 import {
   type ConfirmationEmailCopy,
   isSettingsSection,
@@ -25,7 +25,7 @@ import { savebar } from "../ui/savebar";
 import { holdInView } from "../ui/scroll";
 import { fieldError, renderError, toast } from "../ui/widgets";
 import { confirmationSection, mountConfirmation } from "./confirmation";
-import { instanceSection, senderSection } from "./deploy";
+import { instanceSection, mountSender, senderSection } from "./deploy";
 import { mountRecipients, mountTemplate, recipientsSection, templateSection } from "./emails";
 import { identitySection, mountIdentity } from "./identity";
 import { mountNotifications, notificationsSection } from "./notifications";
@@ -114,7 +114,7 @@ export async function renderSettings(
     notifyTo: [...s.notifications.to],
   };
   let baseline = baselineOf(state);
-  const fromDisplay = fromDisplayName(data.deployment.from_address);
+  const fromAddress = data.deployment.from_address;
 
   const isDirty = () =>
     state.name !== baseline.name ||
@@ -134,8 +134,8 @@ export async function renderSettings(
     provider,
     state,
     saved: () => baseline,
-    fromDisplay,
-    fromName: fromDisplay || "Your publication",
+    fromOverride: fromDisplayName(fromAddress),
+    sender: (name = state.name) => sender(name, fromAddress),
     changed() {
       for (const h of handles) {
         h.repaint?.();
@@ -169,6 +169,7 @@ export async function renderSettings(
     mountTemplate(body, page, signal),
     mountRecipients(body, page),
     mountNotifications(body, page),
+    mountSender(body, page),
   );
   // The template lede's and the identity note's word that saving has to wait, until it no longer does.
   expireRemakeWait(body, data.in_use, signal);

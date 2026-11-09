@@ -142,7 +142,7 @@ export function mountSubscribe(root: HTMLElement, page: SettingsPage): SectionHa
   // Styled first: it pastes in looking like the hosted page anywhere, so the first form a
   // publisher sees is their publication's, and Plain is the choice for one who'll style it.
   let mode: EmbedMode = "styled";
-  const name = () => page.state.name || page.fromDisplay;
+  const name = () => page.state.name;
   const rebuild = () => {
     const code = buildEmbed(mode, name(), appOrigin);
     codeEl.textContent = code;

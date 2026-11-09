@@ -569,6 +569,8 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
       headers: { accept: "text/html", "content-type": "application/x-www-form-urlencoded" },
       body: "email=not-an-email",
     };
+    // Named, so each headline carries the name (a nameless publication is its own case below).
+    await updateSettings(env.DB, { publication: { name: "Field Notes" } });
     const { name: publication } = await readerIdentity(ctxFor(false), getConfig(env));
     // Each row: the case, its handler and path, what only that state's page shows (so
     // the row provably reached it: its headline, and its form where it has one), its
@@ -750,12 +752,13 @@ describe("a test email's unsubscribe link", () => {
 
   it("opens the page a subscriber sees, marked as a test, and unsubscribes no one", async () => {
     await ensureSubscriber();
+    await updateSettings(env.DB, { publication: { name: "Field Notes" } });
     const res = await SELF.fetch(`${base}/unsubscribe?test=1`);
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(res.headers.get("x-robots-tag")).toBe("noindex");
     const body = await res.text();
-    expect(body).toContain("Unsubscribe from ");
+    expect(body).toContain("Unsubscribe from Field Notes?");
     expect(body).toContain("<strong>reader@example.com</strong>");
     expect(body).toContain('class="r-banner"');
     expect(body).toContain(banner);
@@ -805,7 +808,7 @@ describe("a test email's unsubscribe link", () => {
   it("never stands in for a real token", async () => {
     await ensureSubscriber();
     const page = await (await SELF.fetch(`${base}/unsubscribe?token=uns-a&test=1`)).text();
-    expect(page).toContain("Unsubscribe from ");
+    expect(page).toContain('<h1 class="r-h1">Unsubscribe?</h1>');
     expect(page).toContain('action="/unsubscribe?token=uns-a"');
     expect(page).not.toContain('class="r-banner"');
     const res = await SELF.fetch(`${base}/unsubscribe?token=uns-a&test=1`, { method: "POST" });
@@ -909,11 +912,12 @@ describe("a test email's unsubscribe link", () => {
   });
 });
 
-// With no publication name and no display name on the sending address, every reader page
-// words itself without a name rather than showing one the publisher didn't choose.
+// With no publication name set, every reader page words itself without a name rather than
+// showing one the publisher didn't choose, whatever name the sending address carries.
 describe("a publication with no name (SPEC §9)", () => {
-  const UNNAMED = { FROM_ADDRESS: "hello@send.example.com" };
-  const NAMED = { FROM_ADDRESS: '"Birds Weekly" <hello@send.example.com>' };
+  const UNNAMED = { FROM_ADDRESS: '"Field Notes" <hello@send.example.com>' };
+  const NAMED = { FROM_ADDRESS: "hello@send.example.com" };
+  const nameIt = () => updateSettings(env.DB, { publication: { name: "Birds Weekly" } });
 
   const titleOf = (page: string) => /<title>([^<]*)<\/title>/.exec(page)?.[1];
   const headlineOf = (page: string) => /<h1 class="r-h1">([^<]*)<\/h1>/.exec(page)?.[1];
@@ -1008,8 +1012,9 @@ describe("a publication with no name (SPEC §9)", () => {
     }
   });
 
-  it("names the publication on the same pages when the sender has a display name", async () => {
+  it("names the publication on the same pages once the publisher sets a name", async () => {
     await seedReaders();
+    await nameIt();
     const named: [string, string, string][] = [
       ["/subscribe", "Subscribe · Birds Weekly", "Subscribe to Birds Weekly"],
       [
@@ -1046,12 +1051,13 @@ describe("a publication with no name (SPEC §9)", () => {
           '<span class="r-cta"><a class="r-sub" href="http://localhost:8787/subscribe">Subscribe here &rarr;</a></span>\n' +
           "</div></header>",
       );
-      expect(page, path).not.toContain("Newsletter");
+      expect(page, path).not.toContain("Field Notes");
     }
   });
 
   it("titles the home page and the archive index by the name when there is one", async () => {
     await publish("A Post", 1_000);
+    await nameIt();
     expect(titleOf(await (await fetchWith(NAMED, "/")).text())).toBe("Birds Weekly");
     expect(titleOf(await (await fetchWith(NAMED, "/archive")).text())).toBe(
       "Archive · Birds Weekly",
@@ -1076,6 +1082,7 @@ describe("a publication with no name (SPEC §9)", () => {
     const unnamed = await (await fetchWith(UNNAMED, `/archive/${post.slug}`)).text();
     // Only the masthead is the page's own: the sign-off stays as it was sent (I3).
     expect(backLink(unnamed)).toBe("Archive");
+    await nameIt();
     const named = await (await fetchWith(NAMED, `/archive/${post.slug}`)).text();
     expect(backLink(named)).toBe("Birds Weekly");
   });

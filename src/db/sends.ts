@@ -964,13 +964,15 @@ export async function countDeliveriesFiltered(
 // --- the freeze ------------------------------------------------------------------
 
 /** The frozen render a freeze (or a re-make) writes onto a send: the one render
- *  path's output, as the three columns the send loop reads back, and the render's
- *  warnings about it, which the publisher's instruments report (SPEC §5). */
+ *  path's output, as the three columns the send loop reads back, the render's
+ *  warnings about it, which the publisher's instruments report (SPEC §5), and the
+ *  display name the send goes out under, frozen with the copy it reviews (SPEC §9). */
 export interface FrozenRender {
   rendered_html: string;
   rendered_text: string;
   subject: string;
   warnings: string[];
+  from_name: string;
 }
 
 /** The render's warnings a send's frozen copy was stored with (SPEC §5). */
@@ -1005,8 +1007,8 @@ export function insertScheduledSendStmt(
   const guard = settingsVersionIs(settingsVersion);
   return db
     .prepare(
-      `INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, render_warnings, recipient_count, scheduled_at, web_link, rev)
-       SELECT ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, 'unlisted', ${NEXT_REV}
+      `INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, render_warnings, from_name, recipient_count, scheduled_at, web_link, rev)
+       SELECT ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, 'unlisted', ${NEXT_REV}
         WHERE ${guard.sql}`,
     )
     .bind(
@@ -1017,6 +1019,7 @@ export function insertScheduledSendStmt(
       send.rendered_text,
       send.subject,
       JSON.stringify(send.warnings),
+      send.from_name,
       send.recipient_count,
       now,
       ...guard.binds,
@@ -1198,11 +1201,12 @@ export function remakeGuard(
 }
 
 /**
- * Re-freeze one scheduled send in place: the rendered columns and their warnings, `remade_at`, and `web_link`
- * (the new copy carries the unlisted link, whatever the old one did), nothing
- * else (the fire time, the window's anchor, and the audience snapshot stay). A CAS on
- * `status = 'scheduled'` plus the batch's `guard`: a send that fired or was canceled in
- * the gap changes zero rows without failing the batch, and is never touched.
+ * Re-freeze one scheduled send in place: the rendered columns and their warnings, the
+ * display name it goes out under, `remade_at`, and `web_link` (the new copy carries the
+ * unlisted link, whatever the old one did), nothing else (the fire time, the window's
+ * anchor, and the audience snapshot stay). A CAS on `status = 'scheduled'` plus the
+ * batch's `guard`: a send that fired or was canceled in the gap changes zero rows without
+ * failing the batch, and is never touched.
  */
 export function remakeSendStmt(
   db: D1Database,
@@ -1213,7 +1217,7 @@ export function remakeSendStmt(
 ): D1PreparedStatement {
   return db
     .prepare(
-      `UPDATE sends SET rendered_html = ?, rendered_text = ?, subject = ?, render_warnings = ?, remade_at = ?, web_link = 'unlisted', rev = ${NEXT_REV}
+      `UPDATE sends SET rendered_html = ?, rendered_text = ?, subject = ?, render_warnings = ?, from_name = ?, remade_at = ?, web_link = 'unlisted', rev = ${NEXT_REV}
         WHERE id = ? AND status = 'scheduled' AND ${guard.sql}`,
     )
     .bind(
@@ -1221,6 +1225,7 @@ export function remakeSendStmt(
       render.rendered_text,
       render.subject,
       JSON.stringify(render.warnings),
+      render.from_name,
       now,
       sendId,
       ...guard.binds,

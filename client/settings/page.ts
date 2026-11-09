@@ -3,6 +3,7 @@
 // every section wears.
 
 import type { ProviderStatusView } from "../../shared/provider";
+import type { Sender } from "../../shared/publication";
 import {
   type ConfirmationEmailCopy,
   type SettingsResponse,
@@ -41,11 +42,12 @@ export interface SettingsPage {
   state: SettingsFormState;
   /** The state as last saved: what Discard returns to, and what a test is sent from. */
   saved(): SettingsBaseline;
-  /** The From display name as the email resolves it, "" for a bare address. What a reader
-   *  sees falls back to this, so it never shows a name the publisher didn't choose. */
-  fromDisplay: string;
-  /** The same with a visible placeholder, for what only the publisher sees. */
-  fromName: string;
+  /** The display name written into the deploy-time From address, "" for none. Set, it is
+   *  the sender's name whatever the publication is called (SPEC §9). */
+  fromOverride: string;
+  /** The sender every email goes out as, for the publication name given, by default the
+   *  name as it is being typed: the override, else that name, over the deploy-time address. */
+  sender(name?: string): Sender;
   /** The state changed: every section repaints what it derives from it, and the save
    *  bar rises or falls. */
   changed(): void;
@@ -85,4 +87,10 @@ export function secHead(section: SettingsSection, chipHtml: Html, extra: Html | 
 /** The letter an inbox row shows for a sender with no avatar. */
 export function monogram(name: string, fallback: string): string {
   return (String(name || fallback).trim()[0] || "K").toUpperCase();
+}
+
+/** A sender as a line of text: `Birds Weekly <hello@birds.example>`, or the address alone
+ *  while it has no name. */
+export function senderLine(s: Sender): string {
+  return s.name ? `${s.name} <${s.address}>` : s.address;
 }

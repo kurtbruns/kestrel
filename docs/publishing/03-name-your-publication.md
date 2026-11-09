@@ -1,8 +1,8 @@
 # Name your publication
 
-Give your publication a name and a look before your first post. Set the name, tagline, and logo under **Settings → Publication identity**. They appear in every email your template prints them in, on the public pages readers see, and in the confirmation email new subscribers get.
+Give your publication a name and a look before your first post. Set the name, tagline, and logo under **Settings → Publication identity**. They appear in every email your template prints them in, on the public pages readers see, and in the confirmation email new subscribers get. The name is also what readers see as the sender of every email, beside the From address, so set one before your first post: without it, your emails arrive with no name, from the address alone.
 
-All three are optional, and you can change them at any time. How they appear in each email comes from your email template, which you can [edit](11-email-template.md).
+All three are optional, and you can change them at any time. How they appear in each email comes from your email template, which you can [edit](11-email-template.md). Renaming the publication while posts are scheduled updates their emails, and Kestrel asks you to confirm first. Readers recognize a newsletter by its sender's name, and some filter on it, so rename rarely.
 
 Write the tagline as one line that says what the newsletter covers and how often it goes out, such as "Monthly notes on the birds of the Hudson Valley." Until your first post, it's the only line on your home page that says what readers are signing up for. It's also what AWS sees if it reviews your site when you [request production access](../get-started/06-production-access.md).
 
@@ -26,5 +26,5 @@ This is general information, not legal advice. The FTC's [CAN-SPAM compliance gu
 
 ## Who sets the From name and address
 
-The From name and address your emails come from are set when Kestrel is deployed, so **Settings → Email sender** shows them read-only. To change them, follow [Deploy the app](../get-started/02-deploy.md#4-configure-production).
+The From address your emails come from is set when Kestrel is deployed, so **Settings → Email sender** shows it read-only, with how readers see the sender: your publication's name beside that address. To change the address, follow [Deploy the app](../get-started/02-deploy.md#4-configure-production). If whoever deployed Kestrel wrote a name into the address, that name is the sender whatever you call the publication here; **Settings → Email sender** says so, and the deploy is where it changes.
 

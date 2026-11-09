@@ -1,10 +1,11 @@
 // Settings' "Set at deploy" group: the email sender and the instance's infrastructure, a
 // read-only reflection of the deploy-time config that only a redeploy changes (SPEC §9).
-// Secrets never come down this wire (see routes/settings.ts).
+// The sender's name is the one exception, shown here as readers see it but set with the
+// publication's name. Secrets never come down this wire (see routes/settings.ts).
 
 import type { ProviderStatusView } from "../../shared/provider";
 import { DEFAULT_MIN_LEAD_MS, formatLead } from "../../shared/sends";
-import type { DeploymentView, SimulationProfile } from "../../shared/settings";
+import { type DeploymentView, type SimulationProfile, settingsRoute } from "../../shared/settings";
 import { connectProviderLink } from "../deployment";
 import {
   providerStateHtml,
@@ -13,10 +14,11 @@ import {
   stopsSending,
   warningHtml,
 } from "../provider_status";
+import { $ } from "../ui/dom";
 import { fmt } from "../ui/format";
 import { type Html, html } from "../ui/html";
 import { icon } from "../ui/icons";
-import { chip, monogram, type SettingsPage, secHead } from "./page";
+import { chip, monogram, type SectionHandle, type SettingsPage, secHead } from "./page";
 
 const PROVIDER_LABELS: Record<string, string> = {
   none: "No email provider connected",
@@ -61,42 +63,62 @@ const SIMULATION_LABELS: Record<SimulationProfile, string> = {
 // and can't see whether that step was done, so Settings only points to it (SPEC §9).
 const REPLIES_HREF = "#/docs/ses/8-receive-replies-at-your-from-address";
 
-function bareAddress(from: string): string {
-  const m = String(from || "").match(/<([^>]+)>/);
-  return m?.[1] ? m[1] : String(from || "");
+/** Where the sender's name comes from (SPEC §9): the publication's name, which Publication
+ *  identity sets, unless a name was written into the From address at deploy, which this
+ *  card can only explain. The address is deploy-time either way. */
+function senderNote(page: SettingsPage): Html {
+  const guide = html`<a class="set-link" href="#/docs/self-hosting">setup guide</a>`;
+  if (page.fromOverride) {
+    return html`The address, and the name “${page.fromOverride}” written in with it, are set at deploy in <code>wrangler.jsonc</code>, with the AWS keys stored as secrets, so neither can be edited here. To send under your publication’s name instead, leave the name out of the address (the ${guide} shows how), then redeploy. Credentials are never shown.`;
+  }
+  return html`The name is your publication’s, from <a class="set-link" href="#${settingsRoute("publication-identity")}">Publication identity</a>. The address is set at deploy in <code>wrangler.jsonc</code>, with the AWS keys stored as secrets, so it can’t be edited here. Change it in the ${guide}, then redeploy. Credentials are never shown.`;
 }
 
 export function senderSection(page: SettingsPage): Html {
   const d = page.data.deployment;
-  const { fromName } = page;
+  const s = page.sender();
   const status = page.provider;
   const rate = status ? sendRateHtml(status) : null;
   return html`
     <section class="set-sec">
       ${secHead("email-sender", chip("readonly", "Read-only · set at deploy"))}
       <div class="set-card sunken">
-        <div class="set-ro-note">${icon("readonly")}<span>The sender is set at deploy in <code>wrangler.jsonc</code>, with the AWS keys stored as secrets, so it can’t be edited here. Change it in the <a class="set-link" href="#/docs/self-hosting">setup guide</a>, then redeploy. Credentials are never shown.</span></div>
+        <div class="set-ro-note">${icon("readonly")}<span>${senderNote(page)}</span></div>
         <div class="set-preview-bar" style="background:transparent">
           <span class="set-preview-lbl">Inbox preview</span>
           <span class="set-preview-dot">How readers see the sender</span>
         </div>
         <div class="set-inbox">
-          <div class="set-inbox-avatar">${monogram(fromName, fromName)}</div>
+          <div class="set-inbox-avatar" id="senderAvatar">${monogram(s.name, s.address)}</div>
           <div class="set-inbox-body">
-            <div class="set-inbox-top"><span class="set-inbox-from">${fromName}</span><span class="set-inbox-time">9:02 AM</span></div>
+            <div class="set-inbox-top"><span class="set-inbox-from" id="senderFrom">${s.name || s.address}</span><span class="set-inbox-time">9:02 AM</span></div>
             <div class="set-inbox-subj">Your latest post: a sample subject line</div>
             <div class="set-inbox-snip">The opening lines of your post show here as the inbox preview…</div>
-            <div class="set-inbox-addr">${bareAddress(d.from_address)}</div>
+            <div class="set-inbox-addr">${s.address}</div>
           </div>
         </div>
         <div class="set-kv" style="border-top:1px solid var(--line)">
-          <div class="set-kv-k">From address</div><div class="set-kv-v set-kv-stack"><span class="mono">${d.from_address}</span><span class="muted" id="replyNote">Readers’ replies go to this address. <a class="set-link" href="${REPLIES_HREF}">Forward it to your inbox</a>.</span></div>
+          <div class="set-kv-k">From address</div><div class="set-kv-v set-kv-stack"><span class="mono">${s.address}</span><span class="muted" id="replyNote">Readers’ replies go to this address. <a class="set-link" href="${REPLIES_HREF}">Forward it to your inbox</a>.</span></div>
           <div class="set-kv-k">Sending domain</div><div class="set-kv-v"><span class="mono">${d.sending_domain}</span></div>
           <div class="set-kv-k">Email provider</div><div class="set-kv-v set-kv-stack" id="providerValue">${providerValue(d, status)}${status?.warnings.map((w) => html`<span class="${stopsSending(w) ? "set-error" : "set-warn"}">${warningHtml(w)}</span>`)}</div>
           ${rate ? html`<div class="set-kv-k">Send rate</div><div class="set-kv-v" id="sendRate">${rate}</div>` : null}
         </div>
       </div>
     </section>`;
+}
+
+/** The inbox preview follows the publication's name as it is typed, since that is the
+ *  sender's name unless one was set at deploy; the rest of the card is fixed. */
+export function mountSender(root: HTMLElement, page: SettingsPage): SectionHandle {
+  const from = $("#senderFrom", root);
+  const avatar = $("#senderAvatar", root);
+  return {
+    repaint() {
+      const s = page.sender();
+      from.textContent = s.name || s.address;
+      avatar.textContent = monogram(s.name, s.address);
+    },
+  };
 }
 
 export function instanceSection(page: SettingsPage): Html {

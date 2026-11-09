@@ -15,6 +15,7 @@
 import type { AppEnv, Config, NotifyChannel } from "../env";
 import { getProvider, perRecipient } from "../providers";
 import type { RenderedEmail } from "../render/render";
+import { currentSender } from "../services/sender";
 import { type Contacts, contactOutcome } from "../services/sending";
 import { FakeNotifier } from "./fake";
 
@@ -90,7 +91,11 @@ export class ProviderNotifier implements Notifier {
   ) {}
 
   async send(to: string, message: RenderedEmail, key: string, contacts: Contacts): Promise<void> {
-    const provider = getProvider(this.config, this.env);
+    const provider = getProvider(
+      this.config,
+      this.env,
+      await currentSender(this.env.DB, this.config),
+    );
     // Transactional, like the confirmation email: no unsubscribe link, since it goes to
     // the publisher about their own sends and never to the list.
     const recipients = [{ email: to, unsubscribeUrl: "" }];

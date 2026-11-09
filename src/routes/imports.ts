@@ -130,7 +130,7 @@ async function plan(c: RequestContext, input: ImportInput): Promise<Plan> {
   return planImport(c.env.DB, input, {
     maxRows,
     maxRowsReason: reason,
-    publication: attestationPublication(settings.publication.name, c.config.fromAddress),
+    publication: attestationPublication(settings.publication.name),
     freePlan: onFreePlanLimits(c.config),
   });
 }

@@ -10,9 +10,15 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+**Upgrading from 1.22.0.** One database migration, which keeps the sender's name with each scheduled send: run `npm run sync-migrations`, then apply it with `npx wrangler d1 migrations apply DB --remote --env production` (SPEC §9 says what an unapplied migration does). If your `FROM_ADDRESS` is a bare address, emails now come from your publication's name, so make sure one is set under **Settings → Publication identity** before your next send; with none, emails arrive with no sender name, from the address alone. If it carries a name, like `Newsletter <newsletter@send.example.com>`, nothing changes: that name stays the sender, and the publication's pages no longer borrow it, so set a publication name if the pages went by it.
+
 ### Added
 
 - A post scheduled while Amazon SES is refusing your account now says so before it fires, with SES's words and the fix: it will be held when it fires, with no one mailed and no one marked unsent, and go out on its own once the account is fixed. The warning shows in the Schedule and Send now dialogs, on the editor's scheduled banner, and under the countdown on the dashboard's Scheduled card, and the API carries it as a condition on the send, so Claude sees it too. It goes as soon as SES takes an email again (SPEC §6, §13).
+
+### Changed
+
+- The name readers see as the sender of every email now follows the publication's name, set under **Settings → Publication identity**, so renaming the newsletter is one edit in the editor and no deploy (SPEC §9). A name written into `FROM_ADDRESS` still overrides it, and the setup template and guide now give a bare address. The name is frozen into each send when it's scheduled, so a rename while posts are scheduled updates their emails under the same confirmation a template change takes. The publication's pages, emails, and the editor no longer borrow the From address's name while no publication name is set. **Settings → Email sender** shows the sender as readers will see it, and says where each half comes from. A name with a comma, a quote, or characters outside ASCII is written into the email as the standards ask, so Amazon SES takes it.
 
 ## [1.22.0] - 2026-11-06
 
