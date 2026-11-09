@@ -237,7 +237,9 @@ function refused(n: DueNotification, title: string, config: Config): RenderedEma
  * lost and it resumes on its own, so the email says what is still useful, checking AWS's
  * status page and telling readers if the post can't wait, or, for a rate limit that has
  * outlasted any burst, the setting that causes it. It goes through the provider that is down,
- * so it says it may arrive late; the operator's Cloudflare alert is what covers that gap.
+ * so it says it may arrive late, and it is tried every few minutes until the provider takes it
+ * or answers the send (`UNAVAILABLE_NOTICE_RETRY_MS`); the operator's Cloudflare alert is what
+ * covers that gap.
  */
 function unavailable(n: DueNotification, title: string, config: Config): RenderedEmail {
   const held = n.c_pending + n.c_in_flight;
@@ -245,7 +247,9 @@ function unavailable(n: DueNotification, title: string, config: Config): Rendere
   const readers =
     "If this post is time-sensitive, you may want to tell your readers it will be late.";
   return problem({
-    subject: `${title} is late: Amazon SES has been unavailable for over an hour`,
+    subject: throttled
+      ? `${title} is late: SES has refused it for its sending rate for over an hour`
+      : `${title} is late: Amazon SES has been unavailable for over an hour`,
     happened: `${throttled ? "Amazon SES has refused every try for its sending rate" : "Amazon SES has been unavailable"} since ${when(n.halted_at ?? n.episode)}, so ${title} has been waiting for over an hour.`,
     affected: `${emails(held)} ${held === 1 ? "is" : "are"} still to go.`,
     said: said(n.halt_error),

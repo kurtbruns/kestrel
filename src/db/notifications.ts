@@ -22,6 +22,7 @@ import {
   NO_RECEIPTS_NOTICE_AFTER_MS,
   NOTIFY_HORIZON_MS,
   STUCK_THRESHOLD_MS,
+  UNAVAILABLE_NOTICE_RETRY_MS,
 } from "../lib/time";
 import { SEND_IDLE_SINCE, stuckSendSql, WEDGED_SEND } from "./sends";
 
@@ -251,8 +252,14 @@ export async function recordNotifications(db: D1Database, now: number): Promise<
     .run();
 }
 
-/** The oldest pending notifications, at most `limit`, with the send facts to write them. */
-export async function dueNotifications(db: D1Database, limit: number): Promise<DueAny[]> {
+/** The oldest pending notifications, at most `limit`, with the send facts to write them. The
+ *  email about an outage past an hour waits `UNAVAILABLE_NOTICE_RETRY_MS` after a try that
+ *  failed, since it is never given up while the outage stands (SPEC §8). */
+export async function dueNotifications(
+  db: D1Database,
+  limit: number,
+  now: number,
+): Promise<DueAny[]> {
   const { results } = await db
     .prepare(
       `SELECT n.send_id, n.kind, n.episode, n.attempts, n.sent_to,
@@ -266,10 +273,11 @@ export async function dueNotifications(db: D1Database, limit: number): Promise<D
          LEFT JOIN sends s ON s.id = n.send_id
         WHERE n.status = 'pending'
           AND (s.id IS NOT NULL OR n.kind IN ('sandbox', 'not_sending', 'not_sending_held'))
+          AND NOT (n.kind = 'unavailable' AND n.error IS NOT NULL AND n.updated_at > ?)
         ORDER BY n.created_at ASC, n.send_id ASC, n.kind ASC
         LIMIT ?`,
     )
-    .bind(limit)
+    .bind(now - UNAVAILABLE_NOTICE_RETRY_MS, limit)
     .all<Record<string, unknown>>();
   return results.map((r): DueAny => {
     const sentTo = readSentTo(r.sent_to as string);

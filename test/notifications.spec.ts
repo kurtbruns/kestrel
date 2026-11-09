@@ -1302,7 +1302,7 @@ describe("what the publisher is told agrees with what every surface shows (SPEC 
         .sort();
       expect(told).toEqual(showing);
       // And each told problem still holds by the notifier's own check, as it would before sending.
-      const due = (await notifications.dueNotifications(env.DB, 10)).filter(
+      const due = (await notifications.dueNotifications(env.DB, 10, now)).filter(
         (n): n is notifications.DueNotification => n.send_id === send.id && TOLD.includes(n.kind),
       );
       expect(due.map((n) => n.kind).sort()).toEqual(showing);
@@ -1348,7 +1348,7 @@ describe("what the publisher is told agrees with what every surface shows (SPEC 
       halt_retry_at: now + 10 * MIN,
     });
     await notifications.recordNotifications(env.DB, now);
-    const [due] = await notifications.dueNotifications(env.DB, 1);
+    const [due] = await notifications.dueNotifications(env.DB, 1, Date.now());
     const email = composeNotification(due as notifications.DueNotification, getConfig(env));
     expect(email.text).toContain("Illegal address …@example.com");
     expect(email.html).not.toContain("ada@");
@@ -1464,7 +1464,7 @@ describe("no receipts from the provider (SPEC §8)", () => {
   it("is dropped if a receipt lands before it goes, and words what it tells as a possibility", async () => {
     const send = await finished("Owls", 7 * HOUR);
     await notifications.recordNotifications(env.DB, Date.now());
-    const due = await notifications.dueNotifications(env.DB, 5);
+    const due = await notifications.dueNotifications(env.DB, 5, Date.now());
     const n = due.find((d) => d.kind === "no_receipts") as notifications.DueNotification;
     expect(stillHolds(n, Date.now())).toBe(true);
     const email = composeNotification(n, getConfig(env));

@@ -2,10 +2,15 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import * as sends from "../src/db/sends";
 import { updateSettings } from "../src/db/settings";
-import { LONG_OUTAGE_HALTS } from "../src/lib/time";
+import {
+  LONG_OUTAGE_HALTS,
+  MAX_NOTIFY_ATTEMPTS,
+  UNAVAILABLE_NOTICE_RETRY_MS,
+} from "../src/lib/time";
 import { clearFakeNotifications, failFakeNotify, fakeNotifications } from "../src/notify/fake";
 import * as providers from "../src/providers";
 import type { SendBatchResult } from "../src/providers/types";
+import { sweep } from "../src/send/sweep";
 import { BatchProvider } from "./support/batching";
 import { condition } from "./support/conditions";
 import {
@@ -48,6 +53,25 @@ async function rowsOf(kind: string) {
     .bind(kind)
     .all<{ send_id: string; episode: number; status: string }>();
   return results;
+}
+
+/** Every notice of `kind` with its tries, as the notifier keeps them. */
+async function triesOf(kind: string) {
+  const { results } = await env.DB.prepare(
+    "SELECT status, attempts FROM notifications WHERE kind = ? ORDER BY created_at",
+  )
+    .bind(kind)
+    .all<{ status: string; attempts: number }>();
+  return results;
+}
+
+/** A sweep tick a minute on, never jumping to a halted send's retry, so the notifier runs
+ *  every minute between the send's hourly tries. */
+async function minutes(n: number): Promise<void> {
+  for (let i = 0; i < n; i++) {
+    vi.setSystemTime(Date.now() + 60_000);
+    await sweep(env);
+  }
 }
 
 async function provider(sendId: string) {
@@ -234,7 +258,68 @@ describe("a provider outage past an hour (SPEC §8, §12)", () => {
     await ticks(LONG_OUTAGE_HALTS);
 
     expect(told()).toHaveLength(1);
+    expect(told()[0]!.subject).toMatch(
+      /is late: SES has refused it for its sending rate for over an hour$/,
+    );
     expect(told()[0]!.text).toContain("SES_MAX_SEND_RATE");
     expect(told()[0]!.text).not.toContain("health.aws.amazon.com");
+  });
+});
+
+describe("the email about an outage past an hour goes through the provider that is down (SPEC §8)", () => {
+  /** A send six halts into an outage, its email failing from the tick that passes the hour. */
+  async function pastTheHour() {
+    await seedConfirmed(addresses(3));
+    const send = await dueSend();
+    transport.outage = 1_000;
+    await ticks(LONG_OUTAGE_HALTS - 1);
+    failFakeNotify(1_000);
+    await tick();
+    return send;
+  }
+
+  it("is never given up while the outage stands, and is tried every few minutes, not every tick", async () => {
+    const send = await pastTheHour();
+
+    // Half an hour of ticks a minute apart, before the send's hourly retry.
+    await minutes(30);
+    // The try at the hour and one every five minutes after: seven, past the cap other
+    // notices are given up at, and still pending.
+    expect(MAX_NOTIFY_ATTEMPTS).toBeLessThan(7);
+    expect(await triesOf("unavailable")).toEqual([{ status: "pending", attempts: 7 }]);
+    expect((await sends.getSend(env.DB, send.id))!.halt_retries).toBe(LONG_OUTAGE_HALTS);
+    expect(told()).toEqual([]);
+  });
+
+  it("is sent once when the provider takes email again while the send still waits on its hourly retry", async () => {
+    const send = await pastTheHour();
+    // Long enough that any other notice would have been given up.
+    await minutes(40);
+
+    // The provider takes email again; the send's own retry is still most of an hour away.
+    failFakeNotify(0);
+    await minutes(UNAVAILABLE_NOTICE_RETRY_MS / 60_000);
+
+    expect(told()).toHaveLength(1);
+    expect(await triesOf("unavailable")).toMatchObject([{ status: "sent" }]);
+    const row = (await sends.getSend(env.DB, send.id))!;
+    expect([row.halt_reason, row.halt_retries]).toEqual(["unavailable", LONG_OUTAGE_HALTS]);
+
+    await minutes(10);
+    expect(told()).toHaveLength(1);
+  });
+
+  it("is cleared, never sent, when the send gets through first", async () => {
+    const send = await pastTheHour();
+    await minutes(20);
+
+    // The send's hourly retry finds the provider back, with the email still not out.
+    transport.outage = 0;
+    failFakeNotify(0);
+    await tick();
+
+    expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
+    expect(await triesOf("unavailable")).toMatchObject([{ status: "cleared" }]);
+    expect(told()).toEqual([]);
   });
 });

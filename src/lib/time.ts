@@ -56,6 +56,16 @@ export const NOTIFY_HORIZON_MS = 24 * 60 * 60 * 1000;
 export const NO_RECEIPTS_NOTICE_AFTER_MS = 6 * 60 * 60 * 1000;
 /** Tries a notification gets before it is recorded failed (one a tick). */
 export const MAX_NOTIFY_ATTEMPTS = 5;
+/**
+ * How far apart the email about an outage past an hour is tried while it keeps failing (SPEC
+ * §8). It goes through the provider that is down, so it is never given up while the outage
+ * stands, only sent or closed as cleared once the provider answers the send. Every few
+ * minutes rather than every tick: the send itself asks the provider once an hour by then, so a
+ * request a minute for each address would be most of what the instance sends to a provider that
+ * is down, while five minutes still gets the email out within minutes of the provider answering
+ * again, likely well before the send's own hourly retry ends the outage.
+ */
+export const UNAVAILABLE_NOTICE_RETRY_MS = 5 * 60 * 1000;
 /** Per-recipient retry cap before a delivery is marked unsent so the send can complete. */
 export const MAX_DELIVERY_ATTEMPTS = 5;
 

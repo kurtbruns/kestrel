@@ -122,7 +122,7 @@ export async function notifyPublisher(
   if (room < 1) {
     return;
   }
-  let due = await notifications.dueNotifications(db, room);
+  let due = await notifications.dueNotifications(db, room, now);
   if (due.length === 0) {
     return;
   }
@@ -204,7 +204,10 @@ export async function notifyPublisher(
       log.info("notify.sent", { ...about, kind: n.kind, channel: notifier.channel });
       continue;
     }
-    const giveUp = n.attempts + 1 >= MAX_NOTIFY_ATTEMPTS;
+    // The email about an outage past an hour goes through the provider that is down, so it
+    // is never given up while the outage stands: it ends sent, or cleared once the provider
+    // answers the send (`stillHolds`), and is tried every few minutes meanwhile (SPEC §8).
+    const giveUp = n.kind !== "unavailable" && n.attempts + 1 >= MAX_NOTIFY_ATTEMPTS;
     // One line for each address missed, without the address (logs never carry one).
     for (const m of missed) {
       log.warn("notify.failed", {
