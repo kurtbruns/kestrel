@@ -2,7 +2,7 @@
 
 Kestrel's own emails travel through SES, so two problems can never reach you that way: SES refusing your account, and Kestrel itself stopping. Two Cloudflare alerts are how you hear about them. Each is a Monitor that reads the app's logs once a minute and emails you when its condition holds. Setting them up takes about ten minutes in the Cloudflare dashboard, with no DNS change and no deploy.
 
-You can skip this page for a test or demo instance, or if monitoring of your own already reads the same logs. Without the alerts, the dashboard still shows a refusal when you open it, but nothing tells you Kestrel has stopped.
+This guide is optional, and recommended for any newsletter people rely on. Without the alerts, the dashboard still shows a refusal when you open it, but nothing tells you Kestrel has stopped. Monitoring of your own that reads the same logs can replace these Monitors or add to them.
 
 In this guide, you create the two Monitors, `SES can't send email` and `Kestrel has stopped`, and send a test alert to prove the first one end to end.
 
@@ -72,7 +72,7 @@ Each line the SES alert counts carries a `cause`, which says why email can't get
 - `quota`, for a send held because the daily sending quota is spent
 - `test`, from **Send a test alert**
 
-A later release can add a cause, and the Monitor alerts on it with no change, since its query counts every `alert.sending` line. Filter on `event` equal to `alert.sending` in the Worker's **Observability** tab to read the causes, as in [Read the logs](07-verify.md#7-read-the-logs). Count over minutes, never a day: over long ranges the log's counts are estimated from a sample.
+A later release can add a cause, and the Monitor alerts on it with no change, since its query counts every `alert.sending` line. Filter on `event` equal to `alert.sending` in the Worker's **Observability** tab to read the causes, as in [Read the logs](../get-started/07-verify.md#7-read-the-logs). Count over minutes, never a day: over long ranges the log's counts are estimated from a sample.
 
 ## Limits
 
@@ -85,5 +85,3 @@ Know these before you rely on the Monitors:
 - A destination address outside your Cloudflare account may have to be verified first. This hasn't been tested.
 
 When the test alert reaches your inbox, your instance can tell you about the two problems its own emails can't.
-
-Next, [go live](09-go-live.md).

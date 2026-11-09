@@ -94,19 +94,15 @@ If the bounce address has no flag, or the complaint address is still pending, SE
 
 ## 7. Read the logs
 
-The app writes a log line for each thing it does, and Cloudflare keeps them for a few days, depending on your plan. The alerts on the next page, [Set up alerts](08-alerts.md), read these logs for you, and this is where to look when one arrives.
+The app writes a log line for each thing it does, and Cloudflare keeps them for a few days, depending on your plan. They're the one record of what the app did and when, the once-a-minute schedule that sends posts included, so it's worth knowing where to look before you need it.
 
 1. In the Cloudflare dashboard, go to **Workers & Pages**, select your Worker, the `name` in the `production` block of `wrangler.jsonc`, and select **Observability**.
 
-1. Filter on `event` equal to `sweep.tick`. A line arrives every minute. If none arrive, the schedule probably isn't running, and deploying again with `--env production` registers it.
+1. Filter on `event` equal to `send.completed`. The post you sent yourself in section 4 is there, with its `sendId`.
 
-1. Filter on `event` equal to `send.completed`. Your send from section 4 is there.
+1. Filter on `level` equal to `error`. A healthy instance shows nothing, and this is the first place to look when something seems wrong.
 
-1. Filter on `event` equal to `send.scheduled`. Your two sends from section 4 are there, and `send.canceled` shows the one you canceled. Each line that records an action says who took it. Its `principal` is `human` or `service`, and its `client` names the program a person used, such as `editor`.
-
-1. Filter on `level` equal to `error`. A healthy instance shows nothing. An occasional `d1.unavailable` line at `warn` is a brief database stall the next run makes up for, and needs nothing. The same line every minute means work isn't getting done. The two alerts on the next page don't watch for either, so if you add Monitors of your own, one on `error` and one on `d1.unavailable` repeating are worth having.
-
-To follow one send, narrow the time range and filter on its `sendId`, since a long range may show only a sample. On the Free plan, Cloudflare stops keeping logs for the rest of the day once its daily allowance is used, as [its pricing page](https://developers.cloudflare.com/observability/pricing/) describes.
+A long time range may show only a sample, so narrow it when you follow one send by its `sendId`.
 
 ## 8. Clean up the test subscribers
 
@@ -120,6 +116,6 @@ The checks leave test addresses on the list. Erase them, so the publisher starts
 
 Erasing keeps only the address, so it's never mailed again, but the person can subscribe again through the subscribe page. Erasing your own address doesn't lock you out.
 
-When every section gives the result it describes, your instance works end to end.
+When every section gives the result it describes and AWS grants production access, your instance is ready to go live.
 
-Next, [set up alerts](08-alerts.md).
+Next, [go live](08-go-live.md).

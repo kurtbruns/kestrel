@@ -12,13 +12,13 @@ These are the steps to deploy a Kestrel instance and get it ready to send. Each 
 1. [Connect Amazon SES](get-started/05-ses.md)
 1. [Request production access](get-started/06-production-access.md)
 1. [Verify it works](get-started/07-verify.md)
-1. [Set up alerts](get-started/08-alerts.md)
-1. [Go live](get-started/09-go-live.md)
+1. [Go live](get-started/08-go-live.md)
 
 ## Guides
 
 Each one stands on its own. Pick the ones you need.
 
+- [Set up alerts](guides/03-alerts.md)
 - [Allow Claude to connect](guides/01-allow-claude.md)
 - [Automate with a service token](guides/02-automate.md)
 - [Rate-limit the subscribe form](guides/05-rate-limit.md)

@@ -15,13 +15,14 @@ Open the editor at `https://newsletter.example.com/dashboard/`. The dashboard's 
 Three kinds of email tell you about the instance, each by its own route:
 
 - Kestrel's notifications, through SES, from the publication's name followed by `via Kestrel`, to the addresses under **Settings → Notifications**. They cover each send and each problem a send runs into. They can't arrive while SES refuses the account.
-- Cloudflare's alerts, from the two Monitors in [Set up alerts](08-alerts.md), if you created them, from `noreply@notify.cloudflare.com`. They cover SES not sending email, such as SES refusing the account, and Kestrel itself stopping. Each problem with SES alerts you once, when it begins; the `[Resolved]` email that follows means only that no new problem has begun, so check the dashboard to see whether it has cleared.
+- Cloudflare's alerts, from the two Monitors in [Set up alerts](../guides/03-alerts.md), if you created them, from `noreply@notify.cloudflare.com`. They cover SES not sending email, such as SES refusing the account, and Kestrel itself stopping. Each problem with SES alerts you once, when it begins; the `[Resolved]` email that follows means only that no new problem has begun, so check the dashboard to see whether it has cleared.
 - AWS's own notices, to the email address of the AWS account, about the account itself, such as a review of your sending or a bill. Kestrel never sees them, so make sure that address is one someone reads.
 
 ## Optional guides
 
 Each one adds one thing, and you can come back to any of them later.
 
+- Before anyone relies on the newsletter, to hear when SES refuses your account or Kestrel stops: [Set up alerts](../guides/03-alerts.md)
 - Before you share your subscribe link: [Rate-limit the subscribe form](../guides/05-rate-limit.md)
 - To have Claude draft, proofread, and schedule posts: [Allow Claude to connect](../guides/01-allow-claude.md)
 - To run scripts with no one signed in: [Automate with a service token](../guides/02-automate.md)
