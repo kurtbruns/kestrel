@@ -291,6 +291,8 @@ export interface Send {
   web_link: "unlisted" | "archive";
   /** The render's warnings about the frozen copy (SPEC §5), as a JSON array of strings, kept by the freeze and every re-make; `[]` for a send frozen before they were kept. */
   render_warnings: string;
+  /** The display name the send goes out under (SPEC §9), frozen by the freeze and every re-make: "" for none, and null for a send frozen before the name was kept, which goes out under the rule as it stands when it fires. */
+  from_name: string | null;
   /** Why the provider refused this send's last batch as a whole (SPEC §12), or null once a batch is answered: `unavailable` retries on its own, `account` needs the operator. */
   halt_reason: HaltReason | null;
   /** What that refusal is about, for the advice shown with it. */

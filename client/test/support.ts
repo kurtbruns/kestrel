@@ -298,6 +298,7 @@ export function sendSummary(over: Partial<SendRowFixture> = {}): SendRowFixture 
     status: "scheduled",
     fire_at: Date.now() + 3_600_000,
     subject: "Owls",
+    from_name: null,
     recipient_count: 10,
     locked_until: null,
     scheduled_at: Date.now(),

@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DAILY_WRITES_SEND_RECIPIENTS } from "../shared/free_plan";
 import { DEFAULT_MIN_LEAD_MS } from "../shared/sends";
 import * as sendsDb from "../src/db/sends";
+import { updateSettings } from "../src/db/settings";
 import type { AppEnv } from "../src/env";
+import * as providers from "../src/providers";
 import { acceptFireAt, cancel, onTheMinute } from "../src/send/schedule";
 import { addresses, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, PNG_1x1, readJson } from "./support/http";
@@ -868,5 +870,73 @@ describe("a send that may spend D1's daily writes (SPEC §8)", () => {
     await resetDatabase();
     const paid = await scheduleTo(DAILY_WRITES_SEND_RECIPIENTS + 1, { SUBREQUEST_BUDGET: "1000" });
     expect(writes(paid.conditions)).toEqual([]);
+  });
+});
+
+// The display name a send goes out under is frozen at schedule, from the publication's name
+// over a bare From address, or the name written into the address at deploy (SPEC §9).
+describe("the sender's name frozen at schedule (SPEC §9)", () => {
+  const fromName = async (id: string) =>
+    (
+      await env.DB.prepare("SELECT from_name FROM sends WHERE id = ?")
+        .bind(id)
+        .first<{ from_name: string | null }>()
+    )?.from_name;
+  async function scheduleAs(vars: Record<string, string>, postId: string): Promise<string> {
+    const res = await fetchWith(vars, `/api/posts/${postId}/schedule`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
+    });
+    expect(res.status).toBe(201);
+    return (await readJson(res)).send.id;
+  }
+  const testOf = (postId: string) =>
+    SELF.fetch(`${base}/api/posts/${postId}/test`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ to: "me@example.com" }),
+    });
+
+  it("freezes the publication's name over a bare address, and none while it has none", async () => {
+    const unnamed = await scheduleAs(
+      { FROM_ADDRESS: "newsletter@send.example.com" },
+      await makeDraft(),
+    );
+    expect(await fromName(unnamed)).toBe("");
+    await updateSettings(env.DB, { publication: { name: "Field Notes" } });
+    const named = await scheduleAs(
+      { FROM_ADDRESS: "newsletter@send.example.com" },
+      await makeDraft(),
+    );
+    expect(await fromName(named)).toBe("Field Notes");
+  });
+
+  it("freezes a name written into the From address over the publication's", async () => {
+    await updateSettings(env.DB, { publication: { name: "Field Notes" } });
+    const id = await scheduleAs(
+      { FROM_ADDRESS: '"Jane" <newsletter@send.example.com>' },
+      await makeDraft(),
+    );
+    expect(await fromName(id)).toBe("Jane");
+  });
+
+  it("a test of a scheduled send goes out under its frozen name, and a draft's under the name now (I5)", async () => {
+    const spy = vi.spyOn(providers, "getProvider");
+    await updateSettings(env.DB, { publication: { name: "Field Notes" } });
+    const scheduled = await makeDraft();
+    await scheduleAs({}, scheduled);
+    // A rename that reached no re-make.
+    await updateSettings(env.DB, { publication: { name: "Renamed" } });
+    expect((await testOf(scheduled)).status).toBe(200);
+    expect(spy.mock.calls.at(-1)?.[2]).toEqual({
+      name: "Field Notes",
+      address: "newsletter@send.example.com",
+    });
+    expect((await testOf(await makeDraft())).status).toBe(200);
+    expect(spy.mock.calls.at(-1)?.[2]).toEqual({
+      name: "Renamed",
+      address: "newsletter@send.example.com",
+    });
   });
 });

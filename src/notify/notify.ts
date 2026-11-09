@@ -33,6 +33,7 @@ import { unwrap } from "../lib/unwrap";
 import { type Budget, metered } from "../send/budget";
 import { idleSince } from "../send/stuck";
 import { isWedged } from "../send/wedged";
+import { senderFrom } from "../services/sender";
 import { Contacts, sendingView } from "../services/sending";
 import { getNotifier } from "./channel";
 import {
@@ -136,14 +137,15 @@ export async function notifyPublisher(
       return;
     }
   }
-  const { to } = (await getSettings(db)).notifications;
+  const settings = await getSettings(db);
+  const { to } = settings.notifications;
   if (to.length === 0) {
     await notifications.closeUnaddressed(db, now);
     return;
   }
   await notifications.claimNotifications(db, due, now);
 
-  const notifier = getNotifier(config, env);
+  const notifier = getNotifier(config, env, senderFrom(settings, config));
   for (const [i, n] of due.entries()) {
     // Every claimed notification still to come needs its outcome recorded, this one included.
     const recordsLeft = due.length - i;

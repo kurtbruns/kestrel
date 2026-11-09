@@ -34,7 +34,7 @@ This is the `production` block a new instance starts with, here for an instance 
     "APP_ORIGIN": "https://newsletter.example.com",
     "ARCHIVE_BASE_PATH": "/archive",
     "SENDING_DOMAIN": "send.example.com",
-    "FROM_ADDRESS": "Newsletter <newsletter@send.example.com>",
+    "FROM_ADDRESS": "newsletter@send.example.com",
     "AWS_REGION": "us-east-1"
   }
 }
@@ -68,9 +68,9 @@ Vars go in the environment block's `vars`. Every value is a string.
 
 - `FROM_ADDRESS` required with a real provider
 
-    The `From:` of every email, and the identity your provider authenticates. Refused unless it's an email address, optionally with a display name in front, like `Name <address>`, and never on `example.com`, unless `PROVIDER` is `fake`. With Amazon SES, when no identity covering it is verified for sending in `AWS_REGION`, **Settings → Email sender** says so in red within about ten minutes, without sending anything.
+    The address every email comes from, and the identity your provider authenticates. Refused unless it's an email address, and never on `example.com`, unless `PROVIDER` is `fake`. With Amazon SES, when no identity covering it is verified for sending in `AWS_REGION`, **Settings → Email sender** says so in red within about ten minutes, without sending anything.
 
-    It isn't the publication's name, tagline, or logo. You set those in the editor, under **Settings → Publication identity**. Until you do, the From address's display name stands in for the name, and with neither, the emails and reader pages show no name at all.
+    The name readers see beside the address is the publication's name, set in the editor under **Settings → Publication identity**, along with the tagline and logo. Until the publisher sets one, emails go out with no display name, and the reader pages show no name. To send under a fixed name instead, whatever the publication is called, write it in front of the address, like `Name <address>`; **Settings → Email sender** then shows that name and says it's set here. An instance deployed before the name followed the publication keeps its sender this way.
 
 - `SENDING_DOMAIN` optional
 

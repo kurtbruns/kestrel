@@ -65,6 +65,7 @@ function row(over: Partial<SendSummary>): SendSummary {
     audience_resolved_at: null,
     remade_at: null,
     tested_at: null,
+    from_name: null,
     halt_reason: null,
     halt_cause: null,
     halt_error: null,

@@ -220,6 +220,7 @@ describe("buildSendView — derived phase", () => {
       subject: "s",
       web_link: "unlisted",
       render_warnings: "[]",
+      from_name: null,
       recipient_count: 0,
       locked_until: null,
       scheduled_at: Date.now(),

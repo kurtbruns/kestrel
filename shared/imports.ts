@@ -9,7 +9,6 @@
 // dependency-free: the Worker and the editor both import it.
 
 import { isValidEmail, normalizeEmail } from "./email";
-import { publicationName } from "./publication";
 import { strongerCause, type UnsubscribeCause } from "./subscribers";
 
 /** The format's first version. */
@@ -891,10 +890,10 @@ export const ATTESTATION = {
   text: "Everyone I’m importing as subscribed opted in to receive [publication]. This isn’t a purchased, rented, or scraped list.",
 } as const;
 
-/** The publication as the attestation names it: by the name every surface shows (SPEC §9),
- *  its own or else the sender's display name, and as "this newsletter" when it has neither. */
-export function attestationPublication(name: string, fromAddress: string): string {
-  return publicationName(name, fromAddress) || "this newsletter";
+/** The publication as the attestation names it: by its name, the one every surface shows
+ *  (SPEC §9), and as "this newsletter" while it has none. */
+export function attestationPublication(name: string): string {
+  return name || "this newsletter";
 }
 
 /** The attestation's words for a publication named as `attestationPublication` names it. */

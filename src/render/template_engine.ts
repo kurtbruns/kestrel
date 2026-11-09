@@ -25,7 +25,7 @@
 
 import { initWasm, inline } from "@css-inline/css-inline-wasm";
 import wasmModule from "@css-inline/css-inline-wasm/index_bg.wasm";
-import { publicationName } from "../../shared/publication";
+import { senderName } from "../../shared/publication";
 import type { IdentityField } from "../../shared/settings";
 import type { AppSettings } from "../db/settings";
 import { publicationLogoUrl } from "../db/settings";
@@ -225,14 +225,16 @@ export function identityFieldsInUse(template: string): IdentityField[] {
 }
 
 /**
- * Whether a settings save changes what the render path would put into an email:
- * the template's text, or an identity field the template renders (`identityFieldsInUse`,
- * taken from `next`, the template the save leaves in place). Compared on the resolved
- * branding, not the stored strings, so saving the built-in default's text over a blank
- * template, or a name equal to the From display name over a blank one, is no change.
+ * Whether a settings save changes what an email would go out as: the template's text, an
+ * identity field the template renders (`identityFieldsInUse`, taken from `next`, the
+ * template the save leaves in place), or the sender's display name, which the publication
+ * name reaches every email as whether or not the template prints it (SPEC §9). Compared on
+ * the resolved branding, not the stored strings, so saving the built-in default's text over
+ * a blank template is no change, and a rename under a name written into the deploy-time
+ * From address reaches no email the template doesn't print it in.
  */
 export function brandingDiffers(current: EmailBranding, next: EmailBranding): boolean {
-  if (current.template !== next.template) {
+  if (current.template !== next.template || current.senderName !== next.senderName) {
     return true;
   }
   return identityFieldsInUse(next.template).some(
@@ -384,35 +386,45 @@ export async function inlineEmailCss(html: string): Promise<string> {
 
 // --- branding resolution ---------------------------------------------------------
 
-/** Everything the render path needs from settings to fill a template: the template
- *  itself plus the publication identity that a template may show inside the email. */
+/** Everything a freeze takes from settings and deploy config to make an email: the
+ *  template, the publication identity a template may show inside it, and the display
+ *  name it goes out under, which is frozen beside the render (SPEC §9). */
 export interface EmailBranding {
   template: string;
   name: string;
   tagline: string;
   logoUrl: string;
   address: string;
+  /** The `From:` display name the sender rule gives (`senderName`): "" sends with none. */
+  senderName: string;
 }
 
-/** Resolve the branding the email carries from stored settings + deploy config. A
- *  blank template falls back to the built-in default; a blank name falls back to the
- *  From display name, and with neither the email carries no name rather than a made-up
- *  one (SPEC §9). */
+/** Resolve the branding the email carries from stored settings + deploy config. A blank
+ *  template falls back to the built-in default; a blank name is no name, inside the email
+ *  and on the `From:` alike, never a made-up one (SPEC §9). */
 export function resolveBranding(settings: AppSettings, config: Config): EmailBranding {
   const p = settings.publication;
   return {
     template: settings.emailTemplate.trim() ? settings.emailTemplate : DEFAULT_EMAIL_TEMPLATE,
-    name: publicationName(p.name, config.fromAddress),
+    name: p.name,
     tagline: p.tagline,
     logoUrl: publicationLogoUrl(config.mediaPublicBase, p.logo),
     address: p.address,
+    senderName: senderName(p.name, config.fromAddress),
   };
 }
 
 /** Neutral branding (the default template, empty identity) — for tests and the dev
  *  seed, which don't need real settings to exercise the render path. */
 export function defaultBranding(): EmailBranding {
-  return { template: DEFAULT_EMAIL_TEMPLATE, name: "", tagline: "", logoUrl: "", address: "" };
+  return {
+    template: DEFAULT_EMAIL_TEMPLATE,
+    name: "",
+    tagline: "",
+    logoUrl: "",
+    address: "",
+    senderName: "",
+  };
 }
 
 /** The built-in template — a signed sign-off (logo, name, tagline) over a "Powered by

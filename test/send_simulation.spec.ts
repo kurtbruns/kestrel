@@ -227,9 +227,9 @@ describe("SIMULATE_SENDS", () => {
 
   it("swaps the provider only for the simulator, and the plain fake stays when it is off", () => {
     expect(simulationActive(getConfig(env))).toBe(false);
-    expect(getProvider(getConfig(env), env)).not.toBeInstanceOf(SimProvider);
+    expect(getProvider(getConfig(env), env, null)).not.toBeInstanceOf(SimProvider);
     const on = withVars({ SIMULATE_SENDS: "ses" });
-    expect(getProvider(getConfig(on), on)).toBeInstanceOf(SimProvider);
+    expect(getProvider(getConfig(on), on, null)).toBeInstanceOf(SimProvider);
   });
 
   it("drains nothing while it is off", async () => {
@@ -248,6 +248,7 @@ describe("the SES profile, with the real adapter's traits", () => {
     const ses: EmailProvider = new sesAdapter.SesProvider(
       getConfig(withVars(sesVars)),
       withVars(sesVars),
+      null,
     );
     const sim = new SimProvider(
       { profile: "ses", faults: "realistic", account: null, refuse: null },

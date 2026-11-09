@@ -217,7 +217,7 @@ describe("settings view", () => {
     await open();
     const note = $("#replyNote");
     expect(note.closest(".set-kv-v")?.querySelector(".mono")?.textContent).toBe(
-      "Birds <hello@send.birds.example>",
+      "hello@send.birds.example",
     );
     expect(note.textContent).toBe("Readers’ replies go to this address. Forward it to your inbox.");
     expect($<HTMLAnchorElement>("a", note).getAttribute("href")).toBe(
@@ -883,15 +883,9 @@ describe("settings view", () => {
 
   it("names the publication in the page's line only while it has a name, live", async () => {
     await open();
-    typeInto($<HTMLInputElement>("#setName"), "");
-    // The sender's display name stands in, so the page still has a name.
     expect($("#subscribePageLine").textContent).toContain("your publication’s name");
-    const unnamed = response({
-      settings: { publication: { ...settings().publication, name: "" } },
-    });
-    unnamed.deployment.from_address = "hello@send.birds.example";
-    unmount();
-    await open([{ path: "/api/settings", reply: () => unnamed }]);
+    // The sending address's name ("Birds") never stands in (SPEC §9).
+    typeInto($<HTMLInputElement>("#setName"), "");
     expect($("#subscribePageLine").textContent).toBe(
       "A public page with a sign-up form ready to go.",
     );
@@ -912,6 +906,60 @@ describe("settings view", () => {
     expect($("#embedCode").textContent).toContain("Subscribe to Owls Monthly");
   });
 
+  it("shows the sender as readers see it: the publication's name over a bare address, following the name as it's typed (SPEC §9)", async () => {
+    const bare = response();
+    bare.deployment.from_address = "hello@send.birds.example";
+    await open([{ path: "/api/settings", reply: () => bare }]);
+    const from = () => $(".set-card.sunken .set-inbox-from").textContent;
+    const avatar = () => $("#senderAvatar").textContent;
+    expect(from()).toBe("Birds Weekly");
+    expect(avatar()).toBe("B");
+    expect($(".set-inbox-addr").textContent).toBe("hello@send.birds.example");
+    // The card says where each half comes from, linking the section that sets the name.
+    const note = $(".set-card.sunken .set-ro-note span");
+    expect(note.textContent).toBe(
+      "The name is your publication’s, from Publication identity. The address is set at deploy in wrangler.jsonc, with the AWS keys stored as secrets, so it can’t be edited here. Change it in the setup guide, then redeploy. Credentials are never shown.",
+    );
+    expect($<HTMLAnchorElement>("a", note).getAttribute("href")).toBe(
+      "#/settings/publication-identity",
+    );
+    expect($("#setName").nextElementSibling?.textContent).toBe(
+      "Also the name your emails come from. Blank sends them with no name.",
+    );
+    // The inbox rows follow the name live, the confirmation email's too.
+    typeInto($<HTMLInputElement>("#setName"), "Owls Monthly");
+    expect(from()).toBe("Owls Monthly");
+    expect(avatar()).toBe("O");
+    expect($("#cePvFrom").textContent).toBe("Owls Monthly");
+    // With no name, a reader's inbox shows the address.
+    typeInto($<HTMLInputElement>("#setName"), "");
+    expect(from()).toBe("hello@send.birds.example");
+    expect(avatar()).toBe("H");
+    expect($("#cePvFrom").textContent).toBe("hello@send.birds.example");
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("shows a name written into the From address as the sender, whatever the publication is called, and says it's set at deploy (SPEC §9)", async () => {
+    await open(); // "Birds <hello@send.birds.example>"
+    const from = () => $(".set-card.sunken .set-inbox-from").textContent;
+    expect(from()).toBe("Birds");
+    expect($(".set-inbox-addr").textContent).toBe("hello@send.birds.example");
+    expect($(".set-card.sunken .set-ro-note span").textContent).toBe(
+      "The address, and the name “Birds” written in with it, are set at deploy in wrangler.jsonc, with the AWS keys stored as secrets, so neither can be edited here. To send under your publication’s name instead, leave the name out of the address (the setup guide shows how), then redeploy. Credentials are never shown.",
+    );
+    expect($("#setName").nextElementSibling?.textContent).toBe(
+      "Your emails come from “Birds”, a name set at deploy, whatever you put here.",
+    );
+    typeInto($<HTMLInputElement>("#setName"), "Owls Monthly");
+    expect(from()).toBe("Birds");
+    expect($("#cePvFrom").textContent).toBe("Birds");
+    // The identity still reaches the email through the template, so the note holds.
+    expect($('[data-group="publication"] .set-note > span').textContent).toBe(
+      "Shown in every email.",
+    );
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("offers an embed that reads whole when the publication has no name (SPEC §9)", async () => {
     const writeText = stubClipboard();
     const unnamed = response({
@@ -927,7 +975,7 @@ describe("settings view", () => {
     expect($("#embedCode").textContent).toContain("\n    Subscribe\n");
     $("[data-embed='styled']").click();
     expect($("#setName").nextElementSibling?.textContent).toBe(
-      "Blank leaves the publication unnamed, since the email “From” has no name.",
+      "Also the name your emails come from. Blank sends them with no name.",
     );
     $("#embedCopy button").click();
     await vi.advanceTimersByTimeAsync(0);

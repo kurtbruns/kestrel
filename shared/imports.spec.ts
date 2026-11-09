@@ -468,14 +468,10 @@ describe("a page of the export on Workers Free (SPEC §8)", () => {
 
 describe("attestationPublication (SPEC §9)", () => {
   it("names the publication by the name it set", () => {
-    expect(attestationPublication("Field Notes", "Birds <a@b.c>")).toBe("Field Notes");
+    expect(attestationPublication("Field Notes")).toBe("Field Notes");
   });
 
-  it("falls back to the sender's display name", () => {
-    expect(attestationPublication("", '"Birds Weekly" <a@b.c>')).toBe("Birds Weekly");
-  });
-
-  it("calls it this newsletter with neither", () => {
-    expect(attestationPublication("", "a@b.c")).toBe("this newsletter");
+  it("calls it this newsletter while it has no name", () => {
+    expect(attestationPublication("")).toBe("this newsletter");
   });
 });

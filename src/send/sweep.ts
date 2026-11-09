@@ -120,7 +120,8 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
   const whole = new Budget(config.subrequestBudget);
   const budget = new Budget(whole.limit - held, whole.queryLimit - held);
   const db = metered(env.DB, budget);
-  const window = new SendWindow(getProvider(config, env).maxRequestRate);
+  // Null sender: this adapter is read for its traits and never sends.
+  const window = new SendWindow(getProvider(config, env, null).maxRequestRate);
   // The send rate this tick's sends keep to, read the first time a send runs. A read that
   // fails paces by the deployment's own rate instead, so reading the account never stops a
   // send (SPEC §13).

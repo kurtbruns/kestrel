@@ -17,7 +17,7 @@ import { icon } from "../ui/icons";
 import { busy, toast } from "../ui/widgets";
 import { addressListHtml, mountAddressList } from "./address_list";
 import { providerLabel } from "./deploy";
-import { chip, message, type SectionHandle, type SettingsPage, secHead } from "./page";
+import { chip, message, type SectionHandle, type SettingsPage, secHead, senderLine } from "./page";
 
 /** How the deploy-time notification channel reads to the publisher. */
 function notifyChannelLabel(
@@ -90,7 +90,7 @@ export function notificationsSection(page: SettingsPage): Html {
         </div>
         <div class="set-kv" style="border-top:1px solid var(--line)">
           <div class="set-kv-k">Sent through</div><div class="set-kv-v">${notifyChannelLabel(d.notify_channel, d.provider)}</div>
-          <div class="set-kv-k">From address</div><div class="set-kv-v"><span class="mono">${d.notify_from}</span></div>
+          <div class="set-kv-k">From address</div><div class="set-kv-v"><span class="mono">${d.notify_channel === "provider" ? senderLine(page.sender(page.saved().name)) : d.notify_from}</span></div>
           <div class="set-kv-k">Last notification</div><div class="set-kv-v" id="notifyStatus">${notificationStatusHtml(page.data.notification_status)}</div>
         </div>
         <div class="set-note">${icon("readonly")}<span>The channel and its sender are set at deploy. ${d.notify_channel === "provider" ? "Notifications go through your newsletter’s own provider, so one about the provider refusing your account cannot reach you; Cloudflare’s email avoids that. " : ""}See the <a class="set-link" href="#/docs/notifications">setup guide</a>.</span></div>

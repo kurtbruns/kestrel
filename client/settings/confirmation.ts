@@ -10,7 +10,8 @@ import { icon } from "../ui/icons";
 import { chip, monogram, type SectionHandle, type SettingsPage, secHead } from "./page";
 
 export function confirmationSection(page: SettingsPage): Html {
-  const { state, fromName } = page;
+  const { state } = page;
+  const s = page.sender();
   return html`
     <section class="set-sec">
       ${secHead("confirmation-email", chip("editable", "Editable"))}
@@ -24,9 +25,9 @@ export function confirmationSection(page: SettingsPage): Html {
         </div>
         <div id="cePreviewBody">
           <div class="set-inbox">
-            <div class="set-inbox-avatar" id="cePvAvatar">${monogram(state.name, fromName)}</div>
+            <div class="set-inbox-avatar" id="cePvAvatar">${monogram(s.name, s.address)}</div>
             <div class="set-inbox-body">
-              <div class="set-inbox-top"><span class="set-inbox-from" id="cePvFrom">${state.name || fromName}</span><span class="set-inbox-time">now</span></div>
+              <div class="set-inbox-top"><span class="set-inbox-from" id="cePvFrom">${s.name || s.address}</span><span class="set-inbox-time">now</span></div>
               <div class="set-inbox-subj" id="cePvSubject"></div>
             </div>
           </div>
@@ -101,19 +102,21 @@ export function mountConfirmation(root: HTMLElement, page: SettingsPage): Sectio
   };
   const repaint = () => {
     const c = state.confirmation;
-    pv.avatar.textContent = monogram(state.name, page.fromName);
-    pv.from.textContent = state.name || page.fromName;
+    // The inbox row shows the sender as a reader's inbox does: its name, else its address.
+    const s = page.sender();
+    pv.avatar.textContent = monogram(s.name, s.address);
+    pv.from.textContent = s.name || s.address;
     pv.subject.textContent = c.subject.trim() || ceDefault.subject || "";
     pv.body.textContent = c.body.trim() || ceDefault.body || "";
     pv.button.textContent = c.button_label.trim() || ceDefault.button_label || "Confirm";
     pv.foot.textContent = c.reassurance;
     pv.foot.hidden = !c.reassurance.trim();
     // The publication masthead (logo + name + tagline) up top. Mirrors masthead() in
-    // src/emails/system.ts exactly: it uses the identity as the email resolves it (name
-    // = publication name or the From display name, "" if neither), omits the logo cell
-    // when there's no logo (rather than showing a monogram the email won't have), and
-    // degrades to nothing when there's neither a name nor a logo.
-    const mastName = state.name || page.fromDisplay;
+    // src/emails/system.ts exactly: it uses the identity as the email resolves it (the
+    // publication name, "" while none is set), omits the logo cell when there's no logo
+    // (rather than showing a monogram the email won't have), and degrades to nothing when
+    // there's neither a name nor a logo.
+    const mastName = state.name;
     const hasLogo = Boolean(state.logoUrl);
     const showMast = hasLogo || Boolean(mastName);
     pv.mast.hidden = !showMast;

@@ -79,28 +79,6 @@ export function sesTemplateData(ctx: DeliveryContext): Record<string, string> {
 
 const ASCII_ONLY = /^[\x20-\x7e]*$/;
 
-/** Standard base64 of a UTF-8 string. */
-function base64Utf8(s: string): string {
-  let bin = "";
-  for (const byte of new TextEncoder().encode(s)) {
-    bin += String.fromCharCode(byte);
-  }
-  return btoa(bin);
-}
-
-/**
- * The from-line as SES's `FromEmailAddress` takes it: a display name with non-ASCII in it
- * goes as an RFC 2047 encoded-word, which SES requires; anything else as written.
- */
-export function sesFromAddress(from: string): string {
-  const m = /^\s*(.*?)\s*<([^>]+)>\s*$/.exec(from);
-  if (!m || ASCII_ONLY.test(from)) {
-    return from;
-  }
-  const name = (m[1] ?? "").replace(/^"(.*)"$/, "$1");
-  return `=?utf-8?B?${base64Utf8(name)}?= <${m[2]}>`;
-}
-
 /** Whether SES can take the address as a destination: it has no SMTPUTF8, so the local
  *  part must be ASCII, and a domain must already be in its ASCII (Punycode) form. */
 export function sesCanAddress(email: string): boolean {

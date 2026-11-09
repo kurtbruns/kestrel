@@ -920,7 +920,10 @@ describe("the channels", () => {
 
   it("the provider fallback delivers through the newsletter's provider, and fails with its words when it refuses", async () => {
     const config = { ...getConfig(env), provider: "ses" as const };
-    const notifier = new ProviderNotifier(config, env as AppEnv);
+    const notifier = new ProviderNotifier(config, env as AppEnv, {
+      name: "Birds",
+      address: "news@send.birds.example",
+    });
     await notifier.send(
       PUBLISHER,
       { subject: "S", text: "T", html: "" },

@@ -124,10 +124,10 @@ describe("GET /llms.txt", () => {
     expect((await res.text()).split("\n")[0]).toBe("# Marsh Lane");
   });
 
-  it("falls back to the sender's display name, as every reader page does", async () => {
-    // A sender named unlike the no-name heading ("Newsletter"), so the fallback is what's read.
+  it("stays nameless until the publisher names it, whatever name the sending address carries (SPEC §9)", async () => {
+    // A sender named "Birds": the sender's name, never the publication's.
     const res = await fetchWith(NOT_CONNECTED_DEPLOY, "/llms.txt");
-    expect((await res.text()).split("\n")[0]).toBe("# Birds");
+    expect((await res.text()).split("\n")[0]).toBe("# Newsletter");
   });
 
   it("names paths that answer: public ones openly, gated ones only signed in", async () => {

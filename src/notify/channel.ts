@@ -12,9 +12,11 @@
  * handed a subscriber, a send's audience, or a delivery row.
  */
 
+import type { Sender } from "../../shared/publication";
 import type { AppEnv, Config, NotifyChannel } from "../env";
 import { getProvider, perRecipient } from "../providers";
 import type { RenderedEmail } from "../render/render";
+
 import { type Contacts, contactOutcome } from "../services/sending";
 import { FakeNotifier } from "./fake";
 
@@ -29,7 +31,11 @@ export interface Notifier {
   send(to: string, message: RenderedEmail, key: string, contacts: Contacts): Promise<void>;
 }
 
-export function getNotifier(config: Config, env: AppEnv): Notifier {
+/** The channel's notifier. `sender` is who a notification through the newsletter's own
+ *  provider goes out as, the same sender as every other email it sends (SPEC §9), resolved
+ *  once by the caller from the settings it already holds; the other channels have a sender
+ *  of their own and ignore it. */
+export function getNotifier(config: Config, env: AppEnv, sender: Sender): Notifier {
   switch (config.notifyChannel) {
     case "cloudflare":
       if (env.NOTIFY) {
@@ -38,7 +44,7 @@ export function getNotifier(config: Config, env: AppEnv): Notifier {
       // getConfig picks this channel only when the binding is declared.
       throw new Error("the NOTIFY binding is not declared");
     case "provider":
-      return new ProviderNotifier(config, env);
+      return new ProviderNotifier(config, env, sender);
     default:
       return new FakeNotifier();
   }
@@ -87,10 +93,11 @@ export class ProviderNotifier implements Notifier {
   constructor(
     private readonly config: Config,
     private readonly env: AppEnv,
+    private readonly sender: Sender,
   ) {}
 
   async send(to: string, message: RenderedEmail, key: string, contacts: Contacts): Promise<void> {
-    const provider = getProvider(this.config, this.env);
+    const provider = getProvider(this.config, this.env, this.sender);
     // Transactional, like the confirmation email: no unsubscribe link, since it goes to
     // the publisher about their own sends and never to the list.
     const recipients = [{ email: to, unsubscribeUrl: "" }];

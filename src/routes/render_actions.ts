@@ -39,6 +39,7 @@ import {
 import { type EmailBranding, resolveBranding } from "../render/template_engine";
 import type { RequestContext } from "../router";
 import { param } from "../router";
+import { senderFrom, sendSender } from "../services/sender";
 import { sendTest } from "../services/test_send";
 import { webVersion } from "./archive";
 import { testUnsubscribeUrl } from "./public";
@@ -73,8 +74,9 @@ interface PostEmail {
   input: RenderInput;
   email: RenderedEmail;
   warnings: string[];
-  /** The send whose frozen copy this is; null for a draft's live render. */
-  frozen: { id: string } | null;
+  /** The send whose frozen copy this is, with the display name frozen beside it (SPEC §9);
+   *  null for a draft's live render. */
+  frozen: { id: string; from_name: string | null } | null;
   /** When the post went out, or will: the send's start, else its fire time, or now for a
    *  draft. The date the web version's masthead carries, as the post page dates it. */
   dateMs: number;
@@ -95,7 +97,7 @@ async function loadPostEmail(c: RequestContext): Promise<PostEmail> {
       // What the render said when it froze this copy, kept with it: the copy is what goes
       // out, so a test of it reports what it found (SPEC §5).
       warnings: renderWarnings(send),
-      frozen: { id: send.id },
+      frozen: { id: send.id, from_name: send.from_name },
       dateMs: send.started_at ?? send.fire_at,
     };
   }
@@ -185,7 +187,12 @@ export async function test(c: RequestContext): Promise<Response> {
   // that copy while the provider was answering.
   const readAt = Date.now();
   const { input, email, warnings, frozen } = await loadPostEmail(c);
-  const provider = getProvider(c.config, c.env);
+  // A test of a scheduled send goes out as the send will, under its frozen name (I5).
+  const provider = getProvider(
+    c.config,
+    c.env,
+    await sendSender(c.env.DB, c.config, frozen ?? { from_name: null }),
+  );
   // A test uses the same per-recipient substitution path as a real send.
   const unsubscribeUrl = testUnsubscribeUrl(c.config);
   const recipients = [{ email: to, unsubscribeUrl }];
@@ -349,7 +356,7 @@ export async function templateTest(c: RequestContext): Promise<Response> {
   requireConnectedProvider(c.config);
 
   const result = await render(sampleRenderInput(), c.config, resolveBranding(settings, c.config));
-  const provider = getProvider(c.config, c.env);
+  const provider = getProvider(c.config, c.env, senderFrom(settings, c.config));
   const unsubscribeUrl = testUnsubscribeUrl(c.config);
   // A deliberate manual test is a fresh send each press (not a retry), so it carries a
   // key of its own, as a post test does. The tag names the send too (the dev simulation

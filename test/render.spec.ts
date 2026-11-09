@@ -450,6 +450,7 @@ describe("render (the single render path)", async () => {
       tagline: "t",
       logoUrl: "",
       address: "",
+      senderName: "",
     };
     const result = await render(
       { post: post(), revision: revision("hi"), images: [] },
@@ -477,6 +478,7 @@ describe("render (the single render path)", async () => {
       tagline: "t",
       logoUrl: "",
       address: "",
+      senderName: "",
     };
     const result = await render(
       { post: post(), revision: revision("# Hi\n\nbody"), images: [] },
@@ -511,6 +513,7 @@ describe("render (the single render path)", async () => {
       tagline: "Notes on keeping a small newsletter",
       logoUrl: "https://media.example/branding/logo?v=1",
       address: "123 Marsh Lane",
+      senderName: "",
     };
     const result = await render(
       { post: post(), revision: revision("# Hi\n\nbody"), images: [] },
@@ -563,6 +566,7 @@ describe("render (the single render path)", async () => {
       tagline: "",
       logoUrl: "",
       address: "",
+      senderName: "",
     };
     const result = await render(
       { post: post(), revision: revision("hi"), images: [] },
@@ -615,34 +619,51 @@ describe("email-only regions the HTML parser rearranges", () => {
   });
 });
 
-// The email names the publication as the reader pages do: the publisher's name, else the
-// sender's display name, else none at all, never a made-up one.
+// The email names the publication as the reader pages do: the publisher's name, else none
+// at all, never a made-up one, and never the sending address's name, which is the sender's.
 describe("the publication name in the email (SPEC §9)", () => {
   const input = () => ({ post: post(), revision: revision("# Hi\n\nbody"), images: [] });
   const signOffName = (html: string) => /<div class="name"[^>]*>([^<]*)<\/div>/.exec(html)?.[1];
 
-  async function emailFrom(fromAddress: string, name = ""): Promise<string> {
+  function brandingFrom(fromAddress: string, name = "") {
     const cfg = { ...config, fromAddress };
     const settings = {
       ...DEFAULT_SETTINGS,
       publication: { ...DEFAULT_SETTINGS.publication, name },
     };
-    return (await render(input(), cfg, resolveBranding(settings, cfg))).html;
+    return { cfg, branding: resolveBranding(settings, cfg) };
   }
 
-  it("signs off with no name when neither the publisher nor the sender names it", async () => {
-    for (const from of ["news@send.example", "<news@send.example>"]) {
+  async function emailFrom(fromAddress: string, name = ""): Promise<string> {
+    const { cfg, branding } = brandingFrom(fromAddress, name);
+    return (await render(input(), cfg, branding)).html;
+  }
+
+  it("signs off with no name while the publisher has set none, whatever the sending address carries", async () => {
+    for (const from of [
+      "news@send.example",
+      "<news@send.example>",
+      '"Birds Weekly" <news@send.example>',
+    ]) {
       const html = await emailFrom(from);
       expect(signOffName(html), from).toBe("");
-      expect(html, from).not.toContain("Newsletter");
+      expect(html, from).not.toContain("Birds Weekly");
     }
   });
 
-  it("signs off with the sender's display name, or the publisher's name over it", async () => {
-    expect(signOffName(await emailFrom('"Birds Weekly" <news@send.example>'))).toBe("Birds Weekly");
-    expect(signOffName(await emailFrom("Birds Weekly <news@send.example>"))).toBe("Birds Weekly");
+  it("signs off with the publisher's name", async () => {
     expect(signOffName(await emailFrom("Other <news@send.example>", "Field Notes"))).toBe(
       "Field Notes",
     );
+  });
+
+  it("carries the sender's display name beside the render: the publication's name over a bare address, a name in the address over it, and none with neither", () => {
+    expect(brandingFrom("news@send.example", "Field Notes").branding.senderName).toBe(
+      "Field Notes",
+    );
+    expect(brandingFrom("Other <news@send.example>", "Field Notes").branding.senderName).toBe(
+      "Other",
+    );
+    expect(brandingFrom("news@send.example").branding.senderName).toBe("");
   });
 });

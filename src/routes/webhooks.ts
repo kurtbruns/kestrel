@@ -16,7 +16,8 @@ import type { RequestContext } from "../router";
 import { applyDeliveryEvents } from "../services/webhook_events";
 
 async function handle(c: RequestContext): Promise<Response> {
-  const provider = getProvider(c.config, c.env);
+  // Null sender: this adapter parses the webhook and never sends.
+  const provider = getProvider(c.config, c.env, null);
   const { events, response } = await provider.parseWebhook(c.req, c.env);
   // Before the events are applied: one line a request, even a handshake or a refused
   // signature, so a provider that has stopped calling is visible by the silence.

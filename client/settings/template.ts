@@ -2,7 +2,6 @@
 // editor.
 
 import { emailLogoHtml } from "../../shared/email_logo";
-import { publicationName } from "../../shared/publication";
 import {
   ADDRESS_NOT_PRINTED,
   type SettingsPatchBody,
@@ -479,10 +478,9 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
     return;
   }
   const s = data.settings;
-  const d = data.deployment;
   const p = s.publication;
   const identity: TemplateIdentity = {
-    name: publicationName(p.name || "", d.from_address),
+    name: p.name || "",
     tagline: p.tagline || "",
     logoUrl: p.logo_url || "",
     address: p.address || "",
