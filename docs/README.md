@@ -20,7 +20,6 @@ Each one stands on its own. Pick the ones you need.
 
 - [Allow Claude to connect](guides/01-allow-claude.md)
 - [Automate with a service token](guides/02-automate.md)
-- [Notifications through Cloudflare's email](guides/03-notifications.md)
 - [Rate-limit the subscribe form](guides/05-rate-limit.md)
 - [As your list grows](guides/09-as-your-list-grows.md)
 - [Upgrade to a new release](guides/07-upgrade.md)

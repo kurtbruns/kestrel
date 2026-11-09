@@ -1130,7 +1130,7 @@ export const TOOL_DEFS: ToolDef[] = [
     name: "test_notifications",
     title: "Test notifications",
     description:
-      "Send a sample notification through the live channel to each saved notifications address (get_publication's `notifications_to`), and only there, to prove notifications arrive after they change. An address the channel refuses comes back in `failed` with its words while the others still get it; a channel that refuses every address answers notify_failed in its own words.",
+      "Send a sample notification through the email provider to each saved notifications address (get_publication's `notifications_to`), and only there, to prove notifications arrive after they change. An address the provider refuses comes back in `failed` with its words while the others still get it; a provider that refuses every address answers notify_failed in its own words.",
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     routes: [TEST_NOTIFICATIONS],
     args: {},

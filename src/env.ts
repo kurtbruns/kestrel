@@ -114,12 +114,6 @@ export interface OptionalVars {
    */
   MIN_LEAD_SECONDS?: string;
   /**
-   * The `From:` of the notifications that email the publisher through Cloudflare (SPEC §8): an
-   * address on a domain onboarded to Cloudflare's email sending. Unset means
-   * `kestrel@` the app's own hostname.
-   */
-  NOTIFY_FROM?: string;
-  /**
    * The ID `kestrel dev` makes up for one run of the local dev server and records beside its
    * port, so the CLI's seed and reset can tell this directory's server from another's before
    * wiping a database. Set by `kestrel dev` alone; honored only in local dev (see `devRunId`).
@@ -134,28 +128,7 @@ export interface OptionalVars {
   ALLOW_FAKE_PROVIDER?: string;
 }
 
-/**
- * Optional bindings, declared by hand because the development config never carries them,
- * so `wrangler types` does not generate them into `Env`.
- */
-export interface OptionalBindings {
-  /**
-   * Cloudflare's `send_email` binding, the channel that tells the publisher when a send
-   * goes out or runs into a problem (SPEC §8). Deploy-time infrastructure (SPEC §9): its presence
-   * picks the channel, and it is never declared for development, where notifications go to the
-   * in-memory fake.
-   */
-  NOTIFY?: SendEmail;
-}
-
-export type AppEnv = Env & Secrets & OptionalVars & OptionalBindings;
-
-/**
- * How notifications reach the publisher (SPEC §8): Cloudflare's own email when the `NOTIFY`
- * binding is declared, the newsletter's provider otherwise, and the in-memory fake in a
- * dev-shaped env whatever is bound, so development can never reach a real inbox.
- */
-export type NotifyChannel = "fake" | "cloudflare" | "provider";
+export type AppEnv = Env & Secrets & OptionalVars;
 
 export interface Config {
   /** The transport, or `none` when no provider is connected (SPEC §13): the app then runs
@@ -253,11 +226,6 @@ export interface Config {
    * Claude could shorten through it would be no guard against Claude.
    */
   minLeadMs: number;
-  /** The channel notifications to the publisher go through (see `NotifyChannel`). */
-  notifyChannel: NotifyChannel;
-  /** The `From:` a notification carries: `NOTIFY_FROM` on the Cloudflare channel, else the
-   *  newsletter's own `From:`, the only sender its provider will take. */
-  notifyFrom: string;
 }
 
 /** The SES send rate assumed when `SES_MAX_SEND_RATE` is unset, in messages a second: a
@@ -353,12 +321,6 @@ export function getConfig(env: AppEnv): Config {
   }
   const notConnectedPreview = local === "not-connected";
   const sesMaxSendRateSetting = readPositiveInt("SES_MAX_SEND_RATE", env.SES_MAX_SEND_RATE);
-  // The preview runs as a deployment with no provider and no `NOTIFY` binding does: the
-  // provider channel, over the not-connected adapter, which carries nothing. So does the
-  // send simulation, over the simulated provider, so a notification meets what an email
-  // meets there, the sandbox and a refusal of the account included (SPEC §10).
-  const notifyChannel: NotifyChannel =
-    local !== null ? "provider" : devShaped ? "fake" : env.NOTIFY ? "cloudflare" : "provider";
   return {
     // The preview changes the provider alone, after `devShaped` was decided on the fake, so
     // local sign-in stays on while every send path takes the real not-connected route.
@@ -390,11 +352,6 @@ export function getConfig(env: AppEnv): Config {
       readPositiveInt("SUBREQUEST_BUDGET", env.SUBREQUEST_BUDGET) ?? DEFAULT_SUBREQUEST_BUDGET,
     ),
     minLeadMs: readMinLead(env.MIN_LEAD_SECONDS),
-    notifyChannel,
-    notifyFrom:
-      notifyChannel === "cloudflare"
-        ? (orUndefined(env.NOTIFY_FROM) ?? `Kestrel <kestrel@${new URL(appOrigin).hostname}>`)
-        : env.FROM_ADDRESS,
   };
 }
 

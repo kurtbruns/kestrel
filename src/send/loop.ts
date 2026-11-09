@@ -394,6 +394,12 @@ export async function runSend(
       progressed,
       clears: cleared,
     });
+    if (halt?.cause === "quota") {
+      // A spent quota holds every send, yet no refusal of the account records it, so the
+      // operator's alert line is logged here, before the hold is written, so a database
+      // that fails the write can't swallow it (SPEC §12).
+      log.warn("alert.sending", { ...tags, cause: "quota" });
+    }
     // One reading of the clock for the hold and its log line, so the `retryAt` logged is
     // the retry time stored.
     const heldAt = Date.now();

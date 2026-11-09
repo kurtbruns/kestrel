@@ -614,7 +614,14 @@ describe("the entry points group a tick's or a request's lines under one run", (
     });
 
     expect(lines()).toEqual([
-      // Whether email is getting out, recorded in the same run (SPEC §13).
+      // The operator's alert line first, then whether email is getting out, recorded in the
+      // same run (SPEC §12, §13).
+      expect.objectContaining({
+        event: "alert.sending",
+        level: "warn",
+        run: "8c0ffee-LHR",
+        cause: "credentials",
+      }),
       expect.objectContaining({
         event: "sending.refusing",
         level: "warn",

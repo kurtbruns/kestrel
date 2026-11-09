@@ -72,6 +72,8 @@ Vars go in the environment block's `vars`. Every value is a string.
 
     The name readers see beside the address is the publication's name, set in the editor under **Settings → Publication identity**, along with the tagline and logo. Until the publisher sets one, emails go out with no display name, and the reader pages show no name. To send under a fixed name instead, whatever the publication is called, write it in front of the address, like `Name <address>`; **Settings → Email sender** then shows that name and says it's set here. An instance deployed before the name followed the publication keeps its sender this way.
 
+    Kestrel's notifications to the publisher come from the same address, as `Kestrel` until the publication has a name, then as the publication's name followed by `via Kestrel`. A name written in `FROM_ADDRESS` never reaches them.
+
 - `SENDING_DOMAIN` optional
 
     The sending domain, shown in Settings beside the From address. The app never checks that it matches `FROM_ADDRESS`, so set it to the part of `FROM_ADDRESS` after the `@`. Never on `example.com`, unless `PROVIDER` is `fake`.
@@ -119,10 +121,6 @@ Vars go in the environment block's `vars`. Every value is a string.
     The base URL images are served from, such as a custom domain on the image bucket. Default: `APP_ORIGIN` followed by `/media`. Refused unless it's a plain `http` or `https` URL, which may have a path, and never on `example.com`, unless `PROVIDER` is `fake`. A trailing slash is dropped.
 
     The app's own `/media` path sends `Content-Security-Policy: sandbox` and `X-Content-Type-Options: nosniff` with every file, so a file in the bucket never runs as a page. A bucket's custom domain sends neither, so add both with a Response Header Transform Rule on that hostname.
-
-- `NOTIFY_FROM` optional
-
-    The sender of notifications through Cloudflare's email. Default: `kestrel@` on the app's hostname, named Kestrel, such as `Kestrel <kestrel@newsletter.example.com>`. It's used only with the `NOTIFY` binding, and must be an address on a domain set up for Cloudflare's email.
 
 ## Secrets
 
@@ -189,10 +187,6 @@ Wrangler doesn't carry bindings or vars over from the top level of `wrangler.jso
 - `MEDIA` required
 
     The `r2_buckets` binding for the bucket of images and your logo.
-
-- `NOTIFY` optional
-
-    The `send_email` binding for Cloudflare's email. When declared, notifications go through it instead of your email provider, so they still arrive when your provider refuses your account. Without it, notifications come from `FROM_ADDRESS`, through your provider. Local development ignores it, and sends notifications to a stand-in that delivers nothing.
 
 ## What the app refuses
 

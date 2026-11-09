@@ -918,15 +918,10 @@ const SETTINGS_FIELDS: ReferenceField[] = [
       "The AWS region SES is reached in (`AWS_REGION`), used only while `provider` is `ses`.",
   },
   {
-    name: "deployment.notify_channel",
-    type: '"cloudflare" | "provider" | "fake"',
-    description:
-      "How notifications reach the publisher: Cloudflare's own email, the newsletter's provider, or `fake`, which delivers nothing (local development, a demo).",
-  },
-  {
     name: "deployment.notify_from",
     type: "string",
-    description: "The `From:` address a notification carries.",
+    description:
+      "The `From:` a notification to the publisher carries, through the newsletter's provider: `Kestrel` until the publication has a name, then `<publication name> via Kestrel`, over the address of `from_address`. It never takes a name written into `FROM_ADDRESS`, and it follows a rename as soon as it is saved.",
   },
   {
     name: "deployment.simulation",

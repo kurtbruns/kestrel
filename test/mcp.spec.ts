@@ -550,7 +550,6 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
     expect(await callOk("test_notifications", {})).toEqual({
       to: ["me@example.com", "ops@example.com"],
       failed: [],
-      channel: "fake",
     });
     const tool = (await listTools()).find((t) => t.name === "update_settings");
     expect(tool?.description).toContain(

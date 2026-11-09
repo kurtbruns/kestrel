@@ -33,6 +33,7 @@ import {
   STUCK_THRESHOLD_MS,
 } from "../shared/sends";
 import {
+  type AlertTestResponse,
   MAX_NOTIFY_ADDRESSES,
   type NotificationTestResponse,
   type TemplateTestResponse,
@@ -739,21 +740,20 @@ export function createRouter({
       resource: "settings",
       title: "Test notifications",
       summary:
-        "Send a sample notification to every saved notifications address, through the live channel.",
+        "Send a sample notification to every saved notifications address, through the provider.",
       description:
-        "Takes no body and goes only to `settings.notifications.to`, so it cannot mail an arbitrary address. Each address is its own try: one the channel refuses is listed in `failed` with its words while the others still get it.",
+        "Takes no body and goes only to `settings.notifications.to`, so it cannot mail an arbitrary address. Each address is its own try: one the provider refuses is listed in `failed` with its words while the others still get it. It goes out from `deployment.notify_from`.",
       example: {
         response: {
           to: ["you@example.com", "ops@example.com"],
           failed: [],
-          channel: "cloudflare",
         } satisfies NotificationTestResponse,
       },
       errors: [
         { code: "bad_request", when: "No notifications address is saved." },
         {
           code: "notify_failed",
-          when: "The channel refused it at every address, in its own words (an unverified Cloudflare destination, say).",
+          when: "The provider refused it at every address, in its own words.",
         },
         {
           ...notConnected,
@@ -761,6 +761,25 @@ export function createRouter({
         },
       ],
       handler: settingsRoutes.notificationTest,
+    },
+    {
+      method: "POST",
+      path: "/api/settings/notifications/alert-test",
+      access: "admin",
+      resource: "settings",
+      title: "Test the alert",
+      summary:
+        "Log one `alert.sending` line with cause `test`, so a Cloudflare Monitor on that event can be proven end to end.",
+      description:
+        "Takes no body. Writes the same log line the app writes when the provider refuses the account or a send halts on its quota, with `cause` set to `test`, and does nothing else: no state changes and no email goes out. A Monitor watching for `alert.sending` emails about it within a few minutes. Cloudflare's own Test button sends sample data, so this is the only way to prove the real path from this Worker's log to the alert.",
+      example: {
+        response: {
+          event: "alert.sending",
+          cause: "test",
+          at: 1_767_225_600_000,
+        } satisfies AlertTestResponse,
+      },
+      handler: settingsRoutes.alertTest,
     },
     {
       method: "GET",

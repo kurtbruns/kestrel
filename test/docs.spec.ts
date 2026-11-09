@@ -36,7 +36,6 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
       "self-hosting/get-started/go-live",
       "self-hosting/guides/allow-claude",
       "self-hosting/guides/automate",
-      "self-hosting/guides/notifications",
       "self-hosting/guides/rate-limit",
       "self-hosting/guides/as-your-list-grows",
       "self-hosting/guides/upgrade",
@@ -178,7 +177,7 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
   });
 
   it("leaves a Settings name that is already in a link, or names no section, as it is", () => {
-    const inLink = '<a href="#/docs/notifications"><strong>Settings → Notifications</strong></a>';
+    const inLink = '<a href="#/docs/verify"><strong>Settings → Notifications</strong></a>';
     const free = "<strong>Settings → Instance</strong>";
     expect(linkSettingsNames(`${inLink} ${free}`)).toBe(
       `${inLink} <a href="#/settings/instance">${free}</a>`,
@@ -304,13 +303,13 @@ describe("each doc as Markdown, for an agent (docMarkdown)", () => {
       "Write `[Deploy](02-deploy.md)` to link a page.",
       "",
       "```",
-      "[Notifications](../guides/03-notifications.md)",
+      "[Upgrade](../guides/07-upgrade.md)",
       "```",
     ].join("\n");
     const out = markdownLinksForAgents(md, "publishing/01-your-list.md");
     expect(out).toContain("See [Deploy](deploy.md#check-it).");
     expect(out).toContain("Write `[Deploy](02-deploy.md)` to link a page.");
-    expect(out).toContain("[Notifications](../guides/03-notifications.md)\n```");
+    expect(out).toContain("[Upgrade](../guides/07-upgrade.md)\n```");
   });
 });
 

@@ -63,8 +63,7 @@ const response = (
       from_address: "Birds <hello@send.birds.example>",
       sending_domain: "send.birds.example",
       aws_region: "us-east-1",
-      notify_channel: "provider",
-      notify_from: "Birds <hello@send.birds.example>",
+      notify_from: "Birds Weekly via Kestrel <hello@send.birds.example>",
     },
     in_use: { sends: [], retry_after: null, identity_fields: ["name", "logo_url"] },
     ...over,
@@ -399,15 +398,11 @@ describe("settings view", () => {
     ]);
     const facts = $$(".set-kv-v").map((v) => v.textContent?.trim());
     expect(facts).toContain("Your email provider (Amazon SES)");
-    expect(facts).toContain("Birds <hello@send.birds.example>");
+    expect(facts).toContain("Birds Weekly via Kestrel <hello@send.birds.example>");
     // A newer failure outranks the last delivery: the channel has stopped working.
     expect($("#notifyStatus .set-pill.danger").textContent).toBe("Not delivered");
     expect($("#notifyStatus").textContent).toMatch(
       /Terns \(provider refusing\): destination address not verified/,
-    );
-    // On the provider channel, the note says what it cannot carry.
-    expect($("#settingsBody").textContent).toMatch(
-      /one about the provider refusing your account cannot reach you/,
     );
     expect($<HTMLButtonElement>("#notifyTest").disabled).toBe(false);
     expect(fake.unhandled).toEqual([]);
@@ -449,7 +444,7 @@ describe("settings view", () => {
       {
         method: "POST",
         path: "/api/settings/notifications/test",
-        reply: () => ({ to: ["me@b.c", "ops@b.c"], failed: [], channel: "provider" }),
+        reply: () => ({ to: ["me@b.c", "ops@b.c"], failed: [] }),
       },
     ]);
     const test = $<HTMLButtonElement>("#notifyTest");
@@ -486,6 +481,64 @@ describe("settings view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("shows notifications as Kestrel on the saved publication's behalf, following a rename once saved, never the From override (SPEC §8)", async () => {
+    const named = response();
+    named.deployment.from_address = "Field Desk <hello@send.birds.example>";
+    await open([
+      { path: "/api/settings", reply: () => named },
+      {
+        method: "PUT",
+        path: "/api/settings",
+        reply: () => ({
+          settings: settings({
+            publication: {
+              name: "Owls Monthly",
+              tagline: "Owls & more",
+              address: "",
+              logo_url: "",
+            },
+          }),
+          warnings: [],
+          remade: [],
+        }),
+      },
+    ]);
+    const from = () => $("#notifyFrom").textContent;
+    expect(from()).toBe("Birds Weekly via Kestrel <hello@send.birds.example>");
+    // Typing alone doesn't change it: a notification goes out with the saved name.
+    typeInto($<HTMLInputElement>("#setName"), "Owls Monthly");
+    expect(from()).toBe("Birds Weekly via Kestrel <hello@send.birds.example>");
+    $("#savebarSave").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(from()).toBe("Owls Monthly via Kestrel <hello@send.birds.example>");
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("says these emails can't report SES refusing, linking the alerts section of Verify, and logs a test alert on request (SPEC §12)", async () => {
+    await open([
+      { path: "/api/settings", reply: () => response() },
+      {
+        method: "POST",
+        path: "/api/settings/notifications/alert-test",
+        reply: () => ({ event: "alert.sending", cause: "test", at: Date.now() }),
+      },
+    ]);
+    const note = $("#alertsNote");
+    expect(note.textContent).toMatch(/can’t tell you when SES refuses your account/);
+    expect($<HTMLAnchorElement>("a", note).getAttribute("href")).toBe(
+      "#/docs/verify/8-create-the-cloudflare-alerts",
+    );
+    $<HTMLButtonElement>("#alertTest").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(
+      fake.calls.filter((c) => c.url.pathname === "/api/settings/notifications/alert-test"),
+    ).toHaveLength(1);
+    expect($("#alertTestHint").textContent).toMatch(
+      /^Logged at .+\. Watch for Cloudflare’s alert email\.$/,
+    );
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("says a failed test notification in its status row only, not in a toast as well", async () => {
     await open([
       {
@@ -518,7 +571,6 @@ describe("settings view", () => {
         reply: () => ({
           to: ["me@b.c", "ops@b.c"],
           failed: [{ email: "ops@b.c", error: "destination address not verified" }],
-          channel: "cloudflare",
         }),
       },
     ]);

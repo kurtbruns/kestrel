@@ -145,13 +145,16 @@ export class Contacts {
   }
 }
 
-/** Record a refusal of the account, found by an email or by the account check. */
+/** Record a refusal of the account, found by an email or by the account check. The
+ *  operator's alert line (`alert.sending`) goes first, so a database that fails the write
+ *  can't swallow it (SPEC §12); `sending.refusing` after says the record took it. */
 export async function noteRefusal(
   db: D1Database,
   refusal: { cause: RefusingCause; foundBy: RefusalFoundBy; error: string },
   now: number,
   tell: boolean,
 ): Promise<void> {
+  log.warn("alert.sending", { cause: refusal.cause, foundBy: refusal.foundBy });
   await recordRefusal(db, refusal, now, tell);
   log.warn("sending.refusing", { cause: refusal.cause, foundBy: refusal.foundBy });
 }

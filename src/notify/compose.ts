@@ -340,10 +340,8 @@ export function composeOutageNotification(
   }
   const one = posts.length === 1;
   const waiting = one ? `${first} is waiting` : `${posts.length} posts are waiting`;
-  const late =
-    config.notifyChannel === "provider"
-      ? " This email can be held up by the same problem, so it may be fixed already."
-      : "";
+  // Every notification goes through the provider, so this one can be held up with the rest.
+  const late = " This email can be held up by the same problem, so it may be fixed already.";
   return problem({
     subject: `Email isn’t going out, and ${waiting}`,
     happened,

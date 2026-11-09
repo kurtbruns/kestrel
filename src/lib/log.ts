@@ -29,6 +29,8 @@ export type LogLevel = "error" | "warn" | "info";
  */
 export const LOG_EVENTS = {
   // The sweep (SPEC §6).
+  // Every tick, with `ok`. Operators' "Kestrel has stopped" Monitors count the ticks with
+  // `ok` true, so renaming either is a breaking change (SPEC §12).
   "sweep.tick": "info",
   "sweep.error": "error",
   // A database stall the next tick makes up for, with `during` saying where: `sweep`, `receipts`,
@@ -74,6 +76,11 @@ export const LOG_EVENTS = {
   "provider.account_checked": "info",
   "provider.pacing_unread": "warn",
   "provider.account_error": "error",
+  // Email can't get out (SPEC §12, §13): every refusal of the account, and every send halted on
+  // its quota, with `cause` (`test` from Settings' Send a test alert). Logged before the record
+  // is written, so a failing database can't swallow it. Operators' Cloudflare Monitors alert on
+  // this name and field, so renaming either is a breaking change.
+  "alert.sending": "warn",
   // Whether email is getting out (SPEC §13).
   "sending.refusing": "warn",
   "sending.cleared": "info",

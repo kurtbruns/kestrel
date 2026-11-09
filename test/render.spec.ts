@@ -34,8 +34,6 @@ const config: Config = {
   notConnectedPreview: false,
   subrequestBudget: 50,
   minLeadMs: 5 * 60 * 1000,
-  notifyChannel: "fake",
-  notifyFrom: "News <news@send.example>",
 };
 
 function post(over: Partial<PostRow> = {}): PostRow {

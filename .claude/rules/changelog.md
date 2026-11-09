@@ -15,7 +15,7 @@ paths:
 
 A user-facing or operator-visible change earns one line under `## [Unreleased]`, written in the same commit that makes the change, by the same in-sync discipline that ties a behavior change to `docs/SPEC.md`. If a change is worth a SPEC or DESIGN edit, it is worth a changelog line.
 
-What earns a line: a change to behavior, the admin UI, the HTTP API surface, configuration, or a bug an operator would notice. What does not: an internal refactor, a test, a build-tooling tweak, a comment, or a formatting pass. When in doubt, ask whether someone running Kestrel would want to know before they upgrade.
+What earns a line: a change to behavior, the admin UI, the HTTP API surface, configuration, or a bug an operator would notice. So does a change to the two log lines operators' Cloudflare alerts read (SPEC §12): `alert.sending` and its `cause`, and `sweep.tick` and its `ok`. Renaming either, or a field the alerts read, silently breaks every instance's alerts, so it is **Breaking**, and its Upgrading step says how to change the alerts' queries. What does not: an internal refactor, a test, a build-tooling tweak, a comment, or a formatting pass. When in doubt, ask whether someone running Kestrel would want to know before they upgrade.
 
 A non-blocking `Stop` hook (`.claude/hooks/changelog-reminder.mjs`, wired in `.claude/settings.json`, the repo's only hook) shows the maintainer a reminder in the transcript when a turn ends with code changed and no changelog line. A Stop hook's message reaches the person, not the model. It is a nudge, never a gate: it cannot block a turn, and an internal-only change correctly gets no entry.
 

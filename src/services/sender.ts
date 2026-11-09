@@ -1,13 +1,14 @@
 /**
  * The sender an email goes out as (SPEC §9): the deploy-time address, and the display name
  * the rule in `shared/publication.ts` gives it from the publication's name. Every caller
- * that hands a provider an email resolves the sender here, so a confirmation, a test, a
- * notification, and a list send can't disagree on who the email is from: the rule as it
- * stands now for a one-off message, and a send's own frozen name for a list send, which
- * is what the publisher reviewed (I3, I5).
+ * that hands a provider an email resolves the sender here, so a confirmation, a test, and a
+ * list send can't disagree on who the email is from: the rule as it stands now for a one-off
+ * message, and a send's own frozen name for a list send, which is what the publisher
+ * reviewed (I3, I5). A notification to the publisher goes out by its own rule over the same
+ * address (SPEC §8).
  */
 
-import { fromAddressOnly, type Sender, sender } from "../../shared/publication";
+import { fromAddressOnly, notificationSender, type Sender, sender } from "../../shared/publication";
 import type { SendRow } from "../db/sends";
 import { type AppSettings, getSettings } from "../db/settings";
 import type { Config } from "../env";
@@ -17,6 +18,15 @@ import type { Config } from "../env";
  *  reads them no second time. */
 export function senderFrom(settings: Pick<AppSettings, "publication">, config: Config): Sender {
   return sender(settings.publication.name, config.fromAddress);
+}
+
+/** The sender a notification to the publisher goes out as (SPEC §8): Kestrel, on the
+ *  publication's behalf, over the deploy-time address. Reads the publication's name only. */
+export function notificationSenderFrom(
+  settings: Pick<AppSettings, "publication">,
+  config: Config,
+): Sender {
+  return notificationSender(settings.publication.name, config.fromAddress);
 }
 
 /** The sender as it stands now, for a caller with nothing read yet: one settings read. */

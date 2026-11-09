@@ -1,19 +1,17 @@
 /**
- * The channels a notification to the publisher can go through (SPEC §8), behind one
- * method. Cloudflare's own email is the channel when the `NOTIFY` binding is declared,
- * because it does not depend on the newsletter's provider, and so still arrives when that
- * provider is refusing the account; the provider is the fallback when it is not. The
- * choice is deploy config (`getConfig`), never a preference, and a dev-shaped env gets the
- * in-memory fake, so development can never reach a real inbox. The one exception, local dev's
- * not-connected preview, gets the provider channel over the not-connected adapter, which
- * carries nothing, as a deployment with no provider does.
+ * How a notification reaches the publisher (SPEC §8): through the newsletter's own provider,
+ * the one path, sent as Kestrel on the publication's behalf (`notificationSender`). A
+ * dev-shaped env gets the in-memory fake instead, so development can never reach a real
+ * inbox. The exceptions are local dev's send simulation and its not-connected preview, which
+ * get the provider over the simulated or not-connected adapter, as a deployment does, so a
+ * notification meets what an email meets there and the preview carries nothing.
  *
- * A channel only ever sends one message to one address, the publisher's. It is never
+ * A notifier only ever sends one message to one address, the publisher's. It is never
  * handed a subscriber, a send's audience, or a delivery row.
  */
 
 import type { Sender } from "../../shared/publication";
-import type { AppEnv, Config, NotifyChannel } from "../env";
+import type { AppEnv, Config } from "../env";
 import { getProvider, perRecipient } from "../providers";
 import type { RenderedEmail } from "../render/render";
 
@@ -21,71 +19,34 @@ import { type Contacts, contactOutcome } from "../services/sending";
 import { FakeNotifier } from "./fake";
 
 export interface Notifier {
-  readonly channel: NotifyChannel;
+  /** Which notifier it is, for the log line of each delivery. */
+  readonly channel: "provider" | "fake";
   /**
-   * Deliver one message to `to`. `key` names the notification, so a channel that
+   * Deliver one message to `to`. `key` names the notification, so a notifier that
    * records by it (the fake) never records the same one twice.
-   * Throws with the channel's own words when it is not delivered. The provider channel adds
+   * Throws with the provider's own words when it is not delivered. The provider notifier adds
    * what its answer says about the account to `contacts` (SPEC §13), which the caller records.
    */
   send(to: string, message: RenderedEmail, key: string, contacts: Contacts): Promise<void>;
 }
 
-/** The channel's notifier. `sender` is who a notification through the newsletter's own
- *  provider goes out as, the same sender as every other email it sends (SPEC §9), resolved
- *  once by the caller from the settings it already holds; the other channels have a sender
- *  of their own and ignore it. */
+/** Whether notifications go to the in-memory fake: a dev-shaped env with neither the send
+ *  simulation nor the not-connected preview standing in for a provider. */
+export function notifiesFake(config: Config): boolean {
+  return config.devShaped && config.simulation === null && !config.notConnectedPreview;
+}
+
+/** The notifier for this deployment. `sender` is who a notification goes out as
+ *  (`notificationSenderFrom`), resolved once by the caller from the settings it already holds. */
 export function getNotifier(config: Config, env: AppEnv, sender: Sender): Notifier {
-  switch (config.notifyChannel) {
-    case "cloudflare":
-      if (env.NOTIFY) {
-        return new CloudflareNotifier(env.NOTIFY, config.notifyFrom);
-      }
-      // getConfig picks this channel only when the binding is declared.
-      throw new Error("the NOTIFY binding is not declared");
-    case "provider":
-      return new ProviderNotifier(config, env, sender);
-    default:
-      return new FakeNotifier();
-  }
-}
-
-/** A `Name <address>` sender split for the binding, or the bare address as given. */
-function parseFrom(from: string): string | EmailAddress {
-  const m = /^\s*(.*?)\s*<([^>]+)>\s*$/.exec(from);
-  return m?.[2] ? { name: m[1] ?? "", email: m[2] } : from.trim();
+  return notifiesFake(config) ? new FakeNotifier() : new ProviderNotifier(config, env, sender);
 }
 
 /**
- * Cloudflare's `send_email` binding. Cloudflare delivers only to a destination address
- * verified in the account (or to anyone once a sending domain is onboarded), from an
- * address on a domain onboarded to its email sending; either refusal throws, and its
- * message is what the settings surface shows.
- */
-export class CloudflareNotifier implements Notifier {
-  readonly channel = "cloudflare" as const;
-
-  constructor(
-    private readonly binding: SendEmail,
-    private readonly from: string,
-  ) {}
-
-  async send(to: string, message: RenderedEmail): Promise<void> {
-    await this.binding.send({
-      from: parseFrom(this.from),
-      to,
-      subject: message.subject,
-      text: message.text,
-      html: message.html,
-    });
-  }
-}
-
-/**
- * The newsletter's own provider, for a deployment without the binding. It cannot carry a
- * notification that the provider is refusing the account, which is exactly when that one
- * matters; the setup guide says so, and the refusal still shows on the status surface. Its
- * answer is an email's answer like any other, so it records whether email is getting out.
+ * The newsletter's own provider. It cannot carry a notification that the provider is
+ * refusing the account, which is exactly when that one matters; the refusal still shows on
+ * the status surface, and the setup guide's Cloudflare Monitors tell the operator (SPEC §12).
+ * Its answer is an email's answer like any other, so it records whether email is getting out.
  */
 export class ProviderNotifier implements Notifier {
   readonly channel = "provider" as const;
