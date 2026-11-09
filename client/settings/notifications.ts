@@ -46,7 +46,7 @@ function alertsNote(d: SettingsResponse["deployment"]): string {
 }
 
 /** The Verify page's section that creates the Cloudflare Monitors, in the Docs tab. */
-const ALERTS_DOCS_HREF = "#/docs/verify/8-create-the-cloudflare-alerts";
+const ALERTS_DOCS_HREF = "#/docs/alerts";
 
 const NOTIFICATION_KINDS: Record<NotificationStatusKind, string> = {
   finished: "went out",
@@ -105,7 +105,7 @@ export function notificationsSection(page: SettingsPage): Html {
           <div class="set-kv-k">From address</div><div class="set-kv-v"><span class="mono" id="notifyFrom">${notifyFromLine(page)}</span></div>
           <div class="set-kv-k">Last notification</div><div class="set-kv-v" id="notifyStatus">${notificationStatusHtml(page.data.notification_status)}</div>
         </div>
-        <div class="set-note" id="alertsNote">${icon("info")}<span>${alertsNote(d)} See <a class="set-link" href="${ALERTS_DOCS_HREF}">Create the Cloudflare alerts</a>.</span></div>
+        <div class="set-note" id="alertsNote">${icon("info")}<span>${alertsNote(d)} See <a class="set-link" href="${ALERTS_DOCS_HREF}">Set up alerts</a>.</span></div>
         <div class="set-recip" style="border-top:1px solid var(--line)">
           <div class="row"><button type="button" class="ghost" id="alertTest">Send a test alert</button><span class="field-hint" id="alertTestHint"></span></div>
           <p class="field-hint" style="margin:0">Proves the Cloudflare alert “SES can’t send email”, end to end. Kestrel logs the line that alert watches for, and sends no email itself. Cloudflare’s alert email follows in about five minutes, and a Resolved email a few minutes after that, which means only that no new line came. Cloudflare’s own Test button sends sample data, so it can’t prove this.</p>

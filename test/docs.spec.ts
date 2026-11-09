@@ -33,6 +33,7 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
       "self-hosting/get-started/ses",
       "self-hosting/get-started/production-access",
       "self-hosting/get-started/verify",
+      "self-hosting/get-started/alerts",
       "self-hosting/get-started/go-live",
       "self-hosting/guides/allow-claude",
       "self-hosting/guides/automate",

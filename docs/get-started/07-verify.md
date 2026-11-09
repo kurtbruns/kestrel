@@ -4,7 +4,7 @@ This page checks your instance end to end with real email, while the list is emp
 
 You can do all of this while SES is still in the sandbox, since every email goes to the addresses you verified in [Connect Amazon SES](05-ses.md#3-verify-your-test-addresses) or to SES's test addresses.
 
-In this guide, you send yourself a test email, reply to it, and check that it passes authentication. You check that notifications arrive, send a real post to yourself as a subscriber, and unsubscribe. Finally, you check that bounces and complaints reach the app, read the app's logs, create two Cloudflare alerts for what email can't report, and clean up the test subscribers.
+In this guide, you send yourself a test email, reply to it, and check that it passes authentication. You check that notifications arrive, send a real post to yourself as a subscriber, and unsubscribe. Finally, you check that bounces and complaints reach the app, read the app's logs, and clean up the test subscribers.
 
 ## Before you begin
 
@@ -94,7 +94,7 @@ If the bounce address has no flag, or the complaint address is still pending, SE
 
 ## 7. Read the logs
 
-The app writes a log line for each thing it does, and Cloudflare keeps them for a few days, depending on your plan. Nothing else tells you if the once-a-minute schedule that sends posts stops, so it's worth knowing where to look.
+The app writes a log line for each thing it does, and Cloudflare keeps them for a few days, depending on your plan. The alerts on the next page, [Set up alerts](08-alerts.md), read these logs for you, and this is where to look when one arrives.
 
 1. In the Cloudflare dashboard, go to **Workers & Pages**, select your Worker, the `name` in the `production` block of `wrangler.jsonc`, and select **Observability**.
 
@@ -104,79 +104,11 @@ The app writes a log line for each thing it does, and Cloudflare keeps them for 
 
 1. Filter on `event` equal to `send.scheduled`. Your two sends from section 4 are there, and `send.canceled` shows the one you canceled. Each line that records an action says who took it. Its `principal` is `human` or `service`, and its `client` names the program a person used, such as `editor`.
 
-1. Filter on `level` equal to `error`. A healthy instance shows nothing. An occasional `d1.unavailable` line at `warn` is a brief database stall the next run makes up for, and needs nothing. The same line every minute means work isn't getting done, so if you set up alerts, alert on it repeating as well as on `error`.
+1. Filter on `level` equal to `error`. A healthy instance shows nothing. An occasional `d1.unavailable` line at `warn` is a brief database stall the next run makes up for, and needs nothing. The same line every minute means work isn't getting done. The two alerts on the next page don't watch for either, so if you add Monitors of your own, one on `error` and one on `d1.unavailable` repeating are worth having.
 
 To follow one send, narrow the time range and filter on its `sendId`, since a long range may show only a sample. On the Free plan, Cloudflare stops keeping logs for the rest of the day once its daily allowance is used, as [its pricing page](https://developers.cloudflare.com/observability/pricing/) describes.
 
-## 8. Create the Cloudflare alerts
-
-Two problems can't reach anyone by email from Kestrel: SES not sending its email, since Kestrel's own emails go through SES, and Kestrel itself stopping. Two Cloudflare Monitors cover them: `SES can't send email`, and `Kestrel has stopped`. Each one watches the app's logs once a minute and emails you when its condition holds. They need no DNS change and no deploy.
-
-You need two values first:
-
-- Your account ID, which this command prints:
-
-    ```bash
-    npx wrangler whoami
-    ```
-
-- Your Worker's name, the `name` in the `production` block of `wrangler.jsonc`.
-
-Name each Monitor after the publication and the problem, such as `Field Notes: SES can't send email`. The alert email is plain text, and it shows the name but not the description.
-
-1. In the Cloudflare dashboard, go to **Alerts** > **Monitors**, and select **Create a Monitor**.
-
-1. Choose **Threshold**, then **Custom SQL**, and paste this query, with `ACCOUNT_ID` and `WORKER_NAME` replaced by your two values:
-
-    ```sql
-    SELECT count() AS value FROM logs.workersLogs
-    WHERE accountTag = 'ACCOUNT_ID'
-      AND scriptName = 'WORKER_NAME'
-      AND attributes['event'] = 'alert.sending'
-    ```
-
-1. Set it to fire when the value is `>= 1`, as an **Average** over `1m`, and to **Run every** `1m`. Name it, such as `Field Notes: SES can't send email`, add your email address as its destination, and select **Create**.
-
-1. Create a second Monitor the same way, with this query:
-
-    ```sql
-    SELECT count() AS value FROM logs.workersLogs
-    WHERE accountTag = 'ACCOUNT_ID'
-      AND scriptName = 'WORKER_NAME'
-      AND attributes['event'] = 'sweep.tick'
-      AND attributes['ok'] = true
-    ```
-
-1. Set it to fire when the value is `< 0.5`, as an **Average** over `15m`, and to **Run every** `1m`. Name it, such as `Field Notes: Kestrel has stopped`, add your email address, and select **Create**.
-
-1. In the editor, open **Settings → Notifications**, and select **Send a test alert**. Kestrel writes the line the first Monitor watches for, with `cause` set to `test`, and changes nothing else. Cloudflare's own **Test** button sends sample data, so this is the only way to prove the real path.
-
-1. Wait for the alert email. In testing, it arrived about five and a half minutes after the line, from `noreply@notify.cloudflare.com`, with the subject `[Alert] Custom Alert '<name>' triggered`. A `[Resolved]` email followed about three minutes later, once no new line had arrived. Gmail filed both under **Updates**, so look there if your inbox shows nothing.
-
-The second Monitor can't be tested this way without stopping the app. In testing, with the schedule slowed to once an hour, it emailed about 13 minutes after the last tick, and resolved about 12 minutes after ticks resumed.
-
-The two `[Resolved]` emails mean different things:
-
-- For `SES can't send email`, Resolved means no new line was written, not that the problem is fixed. Kestrel writes the line once, when a problem begins, and not again while it lasts, so the Monitor resolves a few minutes after it whether or not anything changed, and you get no reminder. A new line, and a new alert, comes only when a different problem begins, or the same one again after email got out in between. To see whether the problem has cleared, open the dashboard: a refusal of the account shows as the red line at the top saying email isn't going out, and a spent quota as a red line naming the held send, which links to its page. Each line goes away once its problem has cleared.
-- For `Kestrel has stopped`, Resolved means the once-a-minute ticks have resumed.
-
-Each line the first Monitor counts carries a `cause`, which says why email can't get out. Today the causes are:
-
-- the reason SES gave for refusing the account, such as `credentials`, `configuration`, `sender`, or `suspended`
-- `quota`, for a send held because the daily sending quota is spent
-- `test`, from **Send a test alert**
-
-A later release can add a cause, and the Monitor alerts on it with no change, since its query counts every `alert.sending` line. Filter on `event` equal to `alert.sending` in the Worker's **Observability** tab to read the causes. Count over minutes, never a day: over long ranges the log's counts are estimated from a sample.
-
-Know these limits before you rely on the Monitors:
-
-- The SQL API and Monitors are in beta, so their screens and fields can change.
-- On the Workers Free plan, Cloudflare stops keeping logs for the rest of the day once the daily allowance is used, until it resets at 00:00 UTC. Until December 1, 2026, that allowance is 200,000 log events a day; from then, it is 0.5 GB a day, shared with traces. Either way it covers the whole Cloudflare account, not this Worker alone, and [Cloudflare's pricing page](https://developers.cloudflare.com/observability/pricing/) has the current terms. With no logs coming in, `Kestrel has stopped` fires falsely until the reset. An idle instance writes about 3,000 log events a day, far under either limit by Cloudflare's published average event size.
-- An outage at Cloudflare can silence both the logs and the alerts.
-- Kestrel can't see this setup, so the dashboard can't tell you whether the Monitors exist.
-- A destination address outside your Cloudflare account may have to be verified first. This hasn't been tested.
-
-## 9. Clean up the test subscribers
+## 8. Clean up the test subscribers
 
 The checks leave test addresses on the list. Erase them, so the publisher starts with only real readers.
 
@@ -188,6 +120,6 @@ The checks leave test addresses on the list. Erase them, so the publisher starts
 
 Erasing keeps only the address, so it's never mailed again, but the person can subscribe again through the subscribe page. Erasing your own address doesn't lock you out.
 
-When every section gives the result it describes and AWS grants production access, your instance is ready to go live.
+When every section gives the result it describes, your instance works end to end.
 
-Next, [go live](08-go-live.md).
+Next, [set up alerts](08-alerts.md).

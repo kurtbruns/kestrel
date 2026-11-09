@@ -28,7 +28,8 @@ import awsAccount from "../../docs/get-started/04-aws-account.md";
 import ses from "../../docs/get-started/05-ses.md";
 import productionAccess from "../../docs/get-started/06-production-access.md";
 import verify from "../../docs/get-started/07-verify.md";
-import goLive from "../../docs/get-started/08-go-live.md";
+import alerts from "../../docs/get-started/08-alerts.md";
+import goLive from "../../docs/get-started/09-go-live.md";
 import allowClaude from "../../docs/guides/01-allow-claude.md";
 import automate from "../../docs/guides/02-automate.md";
 import rateLimit from "../../docs/guides/05-rate-limit.md";
@@ -74,7 +75,8 @@ const PAGES: Record<string, string> = {
   "get-started/05-ses.md": ses,
   "get-started/06-production-access.md": productionAccess,
   "get-started/07-verify.md": verify,
-  "get-started/08-go-live.md": goLive,
+  "get-started/08-alerts.md": alerts,
+  "get-started/09-go-live.md": goLive,
   "guides/01-allow-claude.md": allowClaude,
   "guides/02-automate.md": automate,
   "get-started/04-aws-account.md": awsAccount,
