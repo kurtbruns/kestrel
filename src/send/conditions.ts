@@ -36,6 +36,7 @@ import {
   unavailableMessage,
 } from "../../shared/sends";
 import { MISSED_THRESHOLD_MS } from "../lib/time";
+import { isLongOutage } from "./outage";
 import { stuckAt } from "./stuck";
 import { isWedged } from "./wedged";
 
@@ -205,13 +206,17 @@ export function sendConditions(
         retry_at: send.halt_retry_at,
       });
     } else if (retried && send.halt_reason === "unavailable") {
+      // An outage past an hour is told to the publisher by email (SPEC §8), so the page says
+      // it at the same moment and in the same weight.
+      const long = isLongOutage(send);
       out.push({
         kind: "provider_unavailable",
         // A rate limit that outlasts any burst is the deployment's setting, which a person
-        // fixes, so it is worth a look rather than only shown.
-        severity: isSelfThrottled(send) ? "warn" : "info",
+        // fixes, and an outage past an hour is news the publisher may want to pass on, so
+        // each is worth a look rather than only shown.
+        severity: isSelfThrottled(send) || long ? "warn" : "info",
         since: send.halted_at,
-        message: unavailableMessage(send),
+        message: unavailableMessage(send, long),
         action: null,
         error: send.halt_error ?? "",
         retry_at: send.halt_retry_at,

@@ -44,6 +44,7 @@ import {
   HALT_BACKOFF_MS,
   HALT_RETRY_SLACK_MS,
   LEASE_TTL_MS,
+  LONG_OUTAGE_HALTS,
   MAX_DELIVERY_ATTEMPTS,
 } from "../lib/time";
 import { getProvider } from "../providers";
@@ -78,15 +79,26 @@ export interface SendLoopResult {
  * refuses for that cause (`alertRefusal`), which the sweep's later record of this run then
  * doesn't log again. A spent quota holds every send though no refusal records it, so it
  * alerts when the send didn't already carry a quota halt: a retry still over quota is the
- * same halt, and another send joins that halt without asking the provider.
+ * same halt, and another send joins that halt without asking the provider. A provider
+ * outage alerts at the halt that makes it an outage past an hour (`LONG_OUTAGE_HALTS`),
+ * and not at the hourly retries after it; an answer that took someone ends it, so a later
+ * outage counts afresh. Here rather than in the notifier, which reads the record after the
+ * sends and never runs inside this loop: the halt is known here first, before the write that
+ * records it, and the line must not wait on, or depend on, an email that goes through the
+ * provider that is down. `carried` is the halt the send carries into this answer, null when
+ * the answer's progress has ended it.
  */
 async function alertHalt(
   db: D1Database,
   halt: BatchHalt,
-  carried: { reason: HaltReason; cause: HaltCause | null } | null,
+  carried: { reason: HaltReason; cause: HaltCause | null; retries: number } | null,
   tags: Record<string, string>,
 ): Promise<void> {
-  if (halt.reason !== "account") {
+  if (halt.reason === "unavailable") {
+    const prior = carried?.reason === "unavailable" ? carried.retries : 0;
+    if (prior + 1 === LONG_OUTAGE_HALTS) {
+      log.warn("alert.sending", { ...tags, cause: "outage" });
+    }
     return;
   }
   if (halt.cause === "quota") {
@@ -427,12 +439,12 @@ export async function runSend(
     // the publisher is told once (SPEC §12). Anything else held back, such as SES throttling
     // a few entries for the account's rate, is pace rather than a fault a person fixes: the
     // progress ends the halt and the hold starts afresh, a minute out.
+    const cleared = progressed && halt?.reason !== "account";
     if (halt) {
       // Before this answer's first write (the settle, then the hold), so a database that
       // fails either can't swallow the operator's alert (SPEC §12).
-      await alertHalt(db, halt, halted, tags);
+      await alertHalt(db, halt, cleared ? null : halted, tags);
     }
-    const cleared = progressed && halt?.reason !== "account";
     result.answeredAt = Date.now();
     await sends.settleDeliveries(db, sendId, lease, "dispatched", outcomes, Date.now(), {
       progressed,

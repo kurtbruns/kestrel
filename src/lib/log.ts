@@ -77,9 +77,10 @@ export const LOG_EVENTS = {
   "provider.pacing_unread": "warn",
   "provider.account_error": "error",
   // Email stopped getting out (SPEC §12, §13), with `cause` saying why: the refusing cause when
-  // a refusal of the account begins, `quota` when a send is first held on its quota, and `test`
-  // from Settings' Send a test alert. Once per refusal or halt, never at a repeat while it stands
-  // (`alertRefusal`, `alertHalt`). The list is open: a new cause is added at its call site and
+  // a refusal of the account begins, `quota` when a send is first held on its quota, `outage`
+  // when the provider has been unavailable to a send for about an hour, and `test` from
+  // Settings' Send a test alert. Once per refusal, halt, or outage, never at a repeat while it
+  // stands (`alertRefusal`, `alertHalt`). The list is open: a new cause is added at its call site and
   // here, and the Monitors, which count every line of this event, need no change. Logged before
   // the record is written, so a failing database can't swallow it. Operators' Cloudflare
   // Monitors alert on this name, so renaming it, or `cause`, is a breaking change.

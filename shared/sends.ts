@@ -205,17 +205,31 @@ export function refusedMessage(cause: HaltCause | null, error: string | null): s
 
 /**
  * The `provider_unavailable` condition's words (SPEC §12): an outage or a rate limit, which
- * clears on its own, or a rate limit that has outlasted any burst (`isSelfThrottled`), which
- * names the setting that causes it.
+ * clears on its own; a rate limit that has outlasted any burst (`isSelfThrottled`), which
+ * names the setting that causes it; or, `long`, an outage past an hour, which says nothing is
+ * lost and what is still useful to do, as the email the publisher gets then does (SPEC §8).
  */
 export function unavailableMessage(
   send: Pick<Send, "halt_reason" | "halt_cause" | "halt_retries" | "halt_error">,
+  long = false,
 ): string {
   if (isSelfThrottled(send)) {
-    return `The provider keeps refusing for its sending rate: ${sentence(send.halt_error)} A burst clears within a second, and this has refused the first request of ${send.halt_retries} retries in a row, minutes apart, so the instance is asking for more a second than the account allows. Set SES_MAX_SEND_RATE to the maximum send rate on the SES console’s account dashboard, or remove it and let the app read that rate by allowing its AWS key ses:GetAccount, and deploy. ${PASS_THIS_ALONG} The send retries on its own meanwhile, and no one has been marked unsent because of this.`;
+    return `The provider keeps refusing for its sending rate: ${sentence(send.halt_error)} A burst clears within a second, and this has refused the first request of ${send.halt_retries} retries in a row, minutes apart, so the instance is asking for more a second than the account allows. ${SES_RATE_ADVICE} ${PASS_THIS_ALONG} The send retries on its own meanwhile, and no one has been marked unsent because of this.`;
+  }
+  if (long) {
+    return `The provider has been unavailable for over an hour: ${sentence(send.halt_error)} Nothing is lost: no one has been marked unsent because of this, and the send tries again every hour and resumes on its own once the provider answers. Check AWS’s status page (${AWS_STATUS_PAGE}) for a problem with Amazon SES in your region, and if this post is time-sensitive, you may want to tell your readers it will be late.`;
   }
   return `The provider is unavailable: ${sentence(send.halt_error)} The send retries on its own, spaced out the longer this lasts, and no one has been marked unsent because of this.`;
 }
+
+/** The fix for a rate limit the deployment causes itself (`isSelfThrottled`), one wording for
+ *  the watch and the email. */
+export const SES_RATE_ADVICE =
+  "Set SES_MAX_SEND_RATE to the maximum send rate on the SES console’s account dashboard, or remove it and let the app read that rate by allowing its AWS key ses:GetAccount, and deploy.";
+
+/** Where AWS says whether Amazon SES is down, which the words for an outage past an hour
+ *  point to. */
+export const AWS_STATUS_PAGE = "https://health.aws.amazon.com/health/status";
 
 /** The provider's standing refusal of a send, while one lasts. */
 export interface SendHalt {

@@ -9,7 +9,14 @@
 
 import { dashboardLink } from "../../shared/dashboard_link";
 import type { SendingRefusal } from "../../shared/provider";
-import { isSendOwnHalt, PASS_THIS_ALONG, refusalAdvice } from "../../shared/sends";
+import {
+  AWS_STATUS_PAGE,
+  isSelfThrottled,
+  isSendOwnHalt,
+  PASS_THIS_ALONG,
+  refusalAdvice,
+  SES_RATE_ADVICE,
+} from "../../shared/sends";
 import { settingsRoute } from "../../shared/settings";
 import type { DueNotification } from "../db/notifications";
 import type { Config } from "../env";
@@ -225,6 +232,31 @@ function refused(n: DueNotification, title: string, config: Config): RenderedEma
   });
 }
 
+/**
+ * A post the provider has been unavailable to for about an hour (SPEC §8, §12): nothing is
+ * lost and it resumes on its own, so the email says what is still useful, checking AWS's
+ * status page and telling readers if the post can't wait, or, for a rate limit that has
+ * outlasted any burst, the setting that causes it. It goes through the provider that is down,
+ * so it says it may arrive late; the operator's Cloudflare alert is what covers that gap.
+ */
+function unavailable(n: DueNotification, title: string, config: Config): RenderedEmail {
+  const held = n.c_pending + n.c_in_flight;
+  const throttled = isSelfThrottled(n);
+  const readers =
+    "If this post is time-sensitive, you may want to tell your readers it will be late.";
+  return problem({
+    subject: `${title} is late: Amazon SES has been unavailable for over an hour`,
+    happened: `${throttled ? "Amazon SES has refused every try for its sending rate" : "Amazon SES has been unavailable"} since ${when(n.halted_at ?? n.episode)}, so ${title} has been waiting for over an hour.`,
+    affected: `${emails(held)} ${held === 1 ? "is" : "are"} still to go.`,
+    said: said(n.halt_error),
+    todo: throttled
+      ? `This instance may be asking for more a second than the account allows. ${SES_RATE_ADVICE} ${PASS_THIS_ALONG} ${readers}`
+      : `There’s nothing to fix in Kestrel. Check AWS’s status page (${AWS_STATUS_PAGE}) for a problem with Amazon SES in your region. ${readers}`,
+    next: `Nothing is lost. It tries again every hour and carries on by itself as soon as SES answers, and any other post that comes due waits with it. ${NO_ONE_HARMED} Notifications go through SES too, so this email may have arrived late.`,
+    link: { label: "See this send", url: sendLink(config, n.send_id) },
+  });
+}
+
 /** Write the notification for one event, from the send as it stands now. */
 export function composeNotification(n: DueNotification, config: Config): RenderedEmail {
   const link = { label: "See this send", url: sendLink(config, n.send_id) };
@@ -234,6 +266,8 @@ export function composeNotification(n: DueNotification, config: Config): Rendere
       return finished(n, title, config);
     case "refused":
       return refused(n, title, config);
+    case "unavailable":
+      return unavailable(n, title, config);
     case "stuck":
       return problem({
         subject: `${title} is waiting: nothing has gone out for ${minutes(STUCK_THRESHOLD_MS)} minutes`,

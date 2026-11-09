@@ -38,11 +38,12 @@ function standIn(d: SettingsResponse["deployment"]): boolean {
   return d.provider === "fake" && d.simulation === null;
 }
 
-/** What these emails can't carry, naming the provider as the Sent through row does: SES by
- *  name when it is SES, the email provider otherwise. */
+/** What these emails can't carry, or carry only late, naming the provider as the Sent through
+ *  row does: SES by name when it is SES, the email provider otherwise. Never that the alerts
+ *  exist, which the app can't tell (SPEC §12). */
 function alertsNote(d: SettingsResponse["deployment"]): string {
   const [via, it] = d.provider === "ses" ? ["Amazon SES", "SES"] : ["your email provider", "it"];
-  return `These emails travel through ${via} like the newsletter, so they can’t tell you when ${it} refuses your account. Two Cloudflare alerts cover that, and Kestrel itself stopping.`;
+  return `These emails travel through ${via} like the newsletter, so they can’t tell you when ${it} refuses your account, and one saying ${it} has been down for over an hour may arrive only once ${it} is back. Two Cloudflare alerts cover both, and Kestrel itself stopping.`;
 }
 
 /** The Set up alerts guide, which creates the Cloudflare Monitors, in the Docs tab. */
@@ -51,6 +52,7 @@ const ALERTS_DOCS_HREF = "#/docs/alerts";
 const NOTIFICATION_KINDS: Record<NotificationStatusKind, string> = {
   finished: "went out",
   refused: "provider refusing",
+  unavailable: "provider down over an hour",
   stuck: "in flight too long",
   wedged: "waiting to be resolved",
   missed: "missed fire time",

@@ -3,7 +3,7 @@ import type { D1Migration } from "@cloudflare/vitest-plugin";
 import { beforeEach, describe, expect, it } from "vitest";
 import { SHIPPED_MIGRATIONS } from "../src/db/migrations";
 import { outageNotice } from "../src/db/notifications";
-import { dueSend, resetDatabase, seedConfirmed } from "./support/fixtures";
+import { dueSend, frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 
 // The migrations folder as vitest.config.ts read it, the same files the setup applied.
 const FOLDER = (env as unknown as { TEST_MIGRATIONS: D1Migration[] }).TEST_MIGRATIONS;
@@ -879,7 +879,8 @@ describe("schema (0020_notifications_not_sending)", () => {
     const rebuilds = FOLDER.filter(
       (m) =>
         m.name === "0020_notifications_not_sending.sql" ||
-        m.name === "0021_notifications_outage_receipts.sql",
+        m.name === "0021_notifications_outage_receipts.sql" ||
+        m.name === "0023_notifications_unavailable.sql",
     );
     for (const q of rebuilds.flatMap((m) => m.queries ?? [])) {
       await env.DB.prepare(q).run();
@@ -908,8 +909,13 @@ describe("schema (0021_notifications_outage_receipts)", () => {
          VALUES (NULL, 'sandbox', 0, 'pending', 2, 1, 2, '["a@example.com"]')`,
       ),
     ]);
-    const migration = FOLDER.find((m) => m.name === "0021_notifications_outage_receipts.sql");
-    for (const q of migration?.queries ?? []) {
+    // With the rebuild after it, so a later test still finds the schema as it ships.
+    const rebuilds = FOLDER.filter(
+      (m) =>
+        m.name === "0021_notifications_outage_receipts.sql" ||
+        m.name === "0023_notifications_unavailable.sql",
+    );
+    for (const q of rebuilds.flatMap((m) => m.queries ?? [])) {
       await env.DB.prepare(q).run();
     }
     const { results } = await env.DB.prepare(
@@ -941,6 +947,66 @@ describe("schema (0021_notifications_outage_receipts)", () => {
     expect(results).toEqual([
       { kind: "not_sending", episode: 500 },
       { kind: "not_sending_held", episode: 500 },
+    ]);
+  });
+});
+
+describe("schema (0023_notifications_unavailable)", () => {
+  it("carries every notification over as it was, and admits one outage notice a send and outage (SPEC §8)", async () => {
+    const send = await frozenSend(Date.now() + 60_000);
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO notifications (send_id, kind, episode, status, attempts, error, created_at, updated_at, sent_to)
+         VALUES (?, 'refused', 7, 'failed', 5, 'refused', 1, 2, '["a@example.com"]')`,
+      ).bind(send.id),
+      env.DB.prepare(
+        `INSERT INTO notifications (send_id, kind, episode, status, attempts, created_at, updated_at)
+         VALUES (NULL, 'not_sending', 9, 'sent', 1, 3, 4)`,
+      ),
+    ]);
+    const migration = FOLDER.find((m) => m.name === "0023_notifications_unavailable.sql");
+    for (const q of migration?.queries ?? []) {
+      await env.DB.prepare(q).run();
+    }
+    const insert = (episode: number) =>
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO notifications (send_id, kind, episode, created_at, updated_at)
+         VALUES (?, 'unavailable', ?, 5, 5)`,
+      )
+        .bind(send.id, episode)
+        .run();
+    await insert(100);
+    await insert(100);
+    await insert(200);
+    const { results } = await env.DB.prepare(
+      "SELECT kind, episode, status, attempts, error, sent_to FROM notifications ORDER BY kind, episode",
+    ).all();
+    expect(results).toEqual([
+      { kind: "not_sending", episode: 9, status: "sent", attempts: 1, error: null, sent_to: "[]" },
+      {
+        kind: "refused",
+        episode: 7,
+        status: "failed",
+        attempts: 5,
+        error: "refused",
+        sent_to: '["a@example.com"]',
+      },
+      {
+        kind: "unavailable",
+        episode: 100,
+        status: "pending",
+        attempts: 0,
+        error: null,
+        sent_to: "[]",
+      },
+      {
+        kind: "unavailable",
+        episode: 200,
+        status: "pending",
+        attempts: 0,
+        error: null,
+        sent_to: "[]",
+      },
     ]);
   });
 });

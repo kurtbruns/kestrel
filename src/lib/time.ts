@@ -20,8 +20,8 @@ export { STUCK_THRESHOLD_MS } from "../../shared/sends";
  * lasts. There is no ceiling on the count, only on the wait. A rate limit or a brief outage
  * usually clears within a minute or two, so `unavailable` retries at the next tick, then
  * 3, 8, 23, and 53 minutes into the halt, then hourly: dense while a blip is likely, and
- * one request an hour once it is a real outage, which the stuck flag has raised by then. An
- * account refusal clears only when a person fixes the key, the sender, or the account (or a
+ * one request an hour once it is a real outage, which the publisher is told of then
+ * (`LONG_OUTAGE_HALTS`). An account refusal clears only when a person fixes the key, the sender, or the account (or a
  * quota resets), so each retry is a request the provider is known to refuse: `account`
  * starts at five minutes, and both cap at an hour, so a fix waits at most that long.
  */
@@ -29,6 +29,16 @@ export const HALT_BACKOFF_MS: Record<HaltReason, readonly number[]> = {
   unavailable: [1, 2, 5, 15, 30, 60].map((m) => m * 60 * 1000),
   account: [5, 15, 30, 60].map((m) => m * 60 * 1000),
 };
+/**
+ * The unavailable halt that makes a provider outage past an hour (SPEC §8, §12): the one
+ * that takes the last step of `HALT_BACKOFF_MS.unavailable`, the provider down at every retry
+ * of the backoff, about 53 minutes after the first, so the next retry waits the hourly cap.
+ * Counted in the provider's answers rather than read off the clock, so a sweep that stopped
+ * running, which its own alert reports, is never taken for an hour of outage. That halt
+ * logs the operator's alert line, and from then the publisher is told and the send's notice
+ * is worth a look.
+ */
+export const LONG_OUTAGE_HALTS = HALT_BACKOFF_MS.unavailable.length;
 /**
  * How early a halted send's retry may run. The halt is stamped after the provider answered,
  * a moment into the tick, and cron ticks drift by a little either way, so a retry due at

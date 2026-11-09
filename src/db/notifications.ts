@@ -17,6 +17,7 @@ import type {
   SendNotificationKind,
 } from "../../shared/settings";
 import {
+  LONG_OUTAGE_HALTS,
   MISSED_THRESHOLD_MS,
   NO_RECEIPTS_NOTICE_AFTER_MS,
   NOTIFY_HORIZON_MS,
@@ -42,6 +43,7 @@ export interface DueNotification {
   locked_until: number | null;
   halt_reason: HaltReason | null;
   halted_at: number | null;
+  halt_retries: number;
   halt_retry_at: number | null;
   progress_at: number | null;
   halt_cause: HaltCause | null;
@@ -152,6 +154,9 @@ export async function postsHeldByOutage(db: D1Database): Promise<string[]> {
  * sharing that start is told of it. A wedged send waits on Resolve, not on the refusal it
  * last carried, so it is neither told of the refusal nor the one the others defer to, and a
  * refusal's notice closed as cleared before it went out holds back no other send's.
+ * A provider outage past an hour (`LONG_OUTAGE_HALTS`, the halt that logged the operator's
+ * alert line) is one event the same way, keyed by when the outage began, so an outage that
+ * ends and later returns is told again, and one that ends before its notice goes is dropped.
  * A refusal of every email is an outage instead, told without naming a send: once when a held
  * post first shows it, unless a reader's signup or the account check already told it, and once
  * more when a post is held after that first notice went, since it named no such post; a first
@@ -196,6 +201,17 @@ export async function recordNotifications(db: D1Database, now: number): Promise<
        )
        UNION ALL
        SELECT * FROM (
+         SELECT id, 'unavailable', halted_at, ?1, ?1 FROM sends s
+          WHERE status = 'sending' AND halt_reason = 'unavailable' AND halted_at IS NOT NULL
+            AND halt_retries >= ?6 AND NOT (${WEDGED_SEND})
+            AND NOT EXISTS (SELECT 1 FROM sends o
+                             WHERE o.status = 'sending' AND o.halt_reason = 'unavailable'
+                               AND o.halted_at = s.halted_at AND o.id < s.id
+                               AND NOT ${WEDGED_SEND})
+            AND NOT EXISTS (SELECT 1 FROM notifications r
+                             WHERE r.kind = 'unavailable' AND r.episode = s.halted_at
+                               AND r.send_id <> s.id AND r.status <> 'cleared')
+         UNION ALL
          SELECT NULL, 'not_sending', g.since, ?1, ?1 FROM sending g
           WHERE g.state = 'refusing' AND EXISTS (SELECT 1 FROM sends WHERE ${HELD_BY_OUTAGE})
          UNION ALL
@@ -230,6 +246,7 @@ export async function recordNotifications(db: D1Database, now: number): Promise<
       MISSED_THRESHOLD_MS,
       STUCK_THRESHOLD_MS,
       NO_RECEIPTS_NOTICE_AFTER_MS,
+      LONG_OUTAGE_HALTS,
     )
     .run();
 }
@@ -240,7 +257,7 @@ export async function dueNotifications(db: D1Database, limit: number): Promise<D
     .prepare(
       `SELECT n.send_id, n.kind, n.episode, n.attempts, n.sent_to,
               s.subject, s.status AS send_status, s.fire_at, s.started_at, s.completed_at,
-              s.locked_until, s.halt_reason, s.halted_at, s.halt_retry_at, s.progress_at, s.halt_cause, s.halt_error, s.c_pending, s.c_in_flight, s.c_accepted,
+              s.locked_until, s.halt_reason, s.halted_at, s.halt_retries, s.halt_retry_at, s.progress_at, s.halt_cause, s.halt_error, s.c_pending, s.c_in_flight, s.c_accepted,
               s.c_delivered, s.c_bounced, s.c_complained, s.c_skipped, s.c_unsent,
               EXISTS (SELECT 1 FROM sends h
                        WHERE h.completed_at >= s.completed_at

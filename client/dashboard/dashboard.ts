@@ -155,17 +155,18 @@ function computeHealth(
           : html`<a href="#/sent">${stuck.length} sends</a> have handed off no one for a while, with no retry or provider problem to explain it.`,
     });
   }
-  // A rate limit the deployment causes itself (SPEC §12): the server marks it worth a look,
-  // since a burst never lasts, and its words name the setting.
-  const throttled = live.flatMap((s) => {
+  // A rate limit the deployment causes itself, or an outage past an hour (SPEC §12): the
+  // server marks each worth a look, since a burst never lasts and the publisher has been
+  // emailed about the outage, and its words name the setting or say what is useful to do.
+  const worthALook = live.flatMap((s) => {
     const c = conditionOf(s, "provider_unavailable");
     return c?.severity === "warn" ? [{ s, c }] : [];
   });
-  const [firstThrottled] = throttled;
-  if (firstThrottled) {
+  const [firstWorth] = worthALook;
+  if (firstWorth) {
     alerts.push({
       level: "amber",
-      text: html`<a href="#/sent/${firstThrottled.s.id}">${firstThrottled.s.subject}</a>: ${firstThrottled.c.message}`,
+      text: html`<a href="#/sent/${firstWorth.s.id}">${firstWorth.s.subject}</a>: ${firstWorth.c.message}`,
     });
   }
   // Bounce spike (SPEC §8): the server's reading of a recent send's confirmed bounces over

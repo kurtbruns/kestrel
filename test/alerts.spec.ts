@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } fr
 import { readSending, recordAccepted } from "../src/db/sending";
 import { getSettings } from "../src/db/settings";
 import { getConfig } from "../src/env";
+import { LONG_OUTAGE_HALTS } from "../src/lib/time";
 import * as providers from "../src/providers";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { Budget } from "../src/send/budget";
@@ -13,7 +14,7 @@ import { refreshProviderAccount } from "../src/services/provider_status";
 import { noteRefusal } from "../src/services/sending";
 import { BatchProvider } from "./support/batching";
 import { failingD1 } from "./support/d1_failure";
-import { dueSend, resetDatabase, seedConfirmed, sendingWorks } from "./support/fixtures";
+import { dueSend, resetDatabase, seedConfirmed, sendingWorks, setRow } from "./support/fixtures";
 import { AUTH, base } from "./support/http";
 import { type LoggedLine, logged } from "./support/log";
 import { withVars } from "./support/worker_env";
@@ -111,6 +112,53 @@ describe("the lines operators' alerts depend on (SPEC §12)", () => {
           event: "alert.sending",
           level: "warn",
           cause: "quota",
+          sendId: send.id,
+        }),
+      ]);
+    },
+  );
+});
+
+describe("an outage past an hour (SPEC §12)", () => {
+  it.each([
+    ["settles the answer", /provider_id = COALESCE/],
+    ["holds the send", /halt_reason = \?/],
+  ])(
+    "logs alert.sending with cause outage at the halt that passes the hour, even when the write that %s fails",
+    async (_what, failing) => {
+      await seedConfirmed(["ada@example.com", "grace@example.com"]);
+      const send = await dueSend();
+      // SES taking one and holding the other back as unavailable, so the answer has an outcome
+      // to settle as well as a hold to write.
+      const transport = new BatchProvider();
+      vi.spyOn(transport, "sendBatch").mockImplementation(async (_r, recipients) => ({
+        kind: "answered",
+        results: recipients.map((r) => ({
+          email: r.email,
+          accepted: false,
+          retryable: true,
+          held: true,
+          error: "ses 503 ServiceUnavailable",
+        })),
+        halt: { reason: "unavailable", cause: "outage", error: "ses 503 ServiceUnavailable" },
+      }));
+      vi.spyOn(providers, "getProvider").mockReturnValue(transport);
+
+      // One halt short of the hour, as the record keeps it.
+      await runSend(env, send.id);
+      await setRow(send.id, {
+        halt_retries: LONG_OUTAGE_HALTS - 1,
+        halt_retry_at: Date.now() - 1,
+      });
+      expect(alerts()).toEqual([]);
+
+      const broken = { ...env, DB: failingD1(env.DB, failing, FAILED) };
+      await expect(runSend(broken, send.id)).rejects.toThrow(FAILED);
+      expect(alerts()).toEqual([
+        expect.objectContaining({
+          event: "alert.sending",
+          level: "warn",
+          cause: "outage",
           sendId: send.id,
         }),
       ]);
