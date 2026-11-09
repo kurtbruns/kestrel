@@ -22,9 +22,9 @@ Three kinds of email tell you about the instance, each by its own route:
 
 Each one adds one thing, and you can come back to any of them later.
 
+- To have Claude draft, proofread, and schedule posts: [Allow Claude to connect](../guides/01-allow-claude.md)
 - Before anyone relies on the newsletter, to hear when SES refuses your account or Kestrel stops: [Set up alerts](../guides/03-alerts.md)
 - Before you share your subscribe link: [Rate-limit the subscribe form](../guides/05-rate-limit.md)
-- To have Claude draft, proofread, and schedule posts: [Allow Claude to connect](../guides/01-allow-claude.md)
-- To run scripts with no one signed in: [Automate with a service token](../guides/02-automate.md)
-- To see when your list needs Workers Paid or higher SES limits: [As your list grows](../guides/09-as-your-list-grows.md)
 - To move to a new release: [Upgrade to a new release](../guides/07-upgrade.md)
+- To see when your list needs Workers Paid or higher SES limits: [As your list grows](../guides/09-as-your-list-grows.md)
+- To run scripts with no one signed in: [Automate with a service token](../guides/02-automate.md)
