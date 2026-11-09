@@ -2,9 +2,9 @@
 
 Moving to Kestrel from another newsletter service means bringing your subscribers with you, along with the consent they gave there. This guide explains how to export your list from the old service, convert it to Kestrel's format, and import it under **Subscribers → Import**. It also covers what carries over, the limits on an import, and taking your list out again. Kestrel shows you what an import will do before anything changes, and an import never emails your subscribers.
 
-**The first decision is whether to upgrade to Cloudflare's Workers Paid plan.** Workers Free suits a list of up to about 1,000 subscribers. Past about 5,000, one send can use up the day's database writes and stop the newsletter until midnight UTC. With more than about 1,000 subscribers, it's recommended to upgrade before you import. Workers Paid is $5 a month and has no daily cap, and [As your list grows](../guides/09-as-your-list-grows.md) walks through the upgrade.
+**The first decision is whether to upgrade to Cloudflare's Workers Paid plan.** Workers Free suits a list of up to about 1,000 subscribers. Past about 5,000, one send can use up the day's database writes and stop the newsletter until midnight UTC. With more than about 1,000 subscribers, it's recommended to upgrade before you import. Workers Paid is $5 a month and has no daily cap, and [As your list grows](../guides/as-your-list-grows.md) walks through the upgrade.
 
-If you're starting without a list, skip this step and go on to [Write and send a post](04-write-a-post.md).
+If you're starting without a list, skip this step and go on to [Write and send a post](write-a-post.md).
 
 ## 1. Export from your old service
 
@@ -26,7 +26,7 @@ grace@example.com,subscribed,single,mailchimp,
 edsger@example.com,unsubscribed,unknown,unknown,
 ```
 
-[The file format](01-your-list.md#the-file-format), below, describes every column. Claude can do the conversion for you, once you [connect it](08-connect-claude.md). In your instance's repository, Claude Code's `/migrate-list` skill asks what anything ambiguous in your old service's export means, and converts a few rows for you to check.
+[The file format](your-list.md#the-file-format), below, describes every column. Claude can do the conversion for you, once you [connect it](connect-claude.md). In your instance's repository, Claude Code's `/migrate-list` skill asks what anything ambiguous in your old service's export means, and converts a few rows for you to check.
 
 ## 3. Import it
 
@@ -147,9 +147,9 @@ A subscriber an import confirmed is **confirmed**, like anyone who confirmed in 
 
 ### Limits in detail
 
-- **Rows:** up to 10,000 in one import. On the free Workers plan's limits it's 1,000, since that plan's processing time per request can't plan and commit more. A setting on your instance tells Kestrel which plan it's on, as [As your list grows](../guides/09-as-your-list-grows.md) describes.
+- **Rows:** up to 10,000 in one import. On the free Workers plan's limits it's 1,000, since that plan's processing time per request can't plan and commit more. A setting on your instance tells Kestrel which plan it's on, as [As your list grows](../guides/as-your-list-grows.md) describes.
 - **Size:** an import request of at most 10 MB, and at most 500 bytes of `evidence` a row.
-- **The free Workers plan:** it suits a list of up to about 1,000 subscribers. Past about 5,000, one send can use up the day's database writes and stop the newsletter until midnight UTC. An import's plan recommends Workers Paid when it would leave more than 1,000 confirmed subscribers, and the Dashboard and the Subscribers screen say the same while the list is past it. A scheduled post to more than 5,000 recipients warns before it's scheduled, and its banner repeats the warning while it's scheduled. None of these stops anything. [As your list grows](../guides/09-as-your-list-grows.md) has the numbers behind them.
+- **The free Workers plan:** it suits a list of up to about 1,000 subscribers. Past about 5,000, one send can use up the day's database writes and stop the newsletter until midnight UTC. An import's plan recommends Workers Paid when it would leave more than 1,000 confirmed subscribers, and the Dashboard and the Subscribers screen say the same while the list is past it. A scheduled post to more than 5,000 recipients warns before it's scheduled, and its banner repeats the warning while it's scheduled. None of these stops anything. [As your list grows](../guides/as-your-list-grows.md) has the numbers behind them.
 
 ### Exporting
 

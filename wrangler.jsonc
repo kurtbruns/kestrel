@@ -78,7 +78,7 @@
   // Self-contained by default: ARCHIVE_ORIGIN defaults to APP_ORIGIN and
   // MEDIA_PUBLIC_BASE to `${APP_ORIGIN}/media`, both resolved in getConfig, so
   // they're omitted here. Set them only to opt into an apex archive or a media
-  // custom domain (docs/reference/01-configuration.md). ARCHIVE_BASE_PATH drives both
+  // custom domain (docs/reference/configuration.md). ARCHIVE_BASE_PATH drives both
   // the archive URL and the route that serves it. PROVIDER names `fake` on purpose: unset
   // means no provider connected (SPEC §13), which refuses every send.
   "vars": {

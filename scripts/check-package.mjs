@@ -64,6 +64,10 @@ const REQUIRED = [
   "demo/publication.md",
   "migrations/0001_init.sql",
   "docs/README.md",
+  "docs/guides/upgrade.md",
+  // The stub at the upgrade guide's old name, which an instance's earlier upgrade skill reads
+  // from the package it has just installed (.claude/rules/release.md says when it goes).
+  "docs/guides/07-upgrade.md",
   "CHANGELOG.md",
 ];
 const FORBIDDEN = ["src/", "client/", "shared/", "test/", "scripts/", ".claude/", "public/"];

@@ -2,13 +2,13 @@
 
 A service token lets a script or scheduled job call the API, such as a job that drafts a weekly digest. Kestrel labels these changes **a service token**, rather than with a person's name.
 
-In this guide, you create a service token, allow it in through the Access application, give it to your script, and check that it works. To connect Claude as yourself instead, follow [Allow Claude to connect](01-allow-claude.md).
+In this guide, you create a service token, allow it in through the Access application, give it to your script, and check that it works. To connect Claude as yourself instead, follow [Allow Claude to connect](allow-claude.md).
 
 ## Before you begin
 
 You need:
 
-- The dashboard locked with Access, from [Lock the dashboard with Access](../get-started/03-access.md).
+- The dashboard locked with Access, from [Lock the dashboard with Access](../get-started/access.md).
 - The script or job that will call the API, and somewhere it keeps secrets.
 
 ## 1. Create a service token
@@ -27,7 +27,7 @@ A service token is a Client ID and a Client Secret that a program sends with eac
 
 The application lets in only the people its Allow policy names, so the token needs a policy of its own on the same application.
 
-1. Under **Access controls → Applications**, select **Configure** on the application from [Lock the dashboard with Access](../get-started/03-access.md#2-create-the-access-application).
+1. Under **Access controls → Applications**, select **Configure** on the application from [Lock the dashboard with Access](../get-started/access.md#2-create-the-access-application).
 
 1. Add a policy:
 

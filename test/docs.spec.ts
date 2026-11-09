@@ -1,8 +1,8 @@
 /// <reference types="vite/client" />
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import troubleshooting from "../docs/publishing/06-troubleshooting.md";
 import publishingIndex from "../docs/publishing/README.md";
+import troubleshooting from "../docs/publishing/troubleshooting.md";
 import selfHostingIndex from "../docs/README.md";
 import { type DocsResponse, headingAnchors } from "../shared/docs";
 import {
@@ -90,14 +90,15 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
     // linked by a path no import provides would quietly drop out of the docs.
     const { sets, docs } = renderDocs();
     const listed = [
-      ...[...publishingIndex.matchAll(/\]\((\d{2}-[a-z0-9-]+\.md)\)/g)].map(
-        ([, f]) => `publishing/${f}`,
-      ),
-      ...[...selfHostingIndex.matchAll(/\]\(([a-z0-9-]+\/\d{2}-[a-z0-9-]+\.md)\)/g)].map(
+      ...[...publishingIndex.matchAll(/\]\(([a-z0-9-]+\.md)\)/g)].map(([, f]) => `publishing/${f}`),
+      ...[...selfHostingIndex.matchAll(/\]\(([a-z0-9-]+\/[a-z0-9-]+\.md)\)/g)].map(
         ([, path]) => path,
       ),
     ];
     expect(listed.sort()).toEqual(bundledPages().sort());
+    // Every listed page is a doc. A file name with a number in front (`07-verify.md`) is no
+    // page, since the index sets the order, so it drops out here.
+    expect(docs.length).toBe(bundledPages().length);
     expect(docs.filter((d) => d.set === "publishing").length).toBe(
       bundledPages().filter((p) => p.startsWith("publishing/")).length,
     );
@@ -119,7 +120,7 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
   });
 
   it("turns every link between guide pages into the doc's in-app route", () => {
-    // The Markdown links pages by relative path (`02-deploy.md`) so the same file works on
+    // The Markdown links pages by relative path (`deploy.md`) so the same file works on
     // GitHub; the Worker rewrites each to `#/docs/<slug>`. A link left as a `.md` path names
     // a file that is not a doc (a typo, or a page since renamed), and would 404 in the app.
     const { docs, sets } = renderDocs();
@@ -263,7 +264,7 @@ describe("each doc as Markdown, for an agent (docMarkdown)", () => {
     expect(md).toMatch(/^# Bring your existing list/);
     expect(md).toContain("](your-list.md#the-file-format)");
     expect(md).toContain("](as-your-list-grows.md)");
-    expect(md).not.toMatch(/\]\([^)]*\d{2}-[a-z0-9-]+\.md/);
+    expect(md).not.toMatch(/\]\([^)]*\/[a-z0-9-]+\.md/);
   });
 
   it("serves a merged page under its former slug, which an earlier release's context or links may name", () => {
@@ -299,18 +300,18 @@ describe("each doc as Markdown, for an agent (docMarkdown)", () => {
 
   it("leaves link syntax inside code as written", () => {
     const md = [
-      "See [Deploy](../get-started/02-deploy.md#check-it).",
+      "See [Deploy](../get-started/deploy.md#check-it).",
       "",
-      "Write `[Deploy](02-deploy.md)` to link a page.",
+      "Write `[Deploy](deploy.md)` to link a page.",
       "",
       "```",
-      "[Upgrade](../guides/07-upgrade.md)",
+      "[Upgrade](../guides/upgrade.md)",
       "```",
     ].join("\n");
-    const out = markdownLinksForAgents(md, "publishing/01-your-list.md");
+    const out = markdownLinksForAgents(md, "publishing/your-list.md");
     expect(out).toContain("See [Deploy](deploy.md#check-it).");
-    expect(out).toContain("Write `[Deploy](02-deploy.md)` to link a page.");
-    expect(out).toContain("[Upgrade](../guides/07-upgrade.md)\n```");
+    expect(out).toContain("Write `[Deploy](deploy.md)` to link a page.");
+    expect(out).toContain("[Upgrade](../guides/upgrade.md)\n```");
   });
 });
 

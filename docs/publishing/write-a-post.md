@@ -6,7 +6,7 @@ Write in Markdown, schedule it, then send yourself a test. Scheduling makes the 
 
 ## Write
 
-The editor takes Markdown, and Kestrel saves as you type. The same Markdown becomes the email, in your [email template](11-email-template.md), and the post's page in your archive. **Preview** shows the email, and warns under it about anything it found wrong.
+The editor takes Markdown, and Kestrel saves as you type. The same Markdown becomes the email, in your [email template](email-template.md), and the post's page in your archive. **Preview** shows the email, and warns under it about anything it found wrong.
 
 - A blank line starts a new paragraph.
 - The opening lines are the preview a mail client shows beside the subject.
@@ -16,11 +16,11 @@ The editor takes Markdown, and Kestrel saves as you type. The same Markdown beco
 
 Choose **Schedule**, pick a time under **Send at**, and confirm. The time must be at least five minutes away by default, or the lead whoever runs your instance set. That's your window to catch a mistake, and you can cancel or move the send until then. **Send now** sends after the same wait.
 
-**Then send yourself a test.** Scheduling locks the post and makes its email, so **Send test email** now sends exactly what your list receives. **Settings → Default test recipients** fills in the addresses. A test needs an email provider, which [Connect Amazon SES](../get-started/05-ses.md) sets up.
+**Then send yourself a test.** Scheduling locks the post and makes its email, so **Send test email** now sends exactly what your list receives. **Settings → Default test recipients** fills in the addresses. A test needs an email provider, which [Connect Amazon SES](../get-started/ses.md) sets up.
 
 To change the post, choose **Cancel** on its banner, and it's a draft again. **Edit schedule** moves the time without unlocking it.
 
-At the send time, the post goes to your confirmed subscribers, and its page goes up in your archive. Watch it go out under **Sent**. If a send needs you, its page says so, and [Troubleshooting](06-troubleshooting.md) covers each case.
+At the send time, the post goes to your confirmed subscribers, and its page goes up in your archive. Watch it go out under **Sent**. If a send needs you, its page says so, and [Troubleshooting](troubleshooting.md) covers each case.
 
 ## Post settings
 

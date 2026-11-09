@@ -1,6 +1,6 @@
 # Create an AWS account
 
-Kestrel sends the newsletter's email through Amazon SES, which runs in an Amazon Web Services (AWS) account. This page assumes a brand-new account, made for the newsletter. If you'd rather use one you already have, skip to [Connect Amazon SES](05-ses.md).
+Kestrel sends the newsletter's email through Amazon SES, which runs in an Amazon Web Services (AWS) account. This page assumes a brand-new account, made for the newsletter. If you'd rather use one you already have, skip to [Connect Amazon SES](ses.md).
 
 If you plan to run multiple publications, you may want to consider setting up one account for each publication. With this setup, you can use [AWS Organizations](https://docs.aws.amazon.com/organizations/latest/userguide/orgs_introduction.html) to keep the accounts under one bill. Multiple publications can be run through one account. However, they share its sandbox, sending quotas, and suppression list, and AWS can pause sending for the whole account if one publication's bounces or complaints run high.
 
@@ -43,7 +43,7 @@ The root user can do anything in the account, including close it, so it needs mo
 
 1. Under **Multi-factor authentication (MFA)**, choose **Assign MFA device**. Enter a device name, select **Passkey or Security Key**, and follow the prompts. A passkey on your computer or phone works.
 
-1. Leave **Access keys** empty. A root user's key could do anything the root user can. [Connect Amazon SES](05-ses.md#5-create-the-apps-aws-key) makes a separate key that can only send email and read the account's sending status.
+1. Leave **Access keys** empty. A root user's key could do anything the root user can. [Connect Amazon SES](ses.md#5-create-the-apps-aws-key) makes a separate key that can only send email and read the account's sending status.
 
 ## 4. Set a budget alert
 
@@ -67,4 +67,4 @@ AWS charges for what you use, with no spending limit, so a mistake or a leaked k
 
     If it shows as **Pending**, select **Resend verification** on its row, and verify the address as section 4 describes.
 
-Next, [connect Amazon SES](05-ses.md).
+Next, [connect Amazon SES](ses.md).

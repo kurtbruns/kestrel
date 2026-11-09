@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import reference from "../docs/reference/01-configuration.md?raw";
+import reference from "../docs/reference/configuration.md?raw";
 import { api } from "./api";
 import {
   CONFIGURATION_REFERENCE,
