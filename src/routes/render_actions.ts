@@ -39,7 +39,7 @@ import {
 import { type EmailBranding, resolveBranding } from "../render/template_engine";
 import type { RequestContext } from "../router";
 import { param } from "../router";
-import { currentSender, sendSender } from "../services/sender";
+import { senderFrom, sendSender } from "../services/sender";
 import { sendTest } from "../services/test_send";
 import { webVersion } from "./archive";
 import { testUnsubscribeUrl } from "./public";
@@ -356,7 +356,7 @@ export async function templateTest(c: RequestContext): Promise<Response> {
   requireConnectedProvider(c.config);
 
   const result = await render(sampleRenderInput(), c.config, resolveBranding(settings, c.config));
-  const provider = getProvider(c.config, c.env, await currentSender(c.env.DB, c.config));
+  const provider = getProvider(c.config, c.env, senderFrom(settings, c.config));
   const unsubscribeUrl = testUnsubscribeUrl(c.config);
   // A deliberate manual test is a fresh send each press (not a retry), so it carries a
   // key of its own, as a post test does. The tag names the send too (the dev simulation

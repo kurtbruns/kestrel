@@ -2,6 +2,7 @@
  *  double opt-in confirmation through the provider seam. Used by both the public
  *  form and the authed API. */
 
+import type { Sender } from "../../shared/publication";
 import * as notifications from "../db/notifications";
 import { getSettings, resolveConfirmationEmail } from "../db/settings";
 import * as subscribers from "../db/subscribers";
@@ -14,7 +15,7 @@ import { getProvider, requireConnectedProvider } from "../providers";
 import type { HaltCause, RenderedEmail, SendBatchResult } from "../providers/types";
 import { resolveBranding } from "../render/template_engine";
 import type { RequestContext } from "../router";
-import { currentSender } from "../services/sender";
+import { senderFrom } from "../services/sender";
 import { contactOutcome, noteContact } from "./sending";
 
 /**
@@ -61,7 +62,7 @@ export async function requestSubscription(
   // Everything that can fail before the provider is asked happens before the claim, so
   // such a failure changes nothing and is never mistaken for a send.
   const token = newToken();
-  const message = await confirmationMessage(c, token);
+  const { message, sender } = await confirmationMessage(c, token);
   const { subscriber, created } = await subscribers.ensureSubscriber(db, email);
   const now = Date.now();
   if (!(await subscribers.claimConfirmation(db, subscriber.id, now, now - CONFIRM_COOLDOWN_MS))) {
@@ -79,7 +80,7 @@ export async function requestSubscription(
       ? "resubscribed"
       : "pending_resent";
 
-  const sent = await sendConfirmation(c, message, subscriber, now, fromReader);
+  const sent = await sendConfirmation(c, message, sender, subscriber, now, fromReader);
   if (sent.delivered === "no") {
     // Nothing went out, so nothing changes: the claim is released (a refusal is not a
     // send, and the reader may try again at once), and a row made for this request goes.
@@ -127,15 +128,22 @@ export async function requestSubscription(
   };
 }
 
-/** The confirmation email carrying `token`, in the publisher's wording and identity. */
-async function confirmationMessage(c: RequestContext, token: string): Promise<RenderedEmail> {
+/** The confirmation email carrying `token`, in the publisher's wording and identity, and
+ *  the sender it goes out as (SPEC §9), both from one read of the settings. */
+async function confirmationMessage(
+  c: RequestContext,
+  token: string,
+): Promise<{ message: RenderedEmail; sender: Sender }> {
   const settings = await getSettings(c.env.DB);
   const copy = resolveConfirmationEmail(settings);
-  // The branded layout reuses the same publication identity the post render does
-  // (name falls back to the From display name), so the two never drift.
+  // The branded layout reuses the same publication identity the post render does, so the
+  // two never drift.
   const branding = resolveBranding(settings, c.config);
   const identity = { name: branding.name, tagline: branding.tagline, logoUrl: branding.logoUrl };
-  return confirmationEmail(`${c.config.appOrigin}/confirm?token=${token}`, copy, identity);
+  return {
+    message: confirmationEmail(`${c.config.appOrigin}/confirm?token=${token}`, copy, identity),
+    sender: senderFrom(settings, c.config),
+  };
 }
 
 /** Hand one confirmation to the provider and say whether it went: `yes`, `no` (refused,
@@ -144,6 +152,7 @@ async function confirmationMessage(c: RequestContext, token: string): Promise<Re
 async function sendConfirmation(
   c: RequestContext,
   message: RenderedEmail,
+  sender: Sender,
   subscriber: subscribers.SubscriberRow,
   attemptAt: number,
   fromReader: boolean,
@@ -152,7 +161,7 @@ async function sendConfirmation(
   | { delivered: "no"; error: string; cause?: HaltCause }
   | { delivered: "unknown"; error: string }
 > {
-  const provider = getProvider(c.config, c.env, await currentSender(c.env.DB, c.config));
+  const provider = getProvider(c.config, c.env, sender);
   const recipients = [{ email: subscriber.email, unsubscribeUrl: "" }];
   let result: SendBatchResult;
   try {

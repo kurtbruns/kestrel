@@ -555,7 +555,7 @@ describe("the real adapters, end to end through the loop", () => {
     AWS_SECRET_ACCESS_KEY: "test-secret-key-abc123",
     SES_MAX_SEND_RATE: "1000",
   } as AppEnv;
-  const sesAdapter = () => new SesProvider(getConfig(sesEnv), sesEnv);
+  const sesAdapter = () => new SesProvider(getConfig(sesEnv), sesEnv, null);
 
   it("an SES SendingPausedException halts the send without consuming anyone, then resumes", async () => {
     const emails = addresses(20);
@@ -711,7 +711,7 @@ describe("the real adapters, end to end through the loop", () => {
     const emails = addresses(9);
     await seedConfirmed(emails);
     const send = await dueSend();
-    vi.mocked(providers.getProvider).mockReturnValue(new SesProvider(getConfig(slow), slow));
+    vi.mocked(providers.getProvider).mockReturnValue(new SesProvider(getConfig(slow), slow, null));
     let first = true;
     const { spy } = answerSes(() => {
       const answer = first

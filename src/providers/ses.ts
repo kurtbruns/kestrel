@@ -401,9 +401,10 @@ export class SesProvider implements EmailProvider {
   private readonly address: string;
   private readonly configurationSet: string | undefined;
 
-  /** `sender` is who the emails go out as (SPEC §9); without one, the deploy-time address
-   *  with whatever name was written into it, as a reader of traits or webhooks needs. */
-  constructor(config: Config, env: AppEnv, sender?: Sender) {
+  /** `sender` is who the emails go out as (SPEC §9). `null`, for a caller that never
+   *  sends (a reader of traits or webhooks), leaves the deploy-time address with whatever
+   *  name was written into it, so even such an adapter carries a valid `From:`. */
+  constructor(config: Config, env: AppEnv, sender: Sender | null) {
     this.region = config.awsRegion;
     const from = sender ?? {
       name: fromDisplayName(config.fromAddress),

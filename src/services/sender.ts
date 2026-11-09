@@ -9,13 +9,19 @@
 
 import { fromAddressOnly, type Sender, sender } from "../../shared/publication";
 import type { SendRow } from "../db/sends";
-import { getSettings } from "../db/settings";
+import { type AppSettings, getSettings } from "../db/settings";
 import type { Config } from "../env";
 
-/** The sender as it stands now: the publication's name through the rule. */
+/** The sender the rule gives settings a caller has already read: the publication's name
+ *  over the deploy-time address. The way in for a handler that holds the settings, so it
+ *  reads them no second time. */
+export function senderFrom(settings: Pick<AppSettings, "publication">, config: Config): Sender {
+  return sender(settings.publication.name, config.fromAddress);
+}
+
+/** The sender as it stands now, for a caller with nothing read yet: one settings read. */
 export async function currentSender(db: D1Database, config: Config): Promise<Sender> {
-  const { publication } = await getSettings(db);
-  return sender(publication.name, config.fromAddress);
+  return senderFrom(await getSettings(db), config);
 }
 
 /**

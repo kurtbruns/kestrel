@@ -37,7 +37,7 @@ const sesEnv = {
 const FOREIGN_TOPIC_ARN = "arn:aws:sns:us-east-1:999999999999:not-ours";
 
 function newProvider(): SesProvider {
-  return new SesProvider(getConfig(env), sesEnv);
+  return new SesProvider(getConfig(env), sesEnv, null);
 }
 
 const UNSUB = "https://app.example.com/unsubscribe?token=deadbeef";
@@ -83,7 +83,7 @@ afterEach(() => {
 describe("SesProvider.sendBatch", () => {
   it("batches a second of the account's send rate, up to 50, one request a second, with no idempotency", () => {
     const at = (rate: number) =>
-      new SesProvider({ ...getConfig(env), sesMaxSendRate: rate }, sesEnv);
+      new SesProvider({ ...getConfig(env), sesMaxSendRate: rate }, sesEnv, null);
     expect(newProvider().name).toBe("ses");
     expect([1, 14, 50, 200].map((rate) => at(rate).maxBatch)).toEqual([1, 14, 50, 50]);
     expect(at(14).maxRequestRate).toBe(1);
@@ -218,7 +218,7 @@ describe("SesProvider.sendBatch", () => {
   it("encodes a display name with non-ASCII in it, as SES requires of FromEmailAddress", async () => {
     const config = { ...getConfig(env), fromAddress: "Café Notes <news@send.example.com>" };
     const { requests } = answerSes();
-    await new SesProvider(config, sesEnv).sendBatch(
+    await new SesProvider(config, sesEnv, null).sendBatch(
       renderedFixture(),
       [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
       { purpose: "list", tag: "send-1" },
@@ -1198,7 +1198,7 @@ describe("SesProvider.sendBatch", () => {
 // ============================================================================
 describe("getProvider factory", () => {
   it("returns the SES adapter when configured", () => {
-    const provider = getProvider({ ...getConfig(env), provider: "ses" }, sesEnv);
+    const provider = getProvider({ ...getConfig(env), provider: "ses" }, sesEnv, null);
     expect(provider).toBeInstanceOf(SesProvider);
     expect(provider.name).toBe("ses");
   });
@@ -1758,12 +1758,16 @@ describe("SesProvider's From line", () => {
     expect(decoded).toBe(name);
   });
 
-  it("without a sender, uses the From address as written at deploy, name and all", async () => {
+  it("with a null sender, as a caller that never sends passes, carries the From address as written at deploy", async () => {
     const { requests } = answerSes();
     await sendOne(
-      new SesProvider({ ...getConfig(env), fromAddress: `"Smith, Jane" <${address}>` }, sesEnv),
+      new SesProvider(
+        { ...getConfig(env), fromAddress: `"Smith, Jane" <${address}>` },
+        sesEnv,
+        null,
+      ),
     );
-    await sendOne(new SesProvider({ ...getConfig(env), fromAddress: address }, sesEnv));
+    await sendOne(new SesProvider({ ...getConfig(env), fromAddress: address }, sesEnv, null));
     expect(requests.map((r) => r.FromEmailAddress)).toEqual([
       `"Smith, Jane" <${address}>`,
       address,

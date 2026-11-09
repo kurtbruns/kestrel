@@ -12,10 +12,11 @@ import type { EmailProvider, PerRecipientResult, Recipient, SendBatchResult } fr
 /**
  * The adapter for the configured provider. A caller that sends hands over the sender its
  * emails go out as (`services/sender.ts`: the rule as it stands, or a send's frozen name,
- * SPEC §9); one that only reads the adapter's traits or parses a webhook passes none, and
- * gets the sender with no publication name, which never sends.
+ * SPEC §9). `null` is the stated choice of a caller that never sends, one that reads the
+ * adapter's traits or parses a webhook, and the compiler holds every caller to saying
+ * which, so no sending path can go out under a sender it never chose.
  */
-export function getProvider(config: Config, env: AppEnv, sender?: Sender): EmailProvider {
+export function getProvider(config: Config, env: AppEnv, sender: Sender | null): EmailProvider {
   switch (config.provider) {
     case "none":
       return new NotConnectedProvider();

@@ -117,7 +117,7 @@ describe("SES's bulk batches on the Workers Free budget", { timeout: 30_000 }, (
         SES_MAX_SEND_RATE: rate,
       } as AppEnv;
       vi.mocked(providers.getProvider).mockReturnValue(
-        new SesProvider(getConfig(sesVars), sesVars),
+        new SesProvider(getConfig(sesVars), sesVars, null),
       );
       const emails = addresses(400);
       await seedConfirmed(emails);

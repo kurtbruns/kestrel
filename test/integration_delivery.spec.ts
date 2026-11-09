@@ -28,7 +28,7 @@ import { getConfig } from "../src/env";
 import { _clearKeyCache, type SnsEnvelope } from "../src/providers/sns";
 import { runSend } from "../src/send/loop";
 import { SES_DEPLOY, SNS_TOPIC_ARN } from "./support/deploy";
-import { dueSend, resetDatabase, seedConfirmed } from "./support/fixtures";
+import { dueSend, resetDatabase, seedConfirmed, sendingWorks } from "./support/fixtures";
 import { base } from "./support/http";
 import { allowErrorLogs } from "./support/log";
 import { answerSes, SES_BULK_ENDPOINT } from "./support/ses";
@@ -40,6 +40,9 @@ import { makeSigner, type Signer, signEnvelope } from "./support/sns";
 // events to the SNS topic in a real deploy, so a send names it.
 const sesEnv = () =>
   ({ ...env, ...SES_DEPLOY, SES_CONFIGURATION_SET: "kestrel-events" }) as unknown as AppEnv;
+// The same deploy on a bare From address, so the sender's name is the publication's (SPEC §9).
+const bareSes = () =>
+  ({ ...sesEnv(), FROM_ADDRESS: "news@send.birds.example" }) as unknown as AppEnv;
 
 // --- seeding helpers --------------------------------------------------------
 
@@ -322,9 +325,6 @@ describe("webhook routes are wired through the real router", () => {
 // The From line a list send carries (SPEC §9, I5): the name frozen with its render, so what
 // goes out is what the publisher reviewed, whatever the publication is called since.
 describe("the From line a list send carries", () => {
-  // A bare From address, so the name is the publication's (SPEC §9).
-  const bareSes = () =>
-    ({ ...sesEnv(), FROM_ADDRESS: "news@send.birds.example" }) as unknown as AppEnv;
   const fromOf = (requests: { FromEmailAddress: string }[]) => requests[0]!.FromEmailAddress;
 
   it("goes out under the name frozen at schedule, not the publication's name since (I5)", async () => {
@@ -364,5 +364,40 @@ describe("the From line a list send carries", () => {
     const result = await runSend(bareSes(), send.id);
     expect(result.accepted).toBe(1);
     expect(fromOf(requests)).toBe('"Smith, Jane" <news@send.birds.example>');
+  });
+});
+
+// ============================================================================
+// The From line a subscribe confirmation carries (SPEC §9): the rule as it stands, through
+// the real adapter, so a reader's first email comes from the same sender as every other.
+describe("the From line a confirmation carries", () => {
+  const signup = (e: AppEnv) =>
+    route(
+      new Request(`${base}/subscribe`, {
+        method: "POST",
+        headers: {
+          accept: "text/html",
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: "email=new@integ.test",
+      }),
+      e,
+    );
+
+  it("goes out under the publication's name over a bare From address", async () => {
+    await sendingWorks();
+    await updateSettings(env.DB, { publication: { name: "Field Notes" } });
+    const { requests } = answerSes();
+    expect((await signup(bareSes())).status).toBe(200);
+    expect(requests.map((r) => r.endpoint)).toEqual(["single"]);
+    expect(requests[0]!.FromEmailAddress).toBe("Field Notes <news@send.birds.example>");
+  });
+
+  it("goes out under a name written into the From address, whatever the publication is called", async () => {
+    await sendingWorks();
+    await updateSettings(env.DB, { publication: { name: "Field Notes" } });
+    const { requests } = answerSes();
+    expect((await signup(sesEnv())).status).toBe(200);
+    expect(requests[0]!.FromEmailAddress).toBe("Birds <news@send.birds.example>");
   });
 });

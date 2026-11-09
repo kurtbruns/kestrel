@@ -79,6 +79,7 @@ import {
 import type { Principal, RequestContext } from "../router";
 import { viewSendsInOrder } from "../send/describe";
 import { insideLead, saveSettingsRemaking } from "../send/remake";
+import { senderFrom } from "../services/sender";
 import { Contacts } from "../services/sending";
 
 /** Logos are small brand assets; keep them well under any provider's object limits. */
@@ -212,7 +213,8 @@ export async function get(c: RequestContext): Promise<Response> {
  * that refuses every address is a 502 carrying its words.
  */
 export async function notificationTest(c: RequestContext): Promise<Response> {
-  const { to } = (await getSettings(c.env.DB)).notifications;
+  const settings = await getSettings(c.env.DB);
+  const { to } = settings.notifications;
   if (to.length === 0) {
     throw badRequest("Add a notifications address first, then send a test.", {
       field: "notifications.to",
@@ -222,7 +224,7 @@ export async function notificationTest(c: RequestContext): Promise<Response> {
     // Through the newsletter's provider, which is not there yet: refused like any test.
     requireConnectedProvider(c.config);
   }
-  const notifier = getNotifier(c.config, c.env);
+  const notifier = getNotifier(c.config, c.env, senderFrom(settings, c.config));
   const email = sampleNotification(c.config);
   const key = `test-${Date.now()}`;
   const failed: NotificationTestMiss[] = [];
