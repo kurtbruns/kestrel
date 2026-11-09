@@ -226,6 +226,14 @@ const CONDITION_KINDS: Record<ConditionKind, ConditionKindDoc> = {
     remedy:
       "AWS granting production access clears it, and the send then finishes on its own. Tell the publisher before it fires; it is a warning, not a refusal.",
   },
+  refusing: {
+    severity: "`warn`",
+    fields: "`cause`, `error`, `advice`",
+    meaning:
+      "Email is refusing (the provider object's `sending`): the provider refuses the account, so when the scheduled send fires it is held, with no one mailed and no one marked unsent, and it resumes on its own once the account is fixed. `error` is the provider's words, or the account check's finding.",
+    remedy:
+      "`advice` names the fix and who makes it, by `cause`, the same words the send's `refused` condition will carry once it is held. Scheduling and Send now stay allowed. It clears the moment email is working again; tell the publisher before the send fires, and that nothing in this API fires or frees it.",
+  },
   daily_writes: {
     severity: "`warn`",
     fields: "`recipients`",

@@ -234,6 +234,18 @@ export function sandboxSendLine(): Html | null {
     : html`<p class="hint daily-writes" id="schSandbox" role="status" hidden></p>`;
 }
 
+/**
+ * The Schedule and Send now dialogs' place for the warning that the send will be held, with a
+ * provider connected: hidden until the provider is read and email found refusing, then filled
+ * with the scheduled send's own `refusing` condition words (SPEC §13, DESIGN §4). It never
+ * disables a control: a held send mails no one and marks no one unsent.
+ */
+export function refusingSendLine(): Html | null {
+  return providerNotConnected()
+    ? null
+    : html`<p class="hint daily-writes" id="schRefusing" role="status" hidden></p>`;
+}
+
 /** The Schedule dialog's standing line; its Schedule and Send now are disabled beside it. */
 export function notConnectedScheduleLine(): Html | null {
   return notConnectedLine("this can’t be scheduled yet", " to schedule it");

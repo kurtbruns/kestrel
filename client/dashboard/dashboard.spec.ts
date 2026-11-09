@@ -1338,6 +1338,53 @@ describe("dashboard", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
+    it("says on a scheduled send's card that it will be held while email is refusing, pointing up at the red line (SPEC §13)", async () => {
+      const srv = sendServer([
+        scheduled(),
+        scheduled({ id: "x5", post_id: "p5", subject: "Terns" }),
+      ]);
+      srv.edit("x2", {}, { conditions: [condition.refusing()] });
+      fake = world(
+        [post()],
+        srv,
+        counts,
+        onSes({
+          state: "production",
+          unknown_reason: null,
+          sending: {
+            state: "refusing",
+            since: 1,
+            last_accepted: null,
+            refusal: {
+              cause: "configuration",
+              found_by: "test",
+              error: "Configuration set does not exist",
+              advice: "Fix the set.",
+              at: 1,
+            },
+          },
+          signups: "paused",
+        }),
+      );
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect($(".dash-not-going-out").textContent).toMatch(/^Email isn’t going out/);
+      const card = $("#dashScheduled .sched-card[data-post='p2']");
+      expect(countdown("p2").textContent).toMatch(/^Sends in/);
+      expect($(".sched-refusing", card).textContent).toBe(
+        "Will be held: email isn’t going out. See why above.",
+      );
+      // Only the send the server says it of: the card keeps no rule of its own.
+      expect(
+        document.querySelector("#dashScheduled .sched-card[data-post='p5'] .sched-refusing"),
+      ).toBeNull();
+      // Email working again: the server stops reporting it, and the line goes with the read.
+      srv.edit("x2", {}, { conditions: [] });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(document.querySelector(".sched-refusing")).toBeNull();
+      expect(fake.unhandled).toEqual([]);
+    });
+
     it("raises an amber line for the sandbox once setup is done, and one for each warning, in the server's words", async () => {
       const warning = {
         code: "bounces_not_routed",

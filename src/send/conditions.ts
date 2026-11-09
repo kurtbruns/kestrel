@@ -9,13 +9,15 @@
  * by the halt the send carries; bounce_spike by its confirmed bounces over its audience at
  * fire; no_receipts by its counters long after dispatch finished; remade by its last re-make against its last test; untested by a test never sent; daily_writes by its audience as
  * scheduled alone, on Workers Free's limits only; sandbox by the provider's account, read by
- * the account check, while it is still in the sandbox.
+ * the account check, while it is still in the sandbox; refusing by whether email is getting
+ * out (SPEC §13), while the provider refuses the account and the send has yet to fire.
  * Each carries its severity, since when (null when the record does not say), the server's
  * words for it, and the action that settles it, if the API has one. The actions are exactly what the server would accept on
  * the send right now, so a client offers a control only while pressing it would work.
  */
 
 import { dailyWritesSendWarning, sendSpendsDailyWrites } from "../../shared/free_plan";
+import type { SendingRefusal } from "../../shared/provider";
 import {
   BOUNCE_SPIKE_MIN,
   BOUNCE_SPIKE_RATE,
@@ -25,6 +27,7 @@ import {
   NO_RECEIPTS_AFTER_MS,
   refusalAdvice,
   refusedMessage,
+  refusingSendWarning,
   SANDBOX_SEND_WARNING,
   type SendAction,
   type SendCondition,
@@ -71,20 +74,41 @@ export function bySeverity<T extends Pick<SendCondition, "severity" | "since">>(
 }
 
 /** What the deployment adds to a send's conditions: whether it runs on Workers Free's limits
- *  (`onFreePlanLimits`), and whether the provider's account was last read in the sandbox
- *  (`readSandbox`). */
+ *  (`onFreePlanLimits`), whether the provider's account was last read in the sandbox
+ *  (`readSandbox`), and the refusal while email is refusing (SPEC §13), null while it isn't.
+ *  Read once per answer (`readConditionContext`), so every send in it reads the same moment. */
 export interface ConditionContext {
   freePlan: boolean;
   sandbox: boolean;
+  refusing: SendingRefusal | null;
 }
 
 /** The send's open conditions, most severe first. */
 export function sendConditions(
   send: SendSummary,
   now: number,
-  { freePlan, sandbox }: ConditionContext,
+  { freePlan, sandbox, refusing }: ConditionContext,
 ): SendCondition[] {
   const out: SendCondition[] = [];
+
+  // A send scheduled while the provider refuses the account will be held when it fires, with
+  // no one mailed and no one marked unsent, and resumes on its own once the account is fixed
+  // (SPEC §12, §13). Allowed, since a held send harms no one and the fix often lands before
+  // the fire time, but said before it fires, with the refusal's words and the fix, so the
+  // publisher learns it now rather than when the send is held. A live reading: it goes the
+  // moment email is working again.
+  if (refusing && send.status === "scheduled") {
+    out.push({
+      kind: "refusing",
+      severity: "warn",
+      since: Math.max(send.scheduled_at, refusing.at),
+      message: refusingSendWarning(refusing.cause, refusing.error),
+      action: null,
+      cause: refusing.cause,
+      error: refusing.error,
+      advice: refusing.advice,
+    });
+  }
 
   // A send scheduled while SES is in the sandbox reaches only addresses verified in SES, and
   // waits for the rest until AWS grants production access (SPEC §6). Allowed, since checking

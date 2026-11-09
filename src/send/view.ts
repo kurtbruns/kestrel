@@ -17,10 +17,10 @@
 import { unlistedPostUrl } from "../../shared/archive_url";
 import type { SendActorsRow, SendHalt, SendPhase, SendSummary, SendView } from "../../shared/sends";
 import { countsOf, readActor, type SendCounts, type SendStatus } from "../db/sends";
-import { type Config, onFreePlanLimits } from "../env";
+import type { Config } from "../env";
 import { archiveAnswers } from "../lib/archive_address";
 import { archiveUrl } from "../render/render";
-import { sendActions, sendConditions } from "./conditions";
+import { type ConditionContext, sendActions, sendConditions } from "./conditions";
 import { nextChangeAt } from "./feed";
 import { isStuck } from "./stuck";
 import { isWedged } from "./wedged";
@@ -189,17 +189,15 @@ export type SendViewRow = SendSummary &
  * Build the view of a send (the frozen bodies play no part). `hasRetries` is the cheap
  * EXISTS probe (see `hasActiveRetries`) — pass false when the send is not `sending`, where
  * it never affects the phase. `now` is the server's clock for everything derived, carried
- * as `as_of`. `sandbox`: the provider's account was last read in the sandbox (`readSandbox`).
+ * as `as_of`. `context` is what the deployment adds to the send's conditions, read once for
+ * every send in an answer (`readConditionContext`).
  */
 export function buildSendView(
   send: SendViewRow,
-  config: Pick<
-    Config,
-    "provider" | "appOrigin" | "archiveOrigin" | "archiveBasePath" | "subrequestBudget"
-  >,
+  config: Pick<Config, "provider" | "appOrigin" | "archiveOrigin" | "archiveBasePath">,
   hasRetries: boolean,
   now: number,
-  sandbox: boolean,
+  context: ConditionContext,
 ): SendView {
   const counts = countsOf(send);
   const published = send.status === "sending" || send.status === "sent";
@@ -304,7 +302,7 @@ export function buildSendView(
     delivery: { confirmed, percent_of_accepted: deliveryPercent },
     provider: { name: config.provider, halt },
     phase,
-    conditions: sendConditions(send, now, { freePlan: onFreePlanLimits(config), sandbox }),
+    conditions: sendConditions(send, now, context),
     actions: sendActions(send, now),
     next_change_at: nextChangeAt(send, now),
     links: {

@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DAILY_WRITES_SEND_RECIPIENTS, dailyWritesSendWarning } from "../../shared/free_plan";
 import type { PostAction } from "../../shared/posts";
 import type { SendSummary, SendView } from "../../shared/sends";
-import { SANDBOX_SEND_WARNING } from "../../shared/sends";
+import { refusingSendWarning, SANDBOX_SEND_WARNING } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import { slugify } from "../../shared/slug";
 import type { ViewHandle } from "../lifecycle";
 import { readSendsNow } from "../send_state";
 import { appState } from "../state";
-import { feedReads, sendRef, sendServer, sendView } from "../test/send_server";
+import { condition, feedReads, sendRef, sendServer, sendView } from "../test/send_server";
 import {
   $,
   type FakeApi,
@@ -722,6 +722,23 @@ describe("editor view", () => {
     expect($("#toasts").textContent).toMatch(/canceled elsewhere/);
     expect(document.querySelector(".banner-scheduled")).toBeNull();
     expect(body().readOnly).toBe(false);
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
+  it("says on the banner that the send will be held while email is refusing, in the server's words, until it recovers (SPEC §13)", async () => {
+    const linked = scheduledPost();
+    const refusing = condition.refusing();
+    linked.sends.edit("s1", {}, { conditions: [refusing] });
+    await open(linked.routes);
+    expect($("#schedRefusing").hidden).toBe(false);
+    expect($("#schedRefusingMsg").textContent).toBe(refusing.message);
+    // A note like the held line's, and the controls stay: the window is real.
+    expect($("#schedRefusing").classList.contains("sched-note-refusing")).toBe(true);
+    expect($<HTMLElement>("#schedControls").hidden).toBe(false);
+    // Email working again: the server stops reporting it, and the line goes.
+    linked.sends.edit("s1", {}, { conditions: [] });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect($("#schedRefusing").hidden).toBe(true);
     expect(fake.unhandled).toHaveLength(0);
   });
 
@@ -2222,6 +2239,49 @@ describe("editor view", () => {
     $("#toSendNow").click();
     await vi.advanceTimersByTimeAsync(0);
     expect($("#schSandbox").textContent).toBe(SANDBOX_SEND_WARNING);
+    expect($<HTMLButtonElement>("#snGo").disabled).toBe(false);
+    expect(fake.calls.filter((c) => c.url.pathname === "/api/provider")).toHaveLength(1);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("warns in the Schedule dialog and Send now that the send will be held while email is refusing, with the fix, and disables nothing (SPEC §13)", async () => {
+    appState.appConfig = settingsResponse({ deployment: { provider: "ses" } });
+    const server = draftServer(draft({ subject: "Owls" }));
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        path: "/api/provider",
+        reply: () =>
+          providerStatus({
+            state: "production",
+            unknown_reason: null,
+            sending: {
+              state: "refusing",
+              since: 1,
+              last_accepted: null,
+              refusal: {
+                cause: "configuration",
+                found_by: "test",
+                error: "Configuration set does not exist",
+                advice: "Fix the set.",
+                at: 1,
+              },
+            },
+            signups: "paused",
+          }),
+      },
+      { path: "/api/subscribers", reply: () => ({ counts: { confirmed: 3 }, page: { total: 3 } }) },
+    ]);
+    $("#scheduleBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    const words = refusingSendWarning("configuration", "Configuration set does not exist");
+    expect($("#schRefusing").hidden).toBe(false);
+    expect($("#schRefusing").textContent).toBe(words);
+    expect($("#schSandbox").hidden).toBe(true);
+    expect($<HTMLButtonElement>("#schGo").disabled).toBe(false);
+    $("#toSendNow").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#schRefusing").textContent).toBe(words);
     expect($<HTMLButtonElement>("#snGo").disabled).toBe(false);
     expect(fake.calls.filter((c) => c.url.pathname === "/api/provider")).toHaveLength(1);
     expect(fake.unhandled).toEqual([]);

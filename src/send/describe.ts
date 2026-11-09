@@ -3,29 +3,54 @@
  * route, every action, every refusal that carries the send as it stands, and the scheduled
  * sends a settings save would re-make, so a client learns where the send stands without a
  * second read. A post refers to its send instead (`postSendRefs`). Beside it, the cursor an answer hands
- * back: where the read stood among the changes to sends, to follow the send from.
+ * back: where the read stood among the changes to sends, to follow the send from. And the
+ * deployment's part of every send's conditions (`readConditionContext`), read once per answer.
  */
 
 import { encodeSendCursor } from "../../shared/cursor";
 import type { SendView } from "../../shared/sends";
+import { readSending } from "../db/sending";
 import { currentSendSeq, getSendViewRow, getSendViewRows } from "../db/sends";
-import { type AppEnv, getConfig } from "../env";
+import { type AppEnv, type Config, getConfig, onFreePlanLimits } from "../env";
 import { readSandbox } from "../services/provider_status";
+import { sendingView } from "../services/sending";
+import type { ConditionContext } from "./conditions";
 import { buildSendView } from "./view";
+
+/**
+ * What the deployment adds to a send's conditions (`ConditionContext`): the plan's limits
+ * from config, and the provider's account and whether email is getting out (SPEC §13) from the
+ * database, one read of each. Every send in an answer is read against the same context, so
+ * the list, the feed, and the send never disagree on the deployment's state.
+ */
+export async function readConditionContext(
+  db: D1Database,
+  config: Config,
+): Promise<ConditionContext> {
+  const [sandbox, sending] = await Promise.all([
+    readSandbox(db, config),
+    config.provider === "none" ? null : readSending(db),
+  ]);
+  return {
+    freePlan: onFreePlanLimits(config),
+    sandbox,
+    refusing: sendingView(config, sending)?.refusal ?? null,
+  };
+}
 
 /** The send as it stands, or null when it is gone. */
 export async function viewSend(env: AppEnv, id: string): Promise<SendView | null> {
   const now = Date.now();
   const config = getConfig(env);
-  const [row, sandbox] = await Promise.all([
+  const [row, context] = await Promise.all([
     getSendViewRow(env.DB, id),
-    readSandbox(env.DB, config),
+    readConditionContext(env.DB, config),
   ]);
   if (!row) {
     return null;
   }
   const { has_retries, ...source } = row;
-  return buildSendView(source, config, has_retries === 1, now, sandbox);
+  return buildSendView(source, config, has_retries === 1, now, context);
 }
 
 /** Sends by id as they stand, each as its view, by id; a send that is gone is left out. One
@@ -33,14 +58,14 @@ export async function viewSend(env: AppEnv, id: string): Promise<SendView | null
 export async function viewSends(env: AppEnv, ids: string[]): Promise<Map<string, SendView>> {
   const now = Date.now();
   const config = getConfig(env);
-  const [rows, sandbox] = await Promise.all([
+  const [rows, context] = await Promise.all([
     getSendViewRows(env.DB, ids),
-    readSandbox(env.DB, config),
+    readConditionContext(env.DB, config),
   ]);
   return new Map(
     rows.map(({ has_retries, ...source }) => [
       source.id,
-      buildSendView(source, config, has_retries === 1, now, sandbox),
+      buildSendView(source, config, has_retries === 1, now, context),
     ]),
   );
 }

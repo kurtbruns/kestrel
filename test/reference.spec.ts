@@ -671,6 +671,7 @@ describe("the reference as Markdown, for an agent (/api/reference.md)", () => {
         "remade",
         "untested",
         "sandbox",
+        "refusing",
         "daily_writes",
       ].map((k) => `| \`${k}\``),
     );

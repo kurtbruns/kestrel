@@ -39,11 +39,10 @@ export function viewOf(
       appOrigin: base,
       archiveOrigin: base,
       archiveBasePath: "/",
-      // The default budget: Workers Free's limits.
-      subrequestBudget: 50,
     },
     hasRetries,
     now,
-    false,
+    // Nothing from the deployment: not on Free's limits, not in the sandbox, email working.
+    { freePlan: false, sandbox: false, refusing: null },
   );
 }

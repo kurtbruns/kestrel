@@ -8,6 +8,7 @@ import {
   MIN_LEAD_FLOOR_MS,
   refusalAdvice,
   refusedMessage,
+  refusingSendWarning,
   SELF_THROTTLE_HALTS,
   tooSoonMessage,
   unavailableMessage,
@@ -87,6 +88,18 @@ describe("a refusal's advice", () => {
     ] as const) {
       expect(refusalAdvice(cause)).not.toContain("'");
     }
+  });
+});
+
+describe("a scheduled send's warning while email is refusing", () => {
+  it("foretells the hold in the refused condition's terms and carries the cause's own fix, so the two never advise differently (SPEC §6, §13)", () => {
+    expect(refusingSendWarning("configuration", "Configuration set does not exist")).toBe(
+      `The provider is refusing the account: Configuration set does not exist. When this send fires it is held, with no one mailed and no one marked unsent, and it goes out on its own at its first retry once the account is fixed. ${refusalAdvice("configuration")}`,
+    );
+    // The account check's finding reads the same way as the provider's words.
+    expect(refusingSendWarning("credentials", "The AWS key was rejected.")).toContain(
+      "the account: The AWS key was rejected. When this send fires",
+    );
   });
 });
 

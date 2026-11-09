@@ -167,6 +167,16 @@ export const SANDBOX_SEND_WARNING =
   "Amazon SES is still in the sandbox, so when this send fires it reaches only addresses verified in SES. It waits for the rest, and other sends wait behind it, until AWS grants production access, then finishes on its own.";
 
 /**
+ * The `refusing` condition's words (SPEC §6, §13), the same before a send is scheduled and on
+ * it: the provider's words (or the account check's finding), what will happen to the send, and
+ * the fix, the one `refused` carries once the send is held, so the warning and the condition
+ * it foretells never advise differently.
+ */
+export function refusingSendWarning(cause: HaltCause, error: string): string {
+  return `The provider is refusing the account: ${sentence(error)} When this send fires it is held, with no one mailed and no one marked unsent, and it goes out on its own at its first retry once the account is fixed. ${refusalAdvice(cause)}`;
+}
+
+/**
  * The `refused` condition's words (SPEC §12), by whose refusal it is: no provider connected,
  * the provider refusing this send's own email (`isSendOwnHalt`), or the account. "Because of
  * this" keeps the claim to this refusal: readers recorded unsent earlier in the send, for
@@ -544,6 +554,9 @@ interface ConditionBase {
  * - `untested`: no test of the scheduled email has been sent, and it was never re-made.
  * - `sandbox`: the provider's account is in the SES sandbox, so the scheduled send will reach
  *   only addresses verified in SES and wait for the rest until AWS grants production access.
+ * - `refusing`: email is refusing (SPEC §13), so the scheduled send will be held when it fires
+ *   and resume on its own once the account is fixed; its `cause`, `error`, and the `advice`
+ *   for the fix, as `refused` will carry them.
  * - `daily_writes`: on Workers Free's limits, a scheduled send to more recipients than D1's
  *   daily writes comfortably cover (`DAILY_WRITES_SEND_RECIPIENTS`), judged by its audience
  *   alone; `recipients` is its audience as scheduled.
@@ -565,6 +578,7 @@ export type SendCondition =
   | (ConditionBase & { kind: "remade"; tested_at: number | null })
   | (ConditionBase & { kind: "untested" })
   | (ConditionBase & { kind: "sandbox" })
+  | (ConditionBase & { kind: "refusing"; cause: HaltCause; error: string; advice: string })
   | (ConditionBase & { kind: "daily_writes"; recipients: number });
 
 /** The kinds of condition. */

@@ -15,7 +15,6 @@ import {
 } from "../../shared/sends";
 import { getPost } from "../db/posts";
 import * as sends from "../db/sends";
-import { onFreePlanLimits } from "../env";
 import { fieldError, type JsonObject, oneOf, readJsonObject } from "../lib/body";
 import { badRequest, HttpError, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
@@ -25,12 +24,11 @@ import { unwrap } from "../lib/unwrap";
 import type { RequestContext } from "../router";
 import { actorOf, param } from "../router";
 import { bySeverity, sendConditions } from "../send/conditions";
-import { viewWithCursor } from "../send/describe";
+import { readConditionContext, viewWithCursor } from "../send/describe";
 import { feedPace, readAgainAt, SETTLE_FOLLOW_MS } from "../send/feed";
 import { resolveStuckSend } from "../send/resolve";
 import { cancel as cancelSend, reschedule as rescheduleSend } from "../send/schedule";
 import { buildSendView } from "../send/view";
-import { readSandbox } from "../services/provider_status";
 import { parseFireAt } from "./schedule";
 
 /** The `GET /api/sends` filters, each held by the router to the values the manifest
@@ -51,9 +49,9 @@ export async function list(c: RequestContext): Promise<Response> {
   // Taken before the read, so anything the clock changes after it is still ahead of the
   // cursor.
   const now = Date.now();
-  const [{ rows, total, seq }, sandbox] = await Promise.all([
+  const [{ rows, total, seq }, context] = await Promise.all([
     sends.listSendsPage(c.env.DB, filter, page),
-    readSandbox(c.env.DB, c.config),
+    readConditionContext(c.env.DB, c.config),
   ]);
   // Every row carries the denormalized c_* counters and its retry probe, so each row's
   // phase, conditions, and actions come from the same rules as `/progress`, with no
@@ -61,7 +59,7 @@ export async function list(c: RequestContext): Promise<Response> {
   // keeps a threshold or a phase rule of its own.
   const body: SendListResponse = {
     sends: rows.map(({ has_retries, ...s }) =>
-      buildSendView(s, c.config, has_retries === 1, now, sandbox),
+      buildSendView(s, c.config, has_retries === 1, now, context),
     ),
     page: listPage(total, page),
     cursor: encodeSendCursor({ seq, at: now }),
@@ -225,10 +223,7 @@ export async function feed(c: RequestContext): Promise<Response> {
     read.settlingSince,
     now,
   );
-  const context = {
-    freePlan: onFreePlanLimits(c.config),
-    sandbox: await readSandbox(c.env.DB, c.config),
-  };
+  const context = await readConditionContext(c.env.DB, c.config);
   // Every open problem in one read, whichever sends it is on and whether they changed.
   const conditions: FeedCondition[] = read.open
     .flatMap((s) =>
@@ -242,7 +237,7 @@ export async function feed(c: RequestContext): Promise<Response> {
   const body: SendFeedResponse = {
     now,
     sends: read.rows.map(({ has_retries, ...row }) =>
-      buildSendView(row, c.config, has_retries === 1, now, context.sandbox),
+      buildSendView(row, c.config, has_retries === 1, now, context),
     ),
     removed: read.removed,
     cursor: encodeSendCursor({ seq: read.seq, at: now }),

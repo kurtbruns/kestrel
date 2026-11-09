@@ -18,6 +18,7 @@ import type {
   TestSendResponse,
 } from "../../shared/posts";
 import {
+  refusingSendWarning,
   SANDBOX_SEND_WARNING,
   type ScheduleResponse,
   type SendAction,
@@ -38,13 +39,14 @@ import {
   notConnectedTestLine,
   notConnectedWarning,
   providerNotConnected,
+  refusingSendLine,
   sandboxSendLine,
   sendNowWhenText,
   tooSoonText,
   withNoProviderNote,
 } from "../deployment";
 import { at, every, mount, onAbort, poll, setTitle, type ViewHandle } from "../lifecycle";
-import { inSandbox, readProviderStatus } from "../provider_status";
+import { inSandbox, readProviderStatus, refusalOf } from "../provider_status";
 import { followSend, readSendsNow, type StageChange } from "../send_state";
 import { openRescheduleModal } from "../sends/dialogs";
 import { can, conditionOf, has } from "../sends/progress";
@@ -248,7 +250,7 @@ export async function renderEditor(
         <button type="button" class="ghost" id="settingsBtn">${icon("settings")}<span>Post settings</span></button>
       </div>
     </div>
-    ${locked && scheduled ? html`<div class="banner banner-scheduled banner-split"><div class="banner-top"><div class="sched-main"><span id="schedWhen"></span><div class="sched-by" id="schedBy" hidden></div>${heldWhenFiresHtml("banner")}<div class="sched-remade" id="schedRemade" hidden><span id="schedRemadeMsg"></span></div><div class="sched-note" id="schedDailyWrites" hidden><span class="sched-note-mark" aria-hidden="true">⚠️</span><span class="sched-note-msg" id="schedDailyWritesMsg"></span></div><div class="sched-note" id="schedSandbox" hidden><span class="sched-note-mark" aria-hidden="true">⚠️</span><span class="sched-note-msg" id="schedSandboxMsg"></span></div></div><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Edit schedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div><div class="banner-bottom sched-dest"><span class="sched-dest-icon" id="schedDestIcon">${destinationIcon(pub)}</span><span id="schedDest">${destinationHtml(pub)}</span></div></div>` : null}
+    ${locked && scheduled ? html`<div class="banner banner-scheduled banner-split"><div class="banner-top"><div class="sched-main"><span id="schedWhen"></span><div class="sched-by" id="schedBy" hidden></div>${heldWhenFiresHtml("banner")}<div class="sched-remade" id="schedRemade" hidden><span id="schedRemadeMsg"></span></div><div class="sched-note" id="schedDailyWrites" hidden><span class="sched-note-mark" aria-hidden="true">⚠️</span><span class="sched-note-msg" id="schedDailyWritesMsg"></span></div><div class="sched-note" id="schedSandbox" hidden><span class="sched-note-mark" aria-hidden="true">⚠️</span><span class="sched-note-msg" id="schedSandboxMsg"></span></div><div class="sched-note sched-note-refusing" id="schedRefusing" hidden><span class="sched-note-mark" aria-hidden="true">⚠️</span><span class="sched-note-msg" id="schedRefusingMsg"></span></div></div><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Edit schedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div><div class="banner-bottom sched-dest"><span class="sched-dest-icon" id="schedDestIcon">${destinationIcon(pub)}</span><span id="schedDest">${destinationHtml(pub)}</span></div></div>` : null}
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
     <div class="editor-form">
       <label for="f-subject">Subject</label>
@@ -1075,7 +1077,9 @@ export async function renderEditor(
     // email, the control that settles it, until its first test lands.
     // On Workers Free's limits, a send too large for D1's daily writes says so here too, in
     // the server's words, for as long as it is scheduled (DESIGN §4). It never blocks. So does
-    // one scheduled while SES is in the sandbox, which reaches only verified addresses.
+    // one scheduled while SES is in the sandbox, which reaches only verified addresses, and one
+    // scheduled while email is refusing, which will be held when it fires (SPEC §13): the
+    // stronger note, so it keeps the held line's weight.
     const remadeEl = $("#schedRemade");
     const testHintEl = $("#testHint");
     const dailyWritesEl = $("#schedDailyWrites");
@@ -1096,6 +1100,9 @@ export async function renderEditor(
       const sandbox = conditionOf(current, "sandbox");
       $("#schedSandbox").hidden = !sandbox;
       $("#schedSandboxMsg").textContent = sandbox?.message ?? "";
+      const refusing = conditionOf(current, "refusing");
+      $("#schedRefusing").hidden = !refusing;
+      $("#schedRefusingMsg").textContent = refusing?.message ?? "";
     };
     paintConditions();
 
@@ -1430,7 +1437,7 @@ export async function renderEditor(
       }
       const scheduleHint = "It sends at the time you pick, with a cancelable window until then.";
       const scheduleView = () =>
-        html`<h3 id="schHead">Schedule this post</h3><p class="hint" id="schHint">${scheduleHint}</p>${notConnectedScheduleLine()}${dailyWritesLine()}${sandboxSendLine()}${notConnected ? null : html`<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}"><div class="dialog-settings" id="schForm"></div>`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Or send as soon as possible.</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
+        html`<h3 id="schHead">Schedule this post</h3><p class="hint" id="schHint">${scheduleHint}</p>${notConnectedScheduleLine()}${dailyWritesLine()}${sandboxSendLine()}${refusingSendLine()}${notConnected ? null : html`<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}"><div class="dialog-settings" id="schForm"></div>`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Or send as soon as possible.</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
       // The picked time survives a trip to Send now and back.
       let picked = def;
       const m = modal(scheduleView(), signal);
@@ -1463,15 +1470,24 @@ export async function renderEditor(
         }
       };
       // In the SES sandbox a send reaches only verified addresses: the scheduled send's own
-      // `sandbox` warning, in the same words, shown before it is scheduled (SPEC §6).
+      // `sandbox` warning, in the same words, shown before it is scheduled (SPEC §6). And
+      // while email is refusing, the send will be held when it fires: its own `refusing`
+      // warning, in the same words, with the refusal's fix (SPEC §13). One read of the
+      // provider serves both views and both lines.
       let provider: ReturnType<typeof readProviderStatus> | null = null;
-      const paintSandbox = async () => {
+      const paintProvider = async () => {
         provider ??= readProviderStatus(appState.appConfig?.deployment, signal);
-        const sandboxed = inSandbox(await provider);
-        const el = box.querySelector<HTMLElement>("#schSandbox"); // gone if closed or flipped
-        if (el && sandboxed) {
-          el.textContent = SANDBOX_SEND_WARNING;
-          el.hidden = false;
+        const status = await provider;
+        const sandboxEl = box.querySelector<HTMLElement>("#schSandbox"); // gone if closed or flipped
+        if (sandboxEl && inSandbox(status)) {
+          sandboxEl.textContent = SANDBOX_SEND_WARNING;
+          sandboxEl.hidden = false;
+        }
+        const refusal = refusalOf(status);
+        const refusingEl = box.querySelector<HTMLElement>("#schRefusing");
+        if (refusingEl && refusal) {
+          refusingEl.textContent = refusingSendWarning(refusal.cause, refusal.error);
+          refusingEl.hidden = false;
         }
       };
       // A refused save closes the dialog, and the out-of-date banner it was covering is
@@ -1590,7 +1606,7 @@ export async function renderEditor(
         showForm();
         $("#schWhen", box).focus();
         void paintDailyWrites();
-        void paintSandbox();
+        void paintProvider();
       }
 
       async function showSendNow() {
@@ -1600,7 +1616,7 @@ export async function renderEditor(
         }
         setHtml(
           box,
-          html`<h3 id="snHead">Send now?</h3><p class="hint">Sends this draft, as it is now, to <strong id="snWho">your subscribers</strong> in ${sendNowWhenText()}. The post locks until then, and you can cancel any time before it starts sending.</p><div class="dialog-settings" id="schForm"></div>${dailyWritesLine()}${sandboxSendLine()}<div class="actions"><button type="button" class="linkbtn actions-back" id="toSchedule">← Back to schedule</button><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`,
+          html`<h3 id="snHead">Send now?</h3><p class="hint">Sends this draft, as it is now, to <strong id="snWho">your subscribers</strong> in ${sendNowWhenText()}. The post locks until then, and you can cancel any time before it starts sending.</p><div class="dialog-settings" id="schForm"></div>${dailyWritesLine()}${sandboxSendLine()}${refusingSendLine()}<div class="actions"><button type="button" class="linkbtn actions-back" id="toSchedule">← Back to schedule</button><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`,
         );
         box.setAttribute("aria-labelledby", "snHead");
         $("#snCancel", box).onclick = m.close;
@@ -1613,7 +1629,7 @@ export async function renderEditor(
         };
         $("#snGo", box).focus();
         void paintDailyWrites();
-        void paintSandbox();
+        void paintProvider();
         // Fill the count once known. The confirmed count would still include the suppressed.
         const n = await readAudience();
         const whoEl = box.querySelector("#snWho"); // gone if the view flipped back meanwhile
