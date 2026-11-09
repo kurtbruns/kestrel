@@ -514,7 +514,7 @@ describe("settings view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("says these emails can't report SES refusing, linking the alerts section of Verify, and logs a test alert on request (SPEC §12)", async () => {
+  it("says these emails can't report SES refusing, linking the Set up alerts guide, and logs a test alert on request (SPEC §12)", async () => {
     await open([
       { path: "/api/settings", reply: () => response() },
       {

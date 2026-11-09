@@ -45,7 +45,7 @@ function alertsNote(d: SettingsResponse["deployment"]): string {
   return `These emails travel through ${via} like the newsletter, so they can’t tell you when ${it} refuses your account. Two Cloudflare alerts cover that, and Kestrel itself stopping.`;
 }
 
-/** The Verify page's section that creates the Cloudflare Monitors, in the Docs tab. */
+/** The Set up alerts guide, which creates the Cloudflare Monitors, in the Docs tab. */
 const ALERTS_DOCS_HREF = "#/docs/alerts";
 
 const NOTIFICATION_KINDS: Record<NotificationStatusKind, string> = {
