@@ -110,7 +110,7 @@ To follow one send, narrow the time range and filter on its `sendId`, since a lo
 
 ## 8. Create the Cloudflare alerts
 
-Two problems can't reach anyone by email from Kestrel: SES refusing the account, since Kestrel's own emails go through SES, and Kestrel itself stopping. Two Cloudflare Monitors cover them. Each one watches the app's logs once a minute and emails you when its condition holds. They need no DNS change and no deploy.
+Two problems can't reach anyone by email from Kestrel: SES not sending its email, since Kestrel's own emails go through SES, and Kestrel itself stopping. Two Cloudflare Monitors cover them: `SES can't send email`, and `Kestrel has stopped`. Each one watches the app's logs once a minute and emails you when its condition holds. They need no DNS change and no deploy.
 
 You need two values first:
 
@@ -151,11 +151,22 @@ Name each Monitor after the publication and the problem, such as `Field Notes: S
 
 1. In the editor, open **Settings → Notifications**, and select **Send a test alert**. Kestrel writes the line the first Monitor watches for, with `cause` set to `test`, and changes nothing else. Cloudflare's own **Test** button sends sample data, so this is the only way to prove the real path.
 
-1. Wait for the alert email. In testing, it arrived about five and a half minutes after the line, from `noreply@notify.cloudflare.com`, with the subject `[Alert] Custom Alert '<name>' triggered`. A `[Resolved]` email followed about three minutes later, once the condition cleared. Gmail filed both under **Updates**, so look there if your inbox shows nothing.
+1. Wait for the alert email. In testing, it arrived about five and a half minutes after the line, from `noreply@notify.cloudflare.com`, with the subject `[Alert] Custom Alert '<name>' triggered`. A `[Resolved]` email followed about three minutes later, once no new line had arrived. Gmail filed both under **Updates**, so look there if your inbox shows nothing.
 
 The second Monitor can't be tested this way without stopping the app. In testing, with the schedule slowed to once an hour, it emailed about 13 minutes after the last tick, and resolved about 12 minutes after ticks resumed.
 
-Each line the first Monitor counts carries a `cause`: the reason SES gave for refusing the account, such as `configuration`, `quota` for a send held because the daily sending quota is spent, or `test`. Filter on `event` equal to `alert.sending` in the Worker's **Observability** tab to read it. Count over minutes, never a day: over long ranges the log's counts are estimated from a sample.
+The two `[Resolved]` emails mean different things:
+
+- For `SES can't send email`, Resolved means no new alert, not that the problem is fixed. The Monitor counts the lines in each minute, so it resolves a few minutes after the last one, whether or not anything changed. Kestrel writes the line when something happens, not for as long as it lasts. To see whether email is getting out again, open the dashboard, which says so at the top while it isn't.
+- For `Kestrel has stopped`, Resolved means the once-a-minute ticks have resumed.
+
+Each line the first Monitor counts carries a `cause`, which says why email can't get out. Today the causes are:
+
+- the reason SES gave for refusing the account, such as `credentials`, `configuration`, `sender`, or `suspended`
+- `quota`, for a send held because the daily sending quota is spent
+- `test`, from **Send a test alert**
+
+A later release can add a cause, and the Monitor alerts on it with no change, since its query counts every `alert.sending` line. Filter on `event` equal to `alert.sending` in the Worker's **Observability** tab to read the causes. Count over minutes, never a day: over long ranges the log's counts are estimated from a sample.
 
 Know these limits before you rely on the Monitors:
 

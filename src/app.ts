@@ -771,7 +771,7 @@ export function createRouter({
       summary:
         "Log one `alert.sending` line with cause `test`, so a Cloudflare Monitor on that event can be proven end to end.",
       description:
-        "Takes no body. Writes the same log line the app writes when the provider refuses the account or a send halts on its quota, with `cause` set to `test`, and does nothing else: no state changes and no email goes out. A Monitor watching for `alert.sending` emails about it within a few minutes. Cloudflare's own Test button sends sample data, so this is the only way to prove the real path from this Worker's log to the alert.",
+        "Takes no body. Writes the same log line the app writes whenever email can't get out (today when the provider refuses the account or a send halts on its quota, each with its own `cause`), with `cause` set to `test`, and does nothing else: no state changes and no email goes out. A Monitor watching for `alert.sending` emails about it within a few minutes. Cloudflare's own Test button sends sample data, so this is the only way to prove the real path from this Worker's log to the alert.",
       example: {
         response: {
           event: "alert.sending",

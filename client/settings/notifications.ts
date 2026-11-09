@@ -101,7 +101,7 @@ export function notificationsSection(page: SettingsPage): Html {
         <div class="set-note" id="alertsNote">${icon("info")}<span>These emails travel through Amazon SES like the newsletter, so they can’t tell you when SES refuses your account. Two Cloudflare alerts cover that, and Kestrel itself stopping. See <a class="set-link" href="${ALERTS_DOCS_HREF}">Create the Cloudflare alerts</a>.</span></div>
         <div class="set-recip" style="border-top:1px solid var(--line)">
           <div class="row"><button type="button" class="ghost" id="alertTest">Send a test alert</button><span class="field-hint" id="alertTestHint"></span></div>
-          <p class="field-hint" style="margin:0">Proves the Cloudflare alert for SES refusing, end to end. Kestrel logs the line that alert watches for, and sends no email itself. Cloudflare’s alert email follows in about five minutes, and a Resolved email a few minutes after that. Cloudflare’s own Test button sends sample data, so it can’t prove this.</p>
+          <p class="field-hint" style="margin:0">Proves the Cloudflare alert “SES can’t send email”, end to end. Kestrel logs the line that alert watches for, and sends no email itself. Cloudflare’s alert email follows in about five minutes, and a Resolved email a few minutes after that, which means only that no new line came. Cloudflare’s own Test button sends sample data, so it can’t prove this.</p>
         </div>
       </div>
     </section>`;
