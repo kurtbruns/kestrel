@@ -6,6 +6,7 @@
 // so neither can drift.
 
 import type { PageMeta } from "./list";
+import type { SendingRefusal } from "./provider";
 import type { Actor } from "./who_acted";
 
 /** A send's statuses, in their order, which the list's `status` filter takes. */
@@ -168,12 +169,21 @@ export const SANDBOX_SEND_WARNING =
 
 /**
  * The `refusing` condition's words (SPEC §6, §13), the same before a send is scheduled and on
- * it: the provider's words (or the account check's finding), what will happen to the send, and
- * the fix, the one `refused` carries once the send is held, so the warning and the condition
- * it foretells never advise differently.
+ * it: what the provider said and what will happen to the send, then the fix. A refusal an
+ * email met carries the provider's words and the fix `refused` will carry once the send is
+ * held, so the warning and the condition it foretells never advise differently. One the
+ * account check found is the check's own finding, which already ends in its fix, so nothing is
+ * appended to it, or the fix would be said twice.
  */
-export function refusingSendWarning(cause: HaltCause, error: string): string {
-  return `The provider is refusing the account: ${sentence(error)} When this send fires it is held, with no one mailed and no one marked unsent, and it goes out on its own at its first retry once the account is fixed. ${refusalAdvice(cause)}`;
+export function refusingSendWarning(
+  refusal: Pick<SendingRefusal, "cause" | "error" | "found_by">,
+): string {
+  const held =
+    "When this send fires it is held, with no one mailed and no one marked unsent, and it goes out on its own at its first retry once the account is fixed.";
+  if (refusal.found_by === "account_check") {
+    return `Kestrel’s check of the SES account found that SES refuses every email: ${sentence(refusal.error)} ${held}`;
+  }
+  return `The provider is refusing the account: ${sentence(refusal.error)} ${held} ${refusalAdvice(refusal.cause)}`;
 }
 
 /**

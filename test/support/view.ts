@@ -43,6 +43,6 @@ export function viewOf(
     hasRetries,
     now,
     // Nothing from the deployment: not on Free's limits, not in the sandbox, email working.
-    { freePlan: false, sandbox: false, refusing: null },
+    { freePlan: false, sandbox: false, sending: null },
   );
 }

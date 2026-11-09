@@ -161,7 +161,11 @@ describe("what anyone can do, by phase (SPEC §6, §7, §13)", () => {
           advice: refusalAdvice("configuration"),
         });
         expect(r.send.conditions[0].message).toBe(
-          refusingSendWarning("configuration", r.send.conditions[0].error),
+          refusingSendWarning({
+            cause: "configuration",
+            error: r.send.conditions[0].error,
+            found_by: "test",
+          }),
         );
       },
       sandbox: async (p) => {

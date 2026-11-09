@@ -247,13 +247,13 @@ export async function accountForPacing(
 }
 
 /**
- * Whether the provider's account was last read in the sandbox: SES's own reading, or local
- * dev's stand-in for it. False when it can't tell, so the `sandbox` condition only ever says
- * what the account itself said (SPEC §6).
+ * Whether the provider's account was last read in the sandbox: SES's own reading (`account`,
+ * the row the check keeps), or local dev's stand-in for it. False when it can't tell, so the
+ * `sandbox` condition only ever says what the account itself said (SPEC §6).
  */
-export async function readSandbox(db: D1Database, config: Config): Promise<boolean> {
+export function sandboxOf(config: Config, account: ProviderAccountRow | null): boolean {
   if (config.provider === "ses") {
-    const answer = (await readProviderAccount(db))?.answer;
+    const answer = account?.answer;
     return answer ? !answer.productionAccess : false;
   }
   const simulated = config.simulation?.account;

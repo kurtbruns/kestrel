@@ -9,10 +9,15 @@
 
 import { encodeSendCursor } from "../../shared/cursor";
 import type { SendView } from "../../shared/sends";
-import { readSending } from "../db/sending";
+import {
+  type ProviderAccountRaw,
+  parseProviderAccount,
+  providerAccountStatement,
+} from "../db/provider_account";
+import { parseSending, type SendingRaw, sendingStatement } from "../db/sending";
 import { currentSendSeq, getSendViewRow, getSendViewRows } from "../db/sends";
 import { type AppEnv, type Config, getConfig, onFreePlanLimits } from "../env";
-import { readSandbox } from "../services/provider_status";
+import { sandboxOf } from "../services/provider_status";
 import { sendingView } from "../services/sending";
 import type { ConditionContext } from "./conditions";
 import { buildSendView } from "./view";
@@ -20,21 +25,27 @@ import { buildSendView } from "./view";
 /**
  * What the deployment adds to a send's conditions (`ConditionContext`): the plan's limits
  * from config, and the provider's account and whether email is getting out (SPEC §13) from the
- * database, one read of each. Every send in an answer is read against the same context, so
- * the list, the feed, and the send never disagree on the deployment's state.
+ * database, both rows in one round trip, since every feed poll and every action's answer
+ * reads them. Every send in an answer is read against the same context, so the list, the
+ * feed, and the send never disagree on the deployment's state. What each row means for the
+ * deployment is decided where it always is (`sandboxOf`, `sendingView`), a deployment with no
+ * provider included.
  */
 export async function readConditionContext(
   db: D1Database,
   config: Config,
 ): Promise<ConditionContext> {
-  const [sandbox, sending] = await Promise.all([
-    readSandbox(db, config),
-    config.provider === "none" ? null : readSending(db),
+  const [account, sending] = await db.batch<Record<string, unknown>>([
+    providerAccountStatement(db),
+    sendingStatement(db),
   ]);
   return {
     freePlan: onFreePlanLimits(config),
-    sandbox,
-    refusing: sendingView(config, sending)?.refusal ?? null,
+    sandbox: sandboxOf(
+      config,
+      parseProviderAccount(account?.results[0] as ProviderAccountRaw | undefined),
+    ),
+    sending: sendingView(config, parseSending(sending?.results[0] as SendingRaw | undefined)),
   };
 }
 

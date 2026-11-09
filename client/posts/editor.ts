@@ -1486,7 +1486,7 @@ export async function renderEditor(
         const refusal = refusalOf(status);
         const refusingEl = box.querySelector<HTMLElement>("#schRefusing");
         if (refusingEl && refusal) {
-          refusingEl.textContent = refusingSendWarning(refusal.cause, refusal.error);
+          refusingEl.textContent = refusingSendWarning(refusal);
           refusingEl.hidden = false;
         }
       };

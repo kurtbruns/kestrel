@@ -2274,7 +2274,11 @@ describe("editor view", () => {
     ]);
     $("#scheduleBtn").click();
     await vi.advanceTimersByTimeAsync(0);
-    const words = refusingSendWarning("configuration", "Configuration set does not exist");
+    const words = refusingSendWarning({
+      cause: "configuration",
+      error: "Configuration set does not exist",
+      found_by: "test",
+    });
     expect($("#schRefusing").hidden).toBe(false);
     expect($("#schRefusing").textContent).toBe(words);
     expect($("#schSandbox").hidden).toBe(true);
