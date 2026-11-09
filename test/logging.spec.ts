@@ -149,9 +149,12 @@ describe("the send lifecycle in the log", () => {
     await toNextTick(env.DB);
     await sweep(env);
 
+    // The refusal begins with this send, so the operator's alert line is its own, before
+    // the writes that follow the answer (SPEC §12).
     expect(eventsFor(send.id)).toEqual([
       "send.scheduled",
       "send.fired",
+      "alert.sending",
       "send.batch",
       "send.halted",
       "send.batch",

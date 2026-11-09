@@ -157,7 +157,7 @@ The second Monitor can't be tested this way without stopping the app. In testing
 
 The two `[Resolved]` emails mean different things:
 
-- For `SES can't send email`, Resolved means no new alert, not that the problem is fixed. The Monitor counts the lines in each minute, so it resolves a few minutes after the last one, whether or not anything changed. Kestrel writes the line when something happens, not for as long as it lasts. To see whether the problem has cleared, open the dashboard: a refusal of the account shows as the red line at the top saying email isn't going out, and a spent quota as a red line naming the held send, which links to its page. Each line goes away once its problem has cleared.
+- For `SES can't send email`, Resolved means no new line was written, not that the problem is fixed. Kestrel writes the line once, when a problem begins, and not again while it lasts, so the Monitor resolves a few minutes after it whether or not anything changed, and you get no reminder. A new line, and a new alert, comes only when a different problem begins, or the same one again after email got out in between. To see whether the problem has cleared, open the dashboard: a refusal of the account shows as the red line at the top saying email isn't going out, and a spent quota as a red line naming the held send, which links to its page. Each line goes away once its problem has cleared.
 - For `Kestrel has stopped`, Resolved means the once-a-minute ticks have resumed.
 
 Each line the first Monitor counts carries a `cause`, which says why email can't get out. Today the causes are:

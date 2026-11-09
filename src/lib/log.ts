@@ -76,12 +76,13 @@ export const LOG_EVENTS = {
   "provider.account_checked": "info",
   "provider.pacing_unread": "warn",
   "provider.account_error": "error",
-  // Email can't get out (SPEC §12, §13), with `cause` saying why: the refusing cause on every
-  // refusal of the account, `quota` on every send halted on its quota, and `test` from Settings'
-  // Send a test alert. The list is open: a new cause is added at its call site and here, and
-  // the Monitors, which count every line of this event, need no change. Logged before the record
-  // is written, so a failing database can't swallow it. Operators' Cloudflare Monitors alert on
-  // this name, so renaming it, or `cause`, is a breaking change.
+  // Email stopped getting out (SPEC §12, §13), with `cause` saying why: the refusing cause when
+  // a refusal of the account begins, `quota` when a send is first held on its quota, and `test`
+  // from Settings' Send a test alert. Once per refusal or halt, never at a repeat while it stands
+  // (`alertRefusal`, `alertHalt`). The list is open: a new cause is added at its call site and
+  // here, and the Monitors, which count every line of this event, need no change. Logged before
+  // the record is written, so a failing database can't swallow it. Operators' Cloudflare
+  // Monitors alert on this name, so renaming it, or `cause`, is a breaking change.
   "alert.sending": "warn",
   // Whether email is getting out (SPEC §13).
   "sending.refusing": "warn",
