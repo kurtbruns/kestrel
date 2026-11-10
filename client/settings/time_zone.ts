@@ -224,7 +224,7 @@ export function mountTimeZone(
       close();
       return;
     }
-    results = searchZones(allChoices(), query);
+    results = searchZones(allChoices(), query, { near: browser ?? page.saved().timeZone });
     active = results.length ? Math.max(0, Math.min(active, results.length - 1)) : -1;
     setHtml(
       list,
