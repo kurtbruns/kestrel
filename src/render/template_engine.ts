@@ -258,6 +258,9 @@ export interface TemplateValidation {
 /** An `<img>` whose `src` is the bare logo URL: empty, so broken, while no logo is set. */
 const LOGO_URL_AS_IMG_SRC = /<img\b[^>]*\bsrc\s*=\s*["']?\s*\{\{\s*\.Publication\.LogoURL\s*\}\}/i;
 
+/** A `<link>` naming a stylesheet, which the inliner leaves out (`inlineEmailCss`). */
+const LINKED_STYLESHEET = /<link\b[^>]*\brel\s*=\s*["']?\s*stylesheet\b/i;
+
 /** `{{ .Post.Body }}`, looked for inside an email-only region. */
 const POST_BODY = /\{\{\s*\.Post\.Body\s*\}\}/;
 
@@ -343,6 +346,11 @@ export function validateEmailTemplate(html: string): TemplateValidation {
       "An <img> whose src is {{ .Publication.LogoURL }} shows as a broken image while no logo is set. Use {{ .Publication.Logo }}, which renders the image only when there is one.",
     );
   }
+  if (LINKED_STYLESHEET.test(html)) {
+    warnings.push(
+      'A <link rel="stylesheet"> is left out of the email: put its CSS in the template’s <style> block instead.',
+    );
+  }
   if (/<script[\s/>]/i.test(html)) {
     warnings.push("A <script> tag won’t run in email and may get the message filtered.");
   }
@@ -378,10 +386,13 @@ const inlinerReady = onceUntilRejected(() =>
 );
 
 /** Inline the `<style>` rules onto elements and keep un-inlinable `@media` rules in a
- *  `<style>` block. Deterministic: same input → same output (holds I5). */
+ *  `<style>` block. Deterministic: same input → same output (holds I5). A linked
+ *  stylesheet is left out, never fetched: the WASM build can't load one and throws, which
+ *  would fail every render of the template, and a render that read a remote file could
+ *  differ between preview and send. Validation warns about it (`validateEmailTemplate`). */
 export async function inlineEmailCss(html: string): Promise<string> {
   await inlinerReady();
-  return inline(html, { keepAtRules: true });
+  return inline(html, { keepAtRules: true, loadRemoteStylesheets: false });
 }
 
 // --- branding resolution ---------------------------------------------------------

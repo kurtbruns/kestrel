@@ -127,6 +127,21 @@ describe("validateEmailTemplate", () => {
     expect(fillEmailTemplate("<p>{{ publication.name }}</p>", ctx)).toBe("<p></p>");
   });
 
+  it("warns that a linked stylesheet is left out, whatever its rel's case or quoting", () => {
+    const base =
+      '{{ .Post.Body }}<a href="{{ .Email.UnsubscribeURL }}">u</a><a href="{{ .Email.ViewInBrowserURL }}">v</a>';
+    const warning =
+      'A <link rel="stylesheet"> is left out of the email: put its CSS in the template’s <style> block instead.';
+    expect(
+      validateEmailTemplate(`<link rel="stylesheet" href="https://f.example/a.css">${base}`)
+        .warnings,
+    ).toEqual([warning]);
+    expect(validateEmailTemplate(`<LINK href=/a.css REL=Stylesheet>${base}`).warnings).toEqual([
+      warning,
+    ]);
+    expect(validateEmailTemplate(`<link rel="icon" href="/i.png">${base}`).warnings).toEqual([]);
+  });
+
   it("warns on an <img> whose src is the bare logo URL, which is broken while no logo is set", () => {
     const base =
       '{{ .Post.Body }}<a href="{{ .Email.UnsubscribeURL }}">u</a><a href="{{ .Email.ViewInBrowserURL }}">v</a>';
@@ -224,6 +239,18 @@ describe("inlineEmailCss", () => {
     expect(out).toContain("@media");
     expect(out).toContain("<!--kestrel:masthead-->");
     expect(out).toContain(UNSUB_SENTINEL);
+  });
+});
+
+describe("inlineEmailCss and linked stylesheets", () => {
+  it("leaves a linked stylesheet out rather than fetching it, local or remote", async () => {
+    const html =
+      '<html><head><link rel="stylesheet" href="https://fonts.example/a.css">' +
+      '<link rel="stylesheet" href="/b.css"><style>p{color:#111}</style></head>' +
+      "<body><p>x</p></body></html>";
+    const out = await inlineEmailCss(html);
+    expect(out).not.toContain("<link");
+    expect(out).toMatch(/<p style="color: #111;?">x<\/p>/);
   });
 });
 
