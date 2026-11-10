@@ -666,7 +666,7 @@ describe("settings view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("says these emails can't report SES refusing and may report an hour's outage only once SES is back, linking the Set up alerts guide, and logs a test alert on request (SPEC §12)", async () => {
+  it("says in a Cloudflare alerts row what a notification can't reach you about, linking the Set up alerts guide, and logs a test alert on request (SPEC §12)", async () => {
     await open([
       { path: "/api/settings", reply: () => response() },
       {
@@ -675,32 +675,23 @@ describe("settings view", () => {
         reply: () => ({ event: "alert.sending", cause: "test", at: Date.now() }),
       },
     ]);
-    const note = $("#alertsNote");
-    expect(note.textContent).toMatch(/can’t tell you when SES refuses your account/);
-    expect($<HTMLAnchorElement>("a", note).getAttribute("href")).toBe("#/docs/alerts");
-    expect(note.textContent?.trim()).toBe(
-      "These emails travel through Amazon SES like the newsletter, so they can’t tell you when SES refuses your account, and one saying SES has been down for over an hour may arrive only once SES is back. Two Cloudflare alerts cover both, and Kestrel itself stopping. See Set up alerts.",
+    const row = $("#alertsRow");
+    expect($(".muted", row).textContent?.trim()).toBe(
+      "Notifications are sent by Kestrel, through your email provider. If either has a problem, such as the provider not sending or Kestrel itself stopping, a notification can’t reach you. To be told about these problems, set up Cloudflare alerts.",
     );
-    $<HTMLButtonElement>("#alertTest").click();
+    const link = $<HTMLAnchorElement>("a", row);
+    expect(link.textContent).toBe("set up Cloudflare alerts");
+    expect(link.getAttribute("href")).toBe("#/docs/alerts");
+    expect($("#alertTestHint").textContent).toBe(
+      "Once the alerts are set up, checks that the first one reaches your inbox.",
+    );
+    $<HTMLButtonElement>("#alertTest", row).click();
     await vi.advanceTimersByTimeAsync(0);
     expect(
       fake.calls.filter((c) => c.url.pathname === "/api/settings/notifications/alert-test"),
     ).toHaveLength(1);
     expect($("#alertTestHint").textContent).toMatch(
-      /^Logged at .+\. Watch for Cloudflare’s alert email\.$/,
-    );
-    expect(fake.unhandled).toEqual([]);
-  });
-
-  it("names the email provider in the alerts note as the Sent through row does, when it isn't SES", async () => {
-    const none = response();
-    none.deployment.provider = "none";
-    await open([{ path: "/api/settings", reply: () => none }]);
-    expect($$(".set-kv-v").map((v) => v.textContent?.trim())).toContain(
-      "Your email provider, once one is connected",
-    );
-    expect($("#alertsNote").textContent?.trim()).toBe(
-      "These emails travel through your email provider like the newsletter, so they can’t tell you when it refuses your account, and one saying it has been down for over an hour may arrive only once it is back. Two Cloudflare alerts cover both, and Kestrel itself stopping. See Set up alerts.",
+      /^Logged at .+\. Cloudflare’s alert email should arrive in about five minutes, then a Resolved email\.$/,
     );
     expect(fake.unhandled).toEqual([]);
   });
