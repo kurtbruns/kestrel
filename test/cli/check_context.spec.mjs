@@ -11,10 +11,20 @@
  */
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { CONTEXT_FILES } from "../../cli/context.mjs";
 
 const PACKAGE_ROOT = join(import.meta.dirname, "..", "..");
 const BIN = join(PACKAGE_ROOT, "bin", "kestrel.mjs");
@@ -26,11 +36,27 @@ const UPGRADE_SKILL = ".claude/skills/upgrade/SKILL.md";
 const MIGRATE_SKILL = ".claude/skills/migrate-list/SKILL.md";
 const FILES = [CLAUDE_MD, UPGRADE_SKILL, MIGRATE_SKILL];
 
-// The release's own copy, as it ships.
-const RELEASE_BODY = readFileSync(join(PACKAGE_ROOT, "template", "claude", "CLAUDE.md"), "utf8");
+// Each file's text as this release ships it.
+const RELEASE = Object.fromEntries(
+  FILES.map((f) => [
+    f,
+    readFileSync(join(PACKAGE_ROOT, "template", f.replace(/^\.claude\//, "claude/")), "utf8"),
+  ]),
+);
 // A paragraph only the older release's copy had: Kestrel has changed the file since.
 const DROPPED = "\nA paragraph an older release had and this one dropped.\n";
 const OPERATOR = "\nAlways sign posts as the Windbreak team.\n";
+
+// The header lines exactly as every release since check-context shipped (1.5.0) wrote them,
+// read off live instances and `git show v1.22.0:cli/context.mjs`: a Markdown file's first
+// line, and in a skill, the second line of its front matter. Instances in the wild carry
+// these, so a change to how the command reads a header has to keep reading them.
+const RELEASED_HEADER = {
+  markdown: (version, hash) =>
+    `<!-- @kurtbruns/kestrel ${version}, sha256:${hash}. Kestrel check-context compares against this line; your edits are yours. -->`,
+  skill: (version, hash) =>
+    `# @kurtbruns/kestrel ${version}, sha256:${hash} (kestrel check-context compares against this line)`,
+};
 
 const HEADER = /@kurtbruns\/kestrel (\S+), sha256:([0-9a-f]{64})/;
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
@@ -52,17 +78,14 @@ const lineFor = (out, file) =>
   out.split("\n").find((l) => l.startsWith(`[check-context] ${file}:`));
 
 /**
- * `file` with a header naming an older release whose copy was `body`, and `text` below it:
- * that copy itself unless the operator has since changed it.
+ * A context file as a release `version` whose copy was `body` would have stamped it, in that release's
+ * header form, with `text` below it: that copy itself unless the operator has since changed it.
  */
-const fromOlderRelease = (file, body, text = body) => {
-  const lines = asInitWrote[file].split("\n");
-  const at = lines.findIndex((l) => HEADER.test(l));
-  lines[at] = lines[at].replace(HEADER, `@kurtbruns/kestrel ${OLD}, sha256:${sha256(body)}`);
-  // CLAUDE.md's header is its first line, above the body; a skill's sits inside its front
-  // matter, so only CLAUDE.md is given an older body here.
-  expect(file).toBe(CLAUDE_MD);
-  return `${lines[at]}\n${text}`;
+const fromOlderRelease = (body, text = body, version = OLD) => {
+  if (text.startsWith("---\n")) {
+    return `---\n${RELEASED_HEADER.skill(version, sha256(body))}\n${text.slice(4)}`;
+  }
+  return `${RELEASED_HEADER.markdown(version, sha256(body))}\n${text}`;
 };
 
 beforeEach(() => {
@@ -97,7 +120,7 @@ describe("kestrel check-context", () => {
   });
 
   it("reports a file the release changed and the operator never edited, and --update takes the release's", () => {
-    const old = fromOlderRelease(CLAUDE_MD, `${RELEASE_BODY}${DROPPED}`);
+    const old = fromOlderRelease(`${RELEASE[CLAUDE_MD]}${DROPPED}`);
     put(CLAUDE_MD, old);
 
     const r = kestrel(instance, "check-context");
@@ -117,8 +140,8 @@ describe("kestrel check-context", () => {
   });
 
   it("reports a file the release changed and the operator edited with the difference, and --update never overwrites it", () => {
-    const older = `${RELEASE_BODY}${DROPPED}`;
-    const edited = fromOlderRelease(CLAUDE_MD, older, older + OPERATOR);
+    const older = `${RELEASE[CLAUDE_MD]}${DROPPED}`;
+    const edited = fromOlderRelease(older, older + OPERATOR);
     put(CLAUDE_MD, edited);
 
     const r = kestrel(instance, "check-context");
@@ -139,15 +162,15 @@ describe("kestrel check-context", () => {
 
   it("records a merge with --merged, keeping the operator's text, so the file then reads current with their edits", () => {
     // Their edit kept, and the release's change (the dropped paragraph) taken.
-    const merged = `${RELEASE_BODY}${OPERATOR}`;
-    put(CLAUDE_MD, fromOlderRelease(CLAUDE_MD, `${RELEASE_BODY}${DROPPED}`, merged));
+    const merged = `${RELEASE[CLAUDE_MD]}${OPERATOR}`;
+    put(CLAUDE_MD, fromOlderRelease(`${RELEASE[CLAUDE_MD]}${DROPPED}`, merged));
 
     const m = kestrel(instance, "check-context", "--merged", CLAUDE_MD);
 
     expect(m.code).toBe(0);
     expect(m.out).toContain(`recorded as merged with ${VERSION}`);
     expect(theirs(CLAUDE_MD).endsWith(merged)).toBe(true);
-    expect(HEADER.exec(theirs(CLAUDE_MD)).slice(1)).toEqual([VERSION, sha256(RELEASE_BODY)]);
+    expect(HEADER.exec(theirs(CLAUDE_MD)).slice(1)).toEqual([VERSION, sha256(RELEASE[CLAUDE_MD])]);
 
     const r = kestrel(instance, "check-context");
 
@@ -183,7 +206,7 @@ describe("kestrel check-context", () => {
 
   it("reports a file that already has the release's text under an older header as current, and --update restamps it", () => {
     // The operator took the release's text by hand, so only the header is behind.
-    put(CLAUDE_MD, fromOlderRelease(CLAUDE_MD, `${RELEASE_BODY}${DROPPED}`, RELEASE_BODY));
+    put(CLAUDE_MD, fromOlderRelease(`${RELEASE[CLAUDE_MD]}${DROPPED}`, RELEASE[CLAUDE_MD]));
 
     const r = kestrel(instance, "check-context");
 
@@ -196,7 +219,7 @@ describe("kestrel check-context", () => {
   });
 
   it("can't tell edits from Kestrel's changes in a file with no header, so shows the difference and keeps it", () => {
-    const headless = `${RELEASE_BODY}${OPERATOR}`;
+    const headless = `${RELEASE[CLAUDE_MD]}${OPERATOR}`;
     put(CLAUDE_MD, headless);
 
     const r = kestrel(instance, "check-context", "--update");
@@ -233,5 +256,95 @@ describe("kestrel check-context", () => {
     expect(r.code).toBe(0);
     expect(r.out).not.toContain("house-style");
     expect(theirs(own)).toBe("---\nname: house-style\n---\nOur style.\n");
+  });
+});
+
+describe("kestrel check-context on a skill, whose header sits inside its front matter", () => {
+  it("replaces a skill the release changed and the operator never edited, front matter still opening the file", () => {
+    put(UPGRADE_SKILL, fromOlderRelease(`${RELEASE[UPGRADE_SKILL]}${DROPPED}`));
+
+    const r = kestrel(instance, "check-context");
+
+    expect(lineFor(r.out, UPGRADE_SKILL)).toContain(`changed it (yours came from ${OLD})`);
+    expect(lineFor(r.out, UPGRADE_SKILL)).toContain("haven't edited it");
+
+    const u = kestrel(instance, "check-context", "--update");
+
+    expect(u.code).toBe(0);
+    expect(lineFor(u.out, UPGRADE_SKILL)).toContain(`updated to ${VERSION}`);
+    expect(theirs(UPGRADE_SKILL)).toBe(asInitWrote[UPGRADE_SKILL]);
+    expect(theirs(UPGRADE_SKILL).split("\n").slice(0, 2)).toEqual([
+      "---",
+      RELEASED_HEADER.skill(VERSION, sha256(RELEASE[UPGRADE_SKILL])),
+    ]);
+  });
+
+  it("leaves a skill the release changed and the operator edited, showing the difference", () => {
+    const older = `${RELEASE[UPGRADE_SKILL]}${DROPPED}`;
+    const edited = fromOlderRelease(older, older + OPERATOR);
+    put(UPGRADE_SKILL, edited);
+
+    const r = kestrel(instance, "check-context", "--update");
+
+    expect(r.code).toBe(0);
+    expect(lineFor(r.out, UPGRADE_SKILL)).toContain("you've edited it");
+    expect(r.out).toContain(`-${OPERATOR.trim()}`);
+    expect(r.out).toContain(`--merged ${UPGRADE_SKILL}`);
+    expect(theirs(UPGRADE_SKILL)).toBe(edited);
+  });
+
+  it("records a merged skill with the header back inside its front matter and the operator's text kept", () => {
+    const merged = `${RELEASE[UPGRADE_SKILL]}${OPERATOR}`;
+    put(UPGRADE_SKILL, fromOlderRelease(`${RELEASE[UPGRADE_SKILL]}${DROPPED}`, merged));
+
+    const m = kestrel(instance, "check-context", "--merged", UPGRADE_SKILL);
+
+    expect(m.code).toBe(0);
+    expect(theirs(UPGRADE_SKILL)).toBe(
+      `---\n${RELEASED_HEADER.skill(VERSION, sha256(RELEASE[UPGRADE_SKILL]))}\n${merged.slice(4)}`,
+    );
+    const r = kestrel(instance, "check-context");
+    expect(lineFor(r.out, UPGRADE_SKILL)).toBe(
+      `[check-context] ${UPGRADE_SKILL}: current, with your edits`,
+    );
+  });
+});
+
+describe("kestrel check-context on headers past releases wrote", () => {
+  it("reads a Markdown header as 1.21.0 wrote it, with its version and hash", () => {
+    const older = `${RELEASE[CLAUDE_MD]}${DROPPED}`;
+    put(CLAUDE_MD, `${RELEASED_HEADER.markdown("1.21.0", sha256(older))}\n${older}`);
+
+    const r = kestrel(instance, "check-context", "--update");
+
+    expect(lineFor(r.out, CLAUDE_MD)).toBe(
+      `[check-context] ${CLAUDE_MD}: updated to ${VERSION} (yours came from 1.21.0)`,
+    );
+    expect(theirs(CLAUDE_MD)).toBe(asInitWrote[CLAUDE_MD]);
+  });
+
+  it("reads a skill's front-matter header as 1.22.0 wrote it, with its version and hash", () => {
+    const older = `${RELEASE[UPGRADE_SKILL]}${DROPPED}`;
+    put(UPGRADE_SKILL, `---\n${RELEASED_HEADER.skill("1.22.0", sha256(older))}\n${older.slice(4)}`);
+
+    const r = kestrel(instance, "check-context", "--update");
+
+    expect(lineFor(r.out, UPGRADE_SKILL)).toBe(
+      `[check-context] ${UPGRADE_SKILL}: updated to ${VERSION} (yours came from 1.22.0)`,
+    );
+    expect(theirs(UPGRADE_SKILL)).toBe(asInitWrote[UPGRADE_SKILL]);
+  });
+});
+
+describe("the context files the command knows", () => {
+  it("are exactly the files template/claude/ ships, so a new one is stamped by init and checked on upgrade", () => {
+    const shipped = join(PACKAGE_ROOT, "template", "claude");
+    const files = readdirSync(shipped, { recursive: true })
+      .filter((f) => statSync(join(shipped, f)).isFile())
+      .map((f) => `.claude/${f.replaceAll("\\", "/")}`)
+      .sort();
+
+    expect([...CONTEXT_FILES].sort()).toEqual(files);
+    expect(FILES).toEqual(CONTEXT_FILES);
   });
 });
