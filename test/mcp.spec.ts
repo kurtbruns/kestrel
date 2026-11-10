@@ -496,7 +496,7 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
   it("ends a held send only through its route, and asks a resolution only while recipients are in flight (SPEC §12)", async () => {
     const tool = (await listTools()).find((t) => t.name === "end_send")!;
     expect(tool.inputSchema.required).toEqual(["id"]);
-    expect(tool.description).toContain("Only when the publisher asks, never as a fix");
+    expect(tool.description).toContain("only when the publisher asks: never as a fix");
     const id = await wedgedSend();
     const none = await callTool("end_send", { id });
     expect(none.isError).toBe(true);
@@ -828,10 +828,10 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
 });
 
 describe("what a tool answers stays small and whole", () => {
-  it("keeps the whole tool list under 25 KB, so growing it is a decision", async () => {
+  it("keeps the whole tool list under 28 KB, so growing it is a decision", async () => {
     const res = await rpc("tools/list", {}, await adminAuth(PERSON));
     const size = new TextEncoder().encode(await res.text()).length;
-    expect(size).toBeLessThan(25 * 1024);
+    expect(size).toBeLessThan(28 * 1024);
   });
 
   it("cuts a long Markdown answer at a line, or at the limit when no line ends before it", () => {

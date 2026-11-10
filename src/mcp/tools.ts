@@ -887,7 +887,7 @@ export const TOOL_DEFS: ToolDef[] = [
     name: "end_send",
     title: "End a held or wedged send",
     description:
-      "Finish a held or wedged send for good: everyone not yet handed off is recorded unsent, no one is mailed, and it can't be undone. Only when the publisher asks, never as a fix: a held send resumes on its own, and a wedged one finishes by resolve_send. First tell them how many will be recorded unsent (`counts.pending`, or the audience if none is fixed) and that reaching them later means a new post to the whole list, which those already sent it get twice; wait for their yes. Pass `resolution` only while `counts.dispatched` is above zero, with the answer they pick.",
+      "End a held or wedged send for good, only when the publisher asks: never as a fix, since a held send resumes on its own and resolve_send finishes a wedged one. Everyone not yet handed off is recorded unsent; it can't be undone. First tell them how many (`counts.pending`) and that reaching them means a new post, which those already sent get twice; wait for their yes. Pass `resolution` only while `counts.dispatched` > 0.",
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     routes: [END_SEND],
     args: {
