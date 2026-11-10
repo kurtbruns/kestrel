@@ -10,6 +10,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+## [1.23.0] - 2026-11-09
+
 **Upgrading from 1.22.0.** Two database migrations, one keeping the sender's name with each scheduled send and one letting Kestrel email you about an outage past an hour: run `npm run sync-migrations`, then apply them with `npx wrangler d1 migrations apply DB --remote --env production` (SPEC §9 says what an unapplied migration does). If your `FROM_ADDRESS` is a bare address, emails now come from your publication's name, so make sure one is set under **Settings → Publication identity** before your next send; with none, emails arrive with no sender name, from the address alone. If it carries a name, like `Newsletter <newsletter@send.example.com>`, nothing changes: that name stays the sender, and the publication's pages no longer borrow it, so set a publication name if the pages went by it. Notifications now go only through SES: if your `wrangler.jsonc` declares the `send_email` binding `NOTIFY` or the `NOTIFY_FROM` var, remove both from the `production` block (an instance that still declares them keeps working and ignores them), and, if you set up Email Routing only for them, you can turn it off. Then, recommended, create the two Cloudflare alerts in [Set up alerts](docs/guides/alerts.md), which tell you what Kestrel's own emails can't: SES refusing your account, and Kestrel itself stopping. Run `npm run check-context`: this release changes three files of the operator's Claude context, `CLAUDE.md` and the upgrade and migrate-list skills, and a copy you've edited is merged by hand. The docs pages lost the numbers in their file names, so the upgrade skill you have now reads the guide at its old name, `docs/guides/07-upgrade.md`; for this upgrade that file is a short page sending you to `upgrade.md`, so carry on there from the step after the install.
 
 ### Breaking
@@ -842,7 +844,8 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
-[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.22.0...HEAD
+[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.23.0...HEAD
+[1.23.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.23.0
 [1.22.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.22.0
 [1.21.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.21.0
 [1.20.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.20.0
