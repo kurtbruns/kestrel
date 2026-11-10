@@ -118,6 +118,24 @@ export function acceptFireAt(
   return onTheMinute(requested);
 }
 
+/** The words a refused schedule, reschedule, or Send now says while the publication has no
+ *  time zone: fit to show the publisher as they stand, and naming where the fix is. */
+export const TIME_ZONE_NOT_SET =
+  "Set the publication’s time zone before scheduling or sending. It’s in Settings.";
+
+/**
+ * Refuse an act that puts a send on the clock (schedule, Send now, reschedule) while the
+ * publication has no time zone (SPEC §9): its fire time and its post's public date would read
+ * on a clock nobody chose. A send already scheduled still fires; this guards only new acts.
+ * Where no provider is connected either, the caller refuses for that first.
+ */
+export async function requireTimeZone(db: D1Database): Promise<void> {
+  const { settings } = await readSettings(db);
+  if (settings.timeZone === null) {
+    throw refusal("time_zone_not_set", TIME_ZONE_NOT_SET);
+  }
+}
+
 /** How many times a freeze re-reads and re-renders when the settings changed under it.
  *  A template save landing in that gap is rare; a couple of retries settles it. */
 const FREEZE_RETRIES = 3;

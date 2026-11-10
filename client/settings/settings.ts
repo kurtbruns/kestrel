@@ -42,6 +42,7 @@ import {
 import { mountReaderPages, readerPagesSection } from "./reader_pages";
 import { expireRemakeWait, remakeIdentity, savedToast, withRemakeConfirm } from "./remake";
 import { mountSubscribe, subscribeSection } from "./subscribe";
+import { mountTimeZone, timeZoneSection } from "./time_zone";
 
 /** One group of sections, kept together by whom they serve: no heading of its own, since
  *  the sections' titles already say what each is, only a wider gap from the next group. */
@@ -166,7 +167,7 @@ export async function renderSettings(
   setHtml(
     body,
     html`
-      ${group("publication", [identitySection(page)])}
+      ${group("publication", [identitySection(page), timeZoneSection(page)])}
       ${group("readers", [subscribeSection(page), confirmationSection(page), readerPagesSection(secHead("reader-pages", chip("preview", "Preview")))])}
       ${group("emails", [templateSection(page), recipientsSection()])}
       ${group("you", [notificationsSection(page)])}
@@ -175,6 +176,7 @@ export async function renderSettings(
   );
   handles.push(
     mountIdentity(body, page, signal),
+    mountTimeZone(body, page, signal),
     mountSubscribe(body, page),
     mountConfirmation(body, page),
     mountTemplate(body, page, signal),

@@ -27,7 +27,11 @@ import { bySeverity, sendConditions } from "../send/conditions";
 import { readConditionContext, viewWithCursor } from "../send/describe";
 import { feedPace, readAgainAt, SETTLE_FOLLOW_MS } from "../send/feed";
 import { resolveStuckSend } from "../send/resolve";
-import { cancel as cancelSend, reschedule as rescheduleSend } from "../send/schedule";
+import {
+  cancel as cancelSend,
+  requireTimeZone,
+  reschedule as rescheduleSend,
+} from "../send/schedule";
 import { buildSendView } from "../send/view";
 import { parseFireAt } from "./schedule";
 
@@ -359,6 +363,7 @@ export async function cancel(c: RequestContext): Promise<Response> {
 export async function reschedule(c: RequestContext): Promise<Response> {
   const body = await readJsonObject(c);
   rejectSettingsFields(body);
+  await requireTimeZone(c.env.DB);
   const fireAt = parseFireAt(body.fire_at);
   const id = param(c, "id");
   const { changed } = await rescheduleSend(

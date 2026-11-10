@@ -224,6 +224,7 @@ export function createRouter({
     { code: "subject_required" },
     { code: "settings_changed", details: ["settings"] },
     notConnected,
+    { code: "time_zone_not_set" },
     ...slugRefusals,
     slugPermanent,
   ];
@@ -565,9 +566,9 @@ export function createRouter({
       resource: "settings",
       title: "Update the settings",
       summary:
-        "Update runtime preferences: test recipients, the publication identity, the email template, the confirmation email wording.",
+        "Update runtime preferences: test recipients, the publication identity, the time zone, the email template, the confirmation email wording.",
       description:
-        "Every field is optional: send only what changes. Saving a changed template, or an identity field the template renders, re-makes every scheduled send's email at once, once the client acknowledges those sends by id in `remake`; a save that leaves the email's inputs unchanged asks nothing. `GET /api/settings` lists them under `in_use` beforehand.",
+        "Every field is optional: send only what changes. Saving a changed template, or an identity field the template renders, re-makes every scheduled send's email at once, once the client acknowledges those sends by id in `remake`; a save that leaves the email's inputs unchanged asks nothing. `GET /api/settings` lists them under `in_use` beforehand. Changing `time_zone` moves no scheduled send: each keeps its moment, and `time_zone_readings` says how each now reads.",
       example: {
         request: { email_template: "<style>…</style>…", remake: ["s_xyz789"] },
         response: {
@@ -621,6 +622,12 @@ export function createRouter({
           description: `Every address the publisher's notifications go to, at most ${MAX_NOTIFY_ADDRESSES}; empty for none. Replaces the whole list.`,
         },
         {
+          name: "time_zone",
+          type: "string",
+          description:
+            "The publication's time zone, the clock its readers keep, as an IANA name such as `America/New_York`. A name the server's runtime doesn't know is a 400. It can be changed but not cleared. Until it is set, scheduling and sending are refused (`time_zone_not_set`). Set it only as the publisher chooses: ask which clock their readers keep, and never use your own.",
+        },
+        {
           name: "remake",
           type: "string[]",
           description:
@@ -646,6 +653,12 @@ export function createRouter({
             type: "object[]",
             description:
               "The scheduled sends the save re-made, each as its send view, as `in_use.sends` lists them; each then needs a fresh test.",
+          },
+          {
+            name: "time_zone_readings",
+            type: "string[]",
+            description:
+              "When the save changed `time_zone`, one sentence per scheduled send saying it keeps its moment and how that moment now reads, to show or relay as it stands; empty otherwise. A save of the same zone under another name changes nothing.",
           },
         ],
       },
@@ -1629,6 +1642,7 @@ export function createRouter({
         { code: "fire_at_too_soon" },
         { code: "window_closed", details: ["send", "cursor"] },
         { code: "send_canceled", details: ["send", "cursor"] },
+        { code: "time_zone_not_set" },
       ],
       returns: { object: "send", as: "send", fields: [cursorField, changedField] },
       handler: sendRoutes.reschedule,

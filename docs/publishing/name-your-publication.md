@@ -1,6 +1,6 @@
 # Name your publication
 
-Give your publication a name and a look before your first post. Set the name, tagline, and logo under **Settings → Publication identity**. They appear in every email your template prints them in, on the public pages readers see, and in the confirmation email new subscribers get. The name is also what readers see as the sender of every email, beside the From address, so set one before your first post: without it, your emails arrive with no name, from the address alone.
+Give your publication a name, a look, and a time zone before your first post. Set the name, tagline, and logo under **Settings → Publication identity**. They appear in every email your template prints them in, on the public pages readers see, and in the confirmation email new subscribers get. The name is also what readers see as the sender of every email, beside the From address, so set one before your first post: without it, your emails arrive with no name, from the address alone.
 
 All three are optional, and you can change them at any time. How they appear in each email comes from your email template, which you can [edit](email-template.md). Renaming the publication while posts are scheduled updates their emails, and Kestrel asks you to confirm first. Readers recognize a newsletter by its sender's name, and some filter on it, so rename rarely.
 
@@ -13,6 +13,16 @@ Write the tagline as one line that says what the newsletter covers and how often
 Kestrel makes a 256 × 256 PNG from your image before uploading it, so the original's file size doesn't matter. A wider or taller image is cropped to its center square, and a smaller one is scaled up and looks soft. An animated GIF keeps its first frame. Emails show the logo at 44 × 44 pixels, so a simple mark reads better than fine detail.
 
 A transparent background shows whatever is behind the logo, and the built-in templates turn dark when a reader's mail app is in dark mode. A solid background keeps a dark mark visible there.
+
+## Set the time zone
+
+**Choose where your readers are, not where you are today.** A New York newsletter keeps New York's clock wherever you are that week. Kestrel uses the time zone for the times you schedule posts at, the dates on your published posts, and the times in your notifications, so nothing can be scheduled or sent until it's set. Pick it under **Settings → Time zone** and choose **Save time zone**. Kestrel fills in your browser's time zone as a suggestion, but saves nothing until you click.
+
+Your published posts are dated by your publication's day, so a post sent at 8 PM in New York is dated that day, even for a reader in London, where it's already the next morning. The date names no time zone, like a newspaper's dateline.
+
+You can change it at any time. A post that's already scheduled keeps its moment and doesn't move, and Kestrel tells you how it now reads ("now Fri Nov 13, 8:00 AM Central Time. Move it if you meant 9:00 AM."), so you can move it yourself with **Edit schedule**. Public dates follow the new zone, so a post sent near midnight may show a different date afterward.
+
+Kestrel's time zone rules come from Cloudflare's servers, which can trail a recent government change, such as a country dropping daylight saving time, by months. If your zone's rules changed recently, times near the change may read an hour off until Cloudflare catches up.
 
 ## When to provide a mailing address
 

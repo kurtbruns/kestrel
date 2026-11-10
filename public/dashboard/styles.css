@@ -6613,6 +6613,16 @@ button.set-embed-copy svg {
 .set-rp-pick {
   display: none;
 }
+/* Settings' Time zone: the picker takes the row and its own Save sits beside it, wrapping
+   under it on a phone. */
+.set-tz-row select {
+  flex: 1 1 260px;
+  width: auto;
+  min-width: 0;
+}
+.set-tz-status {
+  margin: 8px 0 0;
+}
 .set-rp-pick select {
   width: 100%;
 }

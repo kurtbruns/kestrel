@@ -24,6 +24,7 @@ import {
   type NotificationPrefs,
   type SettingsPatchBody,
 } from "../../shared/settings";
+import { resolveTimeZone } from "../../shared/time_zone";
 import { HttpError } from "../lib/errors";
 import { log } from "../lib/log";
 
@@ -94,6 +95,12 @@ export interface AppSettings {
    * sender, are deploy config (SPEC §9).
    */
   notifications: NotificationPrefs;
+  /**
+   * The publication's time zone (SPEC §9): an IANA name as the runtime resolves it, or null
+   * until someone sets it. Required before anything is scheduled or sent, and never set
+   * without a deliberate act, so there is no default.
+   */
+  timeZone: string | null;
 }
 
 /** The R2 key a logo uploaded before each upload had its own key is stored under, and the
@@ -148,6 +155,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   emailTemplate: "",
   confirmationEmail: storedConfirmation(DEFAULT_CONFIRMATION_EMAIL),
   notifications: { to: [] },
+  timeZone: null,
 };
 
 /** Caps so a mistake (or a compromised session) can't grow a field unboundedly. */
@@ -220,6 +228,9 @@ function coerce(raw: unknown): AppSettings {
         ? coerceConfirmation(o.confirmationEmail)
         : storedConfirmation(DEFAULT_CONFIRMATION_EMAIL),
     notifications: coerceNotifications(o.notifications),
+    // A name the runtime no longer knows reads as unset, which refuses sending loudly rather
+    // than dating and scheduling by a zone that can't be read.
+    timeZone: typeof o.timeZone === "string" ? resolveTimeZone(o.timeZone) : null,
   };
 }
 
@@ -262,10 +273,13 @@ export interface SettingsSnapshot {
   version: number | null;
 }
 
+/** The settings row, for a caller that reads it in a batch beside other rows. */
+export function settingsStatement(db: D1Database): D1PreparedStatement {
+  return db.prepare("SELECT data, updated_at FROM settings WHERE id = 1");
+}
+
 export async function readSettings(db: D1Database): Promise<SettingsSnapshot> {
-  const row = await db
-    .prepare("SELECT data, updated_at FROM settings WHERE id = 1")
-    .first<{ data: string; updated_at: number }>();
+  const row = await settingsStatement(db).first<{ data: string; updated_at: number }>();
   if (!row) {
     return { settings: structuredClone(DEFAULT_SETTINGS), version: null };
   }
@@ -317,6 +331,22 @@ export async function getSettingsForDisplay(db: D1Database): Promise<AppSettings
   } catch (err) {
     if (err instanceof HttpError && err.code === "settings_corrupt") {
       return structuredClone(DEFAULT_SETTINGS); // parseStored has already logged it
+    }
+    throw err;
+  }
+}
+
+/** The settings as `settingsStatement` read them, for a surface that only shows them: a
+ *  missing row is the defaults, and so is a corrupt one, as for `getSettingsForDisplay`. */
+export function parseSettingsForDisplay(row: { data: string } | undefined): AppSettings {
+  if (!row) {
+    return structuredClone(DEFAULT_SETTINGS);
+  }
+  try {
+    return coerce(parseStored(row.data));
+  } catch (err) {
+    if (err instanceof HttpError && err.code === "settings_corrupt") {
+      return structuredClone(DEFAULT_SETTINGS);
     }
     throw err;
   }
@@ -516,7 +546,25 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
   if (patch.notifications?.to !== undefined) {
     next.notifications.to = normalizeNotifyTo(patch.notifications.to);
   }
+  if (patch.time_zone !== undefined) {
+    next.timeZone = normalizeTimeZone(patch.time_zone);
+  }
   return next;
+}
+
+/** A zone name the runtime knows, stored as it resolves there, so an alias and its zone are
+ *  stored alike (SPEC §9). Anything else is refused naming the field. */
+function normalizeTimeZone(input: unknown): string {
+  const zone = typeof input === "string" ? resolveTimeZone(input) : null;
+  if (zone === null) {
+    throw new SettingsFieldError(
+      "time_zone",
+      typeof input === "string" && input.trim() !== ""
+        ? `“${input.trim()}” isn’t a time zone this server knows. Use an IANA name, such as America/New_York.`
+        : "The time zone must be an IANA name, such as America/New_York.",
+    );
+  }
+  return zone;
 }
 
 /** The addresses, each trimmed and lowercased, blanks dropped and repeats kept once; an

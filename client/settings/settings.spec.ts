@@ -167,7 +167,7 @@ describe("settings view", () => {
       $$(".set-sec-title", g).map((t) => t.textContent?.trim()),
     );
     expect(groups).toEqual([
-      ["Publication identity"],
+      ["Publication identity", "Time zone"],
       ["Ways to subscribe", "Confirmation email", "Reader pages"],
       ["Email template", "Default test recipients"],
       ["Notifications"],

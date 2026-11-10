@@ -14,6 +14,7 @@ import {
   showSlugRefusal,
 } from "../posts/publishing";
 import { readSendsNow } from "../send_state";
+import { noTimeZoneLine } from "../time_zone";
 import { $ } from "../ui/dom";
 import { toLocalInput } from "../ui/format";
 import { html } from "../ui/html";
@@ -103,7 +104,7 @@ export async function openRescheduleModal(
   const m = modal(
     html`<h3 id="rsHead">Edit schedule</h3>
       <p class="hint" id="rsHint">It sends at the time you pick, with a cancelable window until then.</p>
-      ${notConnectedRescheduleLine()}
+      ${notConnectedRescheduleLine()}${noTimeZoneLine()}
       <label for="rsWhen">Send at</label><input type="datetime-local" id="rsWhen" min="${minStr}" value="${toLocalInput(cur)}">
       <div class="dialog-settings" id="rsForm"></div>
       <div class="actions"><button type="button" id="rsCancel">Cancel</button><button type="button" class="primary" id="rsGo">Save</button></div>`,

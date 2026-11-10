@@ -247,6 +247,9 @@ export function settingsResponse(
         reassurance: "If this wasn't you, ignore this email.",
       },
       notifications: { to: [] },
+      // A publication that can send: its time zone is set (SPEC §9).
+      time_zone: "America/New_York",
+      time_zone_label: "Eastern Time",
       ...settings,
     },
     deployment: {

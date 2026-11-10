@@ -8,7 +8,7 @@ import { fmt } from "../ui/format";
 import { html, setHtml } from "../ui/html";
 import { connectedTo, type SetupFacts, type SetupStep, setupSteps, setupStepsHtml } from "./setup";
 
-// DESIGN §3, SPEC §13: the ten setup steps, read from facts both clients have, in each phase.
+// DESIGN §3, SPEC §13: the eleven setup steps, read from facts both clients have, in each phase.
 
 const facts = (over: Partial<SetupFacts> = {}): SetupFacts => ({
   notConnected: false,
@@ -16,6 +16,7 @@ const facts = (over: Partial<SetupFacts> = {}): SetupFacts => ({
   provider: null,
   name: "Symbol Soup",
   named: true,
+  timeZoneLabel: "Eastern Time",
   notifyTo: 0,
   notifyFailed: false,
   onList: 0,
@@ -76,6 +77,7 @@ describe("setup steps", () => {
       "Connect Amazon SES: todo (Nothing can be sent, and signups stay closed, until SES is connected.)",
       "Send a test email: blocked (After Connect Amazon SES)",
       "Name your publication: todo (Currently “Newsletter”.)",
+      "Set the time zone: done (Set to Eastern Time.)",
       "Get notified: todo",
       "Request production access: todo (Name your publication first: AWS’s reviewer looks at it.)",
       "Bring your existing list: todo (Optional.)",
@@ -92,6 +94,7 @@ describe("setup steps", () => {
       "Connect Amazon SES: done (Sends through Amazon SES in us-west-2.)",
       "Send a test email: todo (SES is connected but hasn’t sent anything yet. Send one to an address verified in SES.)",
       "Name your publication: done (Named “Symbol Soup”.)",
+      "Set the time zone: done (Set to Eastern Time.)",
       "Get notified: todo",
       "Request production access: todo",
       "Bring your existing list: todo (Optional.)",
@@ -109,6 +112,7 @@ describe("setup steps", () => {
       "Connect Amazon SES: done (Sends through Amazon SES in us-west-2.)",
       "Send a test email: attention (SES is refusing. See why above.)",
       "Name your publication: done (Named “Symbol Soup”.)",
+      "Set the time zone: done (Set to Eastern Time.)",
       "Get notified: todo",
       "Request production access: todo",
       "Bring your existing list: todo (Optional.)",
@@ -127,6 +131,7 @@ describe("setup steps", () => {
       "Connect Amazon SES: done (Sends through Amazon SES in us-west-2.)",
       `Send a test email: done (SES accepted an email ${fmt(1)}.)`,
       "Name your publication: done (Named “Symbol Soup”.)",
+      "Set the time zone: done (Set to Eastern Time.)",
       "Get notified: done (Notifications go to 2 addresses.)",
       "Request production access: waiting (Waiting for AWS to grant production access.)",
       "Bring your existing list: todo (Optional.)",
@@ -160,6 +165,7 @@ describe("setup steps", () => {
       "Connect Amazon SES: done (Sends through Amazon SES in us-west-2.)",
       `Send a test email: done (SES accepted an email ${fmt(1)}.)`,
       "Name your publication: done (Named “Symbol Soup”.)",
+      "Set the time zone: done (Set to Eastern Time.)",
       "Get notified: done (Notifications go to 1 address.)",
       "Request production access: done (AWS granted it.)",
       "Bring your existing list: done (40 subscribers on your list.)",
@@ -224,6 +230,7 @@ describe("setup steps", () => {
       // No email recorded yet, as on an upgraded instance: the plain status.
       "Send a test email: done (SES is accepting email.)",
       "Name your publication: done (Named “Symbol Soup”.)",
+      "Set the time zone: done (Set to Eastern Time.)",
       "Get notified: todo",
       "Request production access: todo (Kestrel can’t read your SES account, so the SES console’s account dashboard says whether AWS granted it.)",
       "Write your first post: todo",
@@ -247,6 +254,7 @@ describe("setup steps", () => {
       "connect",
       "test",
       "name",
+      "time_zone",
       "notify",
       "list",
       "write",
@@ -307,7 +315,7 @@ describe("setup card", () => {
   it("hides finished steps behind one toggle, so the list starts at what's left", () => {
     const provider = ses({ review: "pending", sending: sending("working"), signups: "open" });
     const el = render(facts({ provider, notifyTo: 2 }));
-    expect(toggle(el)?.textContent).toBe("✓4 done");
+    expect(toggle(el)?.textContent).toBe("✓5 done");
     expect(toggle(el)?.getAttribute("aria-expanded")).toBe("false");
     expect(toggle(el)?.dataset.act).toBe("toggle-done");
     expect(titles(el)).toEqual([
@@ -330,7 +338,7 @@ describe("setup card", () => {
     // Not proven yet, but named and with a list: done steps sit between the ones left.
     const provider = ses({ sending: sending("unproven"), signups: "not_open" });
     const el = render(facts({ provider, onList: 3 }), "card", true);
-    expect(toggle(el)?.textContent).toBe("✓3 done");
+    expect(toggle(el)?.textContent).toBe("✓4 done");
     expect(toggle(el)?.getAttribute("aria-expanded")).toBe("true");
     expect(
       [...el.querySelectorAll(".setup-steps li")].map((li) => [
@@ -341,6 +349,7 @@ describe("setup card", () => {
       ["Connect Amazon SES", true],
       ["Send a test email", false],
       ["Name your publication", true],
+      ["Set the time zone", true],
       ["Get notified", false],
       ["Request production access", false],
       ["Bring your existing list", true],
@@ -357,6 +366,7 @@ describe("setup card", () => {
     ).toEqual([
       ["Sends through Amazon SES in us-west-2.", null],
       ["Named “Symbol Soup”.", "Settings"],
+      ["Set to Eastern Time.", "Settings"],
       ["3 subscribers on your list.", "Subscribers"],
     ]);
   });
@@ -398,10 +408,10 @@ describe("setup card", () => {
   it("names the toggle by what it does, and points it at the list", () => {
     const provider = ses({ sending: sending("working") });
     const shut = toggle(render(facts({ provider })));
-    expect(shut?.getAttribute("aria-label")).toBe("Show 3 done steps");
+    expect(shut?.getAttribute("aria-label")).toBe("Show 4 done steps");
     expect(shut?.getAttribute("aria-controls")).toBe("setupSteps");
     expect(toggle(render(facts({ provider }), "card", true))?.getAttribute("aria-label")).toBe(
-      "Hide 3 done steps",
+      "Hide 4 done steps",
     );
   });
 
@@ -416,7 +426,7 @@ describe("setup card", () => {
         firstSend: firstSend(),
       }),
     );
-    expect(toggle(el)?.textContent).toBe("✓8 done");
+    expect(toggle(el)?.textContent).toBe("✓9 done");
     expect(titles(el)).toEqual([
       "Send a test email for your first post",
       "Share your subscribe link",
@@ -429,7 +439,9 @@ describe("setup card", () => {
   });
 
   it("says a blocked step's wait in plain text, with no link and no control", () => {
-    const el = render(facts({ notConnected: true, sesAccount: false, named: false }));
+    const el = render(
+      facts({ notConnected: true, sesAccount: false, named: false, timeZoneLabel: null }),
+    );
     expect(el.querySelector(".setup-fold")).toBeNull();
     const blocked = [...el.querySelectorAll<HTMLElement>(".setup-blocked")];
     expect(blocked.map((li) => li.querySelector(".setup-hint")?.textContent)).toEqual([

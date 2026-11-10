@@ -13,6 +13,7 @@ import type { SendView } from "./sends";
  *  section changes its title here and keeps its name. */
 const SETTINGS_SECTION_TITLES = {
   "publication-identity": "Publication identity",
+  "time-zone": "Time zone",
   "ways-to-subscribe": "Ways to subscribe",
   "confirmation-email": "Confirmation email",
   "reader-pages": "Reader pages",
@@ -104,6 +105,14 @@ export interface SettingsView {
   confirmation_email: ConfirmationEmailCopy;
   confirmation_email_default: ConfirmationEmailCopy;
   notifications: NotificationPrefs;
+  /**
+   * The publication's time zone (SPEC §9), an IANA name such as `America/New_York`: the clock
+   * its readers keep. Null until someone sets it, and while it is null nothing can be
+   * scheduled or sent.
+   */
+  time_zone: string | null;
+  /** The zone's name for people, "Eastern Time", from the runtime's locale data; null with no zone. */
+  time_zone_label: string | null;
 }
 
 /**
@@ -270,6 +279,8 @@ export interface SettingsPatchBody {
   email_template?: string;
   confirmation_email?: Partial<ConfirmationEmailCopy>;
   notifications?: Partial<NotificationPrefs>;
+  /** An IANA zone name the runtime knows. It can be changed but not cleared. */
+  time_zone?: string;
   remake?: string[];
 }
 
@@ -278,6 +289,12 @@ export interface SettingsSavedResponse {
   settings: SettingsView;
   warnings: string[];
   remade: SendView[];
+  /**
+   * When the save changed the time zone, one sentence per scheduled send saying it keeps its
+   * moment and how that moment now reads (SPEC §9); empty otherwise. Information to show or
+   * relay as it stands, never a question.
+   */
+  time_zone_readings: string[];
 }
 
 /** POST and DELETE /api/settings/logo: the settings as stored and the scheduled sends the change re-made. */

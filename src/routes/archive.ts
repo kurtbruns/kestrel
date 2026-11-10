@@ -9,6 +9,7 @@
  * that never ships in an email, and the template's email-only regions are left out.
  */
 
+import { formatPublicationDate } from "../../shared/time_zone";
 import { getBySlug, getByUnlistedToken, type PostRow } from "../db/posts";
 import { listPublishedPosts, publishedSendForPost, type SendRow } from "../db/sends";
 import type { Config } from "../env";
@@ -36,14 +37,14 @@ import { param } from "../router";
 import { readSignups } from "../services/sending";
 import { archiveHomeUrl, devDashboardUrl, readerIdentity, readerMessage } from "./reader";
 
-/** A post's date as the reader surface shows it. */
-export function formatPublishedDate(ms: number): string {
-  return new Date(ms).toLocaleDateString("en-US", {
-    timeZone: "UTC",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+/** A post's date as the reader surface shows it: the publication's day, from its time zone
+ *  (SPEC §9), with no zone named; the day in UTC while none is set. Computed when the page is
+ *  served, so a zone change can move the date of a post sent near midnight. */
+export function formatPublishedDate(
+  ms: number,
+  identity: Pick<ReaderIdentity, "timeZone">,
+): string {
+  return formatPublicationDate(ms, identity.timeZone ?? null);
 }
 
 /** The public front door (§5): a home page featuring the latest post over a few
@@ -58,7 +59,7 @@ export async function landing(c: RequestContext): Promise<Response> {
   const mapped = posts.map((i) => ({
     title: i.subject,
     url: archiveUrl(c.config, i.slug),
-    dateLabel: formatPublishedDate(i.published_at),
+    dateLabel: formatPublishedDate(i.published_at, identity),
   }));
   const [featured, ...recent] = mapped;
   return landingPage({
@@ -88,7 +89,7 @@ export async function archiveIndex(c: RequestContext): Promise<Response> {
     posts: posts.map((i) => ({
       title: i.subject,
       url: archiveUrl(c.config, i.slug),
-      dateLabel: formatPublishedDate(i.published_at),
+      dateLabel: formatPublishedDate(i.published_at, identity),
     })),
     devDashboardUrl: devDashboardUrl(c.config),
   });
@@ -114,7 +115,7 @@ export function webVersion(
 ): string {
   const masthead = archiveMasthead({
     name: opts.identity.name,
-    dateLabel: formatPublishedDate(opts.dateMs),
+    dateLabel: formatPublishedDate(opts.dateMs, opts.identity),
     // Back to the archive index the post belongs to, on the same (archive) origin —
     // so an apex-hosted post stays on the apex instead of jumping to the app subdomain.
     indexUrl: archiveHomeUrl(opts.config),

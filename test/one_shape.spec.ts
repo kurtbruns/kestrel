@@ -134,15 +134,22 @@ describe("a post reads the same on every route, with its send and its actions (S
     }
   });
 
-  it("offers schedule and send now only while a provider is connected (SPEC §13)", async () => {
+  it("offers schedule and send now only while a provider is connected and a time zone set (SPEC §9, §13)", async () => {
     const draft = { id: "p1", status: "draft" } as const;
-    expect(postActions(draft, getConfig(env)).map((a) => a.name)).toEqual([
+    expect(postActions(draft, getConfig(env), true).map((a) => a.name)).toEqual([
       "edit",
       "delete",
       "schedule",
       "send_now",
     ]);
-    expect(postActions(draft, { provider: "none" }).map((a) => a.name)).toEqual(["edit", "delete"]);
+    expect(postActions(draft, { provider: "none" }, true).map((a) => a.name)).toEqual([
+      "edit",
+      "delete",
+    ]);
+    expect(postActions(draft, getConfig(env), false).map((a) => a.name)).toEqual([
+      "edit",
+      "delete",
+    ]);
     // Through the route, under a deployment with no provider.
     const { post } = await readJson(await call("/api/posts", { method: "POST", body: {} }));
     const e = withVars(NOT_CONNECTED_DEPLOY);

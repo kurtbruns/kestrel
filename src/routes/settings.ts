@@ -40,6 +40,7 @@ import {
   type SettingsSavedResponse,
   type SettingsView,
 } from "../../shared/settings";
+import { sameTimeZone, scheduledSendReading, timeZoneLabel } from "../../shared/time_zone";
 import { buildInfo } from "../build";
 import { notificationStatus, recordNotificationTest } from "../db/notifications";
 import { listScheduledSends } from "../db/sends";
@@ -154,6 +155,8 @@ function settingsView(settings: AppSettings, cfg: Config): SettingsView {
     confirmation_email: resolveConfirmationEmail(settings),
     confirmation_email_default: DEFAULT_CONFIRMATION_EMAIL,
     notifications: settings.notifications,
+    time_zone: settings.timeZone,
+    time_zone_label: settings.timeZone === null ? null : timeZoneLabel(settings.timeZone),
   };
 }
 
@@ -331,8 +334,30 @@ export async function update(c: RequestContext): Promise<Response> {
     settings: settingsView(settings, c.config),
     warnings,
     remade,
+    time_zone_readings: await timeZoneReadings(c, current.timeZone, settings.timeZone),
   };
   return json(saved);
+}
+
+/**
+ * What a zone change says about the scheduled sends (SPEC §9): none moves, since an automatic
+ * shift could put one earlier than the publisher reviewed it or inside the review window (I6),
+ * so each gets a sentence saying how its moment now reads. Nothing when the zone is the same
+ * zone under another name, or nothing is scheduled.
+ */
+async function timeZoneReadings(
+  c: RequestContext,
+  from: string | null,
+  to: string | null,
+): Promise<string[]> {
+  if (to === null || sameTimeZone(from, to)) {
+    return [];
+  }
+  const scheduled = await listScheduledSends(c.env.DB);
+  const now = Date.now();
+  return scheduled
+    .filter((s) => s.fire_at > now)
+    .map((s) => scheduledSendReading(s, from, to, scheduled.length > 1, now));
 }
 
 /** Store the uploaded logo's bytes under a key of their own, and make it the logo. */
@@ -443,6 +468,10 @@ function readPatch(o: JsonObject): SettingsPatch {
       }
     }
     patch.confirmation_email = ce;
+  }
+  const timeZone = optString(o, "time_zone");
+  if (timeZone !== undefined) {
+    patch.time_zone = timeZone;
   }
   const nBody = optObject(o, "notifications");
   if (nBody !== undefined) {

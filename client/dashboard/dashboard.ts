@@ -42,6 +42,7 @@ import {
 } from "../sends/progress";
 import { appState } from "../state";
 import { addSubscriberModal } from "../subscribers/dialogs";
+import { noTimeZoneHealthHtml, timeZoneUnset } from "../time_zone";
 import { copyButton, wireCopy } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
 import { fmt, recipientCount } from "../ui/format";
@@ -71,7 +72,9 @@ interface HealthAlert {
 // provider outage, which its retry explains, are shown where the send is. The one line
 // not about a send is the deployment's: no email provider connected (SPEC §13), an amber
 // standing state with no time, read from the deployment reflection, gone once one is set.
-// When that state is holding a send, the two are said as one red line instead of two.
+// When that state is holding a send, the two are said as one red line instead of two. The
+// other is no time zone set (SPEC §9), amber the same way, left out while setup's own step
+// says it or while no provider is connected.
 // While setup is open, its Connect Amazon SES step says the not-connected state and the amber
 // line is left out, so it is said once (DESIGN §3). The provider's connection adds the others
 // with no send behind them: each warning the server gives (GET /api/provider), in its words,
@@ -85,6 +88,7 @@ function computeHealth(
   provider: ProviderStatusView | null = null,
   setupSaysSandbox = false,
   notifyFailure: NotificationStatusView["last_failure"] = null,
+  setupSaysTimeZone = false,
 ): HealthAlert[] {
   const alerts: HealthAlert[] = [];
   // Missed only past the server's tolerance: an ordinary slow tick is never a miss (§12).
@@ -199,6 +203,12 @@ function computeHealth(
           ? html`<a href="#/sent/${firstSilent.s.id}">${firstSilent.s.subject}</a>: ${firstSilent.c.message}`
           : html`<a href="#/sent">${silent.length} sends</a> have had no delivery receipt long after they went out. The provider's events may not be reaching this app, so its bounces suppress no one and its complaints unsubscribe no one.`,
     });
+  }
+  // No time zone (SPEC §9), on an instance past setup, whose step would otherwise say it: an
+  // amber standing state, since everything but scheduling and sending still works. Not while no
+  // provider is connected, which is the first thing to fix.
+  if (timeZoneUnset() && !notConnected && !setupSaysTimeZone) {
+    alerts.push({ level: "amber", text: noTimeZoneHealthHtml() });
   }
   if (notConnected && !held.length && !setupSaysNotConnected) {
     alerts.push({
@@ -318,6 +328,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       provider,
       name: pub.name,
       named: Boolean(config?.settings.publication?.name?.trim()),
+      timeZoneLabel: config?.settings.time_zone_label ?? null,
       notifyTo: config?.settings.notifications.to.length ?? 0,
       notifyFailed: failed !== null,
       onList: counts.confirmed + counts.pending,
@@ -341,6 +352,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
         provider,
         setupOpen(),
         appState.appConfig?.notification_status.last_failure ?? null,
+        setupOpen(),
       ),
     );
 
