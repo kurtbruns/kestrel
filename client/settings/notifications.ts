@@ -1,5 +1,5 @@
 // Settings' Notifications section (SPEC §8): where Kestrel tells the publisher about their
-// sends is a preference, committed through the save bar; how it gets there, and from whom,
+// sends is a list of addresses, each added or removed saved at once; how it gets there, and from whom,
 // is shown read-only beside it with how the last one went, and Send a test alert proves the
 // operator's Cloudflare alert for what these emails can't carry (SPEC §12).
 
@@ -100,7 +100,7 @@ export function notificationsSection(page: SettingsPage): Html {
             <p class="field-hint" style="margin:0">Each address gets every notification. Add whoever runs Kestrel for you, so they’re told too. Up to ${MAX_NOTIFY_ADDRESSES}.</p>
           </div>
           ${addressListHtml(NOTIFY_IDS)}
-          <div class="row"><button type="button" class="ghost" id="notifyTest">Send a test notification</button><span class="field-hint" id="notifyTestHint"></span></div>
+          <div class="row"><button type="button" class="secondary" id="notifyTest">Send a test notification</button><span class="field-hint" id="notifyTestHint"></span></div>
         </div>
         <div class="set-kv" style="border-top:1px solid var(--line)">
           <div class="set-kv-k">Sent through</div><div class="set-kv-v">${sentThroughLabel(d)}</div>
@@ -122,9 +122,10 @@ function notifyFromLine(page: SettingsPage): string {
   return senderLine(notificationSender(page.saved().name, page.data.deployment.from_address));
 }
 
-/** The addresses ride the save bar; the test goes to the SAVED addresses only (the server
- *  never takes one from the request), so it waits for a save. Its outcome is the channel's
- *  latest word, so the status line takes it in place. */
+/** The addresses save as they are added or removed, so the list shown is the saved one;
+ *  the test goes to the saved addresses only (the server never takes one from the request),
+ *  so it waits for the first. Its outcome is the channel's latest word, so the status line
+ *  takes it in place. */
 export function mountNotifications(root: HTMLElement, page: SettingsPage): SectionHandle {
   const test = $<HTMLButtonElement>("#notifyTest", root);
   const testHint = $("#notifyTestHint", root);
@@ -134,7 +135,8 @@ export function mountNotifications(root: HTMLElement, page: SettingsPage): Secti
   const alertHint = $("#alertTestHint", root);
   const list = mountAddressList(root, page, {
     ids: NOTIFY_IDS,
-    list: () => page.state.notifyTo,
+    key: "notifyTo",
+    name: "notifications",
     empty: "No addresses yet, so Kestrel emails no one. Add yours below.",
     max: {
       count: MAX_NOTIFY_ADDRESSES,
@@ -142,13 +144,7 @@ export function mountNotifications(root: HTMLElement, page: SettingsPage): Secti
     },
   });
   const refreshTest = () => {
-    const saved = page.saved().notifyTo;
-    const reason =
-      saved.length === 0
-        ? "Save an address to send a test."
-        : page.state.notifyTo.join("\n") !== saved.join("\n")
-          ? "Save first: the test goes to the saved addresses."
-          : "";
+    const reason = page.state.notifyTo.length === 0 ? "Add an address to send a test." : "";
     test.disabled = Boolean(reason);
     testHint.textContent = reason;
   };

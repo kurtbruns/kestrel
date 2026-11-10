@@ -54,14 +54,10 @@ function baselineOf(state: SettingsBaseline): SettingsBaseline {
     name: state.name,
     tagline: state.tagline,
     address: state.address,
-    recipients: [...state.recipients],
     confirmation: { ...state.confirmation },
-    notifyTo: [...state.notifyTo],
   };
 }
 
-const sameList = (a: string[], b: string[]) =>
-  a.length === b.length && a.every((x, i) => x === b[i]);
 const sameCopy = (a: ConfirmationEmailCopy, b: ConfirmationEmailCopy) =>
   a.subject === b.subject &&
   a.body === b.body &&
@@ -95,8 +91,9 @@ export async function renderSettings(
   const p = s.publication;
   const ce = s.confirmation_email;
   // Live, in-memory state. The save bar tracks the persisted fields against the saved
-  // baseline; the logo saves the moment it changes (its own endpoints), and the email
-  // template has its own page and its own Save, so neither feeds the bar.
+  // baseline. The logo (its own endpoints) and the address lists (a write of that list
+  // alone) save the moment they change, and the email template has its own page and its
+  // own Save, so none of them feeds the bar.
   const state: SettingsFormState = {
     name: p.name || "",
     tagline: p.tagline || "",
@@ -120,9 +117,7 @@ export async function renderSettings(
     state.name !== baseline.name ||
     state.tagline !== baseline.tagline ||
     state.address !== baseline.address ||
-    !sameList(state.recipients, baseline.recipients) ||
-    !sameCopy(state.confirmation, baseline.confirmation) ||
-    !sameList(state.notifyTo, baseline.notifyTo);
+    !sameCopy(state.confirmation, baseline.confirmation);
 
   const handles: SectionHandle[] = [];
   // The shared bottom save bar (Save + Discard), its callbacks the hoisted saveSettings /
@@ -149,6 +144,20 @@ export async function renderSettings(
       renderSidebarBrand();
       // The reader pages wear the saved identity, so the one shown re-reads it.
       refreshReaderPages();
+    },
+    // A partial write carrying the one list, so the page's other unsaved edits stay
+    // unsaved and the bar keeps counting them. A list change never reaches an email, so
+    // it never asks to re-make scheduled ones. The state takes the server's normalized
+    // list only once it lands: a refusal leaves the list as it was.
+    async saveList(key, next) {
+      const json: SettingsPatchBody =
+        key === "recipients" ? { test_recipients: next } : { notifications: { to: next } };
+      const r = await api<SettingsSavedResponse>("/api/settings", { method: "PUT", json });
+      state[key] = [
+        ...(key === "recipients" ? r.settings.test_recipients : r.settings.notifications.to),
+      ];
+      page.applySaved(r.settings);
+      page.changed();
     },
   };
 
@@ -190,12 +199,11 @@ export async function renderSettings(
     try {
       // An identity change the template renders reaches every scheduled email, so the
       // server may ask for the acknowledgement first (withRemakeConfirm); a save that
-      // touches only recipients or the confirmation wording never does.
+      // touches only the confirmation wording never does. The address lists save on
+      // their own, so this write leaves them out and can't put back an older list.
       const payload: SettingsPatchBody = {
         publication: { name: state.name, tagline: state.tagline, address: state.address },
-        test_recipients: state.recipients,
         confirmation_email: state.confirmation,
-        notifications: { to: state.notifyTo },
       };
       const r = await withRemakeConfirm(
         (ack) =>
@@ -214,9 +222,7 @@ export async function renderSettings(
       state.name = ns.publication.name;
       state.tagline = ns.publication.tagline;
       state.address = ns.publication.address;
-      state.recipients = [...ns.test_recipients];
       state.confirmation = { ...ns.confirmation_email };
-      state.notifyTo = [...ns.notifications.to];
       baseline = baselineOf(state);
       for (const h of handles) {
         h.reset?.();
@@ -291,13 +297,12 @@ export async function renderSettings(
   return { navigate };
 }
 
-// The input each settings field the API can name is edited in, by its wire name.
+// The input each settings field the save bar's write can name is edited in, by its wire
+// name. The address lists save on their own and say a refusal on their own field.
 const FIELD_INPUTS: Record<string, string> = {
   "publication.name": "#setName",
   "publication.tagline": "#setTagline",
   "publication.address": "#setAddress",
-  test_recipients: "#recipInput",
-  "notifications.to": "#notifyTo",
   "confirmation_email.subject": "#ceSubject",
   "confirmation_email.body": "#ceMessage",
   "confirmation_email.button_label": "#ceButton",

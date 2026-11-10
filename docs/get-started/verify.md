@@ -43,7 +43,7 @@ If a check fails, compare your DNS records with the ones in [Connect Amazon SES]
 
 Kestrel emails each notifications address when a send finishes, and right away when one runs into a problem. Check that they reach you, using one of the addresses you verified in SES. While SES is in the sandbox, every notifications address has to be verified there too. If you're setting Kestrel up for someone else, you can add their address beside yours later.
 
-1. In the editor, open **Settings → Notifications**, type that address under **Send notifications to**, select **Add inbox**, and then **Save**.
+1. In the editor, open **Settings → Notifications**, type that address under **Send notifications to**, and select **Add inbox**. It saves right away.
 
 1. Select **Send a test notification**. It arrives at that address, from `Kestrel` until the publication has a name, and then from the publication's name followed by `via Kestrel`. If it doesn't arrive, **Last notification**, on the same page, says what happened.
 
