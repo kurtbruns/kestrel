@@ -131,7 +131,7 @@ export function timeZoneSection(_page: SettingsPage): Html {
             </div>
           </div>
         </div>
-        <div class="set-note">${icon("info")}<span>Changing it never moves a scheduled post. You’ll see how each one reads before you save.</span></div>
+        <div class="set-note">${icon("info")}<span>Changing it never moves a scheduled post, only how its time is displayed.</span></div>
       </div>
     </section>`;
 }
