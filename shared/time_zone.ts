@@ -10,10 +10,14 @@
 const RESOLVED = new Map<string, string>();
 const LABEL_FORMATS = new Map<string, Intl.DateTimeFormat>();
 
+/** A name the runtime resolved that means UTC, however the engine spells it. */
+const MEANS_UTC = /^(Etc\/)?(UTC|GMT)$/;
+
 /**
- * The zone a name resolves to in this runtime, or null when the runtime doesn't know the
- * name. Aliases resolve to one name (`US/Eastern` to `America/New_York`, and in the engine
- * behind Chrome and Workers `Asia/Kolkata` to `Asia/Calcutta`), and case is corrected.
+ * The zone a name resolves to in this runtime, or null when it is no publication's clock: a
+ * name the runtime doesn't know, a bare offset, or a name that isn't a place. Aliases resolve
+ * to one name (`US/Eastern` to `America/New_York`, and in the engine behind Chrome and Workers
+ * `Asia/Kolkata` to `Asia/Calcutta`), and case is corrected.
  */
 export function resolveTimeZone(name: string): string | null {
   // A bare offset ("-05:00") is a zone to newer runtimes but not a place: it never changes
@@ -26,15 +30,29 @@ export function resolveTimeZone(name: string): string | null {
   if (known !== undefined) {
     return known;
   }
+  let zone: string;
   try {
-    const zone = new Intl.DateTimeFormat("en-US", { timeZone: key }).resolvedOptions().timeZone;
-    RESOLVED.set(key, zone);
-    return zone;
+    zone = new Intl.DateTimeFormat("en-US", { timeZone: key }).resolvedOptions().timeZone;
   } catch {
     // RangeError: a name the runtime doesn't know. Not kept, so a stream of bad names
     // grows nothing.
     return null;
   }
+  // A place is named Area/Location. The one-word names the runtime also knows are refused,
+  // UTC and its other spellings aside: "EST", "MST", and "HST" read like the seasonal names
+  // people say but are fixed offsets, an hour off all summer, and no rule that needs a table
+  // of names tells them from the rest ("Japan"), which every place name covers anyway.
+  if (!isPlaceName(key) && !MEANS_UTC.test(zone)) {
+    return null;
+  }
+  RESOLVED.set(key, zone);
+  return zone;
+}
+
+/** Whether a name has the shape of a place's, Area/Location: the only names besides UTC that
+ *  `resolveTimeZone` takes. A caller uses it to say why a name the runtime knows was refused. */
+export function isPlaceName(name: string): boolean {
+  return name.includes("/");
 }
 
 /**
@@ -48,21 +66,41 @@ export function sameTimeZone(a: string | null, b: string | null): boolean {
   return ra !== null && ra === rb;
 }
 
+/** A zone name that is only an offset, "GMT-05:00" or "GMT": what the runtime gives a zone
+ *  it has no name for. */
+const OFFSET_NAME = /^GMT([+-]|$)/;
+
+/** The formatter for one kind of zone name, kept per zone. */
+function labelFormat(zone: string, timeZoneName: "longGeneric" | "long"): Intl.DateTimeFormat {
+  const key = `${zone} ${timeZoneName}`;
+  let format = LABEL_FORMATS.get(key);
+  if (format === undefined) {
+    format = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName });
+    LABEL_FORMATS.set(key, format);
+  }
+  return format;
+}
+
 /**
  * A zone's name for people: its standard long generic name from the runtime's locale data,
  * "Eastern Time" or "Japan Standard Time", never an abbreviation, and the same in summer and
- * winter. A zone with no such name, such as `Etc/GMT+5`, reads as its offset ("GMT-05:00").
+ * winter. Where the runtime has no generic name and gives an offset, the zone's full name is
+ * used if it has one, so UTC reads "Coordinated Universal Time"; a zone with neither, such as
+ * `Etc/GMT+5`, reads as its offset ("GMT-05:00").
  */
 export function timeZoneLabel(zone: string, at = Date.now()): string {
   // Read at a moment, since a place's zone can change: North Dakota's New Salem was on
   // Mountain Time until 2003.
-  let format = LABEL_FORMATS.get(zone);
-  if (format === undefined) {
-    format = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "longGeneric" });
-    LABEL_FORMATS.set(zone, format);
+  const nameAs = (kind: "longGeneric" | "long") =>
+    labelFormat(zone, kind)
+      .formatToParts(at)
+      .find((p) => p.type === "timeZoneName")?.value;
+  const generic = nameAs("longGeneric");
+  if (generic !== undefined && !OFFSET_NAME.test(generic)) {
+    return generic;
   }
-  const parts = format.formatToParts(at);
-  return parts.find((p) => p.type === "timeZoneName")?.value ?? zone;
+  const full = nameAs("long");
+  return full !== undefined && !OFFSET_NAME.test(full) ? full : (generic ?? zone);
 }
 
 /**

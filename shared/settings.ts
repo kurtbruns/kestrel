@@ -290,11 +290,19 @@ export interface SettingsSavedResponse {
   warnings: string[];
   remade: SendView[];
   /**
-   * When the save changed the time zone, one sentence per scheduled send saying it keeps its
-   * moment and how that moment now reads (SPEC §9); empty otherwise. Information to show or
-   * relay as it stands, never a question.
+   * When the save changed the time zone, one entry per scheduled send, by id, saying it keeps
+   * its moment and how that moment now reads (SPEC §9); empty otherwise. Information to show
+   * or relay as it stands, never a question.
    */
-  time_zone_readings: string[];
+  time_zone_readings: TimeZoneReading[];
+}
+
+/** What a zone change says about one scheduled send: which send, and the sentence. */
+export interface TimeZoneReading {
+  send_id: string;
+  /** "Your scheduled post stays at the same moment, now Fri Nov 13, 8:00 AM Central Time.
+   *  Move it if you meant 9:00 AM." Text to show or relay, never to parse. */
+  message: string;
 }
 
 /** POST and DELETE /api/settings/logo: the settings as stored and the scheduled sends the change re-made. */

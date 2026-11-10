@@ -24,7 +24,7 @@ import {
   type NotificationPrefs,
   type SettingsPatchBody,
 } from "../../shared/settings";
-import { resolveTimeZone } from "../../shared/time_zone";
+import { isPlaceName, resolveTimeZone } from "../../shared/time_zone";
 import { HttpError } from "../lib/errors";
 import { log } from "../lib/log";
 
@@ -559,16 +559,20 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
   return next;
 }
 
-/** A zone name the runtime knows, stored as it resolves there, so an alias and its zone are
- *  stored alike (SPEC §9). Anything else is refused naming the field. */
+/** A place's zone name the runtime knows, stored as it resolves there, so an alias and its
+ *  zone are stored alike (SPEC §9). Anything else is refused naming the field, and a name
+ *  that isn't a place's, such as EST, is told why. */
 function normalizeTimeZone(input: unknown): string {
   const zone = typeof input === "string" ? resolveTimeZone(input) : null;
   if (zone === null) {
+    const name = typeof input === "string" ? input.trim() : "";
     throw new SettingsFieldError(
       "time_zone",
-      typeof input === "string" && input.trim() !== ""
-        ? `“${input.trim()}” isn’t a time zone this server knows. Use an IANA name, such as America/New_York.`
-        : "The time zone must be an IANA name, such as America/New_York.",
+      name === ""
+        ? "The time zone must be an IANA name, such as America/New_York."
+        : isPlaceName(name) || /^[+-]/.test(name)
+          ? `“${name}” isn’t a time zone this server knows. Use an IANA name, such as America/New_York.`
+          : `“${name}” isn’t a place’s zone name: a name such as EST never changes for daylight saving time. Use the place whose clock your readers keep, such as America/New_York.`,
     );
   }
   return zone;

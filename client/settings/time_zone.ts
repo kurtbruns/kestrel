@@ -1,6 +1,6 @@
 // Settings' Time zone section (SPEC §9): the clock the publication's readers keep, which it
 // can't schedule or send without. A zone is chosen, from the browser's own (offered while none
-// is saved) or by searching, and the choice waits for the save bar like a typed edit. Nothing
+// is saved or chosen) or by searching, and the choice waits for the save bar like a typed edit. Nothing
 // is chosen until the publisher picks: the browser's zone is offered, never filled in, so no
 // save carries a zone nobody chose.
 
@@ -140,9 +140,10 @@ export function timeZoneSection(_page: SettingsPage): Html {
 /**
  * Wire the section. The choice is `page.state.timeZone`, against the saved one in
  * `page.saved()`; the save bar commits it with the page's other edits, and Discard puts it back.
- * While nothing is saved, the browser's zone is offered between the warning and the search,
- * until it is the one chosen. Once a zone is saved it is never offered: a browser on another
- * clock is most often a publisher traveling.
+ * While nothing is saved or chosen, the browser's zone is offered between the warning and the
+ * search. A choice, from Use or the search, is the act the offer asks for, so the offer goes
+ * with it, and Discard brings it back. Once a zone is saved it is never offered: a browser on
+ * another clock is most often a publisher traveling.
  */
 export function mountTimeZone(
   root: HTMLElement,
@@ -198,7 +199,7 @@ export function mountTimeZone(
           : null
       }`,
     );
-    if (saved === null && browser !== null && !sameTimeZone(shown, browser)) {
+    if (saved === null && shown === null && browser !== null) {
       const b = zoneChoice(browser);
       setHtml(
         suggestEl,

@@ -625,7 +625,7 @@ export function createRouter({
           name: "time_zone",
           type: "string",
           description:
-            "The publication's time zone, the clock its readers keep, as an IANA name such as `America/New_York`. A name the server's runtime doesn't know is a 400. It can be changed but not cleared. Until it is set, scheduling and sending are refused (`time_zone_not_set`). Set it only as the publisher chooses: ask which clock their readers keep, and never use your own.",
+            "The publication's time zone, the clock its readers keep, as the IANA name of a place such as `America/New_York`, or `UTC`. A name the server's runtime doesn't know, a bare offset, or a name that isn't a place's, such as `EST`, which never changes for daylight saving time, is a 400. It is stored and read back under the server's name for the zone, which may not be the name sent (`US/Eastern` reads back `America/New_York`). It can be changed but not cleared. Until it is set, scheduling and sending are refused (`time_zone_not_set`). Set it only as the publisher chooses: ask which clock their readers keep, and never use your own.",
         },
         {
           name: "remake",
@@ -656,9 +656,9 @@ export function createRouter({
           },
           {
             name: "time_zone_readings",
-            type: "string[]",
+            type: "object[]",
             description:
-              "When the save changed `time_zone` from one zone to another, one sentence per scheduled send saying it keeps its moment and how that moment now reads, to show or relay as it stands; empty otherwise. Setting the zone for the first time, or saving the same zone under another name, says nothing.",
+              "When the save changed `time_zone` from one zone to another, one `{ send_id, message }` per scheduled send: the send, and a sentence saying it keeps its moment and how that moment now reads, to show or relay as it stands and never to parse; empty otherwise. Setting the zone for the first time, or saving the same zone under another name, says nothing.",
           },
         ],
       },

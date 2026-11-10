@@ -39,6 +39,7 @@ import {
   type SettingsResponse,
   type SettingsSavedResponse,
   type SettingsView,
+  type TimeZoneReading,
 } from "../../shared/settings";
 import { sameTimeZone, scheduledSendReading, timeZoneLabel } from "../../shared/time_zone";
 import { buildInfo } from "../build";
@@ -342,7 +343,7 @@ export async function update(c: RequestContext): Promise<Response> {
 /**
  * What a zone change says about the scheduled sends (SPEC §9): none moves, since an automatic
  * shift could put one earlier than the publisher reviewed it or inside the review window (I6),
- * so each gets a sentence saying how its moment now reads. Nothing when the zone is set for the
+ * so each gets a sentence, beside its id, saying how its moment now reads. Nothing when the zone is set for the
  * first time, when it is the same zone under another name, or when nothing is scheduled. The
  * editor shows the same before the save; this is for a client with no preview, such as Claude.
  */
@@ -350,7 +351,7 @@ async function timeZoneReadings(
   c: RequestContext,
   from: string | null,
   to: string | null,
-): Promise<string[]> {
+): Promise<TimeZoneReading[]> {
   // A first zone moves nothing that was ever read on a publication clock, so it says nothing.
   if (from === null || to === null || sameTimeZone(from, to)) {
     return [];
@@ -358,7 +359,10 @@ async function timeZoneReadings(
   const now = Date.now();
   // Only the sends still to go out, and named by subject only when there are several of them.
   const upcoming = (await listScheduledSends(c.env.DB)).filter((s) => s.fire_at > now);
-  return upcoming.map((s) => scheduledSendReading(s, from, to, upcoming.length > 1, now));
+  return upcoming.map((s) => ({
+    send_id: s.id,
+    message: scheduledSendReading(s, from, to, upcoming.length > 1, now),
+  }));
 }
 
 /** Store the uploaded logo's bytes under a key of their own, and make it the logo. */

@@ -70,7 +70,11 @@ describe("the setting (SPEC §9)", () => {
       "America/New_York",
       "Eastern Time",
     ]);
-    // A zone with no generic name reads as its offset.
+    // A zone with no generic name reads by its full name, and as its offset when it has
+    // neither.
+    expect((await readJson(await saveZone("UTC"))).settings.time_zone_label).toBe(
+      "Coordinated Universal Time",
+    );
     expect((await readJson(await saveZone("Etc/GMT+5"))).settings.time_zone_label).toBe(
       "GMT-05:00",
     );
@@ -79,7 +83,7 @@ describe("the setting (SPEC §9)", () => {
     );
   });
 
-  it("refuses a name the runtime doesn't know, or none, naming the field and keeping the zone", async () => {
+  it("refuses a name the runtime doesn't know, one that isn't a place's, or none, naming the field and keeping the zone", async () => {
     await saveZone("Asia/Tokyo");
     for (const bad of ["Mars/Olympus_Mons", "", "-05:00"]) {
       const res = await saveZone(bad);
@@ -90,6 +94,20 @@ describe("the setting (SPEC §9)", () => {
     expect((await readJson(await saveZone("Mars/Olympus_Mons"))).message).toBe(
       "“Mars/Olympus_Mons” isn’t a time zone this server knows. Use an IANA name, such as America/New_York.",
     );
+    // A name that isn't a place's is told why: it reads like a seasonal name, and isn't one.
+    for (const bad of ["EST", "MST", "HST", "Japan"]) {
+      const res = await saveZone(bad);
+      expect(res.status, bad).toBe(400);
+      expect((await readJson(res)).field, bad).toBe("time_zone");
+    }
+    expect((await readJson(await saveZone("EST"))).message).toBe(
+      "“EST” isn’t a place’s zone name: a name such as EST never changes for daylight saving time. Use the place whose clock your readers keep, such as America/New_York.",
+    );
+    // UTC is taken under any of its names.
+    for (const utc of ["UTC", "utc", "GMT", "Etc/UTC"]) {
+      expect((await readJson(await saveZone(utc))).settings.time_zone, utc).toBe("UTC");
+    }
+    await saveZone("Asia/Tokyo");
     // Not text at all is the router's 400 on the field's type.
     expect((await saveZone(null)).status).toBe(400);
     expect((await getSettings(env.DB)).timeZone).toBe("Asia/Tokyo");
@@ -246,9 +264,14 @@ describe("changing it (SPEC §9)", () => {
     expect(res.status).toBe(200);
     const body = await readJson(res);
     expect(body.time_zone_readings).toEqual([
-      `Your scheduled post stays at the same moment, now ${formatInTimeZone(fireAt, "America/Chicago")}. Move it if you meant 9:00 AM.`,
+      {
+        send_id: sendId,
+        message: `Your scheduled post stays at the same moment, now ${formatInTimeZone(fireAt, "America/Chicago")}. Move it if you meant 9:00 AM.`,
+      },
     ]);
-    expect(body.time_zone_readings[0]).toMatch(/, 8:00 AM Central Time\. Move it if you meant/);
+    expect(body.time_zone_readings[0].message).toMatch(
+      /, 8:00 AM Central Time\. Move it if you meant/,
+    );
     const send = (await readJson(await call("GET", `/api/sends/${sendId}`))).send;
     expect(send.fire_at).toBe(fireAt);
     expect(body.remade).toEqual([]);
@@ -258,23 +281,27 @@ describe("changing it (SPEC §9)", () => {
 
   it("names each send by its subject when several are scheduled", async () => {
     await saveZone("America/New_York");
-    const a = (await scheduled(Date.now() + 2 * HOUR)).fire_at;
-    const b = (await scheduled(Date.now() + 5 * HOUR)).fire_at;
+    const a = await scheduled(Date.now() + 2 * HOUR);
+    const b = await scheduled(Date.now() + 5 * HOUR);
     const body = await readJson(await saveZone("Asia/Tokyo"));
-    const meant = (ms: number) => formatClockTime(ms, "America/New_York");
-    expect(body.time_zone_readings).toEqual([
-      `Your scheduled post “Owls” stays at the same moment, now ${formatInTimeZone(a, "Asia/Tokyo")}. Move it if you meant ${meant(a)}.`,
-      `Your scheduled post “Owls” stays at the same moment, now ${formatInTimeZone(b, "Asia/Tokyo")}. Move it if you meant ${meant(b)}.`,
-    ]);
+    const reading = (s: { id: string; fire_at: number }) => ({
+      send_id: s.id,
+      message: `Your scheduled post “Owls” stays at the same moment, now ${formatInTimeZone(s.fire_at, "Asia/Tokyo")}. Move it if you meant ${formatClockTime(s.fire_at, "America/New_York")}.`,
+    });
+    // Two posts of one subject are told apart by their ids.
+    expect(body.time_zone_readings).toEqual([reading(a), reading(b)]);
   });
 
   it("names no subject when one send is still to go out beside one already due", async () => {
     await saveZone("America/New_York");
     await dueSend();
-    const at = (await scheduled(Date.now() + 2 * HOUR)).fire_at;
+    const { id, fire_at: at } = await scheduled(Date.now() + 2 * HOUR);
     const body = await readJson(await saveZone("America/Chicago"));
     expect(body.time_zone_readings).toEqual([
-      `Your scheduled post stays at the same moment, now ${formatInTimeZone(at, "America/Chicago")}. Move it if you meant ${formatClockTime(at, "America/New_York")}.`,
+      {
+        send_id: id,
+        message: `Your scheduled post stays at the same moment, now ${formatInTimeZone(at, "America/Chicago")}. Move it if you meant ${formatClockTime(at, "America/New_York")}.`,
+      },
     ]);
   });
 

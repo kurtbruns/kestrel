@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SettingsSavedResponse, SettingsView } from "../../shared/settings";
+import type { SettingsSavedResponse, SettingsView, TimeZoneReading } from "../../shared/settings";
 import { formatClockTime, formatDayInTimeZone, formatInTimeZone } from "../../shared/time_zone";
 import { appState } from "../state";
 import { sendView } from "../test/send_server";
@@ -39,7 +39,10 @@ describe("settings' time zone", () => {
    *  resets its default zone when `TZ` changes. */
   const browserIn = (zone: string) => vi.stubEnv("TZ", zone);
 
-  const answer = (over: Partial<SettingsView>, readings: string[] = []): SettingsSavedResponse => ({
+  const answer = (
+    over: Partial<SettingsView>,
+    readings: TimeZoneReading[] = [],
+  ): SettingsSavedResponse => ({
     settings: settingsResponse({ settings: over }).settings,
     warnings: [],
     remade: [],
@@ -93,7 +96,7 @@ describe("settings' time zone", () => {
     expect(appState.appConfig?.settings.time_zone).toBeNull();
     $<HTMLButtonElement>("#tzUse").click();
     expect(chosen()).toMatch(/^Central Time \| Chicago · America · UTC-0[56]:00 · C[SD]T$/);
-    expect(suggestion()).toBeNull(); // it is the one chosen now
+    expect(suggestion()).toBeNull(); // a zone is chosen, so the offer goes
     expect(barUp()).toBe(true);
     expect(puts()).toEqual([]);
     expect(fake.unhandled).toEqual([]);
@@ -107,7 +110,7 @@ describe("settings' time zone", () => {
         path: "/api/settings",
         reply: () =>
           answer({ time_zone: "America/Chicago", time_zone_label: "Central Time" }, [
-            "a sentence the API gives Claude",
+            { send_id: "s1", message: "a sentence the API gives Claude" },
           ]),
       },
     ]);
@@ -317,9 +320,11 @@ describe("settings' time zone", () => {
     await open(unset);
     expect(suggestion()).not.toBeNull();
     $<HTMLButtonElement>("#tzUse").click();
-    expect(chosen()).toMatch(/^GMT\+00:00 \| UTC · UTC\+00:00 · UTC$/);
+    expect(chosen()).toMatch(/^Coordinated Universal Time \| UTC · UTC\+00:00 · UTC$/);
     search("utc");
-    expect(rows().filter((r) => r?.startsWith("GMT+00:00 | UTC · "))).toHaveLength(1);
+    expect(rows().filter((r) => r?.startsWith("Coordinated Universal Time | UTC · "))).toHaveLength(
+      1,
+    );
   });
 
   it("finds an alias the list spells differently as the listed zone, once", async () => {
@@ -331,10 +336,27 @@ describe("settings' time zone", () => {
 
   it("finds a saved zone the browser doesn't list", async () => {
     browserIn("Asia/Tokyo");
-    await open({ time_zone: "UTC", time_zone_label: "GMT+00:00" });
-    expect(chosen()).toMatch(/^GMT\+00:00 \| UTC · UTC\+00:00 · UTC$/);
+    await open({ time_zone: "UTC", time_zone_label: "Coordinated Universal Time" });
+    expect(chosen()).toMatch(/^Coordinated Universal Time \| UTC · UTC\+00:00 · UTC$/);
     search("utc");
-    expect(rows().filter((r) => r?.startsWith("GMT+00:00 | UTC · "))).toHaveLength(1);
+    expect(rows().filter((r) => r?.startsWith("Coordinated Universal Time | UTC · "))).toHaveLength(
+      1,
+    );
+  });
+
+  it("takes the offer away once any zone is chosen, and brings it back on Discard", async () => {
+    browserIn("America/Chicago");
+    await open(unset);
+    expect(suggestion()).not.toBeNull();
+    search("tokyo");
+    press("Enter");
+    expect(chosen()).toMatch(/^Japan Standard Time \| Tokyo · Asia/);
+    // The choice is the act the offer asks for, even when it isn't the browser's zone.
+    expect(suggestion()).toBeNull();
+    $("#savebarDiscard").click();
+    expect(chosen()).toBe("No time zone set yet, so nothing can be scheduled or sent.");
+    expect(suggestion()).not.toBeNull();
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("offers nothing when the browser's zone isn't one the server would take", async () => {
