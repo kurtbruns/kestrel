@@ -41,7 +41,9 @@ export function describeHead(d: PageDescription): string {
 
 /** Where the plain-text part's footer starts: render.ts closes the post's text with a blank
  *  line and a line holding only a dash, then the footer (the "view in browser" link, which is
- *  the post's unlisted link, and the unsubscribe slot). Every send ever frozen has it. */
+ *  the post's unlisted link, and the unsubscribe slot). Every send ever frozen has it, but the
+ *  description never relies on finding it: `BARE_ADDRESS` and `PLACEHOLDER` keep the footer's
+ *  contents out whatever its shape. */
 const TEXT_FOOTER_RULE = "\n\n—\n";
 
 /** A line that is only images, as the plain text gives them ("[alt]"). */
@@ -50,30 +52,40 @@ const IMAGES_ONLY = /^(?:\[[^\]]*\]\s*)+$/;
 /** A link's address, as the plain text puts it after the link's words: " (https://…)". */
 const LINK_ADDRESS = /\s?\((?:[a-z][a-z0-9+.-]*:|\/|#)\S*\)/gi;
 
+/** Any address written out in the text, wherever it stands: the description never names one,
+ *  so neither the unlisted link nor any other secret a URL may hold can reach a tag. */
+const BARE_ADDRESS = /(?:\b[a-z][a-z0-9+.-]*:\/\/|\bmailto:|\bwww\.)\S*/gi;
+
+/** A delivery slot as the frozen copy keeps it (the unsubscribe link, the sent-to address). */
+const PLACEHOLDER = /%%[A-Z_]+%%/g;
+
 /** A line that already ends a sentence or clause, so the next one follows after a space. */
 const ENDS_CLAUSE = /[.!?…:;,)\]"'”’»]$/;
 
 /**
  * A post's description: its opening text as readers received it, from the send's frozen
  * plain-text part (so no second render, I5), shortened to about `DESCRIPTION_MAX` characters.
- * Only prose is kept: the footer is cut (it carries the unlisted link), and so are a first line
- * that repeats the subject, a line of nothing but images, a link's address after its words, and
- * a list item's dash. A line that doesn't end in punctuation, such as a heading, is joined to
+ * Only prose is kept: the footer is cut (it carries the unlisted link), every address and
+ * delivery slot is removed wherever it stands (so a text without the footer rule leaks neither),
+ * and so are a first line that repeats the subject, a line of nothing but images, a line left
+ * as only a label once its address is gone ("View in browser:"), and a list item's dash. A line that doesn't end in punctuation, such as a heading, is joined to
  * the next by a dash so the two don't run together. "" when no prose is left.
  */
 export function postDescription(frozenText: string, subject: string): string {
   const end = frozenText.lastIndexOf(TEXT_FOOTER_RULE);
   const body = end === -1 ? frozenText : frozenText.slice(0, end);
-  const lines = body
-    .split("\n")
-    .map((l) =>
-      l
-        .replace(LINK_ADDRESS, "")
-        .replace(/^\s*-\s+/, "")
-        .replace(/\s+/g, " ")
-        .trim(),
-    )
-    .filter((l) => l !== "" && !IMAGES_ONLY.test(l));
+  const lines: string[] = [];
+  for (const raw of body.split("\n")) {
+    const kept = raw.replace(LINK_ADDRESS, "").replace(BARE_ADDRESS, "").replace(PLACEHOLDER, "");
+    const line = kept
+      .replace(/^\s*-\s+/, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const onlyLabel = kept !== raw && line.endsWith(":");
+    if (line !== "" && !onlyLabel && !IMAGES_ONLY.test(line)) {
+      lines.push(line);
+    }
+  }
   if (lines[0] !== undefined && sameWords(lines[0], subject)) {
     lines.shift();
   }

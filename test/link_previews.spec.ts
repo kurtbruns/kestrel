@@ -197,6 +197,22 @@ describe("a post page describes the post (SPEC §5)", () => {
     expect(head).not.toContain("/archive/");
   });
 
+  it("names no unlisted link even when the frozen text has lost its footer rule", async () => {
+    const { post, sendId } = await sendPost("Correction", "Last week's date was wrong.", true);
+    const send = (await getSend(env.DB, sendId))!;
+    // A frozen text whose footer rule is missing, so nothing cuts the footer off.
+    const noRule = send.rendered_text.replace("\n\n—\n", "\n\n");
+    expect(noRule).toContain(post.unlisted_token);
+    await env.DB.prepare("UPDATE sends SET rendered_text = ? WHERE id = ?")
+      .bind(noRule, sendId)
+      .run();
+    const html = await page(`/email/${post.unlisted_token}`);
+    const head = html.slice(0, html.indexOf("</head>"));
+    expect(tagsOf(html).description).toBe("Last week's date was wrong. Powered by Kestrel");
+    expect(head).not.toContain(post.unlisted_token);
+    expect(head).not.toContain("%%");
+  });
+
   it("adds the tags only to the served page, never to the frozen copy or the email (I3)", async () => {
     await withIdentity();
     const { post, sendId } = await sendPost("Kept", "# Kept\n\nThe words as sent.");
@@ -244,6 +260,22 @@ describe("a post's description (SPEC §5)", () => {
   it("keeps a quote's words as the opening and collapses whitespace", () => {
     expect(postDescription(`“Look   up,” she said.\n\nAnd we did.${FOOTER}`, "Up")).toBe(
       "“Look up,” she said. And we did.",
+    );
+  });
+
+  it("names no address or delivery slot, even in a text with no footer rule", () => {
+    const text =
+      "Opening line.\n\nhttps://app.example/email/s3cret\n\nSee www.birds.example/x or mail mailto:a@b.example now.\n\n" +
+      "Powered by Kestrel\nView in browser: https://app.example/email/s3cret\nUnsubscribe: %%UNSUBSCRIBE_URL%%\n";
+    const d = postDescription(text, "Subject");
+    expect(d).toBe("Opening line. See or mail now. Powered by Kestrel");
+    expect(d).not.toContain("s3cret");
+    expect(d).not.toContain("%%");
+  });
+
+  it("drops a bare address on its own line in the body", () => {
+    expect(postDescription(`First.\n\nhttps://x.example/a?token=abc\n\nLast.${FOOTER}`, "S")).toBe(
+      "First. Last.",
     );
   });
 
