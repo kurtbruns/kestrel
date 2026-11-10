@@ -8,6 +8,7 @@ import type { SettingsSavedResponse } from "../../shared/settings";
 import { formatClockTime, resolveTimeZone, sameTimeZone } from "../../shared/time_zone";
 import { $ } from "../ui/dom";
 import { type Html, html, setHtml } from "../ui/html";
+import { icon } from "../ui/icons";
 import { chip, type SectionHandle, type SettingsPage, secHead } from "./page";
 import { markedRuns, searchZones, type ZoneChoice, zoneChoice, zoneChoices } from "./zone_search";
 
@@ -60,9 +61,9 @@ export function timeZoneSection(_page: SettingsPage): Html {
               <input type="search" id="tzSearch" placeholder="Search a city or a zone name, such as Chicago or Eastern" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="tzResults" aria-autocomplete="list">
               <ul class="set-tz-results" id="tzResults" role="listbox" aria-label="Matching time zones" hidden></ul>
             </div>
-            <p class="field-hint set-tz-hint">Changing it never moves a scheduled post: each keeps its moment, and you’re told how it now reads.</p>
           </div>
         </div>
+        <div class="set-note">${icon("info")}<span>Changing it never moves a scheduled post: each keeps its moment, and you’re told how it now reads.</span></div>
       </div>
     </section>`;
 }

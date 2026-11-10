@@ -6656,9 +6656,6 @@ button.set-embed-copy svg {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
-.set-tz-hint {
-  margin: 0;
-}
 /* How each scheduled post reads after a zone change: the server's sentences, under the zone
    they're about. */
 .set-tz-readings {
