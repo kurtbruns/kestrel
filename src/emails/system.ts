@@ -1,10 +1,13 @@
 /** Transactional (system) emails — confirmation, etc. Sent through the same
  *  provider seam as newsletter sends, so dev uses the fake transport. */
+import { inlineStack, SANS_STACK, SERIF_STACK } from "../../shared/fonts";
 import type { ConfirmationEmailCopy } from "../db/settings";
 import { escapeHtml, escapeHtmlAttr } from "../lib/html";
 import type { RenderedEmail } from "../render/render";
 
-const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+const FONT = inlineStack(SANS_STACK);
+/** The sign-off's serif, as a post's built-in template names it. */
+const SERIF = inlineStack(SERIF_STACK);
 
 // Dark-mode overrides for the confirmation email, mirroring the newsletter shell's
 // light+dark support (render/template.ts). Unlike the newsletter render path this email
@@ -73,7 +76,7 @@ function masthead(identity: ConfirmationIdentity): string {
       )}" style="display:block;border-radius:9px;"></td>`
     : "";
   const name = hasName
-    ? `<div class="k-sys-name" style="font:600 17px/1.2 Georgia,'Times New Roman',serif;color:#18181b;">${escapeHtml(
+    ? `<div class="k-sys-name" style="font:600 17px/1.2 ${SERIF};color:#18181b;">${escapeHtml(
         identity.name,
       )}</div>`
     : "";
