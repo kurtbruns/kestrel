@@ -7,7 +7,7 @@ import { isValidEmail, normalizeEmail } from "../../shared/email";
 import { $ } from "../ui/dom";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
-import { busy, fieldError, toast } from "../ui/widgets";
+import { fieldError, toast } from "../ui/widgets";
 import { type AddressListKey, message, type SectionHandle, type SettingsPage } from "./page";
 
 /** The element ids one list is built with, so two lists on the page never collide. */
@@ -67,13 +67,21 @@ export function mountAddressList(
   };
   // One change at a time: each saves the whole list, so a second sent while the first is
   // under way would be built on the list before it and could undo it. Add and every ×
-  // stay disabled until the save lands.
+  // stay disabled until the save lands, whichever started it.
   let saving = false;
   let clearMark: (() => void) | null = null;
-  const save = async (next: string[], done: string) => {
+  /** Save `next`, the list after one change. `removed` is the index of the address a ×
+   *  took out, or null for an add: a refused removal keeps focus on that ×, since there is
+   *  nothing typed to fix, and a refused add moves it to the field. */
+  const save = async (next: string[], done: string, removed: number | null) => {
     clearMark?.();
     clearMark = null;
     saving = true;
+    const label = addBtn.textContent;
+    addBtn.disabled = true;
+    if (removed === null) {
+      addBtn.textContent = "Adding…";
+    }
     for (const b of chips.querySelectorAll<HTMLButtonElement>("[data-rm]")) {
       b.disabled = true;
     }
@@ -86,10 +94,14 @@ export function mountAddressList(
       // A refusal is the list's field's to say (DESIGN §5), and the list stays as it was.
       render();
       clearMark = fieldError(input, message(err));
-      input.focus();
+      const back =
+        removed === null ? input : chips.querySelector<HTMLElement>(`[data-rm="${removed}"]`);
+      (back ?? input).focus();
       return false;
     } finally {
       saving = false;
+      addBtn.disabled = false;
+      addBtn.textContent = label;
     }
   };
   chips.addEventListener("click", (ev) => {
@@ -103,10 +115,12 @@ export function mountAddressList(
     void save(
       list.filter((_, j) => j !== i),
       `Removed ${addr} from ${opts.name}`,
+      i,
     );
   });
-  const add = () => {
+  const add = async () => {
     const v = normalizeEmail(input.value);
+    // While a change is saving, Add is disabled and Enter in the field waits with it.
     if (!v || saving) {
       return;
     }
@@ -125,17 +139,15 @@ export function mountAddressList(
       input.focus();
       return;
     }
-    void busy(addBtn, "Adding…", async () => {
-      if (await save([...list, v], `Added ${v} to ${opts.name}`)) {
-        input.value = "";
-      }
-    });
+    if (await save([...list, v], `Added ${v} to ${opts.name}`, null)) {
+      input.value = "";
+    }
   };
-  addBtn.onclick = add;
+  addBtn.onclick = () => void add();
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      add();
+      void add();
     }
   });
   render();

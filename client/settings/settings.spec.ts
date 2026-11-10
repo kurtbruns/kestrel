@@ -516,8 +516,11 @@ describe("settings view", () => {
     expect(chipsOf("recipChips")).toEqual(["new@b.c"]);
     expect($("#toasts").textContent).toMatch(/Removed me@b.c from default test recipients/);
     expect(bar().classList.contains("show")).toBe(true);
-    // The saved name stays in the brand until the name itself is saved.
+    // The cached config follows the list; the name stays as saved until it is saved itself.
+    expect(appState.appConfig?.settings.test_recipients).toEqual(["new@b.c"]);
     expect(appState.appConfig?.settings.publication.name).toBe("Birds Weekly");
+    // A list wears no identity, so the reader page shown isn't read again: once, on open.
+    expect(readerPageReads()).toBe(1);
     expect(fake.unhandled).toEqual([]);
   });
 
@@ -566,11 +569,13 @@ describe("settings view", () => {
     expect(input.value).toBe("ops@b.c"); // kept, to fix in place
     expect(document.activeElement).toBe(input);
     expect($("#notifyAdd").textContent).toBe("Add inbox");
-    // A refused removal says so in the same place, and the address stays.
+    // A refused removal says so in the same place, and the address stays. Nothing was
+    // typed to fix, so focus stays on the × that was pressed.
     $("#notifyChips [data-rm='0']").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(chipsOf("notifyChips")).toEqual(["me@b.c"]);
     expect(reason()).toBe("!Not that inbox.");
+    expect(document.activeElement).toBe($("#notifyChips [data-rm='0']"));
     expect($("#toasts").textContent).toBe("");
     expect(bar().classList.contains("show")).toBe(false);
   });
@@ -603,6 +608,29 @@ describe("settings view", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(chipsOf("recipChips")).toEqual(["me@b.c", "a@b.c"]);
     expect($<HTMLButtonElement>("#recipAdd").disabled).toBe(false);
+
+    // A removal holds Add too, and Enter in the field, until it lands.
+    $("#recipChips [data-rm='0']").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($<HTMLButtonElement>("#recipAdd").disabled).toBe(true);
+    expect($("#recipAdd").textContent).toBe("Add inbox");
+    typeInto($<HTMLInputElement>("#recipInput"), "b@b.c");
+    $<HTMLInputElement>("#recipInput").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts(fake)).toHaveLength(2);
+    answer(
+      jsonResponse({
+        settings: settings({ test_recipients: ["a@b.c"] }),
+        warnings: [],
+        remade: [],
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(chipsOf("recipChips")).toEqual(["a@b.c"]);
+    expect($<HTMLButtonElement>("#recipAdd").disabled).toBe(false);
+    expect($<HTMLInputElement>("#recipInput").value).toBe("b@b.c"); // still there to add
   });
 
   it("shows notifications as Kestrel on the saved publication's behalf, following a rename once saved, never the From override (SPEC §8)", async () => {

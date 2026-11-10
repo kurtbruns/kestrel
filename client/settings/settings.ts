@@ -156,7 +156,9 @@ export async function renderSettings(
       state[key] = [
         ...(key === "recipients" ? r.settings.test_recipients : r.settings.notifications.to),
       ];
-      page.applySaved(r.settings);
+      // Only the cached config moves: the sidebar brand and the reader pages wear the
+      // identity, which a list never changes, so they aren't redrawn.
+      appState.appConfig = { ...data, settings: r.settings };
       page.changed();
     },
   };
