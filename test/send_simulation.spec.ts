@@ -228,6 +228,7 @@ describe("SIMULATE_SENDS", () => {
   it("is never on outside local dev, whatever it says", () => {
     const deployed = { ...SES_DEPLOY, APP_ORIGIN: "https://newsletter.birds.example" };
     expect(simulation("ses", deployed)).toBeNull();
+    expect(simulation("ses:outage", deployed)).toBeNull();
     expect(simulation("nonsense", deployed)).toBeNull();
     expect(simulation("ses", { ...SES_DEPLOY })).toBeNull();
     expect(
