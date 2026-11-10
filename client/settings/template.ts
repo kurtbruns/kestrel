@@ -11,7 +11,7 @@ import {
 } from "../../shared/settings";
 import { api, describeError } from "../api";
 import { notConnectedTestLine, providerNotConnected, withNoProviderNote } from "../deployment";
-import { mount, onAbort, setTitle } from "../lifecycle";
+import { mount, onAbort, setTitle, type ViewHandle } from "../lifecycle";
 import { appState } from "../state";
 import { copyFace, copyWith } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
@@ -31,6 +31,7 @@ import {
   savedToast,
   withRemakeConfirm,
 } from "./remake";
+import { guardUnsaved } from "./unsaved";
 
 const message = describeError;
 
@@ -463,7 +464,10 @@ interface TemplateSaved {
  * examples, a variable reference, and its own validated Save). Editing lives here,
  * not in Settings, so each surface has a single, unambiguous save.
  */
-export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Promise<void> {
+export async function renderTemplate(
+  root: HTMLElement,
+  signal: AbortSignal,
+): Promise<ViewHandle | undefined> {
   setTitle(signal, "Template");
   setHtml(
     root,
@@ -603,6 +607,7 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
   // {{ .Email.UnsubscribeURL }}, a 400) is a blocking error, so it shows IN the bar
   // (which stays up, right beside Save). Warnings are advisory and describe the
   // template that was just saved, so they stay inline under the editor.
+  const guard = guardUnsaved(isDirty, signal);
   const bar = savebar.attach({ onSave: onSaveTemplate, onDiscard: revertTemplate }, signal);
 
   function refreshDirty() {
@@ -646,7 +651,10 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
   // dirty). THROWS on a rejected template (no unsubscribe link → 400) or a send about to
   // fire (409 remake_too_close), so callers decide what to do. Shared by the save bar's
   // Save and Save-&-send-test.
-  async function saveTemplate(): Promise<TemplateSaved | null> {
+  function saveTemplate(): Promise<TemplateSaved | null> {
+    return guard.saving(writeTemplate);
+  }
+  async function writeTemplate(): Promise<TemplateSaved | null> {
     const value = tplEditor.value;
     const r = await withRemakeConfirm(
       (ack) => {
@@ -850,4 +858,6 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
   tplEditor.value = templateBaseline;
   preview.repaint();
   refreshDirty();
+  // ⌘S is Save changes itself, refusals and the re-make confirmation included.
+  return { ...guard.handle, manualSave: bar.save };
 }
