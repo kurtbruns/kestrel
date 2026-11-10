@@ -114,7 +114,7 @@ describe("settings' time zone", () => {
       "America/Chicago",
     ]);
     expect($("#tzReadings").hidden).toBe(false);
-    expect($("#tzReadings > span").textContent).toBe(reading);
+    expect($("#tzReadings").textContent).toBe(reading);
     expect(appState.appConfig?.settings.time_zone).toBe("America/Chicago");
     // Saved: the browser's zone is never offered again, and nothing is left unsaved.
     expect(suggestion()).toBeNull();
