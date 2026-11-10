@@ -1,13 +1,14 @@
 // A list of the publisher's own addresses edited in place on the Settings page: removable
 // chips and an add row, each address checked as it is added. The default test recipients
-// and the notifications addresses both use it; the list commits through the save bar.
+// and the notifications addresses both use it. Adding or removing one is a complete act,
+// so it saves that list at once, on its own, rather than through the save bar (DESIGN §6).
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
 import { $ } from "../ui/dom";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
-import { fieldError } from "../ui/widgets";
-import type { SectionHandle, SettingsPage } from "./page";
+import { fieldError, toast } from "../ui/widgets";
+import { type AddressListKey, message, type SectionHandle, type SettingsPage } from "./page";
 
 /** The element ids one list is built with, so two lists on the page never collide. */
 export interface AddressListIds {
@@ -29,15 +30,18 @@ export function addressListHtml(ids: AddressListIds): Html {
 
 export interface AddressListOptions {
   ids: AddressListIds;
-  /** The list in the page's live state, read each time: discard replaces the array. */
-  list: () => string[];
+  /** Which of the page's lists this is: what it reads, and what a change saves. */
+  key: AddressListKey;
+  /** The list's name in the toast a saved change shows ("Added a@b.c to …"). */
+  name: string;
   /** What the chips say while the list is empty. */
   empty: string;
   /** The most addresses the list takes, with what the field says when it is full. */
   max?: { count: number; full: string };
 }
 
-/** Wire the chips and the add row; `reset` repaints the chips from the live state. */
+/** Wire the chips and the add row, each change saved at once; `reset` repaints the chips
+ *  from the live state. */
 export function mountAddressList(
   root: HTMLElement,
   page: SettingsPage,
@@ -45,8 +49,10 @@ export function mountAddressList(
 ): SectionHandle {
   const chips = $(`#${opts.ids.chips}`, root);
   const input = $<HTMLInputElement>(`#${opts.ids.input}`, root);
+  const addBtn = $<HTMLButtonElement>(`#${opts.ids.add}`, root);
+  const current = () => page.state[opts.key];
   const render = () => {
-    const list = opts.list();
+    const list = current();
     if (!list.length) {
       setHtml(chips, html`<span class="set-recip-empty">${opts.empty}</span>`);
       return;
@@ -59,21 +65,66 @@ export function mountAddressList(
       )}`,
     );
   };
+  // One change at a time: each saves the whole list, so a second sent while the first is
+  // under way would be built on the list before it and could undo it. Add and every ×
+  // stay disabled until the save lands, whichever started it.
+  let saving = false;
+  let clearMark: (() => void) | null = null;
+  /** Save `next`, the list after one change. `removed` is the index of the address a ×
+   *  took out, or null for an add: a refused removal keeps focus on that ×, since there is
+   *  nothing typed to fix, and a refused add moves it to the field. */
+  const save = async (next: string[], done: string, removed: number | null) => {
+    clearMark?.();
+    clearMark = null;
+    saving = true;
+    const label = addBtn.textContent;
+    addBtn.disabled = true;
+    if (removed === null) {
+      addBtn.textContent = "Adding…";
+    }
+    for (const b of chips.querySelectorAll<HTMLButtonElement>("[data-rm]")) {
+      b.disabled = true;
+    }
+    try {
+      await page.saveList(opts.key, next);
+      render();
+      toast(done);
+      return true;
+    } catch (err) {
+      // A refusal is the list's field's to say (DESIGN §5), and the list stays as it was.
+      render();
+      clearMark = fieldError(input, message(err));
+      const back =
+        removed === null ? input : chips.querySelector<HTMLElement>(`[data-rm="${removed}"]`);
+      (back ?? input).focus();
+      return false;
+    } finally {
+      saving = false;
+      addBtn.disabled = false;
+      addBtn.textContent = label;
+    }
+  };
   chips.addEventListener("click", (ev) => {
     const b = ev.target instanceof Element ? ev.target.closest<HTMLElement>("[data-rm]") : null;
-    if (!b) {
+    if (!b || saving) {
       return;
     }
-    opts.list().splice(Number(b.dataset.rm), 1);
-    render();
-    page.changed();
+    const list = current();
+    const i = Number(b.dataset.rm);
+    const addr = list[i];
+    void save(
+      list.filter((_, j) => j !== i),
+      `Removed ${addr} from ${opts.name}`,
+      i,
+    );
   });
-  const add = () => {
+  const add = async () => {
     const v = normalizeEmail(input.value);
-    if (!v) {
+    // While a change is saving, Add is disabled and Enter in the field waits with it.
+    if (!v || saving) {
       return;
     }
-    const list = opts.list();
+    const list = current();
     // A refused address says why on the field, and keeps what was typed so it can be fixed
     // in place; the reason goes as soon as the field is edited (DESIGN §5).
     const reason = !isValidEmail(v)
@@ -88,16 +139,15 @@ export function mountAddressList(
       input.focus();
       return;
     }
-    list.push(v);
-    input.value = "";
-    render();
-    page.changed();
+    if (await save([...list, v], `Added ${v} to ${opts.name}`, null)) {
+      input.value = "";
+    }
   };
-  $(`#${opts.ids.add}`, root).onclick = add;
+  addBtn.onclick = () => void add();
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      add();
+      void add();
     }
   });
   render();
