@@ -80,7 +80,7 @@ describe("the setting (SPEC §9)", () => {
     );
   });
 
-  it("refuses a name the runtime doesn't know, one that isn't a place's, or none, naming the field and keeping the zone", async () => {
+  it("refuses a name the runtime doesn't know, an abbreviation that never changes for daylight saving time, or none, naming the field and keeping the zone", async () => {
     await saveZone("Asia/Tokyo");
     for (const bad of ["Mars/Olympus_Mons", "", "-05:00"]) {
       const res = await saveZone(bad);
@@ -91,14 +91,14 @@ describe("the setting (SPEC §9)", () => {
     expect((await readJson(await saveZone("Mars/Olympus_Mons"))).message).toBe(
       "“Mars/Olympus_Mons” isn’t a time zone this server knows. Use an IANA name, such as America/New_York.",
     );
-    // A name that isn't a place's is told why: it reads like a seasonal name, and isn't one.
-    for (const bad of ["EST", "MST", "HST", "Japan"]) {
+    // An abbreviation that reads like a seasonal name and isn't one is told why.
+    for (const bad of ["EST", "MST", "HST", "est"]) {
       const res = await saveZone(bad);
       expect(res.status, bad).toBe(400);
       expect((await readJson(res)).field, bad).toBe("time_zone");
     }
     expect((await readJson(await saveZone("EST"))).message).toBe(
-      "“EST” isn’t a place’s zone name: a name such as EST never changes for daylight saving time. Use the place whose clock your readers keep, such as America/New_York.",
+      "EST isn’t a place: it never changes for daylight saving time. Use the place your readers keep, such as America/New_York.",
     );
     // UTC is taken under any of its names.
     for (const utc of ["UTC", "utc", "GMT", "Etc/UTC"]) {

@@ -14,15 +14,35 @@ const LABEL_FORMATS = new Map<string, Intl.DateTimeFormat>();
 const MEANS_UTC = /^(Etc\/)?(UTC|GMT)$/;
 
 /**
+ * Zone names that read like a clock people keep and aren't one: fixed offsets that never
+ * change for daylight saving time. "We're on EST" means New York's clock, and a publication
+ * set to the zone `EST` would be an hour off all summer with nothing on screen to show it. The
+ * list is whole: these are the only fixed offsets the time zone database names like a seasonal
+ * abbreviation, kept for old software, and it adds no more.
+ */
+const NEVER_SEASONAL = ["EST", "MST", "HST"];
+
+/** Whether a name is one of the abbreviations refused for never changing with the seasons. */
+export function neverSeasonal(name: string): boolean {
+  return NEVER_SEASONAL.includes(name.trim().toUpperCase());
+}
+
+/**
  * The zone a name resolves to in this runtime, or null when it is no publication's clock: a
- * name the runtime doesn't know, a bare offset, or a name that isn't a place. Aliases resolve
- * to one name (`US/Eastern` to `America/New_York`, and in the engine behind Chrome and Workers
- * `Asia/Kolkata` to `Asia/Calcutta`), and case is corrected.
+ * name the runtime doesn't know, a bare offset, or an abbreviation that never changes for
+ * daylight saving time (`neverSeasonal`). Aliases resolve to one name (`US/Eastern` to
+ * `America/New_York`, and in the engine behind Chrome and Workers `Asia/Kolkata` to
+ * `Asia/Calcutta`), and case is corrected.
  */
 export function resolveTimeZone(name: string): string | null {
-  // A bare offset ("-05:00") is a zone to newer runtimes but not a place: it never changes
-  // for daylight saving time, so it is no publication's clock.
-  if (typeof name !== "string" || name.trim() === "" || /^[+-]/.test(name.trim())) {
+  // A bare offset ("-05:00") is a zone to newer runtimes but not a place: like the refused
+  // abbreviations, it never changes for daylight saving time.
+  if (
+    typeof name !== "string" ||
+    name.trim() === "" ||
+    /^[+-]/.test(name.trim()) ||
+    neverSeasonal(name)
+  ) {
     return null;
   }
   const key = name.trim();
@@ -30,29 +50,15 @@ export function resolveTimeZone(name: string): string | null {
   if (known !== undefined) {
     return known;
   }
-  let zone: string;
   try {
-    zone = new Intl.DateTimeFormat("en-US", { timeZone: key }).resolvedOptions().timeZone;
+    const zone = new Intl.DateTimeFormat("en-US", { timeZone: key }).resolvedOptions().timeZone;
+    RESOLVED.set(key, zone);
+    return zone;
   } catch {
     // RangeError: a name the runtime doesn't know. Not kept, so a stream of bad names
     // grows nothing.
     return null;
   }
-  // A place is named Area/Location. The one-word names the runtime also knows are refused,
-  // UTC and its other spellings aside: "EST", "MST", and "HST" read like the seasonal names
-  // people say but are fixed offsets, an hour off all summer, and no rule that needs a table
-  // of names tells them from the rest ("Japan"), which every place name covers anyway.
-  if (!isPlaceName(key) && !MEANS_UTC.test(zone)) {
-    return null;
-  }
-  RESOLVED.set(key, zone);
-  return zone;
-}
-
-/** Whether a name has the shape of a place's, Area/Location: the only names besides UTC that
- *  `resolveTimeZone` takes. A caller uses it to say why a name the runtime knows was refused. */
-export function isPlaceName(name: string): boolean {
-  return name.includes("/");
 }
 
 /**

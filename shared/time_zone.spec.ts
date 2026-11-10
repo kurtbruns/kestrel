@@ -27,11 +27,13 @@ describe("a zone's name", () => {
     expect(resolveTimeZone("Etc/GMT+5")).toBe("Etc/GMT+5");
   });
 
-  it("takes a place's name or UTC, and refuses a one-word name that only reads like a clock", () => {
-    // Fixed offsets under seasonal-sounding names, and the other one-word names with them.
-    for (const name of ["EST", "MST", "HST", "Japan", "est"]) {
+  it("refuses the abbreviations that never change for daylight saving time, and nothing else the runtime knows", () => {
+    for (const name of ["EST", "MST", "HST", "est", " Hst "]) {
       expect(resolveTimeZone(name), name).toBeNull();
     }
+    // Other old one-word names are aliases of real places, and seasonal ones keep their rules.
+    expect(resolveTimeZone("Japan")).toBe("Asia/Tokyo");
+    expect(resolveTimeZone("EST5EDT")).not.toBeNull();
     for (const utc of ["UTC", "utc", "GMT", "Etc/UTC"]) {
       expect(resolveTimeZone(utc), utc).toBe("UTC");
     }

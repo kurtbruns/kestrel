@@ -891,7 +891,7 @@ const SETTINGS_FIELDS: ReferenceField[] = [
     name: "settings.time_zone",
     type: "string | null",
     description:
-      "The publication's time zone, the IANA name of a place such as `America/New_York`, or `UTC`: the clock its readers keep, which dates its posts on the reader pages. Null until someone sets it, and while it is null scheduling and sending are refused (`time_zone_not_set`). It names a zone and is not a stable string: it reads back under the server's runtime's name for the zone, which may differ from the name that was sent and can change when the runtime does, so never compare two names as text. A zone's rules are the runtime's too, and can trail a recent government change by months.",
+      "The publication's time zone, an IANA name such as `America/New_York`: the clock its readers keep, which dates its posts on the reader pages. Null until someone sets it, and while it is null scheduling and sending are refused (`time_zone_not_set`). It names a zone and is not a stable string: it reads back under the server's runtime's name for the zone, which may differ from the name that was sent and can change when the runtime does, so never compare two names as text. A zone's rules are the runtime's too, and can trail a recent government change by months.",
   },
   {
     name: "settings.time_zone_label",
