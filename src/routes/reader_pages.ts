@@ -20,7 +20,13 @@ import { archiveUrl, render } from "../render/render";
 import { resolveBranding } from "../render/template_engine";
 import type { RequestContext } from "../router";
 import { param } from "../router";
-import { formatPublishedDate, noPageHerePage, nothingHereYetPage, webVersion } from "./archive";
+import {
+  formatPublishedDate,
+  noPageHerePage,
+  nothingHereYetPage,
+  postPageDescription,
+  webVersion,
+} from "./archive";
 import {
   confirmStatePage,
   subscribeCheckInboxPage,
@@ -103,6 +109,7 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
         identity,
         subscribeUrl,
         homeUrl: home,
+        archiveUrl: archiveHomeUrl(c.config),
         posts: samplePosts(c, identity, Date.now()),
       });
     }
@@ -121,6 +128,7 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
         identity: await readerIdentity(c, c.config),
         subscribeUrl,
         homeUrl: home,
+        archiveUrl: archiveHomeUrl(c.config),
         posts: [],
       });
     case "reading/post": {
@@ -132,10 +140,18 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
         c.config,
         resolveBranding(settings, c.config),
       );
+      const identity = await readerIdentity(c, c.config);
       const html = webVersion(email.html, {
         config: c.config,
-        identity: await readerIdentity(c, c.config),
+        identity,
         dateMs: Date.now(),
+        // The head a listed post's page carries, at the sample post's archive address.
+        describe: postPageDescription(
+          c.config,
+          identity,
+          { slug: "sample-post", emailOnly: false },
+          { subject: email.subject, text: email.text },
+        ),
       });
       return new Response(html);
     }

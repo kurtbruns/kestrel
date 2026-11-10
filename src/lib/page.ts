@@ -3,6 +3,7 @@
  *  reader lands on from an email (confirm, unsubscribe, not found), via `messagePage`.
  *  Automatic light/dark via prefers-color-scheme. */
 import { inlineStack, SANS_STACK, SERIF_STACK } from "../../shared/fonts";
+import { describeHead, type PageDescription } from "./describe";
 import { escapeHtml, escapeHtmlAttr } from "./html";
 import { PAGE_SECURITY_HEADERS } from "./page_headers";
 
@@ -278,6 +279,9 @@ export function readerPage(opts: {
   /** For a page whose answer can change at any moment, as the subscribe page's does when
    *  signups open or pause (SPEC §7): checked with the app on every load, never served stale. */
   fresh?: boolean;
+  /** What the page says about itself to search engines and link previews (`siteDescription`).
+   *  Left out of a page reached from an email (`messagePage`), whose address may hold a token. */
+  describe?: PageDescription;
 }): Response {
   const { name, tagline, logoUrl } = opts.identity;
   const logo = logoUrl
@@ -311,7 +315,7 @@ export function readerPage(opts: {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(opts.title)}</title>
-${readerIconLink(logoUrl)}
+${opts.describe ? `${describeHead(opts.describe)}\n` : ""}${readerIconLink(logoUrl)}
 <style>${READER_STYLE}</style>${readerBannerStyle(opts.banner)}${devDashboardStyle(opts.devDashboardUrl)}
 </head>
 <body>
@@ -330,6 +334,19 @@ ${devDashboardBadge(opts.devDashboardUrl)}
         : { "cache-control": opts.fresh ? "no-cache" : "public, max-age=300" }),
     },
   });
+}
+
+/** What a publication-level page (the home page, the archive index, the subscribe page) says
+ *  about itself (SPEC §5): the publication's name and tagline, its logo as the image, and the
+ *  page's own public address, which holds no token. */
+export function siteDescription(identity: ReaderIdentity, url: string): PageDescription {
+  return {
+    type: "website",
+    title: identity.name,
+    description: identity.tagline ?? "",
+    url,
+    image: identity.logoUrl,
+  };
 }
 
 /** A reader page's tab title: the page's own name, then the publication's when it has
@@ -500,6 +517,7 @@ export function landingPage(opts: {
     title: opts.identity.name || "Home",
     mainHtml: main,
     devDashboardUrl: opts.devDashboardUrl,
+    describe: siteDescription(opts.identity, opts.homeUrl),
     // With nothing listed yet, whether it shows the form follows signups, which can open or
     // pause at any moment (SPEC §7), so it is never served stale. Once a post is listed it
     // doesn't depend on them, and stays briefly cacheable.
@@ -514,6 +532,8 @@ export function archiveIndexPage(opts: {
   /** The masthead's call to action; left out while signups aren't open (SPEC §7). */
   subscribeUrl?: string;
   homeUrl: string;
+  /** The archive index's own public address, for its link preview. */
+  archiveUrl: string;
   posts: ArchiveIndexPost[];
   /** Dev-only editor shortcut (§11); set only on a dev-shaped instance. */
   devDashboardUrl?: string;
@@ -528,6 +548,7 @@ export function archiveIndexPage(opts: {
     title: pageTitle("Archive", opts.identity.name),
     mainHtml: `<p class="r-ey">Archive</p>${list}`,
     devDashboardUrl: opts.devDashboardUrl,
+    describe: siteDescription(opts.identity, opts.archiveUrl),
   });
 }
 
