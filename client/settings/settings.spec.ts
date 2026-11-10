@@ -215,7 +215,7 @@ describe("settings view", () => {
         account: null,
         refuse: null,
         outage: false,
-        bad_request: false,
+        send_refusal: null,
       },
     };
     fake = fakeApi([
@@ -1751,7 +1751,7 @@ describe("settings view", () => {
           faults: "realistic",
           refuse: null,
           outage: false,
-          bad_request: false,
+          send_refusal: null,
           account: { state: "production", bounces_routed: true, problem: null },
         },
       };

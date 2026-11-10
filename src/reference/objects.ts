@@ -937,9 +937,9 @@ const SETTINGS_FIELDS: ReferenceField[] = [
   },
   {
     name: "deployment.simulation",
-    type: "{ profile, faults, refuse, outage, bad_request, account } | null",
+    type: "{ profile, faults, refuse, outage, send_refusal, account } | null",
     description:
-      "In local development, the send simulation standing in for a provider: its `profile`, its `faults` (`realistic` or `none`), the refusal of the account it answers every email with (`refuse`, a cause such as `configuration`, or null), whether SES is down for every email (`outage`), whether SES refuses every list request as a bad request whose words name no one (`bad_request`), and the SES `account` it stands in for, from `SIMULATE_ACCOUNT`: its `state` (`sandbox`, `pending`, `denied`, `production`, or `permission`), whether `bounces_routed`, and the `problem` it shows (`set_missing`, `set_paused`, `key_rejected`, `sending_disabled`, `shutdown`, `sender_unverified`, or `probation`; null for none), or null when the account is left unread. Always null once deployed.",
+      "In local development, the send simulation standing in for a provider: its `profile`, its `faults` (`realistic` or `none`), the refusal of the account it answers every email with (`refuse`, a cause such as `configuration`, or null), whether SES is down for every email (`outage`), how SES refuses each send's own email (`send_refusal`: `bad_request`, every list request refused as invalid in words that name no one, `rejected`, every post's email rejected for its content, or null), and the SES `account` it stands in for, from `SIMULATE_ACCOUNT`: its `state` (`sandbox`, `pending`, `denied`, `production`, or `permission`), whether `bounces_routed`, and the `problem` it shows (`set_missing`, `set_paused`, `key_rejected`, `sending_disabled`, `shutdown`, `sender_unverified`, or `probation`; null for none), or null when the account is left unread. Always null once deployed.",
   },
   {
     name: "deployment.free_plan_limits",

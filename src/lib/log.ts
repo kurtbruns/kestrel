@@ -115,7 +115,7 @@ export const LOG_EVENTS = {
   "sim.quota_spent": "info",
   "sim.quota_lifted": "info",
   "sim.request_lost": "info",
-  "sim.bad_request": "info",
+  "sim.send_refused": "info",
   "sim.receipts_error": "error",
 } as const satisfies Record<string, LogLevel>;
 

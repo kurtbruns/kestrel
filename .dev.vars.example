@@ -54,6 +54,9 @@ MIN_LEAD_SECONDS="60"
 # which sends one email a second, set SES_MAX_SEND_RATE="1" too: each request then carries
 # one reader, and the send holds once two requests sent together, or a list of one, get the
 # answer. Restart with "ses" and the send goes out at its next retry, five minutes or more on.
+# Add ":rejected" ("ses:rejected") to have SES reject every post's email for its content: a
+# list send holds on its own (another send that SES takes goes out meanwhile) and a test of a
+# post is refused; confirmations and notifications go through. Restart with "ses" to end it.
 # For one run, set it in the shell instead: SIMULATE_SENDS=ses npm run dev
 # Only honored in a dev-shaped env (fake transport, no Access, APP_ORIGIN on localhost).
 SIMULATE_SENDS="ses"
