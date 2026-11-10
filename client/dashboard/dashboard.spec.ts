@@ -1484,6 +1484,36 @@ describe("dashboard", () => {
       );
     });
 
+    it("raises an amber line while SES's reports aren't arriving, and drops it once one does (SPEC §13)", async () => {
+      const warning = {
+        code: "receipts_not_arriving",
+        severity: "warn",
+        message:
+          "SES took an email more than an hour ago, and no report has reached Kestrel since.",
+        docs: { slug: "ses", anchor: "4-send-bounces-and-complaints-to-the-app" },
+      } as const;
+      const production = { state: "production", unknown_reason: null } as const;
+      fake = world(
+        [post()],
+        sendServer([send()]),
+        counts,
+        onSes({ ...production, warnings: [warning] }),
+      );
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect($("#dashHealth .health").classList.contains("amber")).toBe(true);
+      expect($(".dash-provider-warning").textContent).toBe(
+        "SES took an email more than an hour ago, and no report has reached Kestrel since. Send bounces and complaints to the app",
+      );
+      unmount();
+      fake.restore();
+      fake = world([post()], sendServer([send()]), counts, onSes(production));
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(document.querySelector(".dash-provider-warning")).toBeNull();
+      expect(fake.unhandled).toEqual([]);
+    });
+
     it("leaves the sandbox line to the setup card while the card says it", async () => {
       fake = world([post()], sendServer(), counts, onSes(sandbox));
       await mount(renderDashboard);

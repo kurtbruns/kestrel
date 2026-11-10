@@ -34,6 +34,12 @@ export interface SendingRow {
   refusalAt: number | null;
   /** The causes the account check found that an email the provider took has since contradicted. */
   checkContradicted: RefusingCause[];
+  /** When the webhook last took a verified report, about any email. */
+  lastReceiptAt: number | null;
+  /** When the provider took the first email after that report; null once a report lands. */
+  waitingSince: number | null;
+  /** The last report the webhook refused for its topic: the topic it named, the one expected, and when. */
+  refusedTopic: { topic: string; expected: string; at: number } | null;
 }
 
 /** The row as D1 returns it, for a reader that runs the statement in a batch of its own. */
@@ -47,6 +53,11 @@ export interface SendingRaw {
   refusal_error: string | null;
   refusal_at: number | null;
   check_contradicted: string;
+  last_receipt_at: number | null;
+  waiting_since: number | null;
+  refused_topic: string | null;
+  refused_topic_expected: string | null;
+  refused_topic_at: number | null;
 }
 
 /** The read, as a statement, for a batch that reads other rows in the same round trip. */
@@ -69,6 +80,16 @@ export function parseSending(r: SendingRaw | null | undefined): SendingRow | nul
     refusalError: r.refusal_error,
     refusalAt: r.refusal_at,
     checkContradicted: JSON.parse(r.check_contradicted) as RefusingCause[],
+    lastReceiptAt: r.last_receipt_at,
+    waitingSince: r.waiting_since,
+    refusedTopic:
+      r.refused_topic !== null && r.refused_topic_at !== null
+        ? {
+            topic: r.refused_topic,
+            expected: r.refused_topic_expected ?? "",
+            at: r.refused_topic_at,
+          }
+        : null,
   };
 }
 
@@ -84,28 +105,78 @@ const CHECK_REFUSING = "(state = 'refusing' AND refusal_found_by = 'account_chec
  * The provider took an email, answered at `at`: email is working, from then if it wasn't
  * already, and any refusal is over. A refusal the account check found that this contradicts
  * is remembered, so the same finding doesn't pause signups again while email goes out.
+ *
+ * The same statement starts the wait for a report (SPEC §13): an email taken after the last
+ * report sets `waiting_since`, keeping the earliest such email, so the record of an email
+ * taken costs no second write. The wait doesn't depend on the order answers land in, so it is
+ * kept even when a newer answer has already been applied and the rest is left as it is.
  */
 export function acceptedStatement(
   db: D1Database,
   by: SendingPurpose,
   at: number,
 ): D1PreparedStatement {
+  const newer = "?1 >= observed_at";
   return db
     .prepare(
-      `INSERT INTO sending (id, state, since, observed_at, last_accepted_at, last_accepted_by)
-       VALUES (1, 'working', ?1, ?1, ?1, ?2)
+      `INSERT INTO sending (id, state, since, observed_at, last_accepted_at, last_accepted_by, waiting_since)
+       VALUES (1, 'working', ?1, ?1, ?1, ?2, ?1)
        ON CONFLICT (id) DO UPDATE SET
-         since = CASE WHEN state = 'working' THEN since ELSE ?1 END,
-         check_contradicted = CASE WHEN ${CHECK_REFUSING}
+         since = CASE WHEN ${newer} THEN CASE WHEN state = 'working' THEN since ELSE ?1 END ELSE since END,
+         check_contradicted = CASE WHEN ${newer} AND ${CHECK_REFUSING}
            THEN json_insert(check_contradicted, '$[#]', refusal_cause) ELSE check_contradicted END,
-         state = 'working',
-         observed_at = ?1,
-         last_accepted_at = ?1,
-         last_accepted_by = ?2,
-         refusal_cause = NULL, refusal_found_by = NULL, refusal_error = NULL, refusal_at = NULL
-       WHERE ?1 >= observed_at`,
+         state = CASE WHEN ${newer} THEN 'working' ELSE state END,
+         last_accepted_at = CASE WHEN ${newer} THEN ?1 ELSE last_accepted_at END,
+         last_accepted_by = CASE WHEN ${newer} THEN ?2 ELSE last_accepted_by END,
+         refusal_cause = CASE WHEN ${newer} THEN NULL ELSE refusal_cause END,
+         refusal_found_by = CASE WHEN ${newer} THEN NULL ELSE refusal_found_by END,
+         refusal_error = CASE WHEN ${newer} THEN NULL ELSE refusal_error END,
+         refusal_at = CASE WHEN ${newer} THEN NULL ELSE refusal_at END,
+         waiting_since = CASE WHEN ${AFTER_RECEIPT} THEN MIN(COALESCE(waiting_since, ?1), ?1) ELSE waiting_since END,
+         observed_at = MAX(observed_at, ?1)
+       WHERE ${newer} OR ${AFTER_RECEIPT}`,
     )
     .bind(at, by);
+}
+
+/** Whether an email taken at `?1` came after the last report, in SQL. */
+const AFTER_RECEIPT = "?1 > COALESCE(last_receipt_at, 0)";
+
+/**
+ * The webhook took a verified report at `at` (SPEC §13): it is the last report, and the wait
+ * for one is over. A missing row, from a database reset by hand, is made not proven yet, since
+ * a report never counts toward whether email is getting out.
+ */
+export function receiptStatement(db: D1Database, at: number): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO sending (id, state, since, observed_at, last_receipt_at)
+       VALUES (1, 'unproven', ?1, 0, ?1)
+       ON CONFLICT (id) DO UPDATE SET
+         last_receipt_at = MAX(COALESCE(last_receipt_at, 0), ?1),
+         waiting_since = CASE WHEN waiting_since <= ?1 THEN NULL ELSE waiting_since END`,
+    )
+    .bind(at);
+}
+
+/**
+ * The webhook refused, at `at`, a report SNS signed for `topic`, where `SNS_TOPIC_ARN` names
+ * `expected` (SPEC §13): kept, the newest standing, so the warning can name both.
+ */
+export function refusedTopicStatement(
+  db: D1Database,
+  refused: { topic: string; expected: string },
+  at: number,
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO sending (id, state, since, observed_at, refused_topic, refused_topic_expected, refused_topic_at)
+       VALUES (1, 'unproven', ?1, 0, ?2, ?3, ?1)
+       ON CONFLICT (id) DO UPDATE SET
+         refused_topic = ?2, refused_topic_expected = ?3, refused_topic_at = ?1
+       WHERE ?1 >= COALESCE(refused_topic_at, 0)`,
+    )
+    .bind(at, refused.topic, refused.expected);
 }
 
 /**

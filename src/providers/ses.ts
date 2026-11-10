@@ -855,7 +855,11 @@ export class SesProvider implements EmailProvider {
     const topic = typeof msg.TopicArn === "string" ? msg.TopicArn.slice(0, 256) : null;
     const refuse = (reason: "signature" | "topic", body: string): WebhookResult => {
       log.error("webhook.refused", { provider: "ses", reason, topic, expected: expectedTopic });
-      return { events: [], response: textResponse(body, 403) };
+      // Only a message whose signature held names a topic SNS really sent from, so only it is
+      // kept for the publisher's warning (SPEC §13).
+      const refusedTopic =
+        reason === "topic" && topic !== null ? { topic, expected: expectedTopic } : undefined;
+      return { events: [], response: textResponse(body, 403), refusedTopic };
     };
 
     // Signature first: the route is public, so nothing acts on an unverified msg.

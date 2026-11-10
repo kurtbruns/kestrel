@@ -226,6 +226,7 @@ export function providerStatus(over: Partial<ProviderStatusView> = {}): Provider
     warnings: [],
     checked_at: null,
     sending: { state: "working", since: 0, last_accepted: null, refusal: null },
+    receipts: { last_at: null, waiting_since: null, refused_topic: null },
     signups: "open",
     ...over,
   };

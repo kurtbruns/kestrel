@@ -62,7 +62,8 @@ export interface ConfigurationSetView {
  * `configuration_set_paused` (the set that applies), `key_rejected`, `sending_disabled` (the
  * account's sending, turned off or paused by AWS), `sender_unverified`. Warnings leave sending
  * working: `account_probation` (AWS reviewing the account's practices), `bounces_not_routed`
- * (no configuration set applies, so bounces and complaints never reach the app).
+ * (no configuration set applies, so bounces and complaints never reach the app),
+ * `receipts_not_arriving` (SES took an email over an hour ago and no report has arrived since).
  */
 export type ProviderWarningCode =
   | "configuration_set_missing"
@@ -71,7 +72,8 @@ export type ProviderWarningCode =
   | "sending_disabled"
   | "sender_unverified"
   | "account_probation"
-  | "bounces_not_routed";
+  | "bounces_not_routed"
+  | "receipts_not_arriving";
 
 /** Something about the connection worth the publisher's look, in words the editor shows as they come. */
 export interface ProviderWarning {
@@ -146,6 +148,21 @@ export interface SendingView {
 }
 
 /**
+ * What the app has heard back from the provider (SPEC §13): the deliveries, bounces, and
+ * complaints its webhook takes, which reach it only when the whole return path holds.
+ */
+export interface ReceiptsView {
+  /** When the last report arrived, about any email; null when none has since this was kept. */
+  last_at: number | null;
+  /** When the provider took the first email after that report, while no report has arrived
+   *  since; null when nothing is waiting. An hour past it is `receipts_not_arriving`. */
+  waiting_since: number | null;
+  /** The last report the webhook refused for its topic, while it is newer than the last report
+   *  taken: the topic SES reports to, the one `SNS_TOPIC_ARN` names, and when. */
+  refused_topic: { topic: string; expected: string; at: number } | null;
+}
+
+/**
  * Whether the public subscribe form takes signups (SPEC §7): `open` while email is working,
  * the sandbox included; `paused` while it is refusing; `not_open` otherwise (no provider, or
  * not proven yet).
@@ -169,6 +186,8 @@ export interface ProviderStatusView {
   checked_at: number | null;
   /** Whether email is getting out; null while no provider is connected. */
   sending: SendingView | null;
+  /** What the app has heard back from the provider; null while no provider is connected. */
+  receipts: ReceiptsView | null;
   /** Whether the public subscribe form takes signups. */
   signups: SignupsState;
 }

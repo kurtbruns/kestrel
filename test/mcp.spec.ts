@@ -712,6 +712,7 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
       review: null,
       unknown_reason: "stand_in",
       warnings: [],
+      last_report_at: null,
     });
     // Whether email is getting out, and so whether signups are open (SPEC §7, §13): nothing
     // has been sent yet.
