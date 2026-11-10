@@ -6616,12 +6616,13 @@ button.set-embed-copy svg {
 /* Settings' Time zone: the chosen zone (or the warning while none is), the browser's zone
    offered under it while none is saved, then the search and its results. */
 /* A reading width, as the address lists' add row (.set-recip-add) keeps one, not the card's:
-   a full-width search on a desktop reads as a banner. A little wider than that row, since a
-   zone's place, offset, and time, and the offer's Use button, sit on one line. */
+   a full-width search on a desktop reads as a banner. Wider than that row, since a zone's
+   place, offset, and time, the offer's Use button, and a scheduled post's old and new times
+   in the preview each sit on one line. */
 .set-tz {
   display: grid;
   gap: 10px;
-  max-width: 480px;
+  max-width: 600px;
 }
 .set-tz-chosen,
 .set-tz-suggest {
