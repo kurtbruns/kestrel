@@ -10,6 +10,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Fixed
+
+- On a new Amazon SES account, which sends one email a second, an error from SES that names no reader marked each reader it came back for unsent, so an error about the email or the account marked the whole list unsent and finished the send as if it had gone out. Such an error now holds the send, with no one marked unsent, when it comes back for two or more readers sent together while SES takes none of them, or for a send to a single reader, as a first send to yourself usually is; given to one reader while SES takes the others, it stays that reader's alone. SES's plain `FAILED` is read the same way, holding the send as an outage instead of spending each reader's retries, and an answer SES doesn't document now stops the send with one reader waiting for Resolve, rather than reader after reader (SPEC §12).
+
 ### Changed
 
 - In **Settings**, adding or removing an address under **Notifications** or **Default test recipients** saves it at once, with a toast saying so, rather than waiting for **Save changes**; the page's other unsaved edits stay unsaved, and **Discard** leaves a saved address in place. **Send a test notification** works as soon as an address is added, and stands out more.

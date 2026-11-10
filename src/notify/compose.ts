@@ -178,11 +178,8 @@ function refused(n: DueNotification, title: string, config: Config): RenderedEma
       happened: `Amazon SES refused part of ${title} as invalid at ${at}.`,
       affected: "Other posts go out as usual.",
       said: said(n.halt_error),
-      // Not `refusalAdvice`, which is read where the address shows: here the email hides it,
-      // giving a reader the hold names by their domain alone (SPEC §12).
-      todo: n.halt_recipient
-        ? `SES refused the request for one reader, at ${n.halt_recipient.slice(n.halt_recipient.lastIndexOf("@") + 1)}, without saying whether the problem is that address or the email. The send’s page shows the address in full: block it under Subscribers and the send skips them, then unblock them once the send has finished. If SES refuses the next address the same way, the problem is the email or the account, not the reader.`
-        : "If SES’s words name an address, the send’s page shows it in full. Block that address under Subscribers, and the send skips them.",
+      // Not `refusalAdvice`, which is read where the address shows: here the email hid it.
+      todo: "If SES’s words name an address, the send’s page shows it in full. Remove that subscriber, and the send skips them.",
       next: `It carries on at its next try. ${NO_ONE_HARMED}`,
       link,
     });

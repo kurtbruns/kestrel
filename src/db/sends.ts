@@ -331,7 +331,7 @@ export const SEND_LIST_SPEC: ListSpec = {
 // but carries the denormalized counters, so a list row is enough for the Sent-page
 // active row and the dashboard active-send widget without a second per-send read.
 const SEND_LIST_COLS =
-  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, audience_resolved_at, remade_at, tested_at, halt_reason, halt_cause, halt_error, halt_recipient, halted_at, halt_retries, halt_retry_at, progress_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent, rev";
+  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, audience_resolved_at, remade_at, tested_at, halt_reason, halt_cause, halt_error, halted_at, halt_retries, halt_retry_at, progress_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent, rev";
 
 // A view's columns: the list projection, which address its email carries, what its post
 // says about its two addresses (the slug for the archive link, and the unlisted token) and its
@@ -1336,7 +1336,7 @@ export async function joinHalt(
 ): Promise<void> {
   await db
     .prepare(
-      `UPDATE sends SET halt_reason = ?, halt_cause = ?, halt_error = ?, halt_recipient = NULL,
+      `UPDATE sends SET halt_reason = ?, halt_cause = ?, halt_error = ?,
               halted_at = CASE WHEN halt_reason IS ? AND halted_at IS NOT NULL THEN halted_at ELSE ? END,
               halt_retries = ?, halt_retry_at = ?, rev = ${NEXT_REV}
         WHERE id = ? AND lease_token = ?`,
@@ -1466,8 +1466,8 @@ export async function completeSend(
     db
       .prepare(
         `UPDATE sends SET status = 'sent', completed_at = ?, locked_until = NULL, lease_token = NULL,
-                halt_reason = NULL, halt_cause = NULL, halt_error = NULL, halt_recipient = NULL,
-                halted_at = NULL, halt_retries = 0, halt_retry_at = NULL, rev = ${NEXT_REV}
+                halt_reason = NULL, halt_cause = NULL, halt_error = NULL, halted_at = NULL,
+                halt_retries = 0, halt_retry_at = NULL, rev = ${NEXT_REV}
           WHERE id = ? AND status = 'sending' AND (? IS NULL OR lease_token = ?)`,
       )
       .bind(now, sendId, lease, lease),
@@ -1658,9 +1658,7 @@ export async function dispatchFresh(
  * were handed off but never sent (a group stopped short), so they only go back to the
  * queue and the send's halt state is left as it was. With no batches, it records only the
  * halt: an answered request whose provider held some recipients back for its own reasons
- * (their rows are already back in the queue). The halt's `recipient`, the one reader a
- * refusal that names no one came back for, is kept beside it, and any earlier one dropped.
- * Lease-guarded, and three statements in all
+ * (their rows are already back in the queue). Lease-guarded, and three statements in all
  * (two with no halt, one with no batches).
  */
 export async function holdBatch(
@@ -1668,7 +1666,7 @@ export async function holdBatch(
   sendId: string,
   lease: string,
   held: string[],
-  halt: { reason: HaltReason; cause: HaltCause; error: string; recipient?: string } | null,
+  halt: { reason: HaltReason; cause: HaltCause; error: string } | null,
   backoff: readonly number[],
   now: number,
 ): Promise<void> {
@@ -1697,7 +1695,7 @@ export async function holdBatch(
     statements.push(
       db
         .prepare(
-          `UPDATE sends SET halt_reason = ?, halt_cause = ?, halt_error = ?, halt_recipient = ?,
+          `UPDATE sends SET halt_reason = ?, halt_cause = ?, halt_error = ?,
                   halted_at = CASE WHEN halt_reason IS ? THEN halted_at ELSE ? END,
                   halt_retries = CASE WHEN halt_reason IS ? THEN halt_retries + 1 ELSE 1 END,
                   halt_retry_at = ? + json_extract(?, '$[' || ${step} || ']'),
@@ -1708,7 +1706,6 @@ export async function holdBatch(
           halt.reason,
           halt.cause,
           halt.error,
-          halt.recipient ?? null,
           halt.reason,
           now,
           halt.reason,
@@ -1795,7 +1792,6 @@ export async function settleDeliveries(
       "halt_reason = NULL",
       "halt_cause = NULL",
       "halt_error = NULL",
-      "halt_recipient = NULL",
       "halted_at = NULL",
       "halt_retries = 0",
       "halt_retry_at = NULL",

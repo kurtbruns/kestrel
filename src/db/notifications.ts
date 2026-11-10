@@ -49,8 +49,6 @@ export interface DueNotification {
   progress_at: number | null;
   halt_cause: HaltCause | null;
   halt_error: string | null;
-  /** The one reader the send's hold names (SPEC §12), which an email gives only as its domain. */
-  halt_recipient: string | null;
   c_pending: number;
   c_in_flight: number;
   c_accepted: number;
@@ -266,7 +264,7 @@ export async function dueNotifications(
     .prepare(
       `SELECT n.send_id, n.kind, n.episode, n.attempts, n.sent_to,
               s.subject, s.status AS send_status, s.fire_at, s.started_at, s.completed_at,
-              s.locked_until, s.halt_reason, s.halted_at, s.halt_retries, s.halt_retry_at, s.progress_at, s.halt_cause, s.halt_error, s.halt_recipient, s.c_pending, s.c_in_flight, s.c_accepted,
+              s.locked_until, s.halt_reason, s.halted_at, s.halt_retries, s.halt_retry_at, s.progress_at, s.halt_cause, s.halt_error, s.c_pending, s.c_in_flight, s.c_accepted,
               s.c_delivered, s.c_bounced, s.c_complained, s.c_skipped, s.c_unsent,
               EXISTS (SELECT 1 FROM sends h
                        WHERE h.completed_at >= s.completed_at

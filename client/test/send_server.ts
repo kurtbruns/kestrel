@@ -188,7 +188,6 @@ export const condition = {
     advice:
       "Replace the SES access key in the instance’s secrets, or allow the key ses:SendEmail, ses:SendBulkEmail, ses:SendTemplatedEmail, and ses:SendBulkTemplatedEmail in its IAM policy. If someone else set up Kestrel for you, pass this along to them.",
     retry_at: retryAt,
-    recipient: null,
   }),
   /** Email refusing while the send is scheduled (SPEC §13): it will be held when it fires. */
   refusing: (): SendCondition => ({
@@ -277,13 +276,12 @@ export function sendServer(rows: SendRowFixture[] = []) {
         kind: "refused",
         severity: "action",
         since: row.halted_at,
-        message: refusedMessage(row.halt_cause, row.halt_error, row.halt_recipient),
+        message: refusedMessage(row.halt_cause, row.halt_error),
         action: null,
         cause: row.halt_cause,
         error: row.halt_error ?? "",
-        advice: refusalAdvice(row.halt_cause, row.halt_recipient),
+        advice: refusalAdvice(row.halt_cause),
         retry_at: row.halt_retry_at,
-        recipient: row.halt_recipient,
       });
     }
     if (

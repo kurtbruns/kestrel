@@ -20,8 +20,8 @@
  * run the same way, but its batch stays in flight for Resolve.
  * An answer that leaves a recipient out stops the run the same way, that recipient in flight.
  * A failure the adapter marks as the request's if repeated (`ifRepeated`) is read across the
- * group: two or more requests answered so, with no one taken, hold the send with no attempt
- * spent (SPEC §12).
+ * group: two or more requests answered so, or one when it carried the send's whole audience,
+ * with no one taken, hold the send with no attempt spent (SPEC §12).
  * Only a recipient's own retryable failure counts toward `MAX_DELIVERY_ATTEMPTS`.
  *
  * A run spends against the invocation's subrequest budget (`budget.ts`) and stops
@@ -307,6 +307,11 @@ export async function runSend(
    * The group's requests go out together, each started no sooner than the provider's
    * rate allows, so a group costs about one request's wait rather than one per batch.
    */
+  /** Whether the send's audience at fire is one recipient, set once the run reads its rows:
+   *  then a failure the adapter can't place has no other request to be compared with, and
+   *  holding the send on it delays no one else (SPEC §12). */
+  let audienceOfOne = false;
+
   const deliver = async (batches: Batch[]): Promise<boolean> => {
     const outcomes: DeliveryOutcome[] = [];
     const held: string[] = [];
@@ -386,15 +391,16 @@ export async function runSend(
 
     // A failure the adapter can't place from one request (`ifRepeated`) is read across the
     // group, as a larger request's entries are: answered so by two or more requests with no
-    // one taken in the group, it is the provider's, so those recipients go back with no
-    // attempt spent and the send holds; otherwise each is its recipient's own (SPEC §12).
+    // one taken in the group, or by the one request of a send whose audience is that one
+    // recipient, it is the provider's, so those recipients go back with no attempt spent and
+    // the send holds; otherwise each is its recipient's own (SPEC §12).
     const tookAny = answers.some(
       (a) => a.answer?.kind === "answered" && a.answer.results.some((r) => r.accepted),
     );
     const repeats = answers.filter(
       (a) => a.answer?.kind === "answered" && a.answer.results.some((r) => repeatedHalt(r)),
     );
-    if (!tookAny && repeats.length > 1) {
+    if (!tookAny && (repeats.length > 1 || (repeats.length === 1 && audienceOfOne))) {
       for (const a of repeats) {
         if (a.answer?.kind !== "answered") {
           continue;
@@ -587,6 +593,10 @@ export async function runSend(
   );
   const pendingIds =
     groups > 0 ? await sends.pendingDeliveryIds(db, sendId, groups * groupCalls * batchSize) : [];
+  // The run that fixes the audience reads every row fresh, at least a group's worth, so one
+  // row read is an audience of one; a later run reads the audience off the send.
+  audienceOfOne =
+    send.audience_resolved_at === null ? pendingIds.length === 1 : send.recipient_count === 1;
   /** How many requests the next group may make: its full size, or fewer when the budget
    *  or the tick's time is short, so a tight budget still sends; zero once the run should
    *  stop. */

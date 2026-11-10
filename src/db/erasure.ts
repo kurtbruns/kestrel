@@ -16,7 +16,6 @@
 import { ERASED_PREFIX } from "../../shared/subscribers";
 import { newToken } from "../lib/ids";
 import { jsonChunks } from "./imports";
-import { NEXT_REV } from "./sends";
 
 /** SQL that holds while no send run holding its lease has the address `email` (an expression)
  *  in hand, at the time bound by the expression `now`. */
@@ -79,7 +78,7 @@ function withoutAddress(text: string | null, email: string, placeholder: string)
  * delivery rows, as of `now`, reading those rows first (through `idx_deliveries_email`).
  * `rewrite` replaces the address in the rows' provider text, and discards any receipt held
  * for one of the addresses (`holdReceipt`), which stores the address and the provider's words,
- * and the name a send's hold gives one of them, and must run first; `move` replaces the rows' address, and its changes count the rows that
+ * and must run first; `move` replaces the rows' address, and its changes count the rows that
  * now show an erased recipient.
  */
 export async function forgetDeliveries(
@@ -153,16 +152,5 @@ export async function forgetDeliveries(
       )
       .bind(chunk, now),
   );
-  // A send held on a refusal that named one of them (SPEC §12) stops naming them: the hold
-  // stays, and the send skips them at its next retry, since they are off the list.
-  const named = jsonChunks(emails).map((chunk) =>
-    db
-      .prepare(
-        `UPDATE sends SET halt_recipient = NULL, rev = ${NEXT_REV}
-          WHERE halt_recipient IN (SELECT value FROM json_each(?1))
-            AND ${erasedNow("sends.halt_recipient")} AND ${idleFor("sends.halt_recipient", "?2")}`,
-      )
-      .bind(chunk, now),
-  );
-  return { rewrite: [...held, ...named, ...rewrite], move };
+  return { rewrite: [...held, ...rewrite], move };
 }

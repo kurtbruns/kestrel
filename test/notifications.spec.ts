@@ -300,7 +300,6 @@ describe("a send that needs the publisher", () => {
       progress_at: null,
       halt_cause: null,
       halt_error: null,
-      halt_recipient: null,
       c_pending: 0,
       c_in_flight: 0,
       c_accepted: 0,
@@ -1129,7 +1128,6 @@ describe("the link in a notification", () => {
           progress_at: null,
           halt_cause: null,
           halt_error: null,
-          halt_recipient: null,
           c_pending: 0,
           c_in_flight: 0,
           c_accepted: 0,
@@ -1281,7 +1279,6 @@ describe("what the publisher is told agrees with what every surface shows (SPEC 
           message: string;
           advice?: string;
           error?: string;
-          recipient?: string | null;
           count?: number;
         }[];
       };
@@ -1357,33 +1354,6 @@ describe("what the publisher is told agrees with what every surface shows (SPEC 
     expect(email.html).not.toContain("ada@");
     const shownNow = await shown(send.id);
     expect(shownNow.find((c) => c.kind === "refused")?.error).toContain("ada@example.com");
-  });
-
-  it("a hold that names its one reader gives the address behind the login and only its domain in the email (SPEC §12)", async () => {
-    const now = Date.now();
-    const send = await setUp({
-      status: "sending",
-      started_at: now - 5 * MIN,
-      progress_at: now - 5 * MIN,
-      c_pending: 4,
-      halt_reason: "account",
-      halt_cause: "invalid_request",
-      halt_error: "ses 400 BadRequestException: Invalid input",
-      halt_recipient: "ada@example.com",
-      halted_at: now - 4 * MIN,
-      halt_retries: 1,
-      halt_retry_at: now + 10 * MIN,
-    });
-    await notifications.recordNotifications(env.DB, now);
-    const [due] = await notifications.dueNotifications(env.DB, 1, Date.now());
-    const email = composeNotification(due as notifications.DueNotification, getConfig(env));
-    expect(email.text).toContain("SES refused the request for one reader, at example.com,");
-    expect(email.text).toContain("block it under Subscribers");
-    expect(email.text).not.toContain("ada@");
-    expect(email.html).not.toContain("ada@");
-    const refused = (await shown(send.id)).find((c) => c.kind === "refused");
-    expect(refused?.recipient).toBe("ada@example.com");
-    expect(refused?.message).toContain("block ada@example.com under Subscribers");
   });
 
   it("a refusal two sends share is told for the one still held, when the other has wedged", async () => {

@@ -100,10 +100,7 @@ export const PASS_THIS_ALONG = "If someone else set up Kestrel for you, pass thi
  * the publisher, so the two never advise differently. Plain text: a page that links the
  * not-connected step builds it from `NOT_CONNECTED_ADVICE`, which an email follows with the line.
  */
-export function refusalAdvice(cause: HaltCause | null, recipient: string | null = null): string {
-  if (cause === "invalid_request" && recipient) {
-    return blockAdvice(recipient);
-  }
+export function refusalAdvice(cause: HaltCause | null): string {
   switch (cause) {
     case "credentials":
       return `Replace the SES access key in the instance’s secrets, or allow the key ses:SendEmail, ses:SendBulkEmail, ses:SendTemplatedEmail, and ses:SendBulkTemplatedEmail in its IAM policy. ${PASS_THIS_ALONG}`;
@@ -132,22 +129,12 @@ export function refusalAdvice(cause: HaltCause | null, recipient: string | null 
     case "content":
       return `This email can’t change once its send has started, so ask AWS Support what SES refuses in it, quoting SES’s words. ${PASS_THIS_ALONG}`;
     case "invalid_request":
-      return "SES refused a batch of this send as invalid. If its words name an address, block that address under Subscribers: the send skips them, and resumes at its next retry.";
+      return "SES refused a batch of this send as invalid. If its words name an address, remove that subscriber: the send skips anyone no longer on the list, and resumes at its next retry.";
     case "not_connected":
       return `${NOT_CONNECTED_ADVICE.step}${NOT_CONNECTED_ADVICE.guide}${NOT_CONNECTED_ADVICE.after}`;
     default:
       return `Fix the account with the provider. ${PASS_THIS_ALONG}`;
   }
-}
-
-/**
- * The way out of a send held because SES refused a request of one reader as invalid, naming no
- * one (SPEC §12): block that address, which the send skips, and lift the block once the send
- * has finished. Blocking, not unsubscribing, which would record a withdrawal the reader never
- * made. A second address refused the same way shows the problem was never the reader's.
- */
-function blockAdvice(recipient: string): string {
-  return `SES refused this send’s request for ${recipient} as invalid, without saying whether the problem is that address or the email. To let the send carry on, block ${recipient} under Subscribers: the send skips them and resumes at its next retry. Unblock them once the send has finished, so they get your next post. If SES refuses the next address the same way, the problem is the email or the account, not the reader.`;
 }
 
 /**
@@ -205,12 +192,8 @@ export function refusingSendWarning(
  * this" keeps the claim to this refusal: readers recorded unsent earlier in the send, for
  * their own failures, stay so.
  */
-export function refusedMessage(
-  cause: HaltCause | null,
-  error: string | null,
-  recipient: string | null = null,
-): string {
-  const advice = refusalAdvice(cause, recipient);
+export function refusedMessage(cause: HaltCause | null, error: string | null): string {
+  const advice = refusalAdvice(cause);
   if (cause === "not_connected") {
     return `No email provider is connected, so this send is held where it is. ${advice} No one has been marked unsent because of this, and the send goes out at its first retry after a provider is connected.`;
   }
@@ -330,8 +313,6 @@ export interface Send {
   halt_cause: HaltCause | null;
   /** The provider's own words for that refusal. */
   halt_error: string | null;
-  /** The one recipient the refused request carried, when the refusal names no one and the request carried only them (SPEC §12): the publisher can block that address to let the send carry on. Null otherwise. */
-  halt_recipient: string | null;
   /** When refusals for this reason began. */
   halted_at: number | null;
   /** How many runs in a row this refusal has halted; 0 while the send is not halted. */
@@ -616,8 +597,6 @@ export type SendCondition =
       error: string;
       advice: string;
       retry_at: number | null;
-      /** The one reader the refused request carried, when the refusal names no one and the request carried only them (`invalid_request`); null otherwise. */
-      recipient: string | null;
     })
   | (ConditionBase & { kind: "provider_unavailable"; error: string; retry_at: number | null })
   | (ConditionBase & { kind: "bounce_spike"; bounced: number; rate: number })

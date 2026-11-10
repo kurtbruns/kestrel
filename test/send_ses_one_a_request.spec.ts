@@ -2,8 +2,8 @@
  * A send through Amazon SES at one recipient a request, the rate a new SES account starts at in
  * the sandbox (SPEC §12): the real adapter, the send loop, and the sweep, with SES's answers
  * stubbed. A request carries one reader, so an answer that names no one can't say whether it is
- * about that reader or the request, and none of them is held against the reader: the send
- * holds and says so, and no one is mailed twice (I4).
+ * about that reader or the request: it is read across the requests sent together, and for a
+ * list of one, held, since there is nothing to compare it with. No one is mailed twice (I4).
  */
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
@@ -17,8 +17,8 @@ import { SesProvider } from "../src/providers/ses";
 import { sweep } from "../src/send/sweep";
 import { pacedClock } from "./support/clock";
 import { addresses, dueSend, resetDatabase, seedConfirmed, tick } from "./support/fixtures";
-import { AUTH, base, JSON_AUTH } from "./support/http";
-import { allowErrorLogs, logged } from "./support/log";
+import { AUTH, base } from "./support/http";
+import { allowErrorLogs } from "./support/log";
 import { type BulkRequest, entryOk, readBulkRequest, SES_BULK_ENDPOINT } from "./support/ses";
 
 const sesEnv = {
@@ -79,12 +79,12 @@ async function rows(sendId: string) {
   return results;
 }
 
-/** What the send's page and Claude read about it: its refused condition, if any. */
+/** The send's refused condition, as its page and Claude read it, if any. */
 async function refused(sendId: string) {
   const res = await SELF.fetch(`${base}/api/sends/${sendId}`, { headers: AUTH });
   const { send } = (await res.json()) as {
     send: {
-      conditions: { kind: string; cause?: string; recipient?: string | null; message: string }[];
+      conditions: { kind: string; cause?: string; message: string }[];
     };
   };
   return send.conditions.find((c) => c.kind === "refused") ?? null;
@@ -113,81 +113,100 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("an answer that names no one, at one recipient a request (SPEC §12)", () => {
-  it("a 400 SES can't read, on every request, holds the send naming its one reader, spending no one", async () => {
+/** SES refusing a request as invalid in words that name no one. */
+const INVALID = () => refusal(400, "BadRequestException", "Invalid input");
+const FAILED = () => ({ Status: "FAILED", Error: "Failed" });
+
+describe("an answer that names no one, read across the requests sent together (SPEC §12)", () => {
+  it("a 400 SES can't read, on every request of a group, holds the send, spending no one", async () => {
     sesAt(1);
     const emails = addresses(25);
     await seedConfirmed(emails);
     const send = await dueSend();
-    const stub = ses(() => refusal(400, "BadRequestException", "Invalid input"));
-    const out = vi.spyOn(console, "log");
-    const warn = vi.spyOn(console, "warn");
+    const stub = ses(() => INVALID());
 
     await tick();
 
-    expect(stub.requests).toHaveLength(1); // the first request alone: the group's others wait
-    const [reader] = stub.requests[0]!.BulkEmailEntries[0]!.Destination.ToAddresses;
+    expect(stub.requests).toHaveLength(10); // one group of ten requests of one
     const held = await expectNoOneSpent(send.id, 25);
-    expect([held.halt_reason, held.halt_cause, held.halt_recipient]).toEqual([
+    expect([held.halt_reason, held.halt_cause, held.halt_error]).toEqual([
       "account",
       "invalid_request",
-      reader,
+      "ses 400 BadRequestException: Invalid input",
     ]);
-    expect(held.halt_error).toBe("ses 400 BadRequestException: Invalid input");
-    const shown = await refused(send.id);
-    expect(shown?.recipient).toBe(reader);
-    expect(shown?.message).toContain(`block ${reader} under Subscribers`);
-    // No line of the log carries the address (SPEC §12).
-    expect(JSON.stringify(logged(out, warn))).not.toContain(reader);
+    expect((await refused(send.id))?.cause).toBe("invalid_request");
+
+    // Held across retries, it never spends anyone, however many pass.
+    for (let i = 0; i < MAX_DELIVERY_ATTEMPTS + 1; i++) {
+      await tick();
+    }
+    await expectNoOneSpent(send.id, 25);
     expect(stub.mailed.size).toBe(0);
   });
 
-  it("blocking the reader a hold names lets the send carry on, mailing everyone else once (I4)", async () => {
+  it("once SES takes the email again, the held send goes out to everyone once (I4)", async () => {
     sesAt(1);
     const emails = addresses(12);
     await seedConfirmed(emails);
     const send = await dueSend();
     let refusing = true;
-    const stub = ses(() =>
-      refusing ? refusal(400, "BadRequestException", "Invalid input") : () => entryOk(),
-    );
+    const stub = ses(() => (refusing ? INVALID() : () => entryOk()));
     await tick();
-    const reader = (await sends.getSend(env.DB, send.id))!.halt_recipient!;
+    await expectNoOneSpent(send.id, 12);
 
-    const block = await SELF.fetch(`${base}/api/suppressions`, {
-      method: "POST",
-      headers: JSON_AUTH,
-      body: JSON.stringify({ email: reader }),
-    });
-    expect(block.status).toBe(201);
-    refusing = false; // the next reader's request goes through: it was the address
+    refusing = false; // the email or the account was fixed
     for (let i = 0; i < 5 && (await sends.getSend(env.DB, send.id))!.status !== "sent"; i++) {
       await tick();
     }
 
     const done = (await sends.getSend(env.DB, send.id))!;
-    expect(done.status).toBe("sent");
-    expect([done.halt_reason, done.halt_recipient]).toEqual([null, null]);
-    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 11, skipped: 1 });
-    expect(stub.mailed.get(reader)).toBeUndefined();
-    expect(emails.filter((e) => e !== reader).every((e) => stub.mailed.get(e) === 1)).toBe(true);
+    expect([done.status, done.halt_reason]).toEqual(["sent", null]);
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 12 });
+    expect(emails.every((e) => stub.mailed.get(e) === 1)).toBe(true);
   });
 
-  it("INVALID_PARAMETER naming no one holds the send naming its one reader, spending no one", async () => {
+  it("INVALID_PARAMETER naming no one, on every request of a group, holds the send, spending no one", async () => {
     sesAt(1);
     const emails = addresses(15);
     await seedConfirmed(emails);
     const send = await dueSend();
-    const stub = ses(() => () => ({ Status: "INVALID_PARAMETER", Error: "Invalid input" }));
+    ses(() => () => ({ Status: "INVALID_PARAMETER", Error: "Invalid input" }));
 
     await tick();
 
-    expect(stub.requests).toHaveLength(1);
-    const [reader] = stub.requests[0]!.BulkEmailEntries[0]!.Destination.ToAddresses;
     const held = await expectNoOneSpent(send.id, 15);
-    expect([held.halt_cause, held.halt_recipient]).toEqual(["invalid_request", reader]);
-    expect(held.halt_error).toBe("ses INVALID_PARAMETER: Invalid input");
+    expect([held.halt_cause, held.halt_error]).toEqual([
+      "invalid_request",
+      "ses INVALID_PARAMETER: Invalid input",
+    ]);
   });
+
+  for (const [what, answer] of [
+    ["a 400 SES can't read", () => INVALID()],
+    [
+      "INVALID_PARAMETER naming no one",
+      () => () => ({ Status: "INVALID_PARAMETER", Error: "Invalid input" }),
+    ],
+  ] as const) {
+    it(`${what}, on one request while SES took the others, is that reader's alone, and the send finishes`, async () => {
+      sesAt(1);
+      const emails = addresses(5);
+      await seedConfirmed(emails);
+      const send = await dueSend();
+      const bad = emails[2]!;
+      const stub = ses((to) => (to[0] === bad ? answer() : () => entryOk()));
+
+      await tick();
+
+      const done = (await sends.getSend(env.DB, send.id))!;
+      expect([done.status, done.halt_reason]).toEqual(["sent", null]);
+      expect((await rows(send.id)).map((r) => [r.email, r.status])).toEqual(
+        emails.map((email) => [email, email === bad ? "unsent" : "accepted"]),
+      );
+      expect(stub.mailed.get(bad)).toBeUndefined();
+      expect(emails.filter((e) => e !== bad).every((e) => stub.mailed.get(e) === 1)).toBe(true);
+    });
+  }
 
   it("a refusal that names its reader is that reader's alone, and the send carries on", async () => {
     sesAt(1);
@@ -203,51 +222,64 @@ describe("an answer that names no one, at one recipient a request (SPEC §12)", 
 
     await tick();
 
-    const done = (await sends.getSend(env.DB, send.id))!;
-    expect(done.status).toBe("sent");
+    expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
     expect((await rows(send.id)).map((r) => [r.email, r.status])).toEqual(
       emails.map((email) => [email, email === bad ? "unsent" : "accepted"]),
     );
     expect(stub.mailed.get(bad)).toBeUndefined();
   });
 
-  it("a list of one, at any rate, holds on an answer that names no one", async () => {
-    sesAt(14);
-    await seedConfirmed(["solo@example.com"]);
-    const send = await dueSend();
-    ses(() => refusal(400, "BadRequestException", "Invalid input"));
+  for (const rate of [1, 14]) {
+    it(`a list of one holds on an answer that names no one, at a rate of ${rate}, and goes out once it's fixed`, async () => {
+      sesAt(rate);
+      await seedConfirmed(["solo@example.com"]);
+      const send = await dueSend();
+      let refusing = true;
+      const stub = ses(() => (refusing ? INVALID() : () => entryOk()));
 
-    await tick();
+      await tick();
+      const held = await expectNoOneSpent(send.id, 1);
+      expect(held.halt_cause).toBe("invalid_request");
+      await tick(); // the retry, still refused: still no one spent
+      await expectNoOneSpent(send.id, 1);
 
-    const held = await expectNoOneSpent(send.id, 1);
-    expect([held.halt_cause, held.halt_recipient]).toEqual(["invalid_request", "solo@example.com"]);
-  });
+      refusing = false;
+      await tick();
+      expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
+      expect(stub.mailed.get("solo@example.com")).toBe(1);
+    });
+  }
 
-  it("a last request of one, at a higher rate, holds naming its reader and keeps those taken", async () => {
+  it("a last request of one, beside others SES took in its group, is that reader's own", async () => {
     sesAt(2);
     const emails = addresses(3);
     await seedConfirmed(emails);
     const send = await dueSend();
-    const stub = ses((to) =>
-      to.length === 1 ? refusal(400, "BadRequestException", "Invalid input") : () => entryOk(),
-    );
+    const stub = ses((to) => (to.length === 1 ? INVALID() : () => entryOk()));
 
     await tick();
 
-    const last = stub.requests.find((r) => r.BulkEmailEntries.length === 1)!;
-    const [reader] = last.BulkEmailEntries[0]!.Destination.ToAddresses;
-    const row = (await sends.getSend(env.DB, send.id))!;
-    expect([row.status, row.halt_cause, row.halt_recipient]).toEqual([
-      "sending",
-      "invalid_request",
-      reader,
-    ]);
-    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 2, pending: 1 });
-    expect((await rows(send.id)).find((r) => r.email === reader)).toEqual({
-      email: reader,
-      status: "pending",
-      attempts: 0,
-    });
+    const [reader] = stub.requests.find((r) => r.BulkEmailEntries.length === 1)!
+      .BulkEmailEntries[0]!.Destination.ToAddresses;
+    expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 2, unsent: 1 });
+    expect((await rows(send.id)).find((r) => r.email === reader)!.status).toBe("unsent");
+  });
+
+  it("a last request of one, alone in its group of a larger send, is that reader's own", async () => {
+    sesAt(1);
+    const emails = addresses(11); // a group of ten, then one
+    await seedConfirmed(emails);
+    const send = await dueSend();
+    const last = emails[10]!;
+    ses((to) => (to[0] === last ? INVALID() : () => entryOk()));
+
+    await tick();
+    await tick();
+
+    expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 10, unsent: 1 });
+    expect((await rows(send.id)).find((r) => r.email === last)!.status).toBe("unsent");
   });
 });
 
@@ -257,19 +289,14 @@ describe("a plain FAILED, judged with its group (SPEC §12)", () => {
     const emails = addresses(25);
     await seedConfirmed(emails);
     const send = await dueSend();
-    const stub = ses(() => () => ({ Status: "FAILED", Error: "Failed" }));
+    const stub = ses(() => FAILED);
 
     await tick();
 
-    expect(stub.requests).toHaveLength(10); // one group of ten requests of one
+    expect(stub.requests).toHaveLength(10);
     const held = await expectNoOneSpent(send.id, 25);
-    expect([held.halt_reason, held.halt_cause, held.halt_recipient]).toEqual([
-      "unavailable",
-      "outage",
-      null,
-    ]);
+    expect([held.halt_reason, held.halt_cause]).toEqual(["unavailable", "outage"]);
 
-    // Held across retries, it never spends anyone, however many ticks pass.
     for (let i = 0; i < MAX_DELIVERY_ATTEMPTS + 1; i++) {
       await tick();
     }
@@ -283,9 +310,7 @@ describe("a plain FAILED, judged with its group (SPEC §12)", () => {
     await seedConfirmed(emails);
     const send = await dueSend();
     const failing = emails[0]!;
-    const stub = ses((to) =>
-      to[0] === failing ? () => ({ Status: "FAILED", Error: "Failed" }) : () => entryOk(),
-    );
+    const stub = ses((to) => (to[0] === failing ? FAILED : () => entryOk()));
 
     await tick();
     expect((await sends.getSend(env.DB, send.id))!.halt_reason).toBeNull();
@@ -294,8 +319,7 @@ describe("a plain FAILED, judged with its group (SPEC §12)", () => {
     for (let i = 0; i < MAX_DELIVERY_ATTEMPTS + 1; i++) {
       await tick();
     }
-    const done = (await sends.getSend(env.DB, send.id))!;
-    expect(done.status).toBe("sent");
+    expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
     expect((await rows(send.id))[0]).toEqual({
       email: failing,
       status: "unsent",
@@ -304,21 +328,38 @@ describe("a plain FAILED, judged with its group (SPEC §12)", () => {
     expect(emails.slice(1).every((e) => stub.mailed.get(e) === 1)).toBe(true);
   });
 
-  it("in a group of one request, is its reader's own, so a list of one loses at most that one", async () => {
+  it("alone in its group of a larger send, is its reader's own, retried up to the cap and then unsent", async () => {
+    sesAt(1);
+    const emails = addresses(11);
+    await seedConfirmed(emails);
+    const send = await dueSend();
+    const last = emails[10]!;
+    ses((to) => (to[0] === last ? FAILED : () => entryOk()));
+
+    for (let i = 0; i < MAX_DELIVERY_ATTEMPTS + 2; i++) {
+      await tick();
+    }
+
+    expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
+    expect((await rows(send.id)).find((r) => r.email === last)).toEqual({
+      email: last,
+      status: "unsent",
+      attempts: MAX_DELIVERY_ATTEMPTS,
+    });
+  });
+
+  it("for a list of one, holds as an outage, spending no attempt, however many retries pass", async () => {
     sesAt(1);
     await seedConfirmed(["solo@example.com"]);
     const send = await dueSend();
-    ses(() => () => ({ Status: "FAILED", Error: "Failed" }));
+    ses(() => FAILED);
 
     for (let i = 0; i < MAX_DELIVERY_ATTEMPTS + 1; i++) {
       await tick();
     }
 
-    const done = (await sends.getSend(env.DB, send.id))!;
-    expect(done.status).toBe("sent");
-    expect(await rows(send.id)).toEqual([
-      { email: "solo@example.com", status: "unsent", attempts: MAX_DELIVERY_ATTEMPTS },
-    ]);
+    const held = await expectNoOneSpent(send.id, 1);
+    expect([held.halt_reason, held.halt_cause]).toEqual(["unavailable", "outage"]);
   });
 });
 
@@ -369,7 +410,7 @@ describe("what one recipient a request leaves as it was (SPEC §12)", () => {
       "sandbox",
     ],
   ] as const) {
-    it(`${what} holds the send, naming no one and spending no one`, async () => {
+    it(`${what} holds the send, spending no one`, async () => {
       sesAt(1);
       const emails = addresses(5);
       await seedConfirmed(emails);
@@ -380,7 +421,7 @@ describe("what one recipient a request leaves as it was (SPEC §12)", () => {
 
       expect(stub.requests).toHaveLength(1);
       const held = await expectNoOneSpent(send.id, 5);
-      expect([held.halt_cause, held.halt_recipient]).toEqual([cause, null]);
+      expect(held.halt_cause).toBe(cause);
     });
   }
 

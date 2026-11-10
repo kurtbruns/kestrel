@@ -39,12 +39,12 @@ export type PerRecipientResult =
       error: string;
       held?: true;
       unknown?: true;
-      /** The halt this failure is instead, if the send loop's group (`GROUP_RECIPIENTS`)
-       *  gets it from another request too and the provider took no one in the group: one
-       *  request alone can't say whether an answer the adapter can't place is the
-       *  recipient's or the request's, and two alike with nothing taken are the request's
-       *  (SPEC §12). Only the adapter knows which answers these are; the loop applies the
-       *  rule without knowing the provider. */
+      /** The halt this failure is instead if the send loop's group (`GROUP_RECIPIENTS`)
+       *  gets it from another request too, or the send's whole audience is this one
+       *  recipient, and the provider took no one in the group: one request alone can't say
+       *  whether an answer the adapter can't place is the recipient's or the request's, and
+       *  two alike with nothing taken are the request's (SPEC §12). Only the adapter knows
+       *  which answers these are; the loop applies the rule without knowing the provider. */
       ifRepeated?: BatchHalt;
     };
 
@@ -63,10 +63,6 @@ export interface BatchHalt {
   cause: HaltCause;
   /** The provider's own words, for the operator. Never carries a credential. */
   error: string;
-  /** The one recipient the refused request carried, when the refusal names no one and the
-   *  request carried only them (SPEC §12): the send's page names them, so the publisher can
-   *  block that address and let the send carry on. Never logged. */
-  recipient?: string;
 }
 
 /**

@@ -688,25 +688,29 @@ describe("SesProvider.sendBatch", () => {
     expect(await send()).toMatchObject({ kind: "halted", halt: { cause: "content" } });
   });
 
-  it("holds a request of one that SES refuses as invalid naming no one, naming its reader (SPEC §12)", async () => {
+  it("answers a request of one that SES refuses as invalid naming no one as its reader's, marked as the request's if repeated (SPEC §12)", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ __type: "BadRequestException", message: "Invalid input" }), {
         status: 400,
       }),
     );
+    const error = "ses 400 BadRequestException: Invalid input";
     const r = await newProvider().sendBatch(
       renderedFixture(),
       [{ email: "ada@example.com", unsubscribeUrl: UNSUB }],
       { purpose: "list", tag: "send-1" },
     );
     expect(r).toEqual({
-      kind: "halted",
-      halt: {
-        reason: "account",
-        cause: "invalid_request",
-        error: "ses 400 BadRequestException: Invalid input",
-        recipient: "ada@example.com",
-      },
+      kind: "answered",
+      results: [
+        {
+          email: "ada@example.com",
+          accepted: false,
+          retryable: false,
+          error,
+          ifRepeated: { reason: "account", cause: "invalid_request", error },
+        },
+      ],
     });
   });
 
