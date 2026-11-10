@@ -15,6 +15,10 @@
  * held send, SPEC §13) by its own path. So does an outage the developer names (`outage`):
  * SES unavailable to every email, read by the same classifier, so a send backs off on the
  * real spacing and the publisher's email about it waits for the outage to end, as it would.
+ * A bad request the developer names (`badRequest`) is about a send's requests, not the
+ * account, so it answers list sends only: each is refused as invalid in words that name no
+ * one, read by the adapter's own reading of a bulk request's error (`sesBulkError`), so a
+ * send holds or marks its reader unsent exactly as the adapter and the send loop decide.
  * Simulated list sends land in the same outbox, so the
  * delivered bytes can be inspected. It engages only when `config.simulation` is set, which
  * `getConfig` allows only in a dev-shaped env.
@@ -47,7 +51,7 @@
  * after a day.
  *
  * Each injected fault is logged as a `sim.*` event tagged with the profile (`sim.quota_spent`,
- * `sim.quota_lifted`, `sim.request_lost`), so a simulated send's log shows what was injected
+ * `sim.quota_lifted`, `sim.request_lost`, `sim.bad_request`), so a simulated send's log shows what was injected
  * beside what the app did about it.
  */
 
@@ -67,7 +71,14 @@ import { HALT_BACKOFF_MS, HALT_RETRY_SLACK_MS } from "../lib/time";
 import { unwrap } from "../lib/unwrap";
 import { applyDeliveryEvents } from "../services/webhook_events";
 import { deliverToOutbox, FakeProvider } from "./fake";
-import { bareAddress, classifySesError, sesEntryErrorText, sesErrorText, sesTraits } from "./ses";
+import {
+  bareAddress,
+  classifySesError,
+  sesBulkError,
+  sesEntryErrorText,
+  sesErrorText,
+  sesTraits,
+} from "./ses";
 import type {
   BatchHalt,
   DeliveryEvent,
@@ -231,6 +242,19 @@ const SES_OUTAGE: SesErrorResponse = {
   status: 408,
   type: "RequestTimeoutException",
   msg: "Request timed out before SES received it whole. (simulated outage)",
+};
+
+/**
+ * The error response SES answers every list request with under `SIMULATE_SENDS=ses:bad_request`:
+ * the request refused as invalid, in words that name no one, so the adapter can't tell whether
+ * it is about one recipient or the request. A test, a confirmation, and a notification go
+ * through: the answer is about a send's requests, and how a one-off email meets it has never
+ * been reasoned about, so the simulation doesn't guess.
+ */
+const SES_BAD_REQUEST: SesErrorResponse = {
+  status: 400,
+  type: "BadRequestException",
+  msg: "Invalid input. (simulated)",
 };
 
 /** The halt the real adapter returns for an SES error response. */
@@ -467,6 +491,8 @@ export class SimProvider implements EmailProvider {
   private readonly refusal: BatchHalt | null;
   /** The provider being unavailable to every email, while the developer has it down. */
   private readonly outage: BatchHalt | null;
+  /** Whether every list request is refused as a bad request that names no one. */
+  private readonly badRequest: boolean;
 
   constructor(simulation: SimulationView, config: Config) {
     this.profile = PROFILES[simulation.profile]();
@@ -477,6 +503,7 @@ export class SimProvider implements EmailProvider {
       ? sesHalt(refusalResponse(simulation.refuse, config), config.fromAddress)
       : null;
     this.outage = !simulation.outage ? null : sesHalt(SES_OUTAGE, config.fromAddress);
+    this.badRequest = simulation.bad_request;
     const traits = this.profile.traits(config);
     this.maxBatch = traits.maxBatch;
     this.maxRequestRate = traits.maxRequestRate;
@@ -504,6 +531,22 @@ export class SimProvider implements EmailProvider {
       return { kind: "halted", halt: sandboxed };
     }
     const sendId = opts.tag;
+    if (this.badRequest) {
+      await sleep(this.profile.requestMs);
+      log.info("sim.bad_request", {
+        sendId,
+        profile: this.profileName,
+        recipients: recipients.length,
+      });
+      const r = SES_BAD_REQUEST;
+      return sesBulkError(
+        r.status,
+        r.type,
+        r.msg,
+        bareAddress(this.config.fromAddress),
+        recipients,
+      );
+    }
     const key = opts.batchKey ?? sendId;
     const realistic = this.faults === "realistic";
     const p = this.profile;

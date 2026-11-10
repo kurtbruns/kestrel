@@ -181,6 +181,8 @@ export interface SimulationView {
   refuse: RefusingCause | null;
   /** Whether SES is unavailable to every email, from `SIMULATE_SENDS=ses:outage`. */
   outage: boolean;
+  /** Whether SES answers every list request as a bad request whose words name no one, from `SIMULATE_SENDS=ses:bad_request`. */
+  bad_request: boolean;
   /** The SES account it stands in for, from `SIMULATE_ACCOUNT`; null leaves the account unread. */
   account: SimulatedAccountView | null;
 }

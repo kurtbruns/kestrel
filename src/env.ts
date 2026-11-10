@@ -73,7 +73,7 @@ export interface Secrets {
    * What stands in for the provider in local dev (SPEC §10): the send simulation, naming the
    * provider it models, `ses` or `generic` (`1`), optionally with `:none` for no
    * injected failures, and for `ses` optionally `:refuse=<cause>`, a refusal of the account
-   * every email meets (SPEC §13); `not-connected` to run as a deployment with no provider (SPEC §13);
+   * every email meets (SPEC §13), `:outage`, or `:bad_request`; `not-connected` to run as a deployment with no provider (SPEC §13);
    * `off` or unset for the plain, instant fake. Honored only in a dev-shaped env, so never
    * in a deployed one. `.dev.vars.example` ships it on.
    */
@@ -652,7 +652,8 @@ const SIMULATION_GENERIC = new Set(["1", "on", "true", "yes"]);
  * fake: `off` (or unset), `not-connected`, or a profile (`generic`, or `1`, `ses`)
  * and optionally `:realistic` (the default) or `:none`, then, for `ses`, optionally
  * `:refuse=<cause>`, a refusal of the account every email meets (SPEC §10, §13), as in
- * `ses:refuse=configuration`, or `:outage`, SES unavailable to every email. Anything else is
+ * `ses:refuse=configuration`, `:outage`, SES unavailable to every email, or `:bad_request`,
+ * SES answering every list request as a bad request whose words name no one. Anything else is
  * refused rather than read as off, so a typo can't quietly turn the simulation off or pick
  * the wrong provider.
  */
@@ -668,10 +669,14 @@ function readSimulateSends(
   }
   const [name = "", ...parts] = raw.split(":");
   const last = parts.at(-1) ?? "";
-  const answerPart = last.startsWith("refuse=") || last === "outage" ? parts.pop() : undefined;
+  const answerPart =
+    last.startsWith("refuse=") || last === "outage" || last === "bad_request"
+      ? parts.pop()
+      : undefined;
   const [faults = "realistic", ...rest] = parts;
   const refuse = answerPart?.startsWith("refuse=") ? answerPart.slice("refuse=".length) : undefined;
   const outage = answerPart === "outage";
+  const badRequest = answerPart === "bad_request";
   const profile = SIMULATION_GENERIC.has(name) ? "generic" : name;
   if (
     rest.length > 0 ||
@@ -681,11 +686,15 @@ function readSimulateSends(
   ) {
     throw new ConfigError(
       "SIMULATE_SENDS",
-      `must be off, one of ${SIMULATION_PROFILES.join(", ")} (or 1) optionally followed by :${SIMULATION_FAULTS.join(" or :")} and, for ses, :refuse= and one of ${SIMULATED_REFUSALS.join(", ")} or :outage, or not-connected, not "${v?.trim()}"`,
+      `must be off, one of ${SIMULATION_PROFILES.join(", ")} (or 1) optionally followed by :${SIMULATION_FAULTS.join(" or :")} and, for ses, :refuse= and one of ${SIMULATED_REFUSALS.join(", ")}, :outage, or :bad_request, or not-connected, not "${v?.trim()}"`,
     );
   }
   if (answerPart !== undefined && profile !== "ses") {
-    const [does, form] = outage ? ["goes down", ":outage"] : ["refuses", ":refuse="];
+    const [does, form] = outage
+      ? ["goes down", ":outage"]
+      : badRequest
+        ? ["answers a bad request", ":bad_request"]
+        : ["refuses", ":refuse="];
     throw new ConfigError(
       "SIMULATE_SENDS",
       `${does} through SES's own answers, so ${form} needs the ses profile, not "${v?.trim()}"`,
@@ -696,6 +705,7 @@ function readSimulateSends(
     faults: faults as SimulationFaults,
     refuse: (refuse as RefusingCause | undefined) ?? null,
     outage,
+    bad_request: badRequest,
   };
 }
 

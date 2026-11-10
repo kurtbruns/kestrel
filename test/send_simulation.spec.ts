@@ -16,9 +16,10 @@ import type { EmailProvider, RenderedEmail } from "../src/providers/types";
 import { UNSUB_SENTINEL } from "../src/render/render";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
+import { pacedClock } from "./support/clock";
 import { has } from "./support/conditions";
 import { SES_DEPLOY } from "./support/deploy";
-import { resetDatabase } from "./support/fixtures";
+import { resetDatabase, tick } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
 import { fetchWith, withVars } from "./support/worker_env";
@@ -131,6 +132,7 @@ describe("SIMULATE_SENDS", () => {
         account: null,
         refuse: null,
         outage: false,
+        bad_request: false,
       });
     }
     expect(simulation("SES")).toEqual({
@@ -139,6 +141,7 @@ describe("SIMULATE_SENDS", () => {
       account: null,
       refuse: null,
       outage: false,
+      bad_request: false,
     });
     expect(simulation("ses:none")).toEqual({
       profile: "ses",
@@ -146,6 +149,7 @@ describe("SIMULATE_SENDS", () => {
       account: null,
       refuse: null,
       outage: false,
+      bad_request: false,
     });
     expect(simulation("1:none")).toEqual({
       profile: "generic",
@@ -153,6 +157,7 @@ describe("SIMULATE_SENDS", () => {
       account: null,
       refuse: null,
       outage: false,
+      bad_request: false,
     });
     expect(simulation("ses:realistic")).toEqual({
       profile: "ses",
@@ -160,6 +165,7 @@ describe("SIMULATE_SENDS", () => {
       account: null,
       refuse: null,
       outage: false,
+      bad_request: false,
     });
   });
 
@@ -181,8 +187,17 @@ describe("SIMULATE_SENDS", () => {
   });
 
   it("reads an outage of SES (SPEC §10)", () => {
-    expect(simulation("ses:outage")).toMatchObject({ profile: "ses", refuse: null, outage: true });
-    expect(simulation("ses:none:outage")).toMatchObject({ faults: "none", outage: true });
+    expect(simulation("ses:outage")).toMatchObject({
+      profile: "ses",
+      refuse: null,
+      outage: true,
+      bad_request: false,
+    });
+    expect(simulation("ses:none:outage")).toMatchObject({
+      faults: "none",
+      outage: true,
+      bad_request: false,
+    });
     expect(simulation("ses")?.outage).toBe(false);
     // An outage is no refusal, so an account problem doesn't turn it into one.
     expect(
@@ -200,6 +215,32 @@ describe("SIMULATE_SENDS", () => {
       "1:outage",
       "ses:outage:none",
       "ses:outage:refuse=paused",
+    ]) {
+      expect(() => simulation(value), value).toThrow(ConfigError);
+    }
+  });
+
+  it("reads a bad request that names no one, for SES only and last (SPEC §10)", () => {
+    expect(simulation("ses:bad_request")).toMatchObject({
+      profile: "ses",
+      faults: "realistic",
+      refuse: null,
+      outage: false,
+      bad_request: true,
+    });
+    expect(simulation("SES:none:BAD_REQUEST")).toMatchObject({ faults: "none", bad_request: true });
+    expect(simulation("ses")?.bad_request).toBe(false);
+    expect(simulation("ses:outage")?.bad_request).toBe(false);
+    // Only SES's own answers can be a bad request, one answer at a time, after the fault level.
+    for (const value of [
+      "1:bad_request",
+      "generic:none:bad_request",
+      "ses:bad_request:none",
+      "ses:bad_request=1",
+      "ses:bad-request",
+      "ses:outage:bad_request",
+      "ses:bad_request:outage",
+      "ses:refuse=paused:bad_request",
     ]) {
       expect(() => simulation(value), value).toThrow(ConfigError);
     }
@@ -229,6 +270,7 @@ describe("SIMULATE_SENDS", () => {
     const deployed = { ...SES_DEPLOY, APP_ORIGIN: "https://newsletter.birds.example" };
     expect(simulation("ses", deployed)).toBeNull();
     expect(simulation("ses:outage", deployed)).toBeNull();
+    expect(simulation("ses:bad_request", deployed)).toBeNull();
     expect(simulation("nonsense", deployed)).toBeNull();
     expect(simulation("ses", { ...SES_DEPLOY })).toBeNull();
     expect(
@@ -252,6 +294,7 @@ describe("SIMULATE_SENDS", () => {
       account: null,
       refuse: null,
       outage: false,
+      bad_request: false,
     });
     const off = await readJson(await fetchWith({}, "/api/settings", { headers: AUTH }));
     expect(off.deployment.simulation).toBeNull();
@@ -283,7 +326,14 @@ describe("the SES profile, with the real adapter's traits", () => {
       null,
     );
     const sim = new SimProvider(
-      { profile: "ses", faults: "realistic", account: null, refuse: null, outage: false },
+      {
+        profile: "ses",
+        faults: "realistic",
+        account: null,
+        refuse: null,
+        outage: false,
+        bad_request: false,
+      },
       getConfig(withVars({ SES_MAX_SEND_RATE: "3" })),
     );
     expect(sim.maxBatch).toBe(ses.maxBatch);
@@ -303,14 +353,28 @@ describe("the SES profile, with the real adapter's traits", () => {
     expect(
       () =>
         new SimProvider(
-          { profile: "generic", faults: "realistic", account: null, refuse: null, outage: false },
+          {
+            profile: "generic",
+            faults: "realistic",
+            account: null,
+            refuse: null,
+            outage: false,
+            bad_request: false,
+          },
           config,
         ),
     ).not.toThrow();
     expect(
       () =>
         new SimProvider(
-          { profile: "ses", faults: "realistic", account: null, refuse: null, outage: false },
+          {
+            profile: "ses",
+            faults: "realistic",
+            account: null,
+            refuse: null,
+            outage: false,
+            bad_request: false,
+          },
           config,
         ),
     ).toThrow("expected a halting error response to exist");
@@ -321,7 +385,14 @@ describe("list sends only", () => {
   it("hands tests, confirmations, and notifications to the outbox at once, never refused", async () => {
     // The generic profile refuses about one recipient in 25 once; none of these may be.
     const sim = new SimProvider(
-      { profile: "generic", faults: "realistic", account: null, refuse: null, outage: false },
+      {
+        profile: "generic",
+        faults: "realistic",
+        account: null,
+        refuse: null,
+        outage: false,
+        bad_request: false,
+      },
       getConfig(env),
     );
     for (const purpose of ["test", "confirmation", "notification"] as const) {
@@ -345,7 +416,14 @@ describe("list sends only", () => {
   it("answers every email as SES unavailable while it is down, read by the adapter's classifier (SPEC §10)", async () => {
     const classify = vi.spyOn(sesAdapter, "classifySesError");
     const sim = new SimProvider(
-      { profile: "ses", faults: "none", account: null, refuse: null, outage: true },
+      {
+        profile: "ses",
+        faults: "none",
+        account: null,
+        refuse: null,
+        outage: true,
+        bad_request: false,
+      },
       getConfig(env),
     );
     // The adapter's own reading of the response, not one the simulation restates.
@@ -416,7 +494,14 @@ describe("list sends only", () => {
 
   it("records a simulated list batch in the outbox with each recipient's own link, once per key", async () => {
     const sim = new SimProvider(
-      { profile: "generic", faults: "none", account: null, refuse: null, outage: false },
+      {
+        profile: "generic",
+        faults: "none",
+        account: null,
+        refuse: null,
+        outage: false,
+        bad_request: false,
+      },
       getConfig(env),
     );
     const email = { ...rendered, html: `<p>hi</p><a href="${UNSUB_SENTINEL}">Unsubscribe</a>` };
@@ -605,6 +690,7 @@ describe("drainSimulatedWebhooks (delayed synthetic receipts through the real in
       account: null,
       refuse: null,
       outage: false,
+      bad_request: false,
     },
   });
 
@@ -723,7 +809,14 @@ describe("drainSimulatedWebhooks (delayed synthetic receipts through the real in
 describe("the generic profile", () => {
   it("paces a batch, accepting the bulk and refusing a few once, retryably", async () => {
     const provider = new SimProvider(
-      { profile: "generic", faults: "realistic", account: null, refuse: null, outage: false },
+      {
+        profile: "generic",
+        faults: "realistic",
+        account: null,
+        refuse: null,
+        outage: false,
+        bad_request: false,
+      },
       getConfig(env),
     );
     expect(provider.maxBatch).toBe(8);
@@ -748,5 +841,125 @@ describe("the generic profile", () => {
     for (const r of results.filter((x) => !x.accepted)) {
       expect(typeof (r as { error: string }).error).toBe("string");
     }
+  });
+});
+
+describe("a bad request that names no one (SPEC §10, §12)", { timeout: 30_000 }, () => {
+  const BAD_REQUEST = {
+    profile: "ses",
+    faults: "none",
+    account: null,
+    refuse: null,
+    outage: false,
+    bad_request: true,
+  } as const;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    pacedClock();
+  });
+
+  it("is SES's answer to a list request, read by the adapter's own reading of it", async () => {
+    const read = vi.spyOn(sesAdapter, "sesBulkError");
+    const sim = new SimProvider(BAD_REQUEST, getConfig(env));
+    const two = recipients(2);
+    const answer = await sim.sendBatch(rendered, two, { purpose: "list", tag: "s-1" });
+    // The adapter's reading of SES's response, not one the simulation restates.
+    expect(read).toHaveBeenCalledWith(
+      400,
+      "BadRequestException",
+      expect.any(String),
+      expect.any(String),
+      two,
+    );
+    // Two readers and no one named: the request's, so the batch holds.
+    expect(answer).toEqual({
+      kind: "halted",
+      halt: {
+        reason: "account",
+        cause: "invalid_request",
+        error: "ses 400 BadRequestException: Invalid input. (simulated)",
+      },
+    });
+    // One reader: theirs, unless the send loop's group repeats it.
+    const [one] = recipients(1);
+    expect(await sim.sendBatch(rendered, [one!], { purpose: "list", tag: "s-1" })).toEqual({
+      kind: "answered",
+      results: [
+        {
+          email: one!.email,
+          accepted: false,
+          retryable: false,
+          error: "ses 400 BadRequestException: Invalid input. (simulated)",
+          ifRepeated: {
+            reason: "account",
+            cause: "invalid_request",
+            error: "ses 400 BadRequestException: Invalid input. (simulated)",
+          },
+        },
+      ],
+    });
+    expect(fakeOutbox()).toHaveLength(0);
+  });
+
+  it("lets a test, a confirmation, and a notification through to the outbox", async () => {
+    const sim = new SimProvider(BAD_REQUEST, getConfig(env));
+    for (const purpose of ["test", "confirmation", "notification"] as const) {
+      const answer = await sim.sendBatch(rendered, recipients(1, purpose), {
+        purpose,
+        tag: `${purpose}-1`,
+      });
+      expect(answer.kind === "answered" && answer.results.map((r) => r.accepted), purpose).toEqual([
+        true,
+      ]);
+    }
+    expect(fakeOutbox().map((m) => m.to)).toEqual([
+      "test0@birds.example",
+      "confirmation0@birds.example",
+      "notification0@birds.example",
+    ]);
+  });
+
+  for (const [what, readers, rate] of [
+    ["at one email a second, read across the requests sent together", 3, "1"],
+    ["for a list of one at one email a second", 1, "1"],
+    ["at a production rate, where a request carries every reader", 3, "14"],
+  ] as const) {
+    it(`holds a list send ${what}, with no one spent and nothing in flight`, async () => {
+      const e = withVars({ SIMULATE_SENDS: "ses:bad_request", SES_MAX_SEND_RATE: rate });
+      await seedReaders(readers);
+      const sendId = await dueSendUnder(e, "Kestrels");
+      await sweep(e);
+      const row = (await sends.getSend(env.DB, sendId))!;
+      expect([row.status, row.halt_reason, row.halt_cause]).toEqual([
+        "sending",
+        "account",
+        "invalid_request",
+      ]);
+      expect([row.c_pending, row.c_in_flight, row.c_unsent]).toEqual([readers, 0, 0]);
+      const { results } = await env.DB.prepare(
+        "SELECT attempts FROM deliveries WHERE send_id = ? AND attempts > 0",
+      )
+        .bind(sendId)
+        .all();
+      expect(results).toEqual([]);
+      expect(fakeOutbox()).toHaveLength(0);
+    });
+  }
+
+  it("goes out to everyone once after a restart without it", async () => {
+    await seedReaders(3);
+    const held = withVars({ SIMULATE_SENDS: "ses:bad_request", SES_MAX_SEND_RATE: "1" });
+    const sendId = await dueSendUnder(held, "Kestrels");
+    await sweep(held);
+    expect((await sends.getSend(env.DB, sendId))!.halt_cause).toBe("invalid_request");
+    await tick(withVars({ SIMULATE_SENDS: "ses:none", SES_MAX_SEND_RATE: "1" }));
+    const row = (await sends.getSend(env.DB, sendId))!;
+    expect([row.status, row.c_accepted, row.c_unsent]).toEqual(["sent", 3, 0]);
+    expect(
+      fakeOutbox()
+        .map((m) => m.to)
+        .sort(),
+    ).toEqual(["reader0@birds.example", "reader1@birds.example", "reader2@birds.example"]);
   });
 });
