@@ -1032,8 +1032,8 @@ describe("dashboard", () => {
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(0);
     expect(cards()).toEqual(["p2", "p5"]);
-    // Claude moves one a day later, which changes no stage.
-    srv.edit("x5", { fire_at: NOW + 3 * 86_400_000 });
+    // Claude moves one two days later, which changes no stage.
+    srv.edit("x5", { fire_at: NOW + 4 * 86_400_000 });
     await vi.advanceTimersByTimeAsync(60_000);
     expect(countdown("p5").textContent).toBe("Sends in 3 days");
     // Then cancels the other.

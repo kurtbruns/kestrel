@@ -9,26 +9,15 @@ import {
   formatClockTime,
   formatDayInTimeZone,
   formatInTimeZone,
-  resolveTimeZone,
   sameTimeZone,
   timeZoneLabel,
 } from "../../shared/time_zone";
+import { browserTimeZone } from "../time_zone";
 import { $ } from "../ui/dom";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { chip, type SectionHandle, type SettingsPage, secHead } from "./page";
 import { markedRuns, searchZones, type ZoneChoice, zoneChoice, zoneChoices } from "./zone_search";
-
-/** The zone this browser is set to, when it is one the server takes by the same rule
- *  (`resolveTimeZone`: a name its `Intl` knows, never a bare offset); null otherwise, so a zone
- *  the save would refuse is never offered. */
-export function browserTimeZone(): string | null {
-  try {
-    return resolveTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
-  } catch {
-    return null;
-  }
-}
 
 /** Whether `chosen` is a change from `saved`: a zone, and not the saved zone under any name. */
 export function timeZoneChanged(chosen: string | null, saved: string | null): boolean {

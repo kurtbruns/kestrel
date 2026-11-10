@@ -75,6 +75,7 @@ import * as settingsRoutes from "./routes/settings";
 import * as subscriberRoutes from "./routes/subscribers";
 import { SUBSCRIBER_DELIVERIES_PAGE } from "./routes/subscribers";
 import * as suppressionRoutes from "./routes/suppressions";
+import * as timeRoutes from "./routes/time";
 import * as webhookRoutes from "./routes/webhooks";
 import { SETTLE_FOLLOW_MS } from "./send/feed";
 
@@ -185,13 +186,32 @@ export function createRouter({
     subjectSlugHeld,
     { name: "revision_id", type: "string", description: "The revision the save wrote." },
   ];
-  // A fire time, as Schedule and Reschedule take it.
+  // A fire time, as Schedule and Reschedule take it (SPEC §6), and the zone a local one names.
+  const fireAtForms =
+    "A local time with no offset (`2026-11-13T09:00`) is the publication's time; with `time_zone`, that place's, at its offset on that date. An exact moment is ISO-8601 ending in `Z`, or epoch ms. A numeric offset (`-08:00`) is refused, and so is a local time a clock change skips or repeats, with the change in the message.";
   const fireAtField: BodyField = {
     name: "fire_at",
-    type: "epoch ms or ISO-8601",
+    type: "local time, ISO-8601 Z, or epoch ms",
     required: true,
+    description: `${fireAtForms} At least the minimum lead out; rounded up to the minute.`,
+  };
+  const timeZoneField: BodyField = {
+    name: "time_zone",
+    type: "string",
     description:
-      "Epoch ms, or ISO-8601 with a `Z` or `±hh:mm` offset. At least the minimum lead out; rounded up to the minute.",
+      "An IANA zone (`Australia/Sydney`) when the local `fire_at` is another place's time, not the publication's. Only with a local time: beside an exact moment it is a 400.",
+  };
+  // How a fire time reads, beside the send in an act's answer (SPEC §6).
+  const readBackField: ReferenceField = {
+    name: "read_back",
+    type: "{ fire_at_local, fire_at_in, now_local }",
+    description:
+      'How the send\'s fire time reads now, to relay as it stands and never to parse: `fire_at_local` on the publication\'s clock with its zone named ("Fri Nov 13, 9:00 AM Eastern Time"), `fire_at_in` how far off it is, rounded down to whole calendar days on that clock and hours, or hours and minutes ("in 2 days, 7 hours"), and `now_local` the publication\'s time now. Beside the send rather than on it, since the clock and a zone change alter the words without writing the send.',
+  };
+  const readBackExample = {
+    fire_at_local: "Fri Jan 16, 9:00 AM Eastern Time",
+    fire_at_in: "in 1 day, 7 hours",
+    now_local: "Thu Jan 15, 1:46 AM Eastern Time",
   };
   // The refusals several routes share, each in one wording.
   const notConnected: RouteRefusal = { code: "provider_not_connected" };
@@ -348,6 +368,63 @@ export function createRouter({
         },
       },
       handler: () => json(buildInfo()),
+    },
+    {
+      method: "GET",
+      path: "/api/time",
+      access: "admin",
+      resource: "system",
+      title: "Get the publication's time",
+      summary:
+        'The publication\'s time now, on its clock with its zone named, and, given `fire_at`, the moment that time names and how it reads. Read it before working out a day such as "Friday" or "tomorrow", never a clock of your own.',
+      description: `A read: it schedules nothing. \`fire_at\` takes the forms Schedule a post does, with \`time_zone\` beside a local time, and is refused the same way, a clock change included, so a time can be checked before it is sent; the minimum lead isn't checked here. With no time zone set, \`now_local\` reads in UTC, and a local \`fire_at\` without \`time_zone\` is \`time_zone_not_set\`.`,
+      query: [
+        { name: "fire_at", description: `A fire time to read. ${fireAtForms}` },
+        {
+          name: "time_zone",
+          description: "An IANA zone, when the local `fire_at` is another place's time.",
+        },
+      ],
+      example: {
+        request: { fire_at: "2026-01-16T09:00" },
+        response: {
+          now: 1768459560000,
+          time_zone: "America/New_York",
+          time_zone_label: "Eastern Time",
+          now_local: "Thu Jan 15, 1:46 AM Eastern Time",
+          fire_at: 1768572000000,
+          read_back: readBackExample,
+        },
+      },
+      returns: {
+        fields: [
+          { name: "now", type: "epoch ms", description: "The server's clock." },
+          {
+            name: "time_zone",
+            type: "string | null",
+            description: "The publication's zone, or null while none is set.",
+          },
+          {
+            name: "time_zone_label",
+            type: "string | null",
+            description: 'Its name for people ("Eastern Time"), or null.',
+          },
+          {
+            name: "now_local",
+            type: "string",
+            description:
+              "The publication's time now, its zone named, in UTC while none is set: words to relay, never to parse.",
+          },
+          {
+            name: "fire_at",
+            type: "epoch ms | null",
+            description: "The moment `fire_at` names, or null when none was asked.",
+          },
+          { ...readBackField, type: "{ fire_at_local, fire_at_in, now_local } | null" },
+        ],
+      },
+      errors: [{ code: "time_zone_not_set" }],
+      handler: timeRoutes.get,
     },
     ...devOnly({
       // Dev-only bootstrap that hands out the local admin token, so it must be public
@@ -1294,12 +1371,21 @@ export function createRouter({
         lead +
         "; it is checked on the time as requested, which is then rounded up to the next whole minute. `email_only`, `slug`, and `slug_auto` set the post's settings as it is scheduled, checked before anything is frozen; none is part of the email. The send records who scheduled it as `scheduled_by`.",
       example: {
-        request: { fire_at: "2026-01-16T09:00:00Z" },
-        response: { send: scheduledBrief, cursor: "57.1768467610000", warnings: [] },
+        request: { fire_at: "2026-01-16T09:00" },
+        response: {
+          send: scheduledBrief,
+          cursor: "57.1768467610000",
+          warnings: [],
+          read_back: readBackExample,
+        },
       },
-      body: [fireAtField, ...postSettingsFields],
+      body: [fireAtField, timeZoneField, ...postSettingsFields],
       errors: [{ code: "fire_at_too_soon" }, activeSendExists, ...freezeRefusals],
-      returns: { object: "send", as: "send", fields: [cursorField, freezeWarningsField] },
+      returns: {
+        object: "send",
+        as: "send",
+        fields: [cursorField, freezeWarningsField, readBackField],
+      },
       handler: scheduleRoutes.schedule,
     },
     {
@@ -1314,7 +1400,12 @@ export function createRouter({
       description: `The same freeze as scheduling, \`fire_at\` now plus the minimum lead (${formatLead(minLeadMs)}, as Schedule a post describes), rounded up to the next whole minute. For nearly all that window the send is inside the lead, so a template or identity save that would re-make it is refused until it fires. The body is optional. A second call for a post already in its window answers with that send and changes nothing, its settings included. The send records who sent it as \`scheduled_by\`, as a schedule does; a repeat records no one.`,
       example: {
         request: { email_only: true },
-        response: { send: scheduledBrief, cursor: "57.1768467610000", warnings: [] },
+        response: {
+          send: scheduledBrief,
+          cursor: "57.1768467610000",
+          warnings: [],
+          read_back: readBackExample,
+        },
       },
       body: postSettingsFields,
       errors: [
@@ -1330,6 +1421,7 @@ export function createRouter({
         fields: [
           cursorField,
           freezeWarningsField,
+          readBackField,
           {
             name: "idempotent",
             type: "true",
@@ -1630,21 +1722,26 @@ export function createRouter({
       summary: "Move a scheduled send's fire time without re-freezing the render.",
       description: `Moves only \`fire_at\`, within the review window: the frozen email is untouched and a re-made send keeps its \`remade_at\`. For a content change, cancel, edit, and schedule again. The same minimum lead as scheduling (${formatLead(minLeadMs)}, as Schedule a post describes), and the time is rounded up to the next whole minute as when scheduling. A reschedule that lands records who rescheduled it as \`rescheduled_by\`; one to the time it already has answers \`changed: false\` before the lead is checked, and records no one. \`email_only\`, \`slug\`, or \`slug_auto\` is a 400: those are the post's, at \`PUT /api/posts/:id/settings\`. The editor's "Edit schedule" is this route and that one together, so a publisher who asks to edit the schedule may mean the time, the post's settings, or both.`,
       example: {
-        request: { fire_at: "2026-01-16T09:00:00Z" },
+        request: { fire_at: "2026-01-16T09:00" },
         response: {
           send: { ...scheduledBrief, rev: 58, rescheduled_by: viaClaude },
           cursor: "58.1768467620000",
           changed: true,
+          read_back: readBackExample,
         },
       },
-      body: [fireAtField],
+      body: [fireAtField, timeZoneField],
       errors: [
         { code: "fire_at_too_soon" },
         { code: "window_closed", details: ["send", "cursor"] },
         { code: "send_canceled", details: ["send", "cursor"] },
         { code: "time_zone_not_set" },
       ],
-      returns: { object: "send", as: "send", fields: [cursorField, changedField] },
+      returns: {
+        object: "send",
+        as: "send",
+        fields: [cursorField, changedField, readBackField],
+      },
       handler: sendRoutes.reschedule,
     },
     {

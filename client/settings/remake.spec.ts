@@ -3,7 +3,7 @@ import type { SendView } from "../../shared/sends";
 import { ApiError } from "../api";
 import { sendView } from "../test/send_server";
 import { $, $$, mount, resetShell, sendSummary, settle } from "../test/support";
-import { fmt } from "../ui/format";
+import { timeAt } from "../time_zone";
 import {
   inUseChip,
   isRemakeTooClose,
@@ -61,8 +61,8 @@ describe("withRemakeConfirm", () => {
       "This template is used by 2 posts that are already scheduled. Saving applies the change to their emails too.",
     );
     expect($$(".remake-list li").map((li) => li.textContent)).toEqual([
-      `Gullssends ${fmt(1_800_000_000_000)}`,
-      `untitledsends ${fmt(1_800_000_000_000)}`,
+      `Gullssends ${timeAt(1_800_000_000_000)}`,
+      `untitledsends ${timeAt(1_800_000_000_000)}`,
     ]);
     expect($("#rmGo").textContent).toBe("Save and apply");
     $("#rmGo").click();
@@ -210,7 +210,7 @@ describe("remakeWait", () => {
     const now = Date.now();
     const at = now + 120_000;
     expect(remakeWait(inside([at, at + 3_600_000], at), now)).toBe(
-      `A scheduled post sends at ${fmt(at)}. You can save once it has sent.`,
+      `A scheduled post sends at ${timeAt(at)}. You can save once it has sent.`,
     );
   });
 
@@ -218,7 +218,7 @@ describe("remakeWait", () => {
     const now = Date.now();
     const at = now + 120_000;
     expect(remakeWait(inside([now + 60_000, at, at + 3_600_000], at), now)).toBe(
-      `2 scheduled posts send by ${fmt(at)}. You can save once they have sent.`,
+      `2 scheduled posts send by ${timeAt(at)}. You can save once they have sent.`,
     );
   });
 

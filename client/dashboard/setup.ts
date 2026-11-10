@@ -12,8 +12,8 @@ import {
   productionAccessHint,
   TEMPLATE_TEST_HREF,
 } from "../provider_status";
+import { timeAt } from "../time_zone";
 import { copyFace } from "../ui/copy";
-import { fmt } from "../ui/format";
 import { type Html, html } from "../ui/html";
 
 /**
@@ -127,7 +127,7 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
             title: TEST,
             state: "done",
             hint: sending.last_accepted
-              ? `SES accepted an email ${fmt(sending.last_accepted.at)}.`
+              ? `SES accepted an email ${timeAt(sending.last_accepted.at)}.`
               : "SES is accepting email.",
           }
         : sending?.state === "refusing"
@@ -214,7 +214,7 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
     hint: f.notConnected
       ? after(CONNECT)
       : f.firstSend
-        ? `Goes out ${fmt(f.firstSend.fire_at)}.`
+        ? `Goes out ${timeAt(f.firstSend.fire_at)}.`
         : f.timeZoneLabel === null
           ? after(TIME_ZONE)
           : sandbox && sending?.state === "working"
@@ -234,7 +234,7 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
       ? after(SCHEDULE)
       : tested
         ? "The email that goes out has been tested."
-        : `“${s.subject}” goes out ${fmt(s.fire_at)}. Send yourself a test of it first.`,
+        : `“${s.subject}” goes out ${timeAt(s.fire_at)}. Send yourself a test of it first.`,
   });
 
   // Sharing can't be known, so it's never done; it waits only for signups to open. In the

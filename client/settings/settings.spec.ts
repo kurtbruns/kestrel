@@ -25,7 +25,7 @@ import {
   typeInto,
   unmount,
 } from "../test/support";
-import { fmt } from "../ui/format";
+import { timeAt } from "../time_zone";
 import { squareImage, UnreadableImage } from "../ui/square_image";
 import { renderSettings } from "./settings";
 
@@ -841,7 +841,7 @@ describe("settings view", () => {
         reply: () => response({ in_use: { sends, retry_after: at, identity_fields: ["name"] } }),
       },
     ]);
-    const wait = ` A scheduled post sends at ${fmt(at)}. You can save once it has sent.`;
+    const wait = ` A scheduled post sends at ${timeAt(at)}. You can save once it has sent.`;
     const chip = $(".set-chip.inuse");
     expect(chip.hasAttribute("title")).toBe(false);
     // The template section's lede, beside the chip, and the identity section's note.
@@ -1650,7 +1650,7 @@ describe("settings view", () => {
         },
       });
       expect(document.querySelector("#providerSending")).toBeNull();
-      expect($("#providerLastAccepted").textContent).toBe(`SES accepted an email ${fmt(1)}.`);
+      expect($("#providerLastAccepted").textContent).toBe(`SES accepted an email ${timeAt(1)}.`);
     });
 
     it("names the sandbox, what it limits, and the step that asks AWS to lift it", async () => {

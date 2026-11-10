@@ -6,8 +6,10 @@ import { api, describeError } from "../api";
 import { mount, setTitle } from "../lifecycle";
 import { followSends } from "../send_state";
 import { titleWithLabel } from "../sends/progress";
+import { secondClockHtml } from "../sends/when";
+import { clocksFor } from "../time_zone";
 import { $, $$ } from "../ui/dom";
-import { fmt } from "../ui/format";
+import { fmt, zoneHeader } from "../ui/format";
 import { html, setHtml } from "../ui/html";
 import {
   type ListState,
@@ -99,10 +101,13 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
         return data;
       }
       // Cells are named (when / updated) and an empty Scheduled cell is marked, so the
-      // ≤720px layout can stack a row and label its dates from CSS alone.
+      // ≤720px layout can stack a row and label its dates from CSS alone. The headers name the
+      // zone once when the browser's clock differs, and a scheduled time, which can still be
+      // moved, carries the browser's clock under it (DESIGN §10).
+      const c = clocksFor(posts.flatMap((p) => [p.updated_at, activeSend(p)?.fire_at]));
       setHtml(
         listEl,
-        html`<div class="table-wrap"><table class="list-table posts-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Title", "subject", state)}${th("Status", null, state)}${th("Scheduled", "send.fire_at", state)}${th("Updated", "updated_at", state)}<th></th></tr></thead><tbody>${posts.map(
+        html`<div class="table-wrap"><table class="list-table posts-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Title", "subject", state)}${th("Status", null, state)}${th(zoneHeader("Scheduled", c), "send.fire_at", state)}${th(zoneHeader("Updated", c), "updated_at", state)}<th></th></tr></thead><tbody>${posts.map(
           (p) => {
             // A post whose send is in flight is no longer an editable/cancelable draft —
             // show it as `sending` and route it to the live watch, not the editor.
@@ -112,7 +117,7 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
             const fireAt = send?.fire_at ?? null;
             // Delete is offered only as the post's own `actions` say the server would take it.
             const del = postAction(p, "delete") ? "1" : "";
-            return html`<tr class="clickable" data-id="${p.id}" data-target="${href}"><td>${titleWithLabel(html`<a href="${href}">${p.subject || html`<em>untitled</em>`}</a>`, p)}</td><td>${sending ? badge("sending") : badge(p.status)}</td><td class="muted when${fireAt ? "" : " empty"}">${fireAt ? fmt(fireAt) : "—"}</td><td class="muted updated">${fmt(p.updated_at)}</td><td class="act"><button class="icon" data-menu="${p.id}" data-status="${sending ? "sending" : p.status}" data-delete="${del}" data-target="${href}" aria-label="Post actions" aria-haspopup="menu">⋯</button></td></tr>`;
+            return html`<tr class="clickable" data-id="${p.id}" data-target="${href}"><td>${titleWithLabel(html`<a href="${href}">${p.subject || html`<em>untitled</em>`}</a>`, p)}</td><td>${sending ? badge("sending") : badge(p.status)}</td><td class="muted when${fireAt ? "" : " empty"}">${fireAt ? (sending ? fmt(fireAt, c) : html`${fmt(fireAt, c, true)}${secondClockHtml(fireAt, c)}`) : "—"}</td><td class="muted updated">${fmt(p.updated_at, c)}</td><td class="act"><button class="icon" data-menu="${p.id}" data-status="${sending ? "sending" : p.status}" data-delete="${del}" data-target="${href}" aria-label="Post actions" aria-haspopup="menu">⋯</button></td></tr>`;
           },
         )}</tbody></table></div>`,
       );

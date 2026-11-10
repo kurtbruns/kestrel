@@ -11,6 +11,7 @@ import type {
   SendView,
 } from "../../shared/sends";
 import { at, every } from "../lifecycle";
+import { clocksFor } from "../time_zone";
 import { $$ } from "../ui/dom";
 import { lateStr, untilStr } from "../ui/format";
 import { type Html, html } from "../ui/html";
@@ -78,6 +79,7 @@ export function countdowns(root: ParentNode, signal: AbortSignal): () => void {
   let armed = 0; // the moment an extra tick is set for, so a repeated tick sets it once
   const tick = () => {
     const now = Date.now();
+    const zone = clocksFor().home;
     let next = Number.POSITIVE_INFINITY;
     const watch = (moment: number) => {
       if (moment > now && moment < next) {
@@ -92,7 +94,7 @@ export function countdowns(root: ParentNode, signal: AbortSignal): () => void {
     for (const el of $$<HTMLElement>("[data-fire]", root)) {
       const fire = Number(el.dataset.fire);
       const missed = el.dataset.missed !== undefined;
-      el.textContent = missed ? lateStr(fire) : untilStr(fire, el.dataset.due !== undefined);
+      el.textContent = missed ? lateStr(fire) : untilStr(fire, zone, el.dataset.due !== undefined);
       el.classList.toggle("countdown-missed", missed);
       watch(fire);
     }

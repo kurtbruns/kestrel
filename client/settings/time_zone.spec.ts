@@ -15,8 +15,8 @@ import {
   typeInto,
   unmount,
 } from "../test/support";
+import { browserTimeZone } from "../time_zone";
 import { renderSettings } from "./settings";
-import { browserTimeZone } from "./time_zone";
 
 // SPEC §9, DESIGN §6: the publication's time zone is never set without a deliberate act. While
 // none is saved the browser's zone is offered, never filled in; a zone is chosen with Use or

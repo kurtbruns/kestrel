@@ -13,8 +13,8 @@ import {
   type SettingsResponse,
 } from "../../shared/settings";
 import { api } from "../api";
+import { timeAt } from "../time_zone";
 import { $ } from "../ui/dom";
-import { fmt } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { busy, toast } from "../ui/widgets";
@@ -73,10 +73,10 @@ function aboutNotification(n: { kind: NotificationStatusKind; subject: string })
 function notificationStatusHtml(status: SettingsResponse["notification_status"]): Html {
   const { last_sent: lastSent, last_failure: lastFailure } = status;
   if (lastFailure) {
-    return html`<span class="set-pill danger">Not delivered</span> <span class="muted">${fmt(lastFailure.at)}, ${aboutNotification(lastFailure)}: ${lastFailure.error}</span>`;
+    return html`<span class="set-pill danger">Not delivered</span> <span class="muted">${timeAt(lastFailure.at)}, ${aboutNotification(lastFailure)}: ${lastFailure.error}</span>`;
   }
   if (lastSent) {
-    return html`<span class="set-pill ok">${icon("check")}Delivered</span> <span class="muted">${fmt(lastSent.at)}, ${aboutNotification(lastSent)}</span>`;
+    return html`<span class="set-pill ok">${icon("check")}Delivered</span> <span class="muted">${timeAt(lastSent.at)}, ${aboutNotification(lastSent)}</span>`;
   }
   return html`<span class="muted">None yet</span>`;
 }
@@ -183,7 +183,7 @@ export function mountNotifications(root: HTMLElement, page: SettingsPage): Secti
         const r = await api<AlertTestResponse>("/api/settings/notifications/alert-test", {
           method: "POST",
         });
-        alertHint.textContent = `Logged at ${fmt(r.at)}. Cloudflare’s alert email should arrive in about five minutes, then a Resolved email.`;
+        alertHint.textContent = `Logged at ${timeAt(r.at)}. Cloudflare’s alert email should arrive in about five minutes, then a Resolved email.`;
       } catch (err) {
         alertHint.textContent = message(err);
       }

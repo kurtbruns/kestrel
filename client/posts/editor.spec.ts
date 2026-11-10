@@ -15,6 +15,7 @@ import {
   type FakeRequest,
   type FakeRoute,
   fakeApi,
+  HOME_ZONE,
   jsonResponse,
   mount,
   mounted,
@@ -27,6 +28,7 @@ import {
   typeInto,
   unmount,
 } from "../test/support";
+import { clocksFor } from "../time_zone";
 import { fmt, toLocalInput } from "../ui/format";
 import { renderEditor } from "./editor";
 
@@ -77,7 +79,7 @@ const draft = (over: Record<string, unknown> = {}): Draft => ({
     current_revision: "r1",
     author: "a@b.c",
     author_client: "editor",
-    updated_at: "2026-09-20T10:00:00Z",
+    updated_at: Date.parse("2026-09-20T10:00:00Z"),
     send: null,
     ...over,
   }),
@@ -858,7 +860,7 @@ describe("editor view", () => {
     linked.move(moved);
     await vi.advanceTimersByTimeAsync(60_000);
     $("#rescheduleSchedule").click();
-    expect($<HTMLInputElement>("#rsWhen").value).toBe(toLocalInput(new Date(moved)));
+    expect($<HTMLInputElement>("#rsWhen").value).toBe(toLocalInput(moved, HOME_ZONE));
   });
 
   it("goes to Drafts, saying so once, when Reschedule finds the post deleted elsewhere", async () => {
@@ -875,7 +877,7 @@ describe("editor view", () => {
       },
     ]);
     $("#rescheduleSchedule").click();
-    $<HTMLInputElement>("#rsWhen").value = toLocalInput(new Date(Date.now() + 2 * 3_600_000));
+    $<HTMLInputElement>("#rsWhen").value = toLocalInput(Date.now() + 2 * 3_600_000, HOME_ZONE);
     $("#rsGo").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(document.querySelector(".modal")).toBeNull();
@@ -888,7 +890,7 @@ describe("editor view", () => {
     await open(linked.routes);
     $("#rescheduleSchedule").click();
     const when = $<HTMLInputElement>("#rsWhen");
-    when.value = toLocalInput(new Date(Date.now() + 60_000));
+    when.value = toLocalInput(Date.now() + 60_000, HOME_ZONE);
     $("#rsGo").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.calls.some((c) => c.url.pathname === "/api/sends/s1/reschedule")).toBe(false);
@@ -920,7 +922,7 @@ describe("editor view", () => {
     ]);
     $("#rescheduleSchedule").click();
     const when = $<HTMLInputElement>("#rsWhen");
-    when.value = toLocalInput(new Date(Date.now() + 86_400_000));
+    when.value = toLocalInput(Date.now() + 86_400_000, HOME_ZONE);
     $("#rsGo").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(when.classList.contains("is-invalid")).toBe(true);
@@ -1736,7 +1738,7 @@ describe("editor view", () => {
     ]);
     $("#scheduleBtn").click();
     const when = $<HTMLInputElement>("#schWhen");
-    when.value = toLocalInput(new Date(Date.now() + 60_000)); // inside the 5-minute default
+    when.value = toLocalInput(Date.now() + 60_000, HOME_ZONE); // inside the 5-minute default
     $("#schGo").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/schedule")).toBe(false);
@@ -1769,7 +1771,7 @@ describe("editor view", () => {
       },
     ]);
     $("#scheduleBtn").click();
-    $<HTMLInputElement>("#schWhen").value = toLocalInput(new Date(Date.now() + 86_400_000));
+    $<HTMLInputElement>("#schWhen").value = toLocalInput(Date.now() + 86_400_000, HOME_ZONE);
     $("#schGo").click();
     await vi.advanceTimersByTimeAsync(0);
     expect($(".modal .field-error").textContent).toBe(
@@ -1819,7 +1821,7 @@ describe("editor view", () => {
           server.apply({ json: () => ({ status: "scheduled" }) } as FakeRequest);
           server.scheduled(sendView(sendRow({ fire_at: new Date(fireAt).getTime() })));
           sends.put(sendRow({ fire_at: new Date(fireAt).getTime() }));
-          return { send: { id: "s1" } };
+          return { send: { id: "s1", fire_at: new Date(fireAt).getTime() } };
         },
       },
     ]);
@@ -1839,11 +1841,9 @@ describe("editor view", () => {
     $("#schGo").click();
     await vi.advanceTimersByTimeAsync(0);
     const scheduled = fake.calls.find((c) => c.url.pathname === "/api/posts/p1/schedule");
-    expect(scheduled?.json()).toEqual({
-      fire_at: new Date("2026-09-25T15:00").toISOString(),
-      email_only: false,
-    });
-    expect($("#toasts").textContent).toMatch(/Scheduled for/);
+    // The local time as picked, which the server reads on the publication's clock (SPEC §6).
+    expect(scheduled?.json()).toEqual({ fire_at: "2026-09-25T15:00", email_only: false });
+    expect($("#toasts").textContent).toMatch(/Scheduled for \w{3} Sep 25, 3:00 PM\. /);
     expect($(".banner-scheduled").textContent).toMatch(/Scheduled for .+ · Sends in /);
     expect(body().readOnly).toBe(true);
   });
@@ -1879,7 +1879,7 @@ describe("editor view", () => {
     const intoView = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
     typeInto(body(), "mine, not theirs");
     $("#scheduleBtn").click();
-    $<HTMLInputElement>("#schWhen").value = toLocalInput(new Date(Date.now() + 86_400_000));
+    $<HTMLInputElement>("#schWhen").value = toLocalInput(Date.now() + 86_400_000, HOME_ZONE);
     $("#schGo").click();
     await vi.advanceTimersByTimeAsync(0);
     // The save was refused, so nothing was frozen; the dialog is gone and the
@@ -2273,7 +2273,9 @@ describe("editor view", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/send")).toBe(true);
     // The toast names the fire time the server answered, not the lead.
-    expect($("#toasts").textContent).toContain(`Sends at ${fmt(fireAt)}, cancelable until then.`);
+    expect($("#toasts").textContent).toContain(
+      `Sends at ${fmt(fireAt, clocksFor(), true)}, cancelable until then.`,
+    );
     expect(document.querySelector(".modal")).toBeNull();
   });
 
@@ -2427,7 +2429,7 @@ describe("editor view", () => {
     await vi.advanceTimersByTimeAsync(0);
     // A minute and a half out, not the lead's one minute: the time as rounded.
     expect($("#toasts").textContent).toContain(
-      `Sends at ${fmt(new Date(2026, 8, 23, 10, 2).getTime())}, cancelable until then.`,
+      `Sends at ${fmt(new Date(2026, 8, 23, 10, 2).getTime(), clocksFor(), true)}, cancelable until then.`,
     );
   });
 

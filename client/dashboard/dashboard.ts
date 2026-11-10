@@ -44,12 +44,13 @@ import {
   sendsNow,
   titleWithLabel,
 } from "../sends/progress";
+import { secondClockHtml } from "../sends/when";
 import { appState } from "../state";
 import { addSubscriberModal } from "../subscribers/dialogs";
-import { noTimeZoneHealthHtml, timeZoneUnset } from "../time_zone";
+import { clocksFor, noTimeZoneHealthHtml, timeZoneUnset } from "../time_zone";
 import { copyButton, wireCopy } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
-import { fmt, recipientCount } from "../ui/format";
+import { fmtAt, recipientCount } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { badge, renderError } from "../ui/widgets";
@@ -432,10 +433,12 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   )}</div>`;
 
   const drafts = posts.filter((p) => p.status === "draft").slice(0, 5);
+  // Each edit time stands alone in its row, so it names the zone when the clocks differ.
+  const draftClocks = clocksFor(drafts.map((p) => p.updated_at));
   const draftsHtml = drafts.length
     ? html`<div class="table-wrap"><table class="dash-drafts"><tbody>${drafts.map(
         (p) =>
-          html`<tr class="clickable" data-id="${p.id}"><td>${titleWithLabel(html`<a href="#/edit/${p.id}">${p.subject || html`<em>untitled</em>`}</a>`, p)}</td><td class="muted edited">edited ${fmt(p.updated_at)}</td></tr>`,
+          html`<tr class="clickable" data-id="${p.id}"><td>${titleWithLabel(html`<a href="#/edit/${p.id}">${p.subject || html`<em>untitled</em>`}</a>`, p)}</td><td class="muted edited">edited ${fmtAt(p.updated_at, draftClocks)}</td></tr>`,
       )}</tbody></table></div>`
     : html`<p class="muted">No drafts in progress.</p>`;
 
@@ -625,10 +628,11 @@ function dashScheduledHtml(scheduled: SendView[]): Html {
     return html`<p class="muted">Nothing scheduled.</p>`;
   }
   const held = heldWhenFiresHtml("card");
+  const c = clocksFor(scheduled.map((s) => s.fire_at));
   const refusing = html`<div class="sched-held sched-refusing">Will be held: email isn’t going out. See why above.</div>`;
   return html`${scheduled.map(
     (s) =>
-      html`<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${recipientCount(s.audience.count)}${emailOnlyNote(s)}</div>${held}${has(s, "refusing") ? refusing : null}${has(s, "remade") ? html`<div class="sched-remade-mark">Look changed since your last test</div>` : null}</div></div>`,
+      html`<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmtAt(s.fire_at, c, true)} · ${recipientCount(s.audience.count)}${emailOnlyNote(s)}</div>${secondClockHtml(s.fire_at, c)}${held}${has(s, "refusing") ? refusing : null}${has(s, "remade") ? html`<div class="sched-remade-mark">Look changed since your last test</div>` : null}</div></div>`,
   )}`;
 }
 function wireDashScheduledCards(root: HTMLElement): void {

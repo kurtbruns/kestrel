@@ -57,4 +57,6 @@ Whatever Claude is asked, Kestrel holds these for any client:
 - **No one's edit is overwritten.** A save based on an older version is refused.
 - **Only you can let an import grow a scheduled send,** in the dashboard.
 
+Times you give Claude are your publication's, in its [time zone](name-your-publication.md#set-the-time-zone), wherever you or Claude are. Claude reads the publication's time before working out "Friday" or "tomorrow", and tells you when a send fires in the publication's time with the zone named, such as "Fri Nov 13, 9:00 AM Eastern Time, in 2 days, 7 hours". For another place's time, name the place: "9 AM Sydney time".
+
 Changes Claude makes show in the dashboard as yours, such as "Scheduled by you@example.com via Claude".

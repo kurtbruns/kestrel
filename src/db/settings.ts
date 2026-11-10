@@ -24,7 +24,7 @@ import {
   type NotificationPrefs,
   type SettingsPatchBody,
 } from "../../shared/settings";
-import { neverSeasonal, resolveTimeZone } from "../../shared/time_zone";
+import { resolveTimeZone, timeZoneNameRefusal } from "../../shared/time_zone";
 import { HttpError } from "../lib/errors";
 import { log } from "../lib/log";
 
@@ -565,15 +565,7 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
 function normalizeTimeZone(input: unknown): string {
   const zone = typeof input === "string" ? resolveTimeZone(input) : null;
   if (zone === null) {
-    const name = typeof input === "string" ? input.trim() : "";
-    throw new SettingsFieldError(
-      "time_zone",
-      name === ""
-        ? "The time zone must be an IANA name, such as America/New_York."
-        : neverSeasonal(name)
-          ? `${name.toUpperCase()} isn’t a place: it never changes for daylight saving time. Use the place your readers keep, such as America/New_York.`
-          : `“${name}” isn’t a time zone this server knows. Use an IANA name, such as America/New_York.`,
-    );
+    throw new SettingsFieldError("time_zone", timeZoneNameRefusal(input));
   }
   return zone;
 }

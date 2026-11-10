@@ -14,7 +14,7 @@ import {
   sendSummary,
   settle,
 } from "../test/support";
-import { fmt } from "../ui/format";
+import { timeAt } from "../time_zone";
 import { renderSubscriber } from "./subscriber";
 
 /** A subscriber as the API answers one: someone who confirmed here, unless `over` says otherwise. */
@@ -123,8 +123,8 @@ describe("the subscriber page (SPEC §8, DESIGN §3)", () => {
     expect(sectionTitles()).toEqual(["How they joined", "Suppression", "Sends"]);
     const rows = rowsOf("subJoinedTitle");
     expect(rows["How they joined"]).toBe("Double opt-in");
-    expect(rows.Joined).toBe(fmt(Date.UTC(2026, 0, 2)));
-    expect(rows.Confirmed).toBe(fmt(Date.UTC(2026, 0, 3)));
+    expect(rows.Joined).toBe(timeAt(Date.UTC(2026, 0, 2)));
+    expect(rows.Confirmed).toBe(timeAt(Date.UTC(2026, 0, 3)));
     expect($(".sub-evidence").textContent).toBe('{\n  "confirmed_ip": "203.0.113.7"\n}');
     expect("Import" in rows).toBe(false);
     expect(document.querySelector(".sub-note")).toBeNull();
@@ -140,7 +140,7 @@ describe("the subscriber page (SPEC §8, DESIGN §3)", () => {
     expect(rows.Origin).toBe("Sendy");
     expect(rows["Opt-in"]).toBe("single opt-in");
     expect(rows.Import).toBe("sendy.csv");
-    expect(rows.Imported).toBe(`${fmt(Date.UTC(2026, 0, 2))}, by you@example.com`);
+    expect(rows.Imported).toBe(`${timeAt(Date.UTC(2026, 0, 2))}, by you@example.com`);
     expect(rows.Attestation).toBe("Version 2");
     expect($(".sub-note").textContent).toBe(
       "The origin, opt-in, confirmation date, and evidence are what the imported file said, not something Kestrel recorded itself.",
@@ -160,7 +160,7 @@ describe("the subscriber page (SPEC §8, DESIGN §3)", () => {
     await settle();
     expect($(".sub-pills .row-flag").textContent).toBe("bounced");
     const section = $("section[aria-labelledby='subSupTitle']");
-    expect($(".sub-sup-line", section).textContent).toBe(`bounced since ${fmt(since)}`);
+    expect($(".sub-sup-line", section).textContent).toBe(`bounced since ${timeAt(since)}`);
     expect($(".sub-meaning", section).textContent).toBe(
       "Mail to this address failed at the service your list was imported from. You can clear it.",
     );
@@ -236,7 +236,7 @@ describe("the subscriber page (SPEC §8, DESIGN §3)", () => {
     // The head shows the status alone, as the roster does; why is in its own section.
     expect($(".sub-pills").textContent).toBe("unsubscribed");
     const section = $("section[aria-labelledby='subLeftTitle']");
-    expect($(".sub-left-line", section).textContent).toBe(`Left ${fmt(left)}`);
+    expect($(".sub-left-line", section).textContent).toBe(`Left ${timeAt(left)}`);
     expect($(".sub-meaning", section).textContent).toBe(CAUSE_MEANING.complaint);
     expect($("a", section).getAttribute("href")).toBe("#/sent/x2");
     expect($("a", section).textContent).toBe("Spring");
@@ -336,7 +336,7 @@ describe("the subscriber page (SPEC §8, DESIGN §3)", () => {
           unsubscribe_cause: "reader",
           suppression: { reason: "manual", detail: null, created_at: 1 },
         },
-        `Not sent your posts: they left the list on ${fmt(left)}, and the address is blocked.`,
+        `Not sent your posts: they left the list on ${timeAt(left)}, and the address is blocked.`,
       ],
     ];
     for (const [over, line] of cases) {
@@ -409,7 +409,7 @@ describe("the subscriber page (SPEC §8, DESIGN §3)", () => {
     await settle();
     expect($("h1.sub-title").textContent).toBe("reader@b.c");
     expect(sectionTitles()).toEqual(["Suppression", "Why they left", "Sends"]);
-    expect($(".sub-left-line").textContent).toBe(`Left ${fmt(at)}`);
+    expect($(".sub-left-line").textContent).toBe(`Left ${timeAt(at)}`);
     expect($(".sub-meaning", $("section[aria-labelledby='subLeftTitle']")).textContent).toBe(
       CAUSE_MEANING.erased,
     );

@@ -307,6 +307,13 @@ export interface Send {
   render_warnings: string;
   /** The display name the send goes out under (SPEC §9), frozen by the freeze and every re-make: "" for none, and null for a send frozen before the name was kept, which goes out under the rule as it stands when it fires. */
   from_name: string | null;
+  /**
+   * The local time the fire time was asked in (`2026-11-13T09:00`) and the zone it was read in
+   * (SPEC §6), set by each act that sets the fire time; null for both when it was asked as an
+   * exact moment, by Send now, or before they were kept. Stored only: nothing reads them yet.
+   */
+  requested_local_time: string | null;
+  requested_time_zone: string | null;
   /** Why the provider refused this send's last batch as a whole (SPEC §12), or null once a batch is answered: `unavailable` retries on its own, `account` needs the operator. */
   halt_reason: HaltReason | null;
   /** What that refusal is about, for the advice shown with it. */
@@ -341,7 +348,12 @@ export interface Send {
 /** A stored send without the large frozen bodies: what a view is built from. */
 export type SendSummary = Omit<
   Send,
-  "rendered_html" | "rendered_text" | "web_link" | "render_warnings"
+  | "rendered_html"
+  | "rendered_text"
+  | "web_link"
+  | "render_warnings"
+  | "requested_local_time"
+  | "requested_time_zone"
 >;
 
 /**
@@ -732,6 +744,21 @@ export interface ResolveResponse {
   completed: boolean;
 }
 
+/**
+ * How a send's fire time reads, carried beside the send in the answer to an act that sets it
+ * (SPEC §6), never on the send: `fire_at_in` changes with the clock and `fire_at_local` with a
+ * zone save, neither of which writes the send. Words to relay as they stand, never to parse:
+ * their wording follows the runtime's locale data.
+ */
+export interface ReadBack {
+  /** The fire time on the publication's clock, its zone named: "Fri Nov 13, 9:00 AM Eastern Time". */
+  fire_at_local: string;
+  /** How far off it is, rounded down: "in 2 days, 7 hours". */
+  fire_at_in: string;
+  /** The publication's time now, the same way. */
+  now_local: string;
+}
+
 /** POST /api/sends/:id/cancel and /reschedule */
 export interface SendActionResponse {
   send: SendView;
@@ -739,6 +766,26 @@ export interface SendActionResponse {
   cursor: string;
   /** False when the send already stood as asked (canceled already, or already at that time): nothing was written. */
   changed: boolean;
+}
+
+/** POST /api/sends/:id/reschedule: an action's answer, and how the fire time now reads. */
+export interface RescheduleResponse extends SendActionResponse {
+  read_back: ReadBack;
+}
+
+/** GET /api/time: the publication's time now, and how a fire time would read. */
+export interface TimeResponse {
+  /** The server's clock, epoch ms. */
+  now: number;
+  /** The publication's zone, or null while none is set (`now_local` then reads in UTC). */
+  time_zone: string | null;
+  time_zone_label: string | null;
+  /** The publication's time now: "Wed Nov 11, 10:15 AM Eastern Time". */
+  now_local: string;
+  /** The moment the `fire_at` asked about names, or null when none was asked. */
+  fire_at: number | null;
+  /** How that moment reads, or null when no `fire_at` was asked. */
+  read_back: ReadBack | null;
 }
 
 /**
@@ -751,5 +798,7 @@ export interface ScheduleResponse {
   warnings: string[];
   /** Where the answer stands among the changes to sends, to follow the send from. */
   cursor: string;
+  /** How the send's fire time reads (SPEC §6). */
+  read_back: ReadBack;
   idempotent?: boolean;
 }

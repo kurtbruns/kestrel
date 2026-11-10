@@ -14,7 +14,7 @@ The editor takes Markdown, and Kestrel saves as you type. The same Markdown beco
 
 ## Schedule and send
 
-Choose **Schedule**, pick a time under **Send at**, and confirm. The time must be at least five minutes away by default, or the lead whoever runs your instance set. That's your window to catch a mistake, and you can cancel or move the send until then. **Send now** sends after the same wait.
+Choose **Schedule**, pick a time under **Send at**, and confirm. The time is your publication's, in its [time zone](name-your-publication.md#set-the-time-zone), wherever you are: 9:00 means 9:00 for your readers. When your browser keeps another clock, the dialog names the zone and shows the same moment in your own time under it. The time must be at least five minutes away by default, or the lead whoever runs your instance set. That's your window to catch a mistake, and you can cancel or move the send until then. **Send now** sends after the same wait.
 
 **Then send yourself a test.** Scheduling locks the post and makes its email, so **Send test email** now sends exactly what your list receives. **Settings → Default test recipients** fills in the addresses. A test needs an email provider, which [Connect Amazon SES](../get-started/ses.md) sets up.
 
