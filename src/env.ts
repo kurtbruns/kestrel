@@ -652,8 +652,9 @@ const SIMULATION_GENERIC = new Set(["1", "on", "true", "yes"]);
  * fake: `off` (or unset), `not-connected`, or a profile (`generic`, or `1`, `ses`)
  * and optionally `:realistic` (the default) or `:none`, then, for `ses`, optionally
  * `:refuse=<cause>`, a refusal of the account every email meets (SPEC §10, §13), as in
- * `ses:refuse=configuration`, or `:outage`, SES unavailable to every email. Anything else is refused rather than read as off, so a typo
- * can't quietly turn the simulation off or pick the wrong provider.
+ * `ses:refuse=configuration`, or `:outage`, SES unavailable to every email. Anything else is
+ * refused rather than read as off, so a typo can't quietly turn the simulation off or pick
+ * the wrong provider.
  */
 function readSimulateSends(
   v: string | undefined,
@@ -684,9 +685,10 @@ function readSimulateSends(
     );
   }
   if (answerPart !== undefined && profile !== "ses") {
+    const [does, form] = outage ? ["goes down", ":outage"] : ["refuses", ":refuse="];
     throw new ConfigError(
       "SIMULATE_SENDS",
-      `${refuse !== undefined ? "refuses" : "goes down"} through SES's own answers, so :${refuse !== undefined ? "refuse=" : "outage"} needs the ses profile, not "${v?.trim()}"`,
+      `${does} through SES's own answers, so ${form} needs the ses profile, not "${v?.trim()}"`,
     );
   }
   return {

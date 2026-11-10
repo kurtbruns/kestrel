@@ -125,6 +125,20 @@ function checkDevVars(fromShell) {
   }
 }
 
+/** The causes `ses:refuse=<cause>` takes: the Worker's `SIMULATED_REFUSALS` (shared/settings.ts),
+ *  copied since cli/ is plain Node; a spec holds the two equal. */
+export const REFUSALS = [
+  "credentials",
+  "opt_in",
+  "configuration",
+  "sender",
+  "mail_from",
+  "paused",
+  "set_paused",
+  "suspended",
+  "unsupported",
+];
+
 /**
  * The line that says what stands in for a provider this run, from `SIMULATE_SENDS` as the
  * Worker will read it (the shell's value over `.dev.vars`'s), or null for the plain fake.
@@ -142,8 +156,13 @@ export function simulationLine(value) {
     return "[dev] running not connected: sends, tests and signups are refused (unset SIMULATE_SENDS to send)";
   }
   const parts = v.split(":");
-  // SES's outage (`ses:outage`), last, as the Worker reads it.
-  if (parts.length > 1 && parts.at(-1) === "outage" && parts[0] === "ses") {
+  // SES's outage (`ses:outage`) or a refusal of the account (`ses:refuse=<cause>`), last, as
+  // the Worker reads them, for SES only.
+  const last = parts.at(-1) ?? "";
+  const answer =
+    last === "outage" ||
+    (last.startsWith("refuse=") && REFUSALS.includes(last.slice("refuse=".length)));
+  if (parts.length > 1 && answer && parts[0] === "ses") {
     parts.pop();
   }
   const [name = "", faults = "realistic", ...rest] = parts;
@@ -153,7 +172,7 @@ export function simulationLine(value) {
     rest.length === 0;
   return known
     ? `[dev] simulating a provider for list sends (SIMULATE_SENDS=${v}); nothing is delivered`
-    : `[dev] SIMULATE_SENDS=${value.trim()} isn't a value the app accepts, so it will refuse to run: use off, ses, or generic (optionally with :none), or not-connected`;
+    : `[dev] SIMULATE_SENDS=${value.trim()} isn't a value the app accepts, so it will refuse to run: use off, ses, or generic (optionally with :none), ses with :refuse=<cause> or :outage last, or not-connected`;
 }
 
 /**
