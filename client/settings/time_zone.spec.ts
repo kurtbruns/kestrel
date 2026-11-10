@@ -90,6 +90,19 @@ describe("settings' time zone", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("names the chosen zone in full at once, and the rest once the picker is reached for", async () => {
+    browserIn("America/Chicago");
+    await open({ time_zone: "America/New_York", time_zone_label: "Eastern Time" });
+    const text = (zone: string) => [...select().options].find((o) => o.value === zone)?.textContent;
+    expect(text("America/New_York")).toBe("America/New York (Eastern Time)");
+    expect(text("Asia/Tokyo")).toBe("Asia/Tokyo");
+    select().dispatchEvent(new Event("focus"));
+    expect(text("Asia/Tokyo")).toBe("Asia/Tokyo (Japan Standard Time)");
+    expect(text("America/North_Dakota/New_Salem")).toBe(
+      "America/North Dakota/New Salem (Central Time)",
+    );
+  });
+
   it("leaves the save bar's save without the zone", async () => {
     browserIn("America/Chicago");
     await open({ time_zone: null, time_zone_label: null }, [

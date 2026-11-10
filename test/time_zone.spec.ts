@@ -178,6 +178,19 @@ describe("required before anything goes to readers (SPEC §9)", () => {
     expect(after.counts.accepted + after.counts.delivered).toBe(1);
   });
 
+  it("reads a stored zone the runtime doesn't know as unset, refusing sending loudly", async () => {
+    await env.DB.prepare(
+      "UPDATE settings SET data = json_set(data, '$.timeZone', 'Mars/Olympus_Mons') WHERE id = 1",
+    ).run();
+    const read = await readJson(await call("GET", "/api/settings"));
+    expect([read.settings.time_zone, read.settings.time_zone_label]).toEqual([null, null]);
+    const res = await call("POST", `/api/posts/${await draft()}/schedule`, {
+      fire_at: Date.now() + HOUR,
+    });
+    expect(res.status).toBe(409);
+    expect((await readJson(res)).error).toBe("time_zone_not_set");
+  });
+
   it("is refused for want of a provider first, where none is connected either (SPEC §13)", async () => {
     const id = await draft();
     await unsetTimeZone();

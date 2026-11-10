@@ -26,14 +26,15 @@ export function browserTimeZone(): string | null {
  * one saved, which may have been set through the API, and the browser's own, which a browser
  * set to `UTC` reports though it isn't listed. A zone is matched by what it resolves to, never
  * its spelling, so an alias of a listed zone (`Asia/Calcutta` against `Asia/Kolkata`) is that
- * zone and never appears twice.
+ * zone and never appears twice. The list holds each zone under the name this engine resolves
+ * it to, so a shown zone is looked up by its resolved name rather than by resolving all of them.
  */
 export function zoneChoices(shown: (string | null)[]): string[] {
   const listed =
     typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
   const extra: string[] = [];
   for (const zone of shown) {
-    if (zone !== null && ![...extra, ...listed].some((z) => sameTimeZone(z, zone))) {
+    if (zone !== null && choiceFor([...extra, ...listed], zone) === null) {
       extra.push(zone);
     }
   }
@@ -42,11 +43,17 @@ export function zoneChoices(shown: (string | null)[]): string[] {
 
 /** The listed zone that is the zone given, under whichever name this browser lists it. */
 function choiceFor(choices: string[], zone: string | null): string | null {
-  return zone === null ? null : (choices.find((z) => sameTimeZone(z, zone)) ?? null);
+  if (zone === null) {
+    return null;
+  }
+  const resolved = resolveTimeZone(zone);
+  return choices.find((z) => z === zone || z === resolved) ?? null;
 }
 
-function optionLabel(zone: string): string {
-  return `${zone.replace(/_/g, " ")} (${timeZoneLabel(zone)})`;
+/** An option's words: the zone's place, and once `long`, its long name ("Eastern Time"). */
+function optionLabel(zone: string, long: boolean): string {
+  const place = zone.replace(/_/g, " ");
+  return long ? `${place} (${timeZoneLabel(zone)})` : place;
 }
 
 /** The line under the picker: what is saved, or, while nothing is, that the picker holds
@@ -91,8 +98,11 @@ export function timeZoneSection(page: SettingsPage): Html {
                 ? html`<option value="" selected disabled>Choose a time zone</option>`
                 : null
             }${choices.map(
+              // Only the chosen option is named in full up front: building every zone's long
+              // name costs a formatter each, hundreds of them, so the rest are named once the
+              // picker is first reached for (mountTimeZone).
               (z) =>
-                html`<option value="${z}"${z === selected ? html` selected` : null}>${optionLabel(z)}</option>`,
+                html`<option value="${z}"${z === selected ? html` selected` : null}>${optionLabel(z, z === selected)}</option>`,
             )}</select><button type="button" id="tzSave">Save time zone</button></div>
             <p class="field-hint set-tz-status" id="tzStatus">${statusHtml(page.data.settings.time_zone_label, saved === null ? selected : null)}</p>
           </div>
@@ -108,7 +118,7 @@ export function timeZoneSection(page: SettingsPage): Html {
 export function mountTimeZone(
   root: HTMLElement,
   page: SettingsPage,
-  _signal: AbortSignal,
+  signal: AbortSignal,
 ): SectionHandle {
   let saved = page.data.settings.time_zone;
   const select = $<HTMLSelectElement>("#tzSelect", root);
@@ -119,6 +129,26 @@ export function mountTimeZone(
   // document applied the mark.
   select.value = picker(saved).selected ?? "";
   // Nothing to save until a zone is chosen, or while the one chosen is the one saved.
+  // Every option's long name, once: in the browser's first idle moment after the page paints,
+  // or the first time the picker is reached for, by pointer or keyboard, if that comes sooner.
+  let named = false;
+  const nameAll = () => {
+    if (named || signal.aborted) {
+      return;
+    }
+    named = true;
+    for (const option of select.options) {
+      if (option.value) {
+        option.textContent = optionLabel(option.value, true);
+      }
+    }
+  };
+  for (const type of ["pointerdown", "focus"]) {
+    select.addEventListener(type, nameAll, { once: true, signal });
+  }
+  if (typeof requestIdleCallback === "function") {
+    requestIdleCallback(nameAll, { timeout: 2000 });
+  }
   const paint = () => {
     save.disabled = select.value === "" || (saved !== null && sameTimeZone(select.value, saved));
   };

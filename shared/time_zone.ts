@@ -3,6 +3,13 @@
 // Kestrel keeps no table of zones or names, so what a name means and what it is called are
 // the runtime's, and one module serves the Worker and the editor so the two can't disagree.
 
+// What each name resolved to, and each zone's label formatter, kept for the life of the
+// isolate or page: building an `Intl.DateTimeFormat` costs tens of microseconds, every settings
+// read resolves the stored zone, and the picker labels hundreds. A runtime's zone data is fixed
+// while it runs, so neither can go stale; a label is still read at the moment asked for.
+const RESOLVED = new Map<string, string>();
+const LABEL_FORMATS = new Map<string, Intl.DateTimeFormat>();
+
 /**
  * The zone a name resolves to in this runtime, or null when the runtime doesn't know the
  * name. Aliases resolve to one name (`US/Eastern` to `America/New_York`, and in the engine
@@ -14,10 +21,19 @@ export function resolveTimeZone(name: string): string | null {
   if (typeof name !== "string" || name.trim() === "" || /^[+-]/.test(name.trim())) {
     return null;
   }
+  const key = name.trim();
+  const known = RESOLVED.get(key);
+  if (known !== undefined) {
+    return known;
+  }
   try {
-    return new Intl.DateTimeFormat("en-US", { timeZone: name.trim() }).resolvedOptions().timeZone;
+    const zone = new Intl.DateTimeFormat("en-US", { timeZone: key }).resolvedOptions().timeZone;
+    RESOLVED.set(key, zone);
+    return zone;
   } catch {
-    return null; // RangeError: a name the runtime doesn't know
+    // RangeError: a name the runtime doesn't know. Not kept, so a stream of bad names
+    // grows nothing.
+    return null;
   }
 }
 
@@ -40,10 +56,12 @@ export function sameTimeZone(a: string | null, b: string | null): boolean {
 export function timeZoneLabel(zone: string, at = Date.now()): string {
   // Read at a moment, since a place's zone can change: North Dakota's New Salem was on
   // Mountain Time until 2003.
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: zone,
-    timeZoneName: "longGeneric",
-  }).formatToParts(at);
+  let format = LABEL_FORMATS.get(zone);
+  if (format === undefined) {
+    format = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "longGeneric" });
+    LABEL_FORMATS.set(zone, format);
+  }
+  const parts = format.formatToParts(at);
   return parts.find((p) => p.type === "timeZoneName")?.value ?? zone;
 }
 
