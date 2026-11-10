@@ -47,7 +47,7 @@ Kestrel emails each notifications address when a send finishes, and right away w
 
 1. Select **Send a test notification**. It arrives at that address, from `Kestrel` until the publication has a name, and then from the publication's name followed by `via Kestrel`. If it doesn't arrive, **Last notification**, on the same page, says what happened.
 
-Notifications travel through SES like the newsletter, so they can't tell anyone when SES refuses the account. Section 8 covers that.
+Notifications travel through SES like the newsletter, so they can't tell anyone when SES refuses the account. [Set up alerts](../guides/alerts.md) covers that.
 
 The publisher sets their own address in [Check your setup](../publishing/check-your-setup.md).
 
