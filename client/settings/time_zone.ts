@@ -21,16 +21,23 @@ export function browserTimeZone(): string | null {
   }
 }
 
-/** Every zone this browser knows, plus the one saved, which may not be among them: one set
- *  through the API (`UTC`, or an alias such as `Asia/Calcutta`). An alias of a listed zone
- *  is that zone, so it never appears twice. */
-export function zoneChoices(saved: string | null): string[] {
+/**
+ * Every zone this browser knows, plus each zone the picker may show that isn't among them: the
+ * one saved, which may have been set through the API, and the browser's own, which a browser
+ * set to `UTC` reports though it isn't listed. A zone is matched by what it resolves to, never
+ * its spelling, so an alias of a listed zone (`Asia/Calcutta` against `Asia/Kolkata`) is that
+ * zone and never appears twice.
+ */
+export function zoneChoices(shown: (string | null)[]): string[] {
   const listed =
     typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
-  if (saved === null || listed.some((z) => sameTimeZone(z, saved))) {
-    return listed;
+  const extra: string[] = [];
+  for (const zone of shown) {
+    if (zone !== null && ![...extra, ...listed].some((z) => sameTimeZone(z, zone))) {
+      extra.push(zone);
+    }
   }
-  return [saved, ...listed];
+  return [...extra, ...listed];
 }
 
 /** The listed zone that is the zone given, under whichever name this browser lists it. */
@@ -56,15 +63,21 @@ function statusHtml(savedLabel: string | null, suggested: string | null): Html {
   }`;
 }
 
-/** What the picker opens on: the saved zone, else the browser's as a suggestion. */
-function initialChoice(choices: string[], saved: string | null): string | null {
-  return choiceFor(choices, saved) ?? choiceFor(choices, browserTimeZone());
+/**
+ * What the picker lists and opens on: the saved zone, else the browser's as a suggestion, else
+ * nothing chosen. The browser's zone is offered only when it is one the server takes by the
+ * same rule (`resolveTimeZone`: a name its `Intl` knows, never a bare offset), so a zone the
+ * save would refuse is never put forward.
+ */
+function picker(saved: string | null): { choices: string[]; selected: string | null } {
+  const suggested = saved === null ? browserTimeZone() : null;
+  const choices = zoneChoices([saved, suggested]);
+  return { choices, selected: choiceFor(choices, saved) ?? choiceFor(choices, suggested) };
 }
 
 export function timeZoneSection(page: SettingsPage): Html {
   const saved = page.data.settings.time_zone;
-  const choices = zoneChoices(saved);
-  const selected = initialChoice(choices, saved);
+  const { choices, selected } = picker(saved);
   return html`
     <section class="set-sec">
       ${secHead("time-zone", chip("editable", "Editable"))}
@@ -73,7 +86,11 @@ export function timeZoneSection(page: SettingsPage): Html {
         <div class="set-recip">
           <div class="set-field">
             <label for="tzSelect">Publication time zone</label>
-            <div class="row set-tz-row"><select id="tzSelect">${choices.map(
+            <div class="row set-tz-row"><select id="tzSelect">${
+              selected === null
+                ? html`<option value="" selected disabled>Choose a time zone</option>`
+                : null
+            }${choices.map(
               (z) =>
                 html`<option value="${z}"${z === selected ? html` selected` : null}>${optionLabel(z)}</option>`,
             )}</select><button type="button" id="tzSave">Save time zone</button></div>
@@ -100,9 +117,10 @@ export function mountTimeZone(
   const readings = $("#tzReadings", root);
   // Chosen here as well as marked in the markup, so the picker shows it however the
   // document applied the mark.
-  select.value = initialChoice(zoneChoices(saved), saved) ?? select.value;
+  select.value = picker(saved).selected ?? "";
+  // Nothing to save until a zone is chosen, or while the one chosen is the one saved.
   const paint = () => {
-    save.disabled = saved !== null && sameTimeZone(select.value, saved);
+    save.disabled = select.value === "" || (saved !== null && sameTimeZone(select.value, saved));
   };
   select.onchange = () => {
     readings.hidden = true;

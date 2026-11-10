@@ -26,7 +26,13 @@ describe("settings' time zone", () => {
   afterEach(() => {
     fake?.restore();
     vi.useRealTimers();
+    vi.unstubAllEnvs();
   });
+
+  /** Set the zone this browser reports, so no case depends on the machine running it: Node
+   *  resets its default zone when `TZ` changes. */
+  const browserIn = (zone: string) => vi.stubEnv("TZ", zone);
+  const optionValues = () => [...select().options].map((o) => o.value);
 
   const saved = (over: Partial<SettingsView>, readings: string[] = []): SettingsSavedResponse => ({
     settings: settingsResponse({ settings: over }).settings,
@@ -52,8 +58,9 @@ describe("settings' time zone", () => {
   const puts = () => fake.calls.filter((c) => c.method === "PUT");
 
   it("suggests the browser's zone while none is saved, and saves nothing until its button is clicked", async () => {
-    const browser = browserTimeZone();
-    expect(browser).not.toBeNull();
+    browserIn("America/Chicago");
+    const browser = "America/Chicago";
+    expect(browserTimeZone()).toBe(browser);
     await open({ time_zone: null, time_zone_label: null }, [
       {
         method: "PUT",
@@ -84,6 +91,7 @@ describe("settings' time zone", () => {
   });
 
   it("leaves the save bar's save without the zone", async () => {
+    browserIn("America/Chicago");
     await open({ time_zone: null, time_zone_label: null }, [
       { method: "PUT", path: "/api/settings", reply: () => saved({ time_zone: null }) },
     ]);
@@ -97,6 +105,7 @@ describe("settings' time zone", () => {
   });
 
   it("shows the saved zone, offers Save only once another is picked, and shows how scheduled posts now read", async () => {
+    browserIn("Asia/Tokyo"); // never the suggestion once a zone is saved
     const reading =
       "Your scheduled post stays at the same moment, now Fri Nov 13, 8:00 AM Central Time. Move it if you meant 9:00 AM.";
     await open({ time_zone: "America/New_York", time_zone_label: "Eastern Time" }, [
@@ -120,17 +129,54 @@ describe("settings' time zone", () => {
     expect($("#tzReadings > span").textContent).toBe(reading);
   });
 
-  it("lists a saved zone the browser doesn't, and an alias of a listed zone only once", () => {
-    const listed = zoneChoices(null);
-    expect(listed).not.toContain("UTC");
-    expect(zoneChoices("UTC")).toEqual(["UTC", ...listed]);
-    // Whichever of the pair this engine lists, the other is the same zone.
-    const india = listed.find((z) => z === "Asia/Calcutta" || z === "Asia/Kolkata");
+  it("lists and suggests a browser zone of UTC, which the browser's own list leaves out", async () => {
+    browserIn("UTC");
+    expect(zoneChoices([null])).not.toContain("UTC");
+    await open({ time_zone: null, time_zone_label: null });
+    expect(select().value).toBe("UTC");
+    expect(optionValues().filter((z) => z === "UTC")).toHaveLength(1);
+    expect(saveButton().disabled).toBe(false);
+  });
+
+  it("suggests an alias the list spells differently as the listed zone, once", async () => {
+    // Whichever of the pair this engine lists, the other names the same zone.
+    const listed = zoneChoices([null]);
+    const india = listed.find((z) => z === "Asia/Calcutta" || z === "Asia/Kolkata") ?? "";
     const alias = india === "Asia/Calcutta" ? "Asia/Kolkata" : "Asia/Calcutta";
-    expect(zoneChoices(alias)).toEqual(listed);
+    expect(zoneChoices([alias])).toEqual(listed);
+    browserIn(alias);
+    await open({ time_zone: null, time_zone_label: null });
+    expect(select().value).toBe(india);
+    expect(optionValues().filter((z) => z === "Asia/Kolkata" || z === "Asia/Calcutta")).toEqual([
+      india,
+    ]);
+  });
+
+  it("lists a saved zone the browser doesn't, and opens on it", async () => {
+    browserIn("Asia/Tokyo");
+    await open({ time_zone: "UTC", time_zone_label: "GMT+00:00" });
+    expect(optionValues()[0]).toBe("UTC");
+    expect(select().value).toBe("UTC");
+    expect(saveButton().disabled).toBe(true);
+  });
+
+  it("offers no suggestion when the browser's zone isn't one the server would take", async () => {
+    browserIn("Etc/Unknown");
+    expect(browserTimeZone()).toBeNull();
+    await open({ time_zone: null, time_zone_label: null });
+    expect(select().value).toBe("");
+    expect(select().selectedOptions[0]?.textContent).toBe("Choose a time zone");
+    expect(saveButton().disabled).toBe(true);
+    expect($("#tzStatus").textContent).toBe(
+      "No time zone set yet, so nothing can be scheduled or sent.",
+    );
+    select().value = "Europe/Paris";
+    select().dispatchEvent(new Event("change"));
+    expect(saveButton().disabled).toBe(false);
   });
 
   it("says why a refused zone was refused, under the picker", async () => {
+    browserIn("America/Chicago");
     await open({ time_zone: null, time_zone_label: null }, [
       {
         method: "PUT",
