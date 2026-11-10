@@ -4,8 +4,15 @@
 // is chosen until the publisher picks: the browser's zone is offered, never filled in, so no
 // save carries a zone nobody chose.
 
-import type { SettingsSavedResponse } from "../../shared/settings";
-import { formatClockTime, resolveTimeZone, sameTimeZone } from "../../shared/time_zone";
+import type { SendView } from "../../shared/sends";
+import {
+  formatClockTime,
+  formatDayInTimeZone,
+  formatInTimeZone,
+  resolveTimeZone,
+  sameTimeZone,
+  timeZoneLabel,
+} from "../../shared/time_zone";
 import { $ } from "../ui/dom";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
@@ -26,6 +33,67 @@ export function browserTimeZone(): string | null {
 /** Whether `chosen` is a change from `saved`: a zone, and not the saved zone under any name. */
 export function timeZoneChanged(chosen: string | null, saved: string | null): boolean {
   return chosen !== null && !sameTimeZone(chosen, saved);
+}
+
+/** One scheduled post in the preview: its subject, and how its fire time reads. */
+export interface PreviewLine {
+  subject: string;
+  /** On the saved zone's clock, "Thu Nov 12, 9:18 AM Pacific Time"; null when none is saved. */
+  from: string | null;
+  /** On the chosen zone's clock: the day only when it differs from `from`'s. */
+  to: string;
+}
+
+/**
+ * How saving `to` in place of `from` will show each scheduled post that hasn't gone out yet
+ * (SPEC §9): every one when no zone is saved, else only those whose time reads differently.
+ * The editor's own arithmetic from the sends Settings already reads, so it needs no request.
+ */
+export function zoneChangePreview(
+  sends: Pick<SendView, "subject" | "fire_at" | "status">[],
+  from: string | null,
+  to: string,
+  now = Date.now(),
+): PreviewLine[] {
+  const lines: PreviewLine[] = [];
+  for (const s of sends) {
+    if (s.status !== "scheduled" || s.fire_at <= now) {
+      continue;
+    }
+    if (from === null) {
+      lines.push({ subject: s.subject, from: null, to: formatInTimeZone(s.fire_at, to, now) });
+      continue;
+    }
+    const sameDay =
+      formatDayInTimeZone(s.fire_at, to, now) === formatDayInTimeZone(s.fire_at, from, now);
+    if (sameDay && formatClockTime(s.fire_at, from) === formatClockTime(s.fire_at, to)) {
+      continue; // reads the same on both clocks
+    }
+    const clock = `${formatClockTime(s.fire_at, to)} ${timeZoneLabel(to)}`;
+    lines.push({
+      subject: s.subject,
+      from: formatInTimeZone(s.fire_at, from, now),
+      to: sameDay ? clock : `${formatDayInTimeZone(s.fire_at, to, now)}, ${clock}`,
+    });
+  }
+  return lines;
+}
+
+/** The preview's markup, or nothing when no scheduled post reads differently. */
+function previewHtml(lines: PreviewLine[]): Html | null {
+  if (lines.length === 0) {
+    return null;
+  }
+  const one = lines.length === 1;
+  const changing = lines[0]?.from !== null;
+  return html`<div class="set-tz-preview" role="status">${
+    changing
+      ? html`<p class="set-tz-preview-head">Your scheduled ${one ? "post still goes" : "posts still go"} out at the same moment. The time displayed will change:</p>`
+      : null
+  }<ul>${lines.map(
+    (l) =>
+      html`<li><strong>“${l.subject}”</strong>: ${l.from === null ? html`goes out ${l.to}` : html`${l.from} → ${l.to}`}</li>`,
+  )}</ul></div>`;
 }
 
 /** The time on a zone's clock now, "8:50 AM": the quickest check that it's the right clock. */
@@ -55,7 +123,7 @@ export function timeZoneSection(_page: SettingsPage): Html {
           <div class="set-field set-tz">
             <label for="tzSearch">Publication time zone</label>
             <div id="tzChosen"></div>
-            <p class="set-tz-readings" id="tzReadings" role="status" hidden></p>
+            <div id="tzPreview"></div>
             <div id="tzSuggest"></div>
             <div class="set-tz-combo">
               <input type="search" id="tzSearch" placeholder="Search a city or a zone name, such as Chicago or Eastern" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="tzResults" aria-autocomplete="list">
@@ -63,7 +131,7 @@ export function timeZoneSection(_page: SettingsPage): Html {
             </div>
           </div>
         </div>
-        <div class="set-note">${icon("info")}<span>Changing it never moves a scheduled post: each keeps its moment, and you’re told how it now reads.</span></div>
+        <div class="set-note">${icon("info")}<span>Changing it never moves a scheduled post. You’ll see how each one reads before you save.</span></div>
       </div>
     </section>`;
 }
@@ -85,7 +153,7 @@ export function mountTimeZone(
   const suggestEl = $("#tzSuggest", root);
   const input = $<HTMLInputElement>("#tzSearch", root);
   const list = $<HTMLUListElement>("#tzResults", root);
-  const readings = $("#tzReadings", root);
+  const previewEl = $("#tzPreview", root);
 
   // Every zone, built once, in the browser's first idle moment or when the search is first
   // used: hundreds of zones, each named by formatters of its own. The saved zone and the
@@ -108,7 +176,6 @@ export function mountTimeZone(
 
   const choose = (zone: string) => {
     page.state.timeZone = zone;
-    readings.hidden = true;
     page.changed(); // repaints this section through its handle, and raises the bar
   };
 
@@ -120,6 +187,15 @@ export function mountTimeZone(
       shown === null
         ? html`<p class="set-tz-unset">No time zone set yet, so nothing can be scheduled or sent.</p>`
         : html`<div class="set-tz-chosen"><div class="set-tz-lines">${zoneLines(zoneChoice(shown))}</div><span class="set-tz-now">${nowIn(shown)} there</span></div>`,
+    );
+    // What saving the choice will show for each scheduled post, while it is unsaved.
+    setHtml(
+      previewEl,
+      html`${
+        shown !== null && timeZoneChanged(shown, saved)
+          ? previewHtml(zoneChangePreview(page.data.in_use.sends, saved, shown))
+          : null
+      }`,
     );
     if (saved === null && browser !== null && !sameTimeZone(shown, browser)) {
       const b = zoneChoice(browser);
@@ -221,17 +297,10 @@ export function mountTimeZone(
   paint();
   return {
     repaint: paint,
-    reset: paint,
-    saved(r: SettingsSavedResponse) {
-      // The saved zone joins the list if the browser doesn't list it.
+    reset() {
+      // After a save, the saved zone joins the search if the browser doesn't list it.
       choices = null;
-      if (r.time_zone_readings.length) {
-        setHtml(
-          readings,
-          html`${r.time_zone_readings.map((line, i) => html`${i ? " " : null}${line}`)}`,
-        );
-        readings.hidden = false;
-      }
+      paint();
     },
   };
 }

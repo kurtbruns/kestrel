@@ -7,7 +7,6 @@ import type { Sender } from "../../shared/publication";
 import {
   type ConfirmationEmailCopy,
   type SettingsResponse,
-  type SettingsSavedResponse,
   type SettingsSection,
   type SettingsView,
   settingsRoute,
@@ -73,9 +72,6 @@ export interface SettingsPage {
 export interface SectionHandle {
   repaint?(): void;
   reset?(): void;
-  /** A save through the bar landed, with the server's answer (the time zone shows how scheduled
-   *  posts now read). */
-  saved?(r: SettingsSavedResponse): void;
 }
 
 export const message = describeError;

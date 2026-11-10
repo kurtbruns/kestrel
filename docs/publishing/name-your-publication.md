@@ -20,7 +20,7 @@ A transparent background shows whatever is behind the logo, and the built-in tem
 
 Your published posts are dated by your publication's day, so a post sent at 8 PM in New York is dated that day, even for a reader in London, where it's already the next morning. The date names no time zone, like a newspaper's dateline.
 
-You can change it at any time. A post that's already scheduled keeps its moment and doesn't move, and Kestrel tells you how it now reads ("now Fri Nov 13, 8:00 AM Central Time. Move it if you meant 9:00 AM."), so you can move it yourself with **Edit schedule**. Public dates follow the new zone, so a post sent near midnight may show a different date afterward.
+You can change it at any time. A post that's already scheduled still goes out at the same moment, so its time is displayed differently on the new clock. Before you save, Settings shows each one ("“A quick note”: Thu Nov 12, 9:18 AM Pacific Time → 11:18 AM Central Time"); if that isn't the time you meant, move it with **Edit schedule** after saving. Public dates follow the new zone, so a post sent near midnight may show a different date afterward.
 
 Kestrel's time zone rules come from Cloudflare's servers, which can trail a recent government change, such as a country dropping daylight saving time, by months. If your zone's rules changed recently, times near the change may read an hour off until Cloudflare catches up.
 

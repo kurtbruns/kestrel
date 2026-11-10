@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SettingsSavedResponse, SettingsView } from "../../shared/settings";
+import { formatClockTime, formatDayInTimeZone, formatInTimeZone } from "../../shared/time_zone";
 import { appState } from "../state";
+import { sendView } from "../test/send_server";
 import {
   $,
   type FakeApi,
@@ -8,8 +10,10 @@ import {
   fakeApi,
   mount,
   resetShell,
+  sendSummary,
   settingsResponse,
   typeInto,
+  unmount,
 } from "../test/support";
 import { renderSettings } from "./settings";
 import { browserTimeZone } from "./time_zone";
@@ -95,16 +99,16 @@ describe("settings' time zone", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("saves the chosen zone through the save bar, with the page's other edits, and shows how scheduled posts now read", async () => {
+  it("saves the chosen zone through the save bar, and says nothing after", async () => {
     browserIn("America/Chicago");
-    const reading =
-      "Your scheduled post stays at the same moment, now Fri Nov 13, 8:00 AM Central Time.";
     await open(unset, [
       {
         method: "PUT",
         path: "/api/settings",
         reply: () =>
-          answer({ time_zone: "America/Chicago", time_zone_label: "Central Time" }, [reading]),
+          answer({ time_zone: "America/Chicago", time_zone_label: "Central Time" }, [
+            "a sentence the API gives Claude",
+          ]),
       },
     ]);
     $<HTMLButtonElement>("#tzUse").click();
@@ -113,13 +117,128 @@ describe("settings' time zone", () => {
     expect(puts().map((c) => (c.json() as { time_zone?: string }).time_zone)).toEqual([
       "America/Chicago",
     ]);
-    expect($("#tzReadings").hidden).toBe(false);
-    expect($("#tzReadings").textContent).toBe(reading);
     expect(appState.appConfig?.settings.time_zone).toBe("America/Chicago");
-    // Saved: the browser's zone is never offered again, and nothing is left unsaved.
+    // Saved: the browser's zone is never offered again, nothing is left unsaved, and the API's
+    // after-save sentences, which the preview already said, aren't shown.
     expect(suggestion()).toBeNull();
     expect(barUp()).toBe(false);
+    expect($("#tzPreview").textContent).toBe("");
+    expect(document.body.textContent).not.toContain("a sentence the API gives Claude");
   });
+
+  describe("previews what saving does to scheduled posts", () => {
+    const DAY = 86_400_000;
+    // Scheduled posts as Settings reads them (`in_use.sends`), at times this spec states.
+    const scheduledAt = (subject: string, fire_at: number) =>
+      sendView(sendSummary({ id: subject, subject, fire_at, status: "scheduled" }));
+    const previewLines = () =>
+      [...document.querySelectorAll("#tzPreview li")].map((li) => li.textContent);
+    const previewHead = () => document.querySelector("#tzPreview p")?.textContent ?? null;
+
+    async function openWith(saved: Partial<SettingsView>, sends: ReturnType<typeof scheduledAt>[]) {
+      appState.appConfig = settingsResponse({ settings: saved });
+      fake = fakeApi([
+        {
+          path: "/api/settings",
+          reply: () =>
+            settingsResponse({
+              settings: saved,
+              in_use: { sends, retry_after: null, identity_fields: [] },
+            }),
+        },
+        { path: /^\/api\/reader-pages\//, reply: () => new Response("<html></html>") },
+      ]);
+      await mount(renderSettings);
+      await vi.advanceTimersByTimeAsync(0);
+    }
+
+    it("shows the time displayed changing for a post, before the save, and goes on Discard", async () => {
+      browserIn("Asia/Tokyo");
+      const at = Date.now() + 2 * DAY;
+      await openWith({ time_zone: "America/Los_Angeles", time_zone_label: "Pacific Time" }, [
+        scheduledAt("A quick note", at),
+      ]);
+      expect($("#tzPreview").textContent).toBe("");
+      search("chicago");
+      press("Enter");
+      expect(previewHead()).toBe(
+        "Your scheduled post still goes out at the same moment. The time displayed will change:",
+      );
+      const sameDay =
+        formatDayInTimeZone(at, "America/Chicago") ===
+        formatDayInTimeZone(at, "America/Los_Angeles");
+      const after = `${formatClockTime(at, "America/Chicago")} Central Time`;
+      expect(previewLines()).toEqual([
+        `“A quick note”: ${formatInTimeZone(at, "America/Los_Angeles")} → ${sameDay ? after : `${formatDayInTimeZone(at, "America/Chicago")}, ${after}`}`,
+      ]);
+      $("#savebarDiscard").click();
+      expect($("#tzPreview").textContent).toBe("");
+    });
+
+    it("names the new day only when it differs, one line per post", async () => {
+      browserIn("Asia/Tokyo");
+      // Noon and 11 PM in Los Angeles: the same day in Chicago for noon, the next for 11 PM.
+      const noon = losAngelesAt(12);
+      const late = losAngelesAt(23);
+      await openWith({ time_zone: "America/Los_Angeles", time_zone_label: "Pacific Time" }, [
+        scheduledAt("Noon", noon),
+        scheduledAt("Late", late),
+      ]);
+      search("chicago");
+      press("Enter");
+      expect(previewHead()).toBe(
+        "Your scheduled posts still go out at the same moment. The time displayed will change:",
+      );
+      expect(previewLines()).toEqual([
+        `“Noon”: ${formatInTimeZone(noon, "America/Los_Angeles")} → 2:00 PM Central Time`,
+        `“Late”: ${formatInTimeZone(late, "America/Los_Angeles")} → ${formatDayInTimeZone(late, "America/Chicago")}, 1:00 AM Central Time`,
+      ]);
+    });
+
+    it("says when each post goes out when no zone was saved, with no heading", async () => {
+      browserIn("America/Chicago");
+      const at = Date.now() + 2 * DAY;
+      await openWith(unset, [scheduledAt("A quick note", at)]);
+      $<HTMLButtonElement>("#tzUse").click();
+      expect(previewHead()).toBeNull();
+      expect(previewLines()).toEqual([
+        `“A quick note”: goes out ${formatInTimeZone(at, "America/Chicago")}`,
+      ]);
+    });
+
+    it("shows nothing for a zone that reads every post the same, or with nothing scheduled", async () => {
+      browserIn("Asia/Tokyo");
+      await openWith({ time_zone: "America/Detroit", time_zone_label: "Eastern Time" }, [
+        scheduledAt("A quick note", Date.now() + 2 * DAY),
+      ]);
+      search("new york");
+      press("Enter");
+      expect(barUp()).toBe(true);
+      expect($("#tzPreview").textContent).toBe("");
+      unmount();
+      await openWith({ time_zone: "America/Los_Angeles", time_zone_label: "Pacific Time" }, []);
+      search("chicago");
+      press("Enter");
+      expect($("#tzPreview").textContent).toBe("");
+    });
+  });
+
+  /** `hour`:00 on Los Angeles' clock two days from now, as an instant. */
+  function losAngelesAt(hour: number): number {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Los_Angeles",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(Date.now() + 2 * 86_400_000);
+    const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+    const guess = Date.UTC(get("year"), get("month") - 1, get("day"), hour);
+    const local = new Date(
+      new Date(guess).toLocaleString("en-US", { timeZone: "America/Los_Angeles" }),
+    );
+    const utc = new Date(new Date(guess).toLocaleString("en-US", { timeZone: "UTC" }));
+    return guess - (local.getTime() - utc.getTime());
+  }
 
   it("never sends a zone the publisher didn't choose, with any other save", async () => {
     browserIn("America/Chicago");

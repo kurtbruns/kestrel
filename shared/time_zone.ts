@@ -98,10 +98,10 @@ export function formatClockTime(ms: number, zone: string): string {
 }
 
 /**
- * A moment as the publication's clock reads it, with the zone named: "Fri Nov 13, 9:00 AM
- * Eastern Time". The year shows only when it isn't the publication's current year at `now`.
+ * The day of a moment on a zone's clock, "Fri Nov 13". The year shows only when it isn't that
+ * clock's current year at `now`.
  */
-export function formatInTimeZone(ms: number, zone: string, now = Date.now()): string {
+export function formatDayInTimeZone(ms: number, zone: string, now = Date.now()): string {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: zone,
     weekday: "short",
@@ -112,7 +112,15 @@ export function formatInTimeZone(ms: number, zone: string, now = Date.now()): st
   const part = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((p) => p.type === type)?.value ?? "";
   const year = yearIn(ms, zone) === yearIn(now, zone) ? "" : `, ${part("year")}`;
-  return `${part("weekday")} ${part("month")} ${part("day")}${year}, ${formatClockTime(ms, zone)} ${timeZoneLabel(zone)}`;
+  return `${part("weekday")} ${part("month")} ${part("day")}${year}`;
+}
+
+/**
+ * A moment as the publication's clock reads it, with the zone named: "Fri Nov 13, 9:00 AM
+ * Eastern Time". The year shows only when it isn't the publication's current year at `now`.
+ */
+export function formatInTimeZone(ms: number, zone: string, now = Date.now()): string {
+  return `${formatDayInTimeZone(ms, zone, now)}, ${formatClockTime(ms, zone)} ${timeZoneLabel(zone)}`;
 }
 
 /**
@@ -123,16 +131,13 @@ export function formatInTimeZone(ms: number, zone: string, now = Date.now()): st
  */
 export function scheduledSendReading(
   send: { subject: string; fire_at: number },
-  from: string | null,
+  from: string,
   to: string,
   named: boolean,
   now = Date.now(),
 ): string {
   const which = named ? `Your scheduled post “${send.subject}”` : "Your scheduled post";
   const reads = `${which} stays at the same moment, now ${formatInTimeZone(send.fire_at, to, now)}.`;
-  if (from === null) {
-    return reads;
-  }
   const before = formatClockTime(send.fire_at, from);
   return before === formatClockTime(send.fire_at, to)
     ? reads

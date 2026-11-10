@@ -239,7 +239,6 @@ export async function renderSettings(
       baseline = baselineOf(state);
       for (const h of handles) {
         h.reset?.();
-        h.saved?.(r);
       }
       page.applySaved(ns);
       page.changed(); // clean now: slides the bar away

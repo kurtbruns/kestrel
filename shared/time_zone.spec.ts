@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatDayInTimeZone,
   formatInTimeZone,
   formatPublicationDate,
   resolveTimeZone,
@@ -52,6 +53,15 @@ describe("dates and times in the publication's zone", () => {
     expect(formatPublicationDate(evening, null)).toBe("November 15, 2025");
   });
 
+  it("writes a day on the zone's clock, the year only when it isn't this year", () => {
+    expect(formatDayInTimeZone(NINE_AM_NEW_YORK, "America/New_York", SAME_YEAR)).toBe("Fri Nov 14");
+    // 9:00 AM in New York is already 11:00 PM in Tokyo, the same day; 2:00 PM in Auckland is the next.
+    expect(formatDayInTimeZone(NINE_AM_NEW_YORK, "Pacific/Auckland", SAME_YEAR)).toBe("Sat Nov 15");
+    expect(formatDayInTimeZone(NINE_AM_NEW_YORK, "America/New_York", Date.UTC(2024, 0, 1))).toBe(
+      "Fri Nov 14, 2025",
+    );
+  });
+
   it("reads a moment on the zone's clock with the zone named, the year only when it isn't this year", () => {
     expect(formatInTimeZone(NINE_AM_NEW_YORK, "America/New_York", SAME_YEAR)).toBe(
       "Fri Nov 14, 9:00 AM Eastern Time",
@@ -74,10 +84,6 @@ describe("dates and times in the publication's zone", () => {
     // Several are each named; a zone that reads the same clock time asks nothing.
     expect(scheduledSendReading(send, "America/Detroit", "America/New_York", true, SAME_YEAR)).toBe(
       "Your scheduled post “Owls” stays at the same moment, now Fri Nov 14, 9:00 AM Eastern Time.",
-    );
-    // With no zone before, there was no time it was meant at.
-    expect(scheduledSendReading(send, null, "Asia/Tokyo", false, SAME_YEAR)).toBe(
-      "Your scheduled post stays at the same moment, now Fri Nov 14, 11:00 PM Japan Standard Time.",
     );
   });
 });

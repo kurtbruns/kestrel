@@ -6656,12 +6656,29 @@ button.set-embed-copy svg {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
-/* How each scheduled post reads after a zone change: the server's sentences, under the zone
-   they're about. */
-.set-tz-readings {
-  margin: 0;
+/* What saving a chosen zone will show for each scheduled post: in the scheduled-send violet
+   the dashboard and editor use for a post waiting to go out, since it is about those posts
+   and is no problem. */
+.set-tz-preview {
+  border: 1px solid var(--status-scheduled-line);
+  background: var(--status-scheduled-bg);
+  color: var(--status-scheduled-fg);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 6px;
   font-size: 13px;
   line-height: 1.5;
+}
+.set-tz-preview p {
+  margin: 0;
+}
+.set-tz-preview ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
 }
 .set-tz-unset {
   margin: 0;

@@ -5,7 +5,7 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
-import { formatInTimeZone } from "../shared/time_zone";
+import { formatClockTime, formatInTimeZone } from "../shared/time_zone";
 import * as posts from "../src/db/posts";
 import { getSettings } from "../src/db/settings";
 import { clearFakeOutbox } from "../src/providers/fake";
@@ -224,16 +224,22 @@ describe("changing it (SPEC §9)", () => {
     expect((await readJson(await saveZone("America/Chicago"))).time_zone_readings).toEqual([]);
   });
 
-  it("names each send by its subject when several are scheduled, and leaves out the time it had when unset", async () => {
+  it("names each send by its subject when several are scheduled", async () => {
     await saveZone("America/New_York");
     const a = (await scheduled(Date.now() + 2 * HOUR)).fire_at;
     const b = (await scheduled(Date.now() + 5 * HOUR)).fire_at;
-    await unsetTimeZone();
     const body = await readJson(await saveZone("Asia/Tokyo"));
+    const meant = (ms: number) => formatClockTime(ms, "America/New_York");
     expect(body.time_zone_readings).toEqual([
-      `Your scheduled post “Owls” stays at the same moment, now ${formatInTimeZone(a, "Asia/Tokyo")}.`,
-      `Your scheduled post “Owls” stays at the same moment, now ${formatInTimeZone(b, "Asia/Tokyo")}.`,
+      `Your scheduled post “Owls” stays at the same moment, now ${formatInTimeZone(a, "Asia/Tokyo")}. Move it if you meant ${meant(a)}.`,
+      `Your scheduled post “Owls” stays at the same moment, now ${formatInTimeZone(b, "Asia/Tokyo")}. Move it if you meant ${meant(b)}.`,
     ]);
+  });
+
+  it("says nothing when the zone is set for the first time: nothing was read on a publication clock", async () => {
+    await scheduled(Date.now() + 2 * HOUR);
+    await unsetTimeZone();
+    expect((await readJson(await saveZone("Asia/Tokyo"))).time_zone_readings).toEqual([]);
   });
 });
 

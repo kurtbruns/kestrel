@@ -342,15 +342,17 @@ export async function update(c: RequestContext): Promise<Response> {
 /**
  * What a zone change says about the scheduled sends (SPEC §9): none moves, since an automatic
  * shift could put one earlier than the publisher reviewed it or inside the review window (I6),
- * so each gets a sentence saying how its moment now reads. Nothing when the zone is the same
- * zone under another name, or nothing is scheduled.
+ * so each gets a sentence saying how its moment now reads. Nothing when the zone is set for the
+ * first time, when it is the same zone under another name, or when nothing is scheduled. The
+ * editor shows the same before the save; this is for a client with no preview, such as Claude.
  */
 async function timeZoneReadings(
   c: RequestContext,
   from: string | null,
   to: string | null,
 ): Promise<string[]> {
-  if (to === null || sameTimeZone(from, to)) {
+  // A first zone moves nothing that was ever read on a publication clock, so it says nothing.
+  if (from === null || to === null || sameTimeZone(from, to)) {
     return [];
   }
   const scheduled = await listScheduledSends(c.env.DB);

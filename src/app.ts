@@ -658,7 +658,7 @@ export function createRouter({
             name: "time_zone_readings",
             type: "string[]",
             description:
-              "When the save changed `time_zone`, one sentence per scheduled send saying it keeps its moment and how that moment now reads, to show or relay as it stands; empty otherwise. A save of the same zone under another name changes nothing.",
+              "When the save changed `time_zone` from one zone to another, one sentence per scheduled send saying it keeps its moment and how that moment now reads, to show or relay as it stands; empty otherwise. Setting the zone for the first time, or saving the same zone under another name, says nothing.",
           },
         ],
       },
