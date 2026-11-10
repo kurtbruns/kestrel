@@ -688,29 +688,93 @@ describe("SesProvider.sendBatch", () => {
     expect(await send()).toMatchObject({ kind: "halted", halt: { cause: "content" } });
   });
 
-  it("fails the one recipient of a request SES refuses as invalid, for good", async () => {
+  it("holds a request of one that SES refuses as invalid naming no one, naming its reader (SPEC §12)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ __type: "BadRequestException", message: "Invalid input" }), {
+        status: 400,
+      }),
+    );
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      [{ email: "ada@example.com", unsubscribeUrl: UNSUB }],
+      { purpose: "list", tag: "send-1" },
+    );
+    expect(r).toEqual({
+      kind: "halted",
+      halt: {
+        reason: "account",
+        cause: "invalid_request",
+        error: "ses 400 BadRequestException: Invalid input",
+        recipient: "ada@example.com",
+      },
+    });
+  });
+
+  it("refuses a request of one alone when SES's words name its reader", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
           __type: "BadRequestException",
-          message: "Local address contains control or whitespace",
+          message: "Illegal address: ada@example.com",
         }),
-        {
-          status: 400,
-        },
+        { status: 400 },
       ),
     );
     const r = await newProvider().sendBatch(
       renderedFixture(),
-      [{ email: "bad addr@example.com", unsubscribeUrl: UNSUB }],
-      {
-        purpose: "list",
-        tag: "send-1",
-      },
+      [{ email: "ada@example.com", unsubscribeUrl: UNSUB }],
+      { purpose: "list", tag: "send-1" },
     );
-    expect(r).toMatchObject({
+    expect(r).toEqual({
       kind: "answered",
-      results: [{ accepted: false, retryable: false }],
+      results: [
+        {
+          email: "ada@example.com",
+          accepted: false,
+          retryable: false,
+          error: "ses 400 BadRequestException: Illegal address: ada@example.com",
+        },
+      ],
+    });
+  });
+
+  it("marks a lone FAILED with nothing taken as the request's if repeated, and holds two alike", async () => {
+    const failed = { Status: "FAILED", Error: "Failed" };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const n = (await readBulkRequest(input)).BulkEmailEntries.length;
+      return new Response(
+        JSON.stringify({ BulkEmailEntryResults: Array.from({ length: n }, () => failed) }),
+        { status: 200 },
+      );
+    });
+    const one = await newProvider().sendBatch(
+      renderedFixture(),
+      [{ email: "ada@example.com", unsubscribeUrl: UNSUB }],
+      { purpose: "list", tag: "send-1" },
+    );
+    expect(one).toEqual({
+      kind: "answered",
+      results: [
+        {
+          email: "ada@example.com",
+          accepted: false,
+          retryable: true,
+          error: "ses FAILED: Failed",
+          ifRepeated: { reason: "unavailable", cause: "outage", error: "ses FAILED: Failed" },
+        },
+      ],
+    });
+    const two = await newProvider().sendBatch(
+      renderedFixture(),
+      [
+        { email: "ada@example.com", unsubscribeUrl: UNSUB },
+        { email: "bo@example.com", unsubscribeUrl: UNSUB },
+      ],
+      { purpose: "list", tag: "send-1" },
+    );
+    expect(two).toEqual({
+      kind: "halted",
+      halt: { reason: "unavailable", cause: "outage", error: "ses FAILED: Failed" },
     });
   });
 

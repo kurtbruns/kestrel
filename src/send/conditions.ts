@@ -198,12 +198,13 @@ export function sendConditions(
         kind: "refused",
         severity: "action",
         since: send.halted_at,
-        message: refusedMessage(send.halt_cause, send.halt_error),
+        message: refusedMessage(send.halt_cause, send.halt_error, send.halt_recipient),
         action: null,
         cause: send.halt_cause,
         error: send.halt_error ?? "",
-        advice: refusalAdvice(send.halt_cause),
+        advice: refusalAdvice(send.halt_cause, send.halt_recipient),
         retry_at: send.halt_retry_at,
+        recipient: send.halt_recipient,
       });
     } else if (retried && send.halt_reason === "unavailable") {
       // An outage past an hour is told to the publisher by email (SPEC §8), so the page says

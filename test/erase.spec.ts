@@ -258,6 +258,22 @@ describe("erasing a subscriber (SPEC §7)", () => {
     expect(fakeOutbox().map((m) => m.to)).toEqual(["keep@example.com"]);
   });
 
+  it("takes their address off a send's hold that named them, leaving the hold (SPEC §7, §12)", async () => {
+    await seedConfirmed(["keep@example.com", "gone@example.com"]);
+    const send = await frozenSend(Date.now() - 1000);
+    await sends.resolveAudience(env.DB, send.id, Date.now());
+    await env.DB.prepare(
+      "UPDATE sends SET status = 'sending', halt_reason = 'account', halt_cause = 'invalid_request', halt_error = 'ses 400 BadRequestException: Invalid input', halt_recipient = 'gone@example.com', halted_at = ?1, halt_retries = 1, halt_retry_at = ?1 WHERE id = ?2",
+    )
+      .bind(Date.now(), send.id)
+      .run();
+
+    await eraseOk("gone@example.com");
+
+    const held = (await sends.getSend(env.DB, send.id))!;
+    expect([held.halt_cause, held.halt_recipient]).toEqual(["invalid_request", null]);
+  });
+
   it("discards their tokens, so an unsubscribe link in mail sent before opens the invalid-link page and changes nothing", async () => {
     const email = "ada@example.com";
     await seedConfirmed(email);

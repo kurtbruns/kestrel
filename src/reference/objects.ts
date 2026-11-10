@@ -177,11 +177,11 @@ const CONDITION_KINDS: Record<ConditionKind, ConditionKindDoc> = {
   },
   refused: {
     severity: "`action`",
-    fields: "`cause`, `error`, `advice`, `retry_at`",
+    fields: "`cause`, `error`, `advice`, `retry_at`, `recipient`",
     meaning:
-      "The provider refuses the account, or this send's own email (`cause` `content` or `invalid_request`); `error` is its words. No one is marked unsent.",
+      "The provider refuses the account, or this send's own email (`cause` `content` or `invalid_request`); `error` is its words. No one is marked unsent. `recipient` is the one reader the refused request carried, when it was refused as `invalid_request` naming no one; null otherwise.",
     remedy:
-      "`advice` names the fix and who makes it, by `cause` (the halt object's causes); almost always outside this API. The send retries on its own at `retry_at` and resumes once the fix lands.",
+      "`advice` names the fix and who makes it, by `cause` (the halt object's causes); almost always outside this API. The send retries on its own at `retry_at` and resumes once the fix lands. With a `recipient`, blocking that address (`POST /api/suppressions`), on the publisher's word, lets the send carry on without them; lift it once the send has finished.",
   },
   provider_unavailable: {
     severity: `\`info\`, or \`warn\` after ${SELF_THROTTLE_HALTS} rate-limit halts in a row, or once the provider has been unavailable for ${LONG_OUTAGE_HALTS} tries in a row, about an hour`,

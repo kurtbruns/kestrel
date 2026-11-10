@@ -309,6 +309,7 @@ export function sendSummary(over: Partial<SendRowFixture> = {}): SendRowFixture 
     halt_reason: null,
     halt_cause: null,
     halt_error: null,
+    halt_recipient: null,
     halted_at: null,
     halt_retries: 0,
     halt_retry_at: null,

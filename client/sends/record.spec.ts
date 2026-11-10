@@ -1084,6 +1084,7 @@ describe("sent record", () => {
           error: "no email provider is connected",
           advice,
           retry_at: null,
+          recipient: null,
         },
       ],
     });

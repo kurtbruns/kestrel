@@ -56,8 +56,8 @@ describe("a refusal's advice", () => {
     ["content", ["can’t change once its send has started", "AWS Support"], "pass this along"],
     [
       "invalid_request",
-      ["remove that subscriber", "skips anyone no longer on the list"],
-      "remove that subscriber",
+      ["block that address under Subscribers", "the send skips them"],
+      "block that address",
     ],
   ] as const)("names the fix for %s and who makes it", (cause, fixes, who) => {
     const advice = refusalAdvice(cause);
@@ -65,6 +65,18 @@ describe("a refusal's advice", () => {
       expect(advice).toContain(fix);
     }
     expect(advice.toLowerCase()).toContain(who);
+  });
+
+  it("names the one reader a request refused as invalid carried, and points to blocking them, not unsubscribing (SPEC §12)", () => {
+    const advice = refusalAdvice("invalid_request", "ada@example.com");
+    expect(advice).toContain("block ada@example.com under Subscribers");
+    expect(advice).toContain("Unblock them once the send has finished");
+    expect(advice).toContain(
+      "If SES refuses the next address the same way, the problem is the email or the account, not the reader.",
+    );
+    expect(advice).not.toMatch(/unsubscribe/i);
+    // Any other cause names no one, recipient or not.
+    expect(refusalAdvice("content", "ada@example.com")).toBe(refusalAdvice("content"));
   });
 
   it("is written with typographic apostrophes, whatever the cause", () => {
