@@ -2380,7 +2380,17 @@ export function createRouter({
       title: "Request a subscription",
       summary: "Request a subscription; starts the double opt-in (confirmation email).",
       description:
-        "Answers alike whatever the address's state, before any confirmation is sent, so neither the reply nor its timing reveals list membership. A confirmation goes out only when due: never to a confirmed or suppressed address, at most one per cooldown. One the provider refuses is logged and changes nothing.",
+        "Answers alike whatever the address's state, before any confirmation is sent, so neither the reply nor its timing reveals list membership. A confirmation goes out only when due: never to a confirmed or suppressed address, at most one per cooldown. One the provider refuses is logged and changes nothing. The address is read only from the body, never the query string, so it stays out of every URL; a request whose body carries none is a 400, as an address that isn't one is, and a form gets the page saying so.",
+      accepts: ["application/json", "application/x-www-form-urlencoded", "multipart/form-data"],
+      body: [
+        {
+          name: "email",
+          type: "string",
+          required: true,
+          description:
+            "The reader's address, as a JSON body's field or the form's. One that isn't an address is a 400, the same for every address.",
+        },
+      ],
       example: {
         request: { email: "you@example.com" },
         response: { status: "check_inbox" },
