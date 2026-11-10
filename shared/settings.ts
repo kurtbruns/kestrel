@@ -211,6 +211,7 @@ export interface DeploymentView {
 export type SendNotificationKind =
   | "finished"
   | "refused"
+  | "unavailable"
   | "stuck"
   | "wedged"
   | "missed"

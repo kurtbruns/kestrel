@@ -232,13 +232,14 @@ function watchBodyHtml(prog: SendView): Html {
   // In flight too long (SPEC §12): the amber the dashboard's health line and the Sent
   // page's card give the same condition, in the server's words.
   const stuck = conditionOf(prog, "stuck");
-  // A rate limit the deployment causes itself (SPEC §12), which the server marks worth a
-  // look: the same amber, in its words, which name the setting.
+  // A rate limit the deployment causes itself, or an outage past an hour (SPEC §12), which the
+  // server marks worth a look: the same amber, in its words, which name the setting or say
+  // what is still useful to do.
   const unavailable = conditionOf(prog, "provider_unavailable");
-  const throttled = unavailable?.severity === "warn" ? unavailable : undefined;
+  const unavailableWarn = unavailable?.severity === "warn" ? unavailable : undefined;
   return html`
     ${stuck ? html`<div class="health amber" role="status"><span class="health-dot">⚠️</span><div>${stuck.message}</div></div>` : null}
-    ${throttled ? html`<div class="health amber" role="status"><span class="health-dot">⚠️</span><div>${throttled.message}</div></div>` : null}
+    ${unavailableWarn ? html`<div class="health amber" role="status"><span class="health-dot">⚠️</span><div>${unavailableWarn.message}</div></div>` : null}
     ${
       refused
         ? html`<div class="health red" role="alert"><span class="health-dot">⚠️</span><div><strong>${unconnected ? "No email provider is connected" : ownRefusal ? "The provider is refusing this send" : "The provider is refusing this account"}</strong>${unconnected ? null : html`<div>${refused.error}</div>`}<div class="refused-advice">${unconnected ? heldAdviceHtml() : refused.advice}</div><div>${refused.since === null ? null : `Since ${fmt(refused.since)}. `}No one has been marked unsent because of this, and once ${unconnected ? "one is connected" : "this is fixed"} the send resumes at its next retry${refused.retry_at === null ? "" : `, ${fmt(refused.retry_at)}`}.</div></div></div>`

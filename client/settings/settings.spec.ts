@@ -514,7 +514,7 @@ describe("settings view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("says these emails can't report SES refusing, linking the Set up alerts guide, and logs a test alert on request (SPEC §12)", async () => {
+  it("says these emails can't report SES refusing and may report an hour's outage only once SES is back, linking the Set up alerts guide, and logs a test alert on request (SPEC §12)", async () => {
     await open([
       { path: "/api/settings", reply: () => response() },
       {
@@ -527,7 +527,7 @@ describe("settings view", () => {
     expect(note.textContent).toMatch(/can’t tell you when SES refuses your account/);
     expect($<HTMLAnchorElement>("a", note).getAttribute("href")).toBe("#/docs/alerts");
     expect(note.textContent?.trim()).toBe(
-      "These emails travel through Amazon SES like the newsletter, so they can’t tell you when SES refuses your account. Two Cloudflare alerts cover that, and Kestrel itself stopping. See Set up alerts.",
+      "These emails travel through Amazon SES like the newsletter, so they can’t tell you when SES refuses your account, and one saying SES has been down for over an hour may arrive only once SES is back. Two Cloudflare alerts cover both, and Kestrel itself stopping. See Set up alerts.",
     );
     $<HTMLButtonElement>("#alertTest").click();
     await vi.advanceTimersByTimeAsync(0);
@@ -548,7 +548,7 @@ describe("settings view", () => {
       "Your email provider, once one is connected",
     );
     expect($("#alertsNote").textContent?.trim()).toBe(
-      "These emails travel through your email provider like the newsletter, so they can’t tell you when it refuses your account. Two Cloudflare alerts cover that, and Kestrel itself stopping. See Set up alerts.",
+      "These emails travel through your email provider like the newsletter, so they can’t tell you when it refuses your account, and one saying it has been down for over an hour may arrive only once it is back. Two Cloudflare alerts cover both, and Kestrel itself stopping. See Set up alerts.",
     );
     expect(fake.unhandled).toEqual([]);
   });

@@ -46,7 +46,7 @@ import type {
   SuppressionReason,
   UnsubscribeCause,
 } from "../../shared/subscribers";
-import { HALT_BACKOFF_MS, MISSED_THRESHOLD_MS } from "../lib/time";
+import { HALT_BACKOFF_MS, LONG_OUTAGE_HALTS, MISSED_THRESHOLD_MS } from "../lib/time";
 
 /** A halt's retry schedule in words, read off `HALT_BACKOFF_MS` so the two can't drift:
  *  "after 1, 2, and 5 minutes and then every 15 minutes". */
@@ -184,12 +184,12 @@ const CONDITION_KINDS: Record<ConditionKind, ConditionKindDoc> = {
       "`advice` names the fix and who makes it, by `cause` (the halt object's causes); almost always outside this API. The send retries on its own at `retry_at` and resumes once the fix lands.",
   },
   provider_unavailable: {
-    severity: `\`info\`, or \`warn\` after ${SELF_THROTTLE_HALTS} rate-limit halts in a row`,
+    severity: `\`info\`, or \`warn\` after ${SELF_THROTTLE_HALTS} rate-limit halts in a row, or once the provider has been unavailable for ${LONG_OUTAGE_HALTS} tries in a row, about an hour`,
     fields: "`error`, `retry_at`",
     meaning:
-      "An outage or a rate limit on the provider's side; the send waits, retried at `retry_at`. No one is marked unsent.",
+      "An outage or a rate limit on the provider's side; the send waits, retried at `retry_at`. No one is marked unsent. Past an hour the publisher is told by email.",
     remedy:
-      "Nothing, while `info`: it retries on its own. At `warn` the deployment asks for more a second than the account allows: whoever runs it sets `SES_MAX_SEND_RATE` to the account's maximum send rate, or removes it and lets the app read that rate (`ses:GetAccount`), and deploys.",
+      "Nothing, while `info`: it retries on its own. At `warn` for a rate limit, the deployment asks for more a second than the account allows: whoever runs it sets `SES_MAX_SEND_RATE` to the account's maximum send rate, or removes it and lets the app read that rate (`ses:GetAccount`), and deploys. At `warn` for an outage, still nothing in the app: check AWS's status page, and tell readers if the post can't wait.",
   },
   bounce_spike: {
     severity: "`warn`",

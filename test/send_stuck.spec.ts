@@ -142,7 +142,7 @@ describe("a send nothing is moving", () => {
 });
 
 describe("a halted send", () => {
-  it("is explained by its halt until its retry, and stuck only once the retry is long overdue", async () => {
+  it("is explained by its halt until its retry, stuck only once the retry is long overdue, and never told as stuck", async () => {
     await seedConfirmed(addresses(2));
     const send = await dueSend();
     const now = Date.now();
@@ -163,7 +163,10 @@ describe("a halted send", () => {
     expect(isStuck(row, now + 20 * MIN + STUCK_THRESHOLD_MS)).toBe(false);
     expect(isStuck(row, now + 20 * MIN + STUCK_THRESHOLD_MS + 1)).toBe(true);
     await notifications.recordNotifications(env.DB, now);
-    expect(await notified(send.id)).toEqual([]);
+    // Six halts in a row is an outage past an hour, told as that (SPEC §8), never as stuck.
+    expect(await notified(send.id)).toEqual([
+      { kind: "unavailable", episode: now - 2 * STUCK_THRESHOLD_MS },
+    ]);
   });
 });
 

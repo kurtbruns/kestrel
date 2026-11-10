@@ -31,6 +31,7 @@ import { errorText, log } from "../lib/log";
 import { MAX_NOTIFY_ATTEMPTS, MISSED_THRESHOLD_MS } from "../lib/time";
 import { unwrap } from "../lib/unwrap";
 import { type Budget, metered } from "../send/budget";
+import { isLongOutage } from "../send/outage";
 import { idleSince } from "../send/stuck";
 import { isWedged } from "../send/wedged";
 import { notificationSenderFrom } from "../services/sender";
@@ -62,8 +63,8 @@ function isOutageNotice(n: notifications.DueAny): n is notifications.DueNotSendi
 /**
  * Whether the event a notification tells of is still true of the send now. A finished
  * send stays finished, and a send that went out late stays late; the other problems can
- * clear (the refusal lifts, the send completes, Resolve settles the wedge, a reschedule
- * moves the fire time), and the tests here mirror the conditions `recordNotifications`
+ * clear (the refusal lifts, the provider answers again, the send completes, Resolve settles
+ * the wedge, a reschedule moves the fire time), and the tests here mirror the conditions `recordNotifications`
  * recorded them under.
  */
 export function stillHolds(n: notifications.DueAny, now: number): boolean {
@@ -87,6 +88,10 @@ export function stillHolds(n: notifications.DueAny, now: number): boolean {
         n.halted_at === n.episode &&
         !isWedged({ ...n, status: n.send_status })
       );
+    case "unavailable":
+      // The same outage, still standing: an answer from the provider ends it, and a later
+      // outage begins afresh, so an email not yet sent when this one clears is dropped.
+      return isLongOutage({ ...n, status: n.send_status }) && n.halted_at === n.episode;
     case "stuck":
       return idleSince({ ...n, status: n.send_status }) === n.episode;
     case "wedged":
@@ -117,7 +122,7 @@ export async function notifyPublisher(
   if (room < 1) {
     return;
   }
-  let due = await notifications.dueNotifications(db, room);
+  let due = await notifications.dueNotifications(db, room, now);
   if (due.length === 0) {
     return;
   }
@@ -199,7 +204,10 @@ export async function notifyPublisher(
       log.info("notify.sent", { ...about, kind: n.kind, channel: notifier.channel });
       continue;
     }
-    const giveUp = n.attempts + 1 >= MAX_NOTIFY_ATTEMPTS;
+    // The email about an outage past an hour goes through the provider that is down, so it
+    // is never given up while the outage stands: it ends sent, or cleared once the provider
+    // answers the send (`stillHolds`), and is tried every few minutes meanwhile (SPEC §8).
+    const giveUp = n.kind !== "unavailable" && n.attempts + 1 >= MAX_NOTIFY_ATTEMPTS;
     // One line for each address missed, without the address (logs never carry one).
     for (const m of missed) {
       log.warn("notify.failed", {
