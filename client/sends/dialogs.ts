@@ -83,27 +83,29 @@ export function endUnsentText(send: Pick<SendView, "counts" | "audience">): {
   return { n, text: who };
 }
 
-/** The way a held or wedged send usually goes on, which the End dialog leads with so ending
- *  reads as the last resort it is (SPEC §12): Resolve for a wedged send, and otherwise waiting,
- *  since a held send resumes on its own once the cause clears. */
+/** How a held or wedged send goes on without ending, which the End dialog leads with so ending
+ *  reads as the last resort it is (SPEC §12): Resolve for a wedged send, and otherwise its next
+ *  retry, since a held send resumes on its own once the problem is fixed. */
 export function endPreferredText(send: Pick<SendView, "actions" | "provider">): string {
   if (send.actions.some((a) => a.name === "resolve")) {
-    return "To let it finish, use Resolve… instead: it settles the readers your provider never answered for, and the send completes with everyone else sent.";
+    return "Resolve… lets this send finish: it settles the readers your provider never answered for, and everyone else stays sent.";
   }
   const retry = send.provider.halt?.retry_at;
   const at = retry ? `, ${fmt(retry)}` : "";
-  return send.provider.halt?.reason === "unavailable"
-    ? `Your provider is unavailable. The send tries again on its own at its next retry${at}, and carries on the moment it answers, mailing no one twice.`
-    : `Once the problem above is fixed, the send resumes on its own at its next retry${at}, from where it stopped, mailing no one twice.`;
+  const fixed =
+    send.provider.halt?.reason === "unavailable"
+      ? "When your provider is back"
+      : "If the problem is fixed";
+  return `${fixed}, this send resumes on its own at its next retry${at}, from where it stopped. Nothing is lost by waiting, and no one is mailed twice.`;
 }
 
 /**
  * End a send that is held or wedged (SPEC §12): a destructive act, confirmed with a Danger
- * button. Its dialog leads with the way the send usually goes on (`endPreferredText`), then says
- * what ending costs: who is recorded unsent, that the post can't be sent again, and that reaching
- * them later means a new post to the whole list, so those already sent it get it twice. When
- * recipients are in flight it asks Resolve's question in the same step, with Assume not sent, the
- * safe default, chosen.
+ * button. Its dialog leads with how the send goes on without ending (`endPreferredText`) and why
+ * someone would end it anyway, then what ending costs, worded for the case it is: a send partly
+ * out, where any new post to reach the rest mails those already sent it twice, or one no one has
+ * received, where a new post reaches everyone once. When recipients are in flight it asks
+ * Resolve's question in the same step, with Assume not sent, the safe default, chosen.
  */
 export function openEndModal(
   send: Pick<SendView, "id" | "subject" | "counts" | "audience" | "actions" | "provider">,
@@ -121,20 +123,32 @@ export function openEndModal(
           <label class="end-choice"><input type="radio" name="endRes" value="unsent" checked><span><strong>Assume not sent</strong><span class="listing-help">Recorded as unsent, with the others.</span></span></label>
           <label class="end-choice"><input type="radio" name="endRes" value="accepted"><span><strong>Assume sent</strong><span class="listing-help">Recorded as accepted by your provider, such as when a reader says they got it.</span></span></label>`
       : null;
-  const twice =
+  const waiting =
+    unsent.n === 0
+      ? html`<li>No one is left waiting to be sent it.</li>`
+      : html`<li><strong>${unsent.text}</strong> not yet sent it are recorded as unsent and won’t get this post. They stay subscribed and get your next one.</li>`;
+  // The cost turns on whether anyone has it: a partial send can't be finished later without
+  // mailing those already sent it twice, while one no one received can be sent again whole.
+  const cost =
     reached === 0
-      ? null
-      : html` That goes to your whole list, so the ${n(reached)} already sent this one would get it twice.`;
+      ? html`<p class="hint">No one has received “${send.subject || "Untitled"}” yet. Ending it:</p>
+          <ul class="hint end-list">
+            ${waiting}
+            <li>A finished post can’t be sent again, but since no one has it, a new post with the same content reaches everyone once.</li>
+            <li>This can’t be undone.</li>
+          </ul>`
+      : html`<p class="hint"><strong>This send is partly out:</strong> ${n(reached)} ${reached === 1 ? "reader has" : "readers have"} it${unsent.n === 0 ? "" : html` and ${unsent.text} don’t`}. Ending it:</p>
+          <ul class="hint end-list">
+            ${waiting}
+            <li>The ${n(reached)} already sent it keep it, and no one is mailed by ending it.</li>
+            <li>A finished post can’t be sent again. A new post with the same content goes to your whole list, so those ${n(reached)} would get it twice.</li>
+            <li>This can’t be undone.</li>
+          </ul>`;
   const m = modal(
-    html`<h3 id="endHead">End this send?</h3>
-      <p class="hint"><strong>You usually don’t need to.</strong> ${endPreferredText(send)} End a send only when it will never clear, or the post is no longer worth sending.</p>
-      <p class="hint">Ending “${send.subject || "Untitled"}” stops it for good:</p>
-      <ul class="hint end-list">
-        ${unsent.n === 0 ? html`<li>No one is left waiting to be sent it.</li>` : html`<li><strong>${unsent.text}</strong> not yet sent it are recorded as unsent and won’t get this post. They stay subscribed and get your next one.</li>`}
-        <li>${reached === 0 ? "No one has been sent it yet, and no one is mailed by ending it." : `The ${n(reached)} already sent it keep it, and no one is mailed by ending it.`}</li>
-        <li>A finished post can’t be sent again. To reach the others later, you’d put its content in a new post.${twice}</li>
-        <li>This can’t be undone.</li>
-      </ul>
+    html`<h3 id="endHead">End send</h3>
+      <p class="hint">${endPreferredText(send)}</p>
+      <p class="hint">End it only when it can’t or shouldn’t go on: the problem won’t be fixed, such as an account closed for good, or the post is no longer timely.</p>
+      ${cost}
       ${question}
       <div class="actions"><button type="button" id="endCancel">Keep the send</button><button type="button" class="danger" id="endGo">End send</button></div>`,
     signal,

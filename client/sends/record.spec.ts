@@ -1388,23 +1388,24 @@ describe("sent record", () => {
   /** The open dialog's words, each run of whitespace as one space. */
   const dialogText = () => ($(".modal").textContent ?? "").replace(/\s+/g, " ");
 
-  it("leads a held send's End with waiting, says what ending costs, then ends it with no resolution (SPEC §12, DESIGN §8)", async () => {
+  it("leads a held send's End with resuming once fixed and why to end, and warns that a partly sent post can't be finished without mailing some twice (SPEC §12, DESIGN §8)", async () => {
     const posted: unknown[] = [];
     fake = fakeApi(endRoutes(held(7, 0), posted));
     await mount((r, s) => renderSentRecord("x1", r, s));
     await vi.advanceTimersByTimeAsync(0);
     $("#endBtn").click();
     const text = dialogText();
-    expect($(".modal h3").textContent).toBe("End this send?");
+    expect($(".modal h3").textContent).toBe("End send");
     expect(text).toContain(
-      "You usually don’t need to. Once the problem above is fixed, the send resumes on its own at its next retry, from where it stopped, mailing no one twice.",
+      "If the problem is fixed, this send resumes on its own at its next retry, from where it stopped. Nothing is lost by waiting, and no one is mailed twice.",
     );
+    expect(text).toContain("End it only when it can’t or shouldn’t go on");
+    expect(text).toContain("This send is partly out: 3 readers have it and 7 recipients don’t.");
     expect(text).toContain(
       "7 recipients not yet sent it are recorded as unsent and won’t get this post.",
     );
-    expect(text).toContain("The 3 already sent it keep it, and no one is mailed by ending it.");
     expect(text).toContain(
-      "To reach the others later, you’d put its content in a new post. That goes to your whole list, so the 3 already sent this one would get it twice.",
+      "A new post with the same content goes to your whole list, so those 3 would get it twice.",
     );
     expect(text).toContain("This can’t be undone.");
     expect($("#endCancel").textContent).toBe("Keep the send");
@@ -1435,14 +1436,40 @@ describe("sent record", () => {
     expect(fake.unhandled).toHaveLength(0);
   });
 
+  it("says a send no one has received can be sent again whole in a new post", async () => {
+    const none = sendView(
+      send({
+        status: "sending",
+        c_pending: 7,
+        c_delivered: 0,
+        c_bounced: 0,
+        c_unsent: 0,
+        completed_at: null,
+      }),
+      {
+        phase: "needs_attention",
+        actions: [{ name: "end", method: "POST", path: "/api/sends/x1/end" }],
+      },
+    );
+    fake = fakeApi(endRoutes(none, []));
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(0);
+    $("#endBtn").click();
+    const text = dialogText();
+    expect(text).toContain("No one has received “Owls” yet.");
+    expect(text).toContain(
+      "since no one has it, a new post with the same content reaches everyone once.",
+    );
+    expect(text).not.toContain("partly out");
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
   it("points a wedged send's End to Resolve as the way to let it finish", async () => {
     fake = fakeApi(endRoutes(held(0, 2, ["resolve", "end"]), []));
     await mount((r, s) => renderSentRecord("x1", r, s));
     await vi.advanceTimersByTimeAsync(0);
     $("#endBtn").click();
-    expect(dialogText()).toContain(
-      "You usually don’t need to. To let it finish, use Resolve… instead",
-    );
+    expect(dialogText()).toContain("Resolve… lets this send finish");
     expect(fake.unhandled).toHaveLength(0);
   });
 
