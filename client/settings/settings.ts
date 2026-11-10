@@ -42,7 +42,7 @@ import {
 import { mountReaderPages, readerPagesSection } from "./reader_pages";
 import { expireRemakeWait, remakeIdentity, savedToast, withRemakeConfirm } from "./remake";
 import { mountSubscribe, subscribeSection } from "./subscribe";
-import { mountTimeZone, timeZoneSection } from "./time_zone";
+import { mountTimeZone, timeZoneChanged, timeZoneSection } from "./time_zone";
 
 /** One group of sections, kept together by whom they serve: no heading of its own, since
  *  the sections' titles already say what each is, only a wider gap from the next group. */
@@ -56,6 +56,7 @@ function baselineOf(state: SettingsBaseline): SettingsBaseline {
     tagline: state.tagline,
     address: state.address,
     confirmation: { ...state.confirmation },
+    timeZone: state.timeZone,
   };
 }
 
@@ -110,6 +111,7 @@ export async function renderSettings(
       reassurance: ce.reassurance || "",
     },
     notifyTo: [...s.notifications.to],
+    timeZone: s.time_zone,
   };
   let baseline = baselineOf(state);
   const fromAddress = data.deployment.from_address;
@@ -118,7 +120,8 @@ export async function renderSettings(
     state.name !== baseline.name ||
     state.tagline !== baseline.tagline ||
     state.address !== baseline.address ||
-    !sameCopy(state.confirmation, baseline.confirmation);
+    !sameCopy(state.confirmation, baseline.confirmation) ||
+    timeZoneChanged(state.timeZone, baseline.timeZone);
 
   const handles: SectionHandle[] = [];
   // The shared bottom save bar (Save + Discard), its callbacks the hoisted saveSettings /
@@ -208,6 +211,11 @@ export async function renderSettings(
       const payload: SettingsPatchBody = {
         publication: { name: state.name, tagline: state.tagline, address: state.address },
         confirmation_email: state.confirmation,
+        // Only a zone chosen on purpose and different from the saved one: the section never
+        // fills one in, so an untouched zone is never sent.
+        ...(timeZoneChanged(state.timeZone, baseline.timeZone)
+          ? { time_zone: state.timeZone ?? "" }
+          : {}),
       };
       const r = await withRemakeConfirm(
         (ack) =>
@@ -227,9 +235,11 @@ export async function renderSettings(
       state.tagline = ns.publication.tagline;
       state.address = ns.publication.address;
       state.confirmation = { ...ns.confirmation_email };
+      state.timeZone = ns.time_zone;
       baseline = baselineOf(state);
       for (const h of handles) {
         h.reset?.();
+        h.saved?.(r);
       }
       page.applySaved(ns);
       page.changed(); // clean now: slides the bar away
@@ -311,6 +321,7 @@ const FIELD_INPUTS: Record<string, string> = {
   "confirmation_email.body": "#ceMessage",
   "confirmation_email.button_label": "#ceButton",
   "confirmation_email.reassurance": "#ceFooter",
+  time_zone: "#tzSearch",
 };
 
 /** The input a refusal's `field` names, when the page shows it; null otherwise. */

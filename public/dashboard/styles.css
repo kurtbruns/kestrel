@@ -6613,15 +6613,83 @@ button.set-embed-copy svg {
 .set-rp-pick {
   display: none;
 }
-/* Settings' Time zone: the picker takes the row and its own Save sits beside it, wrapping
-   under it on a phone. */
-.set-tz-row select {
-  flex: 1 1 260px;
-  width: auto;
+/* Settings' Time zone: the chosen zone (or the warning while none is), the browser's zone
+   offered under it while none is saved, then the search and its results. */
+.set-tz {
+  display: grid;
+  gap: 10px;
+}
+.set-tz-chosen,
+.set-tz-suggest {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.set-tz-suggest {
+  border-style: dashed;
+}
+.set-tz-lines {
+  display: grid;
+  flex: 1 1 220px;
   min-width: 0;
 }
-.set-tz-status {
-  margin: 8px 0 0;
+.set-tz-name {
+  font-weight: 600;
+}
+.set-tz-place {
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.set-tz-now {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.set-tz-unset {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  font-size: 13px;
+}
+.set-tz-results {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  max-height: 300px;
+  overflow: auto;
+  background: var(--card);
+}
+.set-tz-results li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.set-tz-results li[aria-selected="true"] {
+  background: var(--hover);
+}
+.set-tz-results li.set-tz-none {
+  cursor: default;
+  color: var(--muted);
+}
+.set-tz-results mark {
+  background: var(--warn-bg);
+  color: inherit;
+  border-radius: 2px;
 }
 .set-rp-pick select {
   width: 100%;

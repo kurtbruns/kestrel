@@ -16,7 +16,7 @@ A transparent background shows whatever is behind the logo, and the built-in tem
 
 ## Set the time zone
 
-**Choose where your readers are, not where you are today.** A New York newsletter keeps New York's clock wherever you are that week. Kestrel uses the time zone for the times you schedule posts at, the dates on your published posts, and the times in your notifications, so nothing can be scheduled or sent until it's set. Pick it under **Settings → Time zone** and choose **Save time zone**. Kestrel fills in your browser's time zone as a suggestion, but saves nothing until you click.
+**Choose where your readers are, not where you are today.** A New York newsletter keeps New York's clock wherever you are that week. Kestrel uses the time zone for the times you schedule posts at, the dates on your published posts, and the times in your notifications, so nothing can be scheduled or sent until it's set. Under **Settings → Time zone**, choose **Use** beside your browser's time zone if your readers share it, or search for a city or a zone's name, such as Chicago or Eastern, and pick it from the results. Then choose **Save changes**. Kestrel offers your browser's time zone but never chooses it for you.
 
 Your published posts are dated by your publication's day, so a post sent at 8 PM in New York is dated that day, even for a reader in London, where it's already the next morning. The date names no time zone, like a newspaper's dateline.
 

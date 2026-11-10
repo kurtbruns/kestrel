@@ -10,7 +10,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading from 1.23.0.** Once deployed, your instance can't schedule or send until the publication has a time zone: open **Settings → Time zone**, choose the zone where your readers are, and select **Save time zone**, or ask Claude to set it. Until then the dashboard says so, and a send already scheduled still goes out. Run `npm run check-context`: this release changes the operator's Claude context, `CLAUDE.md`, and a copy you've edited is merged by hand.
+**Upgrading from 1.23.0.** Once deployed, your instance can't schedule or send until the publication has a time zone: open **Settings → Time zone**, choose the zone where your readers are, and select **Save changes**, or ask Claude to set it. Until then the dashboard says so, and a send already scheduled still goes out. Run `npm run check-context`: this release changes the operator's Claude context, `CLAUDE.md`, and a copy you've edited is merged by hand.
 
 ### Breaking
 
@@ -18,7 +18,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Added
 
-- **Settings → Time zone**: the clock your readers keep, an IANA zone such as `America/New_York`, read and written through `time_zone` in `/api/settings` with its name for people (`time_zone_label`, "Eastern Time") and shown in Claude's `get_publication`. It's never set without a deliberate save: the picker suggests your browser's zone and saves only on **Save time zone**. Changing it moves no scheduled post, and the save says how each now reads. The setup checklist gains **Set the time zone**, the Schedule and Edit schedule dialogs say when it's missing, and the dashboard's health block says so on an instance past setup (SPEC §9).
+- **Settings → Time zone**: the clock your readers keep, an IANA zone such as `America/New_York`, read and written through `time_zone` in `/api/settings` with its name for people (`time_zone_label`, "Eastern Time") and shown in Claude's `get_publication`. You find it by searching for a city or a zone's name, and it's never set without a deliberate choice: Settings offers your browser's zone with **Use**, never fills it in, and saves it with **Save changes**. Changing it moves no scheduled post, and the save says how each now reads. The setup checklist gains **Set the time zone**, the Schedule and Edit schedule dialogs say when it's missing, and the dashboard's health block says so on an instance past setup (SPEC §9).
 - Posts are dated by the publication's day on the post page, the archive, the home page, and the web version, so an evening send in the Americas, or a morning one in Asia, is no longer dated the next or previous day; with no zone set, dates stay in UTC (SPEC §5, §9).
 - The operator's Claude context (`template/claude/CLAUDE.md`) adds the Set the time zone step and tells Claude to ask which clock the readers keep rather than use its own, so Claude never sets the zone from a guess.
 
