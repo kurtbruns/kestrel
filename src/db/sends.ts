@@ -351,6 +351,7 @@ const VIEW_COLS = [
   lastActor("'reschedule'", "rescheduled_by"),
   lastActor("'cancel'", "canceled_by"),
   lastActor("'resolve'", "resolved_by"),
+  lastActor("'end'", "ended_by"),
 ].join(", ");
 
 /** A stored send as a view is built from it: the list projection, the address its email
@@ -1061,7 +1062,7 @@ export function cancelStmt(db: D1Database, sendId: string, now: number): D1Prepa
 // --- the log of acts (SPEC §6, §11) ---------------------------------------------
 
 /** An act on a send that its log records. */
-export type SendAct = "schedule" | "send_now" | "reschedule" | "cancel" | "resolve";
+export type SendAct = "schedule" | "send_now" | "reschedule" | "cancel" | "resolve" | "end";
 
 /** One act as the log records it: who took it, and what it set where it sets something. */
 export interface SendActInput {
@@ -1071,7 +1072,7 @@ export interface SendActInput {
   by: Actor;
   /** The fire time a schedule, Send now, or move set. */
   fireAt?: number;
-  /** The resolution a Resolve chose. */
+  /** The resolution a Resolve chose, or an End for the recipients in flight it settled. */
   resolution?: "unsent" | "accepted";
 }
 
@@ -1891,6 +1892,84 @@ export async function resolveDispatched(
     ...record,
   ]);
   return moved?.meta.changes ?? 0;
+}
+
+/** What an End records for each recipient it closes before hand-off, in the delivery's error
+ *  field (SPEC §12). */
+export const ENDED_BY_PUBLISHER = "ended by the publisher";
+
+/**
+ * The publisher's End of a held or wedged send (SPEC §12), in one batch under the lease
+ * `lease`, so it lands whole or not at all: each recipient in flight settled as `resolution`
+ * says, with Resolve's `note` (none is given when none is in flight), each recipient still
+ * pending recorded unsent as `ENDED_BY_PUBLISHER`, then the send finished and its post sent,
+ * as `completeSend` finishes one, with its counters rebuilt and the End recorded in its log of
+ * acts. It touches only open rows, so an accepted recipient keeps its delivery and receipts,
+ * and nothing here calls the provider (I4). The send's audience must already be fixed.
+ * Returns how many it settled and how many it recorded unsent.
+ */
+export async function endSend(
+  db: D1Database,
+  send: { id: string; post_id: string },
+  lease: string,
+  settle: { resolution: "unsent" | "accepted"; note: string } | null,
+  now: number,
+  by: Actor,
+): Promise<{ resolved: number; unsent: number }> {
+  const guard = holdsLease(send.id, lease);
+  const settleStmt = settle
+    ? [
+        db
+          .prepare(
+            `UPDATE deliveries SET status = ?, error = ?, dispatch_key = NULL, keyed_at = NULL, updated_at = ?
+              WHERE send_id = ? AND status = 'dispatched' AND ${guard.sql}`,
+          )
+          .bind(settle.resolution, settle.note, now, send.id, ...guard.binds),
+      ]
+    : [];
+  const results = await db.batch([
+    ...settleStmt,
+    db
+      .prepare(
+        `UPDATE deliveries SET status = 'unsent', error = ?, dispatch_key = NULL, keyed_at = NULL, updated_at = ?
+          WHERE send_id = ? AND status = 'pending' AND ${guard.sql}`,
+      )
+      .bind(ENDED_BY_PUBLISHER, now, send.id, ...guard.binds),
+    // Last of the writes the lease guards, since finishing the send releases it.
+    db
+      .prepare(
+        `UPDATE sends SET status = 'sent', completed_at = ?, locked_until = NULL, lease_token = NULL,
+                halt_reason = NULL, halt_cause = NULL, halt_error = NULL, halted_at = NULL,
+                halt_retries = 0, halt_retry_at = NULL, rev = ${NEXT_REV}
+          WHERE id = ? AND status = 'sending' AND lease_token = ?`,
+      )
+      .bind(now, send.id, lease),
+    recordActStmt(
+      db,
+      { sendId: send.id, act: "end", at: now, by, resolution: settle?.resolution },
+      endedAt(send.id, now),
+    ),
+    db
+      .prepare(
+        `UPDATE posts SET status = 'sent', updated_at = ?
+          WHERE id = ? AND status = 'scheduled'
+            AND EXISTS (SELECT 1 FROM sends WHERE id = ? AND status = 'sent')`,
+      )
+      .bind(now, send.post_id, send.id),
+    recomputeSendCountersStmt(db, send.id),
+  ]);
+  const changes = (i: number) => results[i]?.meta.changes ?? 0;
+  return settle
+    ? { resolved: changes(0), unsent: changes(1) }
+    : { resolved: 0, unsent: changes(0) };
+}
+
+/** An End landed: the send was finished at this End's moment. */
+function endedAt(sendId: string, now: number): { sql: string; binds: unknown[] } {
+  return {
+    sql: "EXISTS (SELECT 1 FROM sends WHERE id = ? AND status = 'sent' AND completed_at = ?)",
+    binds: [sendId, now],
+  };
 }
 
 /** A send's in-flight rows no receipt has reached, over one `?` (the send id). */

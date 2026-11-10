@@ -117,6 +117,7 @@ describe("the tools are a curated set over the API's routes (SPEC §11)", () => 
       "reschedule_send",
       "cancel_send",
       "resolve_send",
+      "end_send",
       "import_subscribers",
       "add_subscriber",
       "unsubscribe_subscriber",
@@ -486,6 +487,23 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
     const done = await callOk("resolve_send", { id, resolution: "unsent" });
     expect(done).toMatchObject({ resolved: 1, completed: true });
     expect((await callOk("get_send", { id })).send.resolved_by).toEqual({
+      kind: "human",
+      email: "you@example.com",
+      client: "claude",
+    });
+  });
+
+  it("ends a held send only through its route, and asks a resolution only while recipients are in flight (SPEC §12)", async () => {
+    const tool = (await listTools()).find((t) => t.name === "end_send")!;
+    expect(tool.inputSchema.required).toEqual(["id"]);
+    expect(tool.description).toContain("Only when the publisher asks to end it");
+    const id = await wedgedSend();
+    const none = await callTool("end_send", { id });
+    expect(none.isError).toBe(true);
+    expect(none.text).toMatch(/^Refused: HTTP 400 bad_request\..*\nFix: `resolution`\.$/s);
+    const done = await callOk("end_send", { id, resolution: "unsent" });
+    expect(done).toMatchObject({ resolved: 1, unsent: 0, send: { status: "sent" } });
+    expect((await callOk("get_send", { id })).send.ended_by).toEqual({
       kind: "human",
       email: "you@example.com",
       client: "claude",

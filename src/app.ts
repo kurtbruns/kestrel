@@ -484,7 +484,7 @@ export function createRouter({
       summary:
         "The instance's MCP server, which Claude Desktop and claude.ai connect to as a custom connector: one JSON-RPC message a request, answered in JSON.",
       description:
-        "Stateless MCP over Streamable HTTP, 2025-06-18 and 2025-11-25, opened by `initialize`: `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`, and `resources/read`, one message a request. A notification, or a client's answer to a request, is taken with a 202 and no body. Malformed JSON is a 400 with JSON-RPC's `-32700`, and a batch, or an `MCP-Protocol-Version` this server doesn't speak, a 400 with `-32600`; an error inside the server is a JSON-RPC error, or the tool's, never a 500. A request naming Claude's origin (`https://claude.ai`, `https://claude.com`) with no `Sec-Fetch-Site` is Claude's servers', not a page's. Its tools are a curated set for a publisher in a chat (search and read posts, sends, and subscribers; save or delete a draft; change a post's listing or address; send a test; schedule, move, cancel, or resolve a send; import, add, or unsubscribe; block or lift a suppression; change the settings or the template, and test the notifications), each calling one or more of this API's routes with arguments picked from those routes' own fields, plus `kestrel_api_read` for any other admin read that answers JSON or Markdown, never an export. Erasure, uploads, and the logo stay in the editor. A call runs its routes as the person signed in, naming its client `claude`, so a change records the person via Claude, and a refusal comes back as a tool error led by its code, its words, and the next move, never answered for the person. The resources are the publisher's docs, as Markdown.",
+        "Stateless MCP over Streamable HTTP, 2025-06-18 and 2025-11-25, opened by `initialize`: `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`, and `resources/read`, one message a request. A notification, or a client's answer to a request, is taken with a 202 and no body. Malformed JSON is a 400 with JSON-RPC's `-32700`, and a batch, or an `MCP-Protocol-Version` this server doesn't speak, a 400 with `-32600`; an error inside the server is a JSON-RPC error, or the tool's, never a 500. A request naming Claude's origin (`https://claude.ai`, `https://claude.com`) with no `Sec-Fetch-Site` is Claude's servers', not a page's. Its tools are a curated set for a publisher in a chat (search and read posts, sends, and subscribers; save or delete a draft; change a post's listing or address; send a test; schedule, move, cancel, resolve, or end a send; import, add, or unsubscribe; block or lift a suppression; change the settings or the template, and test the notifications), each calling one or more of this API's routes with arguments picked from those routes' own fields, plus `kestrel_api_read` for any other admin read that answers JSON or Markdown, never an export. Erasure, uploads, and the logo stay in the editor. A call runs its routes as the person signed in, naming its client `claude`, so a change records the person via Claude, and a refusal comes back as a tool error led by its code, its words, and the next move, never answered for the person. The resources are the publisher's docs, as Markdown.",
       body: [
         { name: "jsonrpc", type: '"2.0"', description: "JSON-RPC's version.", required: true },
         {
@@ -1702,6 +1702,69 @@ export function createRouter({
         ],
       },
       handler: sendRoutes.resolve,
+    },
+    {
+      method: "POST",
+      path: "/api/sends/:id/end",
+      access: "admin",
+      accepts: JSON_BODY,
+      resource: "sends",
+      title: "End a held or wedged send",
+      summary: "End a send the provider holds, or one wedged on ambiguous deliveries.",
+      description:
+        "The publisher's way out of a send that will never clear, such as one an account suspended for good holds, or a post no longer timely after a long outage. Offered in `actions` only while the send carries a halt (a refusal or an outage) or is wedged, and no run holds it; never on a send still going out. Recipients the provider took keep their deliveries, and their receipts still land. Everyone still waiting to be handed off is recorded `unsent`, with the error `ended by the publisher`; a send held before its first hand-off fixes its audience first, so the record lists everyone it was for. Recipients in flight, whose fate is unknown, are settled as `resolution` says, as Resolve settles them. The send and its post then finish as `sent`, even when no one was reached, and can't be sent again. It mails no one and can't be undone. The send records who ended it as `ended_by`. Only on the publisher's word: never offer it as a fix.",
+      example: {
+        request: { resolution: "unsent" },
+        response: {
+          send: sendBrief({
+            status: "sent",
+            phase: "settling",
+            rev: 58,
+            ended_by: { kind: "human", email: "you@example.com", client: "editor" },
+          }),
+          cursor: "58.1768467620000",
+          resolved: 2,
+          unsent: 340,
+        },
+      },
+      body: [
+        {
+          name: "resolution",
+          type: '"unsent" | "accepted"',
+          description:
+            'Required while recipients are in flight (`counts.dispatched` above zero), and refused when none are, each a 400 naming the field. The publisher\'s choice for those recipients, as on Resolve; never choose it yourself. `unsent`, the editor\'s "Assume not sent", or `accepted`, its "Assume sent".',
+        },
+      ],
+      errors: [
+        {
+          code: "run_in_progress",
+          when: "A run holds the send, and its in-flight rows may still get the provider's answer: try again a moment later.",
+          details: ["send", "cursor"],
+        },
+        {
+          code: "not_held",
+          when: "The send is neither held nor wedged: still going out, not started, or already finished, as when another End has finished it.",
+          details: ["send", "cursor"],
+        },
+      ],
+      returns: {
+        object: "send",
+        as: "send",
+        fields: [
+          cursorField,
+          {
+            name: "resolved",
+            type: "number",
+            description: "How many recipients in flight it settled as `resolution` said.",
+          },
+          {
+            name: "unsent",
+            type: "number",
+            description: "How many recipients still waiting to be handed off it recorded unsent.",
+          },
+        ],
+      },
+      handler: sendRoutes.end,
     },
 
     // --- subscribers (authed admin) ---

@@ -219,7 +219,7 @@ describe("a wedged send a receipt with no provider id reaches", () => {
       false,
       3,
     ]);
-    expect(p.actions.map((a) => a.name)).toEqual(["resolve"]);
+    expect(p.actions.map((a) => a.name)).toEqual(["resolve", "end"]);
 
     await resolveStuckSend(env, send.id, "accepted", person("tester"));
     expect((await row(send.id)).status).toBe("sent");

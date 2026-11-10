@@ -30,11 +30,13 @@ Nothing is lost. A problem with your email provider never marks anyone unsent or
 
 If someone else set up Kestrel for you, pass this along to them.
 
+**Ending a send that won't clear.** A held send waits as long as it takes, since it goes out on its own once the cause is fixed. If it never will be, such as an SES account suspended for good, or the post is no longer timely after a long outage, the send's page offers **End send…** while the send is held or waiting for **Resolve…**. Ending it records everyone not yet sent it as **Unsent**, ended by you; anyone who already got it keeps it, and no one is mailed. If the provider never answered for some readers, the dialog asks the same question as Resolve. A finished post can't be sent again, so to reach the others, put its content in a new post. Ending can't be undone, so only end a send you've decided to give up on.
+
 ## Someone was mailed twice, or not at all
 
 Kestrel never mails a reader twice on its own. When it can't tell whether your provider took some emails, it stops and asks you: the send's page shows **Resolve…**. Choose **Assume not sent** unless you know otherwise, since it's the safe default: those readers may miss this post, but get your next one. Choose **Assume sent** only when you know they got it, such as from a reader who tells you so. Either choice mails no one.
 
-A reader recorded as **Unsent** is still on your list and gets your next post. That send never mails them again: their own email kept failing, SES refused their email while taking the readers sent with it, or you chose **Assume not sent**.
+A reader recorded as **Unsent** is still on your list and gets your next post. That send never mails them again: their own email kept failing, SES refused their email while taking the readers sent with it, you chose **Assume not sent**, or you ended the send.
 
 ## A reader says they never got a post
 

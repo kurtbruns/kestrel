@@ -502,6 +502,24 @@ const CASES: Case[] = [
     },
   },
   {
+    refusal: "POST /api/sends/:id/end run_in_progress",
+    when: "a held send a run holds",
+    run: async () => {
+      const send = await frozenSend(Date.now() - 1000);
+      await setRow(send.id, {
+        status: "sending",
+        halt_reason: "unavailable",
+        locked_until: Date.now() + 60_000,
+      });
+      return call("POST", `/api/sends/${send.id}/end`);
+    },
+  },
+  {
+    refusal: "POST /api/sends/:id/end not_held",
+    when: "a send neither held nor wedged",
+    run: async () => call("POST", `/api/sends/${(await scheduled()).send.id}/end`),
+  },
+  {
     refusal: "POST /api/sends/:id/resolve not_wedged",
     when: "a send with nothing to resolve",
     run: async () =>

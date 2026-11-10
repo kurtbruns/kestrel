@@ -129,6 +129,9 @@ function finished(n: DueNotification, title: string, config: Config): RenderedEm
   const at = n.completed_at ? ` at ${when(n.completed_at)}` : "";
   const accepted = n.c_accepted + n.c_delivered + n.c_bounced + n.c_complained;
   const total = accepted + n.c_unsent + n.c_pending + n.c_in_flight;
+  if (n.ended) {
+    return ended(n, title, at, accepted, total, report);
+  }
   if (accepted === 0 && total > 0) {
     return problem({
       subject: `${title} didn’t reach anyone`,
@@ -153,6 +156,38 @@ function finished(n: DueNotification, title: string, config: Config): RenderedEm
       lateBy > MISSED_THRESHOLD_MS
         ? `It went out ${minutes(lateBy)} minutes late, because Kestrel’s once-a-minute sending job wasn’t running or failed on it. If this keeps happening, check the Worker’s Cron Trigger and logs. ${PASS_THIS_ALONG}`
         : undefined,
+    link: report,
+  });
+}
+
+/** A send a person ended while it was held or wedged (SPEC §12): their decision, so nothing to
+ *  fix, but said plainly who didn't get it, since "your provider accepted none" would be untrue. */
+function ended(
+  n: DueNotification,
+  title: string,
+  at: string,
+  accepted: number,
+  total: number,
+  report: Link,
+): RenderedEmail {
+  const notReached = total - accepted;
+  const again =
+    "A finished post can’t be sent again: to send it, put its content in a new post. The send report lists who didn’t get it.";
+  if (accepted === 0) {
+    return done({
+      subject: `${title} didn’t reach anyone`,
+      happened:
+        total === 0
+          ? `${title} was ended${at} before anyone received it.`
+          : `${title} was ended${at} before anyone received it, so none of its ${emails(total)} went out.`,
+      more: again,
+      link: report,
+    });
+  }
+  return done({
+    subject: `Ended: ${n.subject}`,
+    happened: `${title} was ended${at}. Your email provider accepted ${count(accepted)} of ${emails(total)} before then, and ${notReached === 1 ? "the other one wasn’t" : `the other ${count(notReached)} weren’t`} sent.`,
+    more: again,
     link: report,
   });
 }

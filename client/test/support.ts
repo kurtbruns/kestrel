@@ -328,6 +328,7 @@ export function sendSummary(over: Partial<SendRowFixture> = {}): SendRowFixture 
     rescheduled_by: null,
     canceled_by: null,
     resolved_by: null,
+    ended_by: null,
     rev: 1,
     ...over,
   };

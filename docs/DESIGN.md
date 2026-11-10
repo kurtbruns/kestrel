@@ -210,7 +210,7 @@ On the dev stand-in, which records sends but delivers nothing, a muted line unde
 
 One page for the whole life of a send once it fires (SPEC §8): the watch while it sends, then the record it becomes, in place.
 
-**The watch** (sending) is observe-only, apart from **Resolve…** (Primary) when the server offers it for a wedged send (SPEC §12). It shows the subject with a phase pill, when it started, who acted on it (§10), any attention alert (§4), and two progress bars on one scale, the audience at fire:
+**The watch** (sending) is observe-only, apart from two controls at the head's right, each only while the server offers it (SPEC §12): **End send…** (subtle Danger) for a send that is held or wedged, and **Resolve…** (Primary) for a wedged send. It shows the subject with a phase pill, when it started, who acted on it (§10), any attention alert (§4), and two progress bars on one scale, the audience at fire:
 
 - **Dispatch**: how many the provider has accepted, in the sending blue, with the phase's one-line gloss and, while handing off, the rate and time to finish.
 - **Delivery**: grey up to the accepted count, with green for confirmed deliveries filling in behind, so delivery visibly lags dispatch and never passes it. Its count reads confirmed of accepted.
@@ -384,7 +384,7 @@ What each screen shows at each stage:
 | **Scheduled** | Link-only card with a countdown | Card with Edit schedule, Cancel, and a countdown | Row reads scheduled | Scheduled banner with a countdown, Edit schedule, and Cancel | Opens the editor |
 | **Due** (fire time passed, not yet started) | Card reads "Preparing to send…" | Same card, without Edit schedule and Cancel | Row reads scheduled | Banner reads "Preparing to send…", its controls disabled in place | Opens the editor |
 | **Sending** | Active-send card | In progress card | Row reads sending, opens the watch | Never shown: hands off to the watch | The watch |
-| **Needs attention**, or in flight too long | Health line | Attention card, or a note on its In progress card | As sending | As sending | Alert at the top; Resolve for a wedged send |
+| **Needs attention**, or in flight too long | Health line | Attention card, or a note on its In progress card | As sending | As sending | Alert at the top; End send for a held or wedged send, and Resolve for a wedged one |
 | **Settling** | Row in Sent, Delivered follows the counts | Same | Gone | Never shown | The record, Settling |
 | **Complete** | Row with its final Delivered | Same | Gone | Never shown | The record, Complete |
 | **Canceled** | Card leaves the queue | Same | Row reads draft again | Banner goes, post editable again | Canceled page |
@@ -434,8 +434,8 @@ The **health block** on the dashboard, the **attention cards** on Sent, and an *
 | Condition | Tone | Where, and what it offers |
 | --- | --- | --- |
 | Missed fire time | red | Health line; the scheduled card and banner read "Missed its fire time · N min late". |
-| Wedged send | red | Health line linking to the send; attention card and the watch carry **Resolve…**. |
-| Provider refusing the account, or this send | red | Health line, attention card, and watch alert, each with the provider's words and one sentence of advice that names the fix and who makes it. No control: nothing in the app fixes it, so the subject links to its watch. The watch's headline says "refusing this account", or "refusing this send" when the provider refuses the send's own email. The copy says no one has been marked unsent because of this, so it stays true beside readers unsent earlier, and the send resumes once it is fixed, and the watch names the next retry. |
+| Wedged send | red | Health line linking to the send; attention card and the watch carry **Resolve…**, and the watch **End send…** too. |
+| Provider refusing the account, or this send | red | Health line, attention card, and watch alert, each with the provider's words and one sentence of advice that names the fix and who makes it. No control on the line or card: nothing in the app fixes it, so the subject links to its watch, whose **End send…** is a way out, never offered as the fix. The watch's headline says "refusing this account", or "refusing this send" when the provider refuses the send's own email. The copy says no one has been marked unsent because of this, so it stays true beside readers unsent earlier, and the send resumes once it is fixed, and the watch names the next retry. |
 | In flight too long | amber | Health line, a note on its active-send and In progress cards, and a line at the top of its watch. |
 | Rate limit the deployment causes | amber | Health line and a line at the top of its watch, in the server's words, which name `SES_MAX_SEND_RATE`. An ordinary outage or rate limit raises nothing (below). |
 | Provider outage past an hour | amber | Health line linking to the send, and a line at the top of its watch, in the server's words: nothing is lost, the send retries hourly and resumes on its own, check AWS's status page, and tell readers if the post is time-sensitive. It appears when the publisher is emailed about it, so the page and the email agree, and goes when the provider answers. |
@@ -450,6 +450,8 @@ The **health block** on the dashboard, the **attention cards** on Sent, and an *
 A send that needs the operator leaves the active-send cards and In progress, so it is reported once. A provider that is only unavailable is not an attention item: the send reads as in progress, and its phase gloss says the provider is unavailable and when the next retry is, in grey, until the outage has lasted about an hour and the amber line above joins it.
 
 **Resolve** explains why the send can't finish on its own and offers **Assume not sent** and **Assume sent**, with Cancel. Neither choice re-mails anyone (I4), so the dialog explains a trade-off in the record's accuracy, not a danger. Since the app can't tell whether those emails went out, the dialog names **Assume not sent** as the safe default and **Assume sent** as the choice for when the operator knows otherwise.
+
+**End send** is offered on the watch only, never on a health line or attention card, so it reads as the publisher's own decision rather than a fix the page suggests. It is destructive and can't be undone, so its dialog, titled "End this send?", says what is lost: how many recipients not yet sent it will be recorded unsent and won't get this post (about the audience, for a send held before its first hand-off), that they stay subscribed and get the next one, that anyone who already got it keeps it and no one is mailed, and that a finished post can't be sent again, so reaching the others means a new post. When recipients are in flight, it asks Resolve's question in the same step, as two radio rows, **Assume not sent** checked as the safe default and **Assume sent**, each with a muted line. Focus lands on Cancel, and the confirming button is a solid Danger **End send**. Its toast says how many were recorded unsent, and the watch becomes the finished record, whose who-acted line reads "ended by".
 
 ### No email provider
 
@@ -631,7 +633,7 @@ The docs room's bar stays one row at every width, so its anchors always clear it
 
 Each of these was decided, not forgotten. Adding one is a design change, and most are a spec change first.
 
-- **Pausing, resuming, or ending a send in flight.** The watch is observe-only apart from Resolve (SPEC §12).
+- **Pausing, resuming, or ending a send still going out.** The watch is observe-only apart from Resolve and ending a send that is held or wedged (SPEC §12).
 - **An instant send.** Send now has a window (I6).
 - **Editing a scheduled post in place.** The lock guarantees that what fires is what was reviewed; editing goes through Cancel.
 - **More than one template, template history, or undo** (SPEC appendix).

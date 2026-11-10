@@ -1328,6 +1328,100 @@ describe("sent record", () => {
     expect($(".modal h3").textContent).toBe("Resolve 2 ambiguous deliveries");
   });
 
+  /** A send the provider refuses, with `pending` still to hand off and `inFlight` unknown. */
+  const held = (pending: number, inFlight: number, actions = ["end"]) =>
+    sendView(
+      send({
+        status: "sending",
+        c_pending: pending,
+        c_in_flight: inFlight,
+        c_delivered: 3,
+        c_bounced: 0,
+        c_unsent: 0,
+        completed_at: null,
+      }),
+      {
+        phase: "needs_attention",
+        conditions: [condition.refused("ses 403 AccountSuspendedException", null)],
+        actions: actions.map((name) => ({
+          name: name as "end",
+          method: "POST" as const,
+          path: `/api/sends/x1/${name}`,
+        })),
+      },
+    );
+  const endRoutes = (view: SendView, posted: unknown[]) => [
+    {
+      path: "/api/sends/x1",
+      reply: () => ({ send: view, outcomes: outcomes({ accepted: 0 }), cursor: "1.1" }),
+    },
+    feedOf(() => view),
+    {
+      method: "POST",
+      path: "/api/sends/x1/end",
+      reply: (req: { json(): unknown }) => {
+        posted.push(req.json());
+        return { send: view, cursor: "2.2", resolved: 0, unsent: 7 };
+      },
+    },
+  ];
+
+  it("offers End only while the server lists it, as a subtle Danger button (SPEC §12, DESIGN §7)", async () => {
+    const moving = sendView(send({ status: "sending", c_pending: 7, completed_at: null }), {
+      phase: "progressing",
+    });
+    fake = fakeApi(endRoutes(moving, []));
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.querySelector("#endBtn")).toBeNull();
+    unmount();
+    fake.restore();
+
+    fake = fakeApi(endRoutes(held(7, 0), []));
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#endBtn").className).toBe("danger-subtle");
+    expect($("#endBtn").textContent).toBe("End send…");
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
+  it("says how many will be recorded unsent and that the post can't be sent again, then ends it with no resolution", async () => {
+    const posted: unknown[] = [];
+    fake = fakeApi(endRoutes(held(7, 0), posted));
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(0);
+    $("#endBtn").click();
+    const text = $(".modal").textContent ?? "";
+    expect($(".modal h3").textContent).toBe("End this send?");
+    expect(text).toContain("7 recipients not yet sent it will be recorded as unsent");
+    expect(text).toContain("A finished post can’t be sent again");
+    expect(text).toContain("This can’t be undone.");
+    expect(document.querySelector('input[name="endRes"]')).toBeNull();
+    expect($("#endGo").className).toBe("danger");
+    $("#endGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(posted).toEqual([{}]);
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
+  it("asks Resolve's question when recipients are in flight, with Assume not sent chosen, and sends the answer picked", async () => {
+    const posted: unknown[] = [];
+    fake = fakeApi(endRoutes(held(4, 2), posted));
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(0);
+    $("#endBtn").click();
+    expect($(".modal").textContent).toContain("The provider never answered for 2 recipients");
+    const checked = () =>
+      document.querySelector<HTMLInputElement>('input[name="endRes"]:checked')?.value;
+    expect(checked()).toBe("unsent");
+    document.querySelector<HTMLInputElement>('input[name="endRes"][value="accepted"]')!.checked =
+      true;
+    $("#endGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(posted).toEqual([{ resolution: "accepted" }]);
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
   it("stops following when the reader navigates away, even with a read in flight", async () => {
     let held: ((v: unknown) => void) | null = null;
     const release = () => held?.(null);

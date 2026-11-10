@@ -82,6 +82,7 @@ const NO_LONGER_APPLIES = {
   window_closed: [409, "The send's fire time has passed."],
   send_canceled: [409, "The send is canceled: schedule the post again instead."],
   not_wedged: [409, "Nothing on the send needs resolving."],
+  not_held: [409, "The send is neither held nor wedged, so there's nothing to end."],
   signup_required: [
     409,
     "Adding someone who left by a complaint or an erasure: only their own sign-up through the subscribe page brings them back.",

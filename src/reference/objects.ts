@@ -87,6 +87,7 @@ const SEND_EXAMPLE = {
   rescheduled_by: { kind: "human", email: "you@example.com", client: "editor" },
   canceled_by: null,
   resolved_by: null,
+  ended_by: null,
   audience: { count: 1200, fixed: true, fixed_at: 1768467601000 },
   counts: {
     pending: 700,
@@ -468,6 +469,12 @@ const SEND_FIELDS: ReferenceField[] = [
       "Who last resolved it while it was wedged, in the same shape; null if no one has, and for a Resolve made before who acted was recorded.",
   },
   {
+    name: "ended_by",
+    type: "{ kind, email, token_id, client } | null",
+    description:
+      "Who ended it while it was held or wedged, in the same shape; null unless someone did.",
+  },
+  {
     name: "audience",
     type: "{ count, fixed, fixed_at }",
     description:
@@ -543,7 +550,7 @@ const SEND_FIELDS: ReferenceField[] = [
     name: "actions",
     type: "object[]",
     description:
-      "What the server would accept now, each `{ name, method, path }`: `cancel` and `reschedule` before the fire time, the reschedule only while the publication has a time zone, `resolve` while wedged.",
+      "What the server would accept now, each `{ name, method, path }`: `cancel` and `reschedule` before the fire time, the reschedule only while the publication has a time zone, `resolve` while wedged, and `end` while held or wedged with no run holding it.",
   },
   {
     name: "next_change_at",

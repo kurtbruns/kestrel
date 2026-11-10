@@ -4,6 +4,7 @@ import { decodeSendCursor, encodeSendCursor, type SendCursor } from "../../share
 import {
   BOUNCE_SPIKE_RECENT_MS,
   type DeliveryListResponse,
+  type EndResponse,
   type FeedCondition,
   NO_RECEIPTS_AFTER_MS,
   type ResolveResponse,
@@ -25,6 +26,7 @@ import type { RequestContext } from "../router";
 import { actorOf, param } from "../router";
 import { bySeverity, sendConditions } from "../send/conditions";
 import { readConditionContext, viewWithCursor } from "../send/describe";
+import { endSendAsked } from "../send/end";
 import { feedPace, readAgainAt, SETTLE_FOLLOW_MS } from "../send/feed";
 import { resolveStuckSend } from "../send/resolve";
 import { cancel as cancelSend, reschedule as rescheduleSend } from "../send/schedule";
@@ -396,5 +398,22 @@ export async function resolve(c: RequestContext): Promise<Response> {
   const id = param(c, "id");
   const { resolved, completed } = await resolveStuckSend(c.env, id, outcome, by);
   const body: ResolveResponse = { ...(await answerWith(c, id)), resolved, completed };
+  return json(body);
+}
+
+/**
+ * End a send that is held or wedged (SPEC §12): the publisher's way out of a send that will
+ * never clear. Everyone not yet handed off is recorded unsent, anyone in flight is settled as
+ * `resolution` says, and the send finishes. The body is optional, since a send with no one in
+ * flight takes no `resolution`.
+ */
+export async function end(c: RequestContext): Promise<Response> {
+  const request = await readJsonObject(c, { optional: true });
+  const resolution =
+    request.resolution === undefined ? null : oneOf(request, "resolution", ["unsent", "accepted"]);
+  const by = actorOf(unwrap(c.principal, "principal"));
+  const id = param(c, "id");
+  const { resolved, unsent } = await endSendAsked(c.env, id, resolution, by);
+  const body: EndResponse = { ...(await answerWith(c, id)), resolved, unsent };
   return json(body);
 }

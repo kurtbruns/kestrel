@@ -287,6 +287,7 @@ export function buildSendView(
     rescheduled_by: readActor(send.rescheduled_by),
     canceled_by: readActor(send.canceled_by),
     resolved_by: readActor(send.resolved_by),
+    ended_by: readActor(send.ended_by),
     audience: {
       count: total,
       fixed: send.audience_resolved_at !== null,

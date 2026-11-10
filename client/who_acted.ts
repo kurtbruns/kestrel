@@ -59,6 +59,7 @@ const SEND_ACTS = [
   ["rescheduled_by", "rescheduled"],
   ["canceled_by", "canceled"],
   ["resolved_by", "resolved"],
+  ["ended_by", "ended"],
 ] as const;
 
 /**
@@ -67,7 +68,9 @@ const SEND_ACTS = [
  * none is recorded, as for a send made before who acted was, or none is known yet.
  */
 export function sendActedBy(
-  send: Partial<Pick<SendView, "scheduled_by" | "rescheduled_by" | "canceled_by" | "resolved_by">>,
+  send: Partial<
+    Pick<SendView, "scheduled_by" | "rescheduled_by" | "canceled_by" | "resolved_by" | "ended_by">
+  >,
 ): string | null {
   const parts = SEND_ACTS.flatMap(([field, verb]) => {
     const actor = send[field];

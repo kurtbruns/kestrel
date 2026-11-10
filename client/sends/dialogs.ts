@@ -1,9 +1,15 @@
-// The send actions a publisher takes from more than one surface: resolving a wedged send
-// (the list, the watch) and rescheduling, the Schedule dialog for a scheduled post (the list's
-// scheduled card, the editor's banner).
+// The send actions a publisher takes in a dialog: resolving a wedged send (the list, the watch),
+// ending a held or wedged one (the watch), and rescheduling, the Schedule dialog for a scheduled
+// post (the list's scheduled card, the editor's banner).
 
 import type { PostResponse } from "../../shared/posts";
-import type { ResolveResponse, SendSummary, WedgedResolution } from "../../shared/sends";
+import type {
+  EndResponse,
+  ResolveResponse,
+  SendSummary,
+  SendView,
+  WedgedResolution,
+} from "../../shared/sends";
 import { ApiError, api, describeError } from "../api";
 import { earliestFireAt, isTooSoon, notConnectedRescheduleLine, tooSoonText } from "../deployment";
 import {
@@ -62,6 +68,85 @@ export function openResolveModal(
   const accepted = $<HTMLButtonElement>("#rAccepted", m.el);
   unsent.onclick = () => doResolve(unsent, "unsent", "not sent");
   accepted.onclick = () => doResolve(accepted, "accepted", "sent");
+}
+
+/** What ending a send would record unsent, as the End dialog words it: everyone still waiting
+ *  to be handed off, or, while it is held before its first hand-off, its estimated audience,
+ *  which the End fixes first (SPEC §12). */
+export function endUnsentText(send: Pick<SendView, "counts" | "audience">): {
+  n: number;
+  text: string;
+} {
+  const n = send.audience.fixed ? send.counts.pending : send.audience.count;
+  const about = send.audience.fixed ? "" : "about ";
+  const who = `${about}${n.toLocaleString("en-US")} ${n === 1 ? "recipient" : "recipients"}`;
+  return { n, text: who };
+}
+
+/**
+ * End a send that is held or wedged (SPEC §12): a destructive act, confirmed with a Danger
+ * button, whose dialog says what is lost (how many are recorded unsent, and that a finished post
+ * can't be sent again) and, when recipients are in flight, asks Resolve's question in the same
+ * step, with Assume not sent, the safe default, chosen.
+ */
+export function openEndModal(
+  send: Pick<SendView, "id" | "subject" | "counts" | "audience">,
+  reload: () => void,
+  signal: AbortSignal,
+): void {
+  const unsent = endUnsentText(send);
+  const inFlight = send.counts.dispatched;
+  const question =
+    inFlight > 0
+      ? html`<p class="hint">The provider never answered for ${inFlight.toLocaleString("en-US")} ${inFlight === 1 ? "recipient" : "recipients"}, so whether ${inFlight === 1 ? "it was" : "they were"} mailed is unknown. Unless you know otherwise, assume not sent.</p>
+          <label class="end-choice"><input type="radio" name="endRes" value="unsent" checked><span><strong>Assume not sent</strong><span class="listing-help">Recorded as unsent. They get your next post.</span></span></label>
+          <label class="end-choice"><input type="radio" name="endRes" value="accepted"><span><strong>Assume sent</strong><span class="listing-help">Recorded as accepted by your provider, such as when a reader says they got it.</span></span></label>`
+      : null;
+  const m = modal(
+    html`<h3 id="endHead">End this send?</h3>
+      <p class="hint">Stops “${send.subject || "Untitled"}” for good. ${unsent.n === 0 ? html`No one is left waiting to be sent it.` : html`<strong>${unsent.text}</strong> not yet sent it will be recorded as unsent and won’t get this post. They stay subscribed and get your next one.`} Anyone who already got it keeps it, and no one is mailed.</p>
+      ${question}
+      <p class="hint">A finished post can’t be sent again: to reach the others, put its content in a new post. This can’t be undone.</p>
+      <div class="actions"><button type="button" id="endCancel">Cancel</button><button type="button" class="danger" id="endGo">End send</button></div>`,
+    signal,
+  );
+  $(".modal", m.el).setAttribute("aria-labelledby", "endHead");
+  const cancel = $<HTMLButtonElement>("#endCancel", m.el);
+  cancel.onclick = m.close;
+  const go = $<HTMLButtonElement>("#endGo", m.el);
+  go.onclick = () =>
+    busy(go, "Ending…", async () => {
+      m.clearError();
+      // Assume not sent unless Assume sent is chosen: the safe default, which the dialog checks.
+      const radios = m.el.querySelectorAll<HTMLInputElement>('input[name="endRes"]');
+      const resolution: WedgedResolution | undefined =
+        radios.length === 0
+          ? undefined
+          : [...radios].some((r) => r.value === "accepted" && r.checked)
+            ? "accepted"
+            : "unsent";
+      try {
+        const res = await api<EndResponse>(`/api/sends/${send.id}/end`, {
+          method: "POST",
+          json: resolution ? { resolution } : {},
+        });
+        m.close();
+        // Everyone this End left without the post: those never handed off, and those in flight
+        // it assumed were not sent.
+        const unsentNow = res.unsent + (resolution === "unsent" ? res.resolved : 0);
+        toast(
+          unsentNow === 0
+            ? "Send ended"
+            : `Send ended: ${unsentNow.toLocaleString("en-US")} recorded unsent`,
+        );
+        readSendsNow();
+        reload();
+      } catch (e) {
+        m.error(message(e));
+      }
+    });
+  // A destructive act: focus starts on the way back, not on End.
+  cancel.focus();
 }
 
 /**

@@ -27,7 +27,7 @@ import { icon } from "../ui/icons";
 import { type ListState, renderPager, th, wireSort } from "../ui/list_controls";
 import { busy, type Modal, modal, renderError, toast } from "../ui/widgets";
 import { sendActedBy } from "../who_acted";
-import { openResolveModal } from "./dialogs";
+import { openEndModal, openResolveModal } from "./dialogs";
 import { deliveryOutcome } from "./outcome";
 import { can, clampPct, conditionOf, fmtDuration, has, nextRetry } from "./progress";
 
@@ -284,7 +284,7 @@ function watchHtml(send: SendView): Html {
   return html`
     <div class="editor-head">
       <a href="#/sent" class="back">← Sent</a>
-      ${can(prog, "resolve") ? html`<button type="button" class="primary" id="resolveBtn">Resolve…</button>` : null}
+      ${watchControls(prog)}
     </div>
     <div class="card rec-card watch-card">
       <div class="rec-head">
@@ -297,8 +297,25 @@ function watchHtml(send: SendView): Html {
     </div>`;
 }
 
-// Wire the header's Resolve control (present only while the server offers it, §12). It
-// reuses the same modal the Sent page uses, with the wedged count the send reports.
+/** The watch header's controls, each present only while the server offers it (§12): End, a
+ *  destructive act and so the subtle Danger (DESIGN §7), and Resolve, the act a wedged send
+ *  waits for. */
+function watchControls(send: SendView): Html | null {
+  const end = can(send, "end");
+  const resolve = can(send, "resolve");
+  if (!end && !resolve) {
+    return null;
+  }
+  return html`<div class="editor-head-right">${end ? html`<button type="button" class="danger-subtle" id="endBtn">End send…</button>` : null}${resolve ? html`<button type="button" class="primary" id="resolveBtn">Resolve…</button>` : null}</div>`;
+}
+
+/** Which controls the header shows, to tell when a report changes them. */
+function controlsKey(root: HTMLElement): string {
+  return `${Boolean(root.querySelector("#endBtn"))}${Boolean(root.querySelector("#resolveBtn"))}`;
+}
+
+// Wire the header's Resolve and End controls. Resolve reuses the same modal the Sent page
+// uses, with the wedged count the send reports; End reads the send as the latest report has it.
 function wireWatchHeader(
   root: HTMLElement,
   send: SendView,
@@ -309,6 +326,10 @@ function wireWatchHeader(
   if (rb) {
     const count = conditionOf(send, "wedged")?.count ?? send.counts.dispatched;
     rb.onclick = () => openResolveModal({ id: send.id, c_in_flight: count }, remount, signal);
+  }
+  const eb = root.querySelector<HTMLButtonElement>("#endBtn");
+  if (eb) {
+    eb.onclick = () => openEndModal(send, remount, signal);
   }
 }
 function paintWatch(root: HTMLElement, prog: SendView): void {
@@ -354,12 +375,14 @@ function startWatch(
           return;
         }
         latest = fresh;
-        // If Resolve just became possible, or stopped being, the header changes: re-render.
-        if (can(fresh, "resolve") !== Boolean(root.querySelector("#resolveBtn"))) {
+        // If Resolve or End just became possible, or stopped being, the header changes:
+        // re-render. Otherwise End's dialog still reads this report's counts.
+        if (`${can(fresh, "end")}${can(fresh, "resolve")}` !== controlsKey(root)) {
           setHtml(root, watchHtml(fresh));
           wireWatchHeader(root, fresh, remount, signal);
         } else {
           paintWatch(root, fresh);
+          wireWatchHeader(root, fresh, remount, signal);
         }
       },
       removed: remount,

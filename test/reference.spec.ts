@@ -537,7 +537,7 @@ describe("API reference is generated from the route registration", () => {
         checked++;
       }
     }
-    expect(checked).toBe(6);
+    expect(checked).toBe(7);
   });
 
   it("a newly registered route appears in the reference with no separate doc to touch", () => {

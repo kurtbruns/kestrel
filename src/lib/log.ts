@@ -46,6 +46,7 @@ export const LOG_EVENTS = {
   "send.rescheduled": "info",
   "send.halted": "warn",
   "send.resolved": "warn",
+  "send.ended": "warn",
   "send.lease_lost": "warn",
   "send.ambiguous": "error",
   "send.wedged": "error",

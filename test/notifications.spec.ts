@@ -309,6 +309,7 @@ describe("a send that needs the publisher", () => {
       c_skipped: 0,
       c_unsent: 0,
       receipt_since: 0,
+      ended: 0,
     } satisfies notifications.DueNotification;
 
     const none = composeNotification({ ...finished, c_unsent: 30 }, config);
@@ -1137,6 +1138,7 @@ describe("the link in a notification", () => {
           c_skipped: 0,
           c_unsent: 0,
           receipt_since: 0,
+          ended: 0,
         },
         config,
       );

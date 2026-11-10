@@ -35,6 +35,7 @@ import type {
 import type { ProviderStatusView } from "../../shared/provider";
 import { concretePath } from "../../shared/reference";
 import type {
+  EndResponse,
   ResolveResponse,
   ScheduleResponse,
   SendActionResponse,
@@ -299,6 +300,7 @@ function sendFull(s: SendView) {
     rescheduled_by: s.rescheduled_by,
     canceled_by: s.canceled_by,
     resolved_by: s.resolved_by,
+    ended_by: s.ended_by,
     archive: s.links.archive,
     unlisted: s.links.unlisted,
   };
@@ -388,6 +390,7 @@ const GET_SEND = route("GET", "/api/sends/:id");
 const RESCHEDULE_SEND = route("POST", "/api/sends/:id/reschedule");
 const CANCEL_SEND = route("POST", "/api/sends/:id/cancel");
 const RESOLVE_SEND = route("POST", "/api/sends/:id/resolve");
+const END_SEND = route("POST", "/api/sends/:id/end");
 const LIST_SUBSCRIBERS = route("GET", "/api/subscribers");
 const ADD_SUBSCRIBER = route("POST", "/api/subscribers");
 const GET_SUBSCRIBER = route("GET", "/api/subscribers/:id");
@@ -878,6 +881,29 @@ export const TOOL_DEFS: ToolDef[] = [
       }
       const r = a.body as ResolveResponse;
       return data({ send: sendBrief(r.send), resolved: r.resolved, completed: r.completed });
+    },
+  },
+  {
+    name: "end_send",
+    title: "End a held or wedged send",
+    description:
+      "End a send the provider holds (a refusal or an outage) or one wedged on recipients whose fate is unknown, and finish it: everyone not yet handed off is recorded unsent, and the post can't be sent again. It mails no one and can't be undone. Only when the publisher asks to end it, never as a fix you suggest: a held send resumes on its own once the cause is fixed. Before calling, read get_send and tell them how many recipients will be recorded unsent (`counts.pending`, or the audience while it is held before its first hand-off) and that a finished post can't be sent again, then wait for their yes in this chat. When `counts.dispatched` is above zero, ask which `resolution` they want for those, as resolve_send does, and never choose it yourself; leave it out when it is zero.",
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    routes: [END_SEND],
+    args: {
+      id: pick(END_SEND, "path", "id"),
+      resolution: pick(END_SEND, "body", "resolution"),
+    },
+    async run(api, args) {
+      const a = await api.call(END_SEND, {
+        params: { id: args.id },
+        body: only(args, ["resolution"]),
+      });
+      if (!a.ok) {
+        return refused(a);
+      }
+      const r = a.body as EndResponse;
+      return data({ send: sendBrief(r.send), resolved: r.resolved, unsent: r.unsent });
     },
   },
   {

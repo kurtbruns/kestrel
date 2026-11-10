@@ -63,6 +63,7 @@ const VIEW_KEYS = [
   "rescheduled_by",
   "remade_at",
   "resolved_by",
+  "ended_by",
   "rev",
   "scheduled_at",
   "scheduled_by",

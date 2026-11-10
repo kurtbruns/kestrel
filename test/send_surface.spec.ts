@@ -403,12 +403,16 @@ describe("conditions: one server rule for each kind", () => {
     expect(kinds(wedged)).toEqual(["wedged"]);
   });
 
-  it("offers cancel and reschedule only inside the window, and Resolve only while wedged", () => {
+  it("offers cancel and reschedule only inside the window, Resolve only while wedged, and End only while held or wedged (SPEC §12)", () => {
     const names = (s: SendSummary) => sendActions(s, NOW, true).map((a) => a.name);
     expect(names(row({ status: "scheduled", fire_at: NOW + 1 }))).toEqual(["cancel", "reschedule"]);
     expect(names(row({ status: "scheduled", fire_at: NOW }))).toEqual([]); // due: the window has closed
-    expect(names(row({ c_in_flight: 2 }))).toEqual(["resolve"]);
+    expect(names(row({ c_in_flight: 2 }))).toEqual(["resolve", "end"]);
     expect(names(row({ c_in_flight: 2, locked_until: NOW + 1 }))).toEqual([]); // a run holds it
+    expect(names(row({ c_pending: 3, halt_reason: "account" }))).toEqual(["end"]);
+    expect(names(row({ c_pending: 3, halt_reason: "unavailable" }))).toEqual(["end"]);
+    expect(names(row({ c_pending: 3, halt_reason: "account", locked_until: NOW + 1 }))).toEqual([]); // a run holds it
+    expect(names(row({ c_pending: 3 }))).toEqual([]); // still going out
     expect(names(row({ status: "sent" }))).toEqual([]);
   });
 });
@@ -449,6 +453,7 @@ describe("every route reads a send the same way", () => {
     expect((await readView(wedged.id)).conditions.map((c) => c.kind)).toEqual(["wedged"]);
     expect(list.sends.find((s) => s.id === wedged.id)?.actions).toEqual([
       { name: "resolve", method: "POST", path: `/api/sends/${wedged.id}/resolve` },
+      { name: "end", method: "POST", path: `/api/sends/${wedged.id}/end` },
     ]);
     expect(list.sends.find((s) => s.id === upcoming.id)?.actions.map((a) => a.name)).toEqual([
       "cancel",

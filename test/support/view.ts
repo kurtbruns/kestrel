@@ -33,6 +33,7 @@ export function viewOf(
       rescheduled_by: null,
       canceled_by: null,
       resolved_by: null,
+      ended_by: null,
     },
     {
       provider,

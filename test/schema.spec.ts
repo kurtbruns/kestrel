@@ -1010,3 +1010,41 @@ describe("schema (0023_notifications_unavailable)", () => {
     ]);
   });
 });
+
+describe("schema (0025_send_acts_end)", () => {
+  it("carries every act over as it was, and logs an End with or without a resolution, while a Resolve still needs one (SPEC §6, §12)", async () => {
+    const send = await frozenSend(Date.now() + 60_000);
+    const actor = JSON.stringify({ kind: "human", email: "a@example.com", client: "editor" });
+    await env.DB.prepare(
+      `INSERT INTO send_acts (send_id, act, at, actor, fire_at, resolution)
+       VALUES (?, 'resolve', 7, ?, NULL, 'accepted')`,
+    )
+      .bind(send.id, actor)
+      .run();
+    const migration = FOLDER.find((m) => m.name === "0025_send_acts_end.sql");
+    for (const q of migration?.queries ?? []) {
+      await env.DB.prepare(q).run();
+    }
+    const insert = (act: string, resolution: string | null) =>
+      env.DB.prepare(
+        "INSERT INTO send_acts (send_id, act, at, actor, resolution) VALUES (?, ?, 8, ?, ?)",
+      )
+        .bind(send.id, act, actor, resolution)
+        .run();
+    await insert("end", null);
+    await insert("end", "unsent");
+    await expect(insert("resolve", null)).rejects.toThrow(/CHECK/);
+    await expect(insert("cancel", "unsent")).rejects.toThrow(/CHECK/);
+    await expect(insert("end", "maybe")).rejects.toThrow(/CHECK/);
+    const { results } = await env.DB.prepare(
+      "SELECT act, at, resolution FROM send_acts WHERE send_id = ? ORDER BY id",
+    )
+      .bind(send.id)
+      .all();
+    expect(results).toEqual([
+      { act: "resolve", at: 7, resolution: "accepted" },
+      { act: "end", at: 8, resolution: null },
+      { act: "end", at: 8, resolution: "unsent" },
+    ]);
+  });
+});

@@ -347,14 +347,15 @@ export type SendSummary = Omit<
 /**
  * Who last took each act on a send, read beside its row from its log of acts (SPEC §6, §11), as
  * the stored actor (JSON): who scheduled it (by Schedule or Send now), last moved it, canceled
- * it, and last resolved it while it was wedged; null for an act no one has taken, or none
- * recorded.
+ * it, last resolved it while it was wedged, and ended it; null for an act no one has taken, or
+ * none recorded.
  */
 export interface SendActorsRow {
   scheduled_by: string | null;
   rescheduled_by: string | null;
   canceled_by: string | null;
   resolved_by: string | null;
+  ended_by: string | null;
 }
 
 /**
@@ -477,13 +478,15 @@ export interface SendView {
   tested_at: number | null;
   /**
    * Who acted on the send (SPEC §6, §11), the latest of each act: who scheduled it (by
-   * Schedule or Send now), last moved its fire time, canceled it, and last resolved it while it
-   * was wedged. Null for an act no one has taken, and for one taken before it was recorded.
+   * Schedule or Send now), last moved its fire time, canceled it, last resolved it while it
+   * was wedged, and ended it while it was held or wedged. Null for an act no one has taken, and
+   * for one taken before it was recorded.
    */
   scheduled_by: Actor | null;
   rescheduled_by: Actor | null;
   canceled_by: Actor | null;
   resolved_by: Actor | null;
+  ended_by: Actor | null;
   /**
    * Who the send goes to: `count` is an estimate while the send is scheduled (the audience
    * is resolved when it fires, SPEC §6), and the audience at fire once `fixed`, from
@@ -540,7 +543,7 @@ export interface SendView {
 
 /** Something a person can do to a send through the API, exactly as the server would take it now. */
 export interface SendAction {
-  name: "cancel" | "reschedule" | "resolve";
+  name: "cancel" | "reschedule" | "resolve" | "end";
   method: "POST";
   /** The route, with the send's id filled in. */
   path: string;
@@ -730,6 +733,17 @@ export interface ResolveResponse {
   resolved: number;
   /** Whether the send reached its completion gate and finished. */
   completed: boolean;
+}
+
+/** POST /api/sends/:id/end */
+export interface EndResponse {
+  send: SendView;
+  /** Where the answer stands among the changes to sends, to follow the send from. */
+  cursor: string;
+  /** How many recipients in flight this End settled as its `resolution` said. */
+  resolved: number;
+  /** How many recipients still waiting to be handed off this End recorded unsent. */
+  unsent: number;
 }
 
 /** POST /api/sends/:id/cancel and /reschedule */

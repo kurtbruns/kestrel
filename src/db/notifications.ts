@@ -60,6 +60,8 @@ export interface DueNotification {
   /** Whether this send, or one finished after it, has heard a receipt: what ends the
    *  provider's silence (`no_receipts`), the same test the record makes. */
   receipt_since: number;
+  /** Whether a person ended the send (SPEC §12), which its finished email says. */
+  ended: number;
 }
 
 /** A notice that the SES sandbox refused a signup's confirmation, due; one a UTC day, whose
@@ -268,7 +270,8 @@ export async function dueNotifications(
               s.c_delivered, s.c_bounced, s.c_complained, s.c_skipped, s.c_unsent,
               EXISTS (SELECT 1 FROM sends h
                        WHERE h.completed_at >= s.completed_at
-                         AND h.c_delivered + h.c_bounced + h.c_complained > 0) AS receipt_since
+                         AND h.c_delivered + h.c_bounced + h.c_complained > 0) AS receipt_since,
+              EXISTS (SELECT 1 FROM send_acts a WHERE a.send_id = s.id AND a.act = 'end') AS ended
          FROM notifications n
          LEFT JOIN sends s ON s.id = n.send_id
         WHERE n.status = 'pending'

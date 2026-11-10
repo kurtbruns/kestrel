@@ -36,6 +36,7 @@ import {
   unavailableMessage,
 } from "../../shared/sends";
 import { MISSED_THRESHOLD_MS } from "../lib/time";
+import { isEndable, runHolds } from "./endable";
 import { isLongOutage } from "./outage";
 import { stuckAt } from "./stuck";
 import { isWedged } from "./wedged";
@@ -57,15 +58,22 @@ export function inWindow(send: Pick<SendSummary, "status" | "fire_at">, now: num
 }
 
 /** What the server would accept on the send right now: cancel and reschedule inside the
- *  review window, the reschedule only while the publication has a time zone (SPEC §9), and
- *  Resolve while it is wedged. */
+ *  review window, the reschedule only while the publication has a time zone (SPEC §9), Resolve
+ *  while it is wedged, and End while it is held or wedged and no run holds it. */
 export function sendActions(send: SendSummary, now: number, timeZoneSet: boolean): SendAction[] {
   if (inWindow(send, now)) {
     return timeZoneSet
       ? [action(send, "cancel"), action(send, "reschedule")]
       : [action(send, "cancel")];
   }
-  return isWedged(send) ? [action(send, "resolve")] : [];
+  const out: SendAction[] = [];
+  if (isWedged(send)) {
+    out.push(action(send, "resolve"));
+  }
+  if (isEndable(send) && !runHolds(send, now)) {
+    out.push(action(send, "end"));
+  }
+  return out;
 }
 
 const RANK: Record<ConditionSeverity, number> = { action: 0, warn: 1, info: 2 };

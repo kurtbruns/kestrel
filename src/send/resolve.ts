@@ -105,10 +105,7 @@ export async function resolveStuckSend(
       "This send is being worked on right now. Try Resolve again in a moment.",
     );
   }
-  const note =
-    outcome === "unsent"
-      ? `operator adjudication: assumed NOT delivered (${noteName(by)})`
-      : `operator adjudication: assumed delivered (${noteName(by)})`;
+  const note = resolutionNote(outcome, by);
   const resolved = await sends.resolveDispatched(env.DB, sendId, lease, outcome, note, now, by);
 
   // Run the loop's completion gate: finish only when nothing is left in flight, so a
@@ -134,6 +131,14 @@ export async function resolveStuckSend(
   });
 
   return { resolved, completed };
+}
+
+/** The note each recipient a person settled carries in its error field, naming their choice
+ *  and who made it: Resolve's, and End's for the recipients in flight it settles. */
+export function resolutionNote(outcome: WedgedResolution, by: Actor): string {
+  return outcome === "unsent"
+    ? `operator adjudication: assumed NOT delivered (${noteName(by)})`
+    : `operator adjudication: assumed delivered (${noteName(by)})`;
 }
 
 /** Who resolved, as each settled row's note names them: a person's email, or a service token by

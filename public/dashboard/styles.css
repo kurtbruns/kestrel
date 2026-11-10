@@ -3506,7 +3506,8 @@ textarea.is-invalid {
   color: var(--status-scheduled-fg);
 }
 /* The Email only box under a dialog's time: the label, then its helper beneath. */
-.listing-check {
+.listing-check,
+.end-choice {
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -3515,14 +3516,20 @@ textarea.is-invalid {
   color: var(--fg);
   cursor: pointer;
 }
-.listing-check input {
+.listing-check input,
+.end-choice input {
   width: auto;
   margin: 3px 0 0;
   flex: 0 0 auto;
   accent-color: var(--ring);
   cursor: pointer;
 }
-.listing-check strong {
+/* End's in-flight question: the paragraph after its radio rows keeps the dialog's spacing. */
+.end-choice + .hint {
+  margin-top: 16px;
+}
+.listing-check strong,
+.end-choice strong {
   font-weight: 600;
 }
 .listing-help {

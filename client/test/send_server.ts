@@ -90,6 +90,7 @@ export function sendView(row: SendRowFixture, over: Partial<SendView> = {}): Sen
     rescheduled_by: actor(row.rescheduled_by ?? null),
     canceled_by: actor(row.canceled_by ?? null),
     resolved_by: actor(row.resolved_by ?? null),
+    ended_by: actor(row.ended_by ?? null),
     audience: {
       count: row.recipient_count,
       fixed: row.audience_resolved_at !== null,
