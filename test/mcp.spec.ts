@@ -22,7 +22,14 @@ import {
 import { buildReferenceResponse } from "../src/reference";
 import { openApiDocument } from "../src/reference/openapi";
 import { accessDeployment } from "./support/access";
-import { frozenSend, resetDatabase, tpl, wedgedSend } from "./support/fixtures";
+import {
+  frozenSend,
+  resetDatabase,
+  setTimeZone,
+  tpl,
+  unsetTimeZone,
+  wedgedSend,
+} from "./support/fixtures";
 import { adminAuth, base, JSON_AUTH, readJson } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
 import { fetchWith } from "./support/worker_env";
@@ -558,7 +565,7 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
     expect(Object.keys(tool?.inputSchema.properties ?? {})).not.toContain("email_template");
     const template = await callTool("update_settings", { email_template: "<p>x</p>" });
     expect(template.text).toBe(
-      "`email_template` isn't an argument update_settings takes; it takes `publication`, `test_recipients`, `notifications`, `confirmation_email`, `remake`.",
+      "`email_template` isn't an argument update_settings takes; it takes `publication`, `test_recipients`, `notifications`, `confirmation_email`, `time_zone`, `remake`.",
     );
   });
 
@@ -700,6 +707,15 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
     expect(pub.deployment.sending).toMatchObject({ state: "unproven", refusal: null });
     expect(pub.deployment.signups).toBe("not_open");
     expect(pub.scheduled_sends).toEqual([]);
+  });
+
+  it("names the publication's time zone and its label, and null for both until it is set (SPEC §9)", async () => {
+    await setTimeZone("America/New_York");
+    const pub = await callOk("get_publication", {});
+    expect([pub.time_zone, pub.time_zone_label]).toEqual(["America/New_York", "Eastern Time"]);
+    await unsetTimeZone();
+    const unset = await callOk("get_publication", {});
+    expect([unset.time_zone, unset.time_zone_label]).toEqual([null, null]);
   });
 
   it("carries each connection warning's severity, so an error that stops every email can be raised first (SPEC §13)", async () => {

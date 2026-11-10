@@ -14,7 +14,7 @@
 import { findReaderPage } from "../../shared/reader_pages";
 import { getSettings } from "../db/settings";
 import { notFound } from "../lib/errors";
-import { archiveIndexPage, landingPage } from "../lib/page";
+import { archiveIndexPage, landingPage, type ReaderIdentity } from "../lib/page";
 import { POST_PAGE_SECURITY_HEADERS } from "../lib/page_headers";
 import { archiveUrl, render } from "../render/render";
 import { resolveBranding } from "../render/template_engine";
@@ -42,7 +42,7 @@ const DAY_MS = 86_400_000;
 
 /** The archive as a preview lists it: the sample post (the one the post page shows),
  *  then two older ones. */
-function samplePosts(c: RequestContext, now: number) {
+function samplePosts(c: RequestContext, identity: ReaderIdentity, now: number) {
   return [
     { title: SAMPLE_POST_SUBJECT, slug: "sample-post", at: now },
     { title: "Notes from the first frost", slug: "first-frost", at: now - 7 * DAY_MS },
@@ -50,7 +50,7 @@ function samplePosts(c: RequestContext, now: number) {
   ].map((p) => ({
     title: p.title,
     url: archiveUrl(c.config, p.slug),
-    dateLabel: formatPublishedDate(p.at),
+    dateLabel: formatPublishedDate(p.at, identity),
   }));
 }
 
@@ -85,9 +85,10 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
     case "unsubscribe/invalid":
       return unsubscribeInvalidPage(c);
     case "reading/landing": {
-      const [featured, ...recent] = samplePosts(c, Date.now());
+      const identity = await readerIdentity(c, c.config);
+      const [featured, ...recent] = samplePosts(c, identity, Date.now());
       return landingPage({
-        identity: await readerIdentity(c, c.config),
+        identity,
         subscribeUrl,
         homeUrl: home,
         archiveUrl: archiveHomeUrl(c.config),
@@ -96,13 +97,15 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
         signupsOpen: true,
       });
     }
-    case "reading/archive":
+    case "reading/archive": {
+      const identity = await readerIdentity(c, c.config);
       return archiveIndexPage({
-        identity: await readerIdentity(c, c.config),
+        identity,
         subscribeUrl,
         homeUrl: home,
-        posts: samplePosts(c, Date.now()),
+        posts: samplePosts(c, identity, Date.now()),
       });
+    }
     // The same two pages before the first post is sent.
     case "reading/landing-empty":
       return landingPage({

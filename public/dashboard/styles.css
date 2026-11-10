@@ -6606,6 +6606,114 @@ button.set-embed-copy svg {
 .set-rp-pick {
   display: none;
 }
+/* Settings' Time zone: the chosen zone (or the warning while none is), the browser's zone
+   offered under it while none is saved, then the search and its results. */
+/* A reading width, as the address lists' add row (.set-recip-add) keeps one, not the card's:
+   a full-width search on a desktop reads as a banner. Wider than that row, since a zone's
+   place, offset, and time, the offer's Use button, and a scheduled post's old and new times
+   in the preview each sit on one line. */
+.set-tz {
+  display: grid;
+  gap: 10px;
+  max-width: 600px;
+}
+.set-tz-chosen,
+.set-tz-suggest {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.set-tz-suggest {
+  border-style: dashed;
+}
+.set-tz-lines {
+  display: grid;
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.set-tz-name {
+  font-weight: 600;
+}
+.set-tz-place {
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.set-tz-now {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+/* What saving a chosen zone will show for each scheduled post: in the scheduled-send violet
+   the dashboard and editor use for a post waiting to go out, since it is about those posts
+   and is no problem. */
+.set-tz-preview {
+  border: 1px solid var(--status-scheduled-line);
+  background: var(--status-scheduled-bg);
+  color: var(--status-scheduled-fg);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.set-tz-preview p {
+  margin: 0;
+}
+.set-tz-preview ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+.set-tz-unset {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  font-size: 13px;
+}
+.set-tz-results {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  max-height: 300px;
+  overflow: auto;
+  background: var(--card);
+}
+.set-tz-results li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.set-tz-results li[aria-selected="true"] {
+  background: var(--hover);
+}
+.set-tz-none {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.set-tz-results mark {
+  background: var(--warn-bg);
+  color: inherit;
+  border-radius: 2px;
+}
 .set-rp-pick select {
   width: 100%;
 }

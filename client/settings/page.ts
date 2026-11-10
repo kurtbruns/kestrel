@@ -22,6 +22,9 @@ export interface SettingsBaseline {
   tagline: string;
   address: string;
   confirmation: ConfirmationEmailCopy;
+  /** The publication's time zone (SPEC §9): as saved, or as chosen and not saved yet; null
+   *  until one is chosen. */
+  timeZone: string | null;
 }
 
 /** The page's live, in-memory state: the baseline fields plus what saves on its own the

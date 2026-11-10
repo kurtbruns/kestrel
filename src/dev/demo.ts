@@ -49,6 +49,8 @@ export interface DemoPublication {
   tagline: string;
   address: string;
   testRecipients: string[];
+  /** The clock the demo's readers keep, an IANA name (SPEC §9). */
+  timeZone: string;
 }
 
 /** Split a file into its front-matter fields and the body after them. */
@@ -173,7 +175,12 @@ export function parseDemoPost(bundle: string, text: string): DemoPost {
 export function parseDemoPublication(file: string, text: string): DemoPublication {
   const { fields } = parseFrontMatter(file, text);
   // `logo` names the image `cli/seed.mjs` uploads; the worker only needs to accept it.
-  const f = readFields(file, fields, ["name", "tagline", "test_recipients"], ["address", "logo"]);
+  const f = readFields(
+    file,
+    fields,
+    ["name", "tagline", "test_recipients", "time_zone"],
+    ["address", "logo"],
+  );
   return {
     name: f.name ?? "",
     tagline: f.tagline ?? "",
@@ -182,6 +189,7 @@ export function parseDemoPublication(file: string, text: string): DemoPublicatio
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
+    timeZone: f.time_zone ?? "",
   };
 }
 

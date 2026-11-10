@@ -4,7 +4,11 @@
 import type { Post, PostListResponse } from "../../shared/posts";
 import type { ProviderStatusView } from "../../shared/provider";
 import type { SendListResponse, SendView } from "../../shared/sends";
-import { type NotificationStatusView, settingsRoute } from "../../shared/settings";
+import {
+  type NotificationStatusView,
+  type SettingsResponse,
+  settingsRoute,
+} from "../../shared/settings";
 import type { SubscriberCounts, SubscriberListResponse } from "../../shared/subscribers";
 import { CLAUDE_CLIENT, CLAUDE_CODE_CLIENT } from "../../shared/who_acted";
 import { api, describeError } from "../api";
@@ -42,6 +46,7 @@ import {
 } from "../sends/progress";
 import { appState } from "../state";
 import { addSubscriberModal } from "../subscribers/dialogs";
+import { noTimeZoneHealthHtml, timeZoneUnset } from "../time_zone";
 import { copyButton, wireCopy } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
 import { fmt, recipientCount } from "../ui/format";
@@ -71,7 +76,9 @@ interface HealthAlert {
 // provider outage, which its retry explains, are shown where the send is. The one line
 // not about a send is the deployment's: no email provider connected (SPEC §13), an amber
 // standing state with no time, read from the deployment reflection, gone once one is set.
-// When that state is holding a send, the two are said as one red line instead of two.
+// When that state is holding a send, the two are said as one red line instead of two. The
+// other is no time zone set (SPEC §9), amber the same way, left out while setup's own step
+// says it or while no provider is connected.
 // While setup is open, its Connect Amazon SES step says the not-connected state and the amber
 // line is left out, so it is said once (DESIGN §3). The provider's connection adds the others
 // with no send behind them: each warning the server gives (GET /api/provider), in its words,
@@ -85,6 +92,7 @@ function computeHealth(
   provider: ProviderStatusView | null = null,
   setupSaysSandbox = false,
   notifyFailure: NotificationStatusView["last_failure"] = null,
+  setupSaysTimeZone = false,
 ): HealthAlert[] {
   const alerts: HealthAlert[] = [];
   // Missed only past the server's tolerance: an ordinary slow tick is never a miss (§12).
@@ -200,6 +208,12 @@ function computeHealth(
           : html`<a href="#/sent">${silent.length} sends</a> have had no delivery receipt long after they went out. The provider's events may not be reaching this app, so its bounces suppress no one and its complaints unsubscribe no one.`,
     });
   }
+  // No time zone (SPEC §9), on an instance past setup, whose step would otherwise say it: an
+  // amber standing state, since everything but scheduling and sending still works. Not while no
+  // provider is connected, which is the first thing to fix.
+  if (timeZoneUnset() && !notConnected && !setupSaysTimeZone) {
+    alerts.push({ level: "amber", text: noTimeZoneHealthHtml() });
+  }
   if (notConnected && !held.length && !setupSaysNotConnected) {
     alerts.push({
       level: "amber",
@@ -281,12 +295,17 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
     // The health line scans every send and the archive-link slug map needs every post,
     // so ask for a full window rather than the list default (50). Subscribers is only
     // read for its (filter-independent) counts, so its row limit doesn't matter.
-    const [p, s, subs, prov] = await Promise.all([
+    // The settings are read again, not taken from boot: the time zone, the name, and where
+    // notifications go may have been set since through the API or by Claude, and the health
+    // block and the setup steps say what they are now.
+    const [p, s, subs, prov, settings] = await Promise.all([
       api<PostListResponse>("/api/posts?limit=200", { signal }),
       api<SendListResponse>("/api/sends?limit=200", { signal }),
       api<SubscriberListResponse>("/api/subscribers", { signal }),
       readProviderStatus(appState.appConfig?.deployment, signal),
+      api<SettingsResponse>("/api/settings", { signal }),
     ]);
+    appState.appConfig = settings;
     provider = prov;
     posts = p.posts;
     first = s;
@@ -318,6 +337,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       provider,
       name: pub.name,
       named: Boolean(config?.settings.publication?.name?.trim()),
+      timeZoneLabel: config?.settings.time_zone_label ?? null,
       notifyTo: config?.settings.notifications.to.length ?? 0,
       notifyFailed: failed !== null,
       onList: counts.confirmed + counts.pending,
@@ -341,6 +361,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
         provider,
         setupOpen(),
         appState.appConfig?.notification_status.last_failure ?? null,
+        setupOpen(),
       ),
     );
 

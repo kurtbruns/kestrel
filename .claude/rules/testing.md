@@ -20,7 +20,7 @@ A test is evidence that the app does what `docs/SPEC.md` says. Keep each one pla
 
 ## Each test stands alone
 
-- A Worker spec that writes to D1 starts each test from `resetDatabase()`; a client spec from `resetShell()`. `resetDatabase()` empties D1 only: module state a spec uses (the fake outbox, notifications, a key cache, R2 objects) is cleared in its own `beforeEach`.
+- A Worker spec that writes to D1 starts each test from `resetDatabase()`; a client spec from `resetShell()`. `resetDatabase()` empties D1 and gives the publication its time zone (UTC), since nothing can be scheduled without one; a spec of the unset state calls `unsetTimeZone()`. It touches D1 only: module state a spec uses (the fake outbox, notifications, a key cache, R2 objects) is cleared in its own `beforeEach`.
 - It passes in any order and on any date. Check with `npx vitest run --sequence.shuffle.tests`. Build times from `Date.now()`, never a fixed epoch in the future. To move time, fake `Date` (`vi.useFakeTimers({ toFake: ["Date"] })`) and set it (`vi.setSystemTime`) rather than sleeping; `tick()` does this, so a spec that uses it fakes `Date` in `beforeEach`.
 - To test what happens between two steps (a race, an unsubscribe mid-send), run the first step directly, change the state, then run the second. Spy on an internal only when there is no other way in.
 - Cleanup goes in `afterEach` (`vi.restoreAllMocks()`, `vi.unstubAllGlobals()`, `vi.useRealTimers()`), so it runs when an assertion fails too.

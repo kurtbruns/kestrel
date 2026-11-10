@@ -42,6 +42,7 @@ import {
 import { mountReaderPages, readerPagesSection } from "./reader_pages";
 import { expireRemakeWait, remakeIdentity, savedToast, withRemakeConfirm } from "./remake";
 import { mountSubscribe, subscribeSection } from "./subscribe";
+import { mountTimeZone, timeZoneChanged, timeZoneSection } from "./time_zone";
 import { guardUnsaved } from "./unsaved";
 
 /** One group of sections, kept together by whom they serve: no heading of its own, since
@@ -56,6 +57,7 @@ function baselineOf(state: SettingsBaseline): SettingsBaseline {
     tagline: state.tagline,
     address: state.address,
     confirmation: { ...state.confirmation },
+    timeZone: state.timeZone,
   };
 }
 
@@ -110,6 +112,7 @@ export async function renderSettings(
       reassurance: ce.reassurance || "",
     },
     notifyTo: [...s.notifications.to],
+    timeZone: s.time_zone,
   };
   let baseline = baselineOf(state);
   const fromAddress = data.deployment.from_address;
@@ -118,7 +121,8 @@ export async function renderSettings(
     state.name !== baseline.name ||
     state.tagline !== baseline.tagline ||
     state.address !== baseline.address ||
-    !sameCopy(state.confirmation, baseline.confirmation);
+    !sameCopy(state.confirmation, baseline.confirmation) ||
+    timeZoneChanged(state.timeZone, baseline.timeZone);
 
   const handles: SectionHandle[] = [];
   // The shared bottom save bar (Save + Discard), its callbacks the hoisted saveSettings /
@@ -173,7 +177,7 @@ export async function renderSettings(
   setHtml(
     body,
     html`
-      ${group("publication", [identitySection(page)])}
+      ${group("publication", [identitySection(page), timeZoneSection(page)])}
       ${group("readers", [subscribeSection(page), confirmationSection(page), readerPagesSection(secHead("reader-pages", chip("preview", "Preview")))])}
       ${group("emails", [templateSection(page), recipientsSection()])}
       ${group("you", [notificationsSection(page)])}
@@ -182,6 +186,7 @@ export async function renderSettings(
   );
   handles.push(
     mountIdentity(body, page, signal),
+    mountTimeZone(body, page, signal),
     mountSubscribe(body, page),
     mountConfirmation(body, page),
     mountTemplate(body, page, signal),
@@ -213,6 +218,11 @@ export async function renderSettings(
       const payload: SettingsPatchBody = {
         publication: { name: state.name, tagline: state.tagline, address: state.address },
         confirmation_email: state.confirmation,
+        // Only a zone chosen on purpose and different from the saved one: the section never
+        // fills one in, so an untouched zone is never sent.
+        ...(timeZoneChanged(state.timeZone, baseline.timeZone)
+          ? { time_zone: state.timeZone ?? "" }
+          : {}),
       };
       const r = await withRemakeConfirm(
         (ack) =>
@@ -232,6 +242,7 @@ export async function renderSettings(
       state.tagline = ns.publication.tagline;
       state.address = ns.publication.address;
       state.confirmation = { ...ns.confirmation_email };
+      state.timeZone = ns.time_zone;
       baseline = baselineOf(state);
       for (const h of handles) {
         h.reset?.();
@@ -317,6 +328,7 @@ const FIELD_INPUTS: Record<string, string> = {
   "confirmation_email.body": "#ceMessage",
   "confirmation_email.button_label": "#ceButton",
   "confirmation_email.reassurance": "#ceFooter",
+  time_zone: "#tzSearch",
 };
 
 /** The input a refusal's `field` names, when the page shows it; null otherwise. */

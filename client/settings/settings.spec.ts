@@ -90,6 +90,7 @@ const listPut: FakeRoute = {
     settings: settings(req.json() as Partial<SettingsView>),
     warnings: [],
     remade: [],
+    time_zone_readings: [],
   }),
 };
 const chipsOf = (id: string) => $$(`#${id} .set-recip-chip`).map((c) => c.textContent?.trim());
@@ -167,7 +168,7 @@ describe("settings view", () => {
       $$(".set-sec-title", g).map((t) => t.textContent?.trim()),
     );
     expect(groups).toEqual([
-      ["Publication identity"],
+      ["Publication identity", "Time zone"],
       ["Ways to subscribe", "Confirmation email", "Reader pages"],
       ["Email template", "Default test recipients"],
       ["Notifications"],
@@ -352,6 +353,7 @@ describe("settings view", () => {
           }),
           warnings: [],
           remade: [],
+          time_zone_readings: [],
         }),
       },
     ]);
@@ -603,6 +605,7 @@ describe("settings view", () => {
         settings: settings({ test_recipients: ["me@b.c", "a@b.c"] }),
         warnings: [],
         remade: [],
+        time_zone_readings: [],
       }),
     );
     await vi.advanceTimersByTimeAsync(0);
@@ -625,6 +628,7 @@ describe("settings view", () => {
         settings: settings({ test_recipients: ["a@b.c"] }),
         warnings: [],
         remade: [],
+        time_zone_readings: [],
       }),
     );
     await vi.advanceTimersByTimeAsync(0);
@@ -652,6 +656,7 @@ describe("settings view", () => {
           }),
           warnings: [],
           remade: [],
+          time_zone_readings: [],
         }),
       },
     ]);
@@ -802,7 +807,7 @@ describe("settings view", () => {
           if (!body.remake) {
             return jsonResponse({ error: "remake_required", message: "ack", sends }, 409);
           }
-          return { settings: settings(), warnings: [], remade: sends };
+          return { settings: settings(), warnings: [], remade: sends, time_zone_readings: [] };
         },
       },
     ]);

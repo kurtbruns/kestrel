@@ -143,6 +143,27 @@ describe("leaving a page with unsaved edits", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
+    it("counts a time zone chosen and not saved as an edit, until Discard", async () => {
+      await open("#/settings");
+      const search = $<HTMLInputElement>("#tzSearch");
+      typeInto(search, "tokyo");
+      search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      expect($("#tzChosen .set-tz-name").textContent).toBe("Japan Standard Time");
+      expect(unloadCancelled()).toBe(true);
+      await at("#/subscribers");
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(h1()).toBe("Settings");
+      expect($("#tzChosen .set-tz-name").textContent).toBe("Japan Standard Time");
+      // Discard puts the saved zone back, and then nothing is asked.
+      $("#savebarDiscard").click();
+      expect($("#tzChosen .set-tz-name").textContent).toBe("Eastern Time");
+      expect(unloadCancelled()).toBe(false);
+      await at("#/subscribers");
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(h1()).toBe("Subscribers");
+      expect(fake.unhandled).toEqual([]);
+    });
+
     it("leaves a clean page unasked", async () => {
       await open("#/settings");
       await at("#/subscribers");

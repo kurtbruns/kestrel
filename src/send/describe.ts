@@ -16,14 +16,16 @@ import {
 } from "../db/provider_account";
 import { parseSending, type SendingRaw, sendingStatement } from "../db/sending";
 import { currentSendSeq, getSendViewRow, getSendViewRows } from "../db/sends";
+import { storedTimeZone, timeZoneStatement } from "../db/settings";
 import { type AppEnv, type Config, getConfig, onFreePlanLimits } from "../env";
 import { sandboxOf } from "../services/provider_status";
 import { sendingView } from "../services/sending";
-import type { ConditionContext } from "./conditions";
+import type { SendViewContext } from "./conditions";
 import { buildSendView } from "./view";
 
 /**
- * What the deployment adds to a send's conditions (`ConditionContext`): the plan's limits
+ * What the deployment adds to a send's view (`SendViewContext`): whether the publication has a
+ * time zone, which a reschedule needs (SPEC §9), and for its conditions the plan's limits
  * from config, and the provider's account and whether email is getting out (SPEC §13) from the
  * database, both rows in one round trip, since every feed poll and every action's answer
  * reads them. Every send in an answer is read against the same context, so the list, the
@@ -34,12 +36,15 @@ import { buildSendView } from "./view";
 export async function readConditionContext(
   db: D1Database,
   config: Config,
-): Promise<ConditionContext> {
-  const [account, sending] = await db.batch<Record<string, unknown>>([
+): Promise<SendViewContext> {
+  const [account, sending, settings] = await db.batch<Record<string, unknown>>([
     providerAccountStatement(db),
     sendingStatement(db),
+    timeZoneStatement(db),
   ]);
   return {
+    timeZoneSet:
+      storedTimeZone(settings?.results[0] as { time_zone: unknown } | undefined) !== null,
     freePlan: onFreePlanLimits(config),
     sandbox: sandboxOf(
       config,

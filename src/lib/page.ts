@@ -205,6 +205,8 @@ export interface ReaderIdentity {
   name: string;
   tagline?: string;
   logoUrl?: string;
+  /** The publication's time zone, whose day dates a post (SPEC §9); absent or null reads UTC. */
+  timeZone?: string | null;
 }
 
 /** The tab icon for a reader page: the publication's logo, already a square (the upload

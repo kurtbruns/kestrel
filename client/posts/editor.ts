@@ -51,6 +51,7 @@ import { followSend, readSendsNow, type StageChange } from "../send_state";
 import { openRescheduleModal } from "../sends/dialogs";
 import { can, conditionOf, has } from "../sends/progress";
 import { appState } from "../state";
+import { noTimeZoneLine } from "../time_zone";
 import { $, $$ } from "../ui/dom";
 import { EMAIL_FRAME_SANDBOX, openLinksInNewTab } from "../ui/email_frame";
 import {
@@ -1424,8 +1425,9 @@ export async function renderEditor(
       }
       const minStr = toLocalInput(earliestFireAt());
       const def = toLocalInput(new Date(Date.now() + 24 * 3600 * 1000));
-      // While the server would refuse both views (no provider connected), the dialog drops the
-      // picker and the Send now row and leaves only the standing line (DESIGN §4).
+      // While the server would refuse both views (no provider connected, or no time zone set),
+      // the dialog drops the picker and the Send now row and leaves only the standing line
+      // (DESIGN §4).
       const notConnected = !canSend;
       // The dialog's own copy of the post's settings (SPEC §4, §5): it opens as stored, the form
       // under the time edits it, and it reaches the post only when Schedule or Send now is
@@ -1437,7 +1439,7 @@ export async function renderEditor(
       }
       const scheduleHint = "It sends at the time you pick, with a cancelable window until then.";
       const scheduleView = () =>
-        html`<h3 id="schHead">Schedule this post</h3><p class="hint" id="schHint">${scheduleHint}</p>${notConnectedScheduleLine()}${dailyWritesLine()}${sandboxSendLine()}${refusingSendLine()}${notConnected ? null : html`<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}"><div class="dialog-settings" id="schForm"></div>`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Or send as soon as possible.</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
+        html`<h3 id="schHead">Schedule this post</h3><p class="hint" id="schHint">${scheduleHint}</p>${notConnectedScheduleLine()}${noTimeZoneLine(canSend)}${dailyWritesLine()}${sandboxSendLine()}${refusingSendLine()}${notConnected ? null : html`<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}"><div class="dialog-settings" id="schForm"></div>`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Or send as soon as possible.</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
       // The picked time survives a trip to Send now and back.
       let picked = def;
       const m = modal(scheduleView(), signal);

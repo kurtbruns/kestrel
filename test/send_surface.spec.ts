@@ -404,7 +404,7 @@ describe("conditions: one server rule for each kind", () => {
   });
 
   it("offers cancel and reschedule only inside the window, and Resolve only while wedged", () => {
-    const names = (s: SendSummary) => sendActions(s, NOW).map((a) => a.name);
+    const names = (s: SendSummary) => sendActions(s, NOW, true).map((a) => a.name);
     expect(names(row({ status: "scheduled", fire_at: NOW + 1 }))).toEqual(["cancel", "reschedule"]);
     expect(names(row({ status: "scheduled", fire_at: NOW }))).toEqual([]); // due: the window has closed
     expect(names(row({ c_in_flight: 2 }))).toEqual(["resolve"]);

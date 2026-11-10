@@ -1,6 +1,6 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SERIF_STACK } from "../shared/fonts";
 import type { TestSendResponse } from "../shared/posts";
 import { refusalAdvice } from "../shared/sends";
@@ -9,9 +9,13 @@ import { FakeProvider } from "../src/providers/fake";
 import type { Recipient, SendBatchResult } from "../src/providers/types";
 import { SENTTO_SENTINEL, UNSUB_SENTINEL } from "../src/render/template_engine";
 import { sweep } from "../src/send/sweep";
-import { setRow } from "./support/fixtures";
+import { setRow, setTimeZone } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, PNG_1x1, readJson } from "./support/http";
 import { logged } from "./support/log";
+
+// These specs share one database across their tests; each starts with the publication's time
+// zone set, since scheduling is refused without one (SPEC §9).
+beforeEach(() => setTimeZone());
 
 async function draftWithImage(title: string): Promise<string> {
   const created = await readJson(

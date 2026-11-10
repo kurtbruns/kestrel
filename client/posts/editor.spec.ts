@@ -48,7 +48,10 @@ function actionsFor(post: Record<string, unknown>): PostAction[] {
     { name: "edit", method: "PUT", path },
     { name: "delete", method: "DELETE", path },
   ];
-  if (appState.appConfig?.deployment.provider !== "none") {
+  if (
+    appState.appConfig?.deployment.provider !== "none" &&
+    appState.appConfig?.settings?.time_zone !== null
+  ) {
     actions.push(
       { name: "schedule", method: "POST", path: `${path}/schedule` },
       { name: "send_now", method: "POST", path: `${path}/send` },
@@ -1914,6 +1917,60 @@ describe("editor view", () => {
     expect($<HTMLButtonElement>("#schGo").disabled).toBe(true);
     expect(document.querySelector(".modal #schWhen")).toBeNull();
     expect(document.querySelector(".modal #toSendNow")).toBeNull();
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  // SPEC §9, DESIGN §4: while the publication has no time zone, the server refuses both views,
+  // and the dialog says so, with the server's words and Settings as the link.
+  it("carries a standing line in the schedule dialog while no time zone is set, with Schedule disabled and no picker or Send now", async () => {
+    appState.appConfig = settingsResponse({
+      deployment: { provider: "ses" },
+      settings: { time_zone: null, time_zone_label: null },
+    });
+    const server = draftServer();
+    await open([{ path: "/api/posts/p1", reply: server.get }]);
+    $("#scheduleBtn").click();
+    const line = $(".modal .no-time-zone");
+    expect(line.textContent).toBe(
+      "Set the publication’s time zone before scheduling or sending. It’s in Settings.",
+    );
+    expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/settings/time-zone");
+    expect($<HTMLButtonElement>("#schGo").disabled).toBe(true);
+    expect(document.querySelector(".modal #schWhen")).toBeNull();
+    expect(document.querySelector(".modal #toSendNow")).toBeNull();
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("goes by the post's own actions, not settings read before the zone was set elsewhere", async () => {
+    // The server offers scheduling (a zone was set through the API since boot), while the
+    // settings this tab read at boot still say there is none.
+    appState.appConfig = settingsResponse({ deployment: { provider: "ses" } });
+    const offered = draftServer().get();
+    appState.appConfig = settingsResponse({
+      deployment: { provider: "ses" },
+      settings: { time_zone: null, time_zone_label: null },
+    });
+    await open([
+      { path: "/api/posts/p1", reply: () => offered },
+      { path: "/api/subscribers", reply: () => ({ counts: { confirmed: 1 } }) },
+    ]);
+    $("#scheduleBtn").click();
+    expect(document.querySelector(".modal .no-time-zone")).toBeNull();
+    expect(document.querySelector(".modal #schWhen")).not.toBeNull();
+    expect($<HTMLButtonElement>("#schGo").disabled).toBe(false);
+    $("#schCancel").click();
+  });
+
+  it("says only that no provider is connected, while neither is, since that comes first", async () => {
+    appState.appConfig = settingsResponse({
+      deployment: { provider: "none" },
+      settings: { time_zone: null, time_zone_label: null },
+    });
+    const server = draftServer();
+    await open([{ path: "/api/posts/p1", reply: server.get }]);
+    $("#scheduleBtn").click();
+    expect(document.querySelectorAll(".modal .not-connected").length).toBe(1);
+    expect(document.querySelector(".modal .no-time-zone")).toBeNull();
     expect(fake.unhandled).toEqual([]);
   });
 

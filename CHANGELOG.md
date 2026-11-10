@@ -10,12 +10,20 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-### Fixed
+**Upgrading from 1.23.0.** Once deployed, your instance can't schedule or send until the publication has a time zone: open **Settings → Time zone**, choose the zone where your readers are, and select **Save changes**, or ask Claude to set it. Until then the dashboard says so, and a send already scheduled still goes out. Run `npm run check-context`: this release changes the operator's Claude context, `CLAUDE.md`, and a copy you've edited is merged by hand.
 
-- On a new Amazon SES account, which sends one email a second, an error from SES that names no reader marked each reader it came back for unsent, so an error about the email or the account marked the whole list unsent and finished the send as if it had gone out. Such an error now holds the send, with no one marked unsent, when it comes back for two or more readers sent together while SES takes none of them, or for a send to a single reader, as a first send to yourself usually is; given to one reader while SES takes the others, it stays that reader's alone. SES's plain `FAILED` is read the same way, holding the send as an outage instead of spending each reader's retries, and an answer SES doesn't document now stops the send with one reader waiting for Resolve, rather than reader after reader (SPEC §12).
+### Breaking
+
+- A publication now has a time zone, and scheduling, moving a send's fire time, and Send now are refused (`time_zone_not_set`) until it's set, so an upgraded instance can't send its next post until someone sets it; drafts, tests, Cancel, subscribers, and Settings work as before, and a send already scheduled still fires (SPEC §9).
+
+### Added
+
+- **Settings → Time zone**: the clock your readers keep, an IANA zone such as `America/New_York` (an offset such as `-05:00`, or the abbreviation `EST`, `MST`, or `HST`, is refused, since none of them changes for daylight saving time), read and written through `time_zone` in `/api/settings` with its name for people (`time_zone_label`, "Eastern Time") and shown in Claude's `get_publication`. You find it by searching for a city or a zone's name, and it's never set without a deliberate choice: Settings offers your browser's zone with **Use**, never fills it in, and saves it with **Save changes**. Changing it moves no scheduled post, and before you save, Settings shows how each one's displayed time will change. The setup checklist gains **Set the time zone**, the Schedule dialog says when it's missing, and the dashboard's health block says so on an instance past setup (SPEC §9).
+- The operator's Claude context (`template/claude/CLAUDE.md`) adds the Set the time zone step and tells Claude to ask which clock the readers keep rather than use its own, and to set it as a place's name, never an abbreviation such as `EST`, so Claude never sets the zone from a guess.
 
 ### Changed
 
+- Posts are dated by the publication's day on the post page, the archive, the home page, and the web version, so an evening send in the Americas, or a morning one in Asia, is no longer dated the next or previous day; with no zone set, dates stay in UTC (SPEC §5, §9).
 - In **Settings**, adding or removing an address under **Notifications** or **Default test recipients** saves it at once, with a toast saying so, rather than waiting for **Save changes**; the page's other unsaved edits stay unsaved, and **Discard** leaves a saved address in place. **Send a test notification** works as soon as an address is added, and stands out more.
 - **Settings → Notifications** now has a **Cloudflare alerts** row in place of the note and the separate band under it: it says a notification can't reach you when your email provider or Kestrel itself has a problem, links Set up alerts, and holds **Send a test alert**, whose line now says what it's for and, once selected, when to expect Cloudflare's email.
 - Set up alerts now gives a description to paste into each Monitor, has you wait a few minutes after creating the SES alert before sending the test alert, since a new Monitor can miss a line written right after it is created, and says to check your other folders and send the test again if no email has come after ten minutes. The step on waiting for the email now says only what to expect, without the timings from Kestrel's own testing.
@@ -25,6 +33,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
+- On a new Amazon SES account, which sends one email a second, an error from SES that names no reader marked each reader it came back for unsent, so an error about the email or the account marked the whole list unsent and finished the send as if it had gone out. Such an error now holds the send, with no one marked unsent, when it comes back for two or more readers sent together while SES takes none of them, or for a send to a single reader, as a first send to yourself usually is; given to one reader while SES takes the others, it stays that reader's alone. SES's plain `FAILED` is read the same way, holding the send as an outage instead of spending each reader's retries, and an answer SES doesn't document now stops the send with one reader waiting for Resolve, rather than reader after reader (SPEC §12).
 - **Settings** and the **Template** page now ask before you leave with unsaved edits, and the browser warns before a reload or closing the tab, where one click on the sidebar used to throw them away; ⌘S saves them as **Save changes** does.
 
 ## [1.23.0] - 2026-11-09

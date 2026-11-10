@@ -42,7 +42,7 @@ import {
   settingsVersionIs,
   stampSendsOfPostStmt,
 } from "../db/sends";
-import { readSettings } from "../db/settings";
+import { readSettings, readTimeZone } from "../db/settings";
 import { audienceCount } from "../db/subscribers";
 import type { AppEnv, Config } from "../env";
 import { badRequest, notFound, refusal } from "../lib/errors";
@@ -116,6 +116,23 @@ export function acceptFireAt(
     });
   }
   return onTheMinute(requested);
+}
+
+/** The words a refused schedule, reschedule, or Send now says while the publication has no
+ *  time zone: fit to show the publisher as they stand, and naming where the fix is. */
+export const TIME_ZONE_NOT_SET =
+  "Set the publication’s time zone before scheduling or sending. It’s in Settings.";
+
+/**
+ * Refuse an act that puts a send on the clock (schedule, Send now, reschedule) while the
+ * publication has no time zone (SPEC §9): its fire time and its post's public date would read
+ * on a clock nobody chose. A send already scheduled still fires; this guards only new acts.
+ * Where no provider is connected either, the caller refuses for that first.
+ */
+export async function requireTimeZone(db: D1Database): Promise<void> {
+  if ((await readTimeZone(db)) === null) {
+    throw refusal("time_zone_not_set", TIME_ZONE_NOT_SET);
+  }
 }
 
 /** How many times a freeze re-reads and re-renders when the settings changed under it.
@@ -317,6 +334,8 @@ export async function reschedule(
   if (send.status !== "scheduled" || send.fire_at <= now) {
     throw await windowClosed(env, send, "rescheduled");
   }
+  // After the send and its state, so a send that is gone or past its window says so first.
+  await requireTimeZone(env.DB);
   // Compared on the minute it would be stored at, so a retried move is recognized
   // whatever seconds the caller put on the time.
   if (send.fire_at === onTheMinute(fireAt)) {

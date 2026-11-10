@@ -39,7 +39,9 @@ import {
   type SettingsResponse,
   type SettingsSavedResponse,
   type SettingsView,
+  type TimeZoneReading,
 } from "../../shared/settings";
+import { sameTimeZone, scheduledSendReading, timeZoneLabel } from "../../shared/time_zone";
 import { buildInfo } from "../build";
 import { notificationStatus, recordNotificationTest } from "../db/notifications";
 import { listScheduledSends } from "../db/sends";
@@ -154,6 +156,8 @@ function settingsView(settings: AppSettings, cfg: Config): SettingsView {
     confirmation_email: resolveConfirmationEmail(settings),
     confirmation_email_default: DEFAULT_CONFIRMATION_EMAIL,
     notifications: settings.notifications,
+    time_zone: settings.timeZone,
+    time_zone_label: settings.timeZone === null ? null : timeZoneLabel(settings.timeZone),
   };
 }
 
@@ -331,8 +335,34 @@ export async function update(c: RequestContext): Promise<Response> {
     settings: settingsView(settings, c.config),
     warnings,
     remade,
+    time_zone_readings: await timeZoneReadings(c, current.timeZone, settings.timeZone),
   };
   return json(saved);
+}
+
+/**
+ * What a zone change says about the scheduled sends (SPEC §9): none moves, since an automatic
+ * shift could put one earlier than the publisher reviewed it or inside the review window (I6),
+ * so each gets a sentence, beside its id, saying how its moment now reads. Nothing when the zone is set for the
+ * first time, when it is the same zone under another name, or when nothing is scheduled. The
+ * editor shows the same before the save; this is for a client with no preview, such as Claude.
+ */
+async function timeZoneReadings(
+  c: RequestContext,
+  from: string | null,
+  to: string | null,
+): Promise<TimeZoneReading[]> {
+  // A first zone moves nothing that was ever read on a publication clock, so it says nothing.
+  if (from === null || to === null || sameTimeZone(from, to)) {
+    return [];
+  }
+  const now = Date.now();
+  // Only the sends still to go out, and named by subject only when there are several of them.
+  const upcoming = (await listScheduledSends(c.env.DB)).filter((s) => s.fire_at > now);
+  return upcoming.map((s) => ({
+    send_id: s.id,
+    message: scheduledSendReading(s, from, to, upcoming.length > 1, now),
+  }));
 }
 
 /** Store the uploaded logo's bytes under a key of their own, and make it the logo. */
@@ -443,6 +473,10 @@ function readPatch(o: JsonObject): SettingsPatch {
       }
     }
     patch.confirmation_email = ce;
+  }
+  const timeZone = optString(o, "time_zone");
+  if (timeZone !== undefined) {
+    patch.time_zone = timeZone;
   }
   const nBody = optObject(o, "notifications");
   if (nBody !== undefined) {

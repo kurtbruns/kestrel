@@ -84,6 +84,8 @@ function world(
   return fakeApi([
     ...extra,
     ...srv.routes,
+    // The settings the dashboard reads on mount: the spec's own, as boot left them.
+    { path: "/api/settings", reply: () => appState.appConfig ?? config() },
     { path: "/api/posts", reply: () => ({ posts, page: { ...page, total: posts.length } }) },
     { path: "/api/subscribers", reply: () => ({ counts: subs, subscribers: [], page }) },
   ]);
@@ -524,7 +526,7 @@ describe("dashboard", () => {
     expect($(".setup-title").textContent).toBe("Set up your publication");
     expect(document.querySelector(".tiles")).toBeNull();
     expect(document.querySelector(".setup-list")).toBeNull();
-    expect($(".setup-fold").textContent).toBe("✓3 done");
+    expect($(".setup-fold").textContent).toBe("✓4 done");
     // Shown, it's in its place in the list. Confirmed and pending: the people a send can
     // reach once they confirm.
     $(".setup-fold").click();
@@ -549,6 +551,76 @@ describe("dashboard", () => {
   // developer lands, as a standing state, and its checklist puts connecting one first.
   // The steps shown: those left, while the done ones are hidden.
   const steps = () => $$(".setup-steps li strong").map((s) => s.textContent);
+  // SPEC §9, DESIGN §3: nothing can be scheduled or sent until the publication has a time
+  // zone. A new instance's checklist carries the step; an upgraded one's health block the line.
+  describe("while no time zone is set", () => {
+    const withoutZone = (provider: "none" | "fake" = "fake") => {
+      const c = config();
+      c.settings = { ...c.settings, time_zone: null, time_zone_label: null };
+      c.deployment = { ...c.deployment, provider };
+      appState.appConfig = c;
+    };
+
+    it("makes setting it a step, to Settings, and scheduling the first post waits for it", async () => {
+      withoutZone();
+      fake = world([], sendServer(), none);
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(steps()).toContain("Set the time zone");
+      expect($(".setup-time-zone .setup-hint").textContent).toBe(
+        "Used for the times you schedule posts at, the dates on your published posts, and the times in your notifications. Needed before your first send.",
+      );
+      expect($(".setup-time-zone button").dataset.nav).toBe("#/settings/time-zone");
+      expect($(".setup-schedule .setup-hint").textContent).toBe("After Set the time zone");
+      expect(document.querySelector("#dashHealth .health")).toBeNull(); // said once, by the step
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("raises one amber line in the health block once setup is done, linking to Settings", async () => {
+      withoutZone();
+      fake = world([post()], sendServer([send()]), counts);
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      const block = $("#dashHealth .health");
+      expect(block.classList.contains("amber")).toBe(true);
+      const line = $(".dash-no-time-zone", block);
+      expect(line.textContent).toBe(
+        "No time zone set, so nothing can be scheduled or sent until it is. Set it in Settings.",
+      );
+      expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/settings/time-zone");
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("reads the settings again on mount, so a zone set since boot clears the line", async () => {
+      withoutZone(); // as this tab read them at boot
+      // Set since, through the API or by Claude.
+      const now = config();
+      fake = world([post()], sendServer([send()]), counts, [
+        { path: "/api/settings", reply: () => now },
+      ]);
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(document.querySelector(".dash-no-time-zone")).toBeNull();
+      expect(appState.appConfig?.settings.time_zone).toBe(now.settings.time_zone);
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("leaves the line out while no provider is connected, the first thing to fix, and once it is set", async () => {
+      withoutZone("none");
+      fake = world([post()], sendServer([send()]), counts);
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(document.querySelector(".dash-no-time-zone")).toBeNull();
+      expect(document.querySelector(".dash-not-connected")).not.toBeNull();
+      fake.restore();
+      appState.appConfig = config();
+      fake = world([post()], sendServer([send()]), counts);
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(document.querySelector(".dash-no-time-zone")).toBeNull();
+    });
+  });
+
   describe("while no email provider is connected", () => {
     const withProvider = (provider: "none" | "fake" | "ses") => {
       const c = config();
@@ -710,7 +782,7 @@ describe("dashboard", () => {
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
       expect($(".setup-card .setup-title").textContent).toBe("Finish setting up");
-      expect($(".setup-card .setup-fold").textContent).toBe("✓3 done");
+      expect($(".setup-card .setup-fold").textContent).toBe("✓4 done");
       expect($$(".setup-card .setup-steps li strong").map((s) => s.textContent)).toEqual([
         "Send a test email",
         "Get notified",
@@ -737,7 +809,7 @@ describe("dashboard", () => {
       fake = world([post()], srv, counts);
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
-      expect($(".setup-card .setup-fold").textContent).toBe("✓6 done");
+      expect($(".setup-card .setup-fold").textContent).toBe("✓7 done");
       expect(document.querySelector(".setup-card .setup-schedule")).toBeNull();
       // The test that counts is the scheduled send's, the frozen email: it opens the post.
       expect($(".setup-card .setup-post-test .setup-hint").textContent).toMatch(
@@ -753,7 +825,7 @@ describe("dashboard", () => {
       srv.edit("x2", { tested_at: Date.now() });
       await vi.advanceTimersByTimeAsync(60_000);
       expect($(".setup-card .setup-post-test").classList.contains("setup-done")).toBe(true);
-      expect($(".setup-card .setup-fold").textContent).toBe("✓7 done");
+      expect($(".setup-card .setup-fold").textContent).toBe("✓8 done");
       expect($(".setup-card .setup-fold").getAttribute("aria-expanded")).toBe("true");
       // The repaint replaced the toggle, and focus came back to it.
       expect(document.activeElement).toBe($(".setup-card .setup-fold"));

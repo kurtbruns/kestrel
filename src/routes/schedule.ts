@@ -10,7 +10,7 @@ import { requireConnectedProvider } from "../providers";
 import type { RequestContext } from "../router";
 import { actorOf, param } from "../router";
 import { viewWithCursor } from "../send/describe";
-import { acceptFireAt, activeSendExists, freeze } from "../send/schedule";
+import { acceptFireAt, activeSendExists, freeze, requireTimeZone } from "../send/schedule";
 import { carryingPost } from "../services/post_view";
 import { readSettingsBody, resolveSettings, type SettingsBody } from "./post_settings";
 import { carryingSettings } from "./settings";
@@ -96,6 +96,7 @@ async function scheduleOnce(c: RequestContext): Promise<Response> {
   rejectStrayTemplateChoice(body);
   const fields = readSettingsBody(body);
   requireConnectedProvider(c.config);
+  await requireTimeZone(c.env.DB);
   const fireAt = parseFutureFireAt(body.fire_at, c.config.minLeadMs);
   // A draft has no started send, so its address can still change.
   const settings = await resolveSettings(c.env.DB, post, fields);
@@ -123,6 +124,7 @@ async function sendNowOnce(c: RequestContext): Promise<Response> {
   }
 
   requireConnectedProvider(c.config);
+  await requireTimeZone(c.env.DB);
   // The soonest time the lead allows, through the same gate as a schedule, so it lands on
   // the minute at or after it like any other fire time.
   const now = Date.now();
