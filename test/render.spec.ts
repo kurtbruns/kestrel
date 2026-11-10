@@ -227,6 +227,80 @@ describe("render (the single render path)", async () => {
     });
   });
 
+  describe("a link that didn't become a link (SPEC §4)", () => {
+    const warningFor = (written: string) =>
+      `“${written}” won’t show as a link, so readers will see it as typed. Check it for a space or a stray parenthesis.`;
+    const rendered = async (markdown: string) =>
+      render({ post: post(), revision: revision(markdown), images: [] }, config);
+    // What a reader reads in the email's body, tags dropped.
+    const readerSees = (html: string) =>
+      (/<p>(.*?)<\/p>/s.exec(html)?.[1] ?? "").replace(/<[^>]+>/g, "");
+
+    it("warns on each way a link is typed out, and readers see it as written", async () => {
+      for (const [markdown, written] of [
+        ["See [Foo](https://en.wikipedia.org/wiki/Foo_(bar) for more.", "[Foo]("],
+        ["[a](foo(bar)", "[a](foo(bar)"],
+        ["[a](https://example.com/foo bar)", "[a]("],
+        ["[a](https://example.com/foo", "[a]("],
+      ] as const) {
+        const result = await rendered(markdown);
+        expect(result.warnings, markdown).toEqual([warningFor(written)]);
+        expect(readerSees(result.html), markdown).toBe(markdown);
+      }
+    });
+
+    it("warns wherever it sits", async () => {
+      const broken = "[a](foo(bar)";
+      for (const markdown of [
+        `# ${broken}`,
+        `> ${broken}`,
+        `- ${broken}`,
+        `**${broken}**`,
+        `| a |\n| - |\n| ${broken} |`,
+      ]) {
+        expect((await rendered(markdown)).warnings, markdown).toEqual([warningFor(broken)]);
+      }
+    });
+
+    it("says nothing of a link that worked", async () => {
+      for (const markdown of [
+        "See [Foo](https://en.wikipedia.org/wiki/Foo_(bar)) for more.",
+        "[a](<https://example.com/foo bar>)",
+        '[a](https://example.com "A title")',
+      ]) {
+        const result = await rendered(markdown);
+        expect(result.warnings, markdown).toEqual([]);
+        expect(result.html, markdown).toContain("<a href=");
+      }
+    });
+
+    it("says nothing of a link shown as code or escaped on purpose", async () => {
+      for (const markdown of [
+        "Write `[a](foo(bar)` to add a link.",
+        "```\n[a](foo(bar)\n```",
+        "\\[a](foo(bar)",
+      ]) {
+        expect((await rendered(markdown)).warnings, markdown).toEqual([]);
+      }
+    });
+
+    it("warns once on an image reference, as an image", async () => {
+      expect((await rendered("![a](foo(bar)")).warnings).toEqual([
+        "“![a](foo(bar)” won’t show as an image, so readers will see it as typed. Check it for a space or a stray bracket, and reference an uploaded image by its file name.",
+      ]);
+      expect((await rendered("![a](b c) and [d](e f)")).warnings).toEqual([
+        "“![a](b c)” won’t show as an image, so readers will see it as typed. Check it for a space or a stray bracket, and reference an uploaded image by its file name.",
+        warningFor("[d](e f)"),
+      ]);
+    });
+
+    it("says nothing of prose with brackets that reads as no link", async () => {
+      for (const markdown of ["A list [a] (b c) of things", "f(x) and g[i] (y)", "[1] and (2)"]) {
+        expect((await rendered(markdown)).warnings, markdown).toEqual([]);
+      }
+    });
+  });
+
   describe("an image uploaded to the post that it doesn't use (SPEC §4)", () => {
     it("warns on each one the post doesn't reference", async () => {
       const result = await render(

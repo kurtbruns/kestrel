@@ -1,5 +1,5 @@
 /** Markdown → email-safe HTML, with image references resolved at render time. */
-import { Marked } from "marked";
+import { Marked, type Token } from "marked";
 import type { ImageRow } from "../db/images";
 import { escapeHtmlAttr } from "../lib/html";
 import { resolveImageSrc } from "./image_urls";
@@ -8,8 +8,8 @@ export interface MarkdownContext {
   images: Map<string, ImageRow>;
   mediaBase: string;
   maxWidth: number;
-  /** Warnings about the post's images are pushed here (surfaced at preview). The HTML is the
-   *  same with or without them. */
+  /** Warnings about the post's images and links are pushed here (surfaced at preview). The
+   *  HTML is the same with or without them. */
   warnings: string[];
 }
 
@@ -21,18 +21,44 @@ export interface MarkdownContext {
  */
 const UNPARSED_IMAGE = /!\[.*?\]\([^)\n]*\)?/g;
 
+/**
+ * Text that reads as a link. A link Markdown did parse is its own token, so what matches is
+ * one the reader would see typed out, most often for a space in its address or a parenthesis
+ * that doesn't pair. Like the image check, it needs no address or closing parenthesis: an
+ * address in a broken link is linked on its own, which ends the text token at `[a](`.
+ */
+const UNPARSED_LINK = /\[[^\]\n]*\]\([^)\n]*\)?/g;
+
 export function markdownToHtml(md: string, ctx: MarkdownContext): string {
   const m = new Marked({ gfm: true, breaks: false });
   const referenced = new Set<ImageRow>();
+  // The token the walk reached before this one, which is all an escaped `\!` leaves behind.
+  let previous: Token | undefined;
   m.use({
     walkTokens(token) {
+      const before = previous;
+      previous = token;
       // A list item's text carries inline tokens of its own, read as the walk reaches them.
       if (token.type !== "text" || "tokens" in token) {
         return;
       }
-      for (const [written] of token.raw.matchAll(UNPARSED_IMAGE)) {
+      const images: [number, number][] = [];
+      for (const match of token.raw.matchAll(UNPARSED_IMAGE)) {
+        images.push([match.index, match.index + match[0].length]);
         ctx.warnings.push(
-          `“${written}” won’t show as an image, so readers will see it as typed. Check it for a space or a stray bracket, and reference an uploaded image by its file name.`,
+          `“${match[0]}” won’t show as an image, so readers will see it as typed. Check it for a space or a stray bracket, and reference an uploaded image by its file name.`,
+        );
+      }
+      // An image reference warns once, as an image. One whose `!` is escaped is shown as typed
+      // on purpose, and reaches here as text starting with the rest of it.
+      const escapedImage = before?.type === "escape" && before.raw === "\\!";
+      for (const match of token.raw.matchAll(UNPARSED_LINK)) {
+        const inImage = images.some(([start, end]) => match.index > start && match.index < end);
+        if (inImage || (escapedImage && match.index === 0)) {
+          continue;
+        }
+        ctx.warnings.push(
+          `“${match[0]}” won’t show as a link, so readers will see it as typed. Check it for a space or a stray parenthesis.`,
         );
       }
     },
