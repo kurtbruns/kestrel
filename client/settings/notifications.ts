@@ -1,7 +1,7 @@
 // Settings' Notifications section (SPEC §8): where Kestrel tells the publisher about their
 // sends is a list of addresses, each added or removed saved at once; how it gets there, and from whom,
-// is shown read-only beside it with how the last one went, and Send a test alert proves the
-// operator's Cloudflare alert for what these emails can't carry (SPEC §12).
+// is shown read-only beside it with how the last one went, and its last row says what these
+// emails can't carry, with Send a test alert to prove the Cloudflare alert for it (SPEC §12).
 
 import { notificationSender } from "../../shared/publication";
 import {
@@ -38,16 +38,12 @@ function standIn(d: SettingsResponse["deployment"]): boolean {
   return d.provider === "fake" && d.simulation === null;
 }
 
-/** What these emails can't carry, or carry only late, naming the provider as the Sent through
- *  row does: SES by name when it is SES, the email provider otherwise. Never that the alerts
- *  exist, which the app can't tell (SPEC §12). */
-function alertsNote(d: SettingsResponse["deployment"]): string {
-  const [via, it] = d.provider === "ses" ? ["Amazon SES", "SES"] : ["your email provider", "it"];
-  return `These emails travel through ${via} like the newsletter, so they can’t tell you when ${it} refuses your account, and one saying ${it} has been down for over an hour may arrive only once ${it} is back. Two Cloudflare alerts cover both, and Kestrel itself stopping.`;
-}
-
 /** The Set up alerts guide, which creates the Cloudflare Monitors, in the Docs tab. */
 const ALERTS_DOCS_HREF = "#/docs/alerts";
+
+/** What Send a test alert is for, beside it until its answer takes the line. It never says
+ *  the alerts exist, which the app can't tell (SPEC §12). */
+const ALERT_TEST_HINT = "Once the alerts are set up, checks that the first one reaches your inbox.";
 
 const NOTIFICATION_KINDS: Record<NotificationStatusKind, string> = {
   finished: "went out",
@@ -106,11 +102,11 @@ export function notificationsSection(page: SettingsPage): Html {
           <div class="set-kv-k">Sent through</div><div class="set-kv-v">${sentThroughLabel(d)}</div>
           <div class="set-kv-k">From address</div><div class="set-kv-v"><span class="mono" id="notifyFrom">${notifyFromLine(page)}</span></div>
           <div class="set-kv-k">Last notification</div><div class="set-kv-v" id="notifyStatus">${notificationStatusHtml(page.data.notification_status)}</div>
-        </div>
-        <div class="set-note" id="alertsNote">${icon("info")}<span>${alertsNote(d)} See <a class="set-link" href="${ALERTS_DOCS_HREF}">Set up alerts</a>.</span></div>
-        <div class="set-recip" style="border-top:1px solid var(--line)">
-          <div class="row"><button type="button" class="ghost" id="alertTest">Send a test alert</button><span class="field-hint" id="alertTestHint"></span></div>
-          <p class="field-hint" style="margin:0">Proves the Cloudflare alert “SES can’t send email”, end to end. Kestrel logs the line that alert watches for, and sends no email itself. Cloudflare’s alert email follows in about five minutes, and a Resolved email a few minutes after that, which means only that no new line came. Cloudflare’s own Test button sends sample data, so it can’t prove this.</p>
+          <div class="set-kv-k">Cloudflare alerts</div>
+          <div class="set-kv-v set-kv-stack" id="alertsRow">
+            <span class="muted">Notifications are sent by Kestrel, through your email provider. If either has a problem, such as the provider not sending or Kestrel itself stopping, a notification can’t reach you. To be told about these problems, <a class="set-link" href="${ALERTS_DOCS_HREF}">set up Cloudflare alerts</a>.</span>
+            <div class="row"><button type="button" class="ghost" id="alertTest">Send a test alert</button><span class="field-hint" id="alertTestHint">${ALERT_TEST_HINT}</span></div>
+          </div>
         </div>
       </div>
     </section>`;
@@ -187,7 +183,7 @@ export function mountNotifications(root: HTMLElement, page: SettingsPage): Secti
         const r = await api<AlertTestResponse>("/api/settings/notifications/alert-test", {
           method: "POST",
         });
-        alertHint.textContent = `Logged at ${fmt(r.at)}. Watch for Cloudflare’s alert email.`;
+        alertHint.textContent = `Logged at ${fmt(r.at)}. Cloudflare’s alert email should arrive in about five minutes, then a Resolved email.`;
       } catch (err) {
         alertHint.textContent = message(err);
       }

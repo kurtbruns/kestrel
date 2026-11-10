@@ -60,7 +60,7 @@ Each step here changes only your instance's repository. Nothing reaches your dep
     - **Kestrel changed it, and you haven't edited it**: take the new one with `npm run check-context -- --update`.
     - **Kestrel changed it, and you've edited it**: it shows the difference from yours to the release's. Merge what you want into yours, by hand or with Claude, then record that you did with the command it prints.
 
-1. If the release's **Upgrading from…** paragraph names a new setting, add it to `wrangler.jsonc`.
+1. If the release's **Upgrading from…** paragraph names a setting to add or remove, change `wrangler.jsonc` as it says. When you remove one, remove any comment that describes it too.
 
 1. Check the configuration and the types:
 

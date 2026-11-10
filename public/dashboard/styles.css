@@ -5461,6 +5461,10 @@ button.set-field-remove {
   align-items: flex-start;
   gap: 3px;
 }
+/* A control under that explanation (Send a test alert) stands a little apart from it. */
+.set-kv > .set-kv-stack > .row {
+  margin-top: 7px;
+}
 .set-kv > div:nth-last-child(1),
 .set-kv > div:nth-last-child(2) {
   border-bottom: 0;

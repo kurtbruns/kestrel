@@ -13,6 +13,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Changed
 
 - In **Settings**, adding or removing an address under **Notifications** or **Default test recipients** saves it at once, with a toast saying so, rather than waiting for **Save changes**; the page's other unsaved edits stay unsaved, and **Discard** leaves a saved address in place. **Send a test notification** works as soon as an address is added, and stands out more.
+- **Settings → Notifications** now has a **Cloudflare alerts** row in place of the note and the separate band under it: it says a notification can't reach you when your email provider or Kestrel itself has a problem, links Set up alerts, and holds **Send a test alert**, whose line now says what it's for and, once selected, when to expect Cloudflare's email.
+- Set up alerts now gives a description to paste into each Monitor, has you wait a few minutes after creating the SES alert before sending the test alert, since a new Monitor can miss a line written right after it is created, and says to check your other folders and send the test again if no email has come after ten minutes. The step on waiting for the email now says only what to expect, without the timings from Kestrel's own testing.
+- Upgrade to a new release now covers a release that removes a setting from `wrangler.jsonc`, comment included, where it spoke only of adding one.
+- The operator's Claude context (`template/claude/CLAUDE.md`) now says to wait a few minutes after a Monitor is created before sending the test alert, and to confirm its line in the Worker's Observability tab; and that `--url` or `KESTREL_URL` for this repository's instance is the `production` block's `APP_ORIGIN`, so a call never stalls on which of several sign-ins to use.
 
 ## [1.23.0] - 2026-11-09
 
