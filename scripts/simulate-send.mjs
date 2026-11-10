@@ -218,7 +218,12 @@ async function main() {
       `  it fires at ${clock(send.fire_at)}, on that minute's sweep tick, as a deployed send would (a fire time is rounded up to the whole minute)`,
     );
   }
-  if (simulation.profile === "ses") {
+  if (simulation.outage) {
+    console.log(
+      "  SES is down (SIMULATE_SENDS=ses:outage): the send backs off on the real spacing, and its line\n" +
+        "  turns amber at the sixth failed try in a row. Restart with SIMULATE_SENDS=ses to end the outage.",
+    );
+  } else if (simulation.profile === "ses") {
     console.log(
       "  SES takes one request a second, each a second of the send rate (up to 50), so on the\n" +
         "  default SUBREQUEST_BUDGET (Workers Free) it goes out a slice a minute, as deployed. Run\n" +

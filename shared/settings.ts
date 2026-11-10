@@ -170,6 +170,8 @@ export interface SimulationView {
   faults: SimulationFaults;
   /** The refusal of the account it answers every email with, from `SIMULATE_SENDS=ses:refuse=<cause>`; null for none. */
   refuse: RefusingCause | null;
+  /** Whether SES is unavailable to every email, from `SIMULATE_SENDS=ses:outage`. */
+  outage: boolean;
   /** The SES account it stands in for, from `SIMULATE_ACCOUNT`; null leaves the account unread. */
   account: SimulatedAccountView | null;
 }

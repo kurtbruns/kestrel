@@ -639,7 +639,8 @@ const PROBLEM_REFUSALS: Record<SimulatedAccountProblem, RefusingCause | null> = 
 function simulationOf(local: Omit<SimulationView, "account">, env: AppEnv): SimulationView {
   const account = readSimulateAccount(env.SIMULATE_ACCOUNT, local.profile);
   const implied = account?.problem ? PROBLEM_REFUSALS[account.problem] : null;
-  return { ...local, refuse: local.refuse ?? implied, account };
+  // A provider that is down answers no request, so an outage implies no refusal.
+  return { ...local, refuse: local.refuse ?? (local.outage ? null : implied), account };
 }
 
 /** The spellings that turn the simulation off, and those that pick the generic profile. */
@@ -651,7 +652,7 @@ const SIMULATION_GENERIC = new Set(["1", "on", "true", "yes"]);
  * fake: `off` (or unset), `not-connected`, or a profile (`generic`, or `1`, `ses`)
  * and optionally `:realistic` (the default) or `:none`, then, for `ses`, optionally
  * `:refuse=<cause>`, a refusal of the account every email meets (SPEC §10, §13), as in
- * `ses:refuse=configuration`. Anything else is refused rather than read as off, so a typo
+ * `ses:refuse=configuration`, or `:outage`, SES unavailable to every email. Anything else is refused rather than read as off, so a typo
  * can't quietly turn the simulation off or pick the wrong provider.
  */
 function readSimulateSends(
@@ -665,9 +666,11 @@ function readSimulateSends(
     return "not-connected";
   }
   const [name = "", ...parts] = raw.split(":");
-  const refusePart = parts.at(-1)?.startsWith("refuse=") ? parts.pop() : undefined;
+  const last = parts.at(-1) ?? "";
+  const answerPart = last.startsWith("refuse=") || last === "outage" ? parts.pop() : undefined;
   const [faults = "realistic", ...rest] = parts;
-  const refuse = refusePart?.slice("refuse=".length);
+  const refuse = answerPart?.startsWith("refuse=") ? answerPart.slice("refuse=".length) : undefined;
+  const outage = answerPart === "outage";
   const profile = SIMULATION_GENERIC.has(name) ? "generic" : name;
   if (
     rest.length > 0 ||
@@ -677,19 +680,20 @@ function readSimulateSends(
   ) {
     throw new ConfigError(
       "SIMULATE_SENDS",
-      `must be off, one of ${SIMULATION_PROFILES.join(", ")} (or 1) optionally followed by :${SIMULATION_FAULTS.join(" or :")} and, for ses, :refuse= and one of ${SIMULATED_REFUSALS.join(", ")}, or not-connected, not "${v?.trim()}"`,
+      `must be off, one of ${SIMULATION_PROFILES.join(", ")} (or 1) optionally followed by :${SIMULATION_FAULTS.join(" or :")} and, for ses, :refuse= and one of ${SIMULATED_REFUSALS.join(", ")} or :outage, or not-connected, not "${v?.trim()}"`,
     );
   }
-  if (refuse !== undefined && profile !== "ses") {
+  if (answerPart !== undefined && profile !== "ses") {
     throw new ConfigError(
       "SIMULATE_SENDS",
-      `refuses through SES's own answers, so :refuse= needs the ses profile, not "${v?.trim()}"`,
+      `${refuse !== undefined ? "refuses" : "goes down"} through SES's own answers, so :${refuse !== undefined ? "refuse=" : "outage"} needs the ses profile, not "${v?.trim()}"`,
     );
   }
   return {
     profile: profile as SimulationProfile,
     faults: faults as SimulationFaults,
     refuse: (refuse as RefusingCause | undefined) ?? null,
+    outage,
   };
 }
 

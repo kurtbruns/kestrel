@@ -141,7 +141,12 @@ export function simulationLine(value) {
   if (v === "not-connected") {
     return "[dev] running not connected: sends, tests and signups are refused (unset SIMULATE_SENDS to send)";
   }
-  const [name = "", faults = "realistic", ...rest] = v.split(":");
+  const parts = v.split(":");
+  // SES's outage (`ses:outage`), last, as the Worker reads it.
+  if (parts.length > 1 && parts.at(-1) === "outage" && parts[0] === "ses") {
+    parts.pop();
+  }
+  const [name = "", faults = "realistic", ...rest] = parts;
   const known =
     ["generic", "ses", "1", "on", "true", "yes"].includes(name) &&
     ["realistic", "none"].includes(faults) &&

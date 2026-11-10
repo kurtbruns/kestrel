@@ -20,7 +20,14 @@ describe("simulationLine", () => {
   });
 
   it("names a simulation profile", () => {
-    for (const value of ["ses:none", "ses", "1", "generic:realistic"]) {
+    for (const value of [
+      "ses:none",
+      "ses",
+      "1",
+      "generic:realistic",
+      "ses:outage",
+      "ses:none:outage",
+    ]) {
       expect(simulationLine(value), value).toBe(
         `[dev] simulating a provider for list sends (SIMULATE_SENDS=${value}); nothing is delivered`,
       );
@@ -43,7 +50,14 @@ describe("simulationLine", () => {
   });
 
   it("says a value the app will refuse is not one it accepts, never that it simulates", () => {
-    for (const value of ["mailgun", "resend", "ses:sometimes", "ses:none:extra"]) {
+    for (const value of [
+      "mailgun",
+      "resend",
+      "ses:sometimes",
+      "ses:none:extra",
+      "ses:outage=6",
+      "1:outage",
+    ]) {
       const line = simulationLine(value);
       expect(line, value).toContain(`SIMULATE_SENDS=${value} isn't a value the app accepts`);
       expect(line, value).not.toContain("simulating");
