@@ -2,6 +2,7 @@
 // editor.
 
 import { emailLogoHtml } from "../../shared/email_logo";
+import { SANS_STACK, SERIF_STACK } from "../../shared/fonts";
 import {
   ADDRESS_NOT_PRINTED,
   type SettingsPatchBody,
@@ -121,14 +122,17 @@ export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
     description:
       "Your post, then your logo, name, and tagline as a sign-off. Your mailing address sits in the footer once you add one.",
     html: `<style>
+  /* Name only fonts your readers already have, with a generic family (serif,
+     sans-serif) last: mail clients ignore web fonts, and a sent email keeps its
+     font names for good. */
   .email {
-    font: 16px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font: 16px/1.6 ${SANS_STACK};
     color: #18181b;
   }
   .email h1,
   .email h2,
   .email h3 {
-    font-family: Georgia, 'Times New Roman', serif;
+    font-family: ${SERIF_STACK};
     line-height: 1.2;
   }
   .email a {
@@ -148,7 +152,7 @@ export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
     margin-right: 14px;
   }
   .signoff .name {
-    font: 600 17px/1.2 Georgia, 'Times New Roman', serif;
+    font: 600 17px/1.2 ${SERIF_STACK};
   }
   .signoff .tagline {
     font-size: 13px;
@@ -221,14 +225,17 @@ export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
     description:
       "Just your post and the footer links. Your mailing address sits in the footer once you add one.",
     html: `<style>
+  /* Name only fonts your readers already have, with a generic family (serif,
+     sans-serif) last: mail clients ignore web fonts, and a sent email keeps its
+     font names for good. */
   .email {
-    font: 16px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font: 16px/1.6 ${SANS_STACK};
     color: #18181b;
   }
   .email h1,
   .email h2,
   .email h3 {
-    font-family: Georgia, 'Times New Roman', serif;
+    font-family: ${SERIF_STACK};
     line-height: 1.2;
   }
   .email a {

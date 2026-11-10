@@ -88,6 +88,9 @@ export default defineConfig(async () => {
           test: {
             name: "client",
             environment: "happy-dom",
+            // Vitest empties every stylesheet a spec imports unless it's named here, a raw
+            // import included; the font spec reads the editor's stylesheet as text.
+            css: { include: [/public\/dashboard\/styles\.css/] },
             // Every client spec starts with the real admin shell in the document (the
             // shell module reads its roots at import time) and a scripted fetch at hand.
             setupFiles: ["./client/test/setup.ts"],

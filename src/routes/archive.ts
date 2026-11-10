@@ -98,8 +98,7 @@ export async function archiveIndex(c: RequestContext): Promise<Response> {
  *  markers, none touching the reviewed content: the per-recipient slots filled for no one
  *  (the generic unsubscribe link, and an empty sent-to address so none leaks), the
  *  template's email-only regions left out, the browser-only masthead (plus, in local dev
- *  only, the "Open dashboard" pill), and the hosted-page <head> chrome (display-serif links,
- *  the reader ground, and the logo as the tab icon), which never ships in an email. The
+ *  only, the "Open dashboard" pill), and the hosted-page <head> chrome (the reader ground, and the logo as the tab icon), which never ships in an email. The
  *  public post page and the publisher's web version both build from this, so the web
  *  version is the page. */
 export function webVersion(
