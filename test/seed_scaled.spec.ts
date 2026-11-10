@@ -66,8 +66,8 @@ describe("scaledEmailFor", () => {
   const DOMAIN = /^(example\.(?:com|net|org)|(?:mail|post|inbox)\.example)$/; // reserved only
 
   // The whole range up to the cap, since a smaller one couldn't show the cap's addresses are
-  // unique. Each address is checked in the loop and the misfits asserted once: 200,000 `expect`
-  // calls were nearly all of the test's time, enough to cross the timeout on a loaded machine.
+  // unique. An `expect` per address costs most of a second over the range, enough to cross the
+  // timeout on a loaded machine, so the misfits are collected and asserted once.
   it("produces unique, human-plausible, suffix-free addresses across the whole 100k range", () => {
     const N = 100_000;
     const seen = new Set<string>();
