@@ -91,9 +91,30 @@ const answer = (over: Partial<AccountAnswer> = {}): AccountAnswer => ({
   ...over,
 });
 
+/**
+ * A clock for the pacing (`performance.now()`, which the account check's reads and a send's
+ * batches are spaced on) that moves only by what the code asks `setTimeout` to wait, with the
+ * wait itself skipped. A gap between two reads is then exactly what the code asked for: a
+ * measured one would also count how late a loaded machine woke the test and how long a read
+ * took, and the reads, a second apart, would cost real time.
+ */
+function pacedClock(): { readonly now: number } {
+  const clock = { now: 0 };
+  vi.spyOn(performance, "now").mockImplementation(() => clock.now);
+  const realSetTimeout = globalThis.setTimeout;
+  vi.spyOn(globalThis, "setTimeout").mockImplementation(((run: () => void, ms = 0) => {
+    clock.now += ms;
+    return realSetTimeout(run, 0);
+  }) as typeof setTimeout);
+  return clock;
+}
+
+let clock: { readonly now: number };
+
 beforeEach(async () => {
   await resetDatabase();
   vi.useFakeTimers({ toFake: ["Date"] });
+  clock = pacedClock();
 });
 
 afterEach(() => {
@@ -540,7 +561,7 @@ describe("the account problems the check finds (SPEC §13)", () => {
     // The address and three of its four domains; birds.example, unread, could be verified.
     expect(asked.filter((u) => u.startsWith(IDENTITY))).toHaveLength(4);
     expect(await codes(LONG)).toEqual([]);
-  }, 15_000); // six reads, a second apart
+  });
 
   it("keeps the last sender and set findings when a later check can't read them", async () => {
     reads((url) =>
@@ -558,12 +579,13 @@ describe("the account problems the check finds (SPEC §13)", () => {
     expect(await codes()).toEqual(found);
 
     vi.restoreAllMocks();
+    clock = pacedClock();
     reads((url) => (url === ACCOUNT ? undefined : sesError(500, "InternalFailure")));
     vi.setSystemTime(Date.now() + ACCOUNT_CHECK_INTERVAL_MS);
     await sweep(SES_WITH_SET);
     expect((await readProviderAccount(env.DB))?.checkedAt).toBe(Date.now());
     expect(await codes()).toEqual(found);
-  }, 15_000); // two checks of up to six reads, a second apart
+  });
 
   it("says nothing about the sender when the key may not read the identity", async () => {
     reads((url) => (url.startsWith(IDENTITY) ? sesError(403, "AccessDeniedException") : undefined));
@@ -635,6 +657,7 @@ describe("the account problems the check finds (SPEC §13)", () => {
     reads();
     await sweep(SES_WITH_SET);
     vi.restoreAllMocks();
+    clock = pacedClock();
     answerReads(() => sesError(403, "UnrecognizedClientException"));
     vi.setSystemTime(Date.now() + ACCOUNT_CHECK_INTERVAL_MS);
     await sweep(SES_WITH_SET);
@@ -764,14 +787,12 @@ describe("the account check, when SES answers otherwise", () => {
   it("asks SES a second apart, the rate it takes these actions at", async () => {
     const at: number[] = [];
     answerReads((url) => {
-      at.push(performance.now());
+      at.push(clock.now);
       return url === ACCOUNT ? ok(accountBody()) : sesError(404, "NotFoundException");
     });
     await sweep(SES);
-    expect(at).toHaveLength(4); // the account, then the address and two domains
-    for (let i = 1; i < at.length; i++) {
-      expect(at[i]! - at[i - 1]!).toBeGreaterThanOrEqual(ACCOUNT_READ_GAP_MS - 5);
-    }
+    // The account, then the address and two domains, each a gap after the last.
+    expect(at).toEqual([0, 1, 2, 3].map((i) => i * ACCOUNT_READ_GAP_MS));
   });
 
   it("keeps the identity's set it last read when a later read is throttled, so the warning doesn't flicker", async () => {

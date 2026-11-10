@@ -65,17 +65,24 @@ describe("scaledEmailFor", () => {
   const LOCAL = /^[a-z]+[._][a-z]+$/; // two whole name tokens, one separator, no digits
   const DOMAIN = /^(example\.(?:com|net|org)|(?:mail|post|inbox)\.example)$/; // reserved only
 
+  // The whole range up to the cap, since a smaller one couldn't show the cap's addresses are
+  // unique. Each address is checked in the loop and the misfits asserted once: 200,000 `expect`
+  // calls were nearly all of the test's time, enough to cross the timeout on a loaded machine.
   it("produces unique, human-plausible, suffix-free addresses across the whole 100k range", () => {
     const N = 100_000;
     const seen = new Set<string>();
+    const misfits: string[] = [];
     for (let i = 0; i < N; i++) {
-      const [local, domain] = scaledEmailFor(i).split("@");
+      const address = scaledEmailFor(i);
+      const [local, domain] = address.split("@");
       // No numeric suffix anywhere below the cap: the address space exceeds 100k, so the
       // generator never has to fall back to a counter (the old "loop and repeat").
-      expect(LOCAL.test(local!)).toBe(true);
-      expect(DOMAIN.test(domain!)).toBe(true);
-      seen.add(`${local}@${domain}`);
+      if (!LOCAL.test(local!) || !DOMAIN.test(domain!)) {
+        misfits.push(address);
+      }
+      seen.add(address);
     }
+    expect(misfits).toEqual([]);
     expect(seen.size).toBe(N); // every address is unique — the scramble is a bijection
   });
 
