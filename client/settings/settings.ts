@@ -42,6 +42,7 @@ import {
 import { mountReaderPages, readerPagesSection } from "./reader_pages";
 import { expireRemakeWait, remakeIdentity, savedToast, withRemakeConfirm } from "./remake";
 import { mountSubscribe, subscribeSection } from "./subscribe";
+import { guardUnsaved } from "./unsaved";
 
 /** One group of sections, kept together by whom they serve: no heading of its own, since
  *  the sections' titles already say what each is, only a wider gap from the next group. */
@@ -122,7 +123,13 @@ export async function renderSettings(
   const handles: SectionHandle[] = [];
   // The shared bottom save bar (Save + Discard), its callbacks the hoisted saveSettings /
   // discardSettings below.
-  const bar = savebar.attach({ onSave: saveSettings, onDiscard: discardSettings }, signal);
+  // A leave asks first while anything on the page is unsaved: the bar's fields, or an edit a
+  // section keeps of its own. Typed text an address list hasn't added is no edit to the page.
+  const guard = guardUnsaved(() => isDirty() || handles.some((h) => h.unsaved?.()), signal);
+  const bar = savebar.attach(
+    { onSave: () => guard.saving(saveSettings), onDiscard: discardSettings },
+    signal,
+  );
   let refreshReaderPages = () => {};
   const page: SettingsPage = {
     data,
@@ -296,7 +303,8 @@ export async function renderSettings(
     },
     { signal },
   );
-  return { navigate };
+  // ⌘S is Save changes itself, refusals and the re-make confirmation included.
+  return { navigate, ...guard.handle, manualSave: bar.save };
 }
 
 // The input each settings field the save bar's write can name is edited in, by its wire

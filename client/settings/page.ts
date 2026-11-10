@@ -65,10 +65,13 @@ export interface SettingsPage {
 
 /** What a section answers once mounted. `repaint` redraws what it derives from the state
  *  (a preview, a snippet) and runs on every change; `reset` puts its fields back to the
- *  state after a save adopts the server's result or a discard restores the baseline. */
+ *  state after a save adopts the server's result or a discard restores the baseline;
+ *  `unsaved` says whether it holds an edit of its own the save bar doesn't track (one it
+ *  saves with a button of its own), which a leave still asks about. */
 export interface SectionHandle {
   repaint?(): void;
   reset?(): void;
+  unsaved?(): boolean;
 }
 
 export const message = describeError;
