@@ -12,9 +12,11 @@ export interface UnsavedGuard {
    * Run a save. While one runs, a leave neither prompts nor drops the edits: the page stays,
    * and once the save lands and nothing is left unsaved it follows to where the reader was
    * going. A save that was refused or declined, or edits typed while it ran, keep the page
-   * where it is, the bar still up and saying why.
+   * where it is, the bar still up and saying why. A save that goes on to act on the page
+   * (Save & send test, whose dialog sends next) passes `follow` false: a leave asked while it
+   * ran is dropped rather than taking the page, and that act, away once it lands.
    */
-  saving<T>(run: () => Promise<T>): Promise<T>;
+  saving<T>(run: () => Promise<T>, follow?: boolean): Promise<T>;
 }
 
 /** The guard over `dirty`, the page's unsaved edits, for the mount `signal` belongs to. */
@@ -33,7 +35,7 @@ export function guardUnsaved(dirty: () => boolean, signal: AbortSignal): Unsaved
         return dirty() ? "confirm" : "leave";
       },
     },
-    async saving(run) {
+    async saving(run, follow = true) {
       running++;
       try {
         return await run();
@@ -42,7 +44,7 @@ export function guardUnsaved(dirty: () => boolean, signal: AbortSignal): Unsaved
         const to = pending;
         if (running === 0 && to !== null) {
           pending = null;
-          if (!signal.aborted && !dirty()) {
+          if (follow && !signal.aborted && !dirty()) {
             location.hash = to;
           }
         }

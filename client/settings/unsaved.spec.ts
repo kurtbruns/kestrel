@@ -105,10 +105,11 @@ describe("leaving a page with unsaved edits", () => {
     vi.unstubAllGlobals();
   });
 
-  async function open(hash: string, write: FakeRoute = put) {
+  async function open(hash: string, write: FakeRoute = put, more: FakeRoute[] = []) {
     fake = fakeApi([
       { path: "/api/settings", reply: () => settingsResponse() },
       write,
+      ...more,
       { path: /^\/api\/reader-pages\//, reply: () => new Response("<html><body></body></html>") },
       {
         path: "/api/subscribers",
@@ -335,6 +336,44 @@ describe("leaving a page with unsaved edits", () => {
       await settle();
       hashchange();
       await settle();
+      expect(h1()).toBe("Subscribers");
+      expect(confirm).not.toHaveBeenCalled();
+    });
+
+    it("stays for the test a Save & send test goes on to send, rather than following a leave made while it saved", async () => {
+      const held = heldPut((req) => saved(req.json() as SettingsPatchBody));
+      const test: FakeRoute = {
+        method: "POST",
+        path: "/api/settings/template/test",
+        reply: () => ({
+          sent: 1,
+          total: 1,
+          failed: [],
+          not_sent: [],
+          provider: "fake",
+          recipients: ["me@b.c"],
+        }),
+      };
+      await open("#/template", held.route, [test]);
+      edit();
+      $("#tplTest").click();
+      typeInto($<HTMLTextAreaElement>("#tplTestTo"), "me@b.c");
+      $("#ttGo").click();
+      await settle();
+      await at("#/subscribers");
+      expect(confirm).not.toHaveBeenCalled();
+      held.release();
+      await settle();
+      hashchange();
+      await settle();
+      expect(location.hash).toBe("#/template");
+      expect(h1()).toBe("Email template");
+      expect(
+        fake.calls.filter((c) => c.url.pathname === "/api/settings/template/test"),
+      ).toHaveLength(1);
+      expect($("#toasts").textContent).toMatch(/Test sent to 1 address/);
+      // The leave was dropped, not deferred again: the page is clean, and the next one goes unasked.
+      await at("#/subscribers");
       expect(h1()).toBe("Subscribers");
       expect(confirm).not.toHaveBeenCalled();
     });

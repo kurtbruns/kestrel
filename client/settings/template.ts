@@ -651,8 +651,10 @@ export async function renderTemplate(
   // dirty). THROWS on a rejected template (no unsubscribe link → 400) or a send about to
   // fire (409 remake_too_close), so callers decide what to do. Shared by the save bar's
   // Save and Save-&-send-test.
-  function saveTemplate(): Promise<TemplateSaved | null> {
-    return guard.saving(writeTemplate);
+  // `follow` false for a save the test dialog goes on to send after: a leave asked while it
+  // saved is dropped, so the page and its dialog stay for the test (unsaved.ts).
+  function saveTemplate(follow = true): Promise<TemplateSaved | null> {
+    return guard.saving(writeTemplate, follow);
   }
   async function writeTemplate(): Promise<TemplateSaved | null> {
     const value = tplEditor.value;
@@ -821,7 +823,7 @@ export async function renderTemplate(
         // A rejected save shows in the bar and stops the send.
         if (isDirty()) {
           try {
-            const saved = await saveTemplate();
+            const saved = await saveTemplate(false);
             if (!saved) {
               m.close(); // declined the re-make: nothing saved, so nothing to test yet
               return;
