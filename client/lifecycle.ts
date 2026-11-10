@@ -14,11 +14,12 @@ export interface ViewHandle {
   /** Unsaved work the browser should warn about before the tab unloads. */
   dirty?(): boolean;
   /**
-   * Asked once before a navigation away. The view may save in the background here and
-   * answer "leave"; "confirm" has the router ask the reader first, and a declined prompt
-   * keeps the view mounted.
+   * Asked once before a navigation away, with the hash already at the destination. The view
+   * may save in the background here and answer "leave"; "confirm" has the router ask the
+   * reader first, and a declined prompt keeps the view mounted; "stay" keeps it mounted
+   * unasked, for a view that follows there itself once it can (a save that has to land first).
    */
-  beforeLeave?(): "leave" | "confirm";
+  beforeLeave?(): "leave" | "confirm" | "stay";
   /** ⌘S / Ctrl-S. */
   manualSave?(): void;
   /**

@@ -2,6 +2,7 @@
  *  the home page, the archive index, the subscribe flow, and the message pages a
  *  reader lands on from an email (confirm, unsubscribe, not found), via `messagePage`.
  *  Automatic light/dark via prefers-color-scheme. */
+import { inlineStack, SANS_STACK, SERIF_STACK } from "../../shared/fonts";
 import { escapeHtml, escapeHtmlAttr } from "./html";
 import { PAGE_SECURITY_HEADERS } from "./page_headers";
 
@@ -17,6 +18,9 @@ import { PAGE_SECURITY_HEADERS } from "./page_headers";
  *  background in each theme. The sent email keeps its own white; this is web-only. */
 const READER_BG_LIGHT = "#fbfbfa";
 const READER_BG_DARK = "#12110f";
+
+/** The sans as the chrome below spells it, outside the reader tokens. */
+const SANS_INLINE = inlineStack(SANS_STACK);
 
 /* The app's brand accent (DESIGN.md §8), mirrored here for the publisher-only chrome the
    reader surface carries: the dev pill and the test pages' strip. Only the publisher ever
@@ -39,7 +43,7 @@ const APP_ACCENT_TOKENS = `
    none of the reader tokens, so the font is set here rather than inherited. */
 const DEV_BADGE_STYLE = `${APP_ACCENT_TOKENS}
 .r-dev { position:fixed; right:18px; bottom:18px; z-index:50; display:inline-flex; align-items:center; gap:8px;
-         font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; line-height:1.6;
+         font-family:${SANS_INLINE}; line-height:1.6;
          font-size:13px; font-weight:600; text-decoration:none; padding:9px 15px 9px 10px; border-radius:999px;
          background:var(--k-accent); color:var(--k-accent-contrast); border:1px solid var(--k-accent);
          box-shadow:0 6px 20px rgba(0,0,0,.22); }
@@ -64,7 +68,7 @@ const DEV_BADGE_STYLE = `${APP_ACCENT_TOKENS}
    in admin CSS (`.web-bar` in styles.css); keep the two in sync. */
 const READER_BANNER_STYLE = `${APP_ACCENT_TOKENS}
 .r-banner { background:var(--k-accent); color:var(--k-accent-contrast);
-            font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+            font-family:${SANS_INLINE};
             font-size:13.5px; font-weight:500; line-height:1.4; }
 /* The tag runs in, inline with the sentence, so on a phone the sentence wraps beneath it at
    the strip's full width rather than in a narrow column beside it. */
@@ -79,8 +83,8 @@ const READER_STYLE = `
 :root {
   color-scheme: light dark;
   --r-bg:${READER_BG_LIGHT}; --r-ink:#1b1a17; --r-card:#ffffff; --r-line:#e7e5df; --r-mut:#6b6a63;
-  --r-serif:Fraunces,Georgia,'Iowan Old Style','Times New Roman',serif;
-  --r-sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  --r-serif:${SERIF_STACK};
+  --r-sans:${SANS_STACK};
   --r-measure:820px; /* one reading width shared by the masthead, body, and footer so their edges line up */
   /* The masthead sits on the card surface with a hairline rule (the footer's top
      rule, mirrored); the eyebrow/link accent inherits the ink color. */
@@ -163,17 +167,9 @@ a:focus-visible, .r-sub:focus-visible, .r-btn:focus-visible { outline:2px solid 
 }
 `;
 
-/** Stylesheet links for the publication's display serif (Fraunces), loaded on the
- *  hosted reader pages and injected into the archive post page's <head> (browser-
- *  only chrome, never the email). Only the allowed Google Fonts hosts are used. */
-export const FRAUNCES_FONT_LINKS =
-  `<link rel="preconnect" href="https://fonts.googleapis.com">` +
-  `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>` +
-  `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..600;1,9..144,400..600&display=swap">`;
-
 /** Everything the archive route injects into a hosted post page's <head> at the
- *  reserved anchor: the display-serif links, the frozen render's background, and the
- *  browser-only masthead's colors (`.k-mast`, see `archiveMasthead`) — both themed
+ *  reserved anchor: the frozen render's background and the browser-only masthead's
+ *  colors (`.k-mast`, see `archiveMasthead`) — both themed
  *  light/dark here so the whole page turns together.
  *
  *  Two kinds of rule live here, and the difference is deliberate. The background
@@ -185,7 +181,6 @@ export const FRAUNCES_FONT_LINKS =
  *  as the page's title rather than a caption; the date stays muted, at `#52525b` in light
  *  (~7:1 on the reader ground; `#71717a` was ~3.9:1) and `#a1a1aa` in dark (~7:1). */
 export const ARCHIVE_POST_HEAD =
-  FRAUNCES_FONT_LINKS +
   `<style>body.k-bg,body .k-bg,body .k-card{background:${READER_BG_LIGHT}!important}` +
   `.k-mast{color:#52525b;border-bottom:1px solid #e4e4e7}.k-mast a{color:#18181b}` +
   `@media(prefers-color-scheme:dark){body.k-bg,body .k-bg,body .k-card{background:${READER_BG_DARK}!important}` +
@@ -316,7 +311,7 @@ export function readerPage(opts: {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(opts.title)}</title>
-${readerIconLink(logoUrl)}${FRAUNCES_FONT_LINKS}
+${readerIconLink(logoUrl)}
 <style>${READER_STYLE}</style>${readerBannerStyle(opts.banner)}${devDashboardStyle(opts.devDashboardUrl)}
 </head>
 <body>

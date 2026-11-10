@@ -18,6 +18,10 @@
  * account's or the provider's, not one send's, so while one send waits one out, another that
  * starts or resumes joins it without a request (`accountHalt`). A request with no answer halts the
  * run the same way, but its batch stays in flight for Resolve.
+ * An answer that leaves a recipient out stops the run the same way, that recipient in flight.
+ * A failure the adapter marks as the request's if repeated (`ifRepeated`) is read across the
+ * group: two or more requests answered so, or one when it carried the send's whole audience,
+ * with no one taken, hold the send with no attempt spent (SPEC §12).
  * Only a recipient's own retryable failure counts toward `MAX_DELIVERY_ATTEMPTS`.
  *
  * A run spends against the invocation's subrequest budget (`budget.ts`) and stops
@@ -49,7 +53,7 @@ import {
 } from "../lib/time";
 import { getProvider } from "../providers";
 import { drainSimulatedWebhooks } from "../providers/simulate";
-import type { BatchHalt, HaltCause, HaltReason } from "../providers/types";
+import type { BatchHalt, HaltCause, HaltReason, PerRecipientResult } from "../providers/types";
 import { sendSender } from "../services/sender";
 import { alertRefusal } from "../services/sending";
 import { Budget, metered } from "./budget";
@@ -148,6 +152,11 @@ export const MIN_RUN_COST = OPEN_COST + GROUP_COST + 1 + CLOSE_COST;
  *  the account's other sends wait on it. */
 function worseHalt(current: BatchHalt | null, next: BatchHalt): BatchHalt {
   return !current || haltRank(next) > haltRank(current) ? next : current;
+}
+
+/** The halt a failed result is instead if the group repeats it (`ifRepeated`), or null. */
+function repeatedHalt(r: PerRecipientResult): BatchHalt | null {
+  return !r.accepted && r.ifRepeated ? r.ifRepeated : null;
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -298,6 +307,11 @@ export async function runSend(
    * The group's requests go out together, each started no sooner than the provider's
    * rate allows, so a group costs about one request's wait rather than one per batch.
    */
+  /** Whether the send's audience at fire is one recipient, set once the run reads its rows:
+   *  then a failure the adapter can't place has no other request to be compared with, and
+   *  holding the send on it delays no one else (SPEC §12). */
+  let audienceOfOne = false;
+
   const deliver = async (batches: Batch[]): Promise<boolean> => {
     const outcomes: DeliveryOutcome[] = [];
     const held: string[] = [];
@@ -352,11 +366,17 @@ export async function runSend(
     };
     // The first request goes alone: a refused account or a provider that is down refuses
     // the whole group, and each retry of a long halt would otherwise pay for every one.
-    // The rest go together once it is answered.
+    // The rest go together once it is answered for every recipient it carried: an answer
+    // that leaves one out may come back for every request (SPEC §10).
     const [first, ...rest] = sent;
     const answers = first ? [await send(first)] : [];
     const probe = answers[0]?.answer;
-    if (probe?.kind === "answered" && !probe.halt) {
+    if (
+      first &&
+      probe?.kind === "answered" &&
+      !probe.halt &&
+      first.recipients.every((r) => probe.results.some((a) => a.email === r.email))
+    ) {
       answers.push(...(await Promise.all(rest.map(send))));
     } else {
       // Handed off but never sent: back to the queue, no key kept (none of them reached the
@@ -366,6 +386,35 @@ export async function runSend(
         held.push(call.batch.key);
         requeued += call.batch.members.length;
         heldCount += call.recipients.length;
+      }
+    }
+
+    // A failure the adapter can't place from one request (`ifRepeated`) is read across the
+    // group, as a larger request's entries are: answered so by two or more requests with no
+    // one taken in the group, or by the one request of a send whose audience is that one
+    // recipient, it is the provider's, so those recipients go back with no attempt spent and
+    // the send holds; otherwise each is its recipient's own (SPEC §12).
+    const tookAny = answers.some(
+      (a) => a.answer?.kind === "answered" && a.answer.results.some((r) => r.accepted),
+    );
+    const repeats = answers.filter(
+      (a) => a.answer?.kind === "answered" && a.answer.results.some((r) => repeatedHalt(r)),
+    );
+    if (!tookAny && (repeats.length > 1 || (repeats.length === 1 && audienceOfOne))) {
+      for (const a of repeats) {
+        if (a.answer?.kind !== "answered") {
+          continue;
+        }
+        let shared = a.answer.halt ?? null;
+        const results = a.answer.results.map((r) => {
+          const instead = repeatedHalt(r);
+          if (!instead) {
+            return r;
+          }
+          shared = worseHalt(shared, instead);
+          return { ...r, ifRepeated: undefined, retryable: true, held: true as const };
+        });
+        a.answer = shared ? { kind: "answered", results, halt: shared } : a.answer;
       }
     }
 
@@ -422,8 +471,20 @@ export async function runSend(
             result.unsent += 1;
           }
         }
-        // A recipient the answer left out stays in flight, its fate unknown.
-        unknown += Math.max(0, call.recipients.length - answeredFor);
+        // A recipient the answer left out stays in flight, its fate unknown, and the run
+        // stops as it does for a request with no answer, waiting out the same backoff: a
+        // provider answering this way may answer every request so, and each would leave
+        // another batch for Resolve (SPEC §10, §12).
+        const left = Math.max(0, call.recipients.length - answeredFor);
+        if (left > 0) {
+          unknown += left;
+          complete = false;
+          halt = worseHalt(halt, {
+            reason: "unavailable",
+            cause: "outage",
+            error: `The provider answered without a result for ${left === 1 ? "1 recipient" : `${left} recipients`}, so whether it took ${left === 1 ? "that one" : "them"} is unknown.`,
+          });
+        }
       }
       if (batchHalt) {
         held.push(batch.key);
@@ -532,6 +593,10 @@ export async function runSend(
   );
   const pendingIds =
     groups > 0 ? await sends.pendingDeliveryIds(db, sendId, groups * groupCalls * batchSize) : [];
+  // The run that fixes the audience reads every row fresh, at least a group's worth, so one
+  // row read is an audience of one; a later run reads the audience off the send.
+  audienceOfOne =
+    send.audience_resolved_at === null ? pendingIds.length === 1 : send.recipient_count === 1;
   /** How many requests the next group may make: its full size, or fewer when the budget
    *  or the tick's time is short, so a tight budget still sends; zero once the run should
    *  stop. */

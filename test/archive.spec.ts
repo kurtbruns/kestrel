@@ -1,6 +1,7 @@
 import { createExecutionContext, SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
+import { SERIF_STACK } from "../shared/fonts";
 import * as posts from "../src/db/posts";
 import { latestSentSendForPost } from "../src/db/sends";
 import { newLogoKey, setPublicationLogo, updateSettings } from "../src/db/settings";
@@ -72,20 +73,22 @@ describe("archive / view-in-browser", () => {
     expect(body).toContain('href="http://localhost:8787/archive"');
   });
 
-  it("loads the display font + reader ground as browser-only chrome, never in the sent bytes (I3)", async () => {
+  it("lands on the reader ground as browser-only chrome, never in the sent bytes, and asks no other host for a font (I3, §5)", async () => {
     const post = await sendPost("Fonts", "# Heading\n\nbody copy");
     const send = (await latestSentSendForPost(env.DB, post.id))!;
-    // The frozen/sent bytes style headings with a system serif (Georgia, inlined by
-    // the template) but load no web font — only the inert head anchor, so an inbox
-    // never fetches a third-party font.
+    // The frozen/sent bytes style headings with the app's serif, which every reader
+    // already has (inlined by the template), and load no font: only the inert head anchor.
     expect(send.rendered_html).toContain(ARCHIVE_HEAD_ANCHOR);
-    expect(send.rendered_html).toContain("Georgia");
-    expect(send.rendered_html).not.toContain("fonts.googleapis.com");
+    expect(send.rendered_html).toContain(SERIF_STACK);
+    expect(send.rendered_html).not.toContain("<link");
 
     const body = await (await SELF.fetch(`${base}/archive/${post.slug}`)).text();
-    // The hosted page fills the anchor: it loads Fraunces and lands on the reader ground.
+    // The hosted page fills the anchor with the reader ground, and links no stylesheet or
+    // font: the masthead names the same serif as the post beneath it.
     expect(body).not.toContain(ARCHIVE_HEAD_ANCHOR);
-    expect(body).toContain("fonts.googleapis.com/css2?family=Fraunces");
+    expect(body).not.toContain('<link rel="stylesheet"');
+    expect(body).not.toContain('<link rel="preconnect"');
+    expect(body).toContain(`font-family:${SERIF_STACK};`);
     expect(body).toContain("background:#fbfbfa!important");
   });
 
