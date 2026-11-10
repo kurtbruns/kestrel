@@ -70,11 +70,8 @@ describe("the setting (SPEC §9)", () => {
       "America/New_York",
       "Eastern Time",
     ]);
-    // A zone with no generic name reads by its full name, and as its offset when it has
-    // neither.
-    expect((await readJson(await saveZone("UTC"))).settings.time_zone_label).toBe(
-      "Coordinated Universal Time",
-    );
+    // UTC is called UTC, and any other zone with no generic name reads as its offset.
+    expect((await readJson(await saveZone("UTC"))).settings.time_zone_label).toBe("UTC");
     expect((await readJson(await saveZone("Etc/GMT+5"))).settings.time_zone_label).toBe(
       "GMT-05:00",
     );

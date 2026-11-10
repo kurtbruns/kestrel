@@ -897,7 +897,7 @@ const SETTINGS_FIELDS: ReferenceField[] = [
     name: "settings.time_zone_label",
     type: "string | null",
     description:
-      "The zone's name for people, such as `Eastern Time`, `Japan Standard Time`, or `Coordinated Universal Time`, never an abbreviation; null with no zone. Use it when naming the zone to the publisher.",
+      "The zone's name for people, such as `Eastern Time` or `Japan Standard Time`, never an abbreviation, except `UTC`, which is called that; null with no zone. Use it when naming the zone to the publisher.",
   },
   {
     name: "deployment",

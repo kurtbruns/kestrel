@@ -66,41 +66,27 @@ export function sameTimeZone(a: string | null, b: string | null): boolean {
   return ra !== null && ra === rb;
 }
 
-/** A zone name that is only an offset, "GMT-05:00" or "GMT": what the runtime gives a zone
- *  it has no name for. */
-const OFFSET_NAME = /^GMT([+-]|$)/;
-
-/** The formatter for one kind of zone name, kept per zone. */
-function labelFormat(zone: string, timeZoneName: "longGeneric" | "long"): Intl.DateTimeFormat {
-  const key = `${zone} ${timeZoneName}`;
-  let format = LABEL_FORMATS.get(key);
-  if (format === undefined) {
-    format = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName });
-    LABEL_FORMATS.set(key, format);
-  }
-  return format;
-}
-
 /**
  * A zone's name for people: its standard long generic name from the runtime's locale data,
  * "Eastern Time" or "Japan Standard Time", never an abbreviation, and the same in summer and
- * winter. Where the runtime has no generic name and gives an offset, the zone's full name is
- * used if it has one, so UTC reads "Coordinated Universal Time"; a zone with neither, such as
- * `Etc/GMT+5`, reads as its offset ("GMT-05:00").
+ * winter. A zone with no such name, such as `Etc/GMT+5`, reads as its offset ("GMT-05:00").
+ * UTC is the one name Kestrel gives itself: the runtime has only an offset for it
+ * ("GMT+00:00"), and "UTC" is what everyone calls that clock, neither ambiguous nor seasonal
+ * as other abbreviations are.
  */
 export function timeZoneLabel(zone: string, at = Date.now()): string {
+  if (MEANS_UTC.test(zone)) {
+    return "UTC";
+  }
   // Read at a moment, since a place's zone can change: North Dakota's New Salem was on
   // Mountain Time until 2003.
-  const nameAs = (kind: "longGeneric" | "long") =>
-    labelFormat(zone, kind)
-      .formatToParts(at)
-      .find((p) => p.type === "timeZoneName")?.value;
-  const generic = nameAs("longGeneric");
-  if (generic !== undefined && !OFFSET_NAME.test(generic)) {
-    return generic;
+  let format = LABEL_FORMATS.get(zone);
+  if (format === undefined) {
+    format = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "longGeneric" });
+    LABEL_FORMATS.set(zone, format);
   }
-  const full = nameAs("long");
-  return full !== undefined && !OFFSET_NAME.test(full) ? full : (generic ?? zone);
+  const parts = format.formatToParts(at);
+  return parts.find((p) => p.type === "timeZoneName")?.value ?? zone;
 }
 
 /**

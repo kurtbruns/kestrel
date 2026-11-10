@@ -51,8 +51,8 @@ describe("a zone's name", () => {
     expect(timeZoneLabel("Asia/Tokyo")).toBe("Japan Standard Time");
     expect(timeZoneLabel("Asia/Calcutta")).toBe("India Standard Time");
     expect(timeZoneLabel("America/North_Dakota/New_Salem")).toBe("Central Time");
-    // No generic name: the full name, and the offset where there is neither.
-    expect(timeZoneLabel("UTC")).toBe("Coordinated Universal Time");
+    // UTC is called UTC; any other zone with no generic name reads as its offset.
+    expect(timeZoneLabel("UTC")).toBe("UTC");
     expect(timeZoneLabel("Etc/GMT+5")).toBe("GMT-05:00");
   });
 });

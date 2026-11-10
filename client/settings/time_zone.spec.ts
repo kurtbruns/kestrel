@@ -320,11 +320,9 @@ describe("settings' time zone", () => {
     await open(unset);
     expect(suggestion()).not.toBeNull();
     $<HTMLButtonElement>("#tzUse").click();
-    expect(chosen()).toMatch(/^Coordinated Universal Time \| UTC · UTC\+00:00 · UTC$/);
+    expect(chosen()).toMatch(/^UTC \| UTC · UTC\+00:00 · UTC$/);
     search("utc");
-    expect(rows().filter((r) => r?.startsWith("Coordinated Universal Time | UTC · "))).toHaveLength(
-      1,
-    );
+    expect(rows().filter((r) => r?.startsWith("UTC | UTC · "))).toHaveLength(1);
   });
 
   it("finds an alias the list spells differently as the listed zone, once", async () => {
@@ -336,12 +334,10 @@ describe("settings' time zone", () => {
 
   it("finds a saved zone the browser doesn't list", async () => {
     browserIn("Asia/Tokyo");
-    await open({ time_zone: "UTC", time_zone_label: "Coordinated Universal Time" });
-    expect(chosen()).toMatch(/^Coordinated Universal Time \| UTC · UTC\+00:00 · UTC$/);
+    await open({ time_zone: "UTC", time_zone_label: "UTC" });
+    expect(chosen()).toMatch(/^UTC \| UTC · UTC\+00:00 · UTC$/);
     search("utc");
-    expect(rows().filter((r) => r?.startsWith("Coordinated Universal Time | UTC · "))).toHaveLength(
-      1,
-    );
+    expect(rows().filter((r) => r?.startsWith("UTC | UTC · "))).toHaveLength(1);
   });
 
   it("takes the offer away once any zone is chosen, and brings it back on Discard", async () => {
