@@ -7,8 +7,12 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { effectiveSimulateSends, simulationLine } from "../../cli/dev.mjs";
-import { SIMULATION_FAULTS, SIMULATION_PROFILES } from "../../shared/settings.ts";
+import { effectiveSimulateSends, REFUSALS, simulationLine } from "../../cli/dev.mjs";
+import {
+  SIMULATED_REFUSALS,
+  SIMULATION_FAULTS,
+  SIMULATION_PROFILES,
+} from "../../shared/settings.ts";
 
 describe("simulationLine", () => {
   it("says a not-connected run refuses what would send, and how to leave it", () => {
@@ -20,7 +24,16 @@ describe("simulationLine", () => {
   });
 
   it("names a simulation profile", () => {
-    for (const value of ["ses:none", "ses", "1", "generic:realistic"]) {
+    for (const value of [
+      "ses:none",
+      "ses",
+      "1",
+      "generic:realistic",
+      "ses:outage",
+      "ses:refuse=configuration",
+      "ses:none:refuse=suspended",
+      "ses:none:outage",
+    ]) {
       expect(simulationLine(value), value).toBe(
         `[dev] simulating a provider for list sends (SIMULATE_SENDS=${value}); nothing is delivered`,
       );
@@ -43,11 +56,24 @@ describe("simulationLine", () => {
   });
 
   it("says a value the app will refuse is not one it accepts, never that it simulates", () => {
-    for (const value of ["mailgun", "resend", "ses:sometimes", "ses:none:extra"]) {
+    for (const value of [
+      "mailgun",
+      "resend",
+      "ses:sometimes",
+      "ses:none:extra",
+      "ses:outage=6",
+      "1:outage",
+      "1:refuse=configuration",
+      "ses:refuse=sandbox",
+    ]) {
       const line = simulationLine(value);
       expect(line, value).toContain(`SIMULATE_SENDS=${value} isn't a value the app accepts`);
       expect(line, value).not.toContain("simulating");
     }
+  });
+
+  it("reads the refusals the Worker reads, no more and no fewer", () => {
+    expect(REFUSALS).toEqual([...SIMULATED_REFUSALS]);
   });
 
   it("says nothing for the plain fake", () => {

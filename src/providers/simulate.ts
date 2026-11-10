@@ -12,7 +12,10 @@
  * names (`refuse`), and, while the account stands in for the SES sandbox, a recipient not
  * verified with it (`sandboxRefusal`). Both are SES's own error responses read by the real
  * adapter's classifier, so the app reaches what follows (email refusing, a paused signup, a
- * held send, SPEC §13) by its own path. Simulated list sends land in the same outbox, so the
+ * held send, SPEC §13) by its own path. So does an outage the developer names (`outage`):
+ * SES unavailable to every email, read by the same classifier, so a send backs off on the
+ * real spacing and the publisher's email about it waits for the outage to end, as it would.
+ * Simulated list sends land in the same outbox, so the
  * delivered bytes can be inspected. It engages only when `config.simulation` is set, which
  * `getConfig` allows only in a dev-shaped env.
  *
@@ -216,6 +219,19 @@ function refusalResponse(cause: RefusingCause, config: Config): SesErrorResponse
       return { status: 404, type: "UnknownOperationException", msg: "(simulated)" };
   }
 }
+
+/**
+ * The error response SES answers every request with while the simulated provider is down
+ * (`SIMULATE_SENDS=ses:outage`): a request SES never received whole. Not a 5xx, which may
+ * follow a request SES accepted (`sesFateUnknown`), so a list send would strand the batch for
+ * Resolve rather than wait out the outage; this is the answer that tells the app the provider
+ * took nothing and is unavailable, which is the outage to watch.
+ */
+const SES_OUTAGE: SesErrorResponse = {
+  status: 408,
+  type: "RequestTimeoutException",
+  msg: "Request timed out before SES received it whole. (simulated outage)",
+};
 
 /** The halt the real adapter returns for an SES error response. */
 function sesHalt(r: SesErrorResponse, from: string): BatchHalt {
@@ -449,6 +465,8 @@ export class SimProvider implements EmailProvider {
   private readonly config: Config;
   /** The refusal of the account every email meets, when the developer named one. */
   private readonly refusal: BatchHalt | null;
+  /** The provider being unavailable to every email, while the developer has it down. */
+  private readonly outage: BatchHalt | null;
 
   constructor(simulation: SimulationView, config: Config) {
     this.profile = PROFILES[simulation.profile]();
@@ -458,6 +476,7 @@ export class SimProvider implements EmailProvider {
     this.refusal = simulation.refuse
       ? sesHalt(refusalResponse(simulation.refuse, config), config.fromAddress)
       : null;
+    this.outage = !simulation.outage ? null : sesHalt(SES_OUTAGE, config.fromAddress);
     const traits = this.profile.traits(config);
     this.maxBatch = traits.maxBatch;
     this.maxRequestRate = traits.maxRequestRate;
@@ -471,6 +490,11 @@ export class SimProvider implements EmailProvider {
   ): Promise<SendBatchResult> {
     if (this.refusal) {
       return { kind: "halted", halt: this.refusal };
+    }
+    // Down for every email, as a real outage is: a test, a confirmation, and the publisher's
+    // own notification about the outage wait for it to end too.
+    if (this.outage) {
+      return { kind: "halted", halt: this.outage };
     }
     if (opts.purpose !== "list") {
       return this.oneOff(rendered, recipients, opts);

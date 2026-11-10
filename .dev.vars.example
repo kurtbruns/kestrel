@@ -44,6 +44,10 @@ MIN_LEAD_SECONDS="60"
 # unsupported. Email then reads as refusing and signups as paused. Beside a sandbox account
 # (SIMULATE_ACCOUNT=sandbox), SES refuses any recipient not at SENDING_DOMAIN or SES's
 # mailbox simulator.
+# Add ":outage" ("ses:outage") to make SES unavailable to every email, notifications
+# included: a send backs off on the real spacing (1, 2, 5, 15, 30, then 60 minutes), and at
+# the sixth failed try, about 53 minutes in, its line turns amber and the publisher's outage
+# email is queued until SES is back. Restart with "ses" to end the outage.
 # For one run, set it in the shell instead: SIMULATE_SENDS=ses npm run dev
 # Only honored in a dev-shaped env (fake transport, no Access, APP_ORIGIN on localhost).
 SIMULATE_SENDS="ses"
