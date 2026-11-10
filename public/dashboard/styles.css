@@ -3524,9 +3524,13 @@ textarea.is-invalid {
   accent-color: var(--ring);
   cursor: pointer;
 }
-/* End's in-flight question: the paragraph after its radio rows keeps the dialog's spacing. */
-.end-choice + .hint {
-  margin-top: 16px;
+/* End's dialog: what ending costs, as a short list. */
+.end-list {
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+.end-list li + li {
+  margin-top: 4px;
 }
 .listing-check strong,
 .end-choice strong {

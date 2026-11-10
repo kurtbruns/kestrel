@@ -1385,17 +1385,30 @@ describe("sent record", () => {
     expect(fake.unhandled).toHaveLength(0);
   });
 
-  it("says how many will be recorded unsent and that the post can't be sent again, then ends it with no resolution", async () => {
+  /** The open dialog's words, each run of whitespace as one space. */
+  const dialogText = () => ($(".modal").textContent ?? "").replace(/\s+/g, " ");
+
+  it("leads a held send's End with waiting, says what ending costs, then ends it with no resolution (SPEC §12, DESIGN §8)", async () => {
     const posted: unknown[] = [];
     fake = fakeApi(endRoutes(held(7, 0), posted));
     await mount((r, s) => renderSentRecord("x1", r, s));
     await vi.advanceTimersByTimeAsync(0);
     $("#endBtn").click();
-    const text = $(".modal").textContent ?? "";
+    const text = dialogText();
     expect($(".modal h3").textContent).toBe("End this send?");
-    expect(text).toContain("7 recipients not yet sent it will be recorded as unsent");
-    expect(text).toContain("A finished post can’t be sent again");
+    expect(text).toContain(
+      "You usually don’t need to. Once the problem above is fixed, the send resumes on its own at its next retry, from where it stopped, mailing no one twice.",
+    );
+    expect(text).toContain(
+      "7 recipients not yet sent it are recorded as unsent and won’t get this post.",
+    );
+    expect(text).toContain("The 3 already sent it keep it, and no one is mailed by ending it.");
+    expect(text).toContain(
+      "To reach the others later, you’d put its content in a new post. That goes to your whole list, so the 3 already sent this one would get it twice.",
+    );
     expect(text).toContain("This can’t be undone.");
+    expect($("#endCancel").textContent).toBe("Keep the send");
+    expect(document.activeElement).toBe($("#endCancel"));
     expect(document.querySelector('input[name="endRes"]')).toBeNull();
     expect($("#endGo").className).toBe("danger");
     $("#endGo").click();
@@ -1410,7 +1423,7 @@ describe("sent record", () => {
     await mount((r, s) => renderSentRecord("x1", r, s));
     await vi.advanceTimersByTimeAsync(0);
     $("#endBtn").click();
-    expect($(".modal").textContent).toContain("The provider never answered for 2 recipients");
+    expect(dialogText()).toContain("Your provider never answered for 2 recipients");
     const checked = () =>
       document.querySelector<HTMLInputElement>('input[name="endRes"]:checked')?.value;
     expect(checked()).toBe("unsent");
@@ -1419,6 +1432,17 @@ describe("sent record", () => {
     $("#endGo").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(posted).toEqual([{ resolution: "accepted" }]);
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
+  it("points a wedged send's End to Resolve as the way to let it finish", async () => {
+    fake = fakeApi(endRoutes(held(0, 2, ["resolve", "end"]), []));
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(0);
+    $("#endBtn").click();
+    expect(dialogText()).toContain(
+      "You usually don’t need to. To let it finish, use Resolve… instead",
+    );
     expect(fake.unhandled).toHaveLength(0);
   });
 

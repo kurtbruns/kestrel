@@ -887,7 +887,7 @@ export const TOOL_DEFS: ToolDef[] = [
     name: "end_send",
     title: "End a held or wedged send",
     description:
-      "End a send the provider holds (a refusal or an outage) or one wedged on recipients whose fate is unknown, and finish it: everyone not yet handed off is recorded unsent, and the post can't be sent again. It mails no one and can't be undone. Only when the publisher asks to end it, never as a fix you suggest: a held send resumes on its own once the cause is fixed. Before calling, read get_send and tell them how many recipients will be recorded unsent (`counts.pending`, or the audience while it is held before its first hand-off) and that a finished post can't be sent again, then wait for their yes in this chat. When `counts.dispatched` is above zero, ask which `resolution` they want for those, as resolve_send does, and never choose it yourself; leave it out when it is zero.",
+      "Finish a held or wedged send for good: everyone not yet handed off is recorded unsent, no one is mailed, and it can't be undone. Only when the publisher asks, never as a fix: a held send resumes on its own, and a wedged one finishes by resolve_send. First tell them how many will be recorded unsent (`counts.pending`, or the audience if none is fixed) and that reaching them later means a new post to the whole list, which those already sent it get twice; wait for their yes. Pass `resolution` only while `counts.dispatched` is above zero, with the answer they pick.",
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     routes: [END_SEND],
     args: {

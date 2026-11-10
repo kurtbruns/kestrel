@@ -21,7 +21,7 @@ import {
 } from "../posts/publishing";
 import { readSendsNow } from "../send_state";
 import { $ } from "../ui/dom";
-import { toLocalInput } from "../ui/format";
+import { fmt, toLocalInput } from "../ui/format";
 import { html } from "../ui/html";
 import { busy, modal, toast } from "../ui/widgets";
 
@@ -83,31 +83,60 @@ export function endUnsentText(send: Pick<SendView, "counts" | "audience">): {
   return { n, text: who };
 }
 
+/** The way a held or wedged send usually goes on, which the End dialog leads with so ending
+ *  reads as the last resort it is (SPEC §12): Resolve for a wedged send, and otherwise waiting,
+ *  since a held send resumes on its own once the cause clears. */
+export function endPreferredText(send: Pick<SendView, "actions" | "provider">): string {
+  if (send.actions.some((a) => a.name === "resolve")) {
+    return "To let it finish, use Resolve… instead: it settles the readers your provider never answered for, and the send completes with everyone else sent.";
+  }
+  const retry = send.provider.halt?.retry_at;
+  const at = retry ? `, ${fmt(retry)}` : "";
+  return send.provider.halt?.reason === "unavailable"
+    ? `Your provider is unavailable. The send tries again on its own at its next retry${at}, and carries on the moment it answers, mailing no one twice.`
+    : `Once the problem above is fixed, the send resumes on its own at its next retry${at}, from where it stopped, mailing no one twice.`;
+}
+
 /**
  * End a send that is held or wedged (SPEC §12): a destructive act, confirmed with a Danger
- * button, whose dialog says what is lost (how many are recorded unsent, and that a finished post
- * can't be sent again) and, when recipients are in flight, asks Resolve's question in the same
- * step, with Assume not sent, the safe default, chosen.
+ * button. Its dialog leads with the way the send usually goes on (`endPreferredText`), then says
+ * what ending costs: who is recorded unsent, that the post can't be sent again, and that reaching
+ * them later means a new post to the whole list, so those already sent it get it twice. When
+ * recipients are in flight it asks Resolve's question in the same step, with Assume not sent, the
+ * safe default, chosen.
  */
 export function openEndModal(
-  send: Pick<SendView, "id" | "subject" | "counts" | "audience">,
+  send: Pick<SendView, "id" | "subject" | "counts" | "audience" | "actions" | "provider">,
   reload: () => void,
   signal: AbortSignal,
 ): void {
   const unsent = endUnsentText(send);
-  const inFlight = send.counts.dispatched;
+  const c = send.counts;
+  const reached = c.accepted + c.delivered + c.bounced + c.complained;
+  const n = (k: number) => k.toLocaleString("en-US");
+  const inFlight = c.dispatched;
   const question =
     inFlight > 0
-      ? html`<p class="hint">The provider never answered for ${inFlight.toLocaleString("en-US")} ${inFlight === 1 ? "recipient" : "recipients"}, so whether ${inFlight === 1 ? "it was" : "they were"} mailed is unknown. Unless you know otherwise, assume not sent.</p>
-          <label class="end-choice"><input type="radio" name="endRes" value="unsent" checked><span><strong>Assume not sent</strong><span class="listing-help">Recorded as unsent. They get your next post.</span></span></label>
+      ? html`<p class="hint">Your provider never answered for ${n(inFlight)} ${inFlight === 1 ? "recipient" : "recipients"}, so whether ${inFlight === 1 ? "it was" : "they were"} mailed is unknown. Unless you know otherwise, assume not sent.</p>
+          <label class="end-choice"><input type="radio" name="endRes" value="unsent" checked><span><strong>Assume not sent</strong><span class="listing-help">Recorded as unsent, with the others.</span></span></label>
           <label class="end-choice"><input type="radio" name="endRes" value="accepted"><span><strong>Assume sent</strong><span class="listing-help">Recorded as accepted by your provider, such as when a reader says they got it.</span></span></label>`
       : null;
+  const twice =
+    reached === 0
+      ? null
+      : html` That goes to your whole list, so the ${n(reached)} already sent this one would get it twice.`;
   const m = modal(
     html`<h3 id="endHead">End this send?</h3>
-      <p class="hint">Stops “${send.subject || "Untitled"}” for good. ${unsent.n === 0 ? html`No one is left waiting to be sent it.` : html`<strong>${unsent.text}</strong> not yet sent it will be recorded as unsent and won’t get this post. They stay subscribed and get your next one.`} Anyone who already got it keeps it, and no one is mailed.</p>
+      <p class="hint"><strong>You usually don’t need to.</strong> ${endPreferredText(send)} End a send only when it will never clear, or the post is no longer worth sending.</p>
+      <p class="hint">Ending “${send.subject || "Untitled"}” stops it for good:</p>
+      <ul class="hint end-list">
+        ${unsent.n === 0 ? html`<li>No one is left waiting to be sent it.</li>` : html`<li><strong>${unsent.text}</strong> not yet sent it are recorded as unsent and won’t get this post. They stay subscribed and get your next one.</li>`}
+        <li>${reached === 0 ? "No one has been sent it yet, and no one is mailed by ending it." : `The ${n(reached)} already sent it keep it, and no one is mailed by ending it.`}</li>
+        <li>A finished post can’t be sent again. To reach the others later, you’d put its content in a new post.${twice}</li>
+        <li>This can’t be undone.</li>
+      </ul>
       ${question}
-      <p class="hint">A finished post can’t be sent again: to reach the others, put its content in a new post. This can’t be undone.</p>
-      <div class="actions"><button type="button" id="endCancel">Cancel</button><button type="button" class="danger" id="endGo">End send</button></div>`,
+      <div class="actions"><button type="button" id="endCancel">Keep the send</button><button type="button" class="danger" id="endGo">End send</button></div>`,
     signal,
   );
   $(".modal", m.el).setAttribute("aria-labelledby", "endHead");

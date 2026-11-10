@@ -496,7 +496,7 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
   it("ends a held send only through its route, and asks a resolution only while recipients are in flight (SPEC §12)", async () => {
     const tool = (await listTools()).find((t) => t.name === "end_send")!;
     expect(tool.inputSchema.required).toEqual(["id"]);
-    expect(tool.description).toContain("Only when the publisher asks to end it");
+    expect(tool.description).toContain("Only when the publisher asks, never as a fix");
     const id = await wedgedSend();
     const none = await callTool("end_send", { id });
     expect(none.isError).toBe(true);
