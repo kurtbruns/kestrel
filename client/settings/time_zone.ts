@@ -122,12 +122,13 @@ export function timeZoneSection(_page: SettingsPage): Html {
         <div class="set-recip">
           <div class="set-field set-tz">
             <label for="tzSearch">Publication time zone</label>
-            <div id="tzChosen"></div>
+            <div id="tzChosen" role="status" aria-live="polite"></div>
             <div id="tzPreview"></div>
             <div id="tzSuggest"></div>
             <div class="set-tz-combo">
-              <input type="search" id="tzSearch" placeholder="Search a city or a zone name, such as Chicago or Eastern" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="tzResults" aria-autocomplete="list">
+              <input type="search" id="tzSearch" placeholder="Search a city or zone name" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="tzResults" aria-autocomplete="list">
               <ul class="set-tz-results" id="tzResults" role="listbox" aria-label="Matching time zones" hidden></ul>
+              <p class="set-tz-none" id="tzNone" role="status" hidden>No zone matches. Try a nearby city, or the zone’s name.</p>
             </div>
           </div>
         </div>
@@ -203,7 +204,12 @@ export function mountTimeZone(
         suggestEl,
         html`<div class="set-tz-suggest"><div class="set-tz-lines"><span>This browser is on <strong>${b.label}</strong></span><span class="set-tz-place">${b.place} · ${nowIn(browser)} there now</span></div><button type="button" id="tzUse">Use ${b.label}</button></div>`,
       );
-      $<HTMLButtonElement>("#tzUse", suggestEl).onclick = () => choose(browser);
+      $<HTMLButtonElement>("#tzUse", suggestEl).onclick = () => {
+        choose(browser);
+        // The button goes with the repaint, so focus goes on to the search rather than
+        // falling back to the top of the page.
+        input.focus();
+      };
     } else {
       setHtml(suggestEl, html``);
     }
@@ -212,8 +218,10 @@ export function mountTimeZone(
   // The search: a combobox over the zones, its active row moved by the arrow keys.
   let results: ZoneChoice[] = [];
   let active = -1;
+  const none = $("#tzNone", root);
   const close = () => {
     list.hidden = true;
+    none.hidden = true;
     input.setAttribute("aria-expanded", "false");
     input.removeAttribute("aria-activedescendant");
   };
@@ -226,22 +234,27 @@ export function mountTimeZone(
     }
     results = searchZones(allChoices(), query, { near: browser ?? page.saved().timeZone });
     active = results.length ? Math.max(0, Math.min(active, results.length - 1)) : -1;
+    // No match is said as a status beside the list, never as a row that can't be chosen.
+    none.hidden = results.length > 0;
+    if (results.length === 0) {
+      setHtml(list, html``);
+      list.hidden = true;
+      input.setAttribute("aria-expanded", "false");
+      input.removeAttribute("aria-activedescendant");
+      return;
+    }
     setHtml(
       list,
-      results.length
-        ? html`${results.map(
-            (c, i) =>
-              html`<li role="option" id="tzOpt${String(i)}" data-i="${String(i)}" aria-selected="${i === active ? "true" : "false"}"><span class="set-tz-lines">${zoneLines(c, query)}</span><span class="set-tz-now">${nowIn(c.zone)}</span></li>`,
-          )}`
-        : html`<li class="set-tz-none" role="option" aria-disabled="true" aria-selected="false">No zone matches. Try a nearby city, or the zone’s name.</li>`,
+      html`${results.map(
+        (c, i) =>
+          html`<li role="option" id="tzOpt${String(i)}" data-i="${String(i)}" aria-selected="${i === active ? "true" : "false"}"><span class="set-tz-lines">${zoneLines(c, query)}</span><span class="set-tz-now">${nowIn(c.zone)}</span></li>`,
+      )}`,
     );
     list.hidden = false;
     input.setAttribute("aria-expanded", "true");
-    if (active >= 0) {
-      input.setAttribute("aria-activedescendant", `tzOpt${active}`);
-    } else {
-      input.removeAttribute("aria-activedescendant");
-    }
+    input.setAttribute("aria-activedescendant", `tzOpt${active}`);
+    // The arrow keys move past the list's fold: keep the active row in sight.
+    list.querySelector(`#tzOpt${active}`)?.scrollIntoView({ block: "nearest" });
   };
   const take = (i: number) => {
     const c = results[i];

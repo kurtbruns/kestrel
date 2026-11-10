@@ -355,11 +355,10 @@ async function timeZoneReadings(
   if (from === null || to === null || sameTimeZone(from, to)) {
     return [];
   }
-  const scheduled = await listScheduledSends(c.env.DB);
   const now = Date.now();
-  return scheduled
-    .filter((s) => s.fire_at > now)
-    .map((s) => scheduledSendReading(s, from, to, scheduled.length > 1, now));
+  // Only the sends still to go out, and named by subject only when there are several of them.
+  const upcoming = (await listScheduledSends(c.env.DB)).filter((s) => s.fire_at > now);
+  return upcoming.map((s) => scheduledSendReading(s, from, to, upcoming.length > 1, now));
 }
 
 /** Store the uploaded logo's bytes under a key of their own, and make it the logo. */

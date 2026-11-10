@@ -22,12 +22,15 @@ function setItHtml(): Html {
 }
 
 /**
- * The standing line the Schedule and Edit schedule dialogs carry while no time zone is set
- * (DESIGN §4), in the not-connected line's place and style. No email provider connected is
- * the first thing to fix, so while that line shows this one doesn't.
+ * The standing line the Schedule dialog carries when the server would refuse to schedule the
+ * post for want of a time zone (DESIGN §4), in the not-connected line's place and style. It
+ * reads the post's own `actions`, never the settings read at boot, which may be older than a
+ * zone set since through the API or by Claude: while a provider is connected, a draft offered
+ * no schedule is one waiting on the time zone. No email provider connected is the first thing
+ * to fix, so while that line shows this one doesn't.
  */
-export function noTimeZoneLine(): Html | null {
-  return timeZoneUnset() && !providerNotConnected()
+export function noTimeZoneLine(canSchedule: boolean): Html | null {
+  return !canSchedule && !providerNotConnected()
     ? html`<p class="hint not-connected no-time-zone">${setItHtml()}</p>`
     : null;
 }

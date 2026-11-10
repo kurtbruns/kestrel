@@ -273,8 +273,8 @@ export interface SettingsSnapshot {
   version: number | null;
 }
 
-/** The settings row, for a caller that reads it in a batch beside other rows. */
-export function settingsStatement(db: D1Database): D1PreparedStatement {
+/** The settings row. */
+function settingsStatement(db: D1Database): D1PreparedStatement {
   return db.prepare("SELECT data, updated_at FROM settings WHERE id = 1");
 }
 
@@ -336,20 +336,27 @@ export async function getSettingsForDisplay(db: D1Database): Promise<AppSettings
   }
 }
 
-/** The settings as `settingsStatement` read them, for a surface that only shows them: a
- *  missing row is the defaults, and so is a corrupt one, as for `getSettingsForDisplay`. */
-export function parseSettingsForDisplay(row: { data: string } | undefined): AppSettings {
-  if (!row) {
-    return structuredClone(DEFAULT_SETTINGS);
-  }
-  try {
-    return coerce(parseStored(row.data));
-  } catch (err) {
-    if (err instanceof HttpError && err.code === "settings_corrupt") {
-      return structuredClone(DEFAULT_SETTINGS);
-    }
-    throw err;
-  }
+/**
+ * The stored time zone alone, for a caller that needs only whether one is set (every send
+ * view and every posts list): the zone, not the whole row with its template. A row that isn't
+ * valid JSON reads as no zone rather than failing the statement; the reads that parse the
+ * whole row say it is corrupt, so this one doesn't say it again on every poll.
+ */
+export function timeZoneStatement(db: D1Database): D1PreparedStatement {
+  return db.prepare(
+    "SELECT CASE WHEN json_valid(data) THEN json_extract(data, '$.timeZone') END AS time_zone FROM settings WHERE id = 1",
+  );
+}
+
+/** The zone `timeZoneStatement` read, as the settings read it: a name the runtime no longer
+ *  knows, or anything not a name, is no zone. */
+export function storedTimeZone(row: { time_zone: unknown } | undefined | null): string | null {
+  return typeof row?.time_zone === "string" ? resolveTimeZone(row.time_zone) : null;
+}
+
+/** Whether the publication has a time zone, read alone (`timeZoneStatement`). */
+export async function readTimeZone(db: D1Database): Promise<string | null> {
+  return storedTimeZone(await timeZoneStatement(db).first<{ time_zone: unknown }>());
 }
 
 /**

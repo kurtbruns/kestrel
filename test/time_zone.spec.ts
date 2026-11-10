@@ -191,6 +191,38 @@ describe("required before anything goes to readers (SPEC §9)", () => {
     expect((await readJson(res)).error).toBe("time_zone_not_set");
   });
 
+  it("says a post or send is missing, or past its window, before it says the zone is", async () => {
+    const past = await dueSend();
+    await unsetTimeZone();
+    const later = { fire_at: Date.now() + HOUR };
+    for (const [path, body] of [
+      ["/api/posts/p_missing/schedule", later],
+      ["/api/posts/p_missing/send", {}],
+      ["/api/sends/s_missing/reschedule", later],
+    ] as const) {
+      const res = await call("POST", path, body);
+      expect([res.status, (await readJson(res)).error], path).toEqual([404, "not_found"]);
+    }
+    const closed = await call("POST", `/api/sends/${past.id}/reschedule`, later);
+    expect([closed.status, (await readJson(closed)).error]).toEqual([409, "window_closed"]);
+  });
+
+  it("reads a corrupt settings row as no zone on every send and post, without saying it is corrupt each time", async () => {
+    const sendId = await scheduleAt(Date.now() + 2 * HOUR);
+    const id = await draft();
+    await env.DB.prepare("UPDATE settings SET data = '{not json' WHERE id = 1").run();
+    // No error line is allowed here, so one logged per read would fail the test.
+    const send = await call("GET", `/api/sends/${sendId}`);
+    expect(send.status).toBe(200);
+    expect((await readJson(send)).send.actions.map((a: { name: string }) => a.name)).toEqual([
+      "cancel",
+    ]);
+    const list = await call("GET", "/api/posts");
+    expect(list.status).toBe(200);
+    const listed = (await readJson(list)).posts.find((p: { id: string }) => p.id === id);
+    expect(listed.actions.map((a: { name: string }) => a.name)).toEqual(["edit", "delete"]);
+  });
+
   it("is refused for want of a provider first, where none is connected either (SPEC §13)", async () => {
     const id = await draft();
     await unsetTimeZone();
@@ -233,6 +265,16 @@ describe("changing it (SPEC §9)", () => {
     expect(body.time_zone_readings).toEqual([
       `Your scheduled post “Owls” stays at the same moment, now ${formatInTimeZone(a, "Asia/Tokyo")}. Move it if you meant ${meant(a)}.`,
       `Your scheduled post “Owls” stays at the same moment, now ${formatInTimeZone(b, "Asia/Tokyo")}. Move it if you meant ${meant(b)}.`,
+    ]);
+  });
+
+  it("names no subject when one send is still to go out beside one already due", async () => {
+    await saveZone("America/New_York");
+    await dueSend();
+    const at = (await scheduled(Date.now() + 2 * HOUR)).fire_at;
+    const body = await readJson(await saveZone("America/Chicago"));
+    expect(body.time_zone_readings).toEqual([
+      `Your scheduled post stays at the same moment, now ${formatInTimeZone(at, "America/Chicago")}. Move it if you meant ${formatClockTime(at, "America/New_York")}.`,
     ]);
   });
 

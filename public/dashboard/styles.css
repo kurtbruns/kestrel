@@ -6711,8 +6711,9 @@ button.set-embed-copy svg {
 .set-tz-results li[aria-selected="true"] {
   background: var(--hover);
 }
-.set-tz-results li.set-tz-none {
-  cursor: default;
+.set-tz-none {
+  margin: 4px 0 0;
+  font-size: 13px;
   color: var(--muted);
 }
 .set-tz-results mark {

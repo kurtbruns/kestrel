@@ -104,7 +104,7 @@ function errorLine(message: string): HTMLElement {
  * such as the label that wraps a checkbox.
  */
 export function fieldError(
-  field: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+  field: HTMLInputElement | HTMLTextAreaElement,
   message: string,
   { after }: { after?: Element } = {},
 ): () => void {

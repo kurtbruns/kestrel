@@ -16,7 +16,7 @@ import {
 } from "../db/provider_account";
 import { parseSending, type SendingRaw, sendingStatement } from "../db/sending";
 import { currentSendSeq, getSendViewRow, getSendViewRows } from "../db/sends";
-import { parseSettingsForDisplay, settingsStatement } from "../db/settings";
+import { storedTimeZone, timeZoneStatement } from "../db/settings";
 import { type AppEnv, type Config, getConfig, onFreePlanLimits } from "../env";
 import { sandboxOf } from "../services/provider_status";
 import { sendingView } from "../services/sending";
@@ -40,12 +40,11 @@ export async function readConditionContext(
   const [account, sending, settings] = await db.batch<Record<string, unknown>>([
     providerAccountStatement(db),
     sendingStatement(db),
-    settingsStatement(db),
+    timeZoneStatement(db),
   ]);
   return {
     timeZoneSet:
-      parseSettingsForDisplay(settings?.results[0] as { data: string } | undefined).timeZone !==
-      null,
+      storedTimeZone(settings?.results[0] as { time_zone: unknown } | undefined) !== null,
     freePlan: onFreePlanLimits(config),
     sandbox: sandboxOf(
       config,

@@ -4,7 +4,11 @@
 import type { Post, PostListResponse } from "../../shared/posts";
 import type { ProviderStatusView } from "../../shared/provider";
 import type { SendListResponse, SendView } from "../../shared/sends";
-import { type NotificationStatusView, settingsRoute } from "../../shared/settings";
+import {
+  type NotificationStatusView,
+  type SettingsResponse,
+  settingsRoute,
+} from "../../shared/settings";
 import type { SubscriberCounts, SubscriberListResponse } from "../../shared/subscribers";
 import { CLAUDE_CLIENT, CLAUDE_CODE_CLIENT } from "../../shared/who_acted";
 import { api, describeError } from "../api";
@@ -291,12 +295,17 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
     // The health line scans every send and the archive-link slug map needs every post,
     // so ask for a full window rather than the list default (50). Subscribers is only
     // read for its (filter-independent) counts, so its row limit doesn't matter.
-    const [p, s, subs, prov] = await Promise.all([
+    // The settings are read again, not taken from boot: the time zone, the name, and where
+    // notifications go may have been set since through the API or by Claude, and the health
+    // block and the setup steps say what they are now.
+    const [p, s, subs, prov, settings] = await Promise.all([
       api<PostListResponse>("/api/posts?limit=200", { signal }),
       api<SendListResponse>("/api/sends?limit=200", { signal }),
       api<SubscriberListResponse>("/api/subscribers", { signal }),
       readProviderStatus(appState.appConfig?.deployment, signal),
+      api<SettingsResponse>("/api/settings", { signal }),
     ]);
+    appState.appConfig = settings;
     provider = prov;
     posts = p.posts;
     first = s;

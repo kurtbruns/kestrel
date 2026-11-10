@@ -1941,6 +1941,26 @@ describe("editor view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("goes by the post's own actions, not settings read before the zone was set elsewhere", async () => {
+    // The server offers scheduling (a zone was set through the API since boot), while the
+    // settings this tab read at boot still say there is none.
+    appState.appConfig = settingsResponse({ deployment: { provider: "ses" } });
+    const offered = draftServer().get();
+    appState.appConfig = settingsResponse({
+      deployment: { provider: "ses" },
+      settings: { time_zone: null, time_zone_label: null },
+    });
+    await open([
+      { path: "/api/posts/p1", reply: () => offered },
+      { path: "/api/subscribers", reply: () => ({ counts: { confirmed: 1 } }) },
+    ]);
+    $("#scheduleBtn").click();
+    expect(document.querySelector(".modal .no-time-zone")).toBeNull();
+    expect(document.querySelector(".modal #schWhen")).not.toBeNull();
+    expect($<HTMLButtonElement>("#schGo").disabled).toBe(false);
+    $("#schCancel").click();
+  });
+
   it("says only that no provider is connected, while neither is, since that comes first", async () => {
     appState.appConfig = settingsResponse({
       deployment: { provider: "none" },

@@ -273,10 +273,43 @@ describe("settings' time zone", () => {
     ).toEqual(["Los", "A", "A"]);
     search("est");
     expect(rows()[0]).toMatch(/· EST$/);
+    // No match is a status beside the list, not a row of it that can't be chosen.
     search("xyzzy");
-    expect($("#tzResults").textContent).toBe(
+    expect($("#tzResults").hidden).toBe(true);
+    expect(document.querySelectorAll("#tzResults [role='option']").length).toBe(0);
+    expect($("#tzNone").hidden).toBe(false);
+    expect($("#tzNone").getAttribute("role")).toBe("status");
+    expect($("#tzNone").textContent).toBe(
       "No zone matches. Try a nearby city, or the zone’s name.",
     );
+  });
+
+  it("keeps the active result in sight as the arrow keys move past the list's fold", async () => {
+    browserIn("America/Chicago");
+    await open({ time_zone: "America/New_York", time_zone_label: "Eastern Time" });
+    const scrolled: string[] = [];
+    vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(function (this: Element) {
+      scrolled.push(this.id);
+    });
+    search("eastern");
+    for (let i = 0; i < 9; i++) {
+      press("ArrowDown");
+    }
+    expect($("#tzSearch").getAttribute("aria-activedescendant")).toBe("tzOpt9");
+    expect(scrolled.at(-1)).toBe("tzOpt9");
+    vi.restoreAllMocks();
+  });
+
+  it("puts focus on the search after Use, which the repaint removes, and says what was chosen", async () => {
+    browserIn("America/Chicago");
+    await open(unset);
+    const use = $<HTMLButtonElement>("#tzUse");
+    use.focus();
+    use.click();
+    expect(document.activeElement).toBe($("#tzSearch"));
+    // The chosen zone is a live region, so a screen reader hears the choice.
+    expect($("#tzChosen").getAttribute("aria-live")).toBe("polite");
+    expect(chosen()).toMatch(/^Central Time \|/);
   });
 
   it("offers a browser zone of UTC, which the browser's own list leaves out", async () => {

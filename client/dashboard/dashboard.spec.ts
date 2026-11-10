@@ -84,6 +84,8 @@ function world(
   return fakeApi([
     ...extra,
     ...srv.routes,
+    // The settings the dashboard reads on mount: the spec's own, as boot left them.
+    { path: "/api/settings", reply: () => appState.appConfig ?? config() },
     { path: "/api/posts", reply: () => ({ posts, page: { ...page, total: posts.length } }) },
     { path: "/api/subscribers", reply: () => ({ counts: subs, subscribers: [], page }) },
   ]);
@@ -586,6 +588,20 @@ describe("dashboard", () => {
         "No time zone set, so nothing can be scheduled or sent until it is. Set it in Settings.",
       );
       expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/settings/time-zone");
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("reads the settings again on mount, so a zone set since boot clears the line", async () => {
+      withoutZone(); // as this tab read them at boot
+      // Set since, through the API or by Claude.
+      const now = config();
+      fake = world([post()], sendServer([send()]), counts, [
+        { path: "/api/settings", reply: () => now },
+      ]);
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(document.querySelector(".dash-no-time-zone")).toBeNull();
+      expect(appState.appConfig?.settings.time_zone).toBe(now.settings.time_zone);
       expect(fake.unhandled).toEqual([]);
     });
 

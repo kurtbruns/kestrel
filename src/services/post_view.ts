@@ -9,7 +9,7 @@
 import type { Post, PostAction } from "../../shared/posts";
 import { currentAuthors, getPost, type PostRow } from "../db/posts";
 import { postSendRefs, publicationsFor } from "../db/sends";
-import { getSettings } from "../db/settings";
+import { readTimeZone } from "../db/settings";
 import type { AppEnv, Config } from "../env";
 import { withAddresses } from "../lib/archive_address";
 import { HttpError } from "../lib/errors";
@@ -49,18 +49,18 @@ export function postActions(
 /** Stored posts as the API answers them, in the order given: a few reads for all of them. */
 export async function viewPosts(env: AppEnv, config: Config, rows: PostRow[]): Promise<Post[]> {
   const ids = rows.map((r) => r.id);
-  const [published, authors, sends, settings] = await Promise.all([
+  const [published, authors, sends, timeZone] = await Promise.all([
     publicationsFor(env.DB, ids),
     currentAuthors(env.DB, rows),
     postSendRefs(env.DB, ids),
-    getSettings(env.DB),
+    readTimeZone(env.DB),
   ]);
   return rows.map((row) => ({
     ...withAddresses(config, row, published.get(row.id) ?? null),
     author: authors.get(row.id)?.author ?? null,
     author_client: authors.get(row.id)?.client ?? null,
     send: sends.get(row.id) ?? null,
-    actions: postActions(row, config, settings.timeZone !== null),
+    actions: postActions(row, config, timeZone !== null),
   }));
 }
 

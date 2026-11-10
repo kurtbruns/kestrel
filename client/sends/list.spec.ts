@@ -494,23 +494,6 @@ describe("sent view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  // SPEC §9, DESIGN §4: while no time zone is set, the server refuses a moved time, so the
-  // Edit schedule dialog says so up front, in the server's words, with Settings as the link.
-  it("says in the Edit schedule dialog that a time zone is needed before a send can move", async () => {
-    appState.appConfig = settingsResponse({ settings: { time_zone: null, time_zone_label: null } });
-    fake = world(sendServer([scheduled()]));
-    await mount(renderSent);
-    await vi.advanceTimersByTimeAsync(0);
-    $("[data-reschedule='sch']").click();
-    await vi.advanceTimersByTimeAsync(0);
-    const line = $(".modal .no-time-zone");
-    expect(line.textContent).toBe(
-      "Set the publication’s time zone before scheduling or sending. It’s in Settings.",
-    );
-    expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/settings/time-zone");
-    expect(fake.unhandled).toEqual([]);
-  });
-
   // A held send is the not-connected state showing on a send: one card, not the amber line
   // and the send's own card, with the fix a link (or, in the local preview, the restart).
   const held = (id: string, subject: string) =>
