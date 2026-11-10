@@ -27,7 +27,8 @@ export function inlineStack(stack: string): string {
  * Every serif stack a page, an email, a template, or a stylesheet names, each spelled as
  * `SERIF_STACK` is (one space after each comma, single quotes): the run of families before
  * each generic `serif`. Comments are left out, so a sentence about fonts isn't read as one.
- * The specs that hold every surface to `SERIF_STACK` read through this.
+ * Only specs call it: the specs that hold every surface to `SERIF_STACK` read through
+ * this, and it lives here so the Worker's and the editor's test projects share one copy.
  */
 export function serifStacksNamed(text: string): string[] {
   const source = text
