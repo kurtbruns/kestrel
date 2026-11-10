@@ -152,13 +152,15 @@ export interface SendingView {
  * complaints its webhook takes, which reach it only when the whole return path holds.
  */
 export interface ReceiptsView {
-  /** When the last report arrived, about any email; null when none has since this was kept. */
+  /** When the last report arrived, about any email, accurate to the minute; null when none has
+   *  since this was kept. */
   last_at: number | null;
   /** When the provider took the first email after that report, while no report has arrived
    *  since; null when nothing is waiting. An hour past it is `receipts_not_arriving`. */
   waiting_since: number | null;
   /** The last report the webhook refused for its topic, while it is newer than the last report
-   *  taken: the topic SES reports to, the one `SNS_TOPIC_ARN` names, and when. */
+   *  taken: the topic it came from (only one in the account and region of the expected topic),
+   *  the one `SNS_TOPIC_ARN` names, and when. */
   refused_topic: { topic: string; expected: string; at: number } | null;
 }
 
@@ -186,7 +188,8 @@ export interface ProviderStatusView {
   checked_at: number | null;
   /** Whether email is getting out; null while no provider is connected. */
   sending: SendingView | null;
-  /** What the app has heard back from the provider; null while no provider is connected. */
+  /** What the app has heard back from the provider; null with no provider, and on any but SES
+   *  or local dev's simulation of it, where no report can arrive. */
   receipts: ReceiptsView | null;
   /** Whether the public subscribe form takes signups. */
   signups: SignupsState;

@@ -855,10 +855,14 @@ export class SesProvider implements EmailProvider {
     const topic = typeof msg.TopicArn === "string" ? msg.TopicArn.slice(0, 256) : null;
     const refuse = (reason: "signature" | "topic", body: string): WebhookResult => {
       log.error("webhook.refused", { provider: "ses", reason, topic, expected: expectedTopic });
-      // Only a message whose signature held names a topic SNS really sent from, so only it is
-      // kept for the publisher's warning (SPEC §13).
+      // Kept for the publisher's warning (SPEC §13) only when it could be the operator's own
+      // mistake: the signature held, so SNS really sent it, and the topic is in the account and
+      // region SNS_TOPIC_ARN names, which no outsider can publish from. Anyone can sign a
+      // message from a topic of their own, so any other is refused and logged, never kept.
       const refusedTopic =
-        reason === "topic" && topic !== null ? { topic, expected: expectedTopic } : undefined;
+        reason === "topic" && topic !== null && sameAccountAndRegion(topic, expectedTopic)
+          ? { topic, expected: expectedTopic }
+          : undefined;
       return { events: [], response: textResponse(body, 403), refusedTopic };
     };
 
@@ -910,6 +914,20 @@ export class SesProvider implements EmailProvider {
         return { events: [], response: textResponse("unsupported message type", 400) };
     }
   }
+}
+
+/**
+ * Whether two SNS topic ARNs (`arn:<partition>:sns:<region>:<account>:<name>`) are in the same
+ * partition, region, and account. False when either isn't an SNS topic ARN.
+ */
+export function sameAccountAndRegion(a: string, b: string): boolean {
+  const parts = (arn: string) => {
+    const p = arn.split(":");
+    return p.length === 6 && p[0] === "arn" && p[2] === "sns" && p[3] && p[4] && p[5] ? p : null;
+  };
+  const x = parts(a);
+  const y = parts(b);
+  return x !== null && y !== null && x[1] === y[1] && x[3] === y[3] && x[4] === y[4];
 }
 
 /** GET the SubscribeURL to complete the SNS handshake (host pinned first). */

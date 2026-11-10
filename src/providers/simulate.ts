@@ -874,15 +874,10 @@ async function settleWait(
     return;
   }
   if ((row?.refusedTopic?.at ?? 0) < since) {
-    const topic = (name: string) => `arn:aws:sns:${config.awsRegion}:111122223333:${name}`;
-    await refusedTopicStatement(
-      env.DB,
-      {
-        topic: topic("kestrel-events-old"),
-        expected: env.SNS_TOPIC_ARN?.trim() || topic("kestrel-events"),
-      },
-      now,
-    ).run();
+    // Another topic in the expected one's account and region, the only kind the webhook keeps.
+    const expected =
+      env.SNS_TOPIC_ARN?.trim() || `arn:aws:sns:${config.awsRegion}:111122223333:kestrel-events`;
+    await refusedTopicStatement(env.DB, { topic: `${expected}-old`, expected }, now).run();
   }
 }
 

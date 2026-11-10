@@ -144,7 +144,7 @@ Store each with `npx wrangler secret put NAME --env production`, which prompts f
 
 - `SNS_TOPIC_ARN` required with SES
 
-    The SNS topic the SES webhook accepts. The webhook refuses a report from every other topic, and logs `webhook.refused` naming both. When SES took an email over an hour ago and its reports since came only from another topic, **Settings → Email sender** names both topics in amber.
+    The SNS topic the SES webhook accepts. The webhook refuses a report from every other topic, and logs `webhook.refused` naming both. When SES took an email over an hour ago with no report since, and a report came from another topic in the same AWS account and region, **Settings → Email sender** names both topics in amber. Check which topic the configuration set's SNS destination uses in the SES console before changing either side.
 
 - `SES_CONFIGURATION_SET` optional, recommended with SES
 

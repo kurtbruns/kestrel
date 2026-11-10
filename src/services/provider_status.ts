@@ -411,7 +411,8 @@ export function receiptsView(row: SendingRow | null): ReceiptsView {
  * more than an hour ago and no report has arrived since. Computed on read from the sending row,
  * so it needs no sweep of its own and clears the moment a report lands. It names the links of
  * the return path in the setup guide's order or, when the webhook refused a report for its
- * topic since the last one it took, exactly which two topics disagree. It warns only: nothing
+ * topic since the last one it took, that topic and the expected one. It never says the refused
+ * topic is SES's, or to adopt it: the operator checks the destination in the SES console first. It warns only: nothing
  * that decides whether to send, or whether signups are open, reads it.
  */
 export function receiptsWarning(
@@ -424,7 +425,7 @@ export function receiptsWarning(
   }
   const refused = receipts.refused_topic;
   const message = refused
-    ? `SES took an email more than ${wait.words} ago, and Kestrel refused the reports since: SES reports to ${refused.topic}, but SNS_TOPIC_ARN names ${refused.expected}. Until they match, a bounced address is mailed again and a complaint unsubscribes no one. Store the topic SES reports to in SNS_TOPIC_ARN and deploy, or point the configuration set’s SNS destination at the topic SNS_TOPIC_ARN names.`
+    ? `SES took an email more than ${wait.words} ago, and no report has reached Kestrel since. A report arrived from ${refused.topic}, which isn’t the topic SNS_TOPIC_ARN names, ${refused.expected}, so Kestrel refused it. Until a report arrives from the topic SNS_TOPIC_ARN names, a bounced address is mailed again and a complaint unsubscribes no one. In the SES console, check which topic the configuration set’s SNS destination uses before changing either side, then make the destination and SNS_TOPIC_ARN name the same topic.`
     : `SES took an email more than ${wait.words} ago, and no report of a delivery, bounce, or complaint has reached Kestrel since. Until one does, a bounced address is mailed again and a complaint unsubscribes no one. Check that the configuration set has an enabled SNS destination and its topic lets SES publish (Connect Amazon SES, section 4), then that /webhooks/ses isn’t behind Access, the app’s subscription to the topic is confirmed, and SNS_TOPIC_ARN names that topic (section 7), or the set doesn’t report Deliveries; the guide selects them.`;
   return { code: "receipts_not_arriving", severity: "warn", message, docs: BOUNCES_DOC };
 }
@@ -437,7 +438,8 @@ export function providerStatusView(
 ): ProviderStatusView {
   let row = read;
   const sending = sendingView(config, sendingRow);
-  const receipts = config.provider === "none" ? null : receiptsView(sendingRow);
+  // Only SES reports back, or local dev's simulation of it; elsewhere a report can't arrive.
+  const receipts = config.provider === "ses" || config.simulation ? receiptsView(sendingRow) : null;
   const none: ProviderStatusView = {
     provider: config.provider,
     state: "not_connected",

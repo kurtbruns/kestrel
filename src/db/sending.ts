@@ -146,6 +146,11 @@ const AFTER_RECEIPT = "?1 > COALESCE(last_receipt_at, 0)";
  * The webhook took a verified report at `at` (SPEC §13): it is the last report, and the wait
  * for one is over. A missing row, from a database reset by hand, is made not proven yet, since
  * a report never counts toward whether email is getting out.
+ *
+ * SNS posts one message per event, so a large send's receipts would otherwise write the row once
+ * each. It writes only when that changes something worth keeping: a wait to clear, or a last
+ * report more than a minute behind. So the last report's time is accurate to the minute, which is
+ * all it is read for, and a burst of receipts costs one write.
  */
 export function receiptStatement(db: D1Database, at: number): D1PreparedStatement {
   return db
@@ -154,14 +159,20 @@ export function receiptStatement(db: D1Database, at: number): D1PreparedStatemen
        VALUES (1, 'unproven', ?1, 0, ?1)
        ON CONFLICT (id) DO UPDATE SET
          last_receipt_at = MAX(COALESCE(last_receipt_at, 0), ?1),
-         waiting_since = CASE WHEN waiting_since <= ?1 THEN NULL ELSE waiting_since END`,
+         waiting_since = CASE WHEN waiting_since <= ?1 THEN NULL ELSE waiting_since END
+       WHERE waiting_since <= ?1 OR ?1 - COALESCE(last_receipt_at, 0) > ?2`,
     )
-    .bind(at);
+    .bind(at, RECEIPT_RESOLUTION_MS);
 }
+
+/** How far behind the last report's time may run, so a burst of reports writes the row once. */
+export const RECEIPT_RESOLUTION_MS = 60_000;
 
 /**
  * The webhook refused, at `at`, a report SNS signed for `topic`, where `SNS_TOPIC_ARN` names
- * `expected` (SPEC §13): kept, the newest standing, so the warning can name both.
+ * `expected` (SPEC §13): kept, the newest standing, so the warning can name both. A refusal that
+ * would store what is already there, within a minute of it and not yet overtaken by a report,
+ * writes nothing, so a misconfigured topic's burst costs one write.
  */
 export function refusedTopicStatement(
   db: D1Database,
@@ -174,9 +185,12 @@ export function refusedTopicStatement(
        VALUES (1, 'unproven', ?1, 0, ?2, ?3, ?1)
        ON CONFLICT (id) DO UPDATE SET
          refused_topic = ?2, refused_topic_expected = ?3, refused_topic_at = ?1
-       WHERE ?1 >= COALESCE(refused_topic_at, 0)`,
+       WHERE ?1 >= COALESCE(refused_topic_at, 0)
+         AND NOT (refused_topic IS ?2 AND refused_topic_expected IS ?3
+                  AND ?1 - refused_topic_at <= ?4
+                  AND refused_topic_at > COALESCE(last_receipt_at, 0))`,
     )
-    .bind(at, refused.topic, refused.expected);
+    .bind(at, refused.topic, refused.expected, RECEIPT_RESOLUTION_MS);
 }
 
 /**

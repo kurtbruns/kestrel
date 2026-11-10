@@ -1,7 +1,13 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProviderStatusView, SendingPurpose } from "../shared/provider";
-import { readSending, recordAccepted } from "../src/db/sending";
+import {
+  RECEIPT_RESOLUTION_MS,
+  readSending,
+  receiptStatement,
+  recordAccepted,
+  refusedTopicStatement,
+} from "../src/db/sending";
 import { getConfig } from "../src/env";
 import { drainSimulatedWebhooks } from "../src/providers/simulate";
 import { _clearKeyCache, type SnsEnvelope } from "../src/providers/sns";
@@ -215,7 +221,7 @@ describe("the warning that SES's reports aren't arriving (SPEC §13)", () => {
       at: refusedAt,
     });
     expect(view.warnings.map((w) => w.message)).toEqual([
-      `SES took an email more than an hour ago, and Kestrel refused the reports since: SES reports to ${OTHER_TOPIC}, but SNS_TOPIC_ARN names ${SNS_TOPIC_ARN}. Until they match, a bounced address is mailed again and a complaint unsubscribes no one. Store the topic SES reports to in SNS_TOPIC_ARN and deploy, or point the configuration set’s SNS destination at the topic SNS_TOPIC_ARN names.`,
+      `SES took an email more than an hour ago, and no report has reached Kestrel since. A report arrived from ${OTHER_TOPIC}, which isn’t the topic SNS_TOPIC_ARN names, ${SNS_TOPIC_ARN}, so Kestrel refused it. Until a report arrives from the topic SNS_TOPIC_ARN names, a bounced address is mailed again and a complaint unsubscribes no one. In the SES console, check which topic the configuration set’s SNS destination uses before changing either side, then make the destination and SNS_TOPIC_ARN name the same topic.`,
     ]);
 
     // Fixed: a report from the right topic clears the warning, and the refusal is history.
@@ -227,6 +233,25 @@ describe("the warning that SES's reports aren't arriving (SPEC §13)", () => {
     const again = await status();
     expect(again.receipts?.refused_topic).toBeNull();
     expect(again.warnings.map((w) => w.message)).toEqual([
+      expect.stringContaining("no report of a delivery, bounce, or complaint has reached Kestrel"),
+    ]);
+  });
+
+  it("keeps no topic from another AWS account or region, which anyone can publish from, so the warning never names it", async () => {
+    allowErrorLogs("webhook.refused");
+    await taken("test");
+    for (const outsider of [
+      "arn:aws:sns:us-east-1:999999999999:kestrel-ses",
+      "arn:aws:sns:eu-west-1:123456789012:kestrel-ses",
+      "not-an-arn",
+    ]) {
+      expect((await report("Bounce", "reader@example.com", "msg-1", outsider)).status).toBe(403);
+    }
+    expect((await readSending(env.DB))?.refusedTopic ?? null).toBeNull();
+    later(HOUR + 1);
+    const view = await status();
+    expect(view.receipts?.refused_topic).toBeNull();
+    expect(view.warnings.map((w) => w.message)).toEqual([
       expect.stringContaining("no report of a delivery, bounce, or complaint has reached Kestrel"),
     ]);
   });
@@ -262,12 +287,55 @@ describe("the warning that SES's reports aren't arriving (SPEC §13)", () => {
     expect(view.signups).toBe("open");
   });
 
+  it("is not reported on the plain fake transport, where no report can arrive, however long it waits", async () => {
+    await recordAccepted(env.DB, "test", Date.now());
+    later(3 * HOUR);
+    const view = await status({ SIMULATE_SENDS: "off" });
+    expect(view.provider).toBe("fake");
+    expect(view.receipts).toBeNull();
+    expect(view.warnings).toEqual([]);
+  });
+
   it("is not reported with no provider connected", async () => {
     await recordAccepted(env.DB, "test", Date.now());
     later(2 * HOUR);
     const view = await status(NOT_CONNECTED_DEPLOY);
     expect(view.receipts).toBeNull();
     expect(view.warnings).toEqual([]);
+  });
+});
+
+describe("what keeping reports costs the database (SPEC §13)", () => {
+  const writes = async (statement: D1PreparedStatement) => (await statement.run()).meta.changes;
+  const refused = { topic: OTHER_TOPIC, expected: SNS_TOPIC_ARN };
+
+  it("writes the last report once for a burst within a minute, and again to clear a wait or once it is a minute behind", async () => {
+    expect(await writes(receiptStatement(env.DB, Date.now()))).toBe(1);
+    later(1_000);
+    expect(await writes(receiptStatement(env.DB, Date.now()))).toBe(0);
+    later(1_000);
+    expect(await writes(receiptStatement(env.DB, Date.now()))).toBe(0);
+    await recordAccepted(env.DB, "list", Date.now());
+    later(1_000);
+    expect(await writes(receiptStatement(env.DB, Date.now()))).toBe(1);
+    expect((await readSending(env.DB))?.waitingSince).toBeNull();
+    later(RECEIPT_RESOLUTION_MS + 1);
+    expect(await writes(receiptStatement(env.DB, Date.now()))).toBe(1);
+    expect((await readSending(env.DB))?.lastReceiptAt).toBe(Date.now());
+  });
+
+  it("writes a refused topic once for a burst within a minute, and again for another topic, once a minute on, or after a report", async () => {
+    expect(await writes(refusedTopicStatement(env.DB, refused, Date.now()))).toBe(1);
+    later(1_000);
+    expect(await writes(refusedTopicStatement(env.DB, refused, Date.now()))).toBe(0);
+    const other = { ...refused, topic: `${OTHER_TOPIC}-2` };
+    expect(await writes(refusedTopicStatement(env.DB, other, Date.now()))).toBe(1);
+    later(RECEIPT_RESOLUTION_MS + 1);
+    expect(await writes(refusedTopicStatement(env.DB, other, Date.now()))).toBe(1);
+    later(1_000);
+    await receiptStatement(env.DB, Date.now()).run();
+    later(1_000);
+    expect(await writes(refusedTopicStatement(env.DB, other, Date.now()))).toBe(1);
   });
 });
 
@@ -317,7 +385,7 @@ describe("the dev simulation's reports (SPEC §10, §13)", () => {
     expect(view.receipts?.last_at).toBeNull();
     expect(view.warnings.map((w) => w.code)).toEqual(["receipts_not_arriving"]);
     expect(view.warnings[0]?.message).toContain(
-      "SES reports to arn:aws:sns:us-east-1:111122223333:kestrel-events-old, but SNS_TOPIC_ARN names arn:aws:sns:us-east-1:111122223333:kestrel-events.",
+      "A report arrived from arn:aws:sns:us-east-1:111122223333:kestrel-events-old, which isn’t the topic SNS_TOPIC_ARN names, arn:aws:sns:us-east-1:111122223333:kestrel-events, so Kestrel refused it.",
     );
   });
 });
