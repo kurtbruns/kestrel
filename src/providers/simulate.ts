@@ -15,6 +15,12 @@
  * held send, SPEC §13) by its own path. So does an outage the developer names (`outage`):
  * SES unavailable to every email, read by the same classifier, so a send backs off on the
  * real spacing and the publisher's email about it waits for the outage to end, as it would.
+ * A refusal of each send's own email the developer names (`sendRefusal`: a bad request that
+ * names no one, or the message rejected for its content) is the send's, not the account's, so
+ * it meets list sends (and, for a rejected message, a test of a post) but never a confirmation
+ * or a notification, read by the adapter's own reading of a bulk request's error
+ * (`sesBulkError`), so a send holds or marks its reader unsent as the adapter and the send loop
+ * decide, and no other send waits on it.
  * Simulated list sends land in the same outbox, so the
  * delivered bytes can be inspected. It engages only when `config.simulation` is set, which
  * `getConfig` allows only in a dev-shaped env.
@@ -47,13 +53,14 @@
  * after a day.
  *
  * Each injected fault is logged as a `sim.*` event tagged with the profile (`sim.quota_spent`,
- * `sim.quota_lifted`, `sim.request_lost`), so a simulated send's log shows what was injected
+ * `sim.quota_lifted`, `sim.request_lost`, `sim.send_refused`), so a simulated send's log shows what was injected
  * beside what the app did about it.
  */
 
 import type { RefusingCause } from "../../shared/provider";
 import type {
   SimulatedAccountView,
+  SimulatedSendRefusal,
   SimulationFaults,
   SimulationProfile,
   SimulationView,
@@ -67,7 +74,14 @@ import { HALT_BACKOFF_MS, HALT_RETRY_SLACK_MS } from "../lib/time";
 import { unwrap } from "../lib/unwrap";
 import { applyDeliveryEvents } from "../services/webhook_events";
 import { deliverToOutbox, FakeProvider } from "./fake";
-import { bareAddress, classifySesError, sesEntryErrorText, sesErrorText, sesTraits } from "./ses";
+import {
+  bareAddress,
+  classifySesError,
+  sesBulkError,
+  sesEntryErrorText,
+  sesErrorText,
+  sesTraits,
+} from "./ses";
 import type {
   BatchHalt,
   DeliveryEvent,
@@ -231,6 +245,33 @@ const SES_OUTAGE: SesErrorResponse = {
   status: 408,
   type: "RequestTimeoutException",
   msg: "Request timed out before SES received it whole. (simulated outage)",
+};
+
+/**
+ * The error responses SES refuses a send's own email with (`SIMULATE_SENDS=ses:bad_request` or
+ * `ses:rejected`), neither of them the account's, so no other send waits on it (SPEC §12):
+ *   - `bad_request`: every list request refused as invalid, in words that name no one, so the
+ *     adapter can't tell whether it is about one recipient or the request. A test goes through:
+ *     the answer is about a send's requests, and how a one-off email meets it has never been
+ *     reasoned about, so the simulation doesn't guess.
+ *   - `rejected`: the message rejected for what it says, in words about neither the sender's
+ *     identity nor a recipient's. Every post's email meets it, so a test of a post (the send's
+ *     own email, I5) is refused too.
+ * A confirmation and a notification are other emails, so they go through under either.
+ */
+const SEND_REFUSALS: Record<SimulatedSendRefusal, SesErrorResponse & { tests: boolean }> = {
+  bad_request: {
+    status: 400,
+    type: "BadRequestException",
+    msg: "Invalid input. (simulated)",
+    tests: false,
+  },
+  rejected: {
+    status: 400,
+    type: "MessageRejected",
+    msg: "Message rejected: the message was refused for its content. (simulated)",
+    tests: true,
+  },
 };
 
 /** The halt the real adapter returns for an SES error response. */
@@ -467,6 +508,8 @@ export class SimProvider implements EmailProvider {
   private readonly refusal: BatchHalt | null;
   /** The provider being unavailable to every email, while the developer has it down. */
   private readonly outage: BatchHalt | null;
+  /** How SES refuses each send's own email, when the developer named it. */
+  private readonly sendRefusal: SimulatedSendRefusal | null;
 
   constructor(simulation: SimulationView, config: Config) {
     this.profile = PROFILES[simulation.profile]();
@@ -477,6 +520,7 @@ export class SimProvider implements EmailProvider {
       ? sesHalt(refusalResponse(simulation.refuse, config), config.fromAddress)
       : null;
     this.outage = !simulation.outage ? null : sesHalt(SES_OUTAGE, config.fromAddress);
+    this.sendRefusal = simulation.send_refusal;
     const traits = this.profile.traits(config);
     this.maxBatch = traits.maxBatch;
     this.maxRequestRate = traits.maxRequestRate;
@@ -496,6 +540,10 @@ export class SimProvider implements EmailProvider {
     if (this.outage) {
       return { kind: "halted", halt: this.outage };
     }
+    const own = this.sendRefusal ? SEND_REFUSALS[this.sendRefusal] : null;
+    if (own?.tests && opts.purpose === "test") {
+      return { kind: "halted", halt: sesHalt(own, bareAddress(this.config.fromAddress)) };
+    }
     if (opts.purpose !== "list") {
       return this.oneOff(rendered, recipients, opts);
     }
@@ -504,6 +552,23 @@ export class SimProvider implements EmailProvider {
       return { kind: "halted", halt: sandboxed };
     }
     const sendId = opts.tag;
+    if (this.sendRefusal && own) {
+      await sleep(this.profile.requestMs);
+      log.info("sim.send_refused", {
+        sendId,
+        profile: this.profileName,
+        answer: this.sendRefusal,
+        recipients: recipients.length,
+      });
+      const r = own;
+      return sesBulkError(
+        r.status,
+        r.type,
+        r.msg,
+        bareAddress(this.config.fromAddress),
+        recipients,
+      );
+    }
     const key = opts.batchKey ?? sendId;
     const realistic = this.faults === "realistic";
     const p = this.profile;

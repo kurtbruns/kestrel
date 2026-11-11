@@ -209,7 +209,14 @@ describe("settings view", () => {
       ...local.deployment,
       provider: "fake",
       min_lead_ms: 60_000,
-      simulation: { profile: "ses", faults: "none", account: null, refuse: null, outage: false },
+      simulation: {
+        profile: "ses",
+        faults: "none",
+        account: null,
+        refuse: null,
+        outage: false,
+        send_refusal: null,
+      },
     };
     fake = fakeApi([
       { path: "/api/settings", reply: () => local },
@@ -1744,6 +1751,7 @@ describe("settings view", () => {
           faults: "realistic",
           refuse: null,
           outage: false,
+          send_refusal: null,
           account: { state: "production", bounces_routed: true, problem: null },
         },
       };

@@ -33,6 +33,9 @@ describe("simulationLine", () => {
       "ses:refuse=configuration",
       "ses:none:refuse=suspended",
       "ses:none:outage",
+      "ses:bad_request",
+      "ses:none:bad_request",
+      "ses:rejected",
     ]) {
       expect(simulationLine(value), value).toBe(
         `[dev] simulating a provider for list sends (SIMULATE_SENDS=${value}); nothing is delivered`,
@@ -65,6 +68,11 @@ describe("simulationLine", () => {
       "1:outage",
       "1:refuse=configuration",
       "ses:refuse=sandbox",
+      "1:bad_request",
+      "ses:bad_request:none",
+      "ses:bad_request=1",
+      "1:rejected",
+      "ses:content",
     ]) {
       const line = simulationLine(value);
       expect(line, value).toContain(`SIMULATE_SENDS=${value} isn't a value the app accepts`);

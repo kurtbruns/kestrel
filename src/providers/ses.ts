@@ -386,6 +386,73 @@ function worse(a: BatchHalt | null, b: BatchHalt): BatchHalt {
   return !a || haltRank(b) > haltRank(a) ? b : a;
 }
 
+/**
+ * What an SES error response to a SendBulkEmail request means for its batch, as the adapter
+ * reads it: no answer at all when SES may have taken the batch (it throws, and the send loop
+ * leaves the batch for Resolve), a halt when it is about SES or the account, and otherwise an
+ * invalid batch (`invalidBatch`). Exported so the dev simulation hands SES's answer to this
+ * same reading rather than restating it (SPEC §10).
+ */
+export function sesBulkError(
+  status: number,
+  type: string,
+  message: string,
+  from: string,
+  batch: Recipient[],
+): SendBatchResult {
+  const error = sesErrorText(status, type, message);
+  // AWS says a server error or a timeout can follow a request SES already accepted, and a
+  // retry then mails a second copy, so such an answer is no answer: it throws, and the send
+  // loop leaves the batch for Resolve (I4).
+  if (sesFateUnknown(status, type)) {
+    throw new Error(`${error} (SES may have taken the batch before answering)`);
+  }
+  const halt = classifySesError(status, type, message, from);
+  if (halt) {
+    return { kind: "halted", halt: { ...halt, error } };
+  }
+  return invalidBatch(batch, error);
+}
+
+/**
+ * A list batch SES refused as invalid, for a reason that may be one recipient's (a bad
+ * address SES's syntax check refuses) rather than the email's. A recipient SES's words name
+ * is refused alone and the rest go back to the queue, untouched, for the next request. With
+ * no one named in a larger batch, no one can be blamed, so the send holds for a person to
+ * read SES's words (`invalid_request`), rather than mark a whole batch unsent for one
+ * address. A batch of one can't tell the two apart: it is that recipient's own, marked as
+ * the request's if the send loop's group repeats it (`ifRepeated`), as a lone failed entry is.
+ */
+function invalidBatch(batch: Recipient[], error: string): SendBatchResult {
+  const named = batch.filter((r) => namesAddress(error, r.email));
+  if (named.length === 0) {
+    const asRequest: BatchHalt = { reason: "account", cause: "invalid_request", error };
+    const only = batch.length === 1 ? batch[0] : undefined;
+    return only
+      ? {
+          kind: "answered",
+          results: [
+            {
+              email: only.email,
+              accepted: false,
+              retryable: false,
+              error,
+              ifRepeated: asRequest,
+            },
+          ],
+        }
+      : { kind: "halted", halt: asRequest };
+  }
+  return {
+    kind: "answered",
+    results: batch.map((r) =>
+      named.includes(r)
+        ? { email: r.email, accepted: false, retryable: false, error }
+        : { email: r.email, accepted: false, retryable: true, error: "not sent", held: true },
+    ),
+  };
+}
+
 export class SesProvider implements EmailProvider {
   readonly name = "ses" as const;
   readonly maxBatch: number;
@@ -582,7 +649,7 @@ export class SesProvider implements EmailProvider {
    *  recipient. */
   private async refusal(
     res: Response,
-  ): Promise<{ type: string; halt: BatchHalt | null; error: string }> {
+  ): Promise<{ type: string; message: string; halt: BatchHalt | null; error: string }> {
     const bodyText = await res.text().catch(() => "");
     const { type, message } = parseSesError(bodyText, res.headers.get("x-amzn-ErrorType"));
     const error = sesErrorText(res.status, type, message);
@@ -591,7 +658,7 @@ export class SesProvider implements EmailProvider {
       // SES's own words, never an address in full: the log redacts each one (SPEC §12).
       log.warn("provider.bad_request", { status: res.status, error, cause: halt?.cause });
     }
-    return { type, halt: halt ? { ...halt, error } : null, error };
+    return { type, message, halt: halt ? { ...halt, error } : null, error };
   }
 
   /** One SendEmail with the inline template, for a one-off message to one recipient. */
@@ -645,17 +712,8 @@ export class SesProvider implements EmailProvider {
     });
 
     if (!res.ok) {
-      const { type, halt, error } = await this.refusal(res);
-      // AWS says a server error or a timeout can follow a request SES already accepted, and
-      // a retry then mails a second copy, so such an answer is no answer: it throws, and the
-      // send loop leaves the batch for Resolve (I4).
-      if (sesFateUnknown(res.status, type)) {
-        throw new Error(`${error} (SES may have taken the batch before answering)`);
-      }
-      if (halt) {
-        return { kind: "halted", halt };
-      }
-      return this.invalidBatch(batch, error);
+      const { type, message } = await this.refusal(res);
+      return sesBulkError(res.status, type, message, this.address, batch);
     }
 
     // SES took the request. Results come one an entry, in the entries' order; a recipient
@@ -768,45 +826,6 @@ export class SesProvider implements EmailProvider {
       });
     }
     return { kind: "answered", results, halt };
-  }
-
-  /**
-   * A list batch SES refused as invalid, for a reason that may be one recipient's (a bad
-   * address SES's syntax check refuses) rather than the email's. A recipient SES's words name
-   * is refused alone and the rest go back to the queue, untouched, for the next request. With
-   * no one named in a larger batch, no one can be blamed, so the send holds for a person to
-   * read SES's words (`invalid_request`), rather than mark a whole batch unsent for one
-   * address. A batch of one can't tell the two apart: it is that recipient's own, marked as
-   * the request's if the send loop's group repeats it (`ifRepeated`), as a lone failed entry is.
-   */
-  private invalidBatch(batch: Recipient[], error: string): SendBatchResult {
-    const named = batch.filter((r) => namesAddress(error, r.email));
-    if (named.length === 0) {
-      const asRequest: BatchHalt = { reason: "account", cause: "invalid_request", error };
-      const only = batch.length === 1 ? batch[0] : undefined;
-      return only
-        ? {
-            kind: "answered",
-            results: [
-              {
-                email: only.email,
-                accepted: false,
-                retryable: false,
-                error,
-                ifRepeated: asRequest,
-              },
-            ],
-          }
-        : { kind: "halted", halt: asRequest };
-    }
-    return {
-      kind: "answered",
-      results: batch.map((r) =>
-        named.includes(r)
-          ? { email: r.email, accepted: false, retryable: false, error }
-          : { email: r.email, accepted: false, retryable: true, error: "not sent", held: true },
-      ),
-    };
   }
 
   async parseWebhook(req: Request, env: AppEnv): Promise<WebhookResult> {
