@@ -30,15 +30,26 @@ export interface Clocks {
   label: string;
 }
 
+// Each zone's date formatter, with and without the weekday, kept for the life of the page as
+// shared/time_zone.ts keeps its own: building one costs tens of microseconds, and a list formats
+// a time per row.
+const DAY_FORMATS = new Map<string, Intl.DateTimeFormat>();
+
 /** The parts of a moment on a clock, en-US, as every time in the dashboard is written. */
 function partsOn(ms: number, zone: string, weekday: boolean) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: zone,
-    weekday: weekday ? "short" : undefined,
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).formatToParts(ms);
+  const key = `${zone} ${weekday}`;
+  let format = DAY_FORMATS.get(key);
+  if (format === undefined) {
+    format = new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      weekday: weekday ? "short" : undefined,
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+    DAY_FORMATS.set(key, format);
+  }
+  const parts = format.formatToParts(ms);
   const part = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((p) => p.type === type)?.value ?? "";
   return { weekday: part("weekday"), month: part("month"), day: part("day"), year: part("year") };

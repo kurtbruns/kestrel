@@ -821,12 +821,12 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
 });
 
 describe("what a tool answers stays small and whole", () => {
-  // Raised from 25 KB for the publication's clock (SPEC §6): get_time, and `time_zone` beside
-  // each fire time a tool takes.
-  it("keeps the whole tool list under 27 KB, so growing it is a decision", async () => {
+  // Raised from 25 KB for ending a held send (end_send) and the publication's clock (get_time,
+  // and `time_zone` beside each fire time a tool takes).
+  it("keeps the whole tool list under 28 KB, so growing it is a decision", async () => {
     const res = await rpc("tools/list", {}, await adminAuth(PERSON));
     const size = new TextEncoder().encode(await res.text()).length;
-    expect(size).toBeLessThan(27 * 1024);
+    expect(size).toBeLessThan(28 * 1024);
   });
 
   it("cuts a long Markdown answer at a line, or at the limit when no line ends before it", () => {
@@ -1289,6 +1289,59 @@ describe("a tool names a fire time on the publication's clock", () => {
       time_zone: "Asia/Tokyo",
     });
     expect(moved.read_back.fire_at_local).toMatch(/, 7:00 PM Eastern Time$/);
+  });
+
+  it("answers for a write that landed when the clock can't be read after it, never as refused", async () => {
+    const fire = Date.now() + 3_600_000;
+    const send = {
+      id: "s1",
+      post_id: "p1",
+      subject: "Owls",
+      status: "canceled",
+      phase: "canceled",
+      fire_at: fire,
+      audience: { count: 3 },
+      conditions: [],
+    };
+    const post = { id: "p1", subject: "Owls", status: "draft", send: null, actions: [] };
+    // Every route answers but the clock's.
+    const api = {
+      call: async (r: { method: string; path: string }) =>
+        r.path === "/api/time"
+          ? { status: 503, ok: false, text: "", body: { error: "unavailable" } }
+          : {
+              status: 200,
+              ok: true,
+              text: "",
+              body: { send, post, cursor: "1.1", changed: true, revision_id: "r1" },
+            },
+      read: async () => {
+        throw new Error("not used");
+      },
+      editor: (page: string) => page,
+    };
+    const run = (name: string, args: Record<string, unknown>) =>
+      (TOOL_DEFS.find((d) => d.name === name) as ToolDef).run(api as any, args);
+    const canceled = await run("cancel_send", { id: "s1" });
+    expect(canceled.isError).toBe(false);
+    expect(JSON.parse(canceled.content[0]?.text ?? "").send).toMatchObject({
+      id: "s1",
+      fire_at: new Date(fire).toISOString(),
+    });
+    const saved = await run("save_draft", { subject: "Owls", markdown: "x" });
+    expect(saved.isError).toBe(false);
+    expect(JSON.parse(saved.content[0]?.text ?? "").post.id).toBe("p1");
+  });
+
+  it("words the sends a save re-made on the zone the save set, not the one before it", async () => {
+    const post = (await callOk("save_draft", { subject: "Owls", markdown: "x" })).post;
+    const send = (await callOk("schedule_send", { id: post.id, fire_at: inHours(30) })).send;
+    const saved = await callOk("update_settings", {
+      publication: { name: "Renamed" },
+      time_zone: "Asia/Tokyo",
+      remake: [send.id],
+    });
+    expect(saved.remade[0].fire_at_local).toMatch(/ Japan Standard Time$/);
   });
 
   it("gives the publication's time now, and how a time would read, scheduling nothing", async () => {

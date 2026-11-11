@@ -210,24 +210,30 @@ interface Clock {
   now: number;
 }
 
-/** Read the publication's clock, or the refusal that stopped it. */
-async function readClock(api: Api): Promise<Clock | Answer> {
+/**
+ * Read the publication's clock, or null when the read fails. The words it gives are an addition
+ * to an answer, never a reason to refuse one: after a write has landed, a refusal would tell
+ * Claude a change that took was refused, and a retry could make it twice. Without it, a fire
+ * time is the exact moment alone.
+ */
+async function readClock(api: Api): Promise<Clock | null> {
   const a = await api.call(TIME);
   if (!a.ok) {
-    return a;
+    return null;
   }
   const r = a.body as TimeResponse;
   return { zone: r.time_zone, now: r.now };
 }
-
-const isClock = (c: Clock | Answer): c is Clock => "now" in c;
 
 /**
  * A fire time as a chat reads it (SPEC §6): the exact moment, the same moment on the
  * publication's clock with its zone named, and, while it is ahead, how far off it is, so Claude
  * relays the app's words rather than converting a UTC time itself.
  */
-function fireTime(ms: number, clock: Clock) {
+function fireTime(ms: number, clock: Clock | null) {
+  if (clock === null) {
+    return { fire_at: iso(ms) };
+  }
   const words = readBack(ms, clock.zone, clock.now);
   return {
     fire_at: iso(ms),
@@ -237,9 +243,18 @@ function fireTime(ms: number, clock: Clock) {
 }
 
 /** A fire time in a line a person reads: "Fri Nov 13, 9:00 AM Eastern Time (in 2 days, 7 hours)". */
-function fireTimeLine(ms: number, clock: Clock): string {
+function fireTimeLine(ms: number, clock: Clock | null): string {
   const t = fireTime(ms, clock);
+  if (!("fire_at_local" in t)) {
+    return String(t.fire_at);
+  }
   return t.fire_at_in ? `${t.fire_at_local} (${t.fire_at_in})` : t.fire_at_local;
+}
+
+/** A moment on the publication's clock with its zone named, or the exact moment without one. */
+function momentLine(ms: number, clock: Clock | null): string {
+  const t = fireTime(ms, clock);
+  return "fire_at_local" in t ? t.fire_at_local : String(t.fire_at);
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -282,7 +297,7 @@ export function refused(a: Answer, lines: string[] = []): ToolResult {
 
 // --- what a chat reads of each object ---
 
-function postBrief(p: Post, clock: Clock) {
+function postBrief(p: Post, clock: Clock | null) {
   return {
     id: p.id,
     subject: p.subject,
@@ -295,7 +310,7 @@ function postBrief(p: Post, clock: Clock) {
   };
 }
 
-function postFull(p: Post, clock: Clock) {
+function postFull(p: Post, clock: Clock | null) {
   return {
     ...postBrief(p, clock),
     slug: p.slug,
@@ -310,7 +325,7 @@ function postFull(p: Post, clock: Clock) {
   };
 }
 
-/** A send as a chat reads it. With no clock its fire time is the exact moment alone, for an
+/** A send as a chat reads it. With no clock its fire time is the exact moment alone, as for an
  *  answer that carries the route's own `read_back` beside it. */
 function sendBrief(s: SendView, clock: Clock | null) {
   return {
@@ -319,13 +334,13 @@ function sendBrief(s: SendView, clock: Clock | null) {
     subject: s.subject,
     status: s.status,
     phase: s.phase,
-    ...(clock ? fireTime(s.fire_at, clock) : { fire_at: iso(s.fire_at) }),
+    ...fireTime(s.fire_at, clock),
     audience: s.audience.count,
     conditions: s.conditions.map((c) => c.message),
   };
 }
 
-function sendFull(s: SendView, clock: Clock) {
+function sendFull(s: SendView, clock: Clock | null) {
   return {
     ...sendBrief(s, clock),
     email_only: s.email_only,
@@ -373,14 +388,14 @@ function nextOffset(page: { total: number; limit: number; offset: number }): num
 }
 
 /** Growing sends as lines a person reads: each subject, fire time, and how many it gains. */
-function growingLines(sends: readonly GrowingSend[], clock: Clock): string[] {
+function growingLines(sends: readonly GrowingSend[], clock: Clock | null): string[] {
   return sends.map(
     (s) => `- "${s.subject}", firing ${fireTimeLine(s.fire_at, clock)}, would gain ${s.gains}.`,
   );
 }
 
 /** Scheduled sends as lines a person reads: each subject, fire time, and id. */
-function sendLines(sends: readonly SendView[], clock: Clock): string[] {
+function sendLines(sends: readonly SendView[], clock: Clock | null): string[] {
   return sends.map((s) => `- "${s.subject}", firing ${fireTimeLine(s.fire_at, clock)} (${s.id}).`);
 }
 
@@ -388,7 +403,7 @@ function sendLines(sends: readonly SendView[], clock: Clock): string[] {
  * A settings save's refusal, with the sends a re-make names listed (SPEC §9): the publisher's
  * to acknowledge in the chat before Claude sends `remake`, never Claude's.
  */
-function settingsRefused(a: Answer, clock: Clock): ToolResult {
+function settingsRefused(a: Answer, clock: Clock | null): ToolResult {
   const body = isObject(a.body) ? a.body : {};
   if (body.error === "remake_required" && Array.isArray(body.sends)) {
     const sends = (a.body as RemakeRequiredError).sends;
@@ -403,14 +418,14 @@ function settingsRefused(a: Answer, clock: Clock): ToolResult {
     return refused(a, [
       "Nothing was saved. These fire inside the minimum lead, so they go out as they stand:",
       ...sendLines(r.sends, clock),
-      `Tell the publisher, and offer to save again after ${fireTime(r.retry_after, clock).fire_at_local}.`,
+      `Tell the publisher, and offer to save again after ${momentLine(r.retry_after, clock)}.`,
     ]);
   }
   return refused(a);
 }
 
 /** The scheduled sends a save re-made, each of which needs a fresh test. */
-function remadeBrief(r: SettingsSavedResponse, clock: Clock) {
+function remadeBrief(r: SettingsSavedResponse, clock: Clock | null) {
   return r.remade.map((s) => sendBrief(s, clock));
 }
 
@@ -483,9 +498,6 @@ export const TOOL_DEFS: ToolDef[] = [
         return refused(a);
       }
       const clock = await readClock(api);
-      if (!isClock(clock)) {
-        return refused(clock);
-      }
       const r = a.body as PostListResponse;
       return data({
         total: r.page.total,
@@ -508,9 +520,6 @@ export const TOOL_DEFS: ToolDef[] = [
         return refused(a);
       }
       const clock = await readClock(api);
-      if (!isClock(clock)) {
-        return refused(clock);
-      }
       const r = a.body as PostResponse;
       return data({
         post: postFull(r.post, clock),
@@ -562,9 +571,6 @@ export const TOOL_DEFS: ToolDef[] = [
         return refused(a);
       }
       const clock = await readClock(api);
-      if (!isClock(clock)) {
-        return refused(clock);
-      }
       const r = a.body as SendListResponse;
       return data({
         total: r.page.total,
@@ -587,9 +593,6 @@ export const TOOL_DEFS: ToolDef[] = [
         return refused(a);
       }
       const clock = await readClock(api);
-      if (!isClock(clock)) {
-        return refused(clock);
-      }
       const r = a.body as SendResponse;
       return data({
         send: sendFull(r.send, clock),
@@ -796,9 +799,6 @@ export const TOOL_DEFS: ToolDef[] = [
         return refused(a);
       }
       const clock = await readClock(api);
-      if (!isClock(clock)) {
-        return refused(clock);
-      }
       const r = a.body as PostSavedResponse;
       return data({
         post: postFull(r.post, clock),
@@ -830,9 +830,6 @@ export const TOOL_DEFS: ToolDef[] = [
         return refused(a);
       }
       const clock = await readClock(api);
-      if (!isClock(clock)) {
-        return refused(clock);
-      }
       const r = a.body as PostSettingsResponse;
       return data({
         post: postFull(r.post, clock),
@@ -960,9 +957,6 @@ export const TOOL_DEFS: ToolDef[] = [
         return refused(a);
       }
       const clock = await readClock(api);
-      if (!isClock(clock)) {
-        return refused(clock);
-      }
       const r = a.body as SendActionResponse;
       return data({ send: sendBrief(r.send, clock), changed: r.changed });
     },
@@ -987,9 +981,6 @@ export const TOOL_DEFS: ToolDef[] = [
         return refused(a);
       }
       const clock = await readClock(api);
-      if (!isClock(clock)) {
-        return refused(clock);
-      }
       const r = a.body as ResolveResponse;
       return data({ send: sendBrief(r.send, clock), resolved: r.resolved, completed: r.completed });
     },
@@ -1013,9 +1004,6 @@ export const TOOL_DEFS: ToolDef[] = [
     async run(api, args) {
       const file = only(args, ["file", "plain_list_status"]);
       const clock = await readClock(api);
-      if (!isClock(clock)) {
-        return refused(clock);
-      }
       if (args.plan_hash === undefined) {
         const a = await api.call(PLAN_IMPORT, { body: file });
         if (!a.ok) {
@@ -1160,9 +1148,6 @@ export const TOOL_DEFS: ToolDef[] = [
     },
     async run(api, args) {
       const clock = await readClock(api);
-      if (!isClock(clock)) {
-        return refused(clock);
-      }
       const a = await api.call(SAVE_SETTINGS, {
         body: only(args, [
           "publication",
@@ -1177,6 +1162,9 @@ export const TOOL_DEFS: ToolDef[] = [
         return settingsRefused(a, clock);
       }
       const r = a.body as SettingsSavedResponse;
+      // A save that changed the zone re-made its sends under the zone it answers with, so word
+      // them on that clock, not the one read before the save.
+      const saved: Clock = { zone: r.settings.time_zone, now: clock?.now ?? Date.now() };
       return data({
         // Where mail now goes, as saved, first: the publisher should see it whatever changed.
         test_recipients: r.settings.test_recipients,
@@ -1191,7 +1179,7 @@ export const TOOL_DEFS: ToolDef[] = [
         time_zone_label: r.settings.time_zone_label,
         time_zone_readings: r.time_zone_readings,
         warnings: r.warnings,
-        remade: remadeBrief(r, clock),
+        remade: remadeBrief(r, saved),
         editor: api.editor("/settings"),
       });
     },
@@ -1209,9 +1197,6 @@ export const TOOL_DEFS: ToolDef[] = [
     },
     async run(api, args) {
       const clock = await readClock(api);
-      if (!isClock(clock)) {
-        return refused(clock);
-      }
       const a = await api.call(SAVE_SETTINGS, { body: only(args, ["email_template", "remake"]) });
       if (!a.ok) {
         return settingsRefused(a, clock);

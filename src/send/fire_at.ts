@@ -16,6 +16,7 @@ import {
   resolveTimeZone,
   timeZoneNameRefusal,
   type Wall,
+  wallAt,
 } from "../../shared/time_zone";
 import { fieldError } from "../lib/body";
 
@@ -30,6 +31,9 @@ export interface RequestedFireAt {
   at: number;
   local: { time: string; zone: string } | null;
 }
+
+/** A fire time is stored on the minute (SPEC §6). */
+const MINUTE_MS = 60 * 1000;
 
 /** An exact moment: an ISO-8601 time ending in `Z`. */
 const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z$/i;
@@ -107,5 +111,8 @@ export function resolveFireAt(
   if (reading.kind !== "exact") {
     throw fieldError("fire_at", localTimeRefusal(request.wall, zone, now) ?? FORMS);
   }
-  return { at: reading.at, local: { time: formatLocalTime(request.wall), zone } };
+  // Kept as the send will have it: on the minute, as every fire time is stored, so a time asked
+  // with seconds (09:00:30) keeps the minute it fires at (09:01) on the same clock.
+  const minute = Math.ceil(reading.at / MINUTE_MS) * MINUTE_MS;
+  return { at: reading.at, local: { time: formatLocalTime(wallAt(minute, zone)), zone } };
 }

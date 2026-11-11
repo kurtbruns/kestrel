@@ -92,6 +92,15 @@ describe("the forms fire_at takes (SPEC §6)", () => {
     });
   });
 
+  it("keeps a local time asked with seconds as the minute the send fires at", async () => {
+    const body = await readJson(await schedule({ fire_at: `${NOV_13_9AM}:30` }));
+    expect(body.send.fire_at).toBe(NOV_13_9AM_NEW_YORK + 60_000);
+    expect(await requested(body.send.id)).toEqual({
+      requested_local_time: local(11, 13, "09:01"),
+      requested_time_zone: "America/New_York",
+    });
+  });
+
   it("takes an exact moment as Z or epoch milliseconds, and keeps no local time for it", async () => {
     const at = Date.now() + 3 * 3_600_000;
     for (const fire_at of [
