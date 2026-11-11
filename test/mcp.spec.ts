@@ -745,9 +745,20 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
       state: "production",
       unknown_reason: null,
       warnings: [
-        { severity: "error", message: expect.stringContaining("SES has no configuration set") },
+        {
+          severity: "error",
+          message: expect.stringContaining("SES has no configuration set"),
+          // Where the fix is, as a path kestrel_api_read serves.
+          docs: "/api/docs/ses.md#4-send-bounces-and-complaints-to-the-app",
+        },
       ],
     });
+    // A connector's Claude can follow it to the section that says what to check.
+    const doc = await callTool("kestrel_api_read", {
+      path: pub.deployment.connection.warnings[0].docs,
+    });
+    expect(doc.isError).toBe(false);
+    expect(doc.text).toContain("## 4. Send bounces and complaints to the app");
   });
 
   it("sends a template test, the step that proves email works, and says signups opened (SPEC §7, §13)", async () => {

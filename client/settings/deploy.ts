@@ -5,7 +5,12 @@
 
 import type { ProviderStatusView } from "../../shared/provider";
 import { DEFAULT_MIN_LEAD_MS, formatLead } from "../../shared/sends";
-import type { DeploymentView, SimulationProfile, SimulationView } from "../../shared/settings";
+import type {
+  DeploymentView,
+  SimulatedAccount,
+  SimulationProfile,
+  SimulationView,
+} from "../../shared/settings";
 import { connectProviderLink } from "../deployment";
 import {
   accountPillHtml,
@@ -46,14 +51,23 @@ function providerName(d: DeploymentView): string {
     : providerLabel(d.provider);
 }
 
+/** The SES account a local server stands in for, as the simulation band words it. */
+const SIMULATED_ACCOUNT_WORDS: Record<SimulatedAccount, string> = {
+  sandbox: "in the sandbox",
+  pending: "in the sandbox, with AWS reviewing a request",
+  denied: "in the sandbox, with AWS having replied without a grant",
+  production: "in production",
+  permission: "with a key that can’t read it",
+};
+
 /** What a local server simulates (SPEC §10), as the band across the card's top says it: the
  *  provider, a clean run when it injects no failures, and the account it stands in for. */
 function simulationBandHtml(sim: SimulationView): Html {
   const what = SIMULATION_LABELS[sim.profile];
   const clean = sim.faults === "none" ? ", with no failures" : "";
   const account = sim.account
-    ? html` and its account, in <strong>${sim.account.state}</strong>`
-    : null;
+    ? ` and its account, ${SIMULATED_ACCOUNT_WORDS[sim.account.state]}`
+    : "";
   return html`<div class="set-dev-band" id="providerSimulation">${icon("code")}<span><strong>Local development.</strong> Simulating ${what}${clean}${account}. No email leaves this machine.</span></div>`;
 }
 

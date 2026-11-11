@@ -673,7 +673,7 @@ export const TOOL_DEFS: ToolDef[] = [
     name: "get_publication",
     title: "Get the publication",
     description:
-      "Who you are signed in as, the running version, the publication's name and identity, its time zone (`time_zone`, the clock its readers keep, and `time_zone_label`, its name for people; null until set, and nothing can be scheduled or sent until it is), the test recipients, where notifications go, the email provider, whether it's still in the SES sandbox and when SES last reported a delivery, bounce, or complaint back (`connection`; after a test during setup, `last_report_at` newer than the test shows reports arrive), whether email is getting out (`sending`: `unproven`, `working`, or `refusing` with SES's words and the fix), whether the public form takes signups (`signups`: `open`, `not_open`, or `paused`), and the minimum lead, the scheduled sends, and the list's counts. Read it first.",
+      "Who you are signed in as, the running version, the publication's name and identity, its time zone (`time_zone`, the clock its readers keep, and `time_zone_label`, its name for people; null until set, and nothing can be scheduled or sent until it is), the test recipients, where notifications go, the email provider, whether it's still in the SES sandbox and when SES last reported a delivery, bounce, or complaint back (`connection`; after a test during setup, `last_report_at` newer than the test shows reports arrive), its warnings, each naming in `docs` the docs section with what to check and the fix, to read with `kestrel_api_read`, whether email is getting out (`sending`: `unproven`, `working`, or `refusing` with SES's words and the fix), whether the public form takes signups (`signups`: `open`, `not_open`, or `paused`), and the minimum lead, the scheduled sends, and the list's counts. Read it first.",
     annotations: READ,
     routes: [WHOAMI, VERSION, SETTINGS, PROVIDER, LIST_SUBSCRIBERS, TIME],
     args: {},
@@ -723,7 +723,12 @@ export const TOOL_DEFS: ToolDef[] = [
             state: p.state,
             review: p.review,
             unknown_reason: p.unknown_reason,
-            warnings: p.warnings.map((w) => ({ severity: w.severity, message: w.message })),
+            // Each warning's fix is in the docs section it names, which kestrel_api_read serves.
+            warnings: p.warnings.map((w) => ({
+              severity: w.severity,
+              message: w.message,
+              docs: `/api/docs/${w.docs.slug}.md#${w.docs.anchor}`,
+            })),
             last_report_at: p.receipts?.last_at ?? null,
           },
           sending: p.sending,

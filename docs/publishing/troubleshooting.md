@@ -53,7 +53,7 @@ When none come, the send's page says so an hour after it went out. Your provider
 
 1. The configuration set has an enabled SNS destination, and its topic lets SES publish, as [Connect Amazon SES](../get-started/ses.md#4-send-bounces-and-complaints-to-the-app) sets up.
 1. `/webhooks/ses` isn't behind Cloudflare Access, the app's subscription to the topic is confirmed, and `SNS_TOPIC_ARN` names that topic, as [Subscribe the app to the topic](../get-started/ses.md#7-subscribe-the-app-to-the-topic) sets up.
-1. The configuration set reports deliveries as well as bounces and complaints. One that doesn't still sends bounces, but a send that bounces no one hears nothing back. The guide selects all three.
+1. The configuration set reports deliveries as well as bounces and complaints. A set that reports only bounces and complaints sends nothing for an email that neither bounces nor draws a complaint, so the warning shows though nothing is broken. The guide selects Deliveries too.
 
 When a report came from a different SNS topic than the one `SNS_TOPIC_ARN` names, the warning names both, and Kestrel refused the report. Check which topic the configuration set's destination uses in the SES console before you change either side, then make the destination and `SNS_TOPIC_ARN` name the same topic. Each refusal is also a `webhook.refused` error in the app's logs, naming both topics, as [Read the logs](../get-started/verify.md#7-read-the-logs) describes.
 

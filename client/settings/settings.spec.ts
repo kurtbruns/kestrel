@@ -1748,7 +1748,7 @@ describe("settings view", () => {
       expect(lines()).toEqual([
         [
           "amber",
-          "SES took an email more than an hour ago, and no report has reached Kestrel since. Why reports don’t arrive",
+          "SES took an email more than an hour ago, and no report has reached Kestrel since. Reports from SES aren’t arriving",
         ],
       ]);
       expect($<HTMLAnchorElement>("#providerLines .health.amber a").getAttribute("href")).toBe(
@@ -1897,6 +1897,39 @@ describe("settings view", () => {
       );
       expect(fake.unhandled).toEqual([]);
     });
+
+    it.each([
+      ["sandbox", "in the sandbox"],
+      ["pending", "in the sandbox, with AWS reviewing a request"],
+      ["denied", "in the sandbox, with AWS having replied without a grant"],
+      ["production", "in production"],
+      ["permission", "with a key that can’t read it"],
+    ] as const)(
+      "words a simulated %s account in plain English on the band (SPEC §10)",
+      async (state, words) => {
+        const local = response();
+        local.deployment = {
+          ...local.deployment,
+          provider: "fake",
+          simulation: {
+            profile: "ses",
+            faults: "realistic",
+            answer: null,
+            account: { state, bounces_routed: true, receipts: "reported", problem: null },
+          },
+        };
+        await open([
+          { path: "/api/settings", reply: () => local },
+          {
+            path: "/api/provider",
+            reply: () => providerStatus({ provider: "fake", unknown_reason: "stand_in" }),
+          },
+        ]);
+        expect($("#providerSimulation").textContent?.trim()).toBe(
+          `Local development. Simulating Amazon SES and its account, ${words}. No email leaves this machine.`,
+        );
+      },
+    );
 
     it("shows each warning in the server's words, linking the step that fixes it", async () => {
       await withStatus({

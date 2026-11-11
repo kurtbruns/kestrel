@@ -199,7 +199,7 @@ const WARNING_LINKS: Record<ProviderWarning["code"], string> = {
   sender_unverified: "Verify your sending hostname",
   account_probation: "A problem with Amazon SES",
   bounces_not_routed: "Send bounces and complaints to the app",
-  receipts_not_arriving: "Why reports don’t arrive",
+  receipts_not_arriving: "Reports from SES aren’t arriving",
 };
 
 /** A warning in the server's words, with the guide step that fixes it. */

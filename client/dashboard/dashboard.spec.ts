@@ -1503,7 +1503,7 @@ describe("dashboard", () => {
       await vi.advanceTimersByTimeAsync(0);
       expect($("#dashHealth .health").classList.contains("amber")).toBe(true);
       expect($(".dash-provider-warning").textContent).toBe(
-        "SES took an email more than an hour ago, and no report has reached Kestrel since. Why reports don’t arrive",
+        "SES took an email more than an hour ago, and no report has reached Kestrel since. Reports from SES aren’t arriving",
       );
       unmount();
       fake.restore();
