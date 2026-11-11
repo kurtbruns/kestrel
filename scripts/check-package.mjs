@@ -343,8 +343,8 @@ if (shipped.some((f) => !synced.includes(f))) {
 step("npx", ["--no", "--", "wrangler", "d1", "migrations", "apply", "DB", "--local"]);
 step("npm", ["run", "sync-migrations"]);
 
-// Each context file's header matches its content: a fresh instance has nothing to update. The
-// client runs it, handing it to the instance's install.
+// init wrote each context file as the release ships it, with no header line: a fresh instance
+// has nothing to update. The client runs it, handing it to the instance's install.
 const context = spawnSync(process.execPath, [clientBin, "check-context"], {
   cwd: instance,
   encoding: "utf8",
@@ -352,6 +352,13 @@ const context = spawnSync(process.execPath, [clientBin, "check-context"], {
 const lines = context.stdout.trim().split("\n");
 if (context.status !== 0 || lines.some((l) => !/: current$/.test(l))) {
   fail(`check-context on a fresh instance:\n${context.stdout}${context.stderr}`);
+}
+if (
+  /@kurtbruns\/kestrel \S+, sha256:/.test(
+    readFileSync(join(instance, ".claude", "CLAUDE.md"), "utf8"),
+  )
+) {
+  fail("init wrote a header line into .claude/CLAUDE.md");
 }
 
 // The instance runs: `npm run dev` serves the Worker from node_modules (the health check and
