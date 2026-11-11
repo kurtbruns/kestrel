@@ -49,8 +49,16 @@
  * hand-off, so it falls differently from run to run.
  *
  * Where it is faster than production, it says so: receipts that take hours (a complaint)
- * arrive within minutes, and a spent quota lifts before the send's first retry instead of
- * after a day.
+ * arrive within minutes, a spent quota lifts before the send's first retry instead of after a
+ * day, and the warning that reports aren't arriving shows two minutes after an email instead
+ * of an hour (`SIMULATED_RECEIPT_WAIT`).
+ *
+ * An email outside a list send (a test, a confirmation, a notification) has no delivery row,
+ * so its report is settled on its own (`settleWait`): a few seconds after the app starts
+ * waiting for one, as SES's report of it would arrive. `SIMULATE_ACCOUNT`'s `:unreported`
+ * withholds every report, a list send's included, and `:wrong_topic` has each arrive from a
+ * topic other than `SNS_TOPIC_ARN`, refused as the webhook refuses one, so the warning can be
+ * seen locally by the path that raises it (SPEC §13).
  *
  * Each injected fault is logged as a `sim.*` event tagged with the profile (`sim.quota_spent`,
  * `sim.quota_lifted`, `sim.request_lost`, `sim.send_refused`), so a simulated send's log shows what was injected
@@ -60,12 +68,14 @@
 import type { RefusingCause } from "../../shared/provider";
 import type {
   SimulatedAccountView,
+  SimulatedReceipts,
   SimulatedSendRefusal,
   SimulationFaults,
   SimulationProfile,
   SimulationView,
 } from "../../shared/settings";
 import type { AccountAnswer, ProviderAccountRow } from "../db/provider_account";
+import { readSending, receiptStatement, refusedTopicStatement } from "../db/sending";
 import { type AcceptedAwaitingEvent, acceptedAwaitingEvent } from "../db/sends";
 import type { AppEnv, Config } from "../env";
 import { log } from "../lib/log";
@@ -798,6 +808,11 @@ export async function drainSimulatedWebhooks(env: AppEnv, config: Config): Promi
   }
   const realistic = config.simulation?.faults === "realistic";
   const now = Date.now();
+  const receipts = config.simulation?.account?.receipts ?? "reported";
+  await settleWait(env, config, receipts, now);
+  if (receipts !== "reported") {
+    return 0; // the return path is broken: no report reaches the app
+  }
   const rows = await acceptedAwaitingEvent(env.DB, DRAIN_LIMIT);
   if (realistic) {
     // Fix each small send's floor before classifying, so a forced complaint takes the
@@ -828,6 +843,42 @@ export async function drainSimulatedWebhooks(env: AppEnv, config: Config): Promi
     due.map((d) => d.event),
   );
   return applied;
+}
+
+/** How long after the app starts waiting for a report the simulation's report arrives. */
+const WAIT_REPORT_LAG_MS = 5_000;
+
+/** How long the simulation waits for a report before it warns: two minutes, not production's
+ *  hour, so the warning can be seen without waiting it out. */
+export const SIMULATED_RECEIPT_WAIT = { ms: 2 * 60_000, words: "two minutes" } as const;
+
+/**
+ * Settle the app's wait for a report as the simulated return path would (SPEC §13): with
+ * reports reaching the app, a report arrives a few seconds after the wait starts, so a test or
+ * a confirmation, which has no delivery row, clears it too; from the wrong topic, the webhook
+ * refuses one, once a wait; unreported, nothing arrives.
+ */
+async function settleWait(
+  env: AppEnv,
+  config: Config,
+  receipts: SimulatedReceipts,
+  now: number,
+): Promise<void> {
+  const row = await readSending(env.DB);
+  const since = row?.waitingSince ?? null;
+  if (since === null || now - since < WAIT_REPORT_LAG_MS || receipts === "unreported") {
+    return;
+  }
+  if (receipts === "reported") {
+    await receiptStatement(env.DB, now).run();
+    return;
+  }
+  if ((row?.refusedTopic?.at ?? 0) < since) {
+    // Another topic in the expected one's account and region, the only kind the webhook keeps.
+    const expected =
+      env.SNS_TOPIC_ARN?.trim() || `arn:aws:sns:${config.awsRegion}:111122223333:kestrel-events`;
+    await refusedTopicStatement(env.DB, { topic: `${expected}-old`, expected }, now).run();
+  }
 }
 
 /** SES's sandbox limits, and a common starting production quota, for the simulated account. */

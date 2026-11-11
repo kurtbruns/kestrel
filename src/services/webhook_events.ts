@@ -17,12 +17,16 @@
  * so a bounce reported before the send loop records the provider's answer still lands on
  * its delivery row (SPEC §10).
  *
+ * Each call also keeps when the last report arrived, the evidence that the provider's reports
+ * reach the app at all (`receiptStatement`, SPEC §13).
+ *
  * Each call logs what it applied, aggregated per send (`receipt.applied`, then
  * `suppression.added` when it suppressed and `subscriber.complained` when a complaint
  * reached a subscriber), never an address: the counts are the story.
  */
 
 import { isErasedPlaceholder } from "../../shared/subscribers";
+import { receiptStatement } from "../db/sending";
 import {
   type DeliveryEventUpdate,
   HELD_RECEIPT_TTL_MS,
@@ -32,7 +36,7 @@ import {
   releaseHeldReceipts,
 } from "../db/sends";
 import { addSuppression, type ComplaintOutcome, complain } from "../db/subscribers";
-import { log } from "../lib/log";
+import { errorFields, log } from "../lib/log";
 import type { DeliveryEvent } from "../providers/types";
 
 export interface ApplyResult {
@@ -119,6 +123,16 @@ export async function applyDeliveryEvents(
       const outcome = await complain(db, email);
       unsubscribed += outcome === "unsubscribed" ? 1 : 0;
       tally.complaint[outcome] += 1;
+    }
+  }
+
+  if (events.length > 0) {
+    // Any report, about any email, shows the return path works (SPEC §13): kept once a call,
+    // after the events, and never failing them, since SNS would only send them again.
+    try {
+      await receiptStatement(db, now).run();
+    } catch (err) {
+      log.warn("webhook.unrecorded", { what: "receipt", ...errorFields(err) });
     }
   }
 

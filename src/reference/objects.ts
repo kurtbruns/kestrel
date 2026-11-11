@@ -1012,7 +1012,7 @@ const PROVIDER_FIELDS: ReferenceField[] = [
     name: "warnings",
     type: "object[]",
     description:
-      "Each `{ code, severity, message, docs }` worth a look, in words to show as they come; `docs` names the page `slug` and heading `anchor` that fix it. `severity` is `error` when no email can go out until it's fixed, and `warn` when sending still works. Errors: `configuration_set_missing` (SES has no set by the name that applies, in the deployment's region), `configuration_set_paused` (that set's sending is turned off), `key_rejected` (SES rejects the AWS key: unknown, a secret that doesn't match, or an account not signed up for SES), `sending_disabled` (the account's sending is turned off, or AWS has paused it), and `sender_unverified` (no identity covering the From address is verified for sending). Warnings: `account_probation` (AWS is reviewing the account's bounce or complaint rate) and `bounces_not_routed` (no configuration set applies). A part the key isn't allowed to read raises nothing. Never holds a send: SES's answer to the send decides that.",
+      "Each `{ code, severity, message, docs }` worth a look, in words to show as they come; `docs` names the page `slug` and heading `anchor` that fix it. `severity` is `error` when no email can go out until it's fixed, and `warn` when sending still works. Errors: `configuration_set_missing` (SES has no set by the name that applies, in the deployment's region), `configuration_set_paused` (that set's sending is turned off), `key_rejected` (SES rejects the AWS key: unknown, a secret that doesn't match, or an account not signed up for SES), `sending_disabled` (the account's sending is turned off, or AWS has paused it), and `sender_unverified` (no identity covering the From address is verified for sending). Warnings: `account_probation` (AWS is reviewing the account's bounce or complaint rate), `bounces_not_routed` (no configuration set applies), and `receipts_not_arriving` (SES took an email more than an hour ago and no report has reached the app since; see `receipts`). A part the key isn't allowed to read raises nothing. Never holds a send: SES's answer to the send decides that.",
   },
   {
     name: "checked_at",
@@ -1025,6 +1025,12 @@ const PROVIDER_FIELDS: ReferenceField[] = [
     type: "object | null",
     description:
       "Whether email is getting out, from the provider's last answer to an email; null while no provider is connected. `state` is `unproven` until the provider takes an email, `working` while the last email it was asked to take it took, and `refusing` while it refuses the account for a reason that won't clear on its own (a rejected or unpermitted key, an account not signed up, a missing or paused configuration set or sending pool, an unverified sender or MAIL FROM domain, a paused or suspended account, or a request SES doesn't support), found by an email or by the account check. A refusal of one reader in the sandbox, a spent quota, a throttle, an outage, or a refusal of one email's content changes nothing. `since` is when it last entered that state, or null when nothing has been recorded yet. `last_accepted` is `{ at, by }`, the last email the provider took and what it was (`test`, `confirmation`, `list`, or `notification`), or null. `refusal` is `{ cause, found_by, error, advice, at }` while refusing, else null: `found_by` is the kind of email that found it, or `account_check`. A refusal the account check found (`found_by` `account_check`) lifts on its next clean reading, about ten minutes after the fix, back to where email stood before. A finding an accepted email has since contradicted doesn't pause signups again until a clean reading. One an email met lifts only when the provider takes an email, so after fixing it, send a test email (`POST /api/settings/template/test`) and read this again.",
+  },
+  {
+    name: "receipts",
+    type: "object | null",
+    description:
+      "What the app has heard back from the provider: the deliveries, bounces, and complaints its webhook takes, about any email, a test and a confirmation included; null while no provider is connected and on any provider but SES and local development's simulation of it, where no report can arrive. `last_at` is when the last report arrived, accurate to the minute (a burst of reports moves it at most once a minute), or null when none has. `waiting_since` is when the provider took the first email after that report, while none has arrived since, else null; more than an hour past it raises the `receipts_not_arriving` warning, which the next report clears. `refused_topic` is `{ topic, expected, at }`, the last report SNS sent that the app refused for naming a topic other than the one `SNS_TOPIC_ARN` names, kept only from a topic in that topic's own AWS account and region (anyone can publish from a topic of their own), while it is newer than `last_at`, else null. It says a report arrived from there, never that SES is configured to use it: check the configuration set's SNS destination in the SES console before changing either side. After a test email during setup, read this until `last_at` is newer than the test: the warning's absence proves nothing in the first hour. It never holds a send or closes signups.",
   },
   {
     name: "signups",
@@ -1240,6 +1246,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
         last_accepted: { at: 1768467000000, by: "test" },
         refusal: null,
       },
+      receipts: { last_at: 1768467004000, waiting_since: null, refused_topic: null },
       signups: "open",
     } satisfies ProviderStatusView,
   },

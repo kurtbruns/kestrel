@@ -117,6 +117,7 @@ const WARNING_LINKS: Record<ProviderWarning["code"], string> = {
   sender_unverified: "Verify your sending hostname",
   account_probation: "A problem with Amazon SES",
   bounces_not_routed: "Send bounces and complaints to the app",
+  receipts_not_arriving: "Send bounces and complaints to the app",
 };
 
 /** A warning in the server's words, with the guide step that fixes it. */
@@ -215,4 +216,20 @@ export function sendingHtml(
     };
   }
   return { pill: null, line: last ?? html`` };
+}
+
+/**
+ * Settings' line for when SES last reported back (SPEC §13): the evidence that bounces and
+ * complaints reach the app, which a test during setup should bring within minutes. Null with no
+ * provider, and while nothing has been reported and SES hasn't taken an email, when there is
+ * nothing to report yet. It explains, never warns: the server's `receipts_not_arriving` does that.
+ */
+export function lastReportHtml(v: ProviderStatusView, when: (ms: number) => string): Html | null {
+  const r = v.receipts;
+  if (!r || (r.last_at === null && !v.sending?.last_accepted)) {
+    return null;
+  }
+  return r.last_at === null
+    ? html`<span class="muted" id="providerLastReport">No report from SES has reached Kestrel yet.</span>`
+    : html`<span class="muted" id="providerLastReport">SES last reported back ${when(r.last_at)}.</span>`;
 }

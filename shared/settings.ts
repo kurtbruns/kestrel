@@ -175,10 +175,21 @@ export const SIMULATED_ACCOUNT_PROBLEMS = [
 ] as const;
 export type SimulatedAccountProblem = (typeof SIMULATED_ACCOUNT_PROBLEMS)[number];
 
+/**
+ * Whether a simulated account's reports reach the app (SPEC §13): `reported` as a working
+ * return path does, `unreported` never (`:unreported`, as a path broken anywhere from the
+ * configuration set to the webhook), or `wrong_topic` from a topic other than `SNS_TOPIC_ARN`
+ * (`:wrong_topic`), which the webhook refuses.
+ */
+export const SIMULATED_RECEIPTS = ["reported", "unreported", "wrong_topic"] as const;
+export type SimulatedReceipts = (typeof SIMULATED_RECEIPTS)[number];
+
 /** The SES account a local server stands in for: its state, whether bounces reach the app, and any problem it has. */
 export interface SimulatedAccountView {
   state: SimulatedAccount;
   bounces_routed: boolean;
+  /** Whether its reports reach the app (`SimulatedReceipts`). */
+  receipts: SimulatedReceipts;
   problem: SimulatedAccountProblem | null;
 }
 

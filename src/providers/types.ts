@@ -90,6 +90,12 @@ export interface WebhookResult {
   events: DeliveryEvent[];
   /** The exact response to return to the provider (handshakes, 200 ack, ...). */
   response: Response;
+  /**
+   * A message the provider really sent (its signature verified) that was refused for naming a
+   * topic other than the one this deployment expects: the topic it named and the expected one,
+   * kept so the warning that reports aren't arriving can name both (SPEC §13).
+   */
+  refusedTopic?: { topic: string; expected: string };
 }
 
 /**
