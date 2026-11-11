@@ -26,6 +26,9 @@ const MEANS_UTC = /^(Etc\/)?(UTC|GMT)$/;
  */
 const NEVER_SEASONAL = ["EST", "MST", "HST"];
 
+/** A name that opens with a sign is a bare offset (`-05:00`), never a place. */
+const BARE_OFFSET = /^[+-]/;
+
 /** Whether a name is one of the abbreviations refused for never changing with the seasons. */
 export function neverSeasonal(name: string): boolean {
   return NEVER_SEASONAL.includes(name.trim().toUpperCase());
@@ -44,7 +47,7 @@ export function resolveTimeZone(name: string): string | null {
   if (
     typeof name !== "string" ||
     name.trim() === "" ||
-    /^[+-]/.test(name.trim()) ||
+    BARE_OFFSET.test(name.trim()) ||
     neverSeasonal(name)
   ) {
     return null;
@@ -179,14 +182,15 @@ export function scheduledSendReading(
 }
 
 /** The refusal for a zone name the runtime won't take as a publication's clock, naming why:
- *  an abbreviation that never changes for daylight saving time, or a name it doesn't know.
+ *  an abbreviation or a bare offset, neither of which changes for daylight saving time, or a
+ *  name it doesn't know.
  *  One wording for the setting and for a fire time's `time_zone`. */
 export function timeZoneNameRefusal(input: unknown): string {
   const name = typeof input === "string" ? input.trim() : "";
   if (name === "") {
     return "The time zone must be an IANA name, such as America/New_York.";
   }
-  return neverSeasonal(name)
+  return neverSeasonal(name) || BARE_OFFSET.test(name)
     ? `${name.toUpperCase()} isn’t a place: it never changes for daylight saving time. Use the place your readers keep, such as America/New_York.`
     : `“${name}” isn’t a time zone this server knows. Use an IANA name, such as America/New_York.`;
 }
