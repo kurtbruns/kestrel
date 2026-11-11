@@ -130,8 +130,8 @@ describe("the warning that SES's reports aren't arriving (SPEC §13)", () => {
         code: "receipts_not_arriving",
         severity: "warn",
         message:
-          "SES took an email more than an hour ago, and no report of a delivery, bounce, or complaint has reached Kestrel since. Until one does, a bounced address is mailed again and a complaint unsubscribes no one. Check that the configuration set has an enabled SNS destination and its topic lets SES publish (Connect Amazon SES, section 4), then that /webhooks/ses isn’t behind Access, the app’s subscription to the topic is confirmed, and SNS_TOPIC_ARN names that topic (section 7), or the set doesn’t report Deliveries; the guide selects them.",
-        docs: { slug: "ses", anchor: "4-send-bounces-and-complaints-to-the-app" },
+          "SES took an email more than an hour ago, and no report of a delivery, bounce, or complaint has reached Kestrel since. Until one does, a bounced address is mailed again and a complaint unsubscribes no one.",
+        docs: { slug: "troubleshooting", anchor: "reports-from-ses-arent-arriving" },
       },
     ]);
   });
@@ -221,7 +221,7 @@ describe("the warning that SES's reports aren't arriving (SPEC §13)", () => {
       at: refusedAt,
     });
     expect(view.warnings.map((w) => w.message)).toEqual([
-      `SES took an email more than an hour ago, and no report has reached Kestrel since. A report arrived from ${OTHER_TOPIC}, which isn’t the topic SNS_TOPIC_ARN names, ${SNS_TOPIC_ARN}, so Kestrel refused it. Until a report arrives from the topic SNS_TOPIC_ARN names, a bounced address is mailed again and a complaint unsubscribes no one. In the SES console, check which topic the configuration set’s SNS destination uses before changing either side, then make the destination and SNS_TOPIC_ARN name the same topic.`,
+      `SES took an email more than an hour ago, and no report has reached Kestrel since. A report arrived from ${OTHER_TOPIC}, which isn’t the topic SNS_TOPIC_ARN names, ${SNS_TOPIC_ARN}, so Kestrel refused it. Until a report arrives from the topic SNS_TOPIC_ARN names, a bounced address is mailed again and a complaint unsubscribes no one. Check which topic the configuration set’s destination uses before changing either side.`,
     ]);
 
     // Fixed: a report from the right topic clears the warning, and the refusal is history.

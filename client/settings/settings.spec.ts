@@ -129,16 +129,15 @@ describe("settings view", () => {
     await vi.advanceTimersByTimeAsync(0);
   }
 
-  it("renders the identity, the sender and instance reflections, the recipients, the subscribe embed, and the confirmation preview", async () => {
+  it("renders the identity, the email preview, the provider and deployment reflections, the recipients, the subscribe embed, and the confirmation preview", async () => {
     await open();
     expect($<HTMLInputElement>("#setName").value).toBe("Birds Weekly");
     expect(document.querySelector(".set-sub-not-connected")).toBeNull(); // signups are open
     expect($<HTMLInputElement>("#setTagline").value).toBe("Owls & more");
     // Nothing scheduled: the note says where the identity shows up, and no more.
     expect($(".set-note span").textContent).toBe("Shown in every email.");
-    // The sender's inbox row, in its read-only card.
-    expect($(".set-card.sunken .set-inbox-from").textContent).toBe("Birds");
-    expect($(".set-inbox-addr").textContent).toBe("hello@send.birds.example");
+    // The sender on the email preview's envelope.
+    expect($("#senderFrom").textContent).toBe("Birds <hello@send.birds.example>");
     const facts = $$(".set-kv-v").map((v) => v.textContent?.trim());
     expect(facts).toContain("Amazon SES");
     expect(facts).toContain("Local dev token");
@@ -168,11 +167,10 @@ describe("settings view", () => {
       $$(".set-sec-title", g).map((t) => t.textContent?.trim()),
     );
     expect(groups).toEqual([
-      ["Publication identity", "Time zone"],
+      ["Publication identity", "Time zone", "Email preview"],
       ["Ways to subscribe", "Confirmation email", "Reader pages"],
-      ["Email template", "Default test recipients"],
-      ["Notifications"],
-      ["Email sender", "Instance"],
+      ["Default test recipients", "Notifications"],
+      ["Email provider", "Deployment"],
     ]);
     expect($$(".set-sec-title").every((h) => h.tagName === "H2")).toBe(true);
     expect(fake.unhandled).toEqual([]);
@@ -201,7 +199,8 @@ describe("settings view", () => {
         ?.nextElementSibling?.textContent?.trim();
     await open();
     expect(row("Minimum lead")).toBe("5 minutesdefault");
-    expect(row("Email provider")).toBe("Amazon SES");
+    expect(row("Provider")).toBe("Amazon SES");
+    expect(document.querySelector("#providerSimulation")).toBeNull();
     unmount();
     fake.restore();
     const local = response();
@@ -229,14 +228,20 @@ describe("settings view", () => {
     await mount(renderSettings);
     await vi.advanceTimersByTimeAsync(0);
     expect(row("Minimum lead")).toBe("1 minute");
-    expect(row("Email provider")).toBe("Fake (dev, dead-end)Simulating Amazon SES, no failures");
+    // A simulated provider never reads as a real one: the row names it, and a band says it's local.
+    expect(row("Provider")).toBe("Amazon SES, simulated");
+    expect($("#providerSimulation").textContent?.trim()).toBe(
+      "Local development. Simulating Amazon SES, with no failures. No email leaves this machine.",
+    );
+    // The stand-in has no account, so the head carries no state.
+    expect(document.querySelector("#providerState")).toBeNull();
   });
 
   it("says under the From address where readers' replies go, linking the guide step, and never warns", async () => {
     await open();
     const note = $("#replyNote");
     expect(note.closest(".set-kv-v")?.querySelector(".mono")?.textContent).toBe(
-      "hello@send.birds.example",
+      "Birds <hello@send.birds.example>",
     );
     expect(note.textContent).toBe("Readers’ replies go to this address. Forward it to your inbox.");
     expect($<HTMLAnchorElement>("a", note).getAttribute("href")).toBe(
@@ -252,11 +257,14 @@ describe("settings view", () => {
     const notConnected = response();
     notConnected.deployment = { ...notConnected.deployment, provider: "none" };
     await open([{ path: "/api/settings", reply: () => notConnected }]);
-    const value = $("#providerValue");
-    expect(value.textContent?.trim()).toBe(
-      "No email provider connected. Connect Amazon SES to start sending.",
+    expect($("#providerState").textContent).toBe("Not connected");
+    expect($("#providerValue").textContent).toBe("None");
+    const line = $("#providerLines .health");
+    expect(line.classList.contains("neutral")).toBe(true);
+    expect(line.textContent?.trim()).toBe(
+      "No email provider connected, so nothing can be sent and signups aren’t open. Connect Amazon SES to start sending.",
     );
-    expect($<HTMLAnchorElement>("a", value).getAttribute("href")).toBe("#/docs/ses");
+    expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/ses");
     // Ways to subscribe keeps the address and the code, and says signups are closed.
     const closed = $(".set-sub-not-connected");
     expect(closed.classList.contains("amber")).toBe(true);
@@ -853,7 +861,7 @@ describe("settings view", () => {
     const templateLede = () => chip.closest(".set-sec")?.querySelector(".set-lede")?.textContent;
     const identityNote = () => $('[data-group="publication"] .set-note > span').textContent;
     const lede =
-      "The template controls the look and feel of the emails you send. Edit it on the Template page.";
+      "An email as your readers open it, following Publication identity as you type. Its look is the template’s, edited on the Template page.";
     const note =
       "Shown in every email. Saving a change updates 1 scheduled email too; you’ll confirm first.";
     expect(templateLede()).toBe(`${lede}${wait}`);
@@ -1110,52 +1118,43 @@ describe("settings view", () => {
     expect($("#embedCode").textContent).toContain("Subscribe to Owls Monthly");
   });
 
-  it("shows the sender as readers see it: the publication's name over a bare address, following the name as it's typed (SPEC §9)", async () => {
+  it("shows the sender as readers see it on the email preview: the publication's name over a bare address, following the name as it's typed (SPEC §9)", async () => {
     const bare = response();
     bare.deployment.from_address = "hello@send.birds.example";
     await open([{ path: "/api/settings", reply: () => bare }]);
-    const from = () => $(".set-card.sunken .set-inbox-from").textContent;
-    const avatar = () => $("#senderAvatar").textContent;
-    expect(from()).toBe("Birds Weekly");
-    expect(avatar()).toBe("B");
-    expect($(".set-inbox-addr").textContent).toBe("hello@send.birds.example");
-    // The card says where each half comes from, linking the section that sets the name.
-    const note = $(".set-card.sunken .set-ro-note span");
-    expect(note.textContent).toBe(
-      "The name is your publication’s, from Publication identity. The address is set at deploy in wrangler.jsonc, with the AWS keys stored as secrets, so it can’t be edited here. Change it in the setup guide, then redeploy. Credentials are never shown.",
-    );
-    expect($<HTMLAnchorElement>("a", note).getAttribute("href")).toBe(
-      "#/settings/publication-identity",
-    );
+    const from = () => $("#senderFrom").textContent;
+    expect(from()).toBe("Birds Weekly <hello@send.birds.example>");
+    // The envelope says only that the address is set at deploy, and where it is explained.
+    const deploy = $<HTMLAnchorElement>(".set-env-deploy");
+    expect(deploy.textContent?.trim()).toBe("Set at deploy, in Email provider");
+    expect(deploy.getAttribute("href")).toBe("#/settings/email-sender");
+    expect(document.querySelector("#fromOverrideNote")).toBeNull();
     expect($("#setName").nextElementSibling?.textContent).toBe(
       "Also the name your emails come from. Blank sends them with no name.",
     );
-    // The inbox rows follow the name live, the confirmation email's too.
+    // The sender follows the name live, the confirmation email's too.
     typeInto($<HTMLInputElement>("#setName"), "Owls Monthly");
-    expect(from()).toBe("Owls Monthly");
-    expect(avatar()).toBe("O");
+    expect(from()).toBe("Owls Monthly <hello@send.birds.example>");
     expect($("#cePvFrom").textContent).toBe("Owls Monthly");
     // With no name, a reader's inbox shows the address.
     typeInto($<HTMLInputElement>("#setName"), "");
     expect(from()).toBe("hello@send.birds.example");
-    expect(avatar()).toBe("H");
     expect($("#cePvFrom").textContent).toBe("hello@send.birds.example");
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("shows a name written into the From address as the sender, whatever the publication is called, and says it's set at deploy (SPEC §9)", async () => {
+  it("shows a name written into the From address as the sender, whatever the publication is called, and says why in Email provider (SPEC §9)", async () => {
     await open(); // "Birds <hello@send.birds.example>"
-    const from = () => $(".set-card.sunken .set-inbox-from").textContent;
-    expect(from()).toBe("Birds");
-    expect($(".set-inbox-addr").textContent).toBe("hello@send.birds.example");
-    expect($(".set-card.sunken .set-ro-note span").textContent).toBe(
-      "The address, and the name “Birds” written in with it, are set at deploy in wrangler.jsonc, with the AWS keys stored as secrets, so neither can be edited here. To send under your publication’s name instead, leave the name out of the address (the setup guide shows how), then redeploy. Credentials are never shown.",
+    const from = () => $("#senderFrom").textContent;
+    expect(from()).toBe("Birds <hello@send.birds.example>");
+    expect($("#fromOverrideNote").textContent).toBe(
+      "“Birds” is written into the From address at deploy, so it is the sender whatever the publication is called. To send under your publication’s name, leave it out of the address (setup guide), then redeploy.",
     );
     expect($("#setName").nextElementSibling?.textContent).toBe(
       "Your emails come from “Birds”, a name set at deploy, whatever you put here.",
     );
     typeInto($<HTMLInputElement>("#setName"), "Owls Monthly");
-    expect(from()).toBe("Birds");
+    expect(from()).toBe("Birds <hello@send.birds.example>");
     expect($("#cePvFrom").textContent).toBe("Birds");
     // The identity still reaches the email through the template, so the note holds.
     expect($('[data-group="publication"] .set-note > span').textContent).toBe(
@@ -1592,7 +1591,9 @@ describe("settings view", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect($<HTMLInputElement>("#setName").value).toBe("Birds Weekly");
   });
-  // SPEC §13: on SES, the Email provider row says where the connection stands (GET /api/provider).
+  // SPEC §13: on SES, Email provider says where the connection stands (GET /api/provider): the
+  // account's state and the worst line as pills in the head, the lines that need a look above
+  // the card, and the facts in it.
   describe("the SES connection", () => {
     const withStatus = (over: Parameters<typeof providerStatus>[0]) =>
       open([
@@ -1606,6 +1607,17 @@ describe("settings view", () => {
       enforcement: "healthy",
       sending_enabled: true,
     } as const;
+    /** The lines above the card, each as its level and its words. */
+    const lines = () =>
+      $$("#providerLines .health").map((l) => [
+        ["red", "amber", "neutral"].find((c) => l.classList.contains(c)),
+        l.textContent?.replace("⚠️", "").trim(),
+      ]);
+    const row = (label: string) =>
+      $$(".set-kv-k")
+        .find((k) => k.textContent === label)
+        ?.nextElementSibling?.textContent?.trim();
+    const worst = () => document.querySelector("#providerSending");
 
     it("says whether email is getting out: not proven yet, refusing with the fix, or when SES accepted an email (SPEC §13)", async () => {
       await withStatus({
@@ -1614,10 +1626,12 @@ describe("settings view", () => {
         sending: { state: "unproven", since: 0, last_accepted: null, refusal: null },
         signups: "not_open",
       });
-      expect($("#providerSending").textContent).toBe("Not proven yet");
-      expect($("#providerValue").textContent).toContain(
-        "SES hasn’t sent anything yet, so signups are closed. Send a test email",
-      );
+      expect(worst()?.textContent).toBe("Not proven yet");
+      expect(worst()?.classList.contains("danger")).toBe(false);
+      expect(lines()).toEqual([
+        ["neutral", "SES hasn’t sent anything yet, so signups are closed. Send a test email"],
+      ]);
+      expect(row("Last accepted")).toBe("None yet.");
       unmount();
       fake.restore();
       await withStatus({
@@ -1635,13 +1649,27 @@ describe("settings view", () => {
             at: 1,
           },
         },
+        // The account check's error says the same cause, so the refusal stands for it.
+        warnings: [
+          {
+            code: "key_rejected",
+            severity: "error",
+            message: "Amazon SES rejects Kestrel’s AWS key.",
+            docs: { slug: "ses", anchor: "5-create-the-apps-aws-key" },
+          },
+        ],
         signups: "paused",
       });
-      expect($("#providerSending").textContent).toBe("Refusing");
-      expect($("#providerSending").classList.contains("danger")).toBe(true);
-      expect($("#providerValue .set-error").textContent).toBe(
-        "Amazon SES rejects Kestrel’s AWS key. Replace the key. Then send a test email.",
-      );
+      expect(worst()?.textContent).toBe("Refusing");
+      expect(worst()?.classList.contains("danger")).toBe(true);
+      expect(lines()).toEqual([
+        [
+          "red",
+          "Email isn’t going out, and signups are paused. Amazon SES rejects Kestrel’s AWS key. Replace the key. Then send a test email: once SES takes one, signups reopen.",
+        ],
+      ]);
+      // Red carries its own mark, so severity never rests on color alone.
+      expect($("#providerLines .health.red .health-dot svg")).toBeInstanceOf(SVGElement);
       unmount();
       fake.restore();
       await withStatus({
@@ -1654,7 +1682,8 @@ describe("settings view", () => {
           refusal: null,
         },
       });
-      expect(document.querySelector("#providerSending")).toBeNull();
+      expect(worst()).toBeNull();
+      expect(document.querySelector("#providerLines")).toBeNull(); // nothing needs a look
       expect($("#providerLastAccepted").textContent).toBe(`SES accepted an email ${timeAt(1)}.`);
     });
 
@@ -1696,7 +1725,7 @@ describe("settings view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
-    it("shows that reports aren't arriving in amber, linking the step that sends them to the app (SPEC §13)", async () => {
+    it("shows that reports aren't arriving in amber, linking what to check (SPEC §13)", async () => {
       await withStatus({
         state: "production",
         unknown_reason: null,
@@ -1706,31 +1735,45 @@ describe("settings view", () => {
             severity: "warn",
             message:
               "SES took an email more than an hour ago, and no report has reached Kestrel since.",
-            docs: { slug: "ses", anchor: "4-send-bounces-and-complaints-to-the-app" },
+            docs: { slug: "troubleshooting", anchor: "reports-from-ses-arent-arriving" },
           },
         ],
       });
-      expect($("#providerValue .set-warn").textContent).toBe(
-        "SES took an email more than an hour ago, and no report has reached Kestrel since. Send bounces and complaints to the app",
-      );
-      expect($<HTMLAnchorElement>("#providerValue .set-warn a").getAttribute("href")).toBe(
-        "#/docs/ses/4-send-bounces-and-complaints-to-the-app",
+      expect(worst()?.textContent).toBe("Needs a look");
+      expect(worst()?.classList.contains("warn")).toBe(true);
+      expect(lines()).toEqual([
+        [
+          "amber",
+          "SES took an email more than an hour ago, and no report has reached Kestrel since. Why reports don’t arrive",
+        ],
+      ]);
+      expect($<HTMLAnchorElement>("#providerLines .health.amber a").getAttribute("href")).toBe(
+        "#/docs/troubleshooting/reports-from-ses-arent-arriving",
       );
     });
 
-    it("names the sandbox, what it limits, and the step that asks AWS to lift it", async () => {
+    it("names the sandbox as a fact, in a neutral line with the step that asks AWS to lift it", async () => {
       await withStatus({
         state: "sandbox",
         unknown_reason: null,
         account,
         send_rate: { value: 1, source: "account" },
       });
+      // A fact, so grey: the sandbox is the usual state for weeks.
       expect($("#providerState").textContent).toBe("Sandbox");
-      expect($("#providerState").classList.contains("warn")).toBe(true);
-      expect($("#providerReview").textContent).toBe(
-        "It mails only addresses verified in SES, up to 200 a day. Request production access",
+      expect($("#providerState").classList.contains("warn")).toBe(false);
+      expect(worst()).toBeNull();
+      // The row reads on its own, without the pill.
+      expect($("#providerAccess").textContent).toBe(
+        "Sandbox: SES mails only addresses verified in it.",
       );
-      expect($<HTMLAnchorElement>("#providerReview a").getAttribute("href")).toBe(
+      expect(lines()).toEqual([
+        [
+          "neutral",
+          "Amazon SES is still in the sandbox, so it mails only addresses verified in SES, up to 200 a day. Request production access",
+        ],
+      ]);
+      expect($<HTMLAnchorElement>("#providerLines a").getAttribute("href")).toBe(
         "#/docs/production-access",
       );
       expect($("#sendRate").textContent).toBe(
@@ -1741,9 +1784,13 @@ describe("settings view", () => {
 
     it("says AWS is reviewing the request, or that it has replied in its case without a grant, never that it denied it", async () => {
       await withStatus({ state: "sandbox", unknown_reason: null, review: "pending", account });
-      expect($("#providerReview").textContent).toBe(
-        "AWS is reviewing your request for production access. Until then, it mails only addresses verified in SES, up to 200 a day.",
-      );
+      expect($("#providerAccess").textContent).toBe("Sandbox, while AWS reviews your request.");
+      expect(lines()).toEqual([
+        [
+          "neutral",
+          "AWS is reviewing your request for production access. Until then, SES mails only addresses verified in it, up to 200 a day.",
+        ],
+      ]);
       unmount();
       fake.restore();
       await withStatus({
@@ -1753,15 +1800,22 @@ describe("settings view", () => {
         review_case: "1234567890",
         account,
       });
-      expect($("#providerReview").textContent).toBe(
-        "AWS hasn’t granted production access yet. It has replied in AWS Support, case 1234567890: read its reply and answer there. What AWS asks for",
+      expect($("#providerAccess").textContent).toBe(
+        "Sandbox. AWS has replied without granting it.",
       );
-      expect($<HTMLAnchorElement>("#providerReview a").getAttribute("href")).toBe(
+      expect(worst()?.textContent).toBe("Needs a look");
+      expect(lines()).toEqual([
+        [
+          "amber",
+          "AWS hasn’t granted production access yet. It has replied in AWS Support, case 1234567890: read its reply and answer there. What AWS asks for",
+        ],
+      ]);
+      expect($<HTMLAnchorElement>("#providerLines a").getAttribute("href")).toBe(
         "#/docs/production-access/3-answer-awss-questions",
       );
     });
 
-    it("marks production green, with the account's rate", async () => {
+    it("names production as a grey fact, never a green check, with the account's rate", async () => {
       await withStatus({
         state: "production",
         unknown_reason: null,
@@ -1769,8 +1823,9 @@ describe("settings view", () => {
         send_rate: { value: 14, source: "account" },
       });
       expect($("#providerState").textContent).toBe("Production");
-      expect($("#providerState").classList.contains("ok")).toBe(true);
-      expect(document.querySelector("#providerReview")).toBeNull();
+      expect($("#providerState").classList.contains("ok")).toBe(false);
+      expect($("#providerAccess").textContent).toBe("Production: SES mails anyone.");
+      expect(document.querySelector("#providerLines")).toBeNull();
       expect($("#sendRate").textContent).toBe(
         "14 emails a second, up to 50,000 a day (from your SES account)",
       );
@@ -1783,23 +1838,30 @@ describe("settings view", () => {
       });
       expect($("#providerValue").textContent?.trim()).toBe("Amazon SES");
       expect(document.querySelector("#providerState")).toBeNull();
-      expect(document.querySelector("#providerUnread")).toBeNull();
+      expect(document.querySelector("#providerAccess")).toBeNull();
+      expect(document.querySelector("#providerLines")).toBeNull();
       expect($("#sendRate").textContent).toBe("1 email a second (set by SES_MAX_SEND_RATE)");
     });
 
     it("says when the key can't read the account, linking the step that allows it", async () => {
       await withStatus({ unknown_reason: "permission" });
       expect(document.querySelector("#providerState")).toBeNull();
-      expect($("#providerUnread").textContent).toBe(
-        "To show whether SES is in the sandbox, Kestrel’s AWS key needs permission to read your account. Add the permission",
+      expect($("#providerAccess").textContent).toBe(
+        "Unknown: Kestrel’s AWS key can’t read the account.",
       );
-      expect($<HTMLAnchorElement>("#providerUnread a").getAttribute("href")).toBe(
+      expect(lines()).toEqual([
+        [
+          "neutral",
+          "To show whether SES is in the sandbox, Kestrel’s AWS key needs permission to read your account. Sending works either way. Add the permission",
+        ],
+      ]);
+      expect($<HTMLAnchorElement>("#providerLines a").getAttribute("href")).toBe(
         "#/docs/ses/5-create-the-apps-aws-key",
       );
       expect(fake.unhandled).toEqual([]);
     });
 
-    it("reads a simulated account in local dev, and names the simulation beside its state (SPEC §10)", async () => {
+    it("reads a simulated account in local dev, and says it's simulated in a band, never a pill (SPEC §10)", async () => {
       const local = response();
       local.deployment = {
         ...local.deployment,
@@ -1824,8 +1886,10 @@ describe("settings view", () => {
             providerStatus({ provider: "fake", state: "production", unknown_reason: null }),
         },
       ]);
-      expect($("#providerValue").textContent?.trim()).toBe(
-        "Amazon SES Production Simulating Amazon SES",
+      expect($("#providerState").textContent).toBe("Production");
+      expect($("#providerValue").textContent).toBe("Amazon SES, simulated");
+      expect($("#providerSimulation").textContent?.trim()).toBe(
+        "Local development. Simulating Amazon SES and its account, in production. No email leaves this machine.",
       );
       expect(fake.unhandled).toEqual([]);
     });
@@ -1841,40 +1905,51 @@ describe("settings view", () => {
           },
         ],
       });
-      expect($("#providerValue .set-warn").textContent).toBe(
-        "Bounces and complaints won’t reach Kestrel. Send bounces and complaints to the app",
-      );
-      expect($<HTMLAnchorElement>("#providerValue .set-warn a").getAttribute("href")).toBe(
+      expect(lines()).toEqual([
+        [
+          "amber",
+          "Bounces and complaints won’t reach Kestrel. Send bounces and complaints to the app",
+        ],
+      ]);
+      expect($<HTMLAnchorElement>("#providerLines a").getAttribute("href")).toBe(
         "#/docs/ses/4-send-bounces-and-complaints-to-the-app",
       );
     });
 
-    it("shows a warning that stops every email in red, and one that leaves sending working in amber (SPEC §13)", async () => {
+    it("lists the lines worst first, red before amber before neutral, and names the worst in the head (SPEC §13)", async () => {
       await withStatus({
+        state: "sandbox",
+        unknown_reason: null,
+        account,
         warnings: [
-          {
-            code: "configuration_set_missing",
-            severity: "error",
-            message: "SES_CONFIGURATION_SET names kestrel-mail, and SES has no such set.",
-            docs: { slug: "ses", anchor: "4-send-bounces-and-complaints-to-the-app" },
-          },
           {
             code: "account_probation",
             severity: "warn",
             message: "AWS is reviewing your SES account.",
             docs: { slug: "troubleshooting", anchor: "a-problem-with-amazon-ses" },
           },
+          {
+            code: "configuration_set_missing",
+            severity: "error",
+            message: "SES_CONFIGURATION_SET names kestrel-mail, and SES has no such set.",
+            docs: { slug: "ses", anchor: "4-send-bounces-and-complaints-to-the-app" },
+          },
         ],
       });
-      expect($("#providerValue .set-error").textContent).toBe(
-        "SES_CONFIGURATION_SET names kestrel-mail, and SES has no such set. Send bounces and complaints to the app",
-      );
-      expect($("#providerValue .set-warn").textContent).toBe(
-        "AWS is reviewing your SES account. A problem with Amazon SES",
-      );
-      expect($<HTMLAnchorElement>("#providerValue .set-warn a").getAttribute("href")).toBe(
-        "#/docs/troubleshooting/a-problem-with-amazon-ses",
-      );
+      // An error that hasn't met an email yet: red, though nothing has been refused.
+      expect(worst()?.textContent).toBe("Needs a fix");
+      expect(worst()?.classList.contains("danger")).toBe(true);
+      expect(lines()).toEqual([
+        [
+          "red",
+          "SES_CONFIGURATION_SET names kestrel-mail, and SES has no such set. Send bounces and complaints to the app",
+        ],
+        ["amber", "AWS is reviewing your SES account. A problem with Amazon SES"],
+        [
+          "neutral",
+          "Amazon SES is still in the sandbox, so it mails only addresses verified in SES, up to 200 a day. Request production access",
+        ],
+      ]);
     });
 
     it("never reads the connection off SES", async () => {

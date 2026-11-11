@@ -1,5 +1,5 @@
 // The Settings page: its sections in groups by whom they serve (the publication, its
-// readers, its emails, the publisher), editable first and set-at-deploy last, under one
+// readers, the publisher), editable first and set-at-deploy last, under one
 // save bar, each with an address of its own (`#/settings/notifications`). Each section is
 // its own module; this one loads the settings, holds the live state against the saved
 // baseline, and commits it.
@@ -25,7 +25,7 @@ import { savebar } from "../ui/savebar";
 import { holdInView } from "../ui/scroll";
 import { fieldError, renderError, toast } from "../ui/widgets";
 import { confirmationSection, mountConfirmation } from "./confirmation";
-import { instanceSection, mountSender, senderSection } from "./deploy";
+import { deploymentSection, providerSection } from "./deploy";
 import { mountRecipients, mountTemplate, recipientsSection, templateSection } from "./emails";
 import { identitySection, mountIdentity } from "./identity";
 import { mountNotifications, notificationsSection } from "./notifications";
@@ -79,7 +79,7 @@ export async function renderSettings(
   setTitle(signal, "Settings");
   setHtml(
     root,
-    html`<div class="settings"><div class="page-head"><h1>Settings</h1><p class="set-lede set-page-lede">Your publication’s identity, the ways readers subscribe and the pages they land on, the email each post is sent inside, and where Kestrel tells you about your sends. Facts set when Kestrel was deployed come last, read-only.</p></div><div id="settingsBody" class="muted">Loading…</div></div>`,
+    html`<div class="settings"><div class="page-head"><h1>Settings</h1><p class="set-lede set-page-lede">Your publication’s identity and the email it sends, the ways readers subscribe and the pages they land on, and where Kestrel reaches you. What was set when Kestrel was deployed comes last, read-only.</p></div><div id="settingsBody" class="muted">Loading…</div></div>`,
   );
   const body = $("#settingsBody", root);
   let data: SettingsResponse;
@@ -177,11 +177,10 @@ export async function renderSettings(
   setHtml(
     body,
     html`
-      ${group("publication", [identitySection(page), timeZoneSection(page)])}
+      ${group("publication", [identitySection(page), timeZoneSection(page), templateSection(page)])}
       ${group("readers", [subscribeSection(page), confirmationSection(page), readerPagesSection(secHead("reader-pages", chip("preview", "Preview")))])}
-      ${group("emails", [templateSection(page), recipientsSection()])}
-      ${group("you", [notificationsSection(page)])}
-      ${group("deploy", [senderSection(page), instanceSection(page)])}
+      ${group("publisher", [recipientsSection(), notificationsSection(page)])}
+      ${group("deploy", [providerSection(page), deploymentSection(page)])}
     `,
   );
   handles.push(
@@ -192,7 +191,6 @@ export async function renderSettings(
     mountTemplate(body, page, signal),
     mountRecipients(body, page),
     mountNotifications(body, page),
-    mountSender(body, page),
   );
   // The template lede's and the identity note's word that saving has to wait, until it no longer does.
   expireRemakeWait(body, data.in_use, signal);

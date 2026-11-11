@@ -13,6 +13,7 @@ import {
   BOUNCES_DOC,
   PERMISSION_RECHECK_MS,
   providerStatusView,
+  REPORTS_DOC,
   sesSendRate,
 } from "../src/services/provider_status";
 import { pacedClock } from "./support/clock";
@@ -535,12 +536,14 @@ describe("the bounces warning (SPEC §8, §10)", () => {
     ]);
   });
 
-  it("points at a heading the guide has", () => {
-    const html = renderDocs().docs.find((d) => d.slug === BOUNCES_DOC.slug)?.html ?? "";
-    const headings = [...html.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/g)].map(([, inner]) =>
-      headingAnchor((inner as string).replace(/<[^>]+>/g, "")),
-    );
-    expect(headings).toContain(BOUNCES_DOC.anchor);
+  it("points at a heading the docs have", () => {
+    for (const doc of [BOUNCES_DOC, REPORTS_DOC]) {
+      const html = renderDocs().docs.find((d) => d.slug === doc.slug)?.html ?? "";
+      const headings = [...html.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/g)].map(([, inner]) =>
+        headingAnchor((inner as string).replace(/<[^>]+>|&[#a-z0-9]+;/gi, "")),
+      );
+      expect(headings, doc.slug).toContain(doc.anchor);
+    }
   });
 });
 

@@ -24,6 +24,7 @@ import kestrel from "./icons/kestrel.svg";
 import lines from "./icons/lines.svg";
 import link from "./icons/link.svg";
 import mail from "./icons/mail.svg";
+import octagonAlert from "./icons/octagon-alert.svg";
 import ol from "./icons/ol.svg";
 import paperclip from "./icons/paperclip.svg";
 import phone from "./icons/phone.svg";
@@ -55,6 +56,7 @@ const ICONS = {
   kestrel: unsafeHtml(kestrel),
   lines: unsafeHtml(lines),
   link: unsafeHtml(link),
+  "octagon-alert": unsafeHtml(octagonAlert),
   ol: unsafeHtml(ol),
   paperclip: unsafeHtml(paperclip),
   plus: unsafeHtml(plus),

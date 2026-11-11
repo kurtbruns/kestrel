@@ -1,6 +1,6 @@
 // The email provider's connection as the editor words it (GET /api/provider; SPEC §13): its
-// read, and the lines Settings, the dashboard, and Subscribers show for the sandbox, production,
-// the send rate, the server's warnings, and whether email is getting out. The state, the
+// read, and the lines, pills, and summaries Settings, the dashboard, and Subscribers show for
+// the sandbox, production, the send rate, the server's warnings, and whether email is getting out. The state, the
 // warnings, and the refusal are the server's; the editor only words the states and shows each
 // warning as it comes, red for an `error` and amber for a `warn`.
 
@@ -8,6 +8,7 @@ import type { ProviderStatusView, ProviderWarning, SendingRefusal } from "../sha
 import type { DeploymentView } from "../shared/settings";
 import { api } from "./api";
 import { type Html, html } from "./ui/html";
+import type { HealthLevel } from "./ui/widgets";
 
 /** The setup guide's page that asks AWS for production access. */
 export const PRODUCTION_ACCESS_HREF = "#/docs/production-access";
@@ -54,32 +55,113 @@ function daily(v: ProviderStatusView): string {
   return typeof n === "number" ? `, up to ${n.toLocaleString()} a day` : "";
 }
 
-/**
- * Settings' Email provider row for SES, with `beside` (a local simulation's pill) after its name: the state as a pill and, in the sandbox, what it limits
- * and where AWS's review stands. Unknown says only "Amazon SES", as before the app could tell,
- * except when the key isn't allowed to read the account: that is a deploy fix, so the row says
- * what it would show and links the step that adds the permission. It explains, never warns,
- * since sending works either way.
- */
-export function providerStateHtml(v: ProviderStatusView, beside: Html | null = null): Html {
+/** Settings' Production access row: the account's state named first, so the line reads on
+ *  its own without the pill, and what it means in a clause. Null while the app can't tell,
+ *  except a key that isn't allowed to read the account, which is a deploy fix. */
+export function accountSummaryHtml(v: ProviderStatusView): Html | null {
   if (v.state === "production") {
-    return html`<span>Amazon SES <span class="set-pill ok" id="providerState">Production</span>${beside}</span>`;
+    return html`<span><strong>Production</strong>: SES mails anyone.</span>`;
   }
-  if (v.state !== "sandbox") {
-    return v.unknown_reason === "permission"
-      ? html`<span>Amazon SES${beside}</span><span class="muted" id="providerUnread">To show whether SES is in the sandbox, Kestrel’s AWS key needs permission to read your account. <a class="set-link" href="${ACCOUNT_PERMISSION_HREF}">Add the permission</a></span>`
-      : html`Amazon SES${beside}`;
+  if (v.state === "sandbox") {
+    const rest =
+      v.review === "pending"
+        ? ", while AWS reviews your request."
+        : v.review === "denied"
+          ? ". AWS has replied without granting it."
+          : v.review === "failed"
+            ? ". AWS didn’t receive your request."
+            : ": SES mails only addresses verified in it.";
+    return html`<span><strong>Sandbox</strong>${rest}</span>`;
   }
-  const pill = html`<span class="set-pill warn" id="providerState">Sandbox</span>`;
-  const line =
-    v.review === "pending"
-      ? html`AWS is reviewing your request for production access. Until then, it mails only addresses verified in SES${daily(v)}.`
-      : v.review === "denied"
-        ? html`<span class="set-warn">AWS hasn’t granted production access yet. ${awsReplied(v)}: read its reply and answer there.</span> <a class="set-link" href="${AWS_QUESTIONS_HREF}">What AWS asks for</a>`
-        : v.review === "failed"
-          ? html`<span class="set-warn">AWS didn’t receive your request for production access.</span> <a class="set-link" href="${PRODUCTION_ACCESS_HREF}">Request it again</a>`
-          : html`<span class="set-warn">It mails only addresses verified in SES${daily(v)}.</span> <a class="set-link" href="${PRODUCTION_ACCESS_HREF}">Request production access</a>`;
-  return html`<span>Amazon SES ${pill}${beside}</span><span class="muted" id="providerReview">${line}</span>`;
+  return v.unknown_reason === "permission"
+    ? html`<span><strong>Unknown</strong>: Kestrel’s AWS key can’t read the account.</span>`
+    : null;
+}
+
+/** The account's state as a pill in Settings' Email provider head: a fact, so grey. */
+export function accountPillHtml(v: ProviderStatusView): Html | null {
+  const label = v.state === "production" ? "Production" : v.state === "sandbox" ? "Sandbox" : null;
+  return label ? html`<span class="set-pill" id="providerState">${label}</span>` : null;
+}
+
+/** A line above Settings' Email provider card. */
+export interface ProviderLine {
+  level: HealthLevel;
+  body: Html;
+}
+
+/**
+ * What needs a look about the connection, as lines above Settings' Email provider card,
+ * worst first: red, then amber, then information with a next step, and within that what closes
+ * signups before the sandbox. The refusal stands for the account check's errors, which say the
+ * same cause, as on the dashboard. Nothing while all is well (DESIGN §1.3).
+ */
+export function providerLines(v: ProviderStatusView): ProviderLine[] {
+  const red: Html[] = [];
+  const amber: Html[] = [];
+  const info: Html[] = [];
+  const refusal = refusalOf(v);
+  if (refusal) {
+    red.push(notGoingOutHtml(refusal));
+  }
+  for (const w of v.warnings) {
+    if (refusal && stopsSending(w)) {
+      continue;
+    }
+    (stopsSending(w) ? red : amber).push(warningHtml(w));
+  }
+  if (v.sending?.state === "unproven") {
+    info.push(
+      html`SES hasn’t sent anything yet, so signups are closed. <a href="${TEMPLATE_TEST_HREF}">Send a test email</a>`,
+    );
+  }
+  if (v.state === "sandbox") {
+    if (v.review === "denied") {
+      amber.push(
+        html`AWS hasn’t granted production access yet. ${awsReplied(v)}: read its reply and answer there. <a href="${AWS_QUESTIONS_HREF}">What AWS asks for</a>`,
+      );
+    } else if (v.review === "failed") {
+      amber.push(
+        html`AWS didn’t receive your request for production access. <a href="${PRODUCTION_ACCESS_HREF}">Request it again</a>`,
+      );
+    } else if (v.review === "pending") {
+      info.push(
+        html`AWS is reviewing your request for production access. Until then, SES mails only addresses verified in it${daily(v)}.`,
+      );
+    } else {
+      info.push(sandboxHealthHtml(v));
+    }
+  }
+  if (v.state === "unknown" && v.unknown_reason === "permission") {
+    info.push(
+      html`To show whether SES is in the sandbox, Kestrel’s AWS key needs permission to read your account. Sending works either way. <a href="${ACCOUNT_PERMISSION_HREF}">Add the permission</a>`,
+    );
+  }
+  return [
+    ...red.map((body) => ({ level: "red" as const, body })),
+    ...amber.map((body) => ({ level: "amber" as const, body })),
+    ...info.map((body) => ({ level: "neutral" as const, body })),
+  ];
+}
+
+/**
+ * The one pill beside the account's that names the worst line below the head, by one rule:
+ * red Refusing (or Needs a fix for an error that hasn't refused an email yet), amber Needs a
+ * look, grey Not proven yet, or none. Never a count: the lines are right below it.
+ */
+export function worstPillHtml(v: ProviderStatusView, lines: ProviderLine[]): Html | null {
+  const pill = (cls: string, label: string) =>
+    html`<span class="set-pill${cls}" id="providerSending">${label}</span>`;
+  if (refusalOf(v)) {
+    return pill(" danger", "Refusing");
+  }
+  if (lines.some((l) => l.level === "red")) {
+    return pill(" danger", "Needs a fix");
+  }
+  if (lines.some((l) => l.level === "amber")) {
+    return pill(" warn", "Needs a look");
+  }
+  return v.sending?.state === "unproven" ? pill("", "Not proven yet") : null;
 }
 
 /**
@@ -117,7 +199,7 @@ const WARNING_LINKS: Record<ProviderWarning["code"], string> = {
   sender_unverified: "Verify your sending hostname",
   account_probation: "A problem with Amazon SES",
   bounces_not_routed: "Send bounces and complaints to the app",
-  receipts_not_arriving: "Send bounces and complaints to the app",
+  receipts_not_arriving: "Why reports don’t arrive",
 };
 
 /** A warning in the server's words, with the guide step that fixes it. */
@@ -128,9 +210,10 @@ export function warningHtml(w: ProviderWarning): Html {
 /** True for a warning that means no email can go out until it's fixed, which reads red. */
 export const stopsSending = (w: ProviderWarning): boolean => w.severity === "error";
 
-/** The dashboard's health line while SES is still in the sandbox. */
-export function sandboxHealthHtml(): Html {
-  return html`Amazon SES is still in the sandbox, so it mails only addresses verified in SES. <a href="${PRODUCTION_ACCESS_HREF}">Request production access</a>`;
+/** The line while SES is still in the sandbox, on the dashboard and above Settings' Email
+ *  provider card, which adds the day's limit when the account gives one. */
+export function sandboxHealthHtml(v: ProviderStatusView | null = null): Html {
+  return html`Amazon SES is still in the sandbox, so it mails only addresses verified in SES${v ? daily(v) : ""}. <a href="${PRODUCTION_ACCESS_HREF}">Request production access</a>`;
 }
 
 /**
@@ -188,38 +271,20 @@ export function signupsPausedHtml(): Html {
   return html`Signups are paused: Amazon SES is refusing email, including confirmations. <a href="#/">See what to fix</a>`;
 }
 
-/**
- * Settings' line under the Email provider for whether email is getting out (SPEC §13): its
- * pill (none while working) and what it means. Null with no provider.
- */
-export function sendingHtml(
-  v: ProviderStatusView,
-  when: (ms: number) => string,
-): { pill: Html | null; line: Html } | null {
+/** Settings' Last accepted row: when SES last took an email, in the words the setup checklist
+ *  uses, or that it hasn't yet. Null with no provider. */
+export function lastAcceptedHtml(v: ProviderStatusView, when: (ms: number) => string): Html | null {
   const s = v.sending;
   if (!s) {
     return null;
   }
-  const last = s.last_accepted
+  return s.last_accepted
     ? html`<span class="muted" id="providerLastAccepted">SES accepted an email ${when(s.last_accepted.at)}.</span>`
-    : null;
-  if (s.state === "refusing" && s.refusal) {
-    return {
-      pill: html`<span class="set-pill danger" id="providerSending">Refusing</span>`,
-      line: html`<span class="set-error">${refusalWords(s.refusal)} Then <a class="set-link" href="${TEMPLATE_TEST_HREF}">send a test email</a>.</span>${last}`,
-    };
-  }
-  if (s.state === "unproven") {
-    return {
-      pill: html`<span class="set-pill" id="providerSending">Not proven yet</span>`,
-      line: html`<span>SES hasn’t sent anything yet, so signups are closed. <a class="set-link" href="${TEMPLATE_TEST_HREF}">Send a test email</a></span>`,
-    };
-  }
-  return { pill: null, line: last ?? html`` };
+    : html`<span class="muted" id="providerLastAccepted">None yet.</span>`;
 }
 
 /**
- * Settings' line for when SES last reported back (SPEC §13): the evidence that bounces and
+ * Settings' Last report row: when SES last reported back (SPEC §13): the evidence that bounces and
  * complaints reach the app, which a test during setup should bring within minutes. Null with no
  * provider, and while nothing has been reported and SES hasn't taken an email, when there is
  * nothing to report yet. It explains, never warns: the server's `receipts_not_arriving` does that.

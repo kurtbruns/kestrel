@@ -14,14 +14,14 @@ import type { SendView } from "./sends";
 const SETTINGS_SECTION_TITLES = {
   "publication-identity": "Publication identity",
   "time-zone": "Time zone",
+  "email-template": "Email preview",
   "ways-to-subscribe": "Ways to subscribe",
   "confirmation-email": "Confirmation email",
   "reader-pages": "Reader pages",
-  "email-template": "Email template",
   "default-test-recipients": "Default test recipients",
   notifications: "Notifications",
-  "email-sender": "Email sender",
-  instance: "Instance",
+  "email-sender": "Email provider",
+  instance: "Deployment",
 } as const;
 
 export type SettingsSection = keyof typeof SETTINGS_SECTION_TITLES;

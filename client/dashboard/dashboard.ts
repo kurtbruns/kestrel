@@ -53,7 +53,7 @@ import { $, $$ } from "../ui/dom";
 import { fmtAt, recipientCount } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
-import { badge, renderError } from "../ui/widgets";
+import { badge, type HealthLevel, renderError } from "../ui/widgets";
 import { connectedTo, firstListedSend, type SetupFacts, setupStepsHtml } from "./setup";
 
 // The post-login landing and the brand's target (the default route). Built entirely
@@ -62,9 +62,10 @@ import { connectedTo, firstListedSend, type SetupFacts, setupStepsHtml } from ".
 // SPEC §8's questions at a glance: is anything wrong, who's on the list, what's
 // scheduled, what went out, and what's still in progress.
 
-/** One line of the health block: red needs a decision, amber a look. */
+/** One line of the health block: red needs a decision, amber a look, neutral a state with a
+ *  next step (the sandbox). */
 interface HealthAlert {
-  level: "red" | "amber";
+  level: HealthLevel;
   text: string | Html;
 }
 
@@ -83,7 +84,8 @@ interface HealthAlert {
 // While setup is open, its Connect Amazon SES step says the not-connected state and the amber
 // line is left out, so it is said once (DESIGN §3). The provider's connection adds the others
 // with no send behind them: each warning the server gives (GET /api/provider), in its words,
-// SES still in the sandbox, left out while setup's production-access step says it, and email
+// SES still in the sandbox, neutral since it is the usual state for weeks and amber would teach
+// the publisher to ignore amber, left out while setup's production-access step says it, and email
 // not going out, in red, which stands for the errors among the warnings while it lasts. A failed
 // notification is the one from the settings. Every problem lives here: a setup step only points
 // up at it.
@@ -238,7 +240,7 @@ function computeHealth(
   }
   if (inSandbox(provider) && !setupSaysSandbox) {
     alerts.push({
-      level: "amber",
+      level: "neutral",
       text: html`<span class="dash-sandbox">${sandboxHealthHtml()}</span>`,
     });
   }
@@ -253,13 +255,19 @@ function computeHealth(
   return alerts;
 }
 
-/** The health block: nothing at all when nothing needs attention. */
+/** The health block: nothing at all when nothing needs attention, else one block in the
+ *  color of its worst line. */
 function healthHtml(alerts: HealthAlert[]): Html {
   if (!alerts.length) {
     return html``;
   }
-  const level = alerts.some((i) => i.level === "red") ? "red" : "amber";
-  return html`<div class="health ${level}"><span class="health-dot">⚠️</span><div>${alerts.map(
+  const level = alerts.some((i) => i.level === "red")
+    ? "red"
+    : alerts.some((i) => i.level === "amber")
+      ? "amber"
+      : "neutral";
+  const mark = level === "neutral" ? icon("info") : html`⚠️`;
+  return html`<div class="health ${level}"><span class="health-dot">${mark}</span><div>${alerts.map(
     (i) => html`<div>${i.text}</div>`,
   )}</div></div>`;
 }

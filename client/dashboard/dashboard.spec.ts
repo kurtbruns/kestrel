@@ -1457,7 +1457,7 @@ describe("dashboard", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
-    it("raises an amber line for the sandbox once setup is done, and one for each warning, in the server's words", async () => {
+    it("raises a line for the sandbox once setup is done, and one for each warning, in the server's words, the block in its worst line's color", async () => {
       const warning = {
         code: "bounces_not_routed",
         severity: "warn",
@@ -1490,7 +1490,7 @@ describe("dashboard", () => {
         severity: "warn",
         message:
           "SES took an email more than an hour ago, and no report has reached Kestrel since.",
-        docs: { slug: "ses", anchor: "4-send-bounces-and-complaints-to-the-app" },
+        docs: { slug: "troubleshooting", anchor: "reports-from-ses-arent-arriving" },
       } as const;
       const production = { state: "production", unknown_reason: null } as const;
       fake = world(
@@ -1503,7 +1503,7 @@ describe("dashboard", () => {
       await vi.advanceTimersByTimeAsync(0);
       expect($("#dashHealth .health").classList.contains("amber")).toBe(true);
       expect($(".dash-provider-warning").textContent).toBe(
-        "SES took an email more than an hour ago, and no report has reached Kestrel since. Send bounces and complaints to the app",
+        "SES took an email more than an hour ago, and no report has reached Kestrel since. Why reports don’t arrive",
       );
       unmount();
       fake.restore();
@@ -1511,6 +1511,19 @@ describe("dashboard", () => {
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
       expect(document.querySelector(".dash-provider-warning")).toBeNull();
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("says the sandbox alone in a neutral block, since it is a state with a next step, not a problem", async () => {
+      fake = world([post()], sendServer([send()]), counts, onSes(sandbox));
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      const block = $("#dashHealth .health");
+      expect(block.classList.contains("neutral")).toBe(true);
+      expect(block.classList.contains("amber")).toBe(false);
+      expect($(".dash-sandbox").textContent).toBe(
+        "Amazon SES is still in the sandbox, so it mails only addresses verified in SES. Request production access",
+      );
       expect(fake.unhandled).toEqual([]);
     });
 

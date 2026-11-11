@@ -68,9 +68,9 @@ Vars go in the environment block's `vars`. Every value is a string.
 
 - `FROM_ADDRESS` required with a real provider
 
-    The address every email comes from, and the identity your provider authenticates. Refused unless it's an email address, and never on `example.com`, unless `PROVIDER` is `fake`. With Amazon SES, when no identity covering it is verified for sending in `AWS_REGION`, **Settings → Email sender** says so in red within about ten minutes, without sending anything.
+    The address every email comes from, and the identity your provider authenticates. Refused unless it's an email address, and never on `example.com`, unless `PROVIDER` is `fake`. With Amazon SES, when no identity covering it is verified for sending in `AWS_REGION`, **Settings → Email provider** says so in red within about ten minutes, without sending anything.
 
-    The name readers see beside the address is the publication's name, set in the editor under **Settings → Publication identity**, along with the tagline and logo. Until the publisher sets one, emails go out with no display name, and the reader pages show no name. To send under a fixed name instead, whatever the publication is called, write it in front of the address, like `Name <address>`; **Settings → Email sender** then shows that name and says it's set here. An instance deployed before the name followed the publication keeps its sender this way.
+    The name readers see beside the address is the publication's name, set in the editor under **Settings → Publication identity**, along with the tagline and logo. Until the publisher sets one, emails go out with no display name, and the reader pages show no name. To send under a fixed name instead, whatever the publication is called, write it in front of the address, like `Name <address>`; **Settings → Email preview** then shows that name as the sender, and **Settings → Email provider** says it's set here. An instance deployed before the name followed the publication keeps its sender this way.
 
     Kestrel's notifications to the publisher come from the same address, as `Kestrel` until the publication has a name, then as the publication's name followed by `via Kestrel`. A name written in `FROM_ADDRESS` never reaches them.
 
@@ -86,7 +86,7 @@ Vars go in the environment block's `vars`. Every value is a string.
 
 - `SES_MAX_SEND_RATE` optional
 
-    A cap on the send rate, in messages a second. Usually left unset: the app reads your SES account's maximum send rate itself, about every ten minutes while nothing is sending, and keeps to the lower of the two when both are known. Without either, it sends at `14`, a common starting rate, not your account's. Refused unless it's a whole number above zero. **Settings → Email sender** shows the rate a send keeps to, and where it comes from.
+    A cap on the send rate, in messages a second. Usually left unset: the app reads your SES account's maximum send rate itself, about every ten minutes while nothing is sending, and keeps to the lower of the two when both are known. Without either, it sends at `14`, a common starting rate, not your account's. Refused unless it's a whole number above zero. **Settings → Email provider** shows the rate a send keeps to, and where it comes from.
 
     The app sends SES one request a second, the most SES takes, and each request carries one second of the rate, up to 50 recipients. Set this only to send slower than your account allows, or when the app's key can't read the account (it needs `ses:GetAccount`). To send faster, ask AWS to raise that rate to 50 before you move to Workers Paid: on Workers Free, a rate of 50 sends nearly four times as many recipients a minute as 14, and a higher rate adds nothing there. A rate set too high only means SES throttles some requests. Those recipients wait for the next minute, and no one is mailed twice.
 
@@ -140,15 +140,15 @@ Store each with `npx wrangler secret put NAME --env production`, which prompts f
 
 - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` required with SES
 
-    The IAM user's access key, which sends through SES. When SES rejects it, because the key ID is unknown, the secret doesn't match it, or the AWS account isn't signed up for SES, **Settings → Email sender** says so in red within about ten minutes, without sending anything.
+    The IAM user's access key, which sends through SES. When SES rejects it, because the key ID is unknown, the secret doesn't match it, or the AWS account isn't signed up for SES, **Settings → Email provider** says so in red within about ten minutes, without sending anything.
 
 - `SNS_TOPIC_ARN` required with SES
 
-    The SNS topic the SES webhook accepts. The webhook refuses a report from every other topic, and logs `webhook.refused` naming both. When SES took an email over an hour ago with no report since, and a report came from another topic in the same AWS account and region, **Settings → Email sender** names both topics in amber. Check which topic the configuration set's SNS destination uses in the SES console before changing either side.
+    The SNS topic the SES webhook accepts. The webhook refuses a report from every other topic, and logs `webhook.refused` naming both. When SES took an email over an hour ago with no report since, and a report came from another topic in the same AWS account and region, **Settings → Email provider** names both topics in amber. Check which topic the configuration set's SNS destination uses in the SES console before changing either side.
 
 - `SES_CONFIGURATION_SET` optional, recommended with SES
 
-    The configuration set named on every email, so SES reports bounces and complaints. A name SES can't find in the region holds every list send until it's fixed. **Settings → Email sender** says so in red within about ten minutes, without sending anything, and does the same when the set's sending is turned off, as long as the app's key may call `ses:GetConfigurationSet`.
+    The configuration set named on every email, so SES reports bounces and complaints. A name SES can't find in the region holds every list send until it's fixed. **Settings → Email provider** says so in red within about ten minutes, without sending anything, and does the same when the set's sending is turned off, as long as the app's key may call `ses:GetConfigurationSet`.
 
 - `DEV_AUTH_SECRET` never on a deployed environment
 

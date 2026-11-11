@@ -34,7 +34,7 @@ AWS reviews each request by hand, for the region the app sends from.
 
 1. Check the acknowledgement, and select **Submit request**. AWS Support answers by email.
 
-1. Within about ten minutes, the editor's **Settings → Email sender** says AWS is reviewing your request for production access, and later whether AWS has granted it.
+1. Within about ten minutes, the editor's **Settings → Email provider** says AWS is reviewing your request for production access, and later whether AWS has granted it.
 
 Within seconds of every request, AWS sends an automated email asking for more information, in a support case. The SES console then shows **More information needed**, and the editor says AWS hasn't granted production access yet and has replied in AWS Support, with the case number. That's expected, and not a refusal: answer it as the next section describes.
 
@@ -56,7 +56,7 @@ In the sandbox, the subscribe form's confirmation email reaches only addresses v
 
 Until AWS grants production access, SES sends only to your verified addresses, so check it before you go live.
 
-1. In the editor, open **Settings → Email sender**. The email provider reads **Production**. From the API, `npx kestrel api GET /api/provider` shows `state` as `production`.
+1. In the editor, open **Settings → Email provider**. Its **Production access** row reads **Production**. From the API, `npx kestrel api GET /api/provider` shows `state` as `production`.
 
 1. If it reads **Sandbox**, AWS hasn't granted access yet. If it also says AWS has replied, with a case number, answer in that case, as section 3 describes. Meanwhile, continue with [Verify it works](verify.md), which runs in the sandbox. Come back to this section when AWS answers.
 

@@ -180,7 +180,7 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
 
   it("leaves a Settings name that is already in a link, or names no section, as it is", () => {
     const inLink = '<a href="#/docs/verify"><strong>Settings → Notifications</strong></a>';
-    const free = "<strong>Settings → Instance</strong>";
+    const free = "<strong>Settings → Deployment</strong>";
     expect(linkSettingsNames(`${inLink} ${free}`)).toBe(
       `${inLink} <a href="#/settings/instance">${free}</a>`,
     );
