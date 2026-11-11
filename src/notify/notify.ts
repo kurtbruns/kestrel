@@ -151,7 +151,7 @@ export async function notifyPublisher(
   await notifications.claimNotifications(db, due, now);
 
   // Times in the emails read on the publication's clock, in UTC while it has no zone (SPEC §8).
-  const clock = { zone: settings.timeZone, now: Date.now() };
+  const clock = { zone: settings.timeZone, now };
   const notifier = getNotifier(config, env, notificationSenderFrom(settings, config));
   for (const [i, n] of due.entries()) {
     // Every claimed notification still to come needs its outcome recorded, this one included.

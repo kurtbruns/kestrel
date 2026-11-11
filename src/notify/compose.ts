@@ -293,8 +293,8 @@ function unavailable(
     "If this post is time-sensitive, you may want to tell your readers it will be late.";
   return problem({
     subject: throttled
-      ? `${title} is late: SES has refused it for its sending rate for over an hour`
-      : `${title} is late: Amazon SES has been unavailable for over an hour`,
+      ? `${title} is late: SES has refused it for its sending rate for about an hour`
+      : `${title} is late: Amazon SES has been unavailable for about an hour`,
     happened: `${throttled ? "Amazon SES has refused every try for its sending rate" : "Amazon SES has been unavailable"} for ${since(began, clock)}, since ${when(began, clock)}, so ${title} is late.`,
     affected: `${emails(held)} ${held === 1 ? "is" : "are"} still to go.`,
     said: said(n.halt_error),

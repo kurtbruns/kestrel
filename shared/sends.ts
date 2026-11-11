@@ -217,7 +217,7 @@ export function unavailableMessage(
     return `The provider keeps refusing for its sending rate: ${sentence(send.halt_error)} A burst clears within a second, and this has refused the first request of ${send.halt_retries} retries in a row, minutes apart, so the instance is asking for more a second than the account allows. ${SES_RATE_ADVICE} ${PASS_THIS_ALONG} The send retries on its own meanwhile, and no one has been marked unsent because of this.`;
   }
   if (long) {
-    return `The provider has been unavailable for over an hour: ${sentence(send.halt_error)} Nothing is lost: no one has been marked unsent because of this, and the send tries again every hour and resumes on its own once the provider answers. Check AWS’s status page (${AWS_STATUS_PAGE}) for a problem with Amazon SES in your region, and if this post is time-sensitive, you may want to tell your readers it will be late.`;
+    return `The provider has been unavailable for about an hour: ${sentence(send.halt_error)} Nothing is lost: no one has been marked unsent because of this, and the send tries again every hour and resumes on its own once the provider answers. Check AWS’s status page (${AWS_STATUS_PAGE}) for a problem with Amazon SES in your region, and if this post is time-sensitive, you may want to tell your readers it will be late.`;
   }
   return `The provider is unavailable: ${sentence(send.halt_error)} The send retries on its own, spaced out the longer this lasts, and no one has been marked unsent because of this.`;
 }

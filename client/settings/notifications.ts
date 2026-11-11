@@ -48,7 +48,7 @@ const ALERT_TEST_HINT = "Once the alerts are set up, checks that the first one r
 const NOTIFICATION_KINDS: Record<NotificationStatusKind, string> = {
   finished: "went out",
   refused: "provider refusing",
-  unavailable: "provider down over an hour",
+  unavailable: "provider down about an hour",
   stuck: "in flight too long",
   wedged: "waiting to be resolved",
   missed: "missed fire time",

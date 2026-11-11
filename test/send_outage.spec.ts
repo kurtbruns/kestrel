@@ -110,8 +110,10 @@ describe("a provider outage past an hour (SPEC §8, §12)", () => {
   });
 
   it("is emailed once and alerted once, with cause outage, about an hour in, and not again at each hourly retry", async () => {
+    // Noon UTC today, so the 53 minutes before the email fall on its day on any date.
+    vi.setSystemTime(new Date(Date.now()).setUTCHours(12, 0, 0, 0));
     await seedConfirmed(addresses(3));
-    const send = await dueSend();
+    const send = await dueSend({ subject: "Owls" });
     transport.outage = 1_000;
 
     // Every halt short of the hourly step: shown in grey, told to no one.
@@ -131,6 +133,14 @@ describe("a provider outage past an hour (SPEC §8, §12)", () => {
     expect(told()).toHaveLength(1);
     const email = told()[0]!;
     expect(email.to).toBe(PUBLISHER);
+    // As it first goes out, 53 minutes in: the subject says about an hour, the body how long
+    // it really has been and since when, on the publication's clock (UTC in these specs).
+    expect(email.subject).toBe('"Owls" is late: Amazon SES has been unavailable for about an hour');
+    const began = new Date(row.halted_at!);
+    const clock = `${began.getUTCHours() % 12 || 12}:${String(began.getUTCMinutes()).padStart(2, "0")} ${began.getUTCHours() < 12 ? "AM" : "PM"} UTC`;
+    expect(email.text).toContain(
+      `Amazon SES has been unavailable for ${Math.floor((Date.now() - row.halted_at!) / 60_000)} minutes, since ${clock}, so "Owls" is late.`,
+    );
     expect(email.text).toContain("Nothing is lost.");
     expect(email.text).toContain("tries again every hour and carries on by itself");
     expect(email.text).toContain("https://health.aws.amazon.com/health/status");
@@ -142,7 +152,7 @@ describe("a provider outage past an hour (SPEC §8, §12)", () => {
     // The page says it at the same moment, amber.
     const shown = await provider(send.id);
     expect(shown?.severity).toBe("warn");
-    expect(shown?.message).toContain("unavailable for over an hour");
+    expect(shown?.message).toContain("unavailable for about an hour");
 
     // Three hourly retries later, still down: nothing more.
     await ticks(3);
@@ -259,7 +269,7 @@ describe("a provider outage past an hour (SPEC §8, §12)", () => {
 
     expect(told()).toHaveLength(1);
     expect(told()[0]!.subject).toMatch(
-      /is late: SES has refused it for its sending rate for over an hour$/,
+      /is late: SES has refused it for its sending rate for about an hour$/,
     );
     expect(told()[0]!.text).toContain("SES_MAX_SEND_RATE");
     expect(told()[0]!.text).not.toContain("health.aws.amazon.com");
