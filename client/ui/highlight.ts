@@ -185,7 +185,7 @@ function renderMdLine(line: string): string {
   // ATX heading: crimson # marks, heading text in the font color (bold for hierarchy).
   const h = line.match(/^(\s{0,3}#{1,6})(\s.*)?$/);
   if (h) {
-    return `<span class="cx-md-hmark">${esc(h[1] ?? "")}</span><span class="cx-md-htext">${esc(h[2] || "")}</span>`;
+    return `<span class="cx-md-hmark">${esc(h[1] ?? "")}</span><span class="cx-md-htext">${hlMdInline(h[2] || "")}</span>`;
   }
   // Thematic break: --- *** ___ (three or more of one mark), alone on the line.
   if (/^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/.test(line)) {
@@ -203,13 +203,41 @@ function renderMdLine(line: string): string {
   }
   return hlMdInline(line);
 }
+/** The lines of `src` the email shows as an indented code block (four spaces in), by marked's
+ *  own block lexer: whether an indented line is code or a list item's continuation depends on
+ *  what comes before it, which a line-at-a-time pass can't see. Only top-level blocks are read;
+ *  indented code inside a list or a quote is rare enough to highlight as prose. */
+function indentedCodeLines(src: string): Set<number> {
+  const lines = new Set<number>();
+  let cursor = 0;
+  let line = 0;
+  for (const t of Lexer.lex(src, MARKED_INLINE)) {
+    const at = src.indexOf(t.raw, cursor);
+    if (at < 0) {
+      continue;
+    }
+    line += src.slice(cursor, at).split("\n").length - 1;
+    const rows = t.raw.split("\n").length - 1;
+    if (t.type === "code" && t.codeBlockStyle === "indented") {
+      // Trailing newlines belong to the token's raw but not to the code.
+      const code = t.raw.replace(/\n+$/, "").split("\n").length;
+      for (let i = 0; i < code; i++) {
+        lines.add(line + i);
+      }
+    }
+    line += rows;
+    cursor = at + t.raw.length;
+  }
+  return lines;
+}
 /** The post's Markdown as highlighted markup for the composer overlay, one block row per line. */
 export function highlightMarkdown(src: string): Html {
   let inFence = false;
+  const indentedCode = indentedCodeLines(String(src));
   return unsafeHtml(
     String(src)
       .split("\n")
-      .map((line) => {
+      .map((line, n) => {
         let html: string;
         let band = false;
         // Fenced code block: a ``` or ~~~ line toggles the fence. The backticks stay plain and
@@ -220,7 +248,8 @@ export function highlightMarkdown(src: string): Html {
           inFence = !inFence;
           const lang = fence[3] ? `<span class="cx-md-bmark">${esc(fence[3])}</span>` : "";
           html = `${fence[1]}${esc(fence[2] ?? "")}${lang}`;
-        } else if (inFence) {
+        } else if (inFence || indentedCode.has(n)) {
+          // Code, fenced or indented: shown as written, on the band.
           band = true;
           html = esc(line);
         } else {

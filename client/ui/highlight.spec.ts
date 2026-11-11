@@ -154,6 +154,41 @@ describe("highlightMarkdown links", () => {
     expect(md("\\![a cat](my cat.png)")).toEqual({ url: [], broken: [] });
   });
 
+  it("marks links in a heading's text, as the email reads them", () => {
+    expect(
+      md("## See [the guide](https://example.com/a b) or [this](https://example.com/c)"),
+    ).toEqual({ url: ["https://example.com/c"], broken: ["[the guide](https://example.com/a b)"] });
+  });
+
+  // A post of several lines: each row's marks, and whether it sits on the code band.
+  const rowsOf = (src: string) =>
+    [...render(highlightMarkdown(src).markup).querySelectorAll<HTMLElement>(".cx-md-ln")].map(
+      (row) => ({
+        url: spans(row, "cx-md-url"),
+        broken: spans(row, "cx-md-broken"),
+        code: row.classList.contains("cx-md-band"),
+      }),
+    );
+  const prose = { url: [], broken: [], code: false };
+
+  it("marks nothing in an indented code block, which the email shows as code", () => {
+    expect(rowsOf("Before.\n\n    [a](b c) and [d](e)\n\nAfter [f](g h).")).toEqual([
+      prose,
+      prose,
+      { url: [], broken: [], code: true },
+      prose,
+      { url: [], broken: ["[f](g h)"], code: false },
+    ]);
+  });
+
+  it("still marks links in a list item's indented continuation, which the email reads as prose", () => {
+    expect(rowsOf("- Item\n\n    More at [a](b c) and [d](e).")).toEqual([
+      prose,
+      prose,
+      { url: ["e"], broken: ["[a](b c)"], code: false },
+    ]);
+  });
+
   it("escapes the line, so link text is never read as markup", () => {
     const el = render(
       highlightMarkdown('[<img src=x onerror="alert(1)">](https://x.test/<b>)').markup,
