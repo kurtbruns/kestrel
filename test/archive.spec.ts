@@ -476,6 +476,7 @@ describe("reader surface — no admin link once deployed (§11)", () => {
       identity,
       subscribeUrl: "https://app.example/subscribe",
       homeUrl: "https://app.example/",
+      archiveUrl: "https://app.example/archive",
       posts: [],
     }).text();
     expect(deployed).not.toContain("/dashboard");

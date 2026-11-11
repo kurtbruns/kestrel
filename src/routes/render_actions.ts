@@ -41,7 +41,7 @@ import type { RequestContext } from "../router";
 import { param } from "../router";
 import { senderFrom, sendSender } from "../services/sender";
 import { sendTest } from "../services/test_send";
-import { webVersion } from "./archive";
+import { postPageDescription, webVersion } from "./archive";
 import { testUnsubscribeUrl } from "./public";
 import { readerIdentity } from "./reader";
 
@@ -152,12 +152,20 @@ export async function previewPage(c: RequestContext): Promise<Response> {
  * once scheduled), so the publisher can proof the page before it is permanent (SPEC §5).
  */
 export async function webPage(c: RequestContext): Promise<Response> {
-  const { email, dateMs } = await loadPostEmail(c);
+  const { input, email, dateMs } = await loadPostEmail(c);
+  const identity = await readerIdentity(c, c.config);
   return postPage(
     webVersion(email.html, {
       config: c.config,
-      identity: await readerIdentity(c, c.config),
+      identity,
       dateMs,
+      // The head the post page will carry, so the publisher proofs its link preview too.
+      describe: postPageDescription(
+        c.config,
+        identity,
+        { slug: input.post.slug, emailOnly: input.post.email_only },
+        { subject: email.subject, text: email.text },
+      ),
     }),
   );
 }

@@ -6,6 +6,8 @@ All three are optional, and you can change them at any time. How they appear in 
 
 Write the tagline as one line that says what the newsletter covers and how often it goes out, such as "Monthly notes on the birds of the Hudson Valley." Until your first post, it's the only line on your home page that says what readers are signing up for. It's also what AWS sees if it reviews your site when you [request production access](../get-started/production-access.md).
 
+The name, tagline, and logo are also what search results and link previews show for your public pages. When someone pastes a link to your home page, archive, or subscribe page into a chat or a social post, the preview shows the name as its title, the tagline beneath it, and the logo as its picture. A post's link shows its subject and its opening lines instead, or the tagline when the post opens with a picture rather than words. There is nothing else to fill in: a part you leave empty is simply left out of the preview.
+
 ## Choose a logo
 
 **Use a square PNG, JPEG, WebP, or GIF, at least 256 × 256 pixels, on a solid background.** Drop it on the logo under **Settings → Publication identity**, or choose **Upload**, which reads **Replace** once you have a logo. It saves right away, without **Save changes**. If that would change scheduled emails, Kestrel asks you to confirm first.

@@ -18,6 +18,7 @@ import {
   type ReaderBanner,
   type ReaderIdentity,
   readerPage,
+  siteDescription,
   subscribeFormHtml,
 } from "../lib/page";
 import type { RequestContext } from "../router";
@@ -101,6 +102,8 @@ function subscribePage(
     devDashboardUrl: devDashboardUrl(c.config),
     status,
     fresh: true,
+    // A subscribe link is shared to win readers, so it previews as the publication.
+    describe: siteDescription(identity, `${c.config.appOrigin}/subscribe`),
   });
 }
 
