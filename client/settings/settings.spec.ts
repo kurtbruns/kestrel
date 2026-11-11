@@ -1673,7 +1673,7 @@ describe("settings view", () => {
         sending: working,
         receipts: { last_at: 2, waiting_since: null, refused_topic: null },
       });
-      expect($("#providerLastReport").textContent).toBe(`SES last reported back ${fmt(2)}.`);
+      expect($("#providerLastReport").textContent).toBe(`SES last reported back ${timeAt(2)}.`);
       unmount();
       fake.restore();
       await withStatus({

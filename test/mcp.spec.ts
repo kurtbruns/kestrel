@@ -822,8 +822,8 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
 });
 
 describe("what a tool answers stays small and whole", () => {
-  // Raised from 25 KB for ending a held send (end_send) and the publication's clock (get_time,
-  // and `time_zone` beside each fire time a tool takes).
+  // Raised from 25 KB for the publication's clock (get_time, and `time_zone` beside each fire
+  // time a tool takes).
   it("keeps the whole tool list under 28 KB, so growing it is a decision", async () => {
     const res = await rpc("tools/list", {}, await adminAuth(PERSON));
     const size = new TextEncoder().encode(await res.text()).length;
