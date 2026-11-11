@@ -4,7 +4,19 @@
 // inline scripts are dropped: they set a sidebar mode before first paint, nothing a spec
 // asserts on.
 
+import { afterEach, beforeEach, vi } from "vitest";
 import page from "../../public/dashboard/index.html?raw";
+
+// The browser keeps the publication's clock unless a spec moves it: `settingsResponse` gives the
+// publication New York's zone, so the dashboard shows its times unlabeled, as it does at home,
+// whatever zone the machine running the suite is in. A spec of a browser elsewhere stubs `TZ`
+// itself (SPEC §6, DESIGN §10).
+beforeEach(() => {
+  vi.stubEnv("TZ", "America/New_York");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 const open = /<body([^>]*)>/.exec(page);
 if (!open) {

@@ -1000,21 +1000,29 @@ export function settingsVersionIs(version: number): { sql: string; binds: unknow
  */
 export function insertScheduledSendStmt(
   db: D1Database,
-  send: FrozenRender & { id: string; post_id: string; fire_at: number; recipient_count: number },
+  send: FrozenRender & {
+    id: string;
+    post_id: string;
+    fire_at: number;
+    recipient_count: number;
+    requested?: RequestedLocalTime | null;
+  },
   now: number,
   settingsVersion: number,
 ): D1PreparedStatement {
   const guard = settingsVersionIs(settingsVersion);
   return db
     .prepare(
-      `INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, render_warnings, from_name, recipient_count, scheduled_at, web_link, rev)
-       SELECT ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, 'unlisted', ${NEXT_REV}
+      `INSERT INTO sends (id, post_id, status, fire_at, requested_local_time, requested_time_zone, rendered_html, rendered_text, subject, render_warnings, from_name, recipient_count, scheduled_at, web_link, rev)
+       SELECT ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unlisted', ${NEXT_REV}
         WHERE ${guard.sql}`,
     )
     .bind(
       send.id,
       send.post_id,
       send.fire_at,
+      send.requested?.time ?? null,
+      send.requested?.zone ?? null,
       send.rendered_html,
       send.rendered_text,
       send.subject,
@@ -1033,18 +1041,28 @@ function inWindowAt(now: number): { sql: string; binds: unknown[] } {
   return { sql: "status = 'scheduled' AND fire_at > ?", binds: [now] };
 }
 
-/** Move a scheduled send's fire time, nothing else, inside its review window (`inWindowAt`):
- *  `meta.changes === 0` means the window has closed. */
+/** Move a scheduled send's fire time and the local time it was asked in, nothing else, inside
+ *  its review window (`inWindowAt`): `meta.changes === 0` means the window has closed. */
 export function rescheduleStmt(
   db: D1Database,
   sendId: string,
   fireAt: number,
   now: number,
+  requested: RequestedLocalTime | null = null,
 ): D1PreparedStatement {
   const guard = inWindowAt(now);
   return db
-    .prepare(`UPDATE sends SET fire_at = ?, rev = ${NEXT_REV} WHERE id = ? AND ${guard.sql}`)
-    .bind(fireAt, sendId, ...guard.binds);
+    .prepare(
+      `UPDATE sends SET fire_at = ?, requested_local_time = ?, requested_time_zone = ?, rev = ${NEXT_REV} WHERE id = ? AND ${guard.sql}`,
+    )
+    .bind(fireAt, requested?.time ?? null, requested?.zone ?? null, sendId, ...guard.binds);
+}
+
+/** The local time a fire time was asked in, and the zone it was read in (SPEC §6): stored
+ *  beside the moment by each act that sets it, null when it was asked as an exact moment. */
+export interface RequestedLocalTime {
+  time: string;
+  zone: string;
 }
 
 /** Cancel a scheduled send inside its review window, the same CAS as `rescheduleStmt`: a

@@ -3,9 +3,11 @@
 // restates it inside a framed copy of such a page, so the two can't drift.
 //
 // What the pages actually load: inline styles (the email's own, the page chrome's
-// <style>), the display font from Google Fonts, and images from anywhere a post may
-// point (the media origin, which may be a separate public bucket domain, or any image the
-// author linked). Nothing else, and no script, frame, plugin, or base rewrite.
+// <style>) and images from anywhere a post may point (the media origin, which may be a
+// separate public bucket domain, or any image the author linked). Nothing else: no
+// stylesheet or font from another host (the pages name only fonts a reader already has,
+// shared/fonts.ts, so `default-src` refuses any font file), and no script, frame, plugin,
+// or base rewrite.
 
 /**
  * The policy, as a header value. `formAction` is the one difference between the kinds of
@@ -23,8 +25,7 @@ export function pagePolicy(formAction: string, opts: { framed?: boolean } = {}):
     `form-action ${formAction}`,
     opts.framed ? null : "frame-ancestors 'none'",
     "img-src * data:",
-    "style-src 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src https://fonts.gstatic.com",
+    "style-src 'unsafe-inline'",
   ]
     .filter((d) => d !== null)
     .join("; ");

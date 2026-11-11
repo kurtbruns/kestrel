@@ -18,10 +18,11 @@ import { heldAdviceHtml, noEmailProvider, providerNotConnected } from "../deploy
 import { every, mount, setTitle } from "../lifecycle";
 import { mountSettingsForm, type Publishing, publishingOf, shortUrl } from "../posts/publishing";
 import { followSend, readSendsNow } from "../send_state";
+import { clocksFor, timeAt } from "../time_zone";
 import { copyFace, copyWith } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
 import { saveFile } from "../ui/download";
-import { fmt, recipientCount } from "../ui/format";
+import { fmt, fmtAt, recipientCount, zoneHeader } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { type ListState, renderPager, th, wireSort } from "../ui/list_controls";
@@ -242,7 +243,7 @@ function watchBodyHtml(prog: SendView): Html {
     ${unavailableWarn ? html`<div class="health amber" role="status"><span class="health-dot">⚠️</span><div>${unavailableWarn.message}</div></div>` : null}
     ${
       refused
-        ? html`<div class="health red" role="alert"><span class="health-dot">⚠️</span><div><strong>${unconnected ? "No email provider is connected" : ownRefusal ? "The provider is refusing this send" : "The provider is refusing this account"}</strong>${unconnected ? null : html`<div>${refused.error}</div>`}<div class="refused-advice">${unconnected ? heldAdviceHtml() : refused.advice}</div><div>${refused.since === null ? null : `Since ${fmt(refused.since)}. `}No one has been marked unsent because of this, and once ${unconnected ? "one is connected" : "this is fixed"} the send resumes at its next retry${refused.retry_at === null ? "" : `, ${fmt(refused.retry_at)}`}.</div></div></div>`
+        ? html`<div class="health red" role="alert"><span class="health-dot">⚠️</span><div><strong>${unconnected ? "No email provider is connected" : ownRefusal ? "The provider is refusing this send" : "The provider is refusing this account"}</strong>${unconnected ? null : html`<div>${refused.error}</div>`}<div class="refused-advice">${unconnected ? heldAdviceHtml() : refused.advice}</div><div>${refused.since === null ? null : `Since ${timeAt(refused.since)}. `}No one has been marked unsent because of this, and once ${unconnected ? "one is connected" : "this is fixed"} the send resumes at its next retry${refused.retry_at === null ? "" : `, ${timeAt(refused.retry_at)}`}.</div></div></div>`
         : null
     }
     <div class="wbars">
@@ -274,9 +275,9 @@ function actedByHtml(send: SendView): Html | null {
 
 function watchMetaHtml(send: SendView): Html {
   if (heldFromStart(send)) {
-    return html`Due ${fmt(send.fire_at)} · held before handing anyone off · about ${recipientCount(send.audience.count)}`;
+    return html`Due ${timeAt(send.fire_at)} · held before handing anyone off · about ${recipientCount(send.audience.count)}`;
   }
-  const started = send.started_at ? `Started ${fmt(send.started_at)}` : "Sending now";
+  const started = send.started_at ? `Started ${timeAt(send.started_at)}` : "Sending now";
   return html`${started} · ${recipientCount(send.audience.count)}`;
 }
 function watchHtml(send: SendView): Html {
@@ -479,6 +480,8 @@ function recordDeliveryQuery(d: DeliveryListState): string {
 }
 
 function deliveryRowsHtml(rows: DeliveryRecord[], dstate: DeliveryListState): Html {
+  // The When header names the zone once when the browser's clock differs (DESIGN §10).
+  const c = clocksFor(rows.map((r) => r.event_at));
   const body = rows.map((r) => {
     const o = deliveryOutcome(r);
     // The label names the bucket; its consequence (suppressed or not, awaiting a receipt)
@@ -486,7 +489,7 @@ function deliveryRowsHtml(rows: DeliveryRecord[], dstate: DeliveryListState): Ht
     // (DESIGN §11), so a row stays a clean one-liner without restating it on every line.
     const outcome = html`<span class="rec-out"><span class="rec-sw sw-${o.sw}"></span>${o.label}</span>`;
     const detail = r.error || r.event_detail || "";
-    const when = r.event_at ? fmt(r.event_at) : "";
+    const when = r.event_at ? fmt(r.event_at, c) : "";
     // An erased person's row keeps its place in the record, named for what it is rather
     // than by its placeholder (SPEC §7); the CSV keeps the placeholder itself.
     const who = isErasedPlaceholder(r.email)
@@ -498,7 +501,7 @@ function deliveryRowsHtml(rows: DeliveryRecord[], dstate: DeliveryListState): Ht
     "Recipient",
     "email",
     dstate,
-  )}<th class="c-out">Outcome</th><th>Detail</th><th class="c-date">When</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  )}<th class="c-out">Outcome</th><th>Detail</th><th class="c-date">${zoneHeader("When", c)}</th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 function renderFrozenRecord(
@@ -526,7 +529,7 @@ function renderFrozenRecord(
     </div>
     <div class="rec-head rec-head-page">
       <div class="watch-title"><h1>${send.subject || html`<em>untitled</em>`}</h1><span id="recPill">${phasePill(send.phase)}</span></div>
-      <div class="rec-meta">Sent ${fmt(sentAt)} · ${recipientCount(total)}</div>
+      <div class="rec-meta">Sent ${timeAt(sentAt)} · ${recipientCount(total)}</div>
       ${actedByHtml(send)}
     </div>
     <section class="card rec-post" aria-labelledby="recPostTitle">
@@ -901,6 +904,7 @@ function outcomesOf(send: SendView): DeliveryOutcomes {
  * post to show, only that it was canceled, when, and when it would have sent.
  */
 function renderCanceled(send: SendView, root: HTMLElement): void {
+  const c = clocksFor([send.completed_at, send.fire_at]);
   setHtml(
     root,
     html`
@@ -910,7 +914,7 @@ function renderCanceled(send: SendView, root: HTMLElement): void {
     <div class="card rec-card">
       <div class="rec-head">
         <div class="watch-title"><h1>${send.subject || html`<em>untitled</em>`}</h1><span id="recPill">${phasePill(send.phase)}</span></div>
-        <div class="rec-meta">Canceled ${fmt(send.completed_at)} · was scheduled for ${fmt(send.fire_at)}</div>
+        <div class="rec-meta">Canceled ${fmtAt(send.completed_at, c)} · was scheduled for ${fmtAt(send.fire_at, c)}</div>
         ${actedByHtml(send)}
       </div>
       <p class="rec-note muted">This send was canceled before it fired, so no one was mailed.</p>

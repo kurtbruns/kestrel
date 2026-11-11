@@ -246,6 +246,8 @@ describe("the time to finish, in ticks", () => {
       web_link: "unlisted",
       render_warnings: "[]",
       from_name: null,
+      requested_local_time: null,
+      requested_time_zone: null,
       recipient_count: TOTAL,
       locked_until: null,
       scheduled_at: T - 10 * MIN,

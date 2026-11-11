@@ -1169,6 +1169,8 @@ export async function seedDatabase(
       address: demo.publication.address,
     },
     test_recipients: demo.publication.testRecipients,
+    // Set as a publisher sets it, so the demo can schedule and send (SPEC §9).
+    time_zone: demo.publication.timeZone,
   });
 
   // And a real logo when one was supplied, so the brand tile isn't just the initial.

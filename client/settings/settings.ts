@@ -42,6 +42,8 @@ import {
 import { mountReaderPages, readerPagesSection } from "./reader_pages";
 import { expireRemakeWait, remakeIdentity, savedToast, withRemakeConfirm } from "./remake";
 import { mountSubscribe, subscribeSection } from "./subscribe";
+import { mountTimeZone, timeZoneChanged, timeZoneSection } from "./time_zone";
+import { guardUnsaved } from "./unsaved";
 
 /** One group of sections, kept together by whom they serve: no heading of its own, since
  *  the sections' titles already say what each is, only a wider gap from the next group. */
@@ -54,14 +56,11 @@ function baselineOf(state: SettingsBaseline): SettingsBaseline {
     name: state.name,
     tagline: state.tagline,
     address: state.address,
-    recipients: [...state.recipients],
     confirmation: { ...state.confirmation },
-    notifyTo: [...state.notifyTo],
+    timeZone: state.timeZone,
   };
 }
 
-const sameList = (a: string[], b: string[]) =>
-  a.length === b.length && a.every((x, i) => x === b[i]);
 const sameCopy = (a: ConfirmationEmailCopy, b: ConfirmationEmailCopy) =>
   a.subject === b.subject &&
   a.body === b.body &&
@@ -95,8 +94,9 @@ export async function renderSettings(
   const p = s.publication;
   const ce = s.confirmation_email;
   // Live, in-memory state. The save bar tracks the persisted fields against the saved
-  // baseline; the logo saves the moment it changes (its own endpoints), and the email
-  // template has its own page and its own Save, so neither feeds the bar.
+  // baseline. The logo (its own endpoints) and the address lists (a write of that list
+  // alone) save the moment they change, and the email template has its own page and its
+  // own Save, so none of them feeds the bar.
   const state: SettingsFormState = {
     name: p.name || "",
     tagline: p.tagline || "",
@@ -112,6 +112,7 @@ export async function renderSettings(
       reassurance: ce.reassurance || "",
     },
     notifyTo: [...s.notifications.to],
+    timeZone: s.time_zone,
   };
   let baseline = baselineOf(state);
   const fromAddress = data.deployment.from_address;
@@ -120,14 +121,19 @@ export async function renderSettings(
     state.name !== baseline.name ||
     state.tagline !== baseline.tagline ||
     state.address !== baseline.address ||
-    !sameList(state.recipients, baseline.recipients) ||
     !sameCopy(state.confirmation, baseline.confirmation) ||
-    !sameList(state.notifyTo, baseline.notifyTo);
+    timeZoneChanged(state.timeZone, baseline.timeZone);
 
   const handles: SectionHandle[] = [];
   // The shared bottom save bar (Save + Discard), its callbacks the hoisted saveSettings /
   // discardSettings below.
-  const bar = savebar.attach({ onSave: saveSettings, onDiscard: discardSettings }, signal);
+  // A leave asks first while anything on the page is unsaved: the bar's fields, or an edit a
+  // section keeps of its own. Typed text an address list hasn't added is no edit to the page.
+  const guard = guardUnsaved(() => isDirty() || handles.some((h) => h.unsaved?.()), signal);
+  const bar = savebar.attach(
+    { onSave: () => guard.saving(saveSettings), onDiscard: discardSettings },
+    signal,
+  );
   let refreshReaderPages = () => {};
   const page: SettingsPage = {
     data,
@@ -150,12 +156,28 @@ export async function renderSettings(
       // The reader pages wear the saved identity, so the one shown re-reads it.
       refreshReaderPages();
     },
+    // A partial write carrying the one list, so the page's other unsaved edits stay
+    // unsaved and the bar keeps counting them. A list change never reaches an email, so
+    // it never asks to re-make scheduled ones. The state takes the server's normalized
+    // list only once it lands: a refusal leaves the list as it was.
+    async saveList(key, next) {
+      const json: SettingsPatchBody =
+        key === "recipients" ? { test_recipients: next } : { notifications: { to: next } };
+      const r = await api<SettingsSavedResponse>("/api/settings", { method: "PUT", json });
+      state[key] = [
+        ...(key === "recipients" ? r.settings.test_recipients : r.settings.notifications.to),
+      ];
+      // Only the cached config moves: the sidebar brand and the reader pages wear the
+      // identity, which a list never changes, so they aren't redrawn.
+      appState.appConfig = { ...data, settings: r.settings };
+      page.changed();
+    },
   };
 
   setHtml(
     body,
     html`
-      ${group("publication", [identitySection(page)])}
+      ${group("publication", [identitySection(page), timeZoneSection(page)])}
       ${group("readers", [subscribeSection(page), confirmationSection(page), readerPagesSection(secHead("reader-pages", chip("preview", "Preview")))])}
       ${group("emails", [templateSection(page), recipientsSection()])}
       ${group("you", [notificationsSection(page)])}
@@ -164,6 +186,7 @@ export async function renderSettings(
   );
   handles.push(
     mountIdentity(body, page, signal),
+    mountTimeZone(body, page, signal),
     mountSubscribe(body, page),
     mountConfirmation(body, page),
     mountTemplate(body, page, signal),
@@ -190,12 +213,16 @@ export async function renderSettings(
     try {
       // An identity change the template renders reaches every scheduled email, so the
       // server may ask for the acknowledgement first (withRemakeConfirm); a save that
-      // touches only recipients or the confirmation wording never does.
+      // touches only the confirmation wording never does. The address lists save on
+      // their own, so this write leaves them out and can't put back an older list.
       const payload: SettingsPatchBody = {
         publication: { name: state.name, tagline: state.tagline, address: state.address },
-        test_recipients: state.recipients,
         confirmation_email: state.confirmation,
-        notifications: { to: state.notifyTo },
+        // Only a zone chosen on purpose and different from the saved one: the section never
+        // fills one in, so an untouched zone is never sent.
+        ...(timeZoneChanged(state.timeZone, baseline.timeZone)
+          ? { time_zone: state.timeZone ?? "" }
+          : {}),
       };
       const r = await withRemakeConfirm(
         (ack) =>
@@ -214,9 +241,8 @@ export async function renderSettings(
       state.name = ns.publication.name;
       state.tagline = ns.publication.tagline;
       state.address = ns.publication.address;
-      state.recipients = [...ns.test_recipients];
       state.confirmation = { ...ns.confirmation_email };
-      state.notifyTo = [...ns.notifications.to];
+      state.timeZone = ns.time_zone;
       baseline = baselineOf(state);
       for (const h of handles) {
         h.reset?.();
@@ -288,20 +314,21 @@ export async function renderSettings(
     },
     { signal },
   );
-  return { navigate };
+  // ⌘S is Save changes itself, refusals and the re-make confirmation included.
+  return { navigate, ...guard.handle, manualSave: bar.save };
 }
 
-// The input each settings field the API can name is edited in, by its wire name.
+// The input each settings field the save bar's write can name is edited in, by its wire
+// name. The address lists save on their own and say a refusal on their own field.
 const FIELD_INPUTS: Record<string, string> = {
   "publication.name": "#setName",
   "publication.tagline": "#setTagline",
   "publication.address": "#setAddress",
-  test_recipients: "#recipInput",
-  "notifications.to": "#notifyTo",
   "confirmation_email.subject": "#ceSubject",
   "confirmation_email.body": "#ceMessage",
   "confirmation_email.button_label": "#ceButton",
   "confirmation_email.reassurance": "#ceFooter",
+  time_zone: "#tzSearch",
 };
 
 /** The input a refusal's `field` names, when the page shows it; null otherwise. */

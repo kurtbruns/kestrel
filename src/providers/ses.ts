@@ -726,16 +726,26 @@ export class SesProvider implements EmailProvider {
     // An invalid parameter or a plain failure on several entries, with nothing taken, is the
     // request's rather than each recipient's: the parameters every entry shares, or SES
     // itself. It holds the batch, as an invalid batch or an outage, rather than mark it unsent.
+    // A lone one with nothing taken can't say which it is from one request: it is the
+    // recipient's, marked as the request's if the send loop's group repeats it
+    // (`PerRecipientResult`'s `ifRepeated`).
     for (const r of own) {
+      const asRequest = {
+        ...(r.status === "FAILED" ? unavailable("outage") : account("invalid_request")),
+        error: r.error,
+      };
       const alike = own.filter((o) => o.status === r.status).length;
       if (alike > 1 && !tookAny) {
-        halt = worse(halt, {
-          ...(r.status === "FAILED" ? unavailable("outage") : account("invalid_request")),
-          error: r.error,
-        });
+        halt = worse(halt, asRequest);
         heldBack.push({ email: r.email, error: r.error });
       } else {
-        results.push({ email: r.email, accepted: false, retryable: r.retryable, error: r.error });
+        results.push({
+          email: r.email,
+          accepted: false,
+          retryable: r.retryable,
+          error: r.error,
+          ...(tookAny ? {} : { ifRepeated: asRequest }),
+        });
       }
     }
     // The request speaks as a whole only when SES answered every recipient and took none:
@@ -762,23 +772,32 @@ export class SesProvider implements EmailProvider {
 
   /**
    * A list batch SES refused as invalid, for a reason that may be one recipient's (a bad
-   * address SES's syntax check refuses) rather than the email's. A batch of one is that
-   * recipient's own, permanently. In a larger batch, a recipient SES's words name is
-   * refused alone and the rest go back to the queue, untouched, for the next request; with
-   * no one named, no one can be blamed, so the send holds for a person to read SES's words
-   * (`invalid_request`), rather than mark a whole batch unsent for one address.
+   * address SES's syntax check refuses) rather than the email's. A recipient SES's words name
+   * is refused alone and the rest go back to the queue, untouched, for the next request. With
+   * no one named in a larger batch, no one can be blamed, so the send holds for a person to
+   * read SES's words (`invalid_request`), rather than mark a whole batch unsent for one
+   * address. A batch of one can't tell the two apart: it is that recipient's own, marked as
+   * the request's if the send loop's group repeats it (`ifRepeated`), as a lone failed entry is.
    */
   private invalidBatch(batch: Recipient[], error: string): SendBatchResult {
-    if (batch.length === 1) {
-      const only = unwrap(batch[0], "a recipient");
-      return {
-        kind: "answered",
-        results: [{ email: only.email, accepted: false, retryable: false, error }],
-      };
-    }
     const named = batch.filter((r) => namesAddress(error, r.email));
     if (named.length === 0) {
-      return { kind: "halted", halt: { reason: "account", cause: "invalid_request", error } };
+      const asRequest: BatchHalt = { reason: "account", cause: "invalid_request", error };
+      const only = batch.length === 1 ? batch[0] : undefined;
+      return only
+        ? {
+            kind: "answered",
+            results: [
+              {
+                email: only.email,
+                accepted: false,
+                retryable: false,
+                error,
+                ifRepeated: asRequest,
+              },
+            ],
+          }
+        : { kind: "halted", halt: asRequest };
     }
     return {
       kind: "answered",

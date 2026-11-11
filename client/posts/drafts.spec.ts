@@ -12,6 +12,7 @@ import {
   settle,
   typeInto,
 } from "../test/support";
+import { clocksFor } from "../time_zone";
 import { fmt } from "../ui/format";
 import { renderDrafts } from "./drafts";
 
@@ -22,7 +23,7 @@ const posts = [
     subject: "<b>Owls</b> & co",
     status: "draft",
     email_only: true,
-    updated_at: "2026-09-20T10:00:00Z",
+    updated_at: Date.parse("2026-09-20T10:00:00Z"),
     send: null,
     actions: [
       { name: "edit", method: "PUT", path: "/api/posts/p1" },
@@ -33,7 +34,7 @@ const posts = [
     id: "p2",
     subject: "Waxwings",
     status: "scheduled",
-    updated_at: "2026-09-21T10:00:00Z",
+    updated_at: Date.parse("2026-09-21T10:00:00Z"),
     send: sendRef(sendView(sendSummary({ id: "s9", post_id: "p2", status: "sending" }))),
     actions: [],
   },
@@ -242,7 +243,7 @@ describe("drafts view", () => {
     post.move(moved);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(postReads()).toHaveLength(2);
-    expect($("tr[data-id='p2'] .when").textContent).toBe(fmt(moved));
+    expect($("tr[data-id='p2'] .when").textContent).toBe(fmt(moved, clocksFor(), true));
   });
 
   it("follows once a first read that failed is retried", async () => {

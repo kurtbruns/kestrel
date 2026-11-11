@@ -25,7 +25,7 @@ import {
   typeInto,
   unmount,
 } from "../test/support";
-import { fmt } from "../ui/format";
+import { timeAt } from "../time_zone";
 import { squareImage, UnreadableImage } from "../ui/square_image";
 import { renderSettings } from "./settings";
 
@@ -80,6 +80,21 @@ const settings = (over: Partial<SettingsView> = {}): SettingsView =>
   response({ settings: over }).settings;
 
 const bar = () => $("#savebar");
+
+// A write of an address list alone, answered as the server stores it: the list as sent,
+// over the rest of the settings unchanged.
+const listPut: FakeRoute = {
+  method: "PUT",
+  path: "/api/settings",
+  reply: (req) => ({
+    settings: settings(req.json() as Partial<SettingsView>),
+    warnings: [],
+    remade: [],
+    time_zone_readings: [],
+  }),
+};
+const chipsOf = (id: string) => $$(`#${id} .set-recip-chip`).map((c) => c.textContent?.trim());
+const puts = (fake: FakeApi) => fake.calls.filter((c) => c.method === "PUT").map((c) => c.json());
 
 describe("settings view", () => {
   let fake: FakeApi;
@@ -153,7 +168,7 @@ describe("settings view", () => {
       $$(".set-sec-title", g).map((t) => t.textContent?.trim()),
     );
     expect(groups).toEqual([
-      ["Publication identity"],
+      ["Publication identity", "Time zone"],
       ["Ways to subscribe", "Confirmation email", "Reader pages"],
       ["Email template", "Default test recipients"],
       ["Notifications"],
@@ -323,48 +338,44 @@ describe("settings view", () => {
     expect(bar().classList.contains("show")).toBe(false);
   });
 
-  it("saves the identity, recipients, and wording, adopting the server's normalized result and the sidebar brand", async () => {
+  it("saves the identity and wording, adopting the server's normalized result and the sidebar brand", async () => {
     await open([
       { path: "/api/settings", reply: () => response() },
       {
         method: "PUT",
         path: "/api/settings",
         // The server's own normalizing, which the client leaves to it: the name's inner
-        // whitespace collapsed, the tagline cleared, and the recipients in its order.
+        // whitespace collapsed and the tagline cleared.
         reply: () => ({
           settings: settings({
             publication: { name: "Birds Monthly", tagline: "", address: "", logo_url: "" },
-            test_recipients: ["new@b.c", "me@b.c"],
             confirmation_email: { ...DEFAULT_COPY, subject: "Please confirm" },
           }),
           warnings: [],
           remade: [],
+          time_zone_readings: [],
         }),
       },
     ]);
     typeInto($<HTMLInputElement>("#setName"), "  Birds   Monthly  ");
-    typeInto($<HTMLInputElement>("#recipInput"), "New@B.C");
-    $("#recipAdd").click();
     $("#ceTabEdit").click();
     typeInto($<HTMLInputElement>("#ceSubject"), "Please confirm");
     $("#savebarSave").click();
     await vi.advanceTimersByTimeAsync(0);
     const put = fake.calls.find((c) => c.method === "PUT");
+    // The address lists save on their own, so this write leaves them out.
     expect(put?.json()).toEqual({
       publication: { name: "Birds   Monthly", tagline: "Owls & more", address: "" },
-      test_recipients: ["me@b.c", "new@b.c"],
       confirmation_email: {
         subject: "Please confirm",
         body: "",
         button_label: "",
         reassurance: "",
       },
-      notifications: { to: [] },
     });
     // The server's result is the baseline now, wherever it differs from what was sent.
     expect($<HTMLInputElement>("#setName").value).toBe("Birds Monthly");
     expect($<HTMLInputElement>("#setTagline").value).toBe("");
-    expect($$(".set-recip-chip").map((c) => c.textContent?.trim())).toEqual(["new@b.c", "me@b.c"]);
     expect($<HTMLInputElement>("#ceMessage").value).toBe(DEFAULT_COPY.body);
     expect($("#brandName").textContent).toBe("Birds Monthly");
     expect(appState.appConfig?.settings.publication.name).toBe("Birds Monthly");
@@ -426,21 +437,10 @@ describe("settings view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("saves the notifications addresses added as chips on the save bar, and holds the test until they are saved", async () => {
+  it("saves a notifications address the moment it's added, and offers the test once one is saved (DESIGN §6)", async () => {
     await open([
       { path: "/api/settings", reply: () => response() },
-      {
-        method: "PUT",
-        path: "/api/settings",
-        reply: (req) => {
-          const body = req.json() as { notifications: { to: string[] } };
-          return {
-            settings: settings({ notifications: { to: body.notifications.to } }),
-            warnings: [],
-            remade: [],
-          };
-        },
-      },
+      listPut,
       {
         method: "POST",
         path: "/api/settings/notifications/test",
@@ -448,28 +448,27 @@ describe("settings view", () => {
       },
     ]);
     const test = $<HTMLButtonElement>("#notifyTest");
+    // A check beside the section's purpose: Secondary, not the quiet Ghost.
+    expect(test.className).toBe("secondary");
     expect(test.disabled).toBe(true);
-    expect($("#notifyTestHint").textContent).toBe("Save an address to send a test.");
+    expect($("#notifyTestHint").textContent).toBe("Add an address to send a test.");
 
     expect($("#notifyChips").textContent).toMatch(/No addresses yet/);
     typeInto($<HTMLInputElement>("#notifyTo"), " Me@B.C ");
     $("#notifyAdd").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts(fake)).toEqual([{ notifications: { to: ["me@b.c"] } }]);
+    expect($("#toasts").textContent).toMatch(/Added me@b.c to notifications/);
+    expect(test.disabled).toBe(false);
+    expect($("#notifyTestHint").textContent).toBe("");
     typeInto($<HTMLInputElement>("#notifyTo"), "ops@b.c");
     $("#notifyAdd").click();
-    expect($$("#notifyChips .set-recip-chip").map((c) => c.textContent?.trim())).toEqual([
-      "me@b.c",
-      "ops@b.c",
-    ]);
-    expect(bar().classList.contains("show")).toBe(true);
-    expect(test.disabled).toBe(true);
-    $("#savebarSave").click();
     await vi.advanceTimersByTimeAsync(0);
-    const put = fake.calls.find((c) => c.method === "PUT");
-    expect((put!.json() as { notifications: unknown }).notifications).toEqual({
-      to: ["me@b.c", "ops@b.c"],
-    });
+    expect(puts(fake)[1]).toEqual({ notifications: { to: ["me@b.c", "ops@b.c"] } });
+    expect(chipsOf("notifyChips")).toEqual(["me@b.c", "ops@b.c"]);
+    expect($<HTMLInputElement>("#notifyTo").value).toBe("");
+    // Nothing is left unsaved, so the bar never rises.
     expect(bar().classList.contains("show")).toBe(false);
-    expect(test.disabled).toBe(false);
 
     test.click();
     await vi.advanceTimersByTimeAsync(0);
@@ -479,6 +478,163 @@ describe("settings view", () => {
     expect($("#notifyStatus .set-pill.ok").textContent?.trim()).toBe("Delivered");
     expect($("#notifyStatus").textContent).toMatch(/test notification/);
     expect(fake.unhandled).toEqual([]);
+  });
+
+  it("saves removing a notifications address at once, and holds the test once none is saved", async () => {
+    await open([
+      {
+        path: "/api/settings",
+        reply: () => response({ settings: { notifications: { to: ["me@b.c"] } } }),
+      },
+      listPut,
+    ]);
+    const test = $<HTMLButtonElement>("#notifyTest");
+    expect(test.disabled).toBe(false);
+    $("#notifyChips [data-rm='0']").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts(fake)).toEqual([{ notifications: { to: [] } }]);
+    expect($("#toasts").textContent).toMatch(/Removed me@b.c from notifications/);
+    expect($("#notifyChips").textContent).toMatch(/No addresses yet/);
+    expect(test.disabled).toBe(true);
+    expect($("#notifyTestHint").textContent).toBe("Add an address to send a test.");
+    expect(bar().classList.contains("show")).toBe(false);
+  });
+
+  it("saves a test recipient added or removed at once, alone, leaving the page's other edits unsaved (DESIGN §6)", async () => {
+    await open([{ path: "/api/settings", reply: () => response() }, listPut]);
+    typeInto($<HTMLInputElement>("#setName"), "Birds Monthly");
+    typeInto($<HTMLInputElement>("#recipInput"), "New@B.C");
+    $("#recipAdd").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts(fake)).toEqual([{ test_recipients: ["me@b.c", "new@b.c"] }]);
+    expect(chipsOf("recipChips")).toEqual(["me@b.c", "new@b.c"]);
+    expect($("#toasts").textContent).toMatch(/Added new@b.c to default test recipients/);
+    // The name is still the only unsaved edit, so the bar stays up for it.
+    expect($<HTMLInputElement>("#setName").value).toBe("Birds Monthly");
+    expect(bar().classList.contains("show")).toBe(true);
+    $("#recipChips [data-rm='0']").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts(fake)[1]).toEqual({ test_recipients: ["new@b.c"] });
+    expect(chipsOf("recipChips")).toEqual(["new@b.c"]);
+    expect($("#toasts").textContent).toMatch(/Removed me@b.c from default test recipients/);
+    expect(bar().classList.contains("show")).toBe(true);
+    // The cached config follows the list; the name stays as saved until it is saved itself.
+    expect(appState.appConfig?.settings.test_recipients).toEqual(["new@b.c"]);
+    expect(appState.appConfig?.settings.publication.name).toBe("Birds Weekly");
+    // A list wears no identity, so the reader page shown isn't read again: once, on open.
+    expect(readerPageReads()).toBe(1);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("leaves a saved address in place on discard, putting back only what is still unsaved", async () => {
+    await open([
+      {
+        path: "/api/settings",
+        reply: () => response({ settings: { notifications: { to: ["me@b.c"] } } }),
+      },
+      listPut,
+    ]);
+    typeInto($<HTMLInputElement>("#setName"), "Birds Monthly");
+    typeInto($<HTMLInputElement>("#notifyTo"), "other@b.c");
+    $("#notifyAdd").click();
+    await vi.advanceTimersByTimeAsync(0);
+    $("#savebarDiscard").click();
+    expect($<HTMLInputElement>("#setName").value).toBe("Birds Weekly");
+    expect(chipsOf("notifyChips")).toEqual(["me@b.c", "other@b.c"]);
+    expect($<HTMLButtonElement>("#notifyTest").disabled).toBe(false);
+    expect(bar().classList.contains("show")).toBe(false);
+  });
+
+  it("says a refused list save on the address field, with the list as it was (DESIGN §5)", async () => {
+    await open([
+      {
+        path: "/api/settings",
+        reply: () => response({ settings: { notifications: { to: ["me@b.c"] } } }),
+      },
+      {
+        method: "PUT",
+        path: "/api/settings",
+        reply: () =>
+          jsonResponse(
+            { error: "bad_request", message: "Not that inbox.", field: "notifications.to" },
+            400,
+          ),
+      },
+    ]);
+    const input = $<HTMLInputElement>("#notifyTo");
+    const reason = () => document.querySelector("#notifyTo + .field-error")?.textContent;
+    typeInto(input, "ops@b.c");
+    $("#notifyAdd").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(chipsOf("notifyChips")).toEqual(["me@b.c"]);
+    expect(reason()).toBe("!Not that inbox.");
+    expect(input.value).toBe("ops@b.c"); // kept, to fix in place
+    expect(document.activeElement).toBe(input);
+    expect($("#notifyAdd").textContent).toBe("Add inbox");
+    // A refused removal says so in the same place, and the address stays. Nothing was
+    // typed to fix, so focus stays on the × that was pressed.
+    $("#notifyChips [data-rm='0']").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(chipsOf("notifyChips")).toEqual(["me@b.c"]);
+    expect(reason()).toBe("!Not that inbox.");
+    expect(document.activeElement).toBe($("#notifyChips [data-rm='0']"));
+    expect($("#toasts").textContent).toBe("");
+    expect(bar().classList.contains("show")).toBe(false);
+  });
+
+  it("takes one list change at a time, so a later one can't be built on the list before an earlier lands", async () => {
+    let answer: (r: Response) => void = () => {};
+    await open([
+      { path: "/api/settings", reply: () => response() },
+      {
+        method: "PUT",
+        path: "/api/settings",
+        reply: () => new Promise<Response>((r) => (answer = r)),
+      },
+    ]);
+    typeInto($<HTMLInputElement>("#recipInput"), "a@b.c");
+    $("#recipAdd").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($<HTMLButtonElement>("#recipAdd").disabled).toBe(true);
+    expect($<HTMLButtonElement>("#recipChips [data-rm='0']").disabled).toBe(true);
+    $("#recipChips [data-rm='0']").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts(fake)).toHaveLength(1);
+    answer(
+      jsonResponse({
+        settings: settings({ test_recipients: ["me@b.c", "a@b.c"] }),
+        warnings: [],
+        remade: [],
+        time_zone_readings: [],
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(chipsOf("recipChips")).toEqual(["me@b.c", "a@b.c"]);
+    expect($<HTMLButtonElement>("#recipAdd").disabled).toBe(false);
+
+    // A removal holds Add too, and Enter in the field, until it lands.
+    $("#recipChips [data-rm='0']").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($<HTMLButtonElement>("#recipAdd").disabled).toBe(true);
+    expect($("#recipAdd").textContent).toBe("Add inbox");
+    typeInto($<HTMLInputElement>("#recipInput"), "b@b.c");
+    $<HTMLInputElement>("#recipInput").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts(fake)).toHaveLength(2);
+    answer(
+      jsonResponse({
+        settings: settings({ test_recipients: ["a@b.c"] }),
+        warnings: [],
+        remade: [],
+        time_zone_readings: [],
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(chipsOf("recipChips")).toEqual(["a@b.c"]);
+    expect($<HTMLButtonElement>("#recipAdd").disabled).toBe(false);
+    expect($<HTMLInputElement>("#recipInput").value).toBe("b@b.c"); // still there to add
   });
 
   it("shows notifications as Kestrel on the saved publication's behalf, following a rename once saved, never the From override (SPEC §8)", async () => {
@@ -500,6 +656,7 @@ describe("settings view", () => {
           }),
           warnings: [],
           remade: [],
+          time_zone_readings: [],
         }),
       },
     ]);
@@ -514,7 +671,7 @@ describe("settings view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("says these emails can't report SES refusing and may report an hour's outage only once SES is back, linking the Set up alerts guide, and logs a test alert on request (SPEC §12)", async () => {
+  it("says in a Cloudflare alerts row what a notification can't reach you about, linking the Set up alerts guide, and logs a test alert on request (SPEC §12)", async () => {
     await open([
       { path: "/api/settings", reply: () => response() },
       {
@@ -523,32 +680,23 @@ describe("settings view", () => {
         reply: () => ({ event: "alert.sending", cause: "test", at: Date.now() }),
       },
     ]);
-    const note = $("#alertsNote");
-    expect(note.textContent).toMatch(/can’t tell you when SES refuses your account/);
-    expect($<HTMLAnchorElement>("a", note).getAttribute("href")).toBe("#/docs/alerts");
-    expect(note.textContent?.trim()).toBe(
-      "These emails travel through Amazon SES like the newsletter, so they can’t tell you when SES refuses your account, and one saying SES has been down for over an hour may arrive only once SES is back. Two Cloudflare alerts cover both, and Kestrel itself stopping. See Set up alerts.",
+    const row = $("#alertsRow");
+    expect($(".muted", row).textContent?.trim()).toBe(
+      "Notifications are sent by Kestrel, through your email provider. If either has a problem, such as the provider not sending or Kestrel itself stopping, a notification can’t reach you. To be told about these problems, set up Cloudflare alerts.",
     );
-    $<HTMLButtonElement>("#alertTest").click();
+    const link = $<HTMLAnchorElement>("a", row);
+    expect(link.textContent).toBe("set up Cloudflare alerts");
+    expect(link.getAttribute("href")).toBe("#/docs/alerts");
+    expect($("#alertTestHint").textContent).toBe(
+      "Once the alerts are set up, checks that the first one reaches your inbox.",
+    );
+    $<HTMLButtonElement>("#alertTest", row).click();
     await vi.advanceTimersByTimeAsync(0);
     expect(
       fake.calls.filter((c) => c.url.pathname === "/api/settings/notifications/alert-test"),
     ).toHaveLength(1);
     expect($("#alertTestHint").textContent).toMatch(
-      /^Logged at .+\. Watch for Cloudflare’s alert email\.$/,
-    );
-    expect(fake.unhandled).toEqual([]);
-  });
-
-  it("names the email provider in the alerts note as the Sent through row does, when it isn't SES", async () => {
-    const none = response();
-    none.deployment.provider = "none";
-    await open([{ path: "/api/settings", reply: () => none }]);
-    expect($$(".set-kv-v").map((v) => v.textContent?.trim())).toContain(
-      "Your email provider, once one is connected",
-    );
-    expect($("#alertsNote").textContent?.trim()).toBe(
-      "These emails travel through your email provider like the newsletter, so they can’t tell you when it refuses your account, and one saying it has been down for over an hour may arrive only once it is back. Two Cloudflare alerts cover both, and Kestrel itself stopping. See Set up alerts.",
+      /^Logged at .+\. Cloudflare’s alert email should arrive in about five minutes, then a Resolved email\.$/,
     );
     expect(fake.unhandled).toEqual([]);
   });
@@ -609,6 +757,7 @@ describe("settings view", () => {
             },
           }),
       },
+      listPut,
     ]);
     const input = $<HTMLInputElement>("#notifyTo");
     const reason = () => document.querySelector("#notifyTo + .field-error")?.textContent;
@@ -618,39 +767,24 @@ describe("settings view", () => {
       "Notifications go to at most 5 addresses. Remove one to add another.",
     );
     expect(input.value).toBe("f@b.c");
+    typeInto(input, "A@b.c");
+    $("#notifyAdd").click();
+    expect(reason()).toContain("That inbox is already in the list.");
+    // Refused before anything is sent: the list stays as saved.
+    expect(puts(fake)).toEqual([]);
     $("#notifyChips [data-rm='0']").click();
+    await vi.advanceTimersByTimeAsync(0);
     typeInto(input, "nope");
     $("#notifyAdd").click();
     expect(reason()).toContain("That doesn’t look like an email address.");
     typeInto(input, "f@b.c");
     $("#notifyAdd").click();
-    expect($$("#notifyChips .set-recip-chip").map((c) => c.textContent?.trim())).toEqual([
-      "b@b.c",
-      "c@b.c",
-      "d@b.c",
-      "e@b.c",
-      "f@b.c",
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts(fake)).toEqual([
+      { notifications: { to: ["b@b.c", "c@b.c", "d@b.c", "e@b.c"] } },
+      { notifications: { to: ["b@b.c", "c@b.c", "d@b.c", "e@b.c", "f@b.c"] } },
     ]);
-    expect(bar().classList.contains("show")).toBe(true);
-  });
-
-  it("puts the notifications address back on discard", async () => {
-    await open([
-      {
-        path: "/api/settings",
-        reply: () => response({ settings: { notifications: { to: ["me@b.c"] } } }),
-      },
-    ]);
-    typeInto($<HTMLInputElement>("#notifyTo"), "other@b.c");
-    $("#notifyAdd").click();
-    expect($("#notifyTestHint").textContent).toBe(
-      "Save first: the test goes to the saved addresses.",
-    );
-    $("#savebarDiscard").click();
-    expect($$("#notifyChips .set-recip-chip").map((c) => c.textContent?.trim())).toEqual([
-      "me@b.c",
-    ]);
-    expect($<HTMLButtonElement>("#notifyTest").disabled).toBe(false);
+    expect(chipsOf("notifyChips")).toEqual(["b@b.c", "c@b.c", "d@b.c", "e@b.c", "f@b.c"]);
     expect(bar().classList.contains("show")).toBe(false);
   });
 
@@ -673,7 +807,7 @@ describe("settings view", () => {
           if (!body.remake) {
             return jsonResponse({ error: "remake_required", message: "ack", sends }, 409);
           }
-          return { settings: settings(), warnings: [], remade: sends };
+          return { settings: settings(), warnings: [], remade: sends, time_zone_readings: [] };
         },
       },
     ]);
@@ -707,7 +841,7 @@ describe("settings view", () => {
         reply: () => response({ in_use: { sends, retry_after: at, identity_fields: ["name"] } }),
       },
     ]);
-    const wait = ` A scheduled post sends at ${fmt(at)}. You can save once it has sent.`;
+    const wait = ` A scheduled post sends at ${timeAt(at)}. You can save once it has sent.`;
     const chip = $(".set-chip.inuse");
     expect(chip.hasAttribute("title")).toBe(false);
     // The template section's lede, beside the chip, and the identity section's note.
@@ -760,28 +894,25 @@ describe("settings view", () => {
           jsonResponse(
             {
               error: "bad_request",
-              message: "Notifications can go to at most 5 addresses. Remove some, then save.",
-              field: "notifications.to",
+              message: "The tagline is too long.",
+              field: "publication.tagline",
             },
             400,
           ),
       },
     ]);
-    typeInto($<HTMLInputElement>("#notifyTo"), "me@b.c");
-    $("#notifyAdd").click();
+    typeInto($<HTMLInputElement>("#setTagline"), "Owls, and a great deal more");
     $("#savebarSave").click();
     await vi.advanceTimersByTimeAsync(0);
-    const input = $<HTMLInputElement>("#notifyTo");
+    const input = $<HTMLInputElement>("#setTagline");
     expect(input.classList.contains("is-invalid")).toBe(true);
-    expect($("#notifyTo + .field-error").textContent).toContain(
-      "Notifications can go to at most 5 addresses. Remove some, then save.",
-    );
+    expect($("#setTagline + .field-error").textContent).toContain("The tagline is too long.");
     expect(document.activeElement).toBe(input);
     expect($(".savebar-msg").textContent).toBe("Not saved: fix the field marked above.");
     // Discard puts the field back without editing it, so the mark goes with the edit.
     $("#savebarDiscard").click();
     expect(input.classList.contains("is-invalid")).toBe(false);
-    expect(document.querySelector("#notifyTo + .field-error")).toBeNull();
+    expect(document.querySelector("#setTagline + .field-error")).toBeNull();
   });
 
   it("says why any save failed in the bar, not in a toast that would cover it (DESIGN §5)", async () => {
@@ -804,7 +935,7 @@ describe("settings view", () => {
   });
 
   it("refuses a recipient on its field, not in a toast, and clears the reason on edit (DESIGN §5)", async () => {
-    await open();
+    await open([{ path: "/api/settings", reply: () => response() }, listPut]);
     const input = $<HTMLInputElement>("#recipInput");
     const reason = () => document.querySelector(".set-recip-add .field-error")?.textContent;
     typeInto(input, "nope");
@@ -821,9 +952,10 @@ describe("settings view", () => {
     expect($("#toasts").textContent).toBe("");
     expect($$(".set-recip-chip")).toHaveLength(1);
     expect(bar().classList.contains("show")).toBe(false);
+    expect(puts(fake)).toEqual([]);
     $(".set-recip-chip [data-rm='0']").click();
+    await vi.advanceTimersByTimeAsync(0);
     expect($("#recipChips").textContent).toMatch(/No default recipients yet/);
-    expect(bar().classList.contains("show")).toBe(true);
   });
 
   it("edits the confirmation wording with a live preview, and resets to the default", async () => {
@@ -961,11 +1093,12 @@ describe("settings view", () => {
 
   it("keeps the embed's Copy as it is while other fields change, and rebuilds it for the name", async () => {
     stubClipboard();
-    await open();
+    await open([{ path: "/api/settings", reply: () => response() }, listPut]);
     $("#embedCopy button").click();
     await vi.advanceTimersByTimeAsync(0);
     typeInto($<HTMLInputElement>("#notifyTo"), "me@example.com");
     $("#notifyAdd").click();
+    await vi.advanceTimersByTimeAsync(0);
     // The snippet doesn't show the notifications address, so its block is left alone.
     expect($("#embedCopy button").getAttribute("aria-label")).toBe("Copied");
     typeInto($<HTMLInputElement>("#setName"), "Owls Monthly");
@@ -1517,7 +1650,7 @@ describe("settings view", () => {
         },
       });
       expect(document.querySelector("#providerSending")).toBeNull();
-      expect($("#providerLastAccepted").textContent).toBe(`SES accepted an email ${fmt(1)}.`);
+      expect($("#providerLastAccepted").textContent).toBe(`SES accepted an email ${timeAt(1)}.`);
     });
 
     it("names the sandbox, what it limits, and the step that asks AWS to lift it", async () => {

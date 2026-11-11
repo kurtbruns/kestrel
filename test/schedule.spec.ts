@@ -239,65 +239,6 @@ describe("schedule / send / cancel + soft-lock", () => {
     expect(await postStatus(sending)).toBe("scheduled");
   });
 
-  it("refuses a fire_at without a timezone (400 naming the field); offsets and epoch millis are accepted", async () => {
-    const at = new Date(Date.now() + 60 * 60 * 1000);
-    const offsetless = at.toISOString().replace(/Z$/, "");
-    for (const fire_at of [offsetless, offsetless.slice(0, 16), at.toISOString().slice(0, 10)]) {
-      const id = await makeDraft();
-      const res = await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
-        method: "POST",
-        headers: JSON_AUTH,
-        body: JSON.stringify({ fire_at }),
-      });
-      expect(res.status).toBe(400);
-      const body = await readJson(res);
-      expect(body.field).toBe("fire_at");
-      expect(body.message).toMatch(/timezone/);
-      expect(await postStatus(id)).toBe("draft");
-    }
-
-    // The same instant written with an offset, as Z, as epoch millis (number or string).
-    const plus2 = new Date(at.getTime() + 2 * 60 * 60 * 1000).toISOString().replace(/Z$/, "+02:00");
-    const minus5 = new Date(at.getTime() - 5 * 60 * 60 * 1000)
-      .toISOString()
-      .replace(/Z$/, "-05:00");
-    const lowerZ = at.toISOString().replace(/Z$/, "z");
-    for (const fire_at of [
-      plus2,
-      minus5,
-      lowerZ,
-      at.toISOString(),
-      at.getTime(),
-      String(at.getTime()),
-    ]) {
-      const id = await makeDraft();
-      const res = await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
-        method: "POST",
-        headers: JSON_AUTH,
-        body: JSON.stringify({ fire_at }),
-      });
-      expect(res.status).toBe(201);
-      expect((await readJson(res)).send.fire_at).toBe(onTheMinute(at.getTime()));
-    }
-
-    // Reschedule reads fire_at the same way.
-    const id = await makeDraft();
-    const scheduled = await readJson(
-      await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
-        method: "POST",
-        headers: JSON_AUTH,
-        body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
-      }),
-    );
-    const res = await SELF.fetch(`${base}/api/sends/${scheduled.send.id}/reschedule`, {
-      method: "POST",
-      headers: JSON_AUTH,
-      body: JSON.stringify({ fire_at: offsetless }),
-    });
-    expect(res.status).toBe(400);
-    expect((await readJson(res)).field).toBe("fire_at");
-  });
-
   it("reschedules a scheduled send: moves fire_at, keeps the frozen render and the lock (I3, I6)", async () => {
     const id = await makeDraft({ markdown: "frozen body" });
     const scheduled = await readJson(

@@ -2,6 +2,7 @@ import { createExecutionContext, SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import type { McpTool } from "../shared/mcp";
+import { formatInTimeZone } from "../shared/time_zone";
 import { createRouter } from "../src/app";
 import { type AppEnv, getConfig } from "../src/env";
 import { HttpError } from "../src/lib/errors";
@@ -22,7 +23,14 @@ import {
 import { buildReferenceResponse } from "../src/reference";
 import { openApiDocument } from "../src/reference/openapi";
 import { accessDeployment } from "./support/access";
-import { frozenSend, resetDatabase, tpl, wedgedSend } from "./support/fixtures";
+import {
+  frozenSend,
+  resetDatabase,
+  setTimeZone,
+  tpl,
+  unsetTimeZone,
+  wedgedSend,
+} from "./support/fixtures";
 import { adminAuth, base, JSON_AUTH, readJson } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
 import { fetchWith } from "./support/worker_env";
@@ -91,6 +99,13 @@ async function callOk(name: string, args: Record<string, unknown>): Promise<any>
 
 const inHours = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString();
 
+/** A tool's line naming a scheduled send: its subject, its fire time on the publication's clock
+ *  (UTC in these specs), how far off it is, and its id. */
+const firingLine = (subject: string, send: { id: string; fire_at: string }) =>
+  new RegExp(
+    `^- "${subject}", firing ${formatInTimeZone(Date.parse(send.fire_at), "UTC")} \\(in [^)]+\\) \\(${send.id}\\)\\.$`,
+  );
+
 describe("the tools are a curated set over the API's routes (SPEC §11)", () => {
   it("lists the publisher's tasks, and the read escape hatch, and nothing else", async () => {
     expect((await listTools()).map((t) => t.name)).toEqual([
@@ -102,6 +117,7 @@ describe("the tools are a curated set over the API's routes (SPEC §11)", () => 
       "search_subscribers",
       "get_subscriber",
       "get_publication",
+      "get_time",
       "save_draft",
       "change_post_settings",
       "delete_draft",
@@ -250,7 +266,7 @@ describe("the tools are a curated set over the API's routes (SPEC §11)", () => 
     const tools = await listTools();
     const schedule = tools.find((t) => t.name === "schedule_send");
     const props = schedule?.inputSchema.properties as Record<string, { description: string }>;
-    expect(Object.keys(props)).toEqual(["id", "fire_at", "email_only"]);
+    expect(Object.keys(props)).toEqual(["id", "fire_at", "time_zone", "email_only"]);
     expect(schedule?.inputSchema.required).toEqual(["id"]);
     expect(schedule?.inputSchema.additionalProperties).toBe(false);
     const op = operationOf(manifestDocument(), {
@@ -258,7 +274,9 @@ describe("the tools are a curated set over the API's routes (SPEC §11)", () => 
       path: "/api/posts/:id/schedule",
     });
     const fireAt = op?.requestBody?.content["application/json"]?.schema.properties?.fire_at;
-    expect(props.fire_at?.description).toBe(`${fireAt?.description} Omit it for the soonest.`);
+    expect(props.fire_at?.description).toBe(
+      `${fireAt?.description} Omit it for the soonest. A time the publisher names is a local time with no offset.`,
+    );
     // Each schema stands alone: an object it names is under its own `$defs`.
     for (const t of tools) {
       const text = JSON.stringify(t.inputSchema);
@@ -494,7 +512,7 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
     expect(lines[0]).toMatch(/^Refused: HTTP 409 remake_required\. /);
     expect(lines[1]).toBe("Next move: Confirm, then send again.");
     expect(lines[2]).toBe("Saving re-makes the email of these scheduled sends:");
-    expect(lines[3]).toBe(`- "Waxwings", firing ${send.fire_at} (${send.id}).`);
+    expect(lines[3]).toMatch(firingLine("Waxwings", send));
     expect(lines[4]).toContain(
       `Only if they say yes in this chat, call again with the same change and remake ["${send.id}"].`,
     );
@@ -509,7 +527,7 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
 
   it("saves nothing while a send it would re-make is inside the minimum lead, and says when to try again", async () => {
     const send = await frozenSend(Date.now() + 30_000, { subject: "Correction" });
-    const fireAt = new Date(send.fire_at).toISOString();
+    const local = formatInTimeZone(send.fire_at, "UTC");
     const refused = await callTool("update_settings", {
       publication: { name: "Renamed" },
       remake: [send.id],
@@ -519,8 +537,8 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
     expect(lines[0]).toMatch(/^Refused: HTTP 409 remake_too_close\. /);
     expect(lines.slice(2)).toEqual([
       "Nothing was saved. These fire inside the minimum lead, so they go out as they stand:",
-      `- "Correction", firing ${fireAt} (${send.id}).`,
-      `Tell the publisher, and offer to save again after ${fireAt}.`,
+      `- "Correction", firing ${local} (in less than a minute) (${send.id}).`,
+      `Tell the publisher, and offer to save again after ${local}.`,
     ]);
     expect((await callOk("get_publication", {})).publication.name).not.toBe("Renamed");
   });
@@ -558,7 +576,7 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
     expect(Object.keys(tool?.inputSchema.properties ?? {})).not.toContain("email_template");
     const template = await callTool("update_settings", { email_template: "<p>x</p>" });
     expect(template.text).toBe(
-      "`email_template` isn't an argument update_settings takes; it takes `publication`, `test_recipients`, `notifications`, `confirmation_email`, `remake`.",
+      "`email_template` isn't an argument update_settings takes; it takes `publication`, `test_recipients`, `notifications`, `confirmation_email`, `time_zone`, `remake`.",
     );
   });
 
@@ -589,7 +607,7 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
     expect(refused.isError).toBe(true);
     const lines = refused.text.split("\n");
     expect(lines[0]).toMatch(/^Refused: HTTP 409 remake_required\. /);
-    expect(lines[3]).toBe(`- "Waxwings", firing ${send.fire_at} (${send.id}).`);
+    expect(lines[3]).toMatch(firingLine("Waxwings", send));
     const template = async () =>
       JSON.parse((await callTool("kestrel_api_read", { path: "/api/settings" })).text).settings
         .email_template;
@@ -702,6 +720,15 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
     expect(pub.scheduled_sends).toEqual([]);
   });
 
+  it("names the publication's time zone and its label, and null for both until it is set (SPEC §9)", async () => {
+    await setTimeZone("America/New_York");
+    const pub = await callOk("get_publication", {});
+    expect([pub.time_zone, pub.time_zone_label]).toEqual(["America/New_York", "Eastern Time"]);
+    await unsetTimeZone();
+    const unset = await callOk("get_publication", {});
+    expect([unset.time_zone, unset.time_zone_label]).toEqual([null, null]);
+  });
+
   it("carries each connection warning's severity, so an error that stops every email can be raised first (SPEC §13)", async () => {
     const vars = { SIMULATE_SENDS: "ses", SIMULATE_ACCOUNT: "production:set_missing" };
     const res = await rpc(
@@ -794,10 +821,12 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
 });
 
 describe("what a tool answers stays small and whole", () => {
-  it("keeps the whole tool list under 25 KB, so growing it is a decision", async () => {
+  // Raised from 25 KB for ending a held send (end_send) and the publication's clock (get_time,
+  // and `time_zone` beside each fire time a tool takes).
+  it("keeps the whole tool list under 28 KB, so growing it is a decision", async () => {
     const res = await rpc("tools/list", {}, await adminAuth(PERSON));
     const size = new TextEncoder().encode(await res.text()).length;
-    expect(size).toBeLessThan(25 * 1024);
+    expect(size).toBeLessThan(28 * 1024);
   });
 
   it("cuts a long Markdown answer at a line, or at the limit when no line ends before it", () => {
@@ -1227,5 +1256,103 @@ describe("each initialize is one line of what the client says it is (SPEC §12)"
         error: false,
       },
     ]);
+  });
+});
+
+// SPEC §6: a tool names a fire time in the app's words, on the publication's clock, and never as
+// a bare UTC time for Claude to convert.
+describe("a tool names a fire time on the publication's clock", () => {
+  it("reads a local time on the publication's clock, and answers the read-back beside the send", async () => {
+    await setTimeZone("America/New_York");
+    const year = new Date().getUTCFullYear() + 1;
+    const post = (await callOk("save_draft", { subject: "Owls", markdown: "x" })).post;
+    const scheduled = await callOk("schedule_send", {
+      id: post.id,
+      fire_at: `${year}-11-13T09:00`,
+    });
+    expect(scheduled.send.fire_at).toBe(new Date(Date.UTC(year, 10, 13, 14, 0)).toISOString());
+    expect(scheduled.read_back.fire_at_local).toMatch(
+      /^\w{3} Nov 13, \d{4}, 9:00 AM Eastern Time$/,
+    );
+    expect(scheduled.read_back.fire_at_in).toMatch(/^in \d+ days/);
+    // Every read naming it says the same, with how far off it is.
+    const listed = (await callOk("list_sends", {})).sends[0];
+    expect(listed.fire_at_local).toBe(scheduled.read_back.fire_at_local);
+    expect(listed.fire_at_in).toMatch(/^in \d+ days/);
+    const found = (await callOk("search_posts", {})).posts.find(
+      (p: { id: string }) => p.id === post.id,
+    );
+    expect(found.send.fire_at_local).toBe(scheduled.read_back.fire_at_local);
+    const moved = await callOk("reschedule_send", {
+      id: scheduled.send.id,
+      fire_at: `${year}-11-13T09:00`,
+      time_zone: "Asia/Tokyo",
+    });
+    expect(moved.read_back.fire_at_local).toMatch(/, 7:00 PM Eastern Time$/);
+  });
+
+  it("answers for a write that landed when the clock can't be read after it, never as refused", async () => {
+    const fire = Date.now() + 3_600_000;
+    const send = {
+      id: "s1",
+      post_id: "p1",
+      subject: "Owls",
+      status: "canceled",
+      phase: "canceled",
+      fire_at: fire,
+      audience: { count: 3 },
+      conditions: [],
+    };
+    const post = { id: "p1", subject: "Owls", status: "draft", send: null, actions: [] };
+    // Every route answers but the clock's.
+    const api = {
+      call: async (r: { method: string; path: string }) =>
+        r.path === "/api/time"
+          ? { status: 503, ok: false, text: "", body: { error: "unavailable" } }
+          : {
+              status: 200,
+              ok: true,
+              text: "",
+              body: { send, post, cursor: "1.1", changed: true, revision_id: "r1" },
+            },
+      read: async () => {
+        throw new Error("not used");
+      },
+      editor: (page: string) => page,
+    };
+    const run = (name: string, args: Record<string, unknown>) =>
+      (TOOL_DEFS.find((d) => d.name === name) as ToolDef).run(api as any, args);
+    const canceled = await run("cancel_send", { id: "s1" });
+    expect(canceled.isError).toBe(false);
+    expect(JSON.parse(canceled.content[0]?.text ?? "").send).toMatchObject({
+      id: "s1",
+      fire_at: new Date(fire).toISOString(),
+    });
+    const saved = await run("save_draft", { subject: "Owls", markdown: "x" });
+    expect(saved.isError).toBe(false);
+    expect(JSON.parse(saved.content[0]?.text ?? "").post.id).toBe("p1");
+  });
+
+  it("words the sends a save re-made on the zone the save set, not the one before it", async () => {
+    const post = (await callOk("save_draft", { subject: "Owls", markdown: "x" })).post;
+    const send = (await callOk("schedule_send", { id: post.id, fire_at: inHours(30) })).send;
+    const saved = await callOk("update_settings", {
+      publication: { name: "Renamed" },
+      time_zone: "Asia/Tokyo",
+      remake: [send.id],
+    });
+    expect(saved.remade[0].fire_at_local).toMatch(/ Japan Standard Time$/);
+  });
+
+  it("gives the publication's time now, and how a time would read, scheduling nothing", async () => {
+    await setTimeZone("Asia/Tokyo");
+    const now = await callOk("get_time", {});
+    expect(now.now_local).toMatch(/ Japan Standard Time$/);
+    expect(now.time_zone).toBe("Asia/Tokyo");
+    const year = new Date().getUTCFullYear() + 1;
+    const asked = await callOk("get_time", { fire_at: `${year}-11-13T09:00` });
+    expect(asked.fire_at_local).toMatch(/, 9:00 AM Japan Standard Time$/);
+    expect(asked.fire_at).toBe(new Date(Date.UTC(year, 10, 13, 0, 0)).toISOString());
+    expect((await callOk("list_sends", {})).sends).toEqual([]);
   });
 });

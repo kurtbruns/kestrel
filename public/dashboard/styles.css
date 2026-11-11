@@ -63,7 +63,9 @@
   --status-sending-bg: #dbeafe;
   --status-sending-fg: #2563eb;
   --status-sending-line: #bfdbfe;
+  /* The app's two stacks, as shared/fonts.ts names them; a spec holds them equal. */
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --serif: Georgia, "Times New Roman", serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   /* Kestrel's own accent — a fixed slate-blue for the app's own chrome (intent
      chips, in-settings links, the Save action). It is the app's own identity, kept
@@ -5461,6 +5463,10 @@ button.set-field-remove {
   align-items: flex-start;
   gap: 3px;
 }
+/* A control under that explanation (Send a test alert) stands a little apart from it. */
+.set-kv > .set-kv-stack > .row {
+  margin-top: 7px;
+}
 .set-kv > div:nth-last-child(1),
 .set-kv > div:nth-last-child(2) {
   border-bottom: 0;
@@ -5626,10 +5632,7 @@ button.set-field-remove {
   color: #ffffff;
   display: grid;
   place-items: center;
-  font:
-    600 20px / 1 Georgia,
-    "Times New Roman",
-    serif;
+  font: 600 20px / 1 var(--serif);
   overflow: hidden;
 }
 .set-ce-mast-logo img {
@@ -5639,10 +5642,7 @@ button.set-field-remove {
   display: block;
 }
 .set-ce-mast-name {
-  font:
-    600 17px / 1.2 Georgia,
-    "Times New Roman",
-    serif;
+  font: 600 17px / 1.2 var(--serif);
   color: #18181b;
 }
 .set-ce-mast-tag {
@@ -5959,10 +5959,7 @@ button.set-embed-copy svg {
 }
 .set-pf-styled .l {
   display: block;
-  font:
-    600 22px / 1.2 Georgia,
-    "Times New Roman",
-    serif;
+  font: 600 22px / 1.2 var(--serif);
   letter-spacing: -0.01em;
   margin-bottom: 12px;
   color: var(--fg);
@@ -6608,6 +6605,114 @@ button.set-embed-copy svg {
 }
 .set-rp-pick {
   display: none;
+}
+/* Settings' Time zone: the chosen zone (or the warning while none is), the browser's zone
+   offered under it while none is saved, then the search and its results. */
+/* A reading width, as the address lists' add row (.set-recip-add) keeps one, not the card's:
+   a full-width search on a desktop reads as a banner. Wider than that row, since a zone's
+   place, offset, and time, the offer's Use button, and a scheduled post's old and new times
+   in the preview each sit on one line. */
+.set-tz {
+  display: grid;
+  gap: 10px;
+  max-width: 600px;
+}
+.set-tz-chosen,
+.set-tz-suggest {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.set-tz-suggest {
+  border-style: dashed;
+}
+.set-tz-lines {
+  display: grid;
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.set-tz-name {
+  font-weight: 600;
+}
+.set-tz-place {
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.set-tz-now {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+/* What saving a chosen zone will show for each scheduled post: in the scheduled-send violet
+   the dashboard and editor use for a post waiting to go out, since it is about those posts
+   and is no problem. */
+.set-tz-preview {
+  border: 1px solid var(--status-scheduled-line);
+  background: var(--status-scheduled-bg);
+  color: var(--status-scheduled-fg);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.set-tz-preview p {
+  margin: 0;
+}
+.set-tz-preview ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+.set-tz-unset {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  font-size: 13px;
+}
+.set-tz-results {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  max-height: 300px;
+  overflow: auto;
+  background: var(--card);
+}
+.set-tz-results li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.set-tz-results li[aria-selected="true"] {
+  background: var(--hover);
+}
+.set-tz-none {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.set-tz-results mark {
+  background: var(--warn-bg);
+  color: inherit;
+  border-radius: 2px;
 }
 .set-rp-pick select {
   width: 100%;
@@ -7278,4 +7383,51 @@ body.has-savebar .content {
   .sub-dl dd {
     margin-bottom: 8px;
   }
+}
+
+/* The publication's clock against the browser's (DESIGN §10). A time that can still be acted on
+   carries the browser's clock on a line of its own under it, smaller, in the scheduled violet
+   at a lower weight, so the publication's time leads and the two never share a line. */
+.second-clock {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--status-scheduled-fg);
+  opacity: 0.85;
+}
+/* The Send at picker (DESIGN §4): the field with the publication's zone beside it when the
+   browser keeps another clock, then the browser's clock, or the server's refusal of the time,
+   under it, and the amber note when the two disagree about the zone's rules. */
+.when-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+/* The field gives up width to the zone's name beside it, and wraps under it only on a phone. */
+.when-field input {
+  flex: 1 1 12rem;
+  width: auto;
+  min-width: 0;
+}
+.when-zone {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.modal .when-line {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.modal .when-line.when-refused {
+  color: var(--danger-fg);
+}
+.modal .when-warn {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--warn-fg);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-line);
+  border-radius: 8px;
+  padding: 8px 10px;
 }

@@ -120,7 +120,8 @@ export function installRouter(): void {
   // before route() tears it down: a dirty editor saves in the background and lets the
   // navigation through, unless its last save failed (a silent flush could lose work),
   // when it asks for a confirm() (synchronous, unlike the modal helper) and, on cancel,
-  // the hash goes back, which is a hashchange to the mounted hash and so nothing to do.
+  // the hash goes back, which is a hashchange to the mounted hash and so nothing to do. A
+  // view that answers "stay" has the hash put back the same way, unasked, and follows later.
   window.addEventListener("hashchange", () => {
     if (location.hash === mountedHash) {
       return;
@@ -131,7 +132,8 @@ export function installRouter(): void {
       setNavOpen(false);
       return;
     }
-    if (mounted()?.beforeLeave?.() === "confirm" && !confirm(LEAVE_MSG)) {
+    const answer = mounted()?.beforeLeave?.();
+    if (answer === "stay" || (answer === "confirm" && !confirm(LEAVE_MSG))) {
       location.hash = mountedHash;
       return;
     }

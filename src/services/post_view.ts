@@ -9,6 +9,7 @@
 import type { Post, PostAction } from "../../shared/posts";
 import { currentAuthors, getPost, type PostRow } from "../db/posts";
 import { postSendRefs, publicationsFor } from "../db/sends";
+import { readTimeZone } from "../db/settings";
 import type { AppEnv, Config } from "../env";
 import { withAddresses } from "../lib/archive_address";
 import { HttpError } from "../lib/errors";
@@ -17,7 +18,8 @@ import { unwrap } from "../lib/unwrap";
 /**
  * What can be done to a post now, as its routes would take it given its state and the
  * deployment: a draft's text is edited and deleted (a scheduled or sent post's is frozen, I3),
- * and a draft is scheduled or sent now while a provider is connected (SPEC §6, §13). A blank
+ * and a draft is scheduled or sent now while a provider is connected and the publication has a
+ * time zone (SPEC §6, §9, §13). A blank
  * subject doesn't withdraw them: it is the one thing the publisher fixes in the act itself, so
  * it stays a refusal naming the field (`subject_required`), as a fire time inside the lead does.
  * A change to the post's settings is taken in any state, so it is no action of its own.
@@ -25,6 +27,7 @@ import { unwrap } from "../lib/unwrap";
 export function postActions(
   post: Pick<PostRow, "id" | "status">,
   config: Pick<Config, "provider">,
+  timeZoneSet: boolean,
 ): PostAction[] {
   if (post.status !== "draft") {
     return [];
@@ -34,7 +37,7 @@ export function postActions(
     { name: "edit", method: "PUT", path },
     { name: "delete", method: "DELETE", path },
   ];
-  if (config.provider !== "none") {
+  if (config.provider !== "none" && timeZoneSet) {
     actions.push(
       { name: "schedule", method: "POST", path: `${path}/schedule` },
       { name: "send_now", method: "POST", path: `${path}/send` },
@@ -46,17 +49,18 @@ export function postActions(
 /** Stored posts as the API answers them, in the order given: a few reads for all of them. */
 export async function viewPosts(env: AppEnv, config: Config, rows: PostRow[]): Promise<Post[]> {
   const ids = rows.map((r) => r.id);
-  const [published, authors, sends] = await Promise.all([
+  const [published, authors, sends, timeZone] = await Promise.all([
     publicationsFor(env.DB, ids),
     currentAuthors(env.DB, rows),
     postSendRefs(env.DB, ids),
+    readTimeZone(env.DB),
   ]);
   return rows.map((row) => ({
     ...withAddresses(config, row, published.get(row.id) ?? null),
     author: authors.get(row.id)?.author ?? null,
     author_client: authors.get(row.id)?.client ?? null,
     send: sends.get(row.id) ?? null,
-    actions: postActions(row, config),
+    actions: postActions(row, config, timeZone !== null),
   }));
 }
 

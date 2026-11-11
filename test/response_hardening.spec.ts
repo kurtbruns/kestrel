@@ -47,10 +47,12 @@ describe("reader and preview pages", () => {
     const res = await SELF.fetch(`${base}/archive/${post.slug}`);
     expect(res.status).toBe(200);
     expectHardenedPage(res);
-    // The page's own needs are allowed: the display font and images from any origin.
+    // The page's own needs are allowed, and nothing more: its inline styles and images from
+    // any origin. It names only fonts a reader has, so no stylesheet or font host is allowed.
     const csp = res.headers.get("content-security-policy") ?? "";
-    expect(csp).toContain("https://fonts.googleapis.com");
-    expect(csp).toContain("font-src https://fonts.gstatic.com");
+    expect(csp.split("; ")).toContain("style-src 'unsafe-inline'");
+    expect(csp).not.toContain("font-src");
+    expect(csp).not.toMatch(/https?:/);
     expect(csp).toContain("img-src * data:");
     // A form in the post's body can't submit: it would carry the publisher's session to
     // the admin API on this same origin.

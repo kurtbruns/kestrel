@@ -42,7 +42,8 @@ export function viewOf(
     },
     hasRetries,
     now,
-    // Nothing from the deployment: not on Free's limits, not in the sandbox, email working.
-    { freePlan: false, sandbox: false, sending: null },
+    // Nothing from the deployment: not on Free's limits, not in the sandbox, email working, and
+    // the publication has a time zone.
+    { freePlan: false, sandbox: false, sending: null, timeZoneSet: true },
   );
 }

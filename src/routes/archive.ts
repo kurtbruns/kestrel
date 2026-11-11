@@ -9,10 +9,12 @@
  * that never ships in an email, and the template's email-only regions are left out.
  */
 
+import { formatPublicationDate } from "../../shared/time_zone";
 import { getBySlug, getByUnlistedToken, type PostRow } from "../db/posts";
 import { listPublishedPosts, publishedSendForPost, type SendRow } from "../db/sends";
 import type { Config } from "../env";
 import { archiveAnswers } from "../lib/archive_address";
+import { describeHead, type PageDescription, postDescription } from "../lib/describe";
 import {
   ARCHIVE_POST_HEAD,
   archiveDevDashboardChrome,
@@ -36,14 +38,14 @@ import { param } from "../router";
 import { readSignups } from "../services/sending";
 import { archiveHomeUrl, devDashboardUrl, readerIdentity, readerMessage } from "./reader";
 
-/** A post's date as the reader surface shows it. */
-export function formatPublishedDate(ms: number): string {
-  return new Date(ms).toLocaleDateString("en-US", {
-    timeZone: "UTC",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+/** A post's date as the reader surface shows it: the publication's day, from its time zone
+ *  (SPEC §9), with no zone named; the day in UTC while none is set. Computed when the page is
+ *  served, so a zone change can move the date of a post sent near midnight. */
+export function formatPublishedDate(
+  ms: number,
+  identity: Pick<ReaderIdentity, "timeZone">,
+): string {
+  return formatPublicationDate(ms, identity.timeZone ?? null);
 }
 
 /** The public front door (§5): a home page featuring the latest post over a few
@@ -58,7 +60,7 @@ export async function landing(c: RequestContext): Promise<Response> {
   const mapped = posts.map((i) => ({
     title: i.subject,
     url: archiveUrl(c.config, i.slug),
-    dateLabel: formatPublishedDate(i.published_at),
+    dateLabel: formatPublishedDate(i.published_at, identity),
   }));
   const [featured, ...recent] = mapped;
   return landingPage({
@@ -85,10 +87,11 @@ export async function archiveIndex(c: RequestContext): Promise<Response> {
     identity,
     subscribeUrl: signups === "open" ? `${c.config.appOrigin}/subscribe` : undefined,
     homeUrl: `${c.config.appOrigin}/`,
+    archiveUrl: archiveHomeUrl(c.config),
     posts: posts.map((i) => ({
       title: i.subject,
       url: archiveUrl(c.config, i.slug),
-      dateLabel: formatPublishedDate(i.published_at),
+      dateLabel: formatPublishedDate(i.published_at, identity),
     })),
     devDashboardUrl: devDashboardUrl(c.config),
   });
@@ -98,10 +101,10 @@ export async function archiveIndex(c: RequestContext): Promise<Response> {
  *  markers, none touching the reviewed content: the per-recipient slots filled for no one
  *  (the generic unsubscribe link, and an empty sent-to address so none leaks), the
  *  template's email-only regions left out, the browser-only masthead (plus, in local dev
- *  only, the "Open dashboard" pill), and the hosted-page <head> chrome (display-serif links,
- *  the reader ground, and the logo as the tab icon), which never ships in an email. The
- *  public post page and the publisher's web version both build from this, so the web
- *  version is the page. */
+ *  only, the "Open dashboard" pill), and the hosted-page <head> chrome (the reader
+ *  ground, the logo as the tab icon, and the description and link-preview tags), which
+ *  never ships in an email. The public post page and the publisher's web version both
+ *  build from this, so the web version is the page. */
 export function webVersion(
   html: string,
   opts: {
@@ -110,11 +113,14 @@ export function webVersion(
     /** The date the masthead carries: when the post went out, or will. */
     dateMs: number;
     devDashboardUrl?: string;
+    /** What the page says about itself to search engines and link previews
+     *  (`postPageDescription`). */
+    describe?: PageDescription;
   },
 ): string {
   const masthead = archiveMasthead({
     name: opts.identity.name,
-    dateLabel: formatPublishedDate(opts.dateMs),
+    dateLabel: formatPublishedDate(opts.dateMs, opts.identity),
     // Back to the archive index the post belongs to, on the same (archive) origin —
     // so an apex-hosted post stays on the apex instead of jumping to the app subdomain.
     indexUrl: archiveHomeUrl(opts.config),
@@ -129,7 +135,34 @@ export function webVersion(
     .split(ARCHIVE_MASTHEAD_ANCHOR)
     .join(masthead + dev.masthead)
     .split(ARCHIVE_HEAD_ANCHOR)
-    .join(ARCHIVE_POST_HEAD + readerIconLink(opts.identity.logoUrl) + dev.head);
+    .join(
+      ARCHIVE_POST_HEAD +
+        (opts.describe ? describeHead(opts.describe) : "") +
+        readerIconLink(opts.identity.logoUrl) +
+        dev.head,
+    );
+}
+
+/**
+ * What a post page says about itself (SPEC §5): the subject as the title, the post's opening
+ * text as readers received it (the frozen plain-text part, `postDescription`), or the tagline
+ * when the post opens with no prose, and the logo as the image. The address is the post's
+ * archive address, and only while the post is listed: an email-only post's page is reached
+ * by its unlisted link, a secret no tag repeats, so its preview names no address.
+ */
+export function postPageDescription(
+  config: Config,
+  identity: ReaderIdentity,
+  post: { slug: string; emailOnly: boolean },
+  frozen: { subject: string; text: string },
+): PageDescription {
+  return {
+    type: "article",
+    title: frozen.subject,
+    description: postDescription(frozen.text, frozen.subject) || (identity.tagline ?? ""),
+    url: post.emailOnly ? undefined : archiveUrl(config, post.slug),
+    image: identity.logoUrl,
+  };
 }
 
 /** One page for every archive address with no published post (see `archivePage`). */
@@ -162,11 +195,18 @@ export function noPageHerePage(c: RequestContext): Promise<Response> {
  *  email-only post: anyone with its link can open it, but no list or search engine is
  *  offered it (SPEC §5). A header, not a meta tag, so the frozen copy is served unchanged (I3). */
 async function postPage(c: RequestContext, post: PostRow, send: SendRow): Promise<Response> {
+  const identity = await readerIdentity(c, c.config);
   const html = webVersion(send.rendered_html, {
     config: c.config,
-    identity: await readerIdentity(c, c.config),
+    identity,
     dateMs: send.started_at ?? send.fire_at,
     devDashboardUrl: devDashboardUrl(c.config),
+    describe: postPageDescription(
+      c.config,
+      identity,
+      { slug: post.slug, emailOnly: post.email_only },
+      { subject: send.subject, text: send.rendered_text },
+    ),
   });
   return new Response(html, {
     headers: {

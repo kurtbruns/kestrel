@@ -32,7 +32,6 @@ import { ApiError, api, apiText, describeError, isNetworkFailure } from "../api"
 import {
   connectProviderLink,
   dailyWritesLine,
-  earliestFireAt,
   heldWhenFiresHtml,
   isTooSoon,
   notConnectedScheduleLine,
@@ -50,15 +49,18 @@ import { inSandbox, readProviderStatus, refusalOf } from "../provider_status";
 import { followSend, readSendsNow, type StageChange } from "../send_state";
 import { openRescheduleModal } from "../sends/dialogs";
 import { can, conditionOf, has } from "../sends/progress";
+import { mountWhen, scheduledText, type WhenPicker, whenHtml } from "../sends/when";
 import { appState } from "../state";
+import { clocksFor, noTimeZoneLine } from "../time_zone";
 import { $, $$ } from "../ui/dom";
 import { EMAIL_FRAME_SANDBOX, openLinksInNewTab } from "../ui/email_frame";
 import {
-  fmt,
+  fmtAt,
   invalidAddressesMessage,
   lateStr,
   notSentMessage,
   parseAddresses,
+  secondClock,
   type TestMiss,
   toLocalInput,
   untilStr,
@@ -1422,10 +1424,12 @@ export async function renderEditor(
       if (!validateSubject()) {
         return; // empty subject: the field-level error is now showing; don't open the modal
       }
-      const minStr = toLocalInput(earliestFireAt());
-      const def = toLocalInput(new Date(Date.now() + 24 * 3600 * 1000));
-      // While the server would refuse both views (no provider connected), the dialog drops the
-      // picker and the Send now row and leaves only the standing line (DESIGN §4).
+      // The picker reads and shows the publication's clock (SPEC §6), opening a day out.
+      const def = Date.now() + 24 * 3600 * 1000;
+      const c = clocksFor([def]);
+      // While the server would refuse both views (no provider connected, or no time zone set),
+      // the dialog drops the picker and the Send now row and leaves only the standing line
+      // (DESIGN §4).
       const notConnected = !canSend;
       // The dialog's own copy of the post's settings (SPEC §4, §5): it opens as stored, the form
       // under the time edits it, and it reaches the post only when Schedule or Send now is
@@ -1437,9 +1441,13 @@ export async function renderEditor(
       }
       const scheduleHint = "It sends at the time you pick, with a cancelable window until then.";
       const scheduleView = () =>
-        html`<h3 id="schHead">Schedule this post</h3><p class="hint" id="schHint">${scheduleHint}</p>${notConnectedScheduleLine()}${dailyWritesLine()}${sandboxSendLine()}${refusingSendLine()}${notConnected ? null : html`<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}"><div class="dialog-settings" id="schForm"></div>`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Or send as soon as possible.</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
+        html`<h3 id="schHead">Schedule this post</h3><p class="hint" id="schHint">${scheduleHint}</p>${notConnectedScheduleLine()}${noTimeZoneLine(canSend)}${dailyWritesLine()}${sandboxSendLine()}${refusingSendLine()}${notConnected ? null : html`${whenHtml("schWhen", def, c)}<div class="dialog-settings" id="schForm"></div>`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Or send as soon as possible.</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
       // The picked time survives a trip to Send now and back.
-      let picked = def;
+      let picked = toLocalInput(def, c.home);
+      // The mounted picker, for the view that shows it; a trip to Send now and back mounts a
+      // fresh one, its reads ending with the view.
+      let picker: WhenPicker | null = null;
+      let pickerMount: AbortController | null = null;
       const m = modal(scheduleView(), signal);
       const box = $(".modal", m.el);
       // Who a send would reach now: the confirmed addresses that aren't suppressed (SPEC §6),
@@ -1520,12 +1528,13 @@ export async function renderEditor(
         busy($<HTMLButtonElement>("#schGo", box), "Scheduling…", async () => {
           m.clearError();
           const whenEl = $<HTMLInputElement>("#schWhen", box);
-          const t = whenEl.value ? new Date(whenEl.value).getTime() : Number.NaN;
-          if (Number.isNaN(t)) {
+          const v = picker?.value() ?? "";
+          if (!v) {
             m.error("Pick a valid date & time", whenEl);
             return;
           }
-          if (isTooSoon(t)) {
+          const t = picker?.moment() ?? null;
+          if (t !== null && isTooSoon(t)) {
             m.error(tooSoonText(), whenEl);
             return;
           }
@@ -1537,14 +1546,16 @@ export async function renderEditor(
               refused();
               return;
             }
-            await api<ScheduleResponse>(`/api/posts/${id}/schedule`, {
+            // The local time as picked: the server reads it on the publication's clock.
+            const { send } = await api<ScheduleResponse>(`/api/posts/${id}/schedule`, {
               method: "POST",
-              json: { fire_at: new Date(t).toISOString(), ...settingsBody() },
+              json: { fire_at: v, ...settingsBody() },
             });
             m.close();
             // Stay on the post, re-rendered in its scheduled state: the window is the
             // review and this page is the review surface (SPEC §6, DESIGN §3).
-            toast(withNoProviderNote(`Scheduled for ${fmt(t)}. Send yourself a test.`));
+            const said = scheduledText(send.fire_at, clocksFor([send.fire_at]));
+            toast(withNoProviderNote(`Scheduled for ${said}. Send yourself a test.`));
             remount();
           } catch (e) {
             if (isNotFound(e)) {
@@ -1578,7 +1589,8 @@ export async function renderEditor(
               json: settingsBody(),
             });
             m.close();
-            toast(withNoProviderNote(`Sends at ${fmt(send.fire_at)}, cancelable until then.`));
+            const said = scheduledText(send.fire_at, clocksFor([send.fire_at]));
+            toast(withNoProviderNote(`Sends at ${said}, cancelable until then.`));
             remount();
           } catch (e) {
             if (isNotFound(e)) {
@@ -1603,6 +1615,10 @@ export async function renderEditor(
         }
         $("#toSendNow", box).onclick = showSendNow;
         $<HTMLInputElement>("#schWhen", box).value = picked;
+        pickerMount?.abort();
+        pickerMount = new AbortController();
+        signal.addEventListener("abort", () => pickerMount?.abort(), { once: true });
+        picker = mountWhen(box, "schWhen", c, pickerMount.signal);
         showForm();
         $("#schWhen", box).focus();
         void paintDailyWrites();
@@ -1614,6 +1630,8 @@ export async function renderEditor(
         if (when) {
           picked = when.value;
         }
+        pickerMount?.abort();
+        picker = null;
         setHtml(
           box,
           html`<h3 id="snHead">Send now?</h3><p class="hint">Sends this draft, as it is now, to <strong id="snWho">your subscribers</strong> in ${sendNowWhenText()}. The post locks until then, and you can cancel any time before it starts sending.</p><div class="dialog-settings" id="schForm"></div>${dailyWritesLine()}${sandboxSendLine()}${refusingSendLine()}<div class="actions"><button type="button" class="linkbtn actions-back" id="toSchedule">← Back to schedule</button><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`,
@@ -1678,13 +1696,15 @@ function movedOn(send: SendView, remount: () => void): boolean {
  * tolerance, how late it is, in the danger tone.
  */
 function scheduledBannerHtml(send: BannerSend, due: boolean): Html {
+  const c = clocksFor([send.fire_at]);
+  const zone = c.home;
+  const at = html`Scheduled for <strong>${fmtAt(send.fire_at, c, true)}</strong>`;
+  const second = secondClock(send.fire_at, c);
+  const under = second ? html`<span class="second-clock">${second}</span>` : null;
   if (has(send, "missed")) {
-    return html`Scheduled for <strong>${fmt(send.fire_at)}</strong> · <span class="countdown countdown-missed">${lateStr(send.fire_at)}</span>`;
+    return html`${at} · <span class="countdown countdown-missed">${lateStr(send.fire_at)}</span>${under}`;
   }
-  if (due) {
-    return html`Scheduled for <strong>${fmt(send.fire_at)}</strong> · <span class="countdown">${untilStr(send.fire_at, true)}</span>`;
-  }
-  return html`Scheduled for <strong>${fmt(send.fire_at)}</strong> · <span class="countdown">${untilStr(send.fire_at)}</span>`;
+  return html`${at} · <span class="countdown">${untilStr(send.fire_at, zone, due)}</span>${under}`;
 }
 
 /** Whether a read or write found its post (or its send, which goes with it) gone. */

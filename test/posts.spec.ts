@@ -1,8 +1,12 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
-import { frozenSend, setRow } from "./support/fixtures";
+import { beforeEach, describe, expect, it } from "vitest";
+import { frozenSend, setRow, setTimeZone } from "./support/fixtures";
 import { AUTH, adminAuth, base, JSON_AUTH, readJson } from "./support/http";
+
+// These specs share one database across their tests; each starts with the publication's time
+// zone set, since scheduling is refused without one (SPEC §9).
+beforeEach(() => setTimeZone());
 
 async function createPost(body: unknown): Promise<Response> {
   return SELF.fetch(`${base}/api/posts`, {

@@ -14,8 +14,9 @@ import type {
 import { api, describeError } from "../api";
 import { setTitle } from "../lifecycle";
 import { deliveryOutcome } from "../sends/outcome";
+import { clocksFor, timeAt } from "../time_zone";
 import { $, $$ } from "../ui/dom";
-import { fmt } from "../ui/format";
+import { fmt, zoneHeader } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
 import { busy, renderError } from "../ui/widgets";
 import { subscriberActs } from "./acts";
@@ -148,7 +149,7 @@ function receivesLine(sub: Subscriber): string {
   if (sub.status === "pending") {
     why.push("they haven’t confirmed");
   } else if (sub.status === "unsubscribed") {
-    why.push(`they left the list on ${fmt(sub.unsubscribed_at)}`);
+    why.push(`they left the list on ${timeAt(sub.unsubscribed_at)}`);
   }
   if (sub.suppression) {
     why.push(
@@ -188,7 +189,7 @@ function joinedSection(sub: Subscriber, record: ImportRecord | null): Html {
             ${
               record
                 ? html`${row("Import", html`<code>${record.file_name}</code>`)}
-                  ${row("Imported", `${fmt(record.created_at)}, by ${importedBy(record)}`)}
+                  ${row("Imported", `${timeAt(record.created_at)}, by ${importedBy(record)}`)}
                   ${row("Attestation", record.attestation_version === null ? "None: the import confirmed no one" : `Version ${record.attestation_version}`)}`
                 : null
             }`
@@ -199,9 +200,9 @@ function joinedSection(sub: Subscriber, record: ImportRecord | null): Html {
         // records the file's own date (its confirmed_at, else its subscribed_at) as the
         // confirmation, which the note says is the file's.
         "Joined",
-        fmt(sub.created_at),
+        timeAt(sub.created_at),
       )}
-      ${row("Confirmed", fmt(sub.confirmed_at))}
+      ${row("Confirmed", timeAt(sub.confirmed_at))}
       ${row("Evidence", evidence ? html`<pre class="sub-evidence">${evidence}</pre>` : "None recorded")}
     </dl>
     ${sub.import_id !== null ? html`<p class="sub-note">The origin, opt-in, confirmation date, and evidence are what the imported file said, not something Kestrel recorded itself.</p>` : null}
@@ -220,7 +221,7 @@ function suppressionSection(sub: Subscriber): Html {
     body = html`<p class="muted">None.</p>`;
   } else {
     const flag = SUPPRESSION_FLAG[sup.reason];
-    body = html`<p class="sub-sup-line"><span class="badge suppressed">${flag}</span> <span class="muted">since ${fmt(sup.created_at)}</span></p>
+    body = html`<p class="sub-sup-line"><span class="badge suppressed">${flag}</span> <span class="muted">since ${timeAt(sup.created_at)}</span></p>
       <p class="sub-meaning">${flagMeaning(sub, sup.reason)}</p>
       ${sup.detail ? html`<dl class="sub-dl">${row("Detail", sup.detail)}</dl>` : null}`;
   }
@@ -274,7 +275,7 @@ function leftSection(sub: Subscriber): Html | null {
   const returned = sub.status !== "unsubscribed";
   return html`<section class="card sub-sec" aria-labelledby="subLeftTitle">
     <h2 class="rec-part-title" id="subLeftTitle">${returned ? "Left before" : "Why they left"}</h2>
-    <p class="sub-left-line"><span class="muted">Left ${fmt(sub.unsubscribed_at)}</span></p>
+    <p class="sub-left-line"><span class="muted">Left ${timeAt(sub.unsubscribed_at)}</span></p>
     <p class="sub-meaning">${returned ? LEFT_BEFORE[cause] : CAUSE_MEANING[cause]}</p>
     ${cause === "complaint" ? html`<p class="sub-meaning" id="subComplaint" hidden></p>` : null}
     ${sub.status === "pending" ? html`<p class="sub-meaning">They signed up again, and haven’t confirmed yet.</p>` : null}
@@ -308,7 +309,7 @@ function paintSends(
   }
   setHtml(
     list,
-    html`<div class="table-wrap"><table class="list-table sub-sends-table"><colgroup><col><col class="c-out"><col><col class="c-date"></colgroup><thead><tr><th>Send</th><th class="c-out">Outcome</th><th>Detail</th><th class="c-date">When</th></tr></thead><tbody></tbody></table></div>`,
+    html`<div class="table-wrap"><table class="list-table sub-sends-table"><colgroup><col><col class="c-out"><col><col class="c-date"></colgroup><thead><tr><th>${zoneHeader("Send", sendsClocks())}</th><th class="c-out">Outcome</th><th>Detail</th><th class="c-date">${zoneHeader("When", sendsClocks())}</th></tr></thead><tbody></tbody></table></div>`,
   );
   const body = $("tbody", list);
   const add = (page: SubscriberDeliveriesResponse) => {
@@ -342,6 +343,10 @@ function paintSends(
   add(first);
 }
 
+// The clocks the table of sends reads on, decided at its header from now, since its rows come a
+// page at a time (DESIGN §10).
+const sendsClocks = () => clocksFor();
+
 // What a skipped row means: it was left out when its turn came.
 const SKIPPED = "Left out: unsubscribed or suppressed before it went";
 
@@ -351,5 +356,5 @@ function sendRow({ send, delivery }: SubscriberDelivery): Html {
     delivery.error ||
     delivery.event_detail ||
     (delivery.event === null && delivery.status === "skipped" ? SKIPPED : "");
-  return html`<tr><td class="sub-send"><a href="#/sent/${send.id}">${send.subject || html`<em>untitled</em>`}</a><div class="muted">${fmt(send.fire_at)}</div></td><td><span class="rec-out"><span class="rec-sw sw-${o.sw}"></span>${o.label}</span></td><td class="muted">${detail || "—"}</td><td class="muted">${delivery.event_at ? fmt(delivery.event_at) : "—"}</td></tr>`;
+  return html`<tr><td class="sub-send"><a href="#/sent/${send.id}">${send.subject || html`<em>untitled</em>`}</a><div class="muted">${fmt(send.fire_at, sendsClocks())}</div></td><td><span class="rec-out"><span class="rec-sw sw-${o.sw}"></span>${o.label}</span></td><td class="muted">${detail || "—"}</td><td class="muted">${delivery.event_at ? fmt(delivery.event_at, sendsClocks()) : "—"}</td></tr>`;
 }
