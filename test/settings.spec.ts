@@ -704,7 +704,7 @@ describe("the stored settings keep their own shape while the wire is snake_case 
   };
 
   it("reads a row in the 1.12.0 shape back through GET /api/settings, every field intact", async () => {
-    await env.DB.prepare("INSERT INTO settings (id, data, updated_at) VALUES (1, ?, 1)")
+    await env.DB.prepare("UPDATE settings SET data = ?, updated_at = 1 WHERE id = 1")
       .bind(JSON.stringify(STORED_1_12))
       .run();
     const { res, body } = await getSettings();

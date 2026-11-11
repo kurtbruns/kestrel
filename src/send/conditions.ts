@@ -57,10 +57,13 @@ export function inWindow(send: Pick<SendSummary, "status" | "fire_at">, now: num
 }
 
 /** What the server would accept on the send right now: cancel and reschedule inside the
- *  review window, Resolve while it is wedged. */
-export function sendActions(send: SendSummary, now: number): SendAction[] {
+ *  review window, the reschedule only while the publication has a time zone (SPEC §9), and
+ *  Resolve while it is wedged. */
+export function sendActions(send: SendSummary, now: number, timeZoneSet: boolean): SendAction[] {
   if (inWindow(send, now)) {
-    return [action(send, "cancel"), action(send, "reschedule")];
+    return timeZoneSet
+      ? [action(send, "cancel"), action(send, "reschedule")]
+      : [action(send, "cancel")];
   }
   return isWedged(send) ? [action(send, "resolve")] : [];
 }
@@ -84,6 +87,12 @@ export interface ConditionContext {
   freePlan: boolean;
   sandbox: boolean;
   sending: SendingView | null;
+}
+
+/** What the deployment adds to a send's view: its conditions' context, and whether the
+ *  publication has a time zone, without which a send can't be rescheduled (SPEC §9). */
+export interface SendViewContext extends ConditionContext {
+  timeZoneSet: boolean;
 }
 
 /** The send's open conditions, most severe first. */

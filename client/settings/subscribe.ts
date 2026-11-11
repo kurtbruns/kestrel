@@ -2,6 +2,7 @@
 // paste into the publisher's own site. Both post to the public /subscribe and start the
 // double opt-in, never an auto-confirm (I1).
 
+import { inlineStack, SANS_STACK, SERIF_STACK } from "../../shared/fonts";
 import { connectProviderLink } from "../deployment";
 import { copyButton, copyFace, wireCopy } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
@@ -22,15 +23,15 @@ export function buildEmbed(mode: EmbedMode, name: string, appOrigin: string): st
   const heading = escapeHtml(embedHeading(name));
   const action = `${escapeHtml(appOrigin)}/subscribe`;
   if (mode === "styled") {
-    // The hosted subscribe page's look, carried inline: a serif headline (Georgia, the
-    // reader pages' own fallback, so it needs no web font) over a sans body, in the reader
+    // The hosted subscribe page's look, carried inline: the reader pages' serif headline
+    // (shared/fonts.ts, so it needs no web font) over their sans body, in the reader
     // pages' ink and muted colors. The headline inherits its color from the host page, and
     // the field's border is a step darker than the reader pages' line so it still shows on
     // a host page of any background. The apostrophe is plain ASCII, so the snippet reads
     // right whatever encoding the host page declares.
     return (
-      `<form action="${action}" method="post" style="max-width:460px;font:16px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">\n` +
-      `  <div style="font:600 22px/1.2 Georgia,'Times New Roman',serif;letter-spacing:-0.01em;margin-bottom:12px">${heading}</div>\n` +
+      `<form action="${action}" method="post" style="max-width:460px;font:16px/1.5 ${inlineStack(SANS_STACK)}">\n` +
+      `  <div style="font:600 22px/1.2 ${inlineStack(SERIF_STACK)};letter-spacing:-0.01em;margin-bottom:12px">${heading}</div>\n` +
       `  <div style="display:flex;gap:10px;flex-wrap:wrap">\n` +
       `    <input type="email" name="email" required placeholder="you@example.com" aria-label="Email address" style="flex:1 1 220px;padding:11px 13px;border:1px solid #d6d3cc;border-radius:9px;background:#fff;color:#1b1a17;font:inherit">\n` +
       `    <button type="submit" style="padding:11px 20px;border:1px solid #1b1a17;border-radius:9px;background:#1b1a17;color:#fbfbfa;font:inherit;font-size:15px;font-weight:600;cursor:pointer;white-space:nowrap">Subscribe</button>\n` +

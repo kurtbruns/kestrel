@@ -106,6 +106,21 @@ describe("router", () => {
     expect(document.querySelector("#app h1")).toBeNull(); // nothing was mounted over the stand-in
   });
 
+  it("keeps the view mounted, unasked, when it answers stay, and goes once it moves the hash itself", async () => {
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal("confirm", confirm);
+    await at("#/subscribers");
+    let answer: "stay" | "leave" = "stay";
+    await editorLike({ beforeLeave: () => answer });
+    await at("#/drafts");
+    expect(confirm).not.toHaveBeenCalled();
+    expect(location.hash).toBe("#/subscribers");
+    expect(document.querySelector("#app h1")).toBeNull();
+    answer = "leave";
+    await at("#/drafts");
+    expect($("#app h1").textContent).toBe("Drafts");
+  });
+
   it("⌘S saves through the mounted view, and is inert when it offers no save", async () => {
     const press = () => {
       const e = new KeyboardEvent("keydown", { key: "s", metaKey: true, cancelable: true });

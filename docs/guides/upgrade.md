@@ -54,13 +54,20 @@ Each step here changes only your instance's repository. Nothing reaches your dep
     npm run check-context
     ```
 
-    It compares each file in `.claude/` with the release's, and says what to do for each one:
+    It compares each file in `.claude/` with the copy this release ships and, where they differ, with the copy of the release you're upgrading from, which it fetches from npm. It finds that release in your last commit's `package.json`, which is why it runs before you commit the upgrade. It says what to do for each file:
 
-    - **current**: nothing to do.
+    - **current**: nothing to do, with or without your edits.
     - **Kestrel changed it, and you haven't edited it**: take the new one with `npm run check-context -- --update`.
-    - **Kestrel changed it, and you've edited it**: it shows the difference from yours to the release's. Merge what you want into yours, by hand or with Claude, then record that you did with the command it prints.
+    - **new in this release**: a file the release you're upgrading from didn't have; add it with `npm run check-context -- --update`.
+    - **you removed it**: a file you deleted stays deleted, and `--update` never brings it back. The line names this release's copy, so to bring it back, copy it from there, or ask Claude to.
+    - **Kestrel changed it, and you've edited it**: it shows what Kestrel changed, then your own edits, each from the release you're upgrading from. Merge Kestrel's change into yours, by hand or with Claude, keeping your edits.
+    - **Kestrel's change can't be shown apart from your edits**: without the network, `tar`, git, or a commit naming the release you're upgrading from, or when your last commit already names this release, it says why and shows one difference from yours to the release's; merge what you want of it. If you've already committed the upgrade, name the release you came from with `npm run check-context -- --from X.Y.Z`.
 
-1. If the release's **Upgrading from…** paragraph names a new setting, add it to `wrangler.jsonc`.
+    A change you don't take now isn't offered again at the next upgrade, which starts from the release you're on.
+
+    Releases before 1.24.0 wrote a header line at the top of each of these files. The first `check-context` after upgrading from one removes that line, changing nothing else in the file. Commit that with the upgrade.
+
+1. If the release's **Upgrading from…** paragraph names a setting to add or remove, change `wrangler.jsonc` as it says. When you remove one, remove any comment that describes it too.
 
 1. Check the configuration and the types:
 

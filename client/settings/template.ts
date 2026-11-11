@@ -2,6 +2,7 @@
 // editor.
 
 import { emailLogoHtml } from "../../shared/email_logo";
+import { SANS_STACK, SERIF_STACK } from "../../shared/fonts";
 import {
   ADDRESS_NOT_PRINTED,
   type SettingsPatchBody,
@@ -11,7 +12,7 @@ import {
 } from "../../shared/settings";
 import { api, describeError } from "../api";
 import { notConnectedTestLine, providerNotConnected, withNoProviderNote } from "../deployment";
-import { mount, onAbort, setTitle } from "../lifecycle";
+import { mount, onAbort, setTitle, type ViewHandle } from "../lifecycle";
 import { appState } from "../state";
 import { copyFace, copyWith } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
@@ -31,6 +32,7 @@ import {
   savedToast,
   withRemakeConfirm,
 } from "./remake";
+import { guardUnsaved } from "./unsaved";
 
 const message = describeError;
 
@@ -121,14 +123,17 @@ export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
     description:
       "Your post, then your logo, name, and tagline as a sign-off. Your mailing address sits in the footer once you add one.",
     html: `<style>
+  /* Name only fonts your readers already have, with a generic family (serif,
+     sans-serif) last: mail clients ignore web fonts, and a sent email keeps its
+     font names for good. */
   .email {
-    font: 16px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font: 16px/1.6 ${SANS_STACK};
     color: #18181b;
   }
   .email h1,
   .email h2,
   .email h3 {
-    font-family: Georgia, 'Times New Roman', serif;
+    font-family: ${SERIF_STACK};
     line-height: 1.2;
   }
   .email a {
@@ -148,7 +153,7 @@ export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
     margin-right: 14px;
   }
   .signoff .name {
-    font: 600 17px/1.2 Georgia, 'Times New Roman', serif;
+    font: 600 17px/1.2 ${SERIF_STACK};
   }
   .signoff .tagline {
     font-size: 13px;
@@ -221,14 +226,17 @@ export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
     description:
       "Just your post and the footer links. Your mailing address sits in the footer once you add one.",
     html: `<style>
+  /* Name only fonts your readers already have, with a generic family (serif,
+     sans-serif) last: mail clients ignore web fonts, and a sent email keeps its
+     font names for good. */
   .email {
-    font: 16px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font: 16px/1.6 ${SANS_STACK};
     color: #18181b;
   }
   .email h1,
   .email h2,
   .email h3 {
-    font-family: Georgia, 'Times New Roman', serif;
+    font-family: ${SERIF_STACK};
     line-height: 1.2;
   }
   .email a {
@@ -463,7 +471,10 @@ interface TemplateSaved {
  * examples, a variable reference, and its own validated Save). Editing lives here,
  * not in Settings, so each surface has a single, unambiguous save.
  */
-export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Promise<void> {
+export async function renderTemplate(
+  root: HTMLElement,
+  signal: AbortSignal,
+): Promise<ViewHandle | undefined> {
   setTitle(signal, "Template");
   setHtml(
     root,
@@ -603,6 +614,7 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
   // {{ .Email.UnsubscribeURL }}, a 400) is a blocking error, so it shows IN the bar
   // (which stays up, right beside Save). Warnings are advisory and describe the
   // template that was just saved, so they stay inline under the editor.
+  const guard = guardUnsaved(isDirty, signal);
   const bar = savebar.attach({ onSave: onSaveTemplate, onDiscard: revertTemplate }, signal);
 
   function refreshDirty() {
@@ -646,7 +658,12 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
   // dirty). THROWS on a rejected template (no unsubscribe link → 400) or a send about to
   // fire (409 remake_too_close), so callers decide what to do. Shared by the save bar's
   // Save and Save-&-send-test.
-  async function saveTemplate(): Promise<TemplateSaved | null> {
+  // `follow` false for a save the test dialog goes on to send after: a leave asked while it
+  // saved is dropped, so the page and its dialog stay for the test (unsaved.ts).
+  function saveTemplate(follow = true): Promise<TemplateSaved | null> {
+    return guard.saving(writeTemplate, follow);
+  }
+  async function writeTemplate(): Promise<TemplateSaved | null> {
     const value = tplEditor.value;
     const r = await withRemakeConfirm(
       (ack) => {
@@ -813,7 +830,7 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
         // A rejected save shows in the bar and stops the send.
         if (isDirty()) {
           try {
-            const saved = await saveTemplate();
+            const saved = await saveTemplate(false);
             if (!saved) {
               m.close(); // declined the re-make: nothing saved, so nothing to test yet
               return;
@@ -850,4 +867,6 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
   tplEditor.value = templateBaseline;
   preview.repaint();
   refreshDirty();
+  // ⌘S is Save changes itself, refusals and the re-make confirmation included.
+  return { ...guard.handle, manualSave: bar.save };
 }

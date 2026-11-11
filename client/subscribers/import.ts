@@ -18,10 +18,10 @@ import {
 } from "../../shared/imports";
 import { ApiError, api, apiFile, describeError } from "../api";
 import { mount, setTitle } from "../lifecycle";
+import { timeAt } from "../time_zone";
 import { codeBlock, wireCopy } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
 import { saveFile } from "../ui/download";
-import { fmt } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { busy, fieldError, renderError, toast } from "../ui/widgets";
@@ -282,7 +282,7 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
             ? html`<p class="imp-text">A scheduled post goes to the list as it stands when it sends, so this import adds to its audience. Acknowledge each one.</p>
               ${p.sends_growing.map(
                 (s) =>
-                  html`<label class="imp-check"><input type="checkbox" data-ack="${s.id}"><span>“${s.subject || "Untitled"}”, sending ${fmt(s.fire_at)}, goes to ${s.gains.toLocaleString("en-US")} more ${s.gains === 1 ? "person" : "people"}.</span></label>`,
+                  html`<label class="imp-check"><input type="checkbox" data-ack="${s.id}"><span>“${s.subject || "Untitled"}”, sending ${timeAt(s.fire_at)}, goes to ${s.gains.toLocaleString("en-US")} more ${s.gains === 1 ? "person" : "people"}.</span></label>`,
               )}`
             : null
         }
@@ -470,7 +470,7 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
         <dl class="imp-dl">
           <dt>File</dt><dd>${rec.file_name}</dd>
           <dt>Fingerprint</dt><dd><code>${rec.file_sha256.slice(0, 16)}</code></dd>
-          <dt>Imported</dt><dd>${fmt(rec.created_at)} by ${who}</dd>
+          <dt>Imported</dt><dd>${timeAt(rec.created_at)} by ${who}</dd>
           <dt>Attestation</dt><dd>${
             rec.attestation_version === null
               ? "None needed: nobody was imported as a subscriber."

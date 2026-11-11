@@ -130,13 +130,14 @@ describe("demo content", () => {
   it("splits the publication's test recipients on commas", () => {
     const pub = parseDemoPublication(
       "p.md",
-      "---\nname: N\ntagline: T\ntest_recipients: a@x.example ,b@x.example\n---\n",
+      "---\nname: N\ntagline: T\ntest_recipients: a@x.example ,b@x.example\ntime_zone: Asia/Tokyo\n---\n",
     );
     expect(pub).toEqual({
       name: "N",
       tagline: "T",
       address: "",
       testRecipients: ["a@x.example", "b@x.example"],
+      timeZone: "Asia/Tokyo",
     });
   });
 });

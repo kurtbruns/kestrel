@@ -67,11 +67,12 @@ export function recipientsSection(): Html {
     </section>`;
 }
 
-/** Removable chips and an add row; the list commits through the save bar. */
+/** Removable chips and an add row, each change saved at once. */
 export function mountRecipients(root: HTMLElement, page: SettingsPage): SectionHandle {
   return mountAddressList(root, page, {
     ids: RECIPIENT_IDS,
-    list: () => page.state.recipients,
+    key: "recipients",
+    name: "default test recipients",
     empty: "No default recipients yet. Add one below.",
   });
 }

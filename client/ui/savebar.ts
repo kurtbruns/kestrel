@@ -24,6 +24,8 @@ export interface SavebarOptions {
 export interface SavebarHandle {
   setDirty(dirty: boolean): void;
   showError(text: string): void;
+  /** Press Save, as a click on it does (⌘S): only while the bar is up and Save isn't already running. */
+  save(): void;
 }
 
 // One full-width banner fixed to the bottom of the viewport (markup in index.html),
@@ -74,7 +76,7 @@ export const savebar = (() => {
     signal: AbortSignal,
   ): SavebarHandle {
     if (signal.aborted) {
-      return { setDirty() {}, showError() {} }; // the page is already gone: nothing to drive
+      return { setDirty() {}, showError() {}, save() {} }; // the page is already gone: nothing to drive
     }
     const mine = ++token;
     signal.addEventListener(
@@ -117,6 +119,11 @@ export const savebar = (() => {
         el.classList.add("is-error");
         setMsg(text);
         reveal();
+      },
+      save() {
+        if (alive() && el.classList.contains("show") && !saveBtn.disabled) {
+          saveBtn.click();
+        }
       },
     };
   }

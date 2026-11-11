@@ -1,4 +1,4 @@
-// The dashboard's setup steps (DESIGN §3, SPEC §13): the ten steps from deployed to the first
+// The dashboard's setup steps (DESIGN §3, SPEC §13): the eleven steps from deployed to the first
 // post, each read from a fact both clients can read, and their markup as the first-run
 // checklist or the Finish setting up card.
 
@@ -12,8 +12,8 @@ import {
   productionAccessHint,
   TEMPLATE_TEST_HREF,
 } from "../provider_status";
+import { timeAt } from "../time_zone";
 import { copyFace } from "../ui/copy";
-import { fmt } from "../ui/format";
 import { type Html, html } from "../ui/html";
 
 /**
@@ -33,6 +33,9 @@ export interface SetupFacts {
   /** The publication's name as readers see it, and whether one has been set. */
   name: string;
   named: boolean;
+  /** The publication's time zone, by its name for people, or null while none is set: nothing
+   *  can be scheduled or sent until it is (SPEC §9). */
+  timeZoneLabel: string | null;
   /** How many addresses notifications go to. */
   notifyTo: number;
   /** The last notification failed, with none delivered since. */
@@ -61,6 +64,7 @@ export type SetupStepKey =
   | "connect"
   | "test"
   | "name"
+  | "time_zone"
   | "notify"
   | "access"
   | "list"
@@ -81,6 +85,7 @@ export interface SetupStep {
 const CONNECT = "Connect Amazon SES";
 const TEST = "Send a test email";
 const SCHEDULE = "Schedule your first post";
+const TIME_ZONE = "Set the time zone";
 
 /** "After <step>", a blocked step's whole hint: the step it waits for, in plain words. */
 const after = (title: string) => `After ${title}`;
@@ -93,7 +98,7 @@ const plural = (n: number, one: string, many: string) =>
   `${n.toLocaleString()} ${n === 1 ? one : many}`;
 
 /**
- * The ten steps, in order. Each is done only from what the facts say, and blocked only when
+ * The eleven steps, in order. Each is done only from what the facts say, and blocked only when
  * it truly can't be taken: sending before SES is connected, the first post's test before it is
  * scheduled, and sharing before signups are open. Production access is never blocked, and
  * scheduling and sharing in the sandbox are allowed, with a hint to wait.
@@ -122,7 +127,7 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
             title: TEST,
             state: "done",
             hint: sending.last_accepted
-              ? `SES accepted an email ${fmt(sending.last_accepted.at)}.`
+              ? `SES accepted an email ${timeAt(sending.last_accepted.at)}.`
               : "SES is accepting email.",
           }
         : sending?.state === "refusing"
@@ -142,6 +147,17 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
     title: "Name your publication",
     state: f.named ? "done" : "todo",
     hint: f.named ? `Named “${f.name}”.` : `Currently “${f.name}”.`,
+  });
+
+  // Required before anything goes to readers, and never filled in on its own (SPEC §9).
+  steps.push({
+    key: "time_zone",
+    title: TIME_ZONE,
+    state: f.timeZoneLabel !== null ? "done" : "todo",
+    hint:
+      f.timeZoneLabel !== null
+        ? `Set to ${f.timeZoneLabel}.`
+        : "Used for the times you schedule posts at, the dates on your published posts, and the times in your notifications. Needed before your first send.",
   });
 
   // A failed notification is the health block's line; the step only points up at it.
@@ -187,14 +203,23 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
   steps.push({
     key: "schedule",
     title: SCHEDULE,
-    state: f.notConnected ? "blocked" : f.firstSend ? "done" : "todo",
+    // A send scheduled before the zone was unset still fires, so it still ticks the step.
+    state: f.notConnected
+      ? "blocked"
+      : f.firstSend
+        ? "done"
+        : f.timeZoneLabel === null
+          ? "blocked"
+          : "todo",
     hint: f.notConnected
       ? after(CONNECT)
       : f.firstSend
-        ? `Goes out ${fmt(f.firstSend.fire_at)}.`
-        : sandbox && sending?.state === "working"
-          ? "Best after AWS grants access: until then it reaches only verified addresses."
-          : null,
+        ? `Goes out ${timeAt(f.firstSend.fire_at)}.`
+        : f.timeZoneLabel === null
+          ? after(TIME_ZONE)
+          : sandbox && sending?.state === "working"
+            ? "Best after AWS grants access: until then it reaches only verified addresses."
+            : null,
   });
 
   // The test of the frozen email that will go out, recorded on the send; a draft's test is a
@@ -209,7 +234,7 @@ export function setupSteps(f: SetupFacts): SetupStep[] {
       ? after(SCHEDULE)
       : tested
         ? "The email that goes out has been tested."
-        : `“${s.subject}” goes out ${fmt(s.fire_at)}. Send yourself a test of it first.`,
+        : `“${s.subject}” goes out ${timeAt(s.fire_at)}. Send yourself a test of it first.`,
   });
 
   // Sharing can't be known, so it's never done; it waits only for signups to open. In the
@@ -262,6 +287,8 @@ function stepAction(step: SetupStep, f: SetupFacts, primary: boolean): Html | nu
       return html`<button class="${cls}" data-nav="${TEMPLATE_TEST_HREF}">Send test email</button>`;
     case "name":
       return html`<button class="${cls}" data-nav="#/settings">Settings</button>`;
+    case "time_zone":
+      return html`<button class="${cls}" data-nav="#${settingsRoute("time-zone")}">Settings</button>`;
     case "notify":
       return html`<button class="${cls}" data-nav="#${settingsRoute("notifications")}">Settings</button>`;
     case "access":

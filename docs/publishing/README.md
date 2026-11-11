@@ -9,6 +9,7 @@ These are the dashboard's setup steps, in its order. Each is checked off from wh
 1. Connect Amazon SES
 1. [Send a test email](check-your-setup.md)
 1. [Name your publication](name-your-publication.md)
+1. [Set the time zone](name-your-publication.md#set-the-time-zone)
 1. Get notified
 1. Request production access
 1. [Bring your existing list](your-list.md)

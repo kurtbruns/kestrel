@@ -8,6 +8,7 @@
  */
 
 import { dashboardLink } from "../../shared/dashboard_link";
+import { inlineStack, SANS_STACK } from "../../shared/fonts";
 import type { SendingRefusal } from "../../shared/provider";
 import {
   AWS_STATUS_PAGE,
@@ -75,7 +76,7 @@ interface Link {
 /** Paragraphs and a closing link, as both a text and an HTML body. Only the templates call it. */
 function message(subject: string, paragraphs: string[], link: Link): RenderedEmail {
   const text = `${paragraphs.join("\n\n")}\n\n${link.label}: ${link.url}\n\n${WHY_YOU_GOT_THIS}\n`;
-  const html = `<!doctype html><html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#18181b;">
+  const html = `<!doctype html><html><body style="font-family:${inlineStack(SANS_STACK)};font-size:15px;line-height:1.5;color:#18181b;">
 ${paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join("\n")}
 <p><a href="${escapeHtmlAttr(link.url)}">${escapeHtml(link.label)}</a></p>
 <p style="font-size:13px;color:#71717a;">${escapeHtml(WHY_YOU_GOT_THIS)}</p>

@@ -1,7 +1,15 @@
-// Pure formatting and parsing, with no DOM: dates, countdowns, the datetime-local value,
-// the recipient list, and a send's recipient count.
+// Pure formatting and parsing, with no DOM: dates and times on a given clock, countdowns, the
+// datetime-local value, the recipient list, and a send's recipient count.
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
+import {
+  formatClockTime,
+  formatLocalTime,
+  formatSecondClock,
+  formatTimeUntil,
+  timeUntil,
+  wallAt,
+} from "../../shared/time_zone";
 
 /** A send's audience in words, which reads "1 recipient" on a list of one (DESIGN's copy rules). */
 export function recipientCount(n: number): string {
@@ -9,23 +17,82 @@ export function recipientCount(n: number): string {
 }
 
 /**
- * A short local date-time, or an em dash for none. The year shows only when it isn't the
- * current one (local time), past or future, so this year's dates stay short and a date
- * from another year, such as a send from last year or one scheduled for next January,
- * can't read as this year's.
+ * The clocks a screen shows its times on (SPEC §6, DESIGN §10): the publication's (`home`, the
+ * browser's while none is set), the browser's, and whether they read differently at any time the
+ * screen shows (`away`), with the publication's zone named for people (`label`). A screen decides
+ * `away` once for all its times, so it labels every time or none. Passed in, since this module
+ * reads no app state.
  */
-export function fmt(ms: number | null | undefined): string {
+export interface Clocks {
+  home: string;
+  browser: string;
+  away: boolean;
+  label: string;
+}
+
+// Each zone's date formatter, with and without the weekday, kept for the life of the page as
+// shared/time_zone.ts keeps its own: building one costs tens of microseconds, and a list formats
+// a time per row.
+const DAY_FORMATS = new Map<string, Intl.DateTimeFormat>();
+
+/** The parts of a moment on a clock, en-US, as every time in the dashboard is written. */
+function partsOn(ms: number, zone: string, weekday: boolean) {
+  const key = `${zone} ${weekday}`;
+  let format = DAY_FORMATS.get(key);
+  if (format === undefined) {
+    format = new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      weekday: weekday ? "short" : undefined,
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+    DAY_FORMATS.set(key, format);
+  }
+  const parts = format.formatToParts(ms);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "";
+  return { weekday: part("weekday"), month: part("month"), day: part("day"), year: part("year") };
+}
+
+/**
+ * A date and time on the publication's clock, "Nov 13, 9:00 AM", or an em dash for none, with no
+ * zone named: the screen names it, in a header or after the time, when the browser's clock
+ * differs. The year shows only when it isn't the publication's current year, past or future, so
+ * this year's dates stay short and another year's can't read as this one. With `weekday`, a time
+ * still to come: "Fri Nov 13, 9:00 AM".
+ */
+export function fmt(ms: number | null | undefined, c: Clocks, weekday = false): string {
   if (!ms) {
     return "—";
   }
-  const d = new Date(ms);
-  return d.toLocaleString(undefined, {
-    year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const p = partsOn(ms, c.home, weekday);
+  const year =
+    new Date(wallAt(ms, c.home)).getUTCFullYear() ===
+    new Date(wallAt(Date.now(), c.home)).getUTCFullYear()
+      ? ""
+      : `, ${p.year}`;
+  const day = `${weekday ? `${p.weekday} ` : ""}${p.month} ${p.day}${year}`;
+  return `${day}, ${formatClockTime(ms, c.home)}`;
+}
+
+/** A time standing on its own (in a card, a sentence, a label-and-value row), with the
+ *  publication's zone after it when the browser's clock differs: "Nov 11, 1:40 AM Eastern Time". */
+export function fmtAt(ms: number | null | undefined, c: Clocks, weekday = false): string {
+  const at = fmt(ms, c, weekday);
+  return c.away && ms ? `${at} ${c.label}` : at;
+}
+
+/** A list's column or section header, naming the zone once for every time under it when the
+ *  browser's clock differs: "When · Eastern Time". */
+export function zoneHeader(word: string, c: Clocks): string {
+  return c.away ? `${word} · ${c.label}` : word;
+}
+
+/** A time that can still be acted on, on the browser's clock as a second line, or null at home:
+ *  "Fri 11:00 PM your time · Japan Standard Time". */
+export function secondClock(ms: number, c: Clocks): string | null {
+  return c.away ? formatSecondClock(ms, c.browser) : null;
 }
 
 /**
@@ -102,19 +169,20 @@ export function notSentMessage(sent: number, total: number, missed: TestMiss[]):
     : reasons.join(" ");
 }
 
-/** A Date as the value of a `datetime-local` input, in local time. */
-export function toLocalInput(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+/** A moment as the value of a `datetime-local` input on a zone's clock: the picker reads and
+ *  writes the publication's time, never the device's. */
+export function toLocalInput(ms: number, zone: string): string {
+  return formatLocalTime(wallAt(ms, zone));
 }
 
 /**
- * A countdown that gets coarser the further out the fire time is: it ticks seconds
- * only inside the last few minutes (the imminent / send-now cancel window), then
- * counts down by the minute, by the hour within a day, and by whole days beyond, so
- * a send scheduled days away reads "Sends in 2 days", not a ticking "47h 47m".
+ * A countdown that gets coarser the further out the fire time is: it ticks seconds only inside
+ * the last few minutes (the imminent / send-now cancel window), then counts down by the minute,
+ * by the hour within a day, by days and hours under three days, and by whole days beyond, so a
+ * send three days away reads "Sends in 3 days", not a ticking "71h 47m". Days are calendar days
+ * on the publication's clock, rounded down, as the server's `fire_at_in` counts them.
  */
-export function untilStr(fireAt: number, due = false): string {
+export function untilStr(fireAt: number, zone: string, due = false): string {
   const d = fireAt - Date.now();
   if (due || d <= 0) {
     // From the fire time the send waits for the sweep's tick on that minute (a fire time is
@@ -135,8 +203,11 @@ export function untilStr(fireAt: number, due = false): string {
     const rm = min % 60;
     return rm > 0 ? `Sends in ${hr}h ${rm}m` : `Sends in ${hr}h`;
   }
-  const days = Math.round(hr / 24);
-  return `Sends in ${days} day${days === 1 ? "" : "s"}`;
+  const { days } = timeUntil(fireAt, zone);
+  if (days >= 3) {
+    return `Sends in ${days} days`;
+  }
+  return `Sends ${formatTimeUntil(fireAt, zone)}`;
 }
 
 /** A scheduled send past the server's missed tolerance, by how late it now is. */

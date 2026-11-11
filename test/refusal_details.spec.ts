@@ -18,6 +18,7 @@ import {
   seedConfirmed,
   setRow,
   tpl,
+  unsetTimeZone,
 } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, PNG_1x1, readJson } from "./support/http";
 import { allowErrorLogs } from "./support/log";
@@ -357,6 +358,15 @@ const CASES: Case[] = [
       notConnected("POST", `/api/posts/${await draft()}/schedule`, { fire_at: Date.now() + HOUR }),
   },
   {
+    refusal: "POST /api/posts/:id/schedule time_zone_not_set",
+    when: "no time zone",
+    run: async () => {
+      const id = await draft();
+      await unsetTimeZone();
+      return call("POST", `/api/posts/${id}/schedule`, { fire_at: Date.now() + HOUR });
+    },
+  },
+  {
     refusal: "POST /api/posts/:id/schedule slug_invalid",
     when: "a malformed slug in the same act",
     run: async () =>
@@ -408,6 +418,15 @@ const CASES: Case[] = [
     refusal: "POST /api/posts/:id/send provider_not_connected",
     when: "no provider",
     run: async () => notConnected("POST", `/api/posts/${await draft()}/send`, {}),
+  },
+  {
+    refusal: "POST /api/posts/:id/send time_zone_not_set",
+    when: "no time zone",
+    run: async () => {
+      const id = await draft();
+      await unsetTimeZone();
+      return call("POST", `/api/posts/${id}/send`, {});
+    },
   },
   {
     refusal: "POST /api/posts/:id/send slug_invalid",
@@ -462,6 +481,23 @@ const CASES: Case[] = [
       const { send } = await scheduled();
       expect((await call("POST", `/api/sends/${send.id}/cancel`)).status).toBe(200);
       return call("POST", `/api/sends/${send.id}/reschedule`, { fire_at: Date.now() + HOUR });
+    },
+  },
+  {
+    refusal: "POST /api/sends/:id/reschedule time_zone_not_set",
+    when: "no time zone",
+    run: async () => {
+      const { send } = await scheduled();
+      await unsetTimeZone();
+      return call("POST", `/api/sends/${send.id}/reschedule`, { fire_at: Date.now() + 2 * HOUR });
+    },
+  },
+  {
+    refusal: "GET /api/time time_zone_not_set",
+    when: "a local time with no time zone",
+    run: async () => {
+      await unsetTimeZone();
+      return call("GET", "/api/time?fire_at=2026-11-13T09:00");
     },
   },
   {

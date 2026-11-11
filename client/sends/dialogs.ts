@@ -5,7 +5,7 @@
 import type { PostResponse } from "../../shared/posts";
 import type { ResolveResponse, SendSummary, WedgedResolution } from "../../shared/sends";
 import { ApiError, api, describeError } from "../api";
-import { earliestFireAt, isTooSoon, notConnectedRescheduleLine, tooSoonText } from "../deployment";
+import { isTooSoon, notConnectedRescheduleLine, tooSoonText } from "../deployment";
 import {
   mountSettingsForm,
   type Publishing,
@@ -14,10 +14,12 @@ import {
   showSlugRefusal,
 } from "../posts/publishing";
 import { readSendsNow } from "../send_state";
+import { clocksFor } from "../time_zone";
 import { $ } from "../ui/dom";
 import { toLocalInput } from "../ui/format";
 import { html } from "../ui/html";
 import { busy, modal, toast } from "../ui/widgets";
+import { mountWhen, scheduledText, whenHtml } from "./when";
 
 const message = describeError;
 
@@ -97,14 +99,15 @@ export async function openRescheduleModal(
   let stored: Publishing = saved;
   // The dialog's copy: Cancel leaves the post as it was.
   const working: Publishing = { ...stored };
-  const minStr = toLocalInput(earliestFireAt());
-  const cur = new Date(toLocalInput(new Date(send.fire_at)));
+  // The time it has, on the publication's clock, as the picker shows it.
+  const c = clocksFor([send.fire_at]);
+  const cur = toLocalInput(send.fire_at, c.home);
 
   const m = modal(
     html`<h3 id="rsHead">Edit schedule</h3>
       <p class="hint" id="rsHint">It sends at the time you pick, with a cancelable window until then.</p>
       ${notConnectedRescheduleLine()}
-      <label for="rsWhen">Send at</label><input type="datetime-local" id="rsWhen" min="${minStr}" value="${toLocalInput(cur)}">
+      ${whenHtml("rsWhen", send.fire_at, c)}
       <div class="dialog-settings" id="rsForm"></div>
       <div class="actions"><button type="button" id="rsCancel">Cancel</button><button type="button" class="primary" id="rsGo">Save</button></div>`,
     signal,
@@ -114,6 +117,7 @@ export async function openRescheduleModal(
   mountSettingsForm($("#rsForm", box), working, "rs");
   const go = $<HTMLButtonElement>("#rsGo", box);
   const when = $<HTMLInputElement>("#rsWhen", box);
+  const picker = mountWhen(box, "rsWhen", c, signal);
   // Settings saved by a Save whose time was then refused: closing shows them on the page.
   let savedSome = false;
   $("#rsCancel", box).onclick = () => {
@@ -125,16 +129,16 @@ export async function openRescheduleModal(
   go.onclick = () =>
     busy(go, "Saving…", async () => {
       m.clearError();
-      const v = when.value;
-      const t = v ? new Date(v).getTime() : Number.NaN;
-      if (Number.isNaN(t)) {
+      const v = picker.value();
+      if (!v) {
         m.error("Pick a valid date & time", when);
         return;
       }
       // The time it already has stays, however near: only a moved time is checked against the
       // lead, so a change to the settings alone saves up to the fire time (SPEC §6).
-      const unchanged = t === cur.getTime();
-      if (!unchanged && isTooSoon(t)) {
+      const unchanged = v === cur;
+      const t = picker.moment();
+      if (!unchanged && t !== null && isTooSoon(t)) {
         m.error(tooSoonText(), when);
         return;
       }
@@ -171,7 +175,8 @@ export async function openRescheduleModal(
         try {
           await api(`/api/sends/${send.id}/reschedule`, {
             method: "POST",
-            json: { fire_at: new Date(t).toISOString() },
+            // The local time as picked: the server reads it on the publication's clock.
+            json: { fire_at: v },
           });
         } catch (e) {
           if (deleted(e)) {
@@ -205,7 +210,9 @@ export async function openRescheduleModal(
       }
       m.close();
       // Said after the act, so it can say exactly what changed.
-      toast(unchanged ? "Saved" : "Rescheduled");
+      toast(
+        unchanged ? "Saved" : t === null ? "Rescheduled" : `Rescheduled to ${scheduledText(t, c)}`,
+      );
       onDone();
     });
   when.focus();

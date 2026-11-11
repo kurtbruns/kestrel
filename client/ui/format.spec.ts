@@ -1,12 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  type Clocks,
   fmt,
+  fmtAt,
   invalidAddressesMessage,
   lateStr,
   notSentMessage,
   parseAddresses,
+  secondClock,
   toLocalInput,
   untilStr,
+  zoneHeader,
 } from "./format";
 
 describe("parseAddresses", () => {
@@ -72,51 +76,57 @@ describe("notSentMessage", () => {
   });
 });
 
-describe("fmt", () => {
+describe("fmt and the clocks a screen shows its times on (DESIGN §10)", () => {
   // "Now" is pinned mid-year in the real clock's year, so each date below sits squarely
   // inside or outside the current year on any day the suite runs, New Year's Eve included.
   const year = new Date().getFullYear();
+  const NY = "America/New_York";
+  const home: Clocks = { home: NY, browser: NY, away: false, label: "Eastern Time" };
+  const away: Clocks = { home: NY, browser: "Asia/Tokyo", away: true, label: "Eastern Time" };
+  // 9:00 AM in New York in September (UTC-4), as a moment.
+  const at = (month: number, day: number, h: number, m: number, y = year) =>
+    Date.UTC(y, month, day, h + 4, m);
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date(year, 5, 15, 12, 0));
+    vi.setSystemTime(new Date(Date.UTC(year, 5, 15, 16, 0)));
   });
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it("gives a short local date and time, to the minute, and an em dash for none", () => {
-    const at = new Date(year, 8, 5, 7, 3, 45).getTime();
-    expect(fmt(at)).toMatch(/\b5\b/); // the day
-    expect(fmt(at)).toMatch(/:03\b/); // the minute, padded; no seconds
-    expect(fmt(at)).not.toMatch(/:45/);
-    expect(fmt(null)).toBe("—");
-    expect(fmt(undefined)).toBe("—");
-    expect(fmt(0)).toBe("—"); // no timestamp is the epoch
+  it("gives a short date and time on the publication's clock, to the minute, and an em dash for none", () => {
+    expect(fmt(at(8, 5, 7, 3) + 45_000, home)).toBe("Sep 5, 7:03 AM");
+    expect(fmt(at(8, 5, 7, 3), away)).toBe("Sep 5, 7:03 AM"); // whatever the browser's clock
+    expect(fmt(at(8, 4, 9, 0), home, true)).toMatch(/^\w{3} Sep 4, 9:00 AM$/); // still to come
+    expect(fmt(null, home)).toBe("—");
+    expect(fmt(undefined, home)).toBe("—");
+    expect(fmt(0, home)).toBe("—"); // no timestamp is the epoch
   });
 
-  it("leaves the year off a date in the current year, at either end of it", () => {
-    for (const at of [new Date(year, 0, 1, 0, 0), new Date(year, 11, 31, 23, 59)]) {
-      expect(fmt(at.getTime())).not.toContain(String(year));
-    }
+  it("shows the year only for a date outside the publication's current year, either way", () => {
+    expect(fmt(Date.UTC(year, 0, 1, 5, 0), home)).not.toContain(String(year));
+    expect(fmt(Date.UTC(year + 1, 0, 1, 4, 59), home)).not.toContain(String(year)); // Dec 31 there
+    expect(fmt(Date.UTC(year - 2, 1, 11, 7, 0), home)).toContain(String(year - 2));
+    expect(fmt(Date.UTC(year + 1, 0, 2, 14, 0), home)).toContain(String(year + 1));
   });
 
-  it("shows the year on a date from an earlier year", () => {
-    expect(fmt(new Date(year - 2, 1, 11, 2, 0).getTime())).toContain(String(year - 2));
-    expect(fmt(new Date(year - 1, 11, 31, 23, 59).getTime())).toContain(String(year - 1));
-  });
-
-  it("shows the year on a date in a later year, such as a send scheduled for next January", () => {
-    expect(fmt(new Date(year + 1, 0, 2, 9, 0).getTime())).toContain(String(year + 1));
+  it("names the zone only away: after a lone time, once in a header, and a second clock under an upcoming one", () => {
+    const fire = at(8, 4, 9, 0);
+    expect(fmtAt(fire, home)).toBe("Sep 4, 9:00 AM");
+    expect(fmtAt(fire, away)).toBe("Sep 4, 9:00 AM Eastern Time");
+    expect(zoneHeader("When", home)).toBe("When");
+    expect(zoneHeader("When", away)).toBe("When · Eastern Time");
+    expect(secondClock(fire, home)).toBeNull();
+    expect(secondClock(fire, away)).toMatch(/^\w{3} 10:00 PM your time · Japan Standard Time$/);
   });
 });
 
 describe("toLocalInput", () => {
-  it("writes a datetime-local value in local time, padded, to the minute", () => {
-    expect(toLocalInput(new Date(2026, 8, 5, 7, 3, 45))).toBe("2026-09-05T07:03");
-    expect(toLocalInput(new Date(2026, 11, 31, 23, 59))).toBe("2026-12-31T23:59");
-    // What the input hands back reads as the same moment, to the minute.
-    const d = new Date(2026, 0, 2, 3, 4);
-    expect(new Date(toLocalInput(d)).getTime()).toBe(d.getTime());
+  it("writes a datetime-local value on the publication's clock, padded, to the minute", () => {
+    expect(toLocalInput(Date.UTC(2026, 8, 5, 11, 3, 45), "America/New_York")).toBe(
+      "2026-09-05T07:03",
+    );
+    expect(toLocalInput(Date.UTC(2026, 8, 5, 11, 3), "Asia/Tokyo")).toBe("2026-09-05T20:03");
   });
 });
 
@@ -125,14 +135,15 @@ describe("untilStr and lateStr", () => {
   const s = 1000;
   const min = 60 * s;
   const hr = 60 * min;
+  const NY = "America/New_York";
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
   });
   afterEach(() => vi.useRealTimers());
 
-  it("ticks seconds only in the last five minutes, then coarsens by minute, hour, and day", () => {
-    const until = (ms: number) => untilStr(NOW + ms);
+  it("ticks seconds only in the last five minutes, then coarsens by minute, hour, days and hours, and days", () => {
+    const until = (ms: number) => untilStr(NOW + ms, NY);
     expect(until(45 * s)).toBe("Sends in 45s");
     expect(until(90 * s)).toBe("Sends in 1m 30s");
     expect(until(4 * min + 5 * s)).toBe("Sends in 4m 05s");
@@ -143,14 +154,16 @@ describe("untilStr and lateStr", () => {
     expect(until(hr + min)).toBe("Sends in 1h 1m");
     expect(until(24 * hr - 1)).toBe("Sends in 23h 59m");
     expect(until(24 * hr)).toBe("Sends in 1 day");
-    expect(until(35 * hr)).toBe("Sends in 1 day");
-    expect(until(36 * hr)).toBe("Sends in 2 days"); // whole days, rounded
+    expect(until(35 * hr)).toBe("Sends in 1 day, 11 hours");
+    expect(until(55 * hr + 30 * min)).toBe("Sends in 2 days, 7 hours"); // rounded down
+    expect(until(72 * hr)).toBe("Sends in 3 days");
+    expect(until(9 * 24 * hr + 20 * hr)).toBe("Sends in 9 days"); // whole days from three on
   });
 
   it("says Preparing to send from the fire time, or as soon as the server reads it due", () => {
-    expect(untilStr(NOW)).toBe("Preparing to send…");
-    expect(untilStr(NOW - min)).toBe("Preparing to send…");
-    expect(untilStr(NOW + hr, true)).toBe("Preparing to send…");
+    expect(untilStr(NOW, NY)).toBe("Preparing to send…");
+    expect(untilStr(NOW - min, NY)).toBe("Preparing to send…");
+    expect(untilStr(NOW + hr, NY, true)).toBe("Preparing to send…");
   });
 
   it("says how many whole minutes late a missed send is, never fewer than none", () => {

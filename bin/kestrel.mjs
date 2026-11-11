@@ -29,8 +29,8 @@ Usage: kestrel <command> [options]
   init [dir] [--name <name>]    write a new instance repository here (or in dir)
   dev [wrangler dev args]       run locally, with the send sweep once a minute (PORT picks the port)
   sync-migrations               copy this release's migrations into migrations/
-  check-context [--update]      compare the Claude files in .claude/ with this release's
-  check-context --merged <file> record that you merged this release's changes into one
+  check-context [--update]      show what this release changed in the Claude files in .claude/
+  check-context --from <ver>    compare from that release, not the one your last commit pins
   seed [--size <n>] [port|url]  load the demo publication into the local dev server
   reset [port|url]              return the local dev server to a fresh install
 

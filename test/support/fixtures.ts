@@ -41,9 +41,43 @@ const TABLES = [
   "sending",
 ];
 
-/** Empty every table, so a test starts from the schema alone whatever ran before it. */
+/**
+ * The time zone every test's publication starts with. Scheduling and sending are refused
+ * until a publication has one (SPEC §9), so a test starts where a working instance stands;
+ * UTC keeps a post's public date the day it was in UTC. A spec of the unset state calls
+ * `unsetTimeZone()`.
+ */
+export const TEST_TIME_ZONE = "UTC";
+
+/**
+ * Empty every table, so a test starts from the schema alone whatever ran before it, then give
+ * the publication its time zone (`TEST_TIME_ZONE`), the one setting a publication can't send
+ * without. The row is at version 0, as a fresh install's first write leaves it.
+ */
 export async function resetDatabase(): Promise<void> {
-  await env.DB.batch(TABLES.map((table) => env.DB.prepare(`DELETE FROM ${table}`)));
+  await env.DB.batch([
+    ...TABLES.map((table) => env.DB.prepare(`DELETE FROM ${table}`)),
+    env.DB.prepare("INSERT INTO settings (id, data, updated_at) VALUES (1, ?, 0)").bind(
+      JSON.stringify({ timeZone: TEST_TIME_ZONE }),
+    ),
+  ]);
+}
+
+/** Give the publication a time zone, for a spec that doesn't start from `resetDatabase()`. */
+export async function setTimeZone(zone = TEST_TIME_ZONE): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO settings (id, data, updated_at) VALUES (1, json_object('timeZone', ?1), 0)
+     ON CONFLICT (id) DO UPDATE SET data = json_set(data, '$.timeZone', ?1), updated_at = updated_at + 1`,
+  )
+    .bind(zone)
+    .run();
+}
+
+/** A publication with no time zone, as an instance upgraded from before the setting stands. */
+export async function unsetTimeZone(): Promise<void> {
+  await env.DB.prepare(
+    "UPDATE settings SET data = json_remove(data, '$.timeZone'), updated_at = updated_at + 1 WHERE id = 1",
+  ).run();
 }
 
 /**
