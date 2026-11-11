@@ -1,6 +1,6 @@
 # Set up alerts
 
-Kestrel's own emails travel through SES, so two problems can never reach you that way: SES refusing your account, and Kestrel itself stopping. A third, SES down for over an hour, reaches you that way only once SES is back. Two Cloudflare alerts are how you hear about them. Each is a Monitor that reads the app's logs once a minute and emails you when its condition holds. Setting them up takes about ten minutes in the Cloudflare dashboard, with no DNS change and no deploy.
+Kestrel's own emails travel through SES, so two problems can never reach you that way: SES refusing your account, and Kestrel itself stopping. A third, SES down for about an hour, reaches you that way only once SES is back. Two Cloudflare alerts are how you hear about them. Each is a Monitor that reads the app's logs once a minute and emails you when its condition holds. Setting them up takes about ten minutes in the Cloudflare dashboard, with no DNS change and no deploy.
 
 This guide is optional, and recommended for any newsletter people rely on. Without the alerts, the dashboard still shows a refusal when you open it, but nothing tells you Kestrel has stopped. Monitoring of your own that reads the same logs can replace these Monitors or add to them.
 

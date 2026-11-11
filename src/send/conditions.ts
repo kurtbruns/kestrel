@@ -80,26 +80,26 @@ export function bySeverity<T extends Pick<SendCondition, "severity" | "since">>(
 
 /** What the deployment adds to a send's conditions: whether it runs on Workers Free's limits
  *  (`onFreePlanLimits`), whether the provider's account was last read in the sandbox
- *  (`sandboxOf`), and whether email is getting out (`sendingView`, SPEC §13), null with no
- *  provider. Read once per answer (`readConditionContext`), so every send in it reads the
- *  same moment. */
+ *  (`sandboxOf`), whether email is getting out (`sendingView`, SPEC §13), null with no
+ *  provider, and the publication's time zone, null while none is set, the clock a condition's
+ *  words name a time on (SPEC §9). Read once per answer (`readConditionContext`), so every
+ *  send in it reads the same moment. */
 export interface ConditionContext {
   freePlan: boolean;
   sandbox: boolean;
   sending: SendingView | null;
+  timeZone: string | null;
 }
 
-/** What the deployment adds to a send's view: its conditions' context, and whether the
- *  publication has a time zone, without which a send can't be rescheduled (SPEC §9). */
-export interface SendViewContext extends ConditionContext {
-  timeZoneSet: boolean;
-}
+/** What the deployment adds to a send's view: its conditions' context, whose time zone also
+ *  decides whether a send can be rescheduled (SPEC §9). */
+export type SendViewContext = ConditionContext;
 
 /** The send's open conditions, most severe first. */
 export function sendConditions(
   send: SendSummary,
   now: number,
-  { freePlan, sandbox, sending }: ConditionContext,
+  { freePlan, sandbox, sending, timeZone }: ConditionContext,
 ): SendCondition[] {
   const out: SendCondition[] = [];
 
@@ -225,7 +225,7 @@ export function sendConditions(
         // each is worth a look rather than only shown.
         severity: isSelfThrottled(send) || long ? "warn" : "info",
         since: send.halted_at,
-        message: unavailableMessage(send, long),
+        message: unavailableMessage(send, long, timeZone),
         action: null,
         error: send.halt_error ?? "",
         retry_at: send.halt_retry_at,
