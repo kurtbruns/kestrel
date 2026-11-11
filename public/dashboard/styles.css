@@ -6141,7 +6141,8 @@ button.set-embed-copy svg {
    CONTENT keeps --syntax-fg and carries only weight/slant. So a bold word reads as weight, not
    as a hue that competes with a heading. Heading text is bold with a crimson # mark; emphasis
    asterisks are pink around plain weighted/slanted text; block markers (>, bullets, the fence
-   language) are orange; only a link's URL is treated; code sits on a --chip surface. */
+   language) are orange; only a link's URL is treated, and only where the email makes a link;
+   code sits on a --chip surface. */
 .cx-md-hmark {
   color: var(--syntax-heading);
   font-weight: 700;
@@ -6164,6 +6165,14 @@ button.set-embed-copy svg {
 .cx-md-url {
   color: var(--syntax-property);
   text-decoration: underline;
+}
+/* Link Markdown the email will show as typed (a space or an unbalanced parenthesis in the
+   address): the font color with a wavy underline in the warning color, so it reads as a
+   problem to fix rather than a working link, and moves no glyph under the textarea. */
+.cx-md-broken {
+  text-decoration: underline wavy var(--warn-fg);
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
 }
 .cx-md-code {
   color: var(--syntax-string);
