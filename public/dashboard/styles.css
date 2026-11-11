@@ -6166,14 +6166,6 @@ button.set-embed-copy svg {
   color: var(--syntax-property);
   text-decoration: underline;
 }
-/* Link Markdown the email will show as typed (a space in the address, or a parenthesis that
-   doesn't pair): the font color with a wavy underline in the warning color, so it reads as a
-   problem to fix rather than a working link, and moves no glyph under the textarea. */
-.cx-md-broken {
-  text-decoration: underline wavy var(--warn-fg);
-  text-decoration-skip-ink: none;
-  text-underline-offset: 3px;
-}
 .cx-md-code {
   color: var(--syntax-string);
   background: var(--syntax-code-bg);

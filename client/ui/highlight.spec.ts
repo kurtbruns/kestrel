@@ -84,108 +84,82 @@ describe("highlightShell", () => {
 });
 
 describe("highlightMarkdown links", () => {
-  // Each row is one line of a post, what the email makes of it (src/render/markdown.ts, marked),
-  // and so what the editor's overlay must mark: the address of a link the email has, or the
-  // whole link-shaped span the email shows as typed.
+  // Each row is one line of a post and what the email makes of it (src/render/markdown.ts,
+  // marked): the editor colors the address of a link the email has, and leaves link Markdown the
+  // email shows as typed as plain text, with no mark of any kind.
   const md = (src: string) => {
     const el = render(highlightMarkdown(src).markup);
     expect(el.textContent).toBe(src);
-    return { url: spans(el, "cx-md-url"), broken: spans(el, "cx-md-broken") };
+    return { url: spans(el, "cx-md-url"), marks: marksIn(el) };
   };
+  // Every span inside a line, by class: what the overlay decorates.
+  const marksIn = (el: Element) =>
+    [...el.querySelectorAll(".cx-md-ln span")].map((span) => span.className);
 
-  it("marks a working link's address, and nothing broken", () => {
+  it("colors a working link's address", () => {
     expect(md("Read [the post](https://example.com/a) today.")).toEqual({
       url: ["https://example.com/a"],
-      broken: [],
+      marks: ["cx-md-url"],
     });
   });
 
-  it("marks the whole address when its parentheses balance, past the first close", () => {
-    expect(md("[Foo](https://en.wikipedia.org/wiki/Foo_(bar))")).toEqual({
-      url: ["https://en.wikipedia.org/wiki/Foo_(bar)"],
-      broken: [],
-    });
-  });
-
-  it("marks an address in angle brackets as a link, its space included", () => {
-    expect(md("[a](<https://example.com/foo bar>)")).toEqual({
-      url: ["<https://example.com/foo bar>"],
-      broken: [],
-    });
-  });
-
-  it.each([
-    [
-      "an unbalanced parenthesis",
-      "See [Foo](https://en.wikipedia.org/wiki/Foo_(bar) for more.",
-      "[Foo](https://en.wikipedia.org/wiki/Foo_(bar)",
-    ],
-    ["a stray parenthesis", "[a](foo(bar)", "[a](foo(bar)"],
-    [
-      "a space in the address",
-      "[a](https://example.com/foo bar)",
-      "[a](https://example.com/foo bar)",
-    ],
-    ["an image with a space in its name", "![a cat](my cat.png)", "![a cat](my cat.png)"],
-  ])("marks a link with %s as broken, not as a link", (_why, src, shown) => {
-    expect(md(src)).toEqual({ url: [], broken: [shown] });
-  });
-
-  it("marks a link with no closing parenthesis as broken, through the end of the line", () => {
-    expect(md("[a](https://example.com/foo")).toEqual({
-      url: [],
-      broken: ["[a](https://example.com/foo"],
-    });
-  });
-
-  it("tells a working link from a broken one on the same line, and inside bold", () => {
-    expect(md("[a](b) and **[c](d e) or [f](g)**")).toEqual({
-      url: ["b", "g"],
-      broken: ["[c](d e)"],
-    });
-  });
-
-  it("marks neither in a code span or after an escaped bracket, which the email shows as typed", () => {
-    expect(md("`[a](b c)` and `[d](e)`")).toEqual({ url: [], broken: [] });
-    expect(md("\\[a](b c) and \\[d](e)")).toEqual({ url: [], broken: [] });
-  });
-
-  it("marks nothing after an escaped image mark, which shows the reference as typed on purpose", () => {
-    expect(md("\\![a cat](my cat.png)")).toEqual({ url: [], broken: [] });
-  });
-
-  it("marks links in a heading's text, as the email reads them", () => {
-    expect(
-      md("## See [the guide](https://example.com/a b) or [this](https://example.com/c)"),
-    ).toEqual({ url: ["https://example.com/c"], broken: ["[the guide](https://example.com/a b)"] });
-  });
-
-  // A post of several lines: each row's marks, and whether it sits on the code band.
-  const rowsOf = (src: string) =>
-    [...render(highlightMarkdown(src).markup).querySelectorAll<HTMLElement>(".cx-md-ln")].map(
-      (row) => ({
-        url: spans(row, "cx-md-url"),
-        broken: spans(row, "cx-md-broken"),
-        code: row.classList.contains("cx-md-band"),
-      }),
-    );
-  const prose = { url: [], broken: [], code: false };
-
-  it("marks nothing in an indented code block, which the email shows as code", () => {
-    expect(rowsOf("Before.\n\n    [a](b c) and [d](e)\n\nAfter [f](g h).")).toEqual([
-      prose,
-      prose,
-      { url: [], broken: [], code: true },
-      prose,
-      { url: [], broken: ["[f](g h)"], code: false },
+  it("colors the whole address when its parentheses balance, past the first close", () => {
+    expect(md("[Foo](https://en.wikipedia.org/wiki/Foo_(bar))").url).toEqual([
+      "https://en.wikipedia.org/wiki/Foo_(bar)",
     ]);
   });
 
-  it("still marks links in a list item's indented continuation, which the email reads as prose", () => {
+  it("colors an address in angle brackets as a link, its space included", () => {
+    expect(md("[a](<https://example.com/foo bar>)").url).toEqual(["<https://example.com/foo bar>"]);
+  });
+
+  it.each([
+    ["an unbalanced parenthesis", "See [Foo](https://en.wikipedia.org/wiki/Foo_(bar) for more."],
+    ["a stray parenthesis", "[a](foo(bar)"],
+    ["a space in the address", "[a](https://example.com/foo bar)"],
+    ["no closing parenthesis", "[a](https://example.com/foo"],
+    ["an image with a space in its name", "![a cat](my cat.png)"],
+  ])("leaves a link with %s plain, as the email shows it typed", (_why, src) => {
+    expect(md(src)).toEqual({ url: [], marks: [] });
+  });
+
+  it("tells a working link from a broken one on the same line, and inside bold", () => {
+    expect(md("[a](b) and **[c](d e) or [f](g)**").url).toEqual(["b", "g"]);
+  });
+
+  it("colors nothing in a code span or after an escaped bracket", () => {
+    expect(md("`[a](b c)` and `[d](e)`").url).toEqual([]);
+    expect(md("\\[a](b c) and \\[d](e)")).toEqual({ url: [], marks: [] });
+  });
+
+  it("colors links in a heading's text, as the email reads them", () => {
+    expect(
+      md("## See [the guide](https://example.com/a b) or [this](https://example.com/c)").url,
+    ).toEqual(["https://example.com/c"]);
+  });
+
+  // A post of several lines: each row's colored addresses, and whether it sits on the code band.
+  const rowsOf = (src: string) =>
+    [...render(highlightMarkdown(src).markup).querySelectorAll<HTMLElement>(".cx-md-ln")].map(
+      (row) => ({ url: spans(row, "cx-md-url"), code: row.classList.contains("cx-md-band") }),
+    );
+  const prose = { url: [], code: false };
+
+  it("colors nothing in an indented code block, which the email shows as code", () => {
+    expect(rowsOf("Before.\n\n    [a](b) and [d](e)\n\nAfter [f](g).")).toEqual([
+      prose,
+      prose,
+      { url: [], code: true },
+      prose,
+      { url: ["g"], code: false },
+    ]);
+  });
+
+  it("still colors links in a list item's indented continuation, which the email reads as prose", () => {
     expect(rowsOf("- Item\n\n    More at [a](b c) and [d](e).")).toEqual([
       prose,
       prose,
-      { url: ["e"], broken: ["[a](b c)"], code: false },
+      { url: ["e"], code: false },
     ]);
   });
 

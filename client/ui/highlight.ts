@@ -69,13 +69,9 @@ export function highlightTemplate(src: string): Html {
 // pattern can follow: an address ends at a space unless it's in <…>, its parentheses must
 // balance, a stray ")" cuts it short, and what counts shifts between marked's releases. So the
 // highlighter asks the renderer's own lexer, with the renderer's options (src/render/markdown.ts),
-// and colors an address only where the email will have a link. Text shaped like a link that
-// marked won't make one is marked broken, so the publisher sees it where they type, not only in
-// the Preview's warning.
+// and colors an address only where the email will have a link. Text written as a link that
+// marked won't make one stays plain, as the email shows it; the Preview's warning names it.
 const MARKED_INLINE = { gfm: true, breaks: false } as const;
-/** Text written as a link: brackets, then an opening parenthesis and what follows it on the
- *  line, closed or not. The render's warning reads the same shape (src/render/markdown.ts). */
-const LINK_SHAPED = /^!?\[[^\]\n]*\]\([^)\n]*\)?/;
 
 /** Where marked makes a link or image in one line: its offset in the line, and its source. A
  *  link inside emphasis is found by walking into the emphasis, whose source holds its own. */
@@ -114,9 +110,6 @@ const MD_INLINE =
 function hlMdRun(src: string, base: number, links: Map<number, string>): string {
   let out = "";
   let last = 0;
-  // Where an escaped "\!" ends: a link shape right after it was shown as typed on purpose, and
-  // the render's warning stays quiet about it, so the highlight does too.
-  let escapedBangEnd = -1;
   const re = new RegExp(MD_INLINE);
   for (let m = re.exec(src); m; m = re.exec(src)) {
     const [whole, code, escaped, open, bd, btext, aem, uem] = m;
@@ -126,23 +119,14 @@ function hlMdRun(src: string, base: number, links: Map<number, string>): string 
       out += `<span class="cx-md-code">${esc(code)}</span>`;
     } else if (escaped !== undefined) {
       out += esc(escaped);
-      if (escaped === "\\!") {
-        escapedBangEnd = end;
-      }
     } else if (open !== undefined) {
-      const rest = src.slice(m.index);
       const link = links.get(base + m.index);
-      const onPurpose = m.index === escapedBangEnd;
-      const shaped = link === undefined && !onPurpose ? LINK_SHAPED.exec(rest) : null;
       if (link !== undefined) {
         // Link/image: text + brackets stay plain; only what's in the parentheses is treated.
         // The address opens at the first "](" past the label's own brackets.
         const opens = labelEnd(link) + 2;
         out += `${esc(link.slice(0, opens))}<span class="cx-md-url">${esc(link.slice(opens, -1))}</span>)`;
         end = m.index + link.length;
-      } else if (shaped) {
-        out += `<span class="cx-md-broken">${esc(shaped[0])}</span>`;
-        end = m.index + shaped[0].length;
       } else {
         // Not a link here. A "!" may still sit before one, so step past only the first mark.
         out += esc(open.charAt(0));
