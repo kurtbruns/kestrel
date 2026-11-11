@@ -1,6 +1,6 @@
 // Small shared widgets, each independent of the others: the toast, the status badge, the
-// modal, the info tooltip, the row-action menu, the busy state on a button, and the error
-// view with its retry. The tooltip's document
+// modal, the info tooltip, the row-action menu, the busy state on a button, the error
+// view with its retry, and a standing line that needs a look. The tooltip's document
 // listeners are wired by installTooltips() when boot calls it.
 
 import { toasts } from "../shell";
@@ -455,4 +455,18 @@ export function renderError(container: Element, msg: string, retryFn: () => void
   if (b) {
     b.onclick = retryFn;
   }
+}
+
+/** How much a standing line asks of the reader (DESIGN §8): red must act, amber is worth a
+ *  look, neutral explains a state with a next step. */
+export type HealthLevel = "red" | "amber" | "neutral";
+
+/**
+ * One standing condition as a line of its own, in the dashboard health block's colors
+ * (DESIGN §4). Red carries its own mark so severity never rests on color alone.
+ */
+export function healthLineHtml(level: HealthLevel, body: Html): Html {
+  const mark =
+    level === "red" ? icon("octagon-alert") : level === "neutral" ? icon("info") : html`⚠️`;
+  return html`<div class="health ${level}"><span class="health-dot">${mark}</span><div><span>${body}</span></div></div>`;
 }

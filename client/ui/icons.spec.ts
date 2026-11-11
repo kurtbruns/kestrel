@@ -19,6 +19,7 @@ const ALL = {
   kestrel: true,
   lines: true,
   link: true,
+  "octagon-alert": true,
   ol: true,
   paperclip: true,
   plus: true,

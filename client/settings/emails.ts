@@ -1,34 +1,41 @@
-// Settings' "Your emails" group: the email template, shown as a sample email with the way
-// to the Template page where it is edited, and the default test recipients the publisher
+// Settings' emails: the Email preview, a sample email as readers open it, with the way to the
+// Template page where the template is edited, and the default test recipients the publisher
 // proofs a post against.
 
+import { settingsRoute } from "../../shared/settings";
 import { $ } from "../ui/dom";
 import { type Html, html } from "../ui/html";
+import { icon } from "../ui/icons";
 import { addressListHtml, mountAddressList } from "./address_list";
-import { chip, type SectionHandle, type SettingsPage, secHead } from "./page";
+import { chip, type SectionHandle, type SettingsPage, secHead, senderLine } from "./page";
 import { inUseChip, remakeWaitHtml } from "./remake";
 import { mountSampleEmailPreview } from "./template";
 
-/** The template as what a publication's email looks like: a sample email in the saved
- *  template, read-only, with the way to the Template page, where editing lives (so each
- *  surface has one save). */
+/** The Email preview (SPEC §9): a sample email in the saved template as readers open it,
+ *  headed as a mail client heads it, from the sender they see, read-only, with the way to the
+ *  Template page, where editing lives (so each surface has one save). The From line is the
+ *  sender alone: the address is deploy config, explained in Email provider, which its mark
+ *  links to. The subject is each post's own, so the sample names it rather than inventing one. */
 export function templateSection(page: SettingsPage): Html {
   return html`
     <section class="set-sec">
-      ${secHead("email-template", chip("editable", "Editable"), inUseChip(page.data.in_use))}
-      <p class="set-lede">The template controls the look and feel of the emails you send. Edit it on the Template page.${remakeWaitHtml(page.data.in_use)}</p>
+      ${secHead("email-template", chip("preview", "Preview"), inUseChip(page.data.in_use))}
+      <p class="set-lede">An email as your readers open it, following Publication identity as you type. Its look comes from your email template.${remakeWaitHtml(page.data.in_use)}</p>
       <div class="set-preview set-tpl-sample">
-        <div class="set-preview-bar">
-          <span class="set-preview-lbl">Sample email</span>
-          <span class="set-preview-dot">Current template</span>
+        <div class="set-env">
+          <span class="set-env-k">From</span>
+          <span class="set-env-v"><span class="mono" id="senderFrom">${senderLine(page.sender())}</span> <a class="set-env-deploy" href="#${settingsRoute("email-sender")}">${icon("readonly")}Set at deploy<span class="visually-hidden">, in Email provider</span></a></span>
+          <span class="set-env-k">Subject</span>
+          <span class="set-env-v muted">Your post’s subject</span>
         </div>
-        <iframe class="set-email-frame" id="tplPreview" title="Sample email preview" scrolling="no"></iframe>
+        <iframe class="set-email-frame" id="tplPreview" title="Sample email" scrolling="no"></iframe>
       </div>
-      <div class="row" style="margin-top:12px"><button type="button" id="tplEditLink">Edit template →</button></div>
+      <div class="row" style="margin-top:12px"><button type="button" id="tplEditLink">Edit email template →</button></div>
     </section>`;
 }
 
-/** The sample follows the identity fields as they are typed. */
+/** The sample and its sender follow the identity fields as they are typed: the publication's
+ *  name is the sender's unless one was written into the From address at deploy (SPEC §9). */
 export function mountTemplate(
   root: HTMLElement,
   page: SettingsPage,
@@ -49,7 +56,13 @@ export function mountTemplate(
   $("#tplEditLink", root).onclick = () => {
     location.hash = "#/template";
   };
-  return { repaint: () => preview.repaint() };
+  const from = $("#senderFrom", root);
+  return {
+    repaint() {
+      preview.repaint();
+      from.textContent = senderLine(page.sender());
+    },
+  };
 }
 
 const RECIPIENT_IDS = { chips: "recipChips", input: "recipInput", add: "recipAdd" };

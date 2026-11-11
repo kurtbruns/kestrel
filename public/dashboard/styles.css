@@ -4664,6 +4664,20 @@ button.copy-btn.api-copy-path {
   border-color: var(--danger-line);
   background: var(--danger-bg);
 }
+/* A state with a next step, not a problem (the sandbox, a review under way): neutral, with
+   the info mark, so amber keeps meaning worth a look (DESIGN §8). */
+.health.neutral {
+  background: var(--card);
+}
+.health-dot svg {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  display: block;
+}
+.health.neutral .health-dot svg {
+  color: var(--muted);
+}
 /* A banner at the head of the watch (the provider refusing the account) takes the gap
    below the header that the dispatch bar has when there is none. */
 .watch-card .health {
@@ -5415,7 +5429,84 @@ button.set-field-remove {
   border-top: 1px solid var(--line);
 }
 
-/* --- read-only note bar + key/value facts (email sender, instance) --- */
+/* --- Email provider: the lines that need a look, between the section's head and its card.
+   Their links take the line's color, since an accent link on red or amber reads as a clash. --- */
+.set-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.set-lines .health {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.set-lines .health.red a,
+.set-lines .health.amber a {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+}
+/* Local development's simulation (SPEC §10): one quiet line in the accent tint across the
+   card's top, so a simulated provider never reads as a real one. */
+.set-dev-band {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  padding: 10px 16px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+.set-dev-band svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--accent);
+}
+/* The Email preview's header, as a mail client heads an opened email: the sender alone, with
+   the mark that it is set at deploy, linking to Email provider, and the post's subject. */
+.set-env {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  align-items: baseline;
+  padding: 12px 14px;
+  font-size: 13px;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+}
+.set-env-k {
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 550;
+}
+.set-env-v {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.set-env-deploy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.set-env-deploy:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.set-env-deploy svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* --- read-only note bar + key/value facts (email provider, deployment) --- */
 .set-ro-note {
   display: flex;
   gap: 9px;
@@ -5520,7 +5611,7 @@ button.set-field-remove {
   height: 12px;
 }
 
-/* Inbox preview: how the From line reaches a reader. */
+/* Inbox row: how the confirmation email reaches a reader, its sender over its subject. */
 .set-inbox {
   display: flex;
   gap: 13px;
@@ -5573,12 +5664,6 @@ button.set-field-remove {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.set-inbox-addr {
-  font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--muted);
-  margin-top: 5px;
 }
 
 /* --- confirmation email: the rendered preview + the words-only edit body ---

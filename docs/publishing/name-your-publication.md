@@ -40,5 +40,5 @@ This is general information, not legal advice. The FTC's [CAN-SPAM compliance gu
 
 ## Who sets the From name and address
 
-The From address your emails come from is set when Kestrel is deployed, so **Settings → Email sender** shows it read-only, with how readers see the sender: your publication's name beside that address. To change the address, follow [Deploy the app](../get-started/deploy.md#4-configure-production). If whoever deployed Kestrel wrote a name into the address, that name is the sender whatever you call the publication here; **Settings → Email sender** says so, and the deploy is where it changes.
+The From address your emails come from is set when Kestrel is deployed. **Settings → Email preview** shows it on a sample email as readers see the sender, your publication's name beside that address, and **Settings → Email provider** lists it read-only with the rest of what was deployed. To change the address, follow [Deploy the app](../get-started/deploy.md#4-configure-production). If whoever deployed Kestrel wrote a name into the address, that name is the sender whatever you call the publication here; **Settings → Email provider** says so, and the deploy is where it changes.
 

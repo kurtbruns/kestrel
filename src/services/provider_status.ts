@@ -271,6 +271,10 @@ export function sandboxOf(config: Config, account: ProviderAccountRow | null): b
 /** The anchor of the guide's step that routes bounces and complaints to the app. */
 export const BOUNCES_DOC = { slug: "ses", anchor: "4-send-bounces-and-complaints-to-the-app" };
 
+/** Troubleshooting's section on reports that don't arrive: the links of the return path to
+ *  check, in the setup guide's order, which the warning that they aren't arriving points to. */
+export const REPORTS_DOC = { slug: "troubleshooting", anchor: "reports-from-ses-arent-arriving" };
+
 /** The guide's step that creates the app's AWS key and its policy. */
 const KEY_DOC = { slug: "ses", anchor: "5-create-the-apps-aws-key" };
 
@@ -410,11 +414,12 @@ export function receiptsView(row: SendingRow | null): ReceiptsView {
 /**
  * The warning that the provider's reports aren't reaching the app (SPEC §13): it took an email
  * more than an hour ago and no report has arrived since. Computed on read from the sending row,
- * so it needs no sweep of its own and clears the moment a report lands. It names the links of
- * the return path in the setup guide's order or, when the webhook refused a report for its
- * topic since the last one it took, that topic and the expected one. It never says the refused
- * topic is SES's, or to adopt it: the operator checks the destination in the SES console first. It warns only: nothing
- * that decides whether to send, or whether signups are open, reads it.
+ * so it needs no sweep of its own and clears the moment a report lands. It says what happened
+ * and what it costs, and points to the troubleshooting section that lists what to check; when
+ * the webhook refused a report for its topic since the last one it took, it names that topic
+ * and the expected one. It never says the refused topic is SES's, or to adopt it: the operator
+ * checks the destination first. It warns only: nothing that decides whether to send, or whether
+ * signups are open, reads it.
  */
 export function receiptsWarning(
   receipts: ReceiptsView,
@@ -426,9 +431,9 @@ export function receiptsWarning(
   }
   const refused = receipts.refused_topic;
   const message = refused
-    ? `SES took an email more than ${wait.words} ago, and no report has reached Kestrel since. A report arrived from ${refused.topic}, which isn’t the topic SNS_TOPIC_ARN names, ${refused.expected}, so Kestrel refused it. Until a report arrives from the topic SNS_TOPIC_ARN names, a bounced address is mailed again and a complaint unsubscribes no one. In the SES console, check which topic the configuration set’s SNS destination uses before changing either side, then make the destination and SNS_TOPIC_ARN name the same topic.`
-    : `SES took an email more than ${wait.words} ago, and no report of a delivery, bounce, or complaint has reached Kestrel since. Until one does, a bounced address is mailed again and a complaint unsubscribes no one. Check that the configuration set has an enabled SNS destination and its topic lets SES publish (Connect Amazon SES, section 4), then that /webhooks/ses isn’t behind Access, the app’s subscription to the topic is confirmed, and SNS_TOPIC_ARN names that topic (section 7), or the set doesn’t report Deliveries; the guide selects them.`;
-  return { code: "receipts_not_arriving", severity: "warn", message, docs: BOUNCES_DOC };
+    ? `SES took an email more than ${wait.words} ago, and no report has reached Kestrel since. A report arrived from ${refused.topic}, which isn’t the topic SNS_TOPIC_ARN names, ${refused.expected}, so Kestrel refused it. Until a report arrives from the topic SNS_TOPIC_ARN names, a bounced address is mailed again and a complaint unsubscribes no one. Check which topic the configuration set’s destination uses before changing either side.`
+    : `SES took an email more than ${wait.words} ago, and no report of a delivery, bounce, or complaint has reached Kestrel since. Until one does, a bounced address is mailed again and a complaint unsubscribes no one.`;
+  return { code: "receipts_not_arriving", severity: "warn", message, docs: REPORTS_DOC };
 }
 
 /** GET /api/provider, from the deploy config, the account check's row, and the sending row. */

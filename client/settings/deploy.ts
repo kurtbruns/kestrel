@@ -1,25 +1,31 @@
-// Settings' "Set at deploy" group: the email sender and the instance's infrastructure, a
-// read-only reflection of the deploy-time config that only a redeploy changes (SPEC §9).
-// The sender's name is the one exception, shown here as readers see it but set with the
-// publication's name. Secrets never come down this wire (see routes/settings.ts).
+// Settings' "Set at deploy" group: the email provider and the deployment's infrastructure, a
+// read-only reflection of the deploy-time config that only a redeploy changes (SPEC §9), with
+// what the app last read of the provider's account beside it (SPEC §13). Secrets never come
+// down this wire (see routes/settings.ts).
 
 import type { ProviderStatusView } from "../../shared/provider";
 import { DEFAULT_MIN_LEAD_MS, formatLead } from "../../shared/sends";
-import { type DeploymentView, type SimulationProfile, settingsRoute } from "../../shared/settings";
+import type {
+  DeploymentView,
+  SimulatedAccount,
+  SimulationProfile,
+  SimulationView,
+} from "../../shared/settings";
 import { connectProviderLink } from "../deployment";
 import {
+  accountPillHtml,
+  accountSummaryHtml,
+  lastAcceptedHtml,
   lastReportHtml,
-  providerStateHtml,
-  sendingHtml,
+  providerLines,
   sendRateHtml,
-  stopsSending,
-  warningHtml,
+  worstPillHtml,
 } from "../provider_status";
 import { timeAt } from "../time_zone";
-import { $ } from "../ui/dom";
 import { type Html, html } from "../ui/html";
 import { icon } from "../ui/icons";
-import { chip, monogram, type SectionHandle, type SettingsPage, secHead } from "./page";
+import { healthLineHtml } from "../ui/widgets";
+import { chip, type SettingsPage, secHead } from "./page";
 
 const PROVIDER_LABELS: Record<string, string> = {
   none: "No email provider connected",
@@ -32,99 +38,110 @@ export function providerLabel(provider: string): string {
   return PROVIDER_LABELS[provider] || provider;
 }
 
-/**
- * The Email provider row's value: the provider's name, the simulation a local server runs
- * in its place, or, while none is connected (SPEC §13), the state and the step that ends it.
- */
-function providerValue(d: DeploymentView, status: ProviderStatusView | null): Html {
-  if (d.provider === "none") {
-    return html`${providerLabel(d.provider)}. ${connectProviderLink("set-link")} to start sending.`;
-  }
-  const simulating = d.simulation
-    ? html`<span class="set-pill">Simulating ${SIMULATION_LABELS[d.simulation.profile]}${d.simulation.faults === "none" ? ", no failures" : ""}</span>`
-    : null;
-  // Whether email is getting out (SPEC §13), its pill beside the name and its line after.
-  const sending = status ? sendingHtml(status, timeAt) : null;
-  // When SES last reported back, after whether email is getting out (SPEC §13).
-  const report = status ? lastReportHtml(status, timeAt) : null;
-  if (status && status.unknown_reason !== "stand_in") {
-    // A simulated account (SPEC §10) shows its state as SES would, with the simulation named
-    // beside it.
-    const beside = [sending?.pill, simulating].filter((x): x is Html => Boolean(x));
-    return html`${providerStateHtml(status, beside.length ? html`${beside.map((b) => html` ${b}`)}` : null)}${sending?.line ?? null}${report}`;
-  }
-  return html`<span>${providerLabel(d.provider)}${sending?.pill ? html` ${sending.pill}` : null}${simulating}</span>${sending?.line ?? null}${report}`;
-}
-
-/** The provider a local send simulation models, as the Email provider row names it. */
+/** The provider a local send simulation models, as the Provider row names it. */
 const SIMULATION_LABELS: Record<SimulationProfile, string> = {
-  generic: "a generic provider",
+  generic: "A generic provider",
   ses: "Amazon SES",
 };
+
+/** The Provider row: the provider's name, or the one a local server simulates in its place. */
+function providerName(d: DeploymentView): string {
+  return d.simulation
+    ? `${SIMULATION_LABELS[d.simulation.profile]}, simulated`
+    : providerLabel(d.provider);
+}
+
+/** The SES account a local server stands in for, as the simulation band words it. */
+const SIMULATED_ACCOUNT_WORDS: Record<SimulatedAccount, string> = {
+  sandbox: "in the sandbox",
+  pending: "in the sandbox, with AWS reviewing a request",
+  denied: "in the sandbox, with AWS having replied without a grant",
+  production: "in production",
+  permission: "with a key that can’t read it",
+};
+
+/** What a local server simulates (SPEC §10), as the band across the card's top says it: the
+ *  provider, a clean run when it injects no failures, and the account it stands in for. */
+function simulationBandHtml(sim: SimulationView): Html {
+  const what = SIMULATION_LABELS[sim.profile];
+  const clean = sim.faults === "none" ? ", with no failures" : "";
+  const account = sim.account
+    ? ` and its account, ${SIMULATED_ACCOUNT_WORDS[sim.account.state]}`
+    : "";
+  return html`<div class="set-dev-band" id="providerSimulation">${icon("code")}<span><strong>Local development.</strong> Simulating ${what}${clean}${account}. No email leaves this machine.</span></div>`;
+}
 
 // The setup guide's step that gives the From address an inbox. The app never receives mail
 // and can't see whether that step was done, so Settings only points to it (SPEC §9).
 const REPLIES_HREF = "#/docs/ses/8-receive-replies-at-your-from-address";
 
-/** Where the sender's name comes from (SPEC §9): the publication's name, which Publication
- *  identity sets, unless a name was written into the From address at deploy, which this
- *  card can only explain. The address is deploy-time either way. */
-function senderNote(page: SettingsPage): Html {
-  const guide = html`<a class="set-link" href="#/docs/self-hosting">setup guide</a>`;
-  if (page.fromOverride) {
-    return html`The address, and the name “${page.fromOverride}” written in with it, are set at deploy in <code>wrangler.jsonc</code>, with the AWS keys stored as secrets, so neither can be edited here. To send under your publication’s name instead, leave the name out of the address (the ${guide} shows how), then redeploy. Credentials are never shown.`;
-  }
-  return html`The name is your publication’s, from <a class="set-link" href="#${settingsRoute("publication-identity")}">Publication identity</a>. The address is set at deploy in <code>wrangler.jsonc</code>, with the AWS keys stored as secrets, so it can’t be edited here. Change it in the ${guide}, then redeploy. Credentials are never shown.`;
+/** The From address row: the deploy value as written, where readers' replies go, and, when a
+ *  name was written in with the address, why that name is every email's sender (SPEC §9). */
+function fromAddressHtml(page: SettingsPage): Html {
+  const d = page.data.deployment;
+  const named = page.fromOverride
+    ? html`<span class="muted" id="fromOverrideNote">“${page.fromOverride}” is written into the From address at deploy, so it is the sender whatever the publication is called. To send under your publication’s name, leave it out of the address (<a class="set-link" href="#/docs/configuration">setup guide</a>), then redeploy.</span>`
+    : null;
+  return html`<span class="mono">${d.from_address}</span>${named}<span class="muted" id="replyNote">Readers’ replies go to this address. <a class="set-link" href="${REPLIES_HREF}">Forward it to your inbox</a>.</span>`;
 }
 
-export function senderSection(page: SettingsPage): Html {
+/** A row of the card's facts. */
+const row = (label: string, value: Html, id?: string): Html =>
+  html`<div class="set-kv-k">${label}</div><div class="set-kv-v set-kv-stack"${id ? html` id="${id}"` : null}>${value}</div>`;
+
+/**
+ * Email provider (SPEC §13): the account's state as a grey pill in the head and one more pill
+ * naming the worst line below it; the lines that need a look between the head and the card,
+ * worst first; and the card's facts, each row readable on its own.
+ */
+export function providerSection(page: SettingsPage): Html {
   const d = page.data.deployment;
-  const s = page.sender();
-  const status = page.provider;
-  const rate = status ? sendRateHtml(status) : null;
+  // The account's read, except local dev's stand-in, which has no account to read.
+  const status: ProviderStatusView | null =
+    page.provider && page.provider.unknown_reason !== "stand_in" ? page.provider : null;
+  const sending = page.provider;
+  const lines = status ? providerLines(status) : [];
+  if (d.provider === "none") {
+    lines.push({
+      level: "neutral",
+      body: html`No email provider connected, so nothing can be sent and signups aren’t open. ${connectProviderLink()} to start sending.`,
+    });
+  }
+  const pills =
+    d.provider === "none"
+      ? html`<span class="set-pill" id="providerState">Not connected</span>`
+      : status
+        ? html`${accountPillHtml(status)}${worstPillHtml(status, lines)}`
+        : null;
+  const summary = status ? accountSummaryHtml(status) : null;
+  const accepted = sending ? lastAcceptedHtml(sending, timeAt) : null;
+  const report = sending ? lastReportHtml(sending, timeAt) : null;
+  const rate = sending ? sendRateHtml(sending) : null;
+  const read = sending
+    ? " The rest is what Kestrel last read from the provider, about every ten minutes and after every email."
+    : "";
   return html`
     <section class="set-sec">
-      ${secHead("email-sender", chip("readonly", "Read-only · set at deploy"))}
+      ${secHead("email-sender", chip("readonly", "Read-only · set at deploy"), pills)}
+      ${lines.length ? html`<div class="set-lines" id="providerLines">${lines.map((l) => healthLineHtml(l.level, l.body))}</div>` : null}
       <div class="set-card sunken">
-        <div class="set-ro-note">${icon("readonly")}<span>${senderNote(page)}</span></div>
-        <div class="set-preview-bar" style="background:transparent">
-          <span class="set-preview-lbl">Inbox preview</span>
-          <span class="set-preview-dot">How readers see the sender</span>
+        ${d.simulation ? simulationBandHtml(d.simulation) : null}
+        <div class="set-kv">
+          ${row("Provider", html`${d.provider === "none" ? "None" : providerName(d)}`, "providerValue")}
+          ${summary ? row("Production access", summary, "providerAccess") : null}
+          ${accepted ? row("Last accepted", accepted) : null}
+          ${report ? row("Last report", report) : null}
+          ${row("From address", fromAddressHtml(page))}
+          ${row("Sending domain", html`<span class="mono">${d.sending_domain}</span>`)}
+          ${rate ? row("Send rate", rate, "sendRate") : null}
         </div>
-        <div class="set-inbox">
-          <div class="set-inbox-avatar" id="senderAvatar">${monogram(s.name, s.address)}</div>
-          <div class="set-inbox-body">
-            <div class="set-inbox-top"><span class="set-inbox-from" id="senderFrom">${s.name || s.address}</span><span class="set-inbox-time">9:02 AM</span></div>
-            <div class="set-inbox-subj">Your latest post: a sample subject line</div>
-            <div class="set-inbox-snip">The opening lines of your post show here as the inbox preview…</div>
-            <div class="set-inbox-addr">${s.address}</div>
-          </div>
-        </div>
-        <div class="set-kv" style="border-top:1px solid var(--line)">
-          <div class="set-kv-k">From address</div><div class="set-kv-v set-kv-stack"><span class="mono">${s.address}</span><span class="muted" id="replyNote">Readers’ replies go to this address. <a class="set-link" href="${REPLIES_HREF}">Forward it to your inbox</a>.</span></div>
-          <div class="set-kv-k">Sending domain</div><div class="set-kv-v"><span class="mono">${d.sending_domain}</span></div>
-          <div class="set-kv-k">Email provider</div><div class="set-kv-v set-kv-stack" id="providerValue">${providerValue(d, status)}${status?.warnings.map((w) => html`<span class="${stopsSending(w) ? "set-error" : "set-warn"}">${warningHtml(w)}</span>`)}</div>
-          ${rate ? html`<div class="set-kv-k">Send rate</div><div class="set-kv-v" id="sendRate">${rate}</div>` : null}
-        </div>
+        <div class="set-note">${icon("info")}<span>The provider, the From address, and the sending domain are set at deploy. See the <a class="set-link" href="#/docs/configuration">setup guide</a> to change them.${read}</span></div>
       </div>
     </section>`;
 }
 
-/** The inbox preview follows the publication's name as it is typed, since that is the
- *  sender's name unless one was set at deploy; the rest of the card is fixed. */
-export function mountSender(root: HTMLElement, page: SettingsPage): SectionHandle {
-  const from = $("#senderFrom", root);
-  const avatar = $("#senderAvatar", root);
-  return {
-    repaint() {
-      const s = page.sender();
-      from.textContent = s.name || s.address;
-      avatar.textContent = monogram(s.name, s.address);
-    },
-  };
-}
-
-export function instanceSection(page: SettingsPage): Html {
+/** Deployment: the deploy-time infrastructure, for reference. */
+export function deploymentSection(page: SettingsPage): Html {
   const d = page.data.deployment;
   const archiveBase = `${d.archive_origin || ""}${d.archive_base_path || ""}`;
   const archiveIsDefault = d.archive_origin === d.app_origin;

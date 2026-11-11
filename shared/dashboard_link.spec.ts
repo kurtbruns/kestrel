@@ -10,10 +10,10 @@ describe("links into the editor from outside it", () => {
     expect(SETTINGS_SECTIONS).toEqual([
       "publication-identity",
       "time-zone",
+      "email-template",
       "ways-to-subscribe",
       "confirmation-email",
       "reader-pages",
-      "email-template",
       "default-test-recipients",
       "notifications",
       "email-sender",

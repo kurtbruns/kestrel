@@ -10,6 +10,7 @@ When something needs you, Kestrel says so in a line on the send's page, under **
 | [Someone was mailed twice, or not at all](#someone-was-mailed-twice-or-not-at-all) | In Kestrel |
 | [A reader says they never got a post](#a-reader-says-they-never-got-a-post) | In Kestrel |
 | [A send still reads Settling](#a-send-still-reads-settling) | Nothing to fix, unless no receipts come at all |
+| [Reports from SES aren't arriving](#reports-from-ses-arent-arriving) | Outside Kestrel |
 | [A test doesn't arrive](#a-test-doesnt-arrive) | Outside Kestrel |
 | [Signups aren't open yet, or are paused](#signups-arent-open-yet-or-are-paused) | In Kestrel, or outside it |
 | [The dashboard names a problem with your Amazon SES account](#a-problem-with-amazon-ses) | Outside Kestrel |
@@ -23,7 +24,7 @@ When something needs you, Kestrel says so in a line on the send's page, under **
 Nothing is lost. A problem with your email provider never marks anyone unsent or mails anyone twice. The send waits where it is, and carries on once the problem is fixed. The send's line names the fix. When that fix is outside Kestrel, it's one of these:
 
 - **Amazon SES refuses your account or the send.** The line carries SES's words and the fix, almost always in the SES console. [Connect Amazon SES](../get-started/ses.md) sets up each piece SES checks: the sending domain, the AWS key, and the configuration set. [Request production access](../get-started/production-access.md) lifts the sandbox. When SES refuses your account, any other post that comes due meanwhile waits with it, and a post you schedule meanwhile says so before it fires, in the editor and on the dashboard's Scheduled card, with the fix: it will be held when it fires and go out on its own once SES takes email again. When it refuses only this send's email, other posts go out as usual. A first send to only yourself is held the same way, with SES's words, rather than recorded as unsent. While SES takes some readers and refuses the rest, as while a daily quota frees up, those it takes are sent. The line stays until SES takes everyone.
-- **SES keeps refusing for its sending rate.** Kestrel is sending faster than your SES account allows. **Settings → Email sender** shows the **Send rate** and where it comes from. If `SES_MAX_SEND_RATE` sets it, lower it to the maximum send rate on the SES console's account dashboard, or remove it, then deploy, as [Configuration](../reference/configuration.md#vars) describes. If it's Kestrel's default, the app can't read your account: allow its key `ses:GetAccount`, as [Connect Amazon SES](../get-started/ses.md#5-create-the-apps-aws-key) shows.
+- **SES keeps refusing for its sending rate.** Kestrel is sending faster than your SES account allows. **Settings → Email provider** shows the **Send rate** and where it comes from. If `SES_MAX_SEND_RATE` sets it, lower it to the maximum send rate on the SES console's account dashboard, or remove it, then deploy, as [Configuration](../reference/configuration.md#vars) describes. If it's Kestrel's default, the app can't read your account: allow its key `ses:GetAccount`, as [Connect Amazon SES](../get-started/ses.md#5-create-the-apps-aws-key) shows.
 - **Amazon SES is down.** The send reads **Backing off** and tries again on its own, at longer gaps up to an hour apart, and carries on the moment SES answers. There's nothing to fix in Kestrel. Once it has lasted about an hour, the send's line turns amber and you're emailed: check [AWS's status page](https://health.aws.amazon.com/health/status) for a problem with Amazon SES in your region, and if the post is time-sensitive, you may want to tell your readers it will be late.
 - **No email provider is connected.** Connect one, as [Connect Amazon SES](../get-started/ses.md) describes, and the send goes out at its next retry.
 - **A send missed its time, or nothing has gone out for a while.** The part of Kestrel that sends has stopped, or keeps failing on this send. Check the Worker's Cron Trigger, as [Configuration](../reference/configuration.md#bindings-and-triggers) describes, and read the app's logs, as [Read the logs](../get-started/verify.md#7-read-the-logs) describes. If another send is going out at the same time, this one may only be waiting its turn.
@@ -44,7 +45,21 @@ Under **Subscribers**, search for their address and open their row. Their page l
 
 That's normal. **Delivered** counts only the emails your provider confirmed reached the reader's mail server. Confirmations can lag by days, so the counts keep rising after a send finishes. Some are never confirmed at all, so a send can read **Settling** for good, as long as some receipts have come.
 
-When none come, the send's page says so an hour after it went out. Your provider's reports aren't reaching Kestrel, so its bounces suppress no one and its complaints unsubscribe no one. Your next post mails those addresses again. **Settings → Email sender** says the same of any email SES took an hour ago with no report since, a test included, and names what to check; when a report came from a different SNS topic than Kestrel expects, it names both, and the fix is to make the configuration set and Kestrel name the same one. Look for `webhook.refused` errors in the app's logs, as [Read the logs](../get-started/verify.md#7-read-the-logs) describes. Each names the SNS topic that reached Kestrel and the one it expects. Then check the subscription, as [Connect Amazon SES](../get-started/ses.md#7-subscribe-the-app-to-the-topic) describes. If someone else set up Kestrel for you, pass this along to them.
+When none come, the send's page says so an hour after it went out. Your provider's reports aren't reaching Kestrel, so its bounces suppress no one and its complaints unsubscribe no one. Your next post mails those addresses again. [Reports from SES aren't arriving](#reports-from-ses-arent-arriving) says what to check.
+
+## Reports from SES aren't arriving
+
+**Settings → Email provider** and the top of the dashboard say so in amber once SES took an email more than an hour ago, a test included, and no report of a delivery, bounce, or complaint has reached Kestrel since. Until one does, Kestrel can't act on bounces and complaints: a bounced address is mailed again with your next post, and a complaint unsubscribes no one. Every link between SES and Kestrel has to hold, so check them in the setup guide's order:
+
+1. The configuration set has an enabled SNS destination, and its topic lets SES publish, as [Connect Amazon SES](../get-started/ses.md#4-send-bounces-and-complaints-to-the-app) sets up.
+1. `/webhooks/ses` isn't behind Cloudflare Access, the app's subscription to the topic is confirmed, and `SNS_TOPIC_ARN` names that topic, as [Subscribe the app to the topic](../get-started/ses.md#7-subscribe-the-app-to-the-topic) sets up.
+1. The configuration set reports deliveries as well as bounces and complaints. A set that reports only bounces and complaints sends nothing for an email that neither bounces nor draws a complaint, so the warning shows though nothing is broken. The guide selects Deliveries too.
+
+When a report came from a different SNS topic than the one `SNS_TOPIC_ARN` names, the warning names both, and Kestrel refused the report. Check which topic the configuration set's destination uses in the SES console before you change either side, then make the destination and `SNS_TOPIC_ARN` name the same topic. Each refusal is also a `webhook.refused` error in the app's logs, naming both topics, as [Read the logs](../get-started/verify.md#7-read-the-logs) describes.
+
+To check a fix, send a test email from **Template**. Within a few minutes, **Settings → Email provider** says when SES last reported back, at a time after the test.
+
+If someone else set up Kestrel for you, pass this along to them.
 
 ## A test doesn't arrive
 
@@ -63,7 +78,7 @@ If someone else set up Kestrel for you, pass this along to them.
 
 ## A problem with Amazon SES
 
-**Settings → Email sender** and the top of the dashboard name a problem with your Amazon SES account within about ten minutes, without sending anything. Red means no email can go out until it's fixed, tests and confirmations included. Amber is worth a look. Each line links the step that fixes it:
+**Settings → Email provider** and the top of the dashboard name a problem with your Amazon SES account within about ten minutes, without sending anything. Red means no email can go out until it's fixed, tests and confirmations included. Amber is worth a look. Each line links the step that fixes it:
 
 - **The configuration set is missing, or its sending is off.** The set Kestrel sends with, the one `SES_CONFIGURATION_SET` names or the sending identity's default if that secret isn't set, isn't in your region, or its sending is turned off. Correct the name, or create the set, as [Connect Amazon SES](../get-started/ses.md#4-send-bounces-and-complaints-to-the-app) shows. Turn a set's sending back on in the SES console, under its configuration sets.
 - **SES rejects the AWS key.** The key ID is unknown, the secret doesn't match it, or the AWS account isn't signed up for SES. Store the key's ID and secret again, or create a new key, as [Connect Amazon SES](../get-started/ses.md#5-create-the-apps-aws-key) shows.
@@ -114,7 +129,7 @@ When a line doesn't settle it, these say the most about what happened:
 
 - The top of the dashboard: what needs someone now, in Kestrel's own words.
 - The send's page, under **Sent**: what happened on that send, when it next retries, and its record of each reader.
-- **Settings → Email sender**: the state of your Amazon SES account, and your **Send rate**.
+- **Settings → Email provider**: the state of your Amazon SES account, and your **Send rate**.
 - **Settings → Notifications**: **Last notification** says whether the last one was delivered, or why not.
 - A subscriber's page, under **Subscribers**: every send they were in, and what happened on each.
 - The app's logs, in your instance's Cloudflare account: [Read the logs](../get-started/verify.md#7-read-the-logs) describes them. If someone else set up Kestrel for you, pass this along to them.
