@@ -218,14 +218,15 @@ async function main() {
       `  it fires at ${clock(send.fire_at)}, on that minute's sweep tick, as a deployed send would (a fire time is rounded up to the whole minute)`,
     );
   }
-  if (simulation.outage) {
+  const answer = simulation.answer?.kind;
+  if (answer === "outage") {
     console.log(
       "  SES is down (SIMULATE_SENDS=ses:outage): the send backs off on the real spacing, and its line\n" +
         "  turns amber at the sixth failed try in a row. Restart with SIMULATE_SENDS=ses to end the outage.",
     );
-  } else if (simulation.send_refusal) {
+  } else if (answer === "bad_request" || answer === "rejected") {
     console.log(
-      `${simulation.send_refusal === "rejected" ? "  SES rejects every post's email for its content" : "  SES refuses every list request as invalid, naming no reader"} (SIMULATE_SENDS=ses:${simulation.send_refusal}):\n` +
+      `${answer === "rejected" ? "  SES rejects every post's email for its content" : "  SES refuses every list request as invalid, naming no reader"} (SIMULATE_SENDS=ses:${answer}):\n` +
         "  the send holds with no one spent. Restart with SIMULATE_SENDS=ses to let it go out at its next retry.",
     );
   } else if (simulation.profile === "ses") {

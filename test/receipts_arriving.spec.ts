@@ -8,8 +8,8 @@ import {
   recordAccepted,
   refusedTopicStatement,
 } from "../src/db/sending";
+import { drainSimulatedWebhooks } from "../src/dev/simulated_receipts";
 import { getConfig } from "../src/env";
-import { drainSimulatedWebhooks } from "../src/providers/simulate";
 import { _clearKeyCache, type SnsEnvelope } from "../src/providers/sns";
 import { providerStatusView } from "../src/services/provider_status";
 import { noteContact } from "../src/services/sending";

@@ -9,13 +9,14 @@ import tickerSource from "../cli/sweep-ticker.mjs?raw";
 import type { SendView } from "../shared/sends";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
+import { RECEIPTS_CRON } from "../src/dev/simulated_receipts";
 import { type AppEnv, getConfig } from "../src/env";
 import worker from "../src/index";
 import { clearFakeOutbox } from "../src/providers/fake";
-import { RECEIPTS_CRON, resetSimulation } from "../src/providers/simulate";
 import { freeze } from "../src/send/schedule";
 import { resetDatabase } from "./support/fixtures";
 import { AUTH } from "./support/http";
+import { resetSimulation } from "./support/simulation";
 import { fetchWith, withVars } from "./support/worker_env";
 
 // Locally, simulated receipts arrive on the dev ticker's own clock (SPEC §10), through the

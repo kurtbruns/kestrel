@@ -6,7 +6,7 @@ import { refusal } from "../lib/errors";
 import { FakeProvider } from "./fake";
 import { NotConnectedProvider } from "./none";
 import { SesProvider } from "./ses";
-import { SimProvider } from "./simulate";
+import { SimProvider } from "./simulate/provider";
 import type { EmailProvider, PerRecipientResult, Recipient, SendBatchResult } from "./types";
 
 /**

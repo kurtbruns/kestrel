@@ -28,11 +28,12 @@ import {
   recordMiss,
 } from "../db/provider_account";
 import { clearCheckRefusal, readSending, type SendingRow } from "../db/sending";
+import { SIMULATED_RECEIPT_WAIT } from "../dev/simulated_receipts";
 import type { AppEnv, Config } from "../env";
 import { DEFAULT_SES_MAX_SEND_RATE } from "../env";
 import { log } from "../lib/log";
 import { checkSesAccount, MAX_ACCOUNT_REQUESTS } from "../providers/ses_account";
-import { SIMULATED_RECEIPT_WAIT, simulatedAccountRow } from "../providers/simulate";
+import { simulatedAccountRow } from "../providers/simulate/account";
 import type { Budget } from "../send/budget";
 import { noteRefusal, sendingView, signupsState } from "./sending";
 
