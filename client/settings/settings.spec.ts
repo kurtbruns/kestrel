@@ -2043,6 +2043,13 @@ describe("settings view", () => {
         expect(targets).toEqual(["settings-notifications", "settings-notifications"]);
       });
 
+      it("lands on a section from a link in another section's text, its address already in the bar", async () => {
+        history.replaceState(null, "", "#/settings/email-sender");
+        const { targets } = await openAt("email-sender");
+        $<HTMLAnchorElement>(".set-env-deploy").click();
+        expect(targets).toEqual(["settings-email-sender", "settings-email-sender"]);
+      });
+
       it.each(["metaKey", "ctrlKey", "shiftKey", "altKey"])(
         "leaves a click with %s, a new tab or window, to the browser",
         async (modifier) => {

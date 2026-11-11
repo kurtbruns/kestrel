@@ -299,12 +299,14 @@ export async function renderSettings(
     show(name);
     return true;
   };
-  // A title's link moves the hash and comes back through `navigate`, except the one for the
-  // address already in the bar, which fires no hashchange: that click still lands on its section.
+  // A link to a section (a title's, or one in a section's text, such as the Email preview's Set
+  // at deploy) moves the hash and comes back through `navigate`, except one for the address
+  // already in the bar, which fires no hashchange: that click still lands on its section.
   body.addEventListener(
     "click",
     (ev) => {
-      const link = ev.target instanceof Element ? ev.target.closest(".set-sec-link") : null;
+      const link =
+        ev.target instanceof Element ? ev.target.closest('a[href^="#/settings/"]') : null;
       const plain = !(ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey);
       if (plain && link?.getAttribute("href") === location.hash) {
         navigate(location.hash);
