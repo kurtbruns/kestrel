@@ -6,6 +6,7 @@ import {
   formatLocalTime,
   formatPublicationDate,
   formatSecondClock,
+  formatTimeSince,
   formatTimeUntil,
   localTimeRefusal,
   parseLocalTime,
@@ -211,6 +212,18 @@ describe("how far off a fire time is", () => {
     const sun = Date.UTC(2026, 10, 1, 14, 0); // Sun Nov 1, 9:00 AM EST: 25 hours later
     expect(formatTimeUntil(sun, "America/New_York", sat)).toBe("in 1 day");
     expect(formatTimeUntil(sun - 60_000, "America/New_York", sat)).toBe("in 24 hours, 59 minutes");
+  });
+
+  it("reads how long something has gone on the same way, rounded down, and never as less than nothing", () => {
+    const sat = Date.UTC(2026, 9, 31, 13, 0); // Sat Oct 31, 9:00 AM EDT
+    const sun = Date.UTC(2026, 10, 1, 14, 0); // Sun Nov 1, 9:00 AM EST: 25 hours later
+    expect(formatTimeSince(sat, "America/New_York", sun)).toBe("1 day");
+    expect(formatTimeSince(sat, "America/New_York", sun - 60_000)).toBe("24 hours, 59 minutes");
+    expect(formatTimeSince(NOW - 79 * 60_000 - 59_000, "America/New_York", NOW)).toBe(
+      "1 hour, 19 minutes",
+    );
+    expect(formatTimeSince(NOW - 30_000, "America/New_York", NOW)).toBe("less than a minute");
+    expect(formatTimeSince(NOW + 60_000, "America/New_York", NOW)).toBe("less than a minute");
   });
 
   it("reads back a fire time on the publication's clock, and in UTC with no zone", () => {

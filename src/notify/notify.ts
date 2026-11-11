@@ -150,6 +150,8 @@ export async function notifyPublisher(
   }
   await notifications.claimNotifications(db, due, now);
 
+  // Times in the emails read on the publication's clock, in UTC while it has no zone (SPEC §8).
+  const clock = { zone: settings.timeZone, now: Date.now() };
   const notifier = getNotifier(config, env, notificationSenderFrom(settings, config));
   for (const [i, n] of due.entries()) {
     // Every claimed notification still to come needs its outcome recorded, this one included.
@@ -168,8 +170,8 @@ export async function notifyPublisher(
       n.kind === "sandbox"
         ? composeSandboxNotification(config)
         : isOutageNotice(n)
-          ? composeOutageNotification(unwrap(refusal, "the refusal"), since, held, config)
-          : composeNotification(n, config);
+          ? composeOutageNotification(unwrap(refusal, "the refusal"), since, held, config, clock)
+          : composeNotification(n, config, clock);
     let email: ReturnType<typeof write> | undefined;
     // Only the addresses it hasn't reached: one that got it on an earlier try never gets it
     // again because another failed.

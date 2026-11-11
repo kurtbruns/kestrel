@@ -428,22 +428,32 @@ export function timeUntil(
   return { days: 0, hours: Math.floor(left / HOUR), minutes: Math.floor((left % HOUR) / MINUTE) };
 }
 
+/** A span `timeUntil` measured, in words: "2 days, 7 hours", "1 hour, 19 minutes", "59 minutes". */
+function spanWords({ days, hours, minutes }: ReturnType<typeof timeUntil>): string {
+  if (days > 0) {
+    return `${plural(days, "day")}${hours > 0 ? `, ${plural(hours, "hour")}` : ""}`;
+  }
+  if (hours > 0) {
+    return `${plural(hours, "hour")}${minutes > 0 ? `, ${plural(minutes, "minute")}` : ""}`;
+  }
+  return minutes > 0 ? plural(minutes, "minute") : "less than a minute";
+}
+
 /**
  * How long until a moment, in words: "in 2 days, 7 hours", "in 1 hour, 19 minutes", "in 59
  * minutes" (`timeUntil`, rounded down). A moment already reached reads "now".
  */
 export function formatTimeUntil(ms: number, zone: string, now = Date.now()): string {
-  if (ms <= now) {
-    return "now";
-  }
-  const { days, hours, minutes } = timeUntil(ms, zone, now);
-  if (days > 0) {
-    return `in ${plural(days, "day")}${hours > 0 ? `, ${plural(hours, "hour")}` : ""}`;
-  }
-  if (hours > 0) {
-    return `in ${plural(hours, "hour")}${minutes > 0 ? `, ${plural(minutes, "minute")}` : ""}`;
-  }
-  return minutes > 0 ? `in ${plural(minutes, "minute")}` : "in less than a minute";
+  return ms <= now ? "now" : `in ${spanWords(timeUntil(ms, zone, now))}`;
+}
+
+/**
+ * How long something has gone on since a moment, in words, measured as `timeUntil` measures
+ * ahead and so rounded down, never reading longer than it has been: "2 hours", "1 day, 3
+ * hours", "less than a minute". What a notification leads with when its point is an age.
+ */
+export function formatTimeSince(ms: number, zone: string, now = Date.now()): string {
+  return spanWords(timeUntil(now, zone, Math.min(ms, now)));
 }
 
 /**
