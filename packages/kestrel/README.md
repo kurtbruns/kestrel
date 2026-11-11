@@ -10,6 +10,8 @@ npx kestrel api --list
 
 `login` signs you in through your instance's Cloudflare Access, in your browser, and keeps the sign-in in your user config. `api` calls a route as you, and `api --list` and `api help <method> <path>` describe the routes, read from the instance's own OpenAPI document so they match the release it runs. `logout` forgets the sign-in.
 
+`api` calls the instance `--url` or `KESTREL_URL` names; else, run in an instance's repository, that instance, the production `APP_ORIGIN` its `wrangler.jsonc` sets; else the only one you're signed in to. It names on stderr an instance it chose itself.
+
 To start a new instance, run `npx kestrel init` in an empty folder. It writes the instance's repository from the `@kurtbruns/kestrel` package, which the instance installs and pins. The commands that act on that repository (`dev`, `seed`, `reset`, `sync-migrations`, and `check-context`) run from that install, through its npm scripts.
 
 The setup guide and the publisher's docs are at [getkestrel.dev](https://getkestrel.dev). Kestrel's source is at [github.com/kurtbruns/kestrel](https://github.com/kurtbruns/kestrel).

@@ -32,7 +32,7 @@ Claude Code can use the same connector as Claude Desktop and claude.ai. To reach
 
 1. Approve the sign-in in the browser that opens. The terminal then says who you're signed in as.
 
-The sign-in stays on your computer. Opened in your instance's repository, Claude Code then calls Kestrel's API as you through `kestrel api`, the way `gh` calls GitHub, following your instance's instructions for Claude. Its changes show as yours, via Claude Code.
+The sign-in stays on your computer. Opened in your instance's repository, Claude Code then calls Kestrel's API as you through `kestrel api`, which calls the instance whose address that repository's `wrangler.jsonc` names, the way `gh` calls GitHub for the repository you're in, following your instance's instructions for Claude. Its changes show as yours, via Claude Code.
 
 ## How long a sign-in lasts
 
