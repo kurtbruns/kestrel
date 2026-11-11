@@ -10,7 +10,7 @@ import * as providers from "../src/providers";
 import type { EmailProvider, SendBatchResult } from "../src/providers/types";
 import { resetDatabase, seedConfirmed, sendingWorks } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
-import { allowErrorLogs } from "./support/log";
+import { allowErrorLogs, logged } from "./support/log";
 import { fetchWith } from "./support/worker_env";
 
 let seq = 0;
@@ -442,6 +442,101 @@ describe("subscribing: no flood, and no reveal of who is on the list", () => {
   });
 });
 
+describe("the address comes only from the body, never a URL (SPEC §7)", () => {
+  /** A POST to the public form, with whatever query and body the case gives it. */
+  function post(query: string, init: RequestInit = {}): Promise<Response> {
+    return route(new Request(`${base}/subscribe${query}`, { method: "POST", ...init }));
+  }
+
+  /** Status and body as one string, so two answers compare whole. */
+  async function answer(res: Response): Promise<string> {
+    return `${res.status} ${await res.text()}`;
+  }
+
+  const NO_ADDRESS = `400 ${JSON.stringify({ error: "bad_request", message: "a valid email is required" })}`;
+
+  it("an address in the query subscribes no one, and is answered the same whoever it names", async () => {
+    const fresh = uniqueEmail();
+    const confirmed = uniqueEmail();
+    await addConfirmed(confirmed);
+
+    const answers = new Set<string>();
+    const pages = new Set<string>();
+    for (const email of [fresh, confirmed]) {
+      const q = `?${new URLSearchParams({ email })}`;
+      answers.add(await answer(await post(q)));
+      answers.add(await answer(await post(q, { headers: { "content-type": "application/json" } })));
+      // A form posted with the address only in its action: the page that asks for one.
+      pages.add(
+        await answer(
+          await post(q, {
+            headers: { "content-type": "application/x-www-form-urlencoded" },
+            body: "",
+          }),
+        ),
+      );
+    }
+    expect([...answers]).toEqual([NO_ADDRESS]);
+    expect(pages.size).toBe(1);
+    expect([...pages][0]).toMatch(/^400 [\s\S]*<html/);
+    expect(await subs.getByEmail(env.DB, fresh)).toBeNull();
+    expect(await confirmationsTo(fresh)).toBe(0);
+    expect(await confirmationsTo(confirmed)).toBe(0);
+  });
+
+  it("a request carrying no address at all is answered as one carrying a wrong one", async () => {
+    expect(await answer(await post(""))).toBe(NO_ADDRESS);
+    expect(
+      await answer(await post("", { headers: { "content-type": "text/plain" }, body: "x" })),
+    ).toBe(NO_ADDRESS);
+    expect(await answer(await publicSubscribe("not-an-email"))).toBe(NO_ADDRESS);
+  });
+
+  it("a JSON body and a form each subscribe, and the body wins over a query naming someone else", async () => {
+    const byJson = uniqueEmail();
+    const byForm = uniqueEmail();
+    const inQuery = uniqueEmail();
+    const q = `?${new URLSearchParams({ email: inQuery })}`;
+
+    const json = await post(q, {
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ email: byJson }),
+    });
+    expect(await answer(json)).toBe(`200 ${JSON.stringify({ status: "check_inbox" })}`);
+    const form = await post(q, {
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ email: byForm }).toString(),
+    });
+    expect(form.status).toBe(200);
+    expect(await form.text()).toContain("Check your inbox");
+
+    expect((await subs.getByEmail(env.DB, byJson))?.status).toBe("pending");
+    expect((await subs.getByEmail(env.DB, byForm))?.status).toBe("pending");
+    expect(await subs.getByEmail(env.DB, inQuery)).toBeNull();
+    expect(await confirmationsTo(byJson)).toBe(1);
+    expect(await confirmationsTo(byForm)).toBe(1);
+    expect(await confirmationsTo(inQuery)).toBe(0);
+  });
+
+  it("a JSON body of the wrong shape is a 400 naming what is wrong, the same for every address", async () => {
+    const confirmed = uniqueEmail();
+    await addConfirmed(confirmed);
+    const asJson = (body: string) =>
+      post("", { headers: { "content-type": "application/json" }, body });
+
+    expect(await answer(await asJson(JSON.stringify({ email: 42 })))).toBe(
+      `400 ${JSON.stringify({ field: "email", error: "bad_request", message: "email must be a string" })}`,
+    );
+    expect(await answer(await asJson("{not json"))).toBe(
+      `400 ${JSON.stringify({ error: "bad_request", message: "the body is not valid JSON" })}`,
+    );
+    expect(await answer(await asJson(JSON.stringify([confirmed])))).toBe(
+      `400 ${JSON.stringify({ error: "bad_request", message: "the body must be a JSON object, not an array" })}`,
+    );
+    expect(await answer(await asJson(JSON.stringify({})))).toBe(NO_ADDRESS);
+  });
+});
+
 describe("a confirmation the provider does not take is not treated as sent", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -590,6 +685,37 @@ describe("a confirmation the provider does not take is not treated as sent", () 
     const email = uniqueEmail();
     await publicSubscribe(email);
     expect(await subs.getByEmail(env.DB, email)).toBeNull();
+  });
+
+  it("no log line names the address, whether it came in the query or the body (SPEC §12)", async () => {
+    const spies = [vi.spyOn(console, "log"), vi.spyOn(console, "warn"), vi.spyOn(console, "error")];
+    // The provider's words carry the address, as a real refusal's can.
+    stubProvider((to) => ({
+      kind: "answered",
+      results: [{ email: to, accepted: false, retryable: false, error: `550 ${to}: no such user` }],
+    }));
+    const inQuery = uniqueEmail();
+    const inBody = uniqueEmail();
+
+    await route(
+      new Request(`${base}/subscribe?${new URLSearchParams({ email: inQuery })}`, {
+        method: "POST",
+      }),
+    );
+    await publicSubscribe(inBody);
+
+    // The refusal was logged, cut down to the domain, so the check below has a line to read.
+    expect(logged(...spies).map((l) => [l.event, l.error])).toContainEqual([
+      "subscribe.confirmation_refused",
+      "550 …@example.com: no such user",
+    ]);
+    const printed = spies.flatMap((spy) =>
+      spy.mock.calls.map((call) => call.map(String).join(" ")),
+    );
+    for (const email of [inQuery, inBody]) {
+      const local = `${email.split("@")[0]}@`;
+      expect(printed.filter((text) => text.includes(local))).toEqual([]);
+    }
   });
 
   it("no answer at all: the link is kept in case it arrived, and the cooldown holds", async () => {
