@@ -5,6 +5,7 @@
  *  (`archiveMasthead`) — invisible in every email, present only on the hosted page
  *  (I3). Styling lives in the template (inlined at render); the shell carries only its
  *  frame's: the column's padding and background. */
+import { inlineStack, SANS_STACK, SERIF_STACK } from "../../shared/fonts";
 import { escapeHtml, escapeHtmlAttr } from "../lib/html";
 
 // The per-recipient delivery sentinels (UNSUB_SENTINEL / SENTTO_SENTINEL) live with the
@@ -16,8 +17,8 @@ import { escapeHtml, escapeHtmlAttr } from "../lib/html";
 export const ARCHIVE_MASTHEAD_ANCHOR = "<!--kestrel:masthead-->";
 
 /** Inert marker in the <head>. Emails render it as nothing; the archive route
- *  replaces it with the web-font stylesheet links (see lib/page.ts), so the
- *  display serif loads only on the hosted page — never in a sent email (I3). */
+ *  replaces it with the hosted page's own styles (`ARCHIVE_POST_HEAD` in lib/page.ts),
+ *  so they reach only the hosted page, never a sent email (I3). */
 export const ARCHIVE_HEAD_ANCHOR = "<!--kestrel:head-->";
 
 /** Inert markers around an email-only region, which the template marks with
@@ -87,12 +88,10 @@ export function emailOnlyRegionsWhole(html: string): boolean {
   return true;
 }
 
-/** Display serif for content headings — the publication's editorial voice, shared
- *  with the reader chrome's `--r-serif` (lib/page.ts); keep the two in step. Baked
- *  into the frozen render so the archive page and the email agree (I3). Fraunces is
- *  a web font loaded only on the hosted page; email and any client without it fall
- *  back to Georgia, an ubiquitous serif. */
-const HEADING_FONT = "Fraunces, Georgia, 'Times New Roman', serif";
+/** The serif for the masthead's publication name: the one the reader pages and the
+ *  built-in template name (shared/fonts.ts), so the masthead, the frozen post beneath
+ *  it, and the pages around it read as one publication. */
+const HEADING_FONT = SERIF_STACK;
 
 export interface LayoutInput {
   subject: string;
@@ -101,7 +100,8 @@ export interface LayoutInput {
   bodyHtml: string;
 }
 
-const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+/** The shell's base font, spelled as every email already sent spells it (I3). */
+const FONT = inlineStack(SANS_STACK);
 
 export function emailLayout(i: LayoutInput): string {
   const preheader = i.preheader

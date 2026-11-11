@@ -1,7 +1,7 @@
 // Settings' Notifications section (SPEC §8): where Kestrel tells the publisher about their
-// sends is a preference, committed through the save bar; how it gets there, and from whom,
-// is shown read-only beside it with how the last one went, and Send a test alert proves the
-// operator's Cloudflare alert for what these emails can't carry (SPEC §12).
+// sends is a list of addresses, each added or removed saved at once; how it gets there, and from whom,
+// is shown read-only beside it with how the last one went, and its last row says what these
+// emails can't carry, with Send a test alert to prove the Cloudflare alert for it (SPEC §12).
 
 import { notificationSender } from "../../shared/publication";
 import {
@@ -13,8 +13,8 @@ import {
   type SettingsResponse,
 } from "../../shared/settings";
 import { api } from "../api";
+import { timeAt } from "../time_zone";
 import { $ } from "../ui/dom";
-import { fmt } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { busy, toast } from "../ui/widgets";
@@ -38,21 +38,17 @@ function standIn(d: SettingsResponse["deployment"]): boolean {
   return d.provider === "fake" && d.simulation === null;
 }
 
-/** What these emails can't carry, or carry only late, naming the provider as the Sent through
- *  row does: SES by name when it is SES, the email provider otherwise. Never that the alerts
- *  exist, which the app can't tell (SPEC §12). */
-function alertsNote(d: SettingsResponse["deployment"]): string {
-  const [via, it] = d.provider === "ses" ? ["Amazon SES", "SES"] : ["your email provider", "it"];
-  return `These emails travel through ${via} like the newsletter, so they can’t tell you when ${it} refuses your account, and one saying ${it} has been down for over an hour may arrive only once ${it} is back. Two Cloudflare alerts cover both, and Kestrel itself stopping.`;
-}
-
 /** The Set up alerts guide, which creates the Cloudflare Monitors, in the Docs tab. */
 const ALERTS_DOCS_HREF = "#/docs/alerts";
+
+/** What Send a test alert is for, beside it until its answer takes the line. It never says
+ *  the alerts exist, which the app can't tell (SPEC §12). */
+const ALERT_TEST_HINT = "Once the alerts are set up, checks that the first one reaches your inbox.";
 
 const NOTIFICATION_KINDS: Record<NotificationStatusKind, string> = {
   finished: "went out",
   refused: "provider refusing",
-  unavailable: "provider down over an hour",
+  unavailable: "provider down about an hour",
   stuck: "in flight too long",
   wedged: "waiting to be resolved",
   missed: "missed fire time",
@@ -77,10 +73,10 @@ function aboutNotification(n: { kind: NotificationStatusKind; subject: string })
 function notificationStatusHtml(status: SettingsResponse["notification_status"]): Html {
   const { last_sent: lastSent, last_failure: lastFailure } = status;
   if (lastFailure) {
-    return html`<span class="set-pill danger">Not delivered</span> <span class="muted">${fmt(lastFailure.at)}, ${aboutNotification(lastFailure)}: ${lastFailure.error}</span>`;
+    return html`<span class="set-pill danger">Not delivered</span> <span class="muted">${timeAt(lastFailure.at)}, ${aboutNotification(lastFailure)}: ${lastFailure.error}</span>`;
   }
   if (lastSent) {
-    return html`<span class="set-pill ok">${icon("check")}Delivered</span> <span class="muted">${fmt(lastSent.at)}, ${aboutNotification(lastSent)}</span>`;
+    return html`<span class="set-pill ok">${icon("check")}Delivered</span> <span class="muted">${timeAt(lastSent.at)}, ${aboutNotification(lastSent)}</span>`;
   }
   return html`<span class="muted">None yet</span>`;
 }
@@ -100,17 +96,17 @@ export function notificationsSection(page: SettingsPage): Html {
             <p class="field-hint" style="margin:0">Each address gets every notification. Add whoever runs Kestrel for you, so they’re told too. Up to ${MAX_NOTIFY_ADDRESSES}.</p>
           </div>
           ${addressListHtml(NOTIFY_IDS)}
-          <div class="row"><button type="button" class="ghost" id="notifyTest">Send a test notification</button><span class="field-hint" id="notifyTestHint"></span></div>
+          <div class="row"><button type="button" class="secondary" id="notifyTest">Send a test notification</button><span class="field-hint" id="notifyTestHint"></span></div>
         </div>
         <div class="set-kv" style="border-top:1px solid var(--line)">
           <div class="set-kv-k">Sent through</div><div class="set-kv-v">${sentThroughLabel(d)}</div>
           <div class="set-kv-k">From address</div><div class="set-kv-v"><span class="mono" id="notifyFrom">${notifyFromLine(page)}</span></div>
           <div class="set-kv-k">Last notification</div><div class="set-kv-v" id="notifyStatus">${notificationStatusHtml(page.data.notification_status)}</div>
-        </div>
-        <div class="set-note" id="alertsNote">${icon("info")}<span>${alertsNote(d)} See <a class="set-link" href="${ALERTS_DOCS_HREF}">Set up alerts</a>.</span></div>
-        <div class="set-recip" style="border-top:1px solid var(--line)">
-          <div class="row"><button type="button" class="ghost" id="alertTest">Send a test alert</button><span class="field-hint" id="alertTestHint"></span></div>
-          <p class="field-hint" style="margin:0">Proves the Cloudflare alert “SES can’t send email”, end to end. Kestrel logs the line that alert watches for, and sends no email itself. Cloudflare’s alert email follows in about five minutes, and a Resolved email a few minutes after that, which means only that no new line came. Cloudflare’s own Test button sends sample data, so it can’t prove this.</p>
+          <div class="set-kv-k">Cloudflare alerts</div>
+          <div class="set-kv-v set-kv-stack" id="alertsRow">
+            <span class="muted">Notifications are sent by Kestrel, through your email provider. If either has a problem, such as the provider not sending or Kestrel itself stopping, a notification can’t reach you. To be told about these problems, <a class="set-link" href="${ALERTS_DOCS_HREF}">set up Cloudflare alerts</a>.</span>
+            <div class="row"><button type="button" class="ghost" id="alertTest">Send a test alert</button><span class="field-hint" id="alertTestHint">${ALERT_TEST_HINT}</span></div>
+          </div>
         </div>
       </div>
     </section>`;
@@ -122,9 +118,10 @@ function notifyFromLine(page: SettingsPage): string {
   return senderLine(notificationSender(page.saved().name, page.data.deployment.from_address));
 }
 
-/** The addresses ride the save bar; the test goes to the SAVED addresses only (the server
- *  never takes one from the request), so it waits for a save. Its outcome is the channel's
- *  latest word, so the status line takes it in place. */
+/** The addresses save as they are added or removed, so the list shown is the saved one;
+ *  the test goes to the saved addresses only (the server never takes one from the request),
+ *  so it waits for the first. Its outcome is the channel's latest word, so the status line
+ *  takes it in place. */
 export function mountNotifications(root: HTMLElement, page: SettingsPage): SectionHandle {
   const test = $<HTMLButtonElement>("#notifyTest", root);
   const testHint = $("#notifyTestHint", root);
@@ -134,7 +131,8 @@ export function mountNotifications(root: HTMLElement, page: SettingsPage): Secti
   const alertHint = $("#alertTestHint", root);
   const list = mountAddressList(root, page, {
     ids: NOTIFY_IDS,
-    list: () => page.state.notifyTo,
+    key: "notifyTo",
+    name: "notifications",
     empty: "No addresses yet, so Kestrel emails no one. Add yours below.",
     max: {
       count: MAX_NOTIFY_ADDRESSES,
@@ -142,13 +140,7 @@ export function mountNotifications(root: HTMLElement, page: SettingsPage): Secti
     },
   });
   const refreshTest = () => {
-    const saved = page.saved().notifyTo;
-    const reason =
-      saved.length === 0
-        ? "Save an address to send a test."
-        : page.state.notifyTo.join("\n") !== saved.join("\n")
-          ? "Save first: the test goes to the saved addresses."
-          : "";
+    const reason = page.state.notifyTo.length === 0 ? "Add an address to send a test." : "";
     test.disabled = Boolean(reason);
     testHint.textContent = reason;
   };
@@ -191,7 +183,7 @@ export function mountNotifications(root: HTMLElement, page: SettingsPage): Secti
         const r = await api<AlertTestResponse>("/api/settings/notifications/alert-test", {
           method: "POST",
         });
-        alertHint.textContent = `Logged at ${fmt(r.at)}. Watch for Cloudflare’s alert email.`;
+        alertHint.textContent = `Logged at ${timeAt(r.at)}. Cloudflare’s alert email should arrive in about five minutes, then a Resolved email.`;
       } catch (err) {
         alertHint.textContent = message(err);
       }

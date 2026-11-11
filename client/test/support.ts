@@ -12,6 +12,10 @@ import { unmount } from "../lifecycle";
 import { appState } from "../state";
 
 /** One request the script saw. `url` is absolute against a placeholder origin. */
+
+/** The publication's zone in `settingsResponse`, which the specs' browser keeps too. */
+export const HOME_ZONE = "America/New_York";
+
 export interface FakeCall {
   method: string;
   url: URL;
@@ -247,6 +251,10 @@ export function settingsResponse(
         reassurance: "If this wasn't you, ignore this email.",
       },
       notifications: { to: [] },
+      // A publication that can send: its time zone is set (SPEC §9), and the clock the specs'
+      // browser keeps too (client/test/setup.ts), so times read as they do at home.
+      time_zone: HOME_ZONE,
+      time_zone_label: "Eastern Time",
       ...settings,
     },
     deployment: {

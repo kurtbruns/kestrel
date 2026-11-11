@@ -8,6 +8,7 @@
  */
 
 import { dashboardLink } from "../../shared/dashboard_link";
+import { inlineStack, SANS_STACK } from "../../shared/fonts";
 import type { SendingRefusal } from "../../shared/provider";
 import {
   AWS_STATUS_PAGE,
@@ -18,11 +19,18 @@ import {
   SES_RATE_ADVICE,
 } from "../../shared/sends";
 import { settingsRoute } from "../../shared/settings";
+import {
+  formatClockTime,
+  formatDayInTimeZone,
+  formatInTimeZone,
+  formatTimeSince,
+  timeZoneLabel,
+} from "../../shared/time_zone";
 import type { DueNotification } from "../db/notifications";
 import type { Config } from "../env";
 import { escapeHtml, escapeHtmlAttr } from "../lib/html";
 import { scrub } from "../lib/log";
-import { MISSED_THRESHOLD_MS, NO_RECEIPTS_NOTICE_AFTER_MS, STUCK_THRESHOLD_MS } from "../lib/time";
+import { MISSED_THRESHOLD_MS, NO_RECEIPTS_NOTICE_AFTER_MS } from "../lib/time";
 import type { RenderedEmail } from "../render/render";
 
 /** The one sentence every held post's email keeps, so the safety facts never vary (I4). */
@@ -32,13 +40,34 @@ const WHY_YOU_GOT_THIS =
   "You get these because this address is listed under Settings → Notifications.";
 const CRON = "Check the Worker’s Cron Trigger and logs.";
 
-/** A moment as the publisher reads it in a notification: UTC, to the minute. */
-function when(ms: number): string {
-  return `${new Date(ms).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+/**
+ * The clock a notification is written on (SPEC §8, §9): the publication's time zone, or UTC
+ * while none is set, and the moment it is written, which a delivery retried later moves on.
+ */
+export interface NotifyClock {
+  zone: string | null;
+  now: number;
 }
 
-function minutes(ms: number): number {
-  return Math.round(ms / 60_000);
+/**
+ * A moment as the publisher reads it in a notification, always with the zone named, since an
+ * email has no browser to read it on: "9:23 AM Pacific Time" on the day the email is written,
+ * and with its day otherwise ("Thu Nov 12, 11:40 PM Pacific Time"). With no zone set, "UTC".
+ */
+function when(ms: number, clock: NotifyClock): string {
+  const zone = clock.zone ?? "UTC";
+  if (
+    formatDayInTimeZone(ms, zone, clock.now) !== formatDayInTimeZone(clock.now, zone, clock.now)
+  ) {
+    return formatInTimeZone(ms, zone, clock.now);
+  }
+  return `${formatClockTime(ms, zone)} ${timeZoneLabel(zone, clock.now)}`;
+}
+
+/** How long it has been since a moment, for a sentence whose point is an age, which leads with
+ *  it: "31 minutes", "1 hour, 5 minutes", rounded down on the publication's clock. */
+function since(ms: number, clock: NotifyClock): string {
+  return formatTimeSince(ms, clock.zone ?? "UTC", clock.now);
 }
 
 /** A count as the publisher reads it, with the thousands marked. */
@@ -75,7 +104,7 @@ interface Link {
 /** Paragraphs and a closing link, as both a text and an HTML body. Only the templates call it. */
 function message(subject: string, paragraphs: string[], link: Link): RenderedEmail {
   const text = `${paragraphs.join("\n\n")}\n\n${link.label}: ${link.url}\n\n${WHY_YOU_GOT_THIS}\n`;
-  const html = `<!doctype html><html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#18181b;">
+  const html = `<!doctype html><html><body style="font-family:${inlineStack(SANS_STACK)};font-size:15px;line-height:1.5;color:#18181b;">
 ${paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join("\n")}
 <p><a href="${escapeHtmlAttr(link.url)}">${escapeHtml(link.label)}</a></p>
 <p style="font-size:13px;color:#71717a;">${escapeHtml(WHY_YOU_GOT_THIS)}</p>
@@ -123,9 +152,14 @@ function problem(slots: {
 }
 
 /** A send that finished: `done`, unless nobody got it for a reason that can be fixed. */
-function finished(n: DueNotification, title: string, config: Config): RenderedEmail {
+function finished(
+  n: DueNotification,
+  title: string,
+  config: Config,
+  clock: NotifyClock,
+): RenderedEmail {
   const report = { label: "See the send report", url: sendLink(config, n.send_id) };
-  const at = n.completed_at ? ` at ${when(n.completed_at)}` : "";
+  const at = n.completed_at ? ` at ${when(n.completed_at, clock)}` : "";
   const accepted = n.c_accepted + n.c_delivered + n.c_bounced + n.c_complained;
   const total = accepted + n.c_unsent + n.c_pending + n.c_in_flight;
   if (accepted === 0 && total > 0) {
@@ -150,23 +184,28 @@ function finished(n: DueNotification, title: string, config: Config): RenderedEm
     happened: `${title} finished sending${at}. ${outcome}`,
     more:
       lateBy > MISSED_THRESHOLD_MS
-        ? `It went out ${minutes(lateBy)} minutes late, because Kestrel’s once-a-minute sending job wasn’t running or failed on it. If this keeps happening, check the Worker’s Cron Trigger and logs. ${PASS_THIS_ALONG}`
+        ? `It went out ${since(n.fire_at, { ...clock, now: n.started_at ?? n.fire_at })} late, because Kestrel’s once-a-minute sending job wasn’t running or failed on it. If this keeps happening, check the Worker’s Cron Trigger and logs. ${PASS_THIS_ALONG}`
         : undefined,
     link: report,
   });
 }
 
 /** A post held on a refusal that isn't an outage (those are `composeOutageNotification`). */
-function refused(n: DueNotification, title: string, config: Config): RenderedEmail {
+function refused(
+  n: DueNotification,
+  title: string,
+  config: Config,
+  clock: NotifyClock,
+): RenderedEmail {
   const link = { label: "See this send", url: sendLink(config, n.send_id) };
-  const at = when(n.halted_at ?? n.episode);
+  const at = when(n.halted_at ?? n.episode, clock);
   const waits = "any other post that comes due waits with it";
   if (n.halt_cause === "not_connected") {
     // Held for want of a provider (SPEC §13): no provider is refusing anything, so there are
     // no words to quote.
     return problem({
       subject: `${title} is waiting: no email provider is connected`,
-      happened: `${title} came due at ${when(n.fire_at)}, but no email provider is connected to this Kestrel instance, so it hasn’t gone out.`,
+      happened: `${title} came due at ${when(n.fire_at, clock)}, but no email provider is connected to this Kestrel instance, so it hasn’t gone out.`,
       todo: `${refusalAdvice(n.halt_cause)} ${PASS_THIS_ALONG}`,
       next: `It goes out within the hour after that, and ${waits}. ${NO_ONE_HARMED}`,
       link,
@@ -241,16 +280,25 @@ function refused(n: DueNotification, title: string, config: Config): RenderedEma
  * or answers the send (`UNAVAILABLE_NOTICE_RETRY_MS`); the operator's Cloudflare alert is what
  * covers that gap.
  */
-function unavailable(n: DueNotification, title: string, config: Config): RenderedEmail {
+function unavailable(
+  n: DueNotification,
+  title: string,
+  config: Config,
+  clock: NotifyClock,
+): RenderedEmail {
   const held = n.c_pending + n.c_in_flight;
+  const began = n.halted_at ?? n.episode;
   const throttled = isSelfThrottled(n);
+  // It first goes out about 53 minutes in (`LONG_OUTAGE_HALTS`), and a retry can take it out
+  // hours later, so the subject never says less than the body does.
+  const hour = clock.now - began < 60 * 60 * 1000 ? "about an hour" : "over an hour";
   const readers =
     "If this post is time-sensitive, you may want to tell your readers it will be late.";
   return problem({
     subject: throttled
-      ? `${title} is late: SES has refused it for its sending rate for over an hour`
-      : `${title} is late: Amazon SES has been unavailable for over an hour`,
-    happened: `${throttled ? "Amazon SES has refused every try for its sending rate" : "Amazon SES has been unavailable"} since ${when(n.halted_at ?? n.episode)}, so ${title} has been waiting for over an hour.`,
+      ? `${title} is late: SES has refused it for its sending rate for ${hour}`
+      : `${title} is late: Amazon SES has been unavailable for ${hour}`,
+    happened: `${throttled ? "Amazon SES has refused every try for its sending rate" : "Amazon SES has been unavailable"} for ${since(began, clock)}, since ${when(began, clock)}, so ${title} is late.`,
     affected: `${emails(held)} ${held === 1 ? "is" : "are"} still to go.`,
     said: said(n.halt_error),
     todo: throttled
@@ -261,26 +309,34 @@ function unavailable(n: DueNotification, title: string, config: Config): Rendere
   });
 }
 
-/** Write the notification for one event, from the send as it stands now. */
-export function composeNotification(n: DueNotification, config: Config): RenderedEmail {
+/** Write the notification for one event, from the send as it stands now, on the publication's
+ *  clock. */
+export function composeNotification(
+  n: DueNotification,
+  config: Config,
+  clock: NotifyClock,
+): RenderedEmail {
   const link = { label: "See this send", url: sendLink(config, n.send_id) };
   const title = `"${n.subject}"`;
   switch (n.kind) {
     case "finished":
-      return finished(n, title, config);
+      return finished(n, title, config, clock);
     case "refused":
-      return refused(n, title, config);
+      return refused(n, title, config, clock);
     case "unavailable":
-      return unavailable(n, title, config);
-    case "stuck":
+      return unavailable(n, title, config, clock);
+    case "stuck": {
+      const idle = n.progress_at ?? n.started_at ?? n.episode;
+      const stopped = since(idle, clock);
       return problem({
-        subject: `${title} is waiting: nothing has gone out for ${minutes(STUCK_THRESHOLD_MS)} minutes`,
-        happened: `Nothing has gone out for ${title} since ${when(n.progress_at ?? n.started_at ?? n.episode)}, and no provider problem explains it.`,
+        subject: `${title} is waiting: nothing has gone out for ${stopped}`,
+        happened: `Nothing has gone out for ${title} in ${stopped}, since ${when(idle, clock)}, and no provider problem explains it.`,
         affected: `${recipients(n.c_pending + n.c_in_flight)} ${n.c_pending + n.c_in_flight === 1 ? "is" : "are"} still waiting.`,
         todo: `If another post is going out, this one picks up once it finishes. Otherwise Kestrel’s once-a-minute sending job may have stopped or keep failing. ${CRON} ${PASS_THIS_ALONG}`,
         next: "You don’t need to restart it. It picks up where it stopped, mailing no one twice.",
         link,
       });
+    }
     case "wedged":
       return problem({
         subject: `${title} is waiting for you: ${recipients(n.c_in_flight)} to resolve`,
@@ -294,7 +350,7 @@ export function composeNotification(n: DueNotification, config: Config): Rendere
     case "missed":
       return problem({
         subject: `${title} is waiting: it didn’t go out on time`,
-        happened: `${title} was due at ${when(n.fire_at)} and hasn’t gone out.`,
+        happened: `${title} is ${since(n.fire_at, clock)} late: it was due at ${when(n.fire_at, clock)} and hasn’t gone out.`,
         todo: `Kestrel’s once-a-minute sending job has stopped or failed on it. ${CRON} ${PASS_THIS_ALONG}`,
         next: "It goes out as soon as that job runs again.",
         link,
@@ -354,17 +410,18 @@ export function composeSandboxNotification(config: Config): RenderedEmail {
  */
 export function composeOutageNotification(
   refusal: SendingRefusal,
-  since: number,
+  began: number,
   heldSubjects: string[],
   config: Config,
+  clock: NotifyClock,
 ): RenderedEmail {
   const posts = heldSubjects.map((s) => `"${s}"`);
   const first = posts[0];
   const link = { label: "Open the dashboard", url: dashboardLink(config.appOrigin, "/") };
   const happened =
     refusal.found_by === "account_check"
-      ? `Kestrel’s check of your SES account found at ${when(since)} that SES will refuse every email.`
-      : `Amazon SES started refusing your email at ${when(since)}.`;
+      ? `Kestrel’s check of your SES account found at ${when(began, clock)} that SES will refuse every email.`
+      : `Amazon SES started refusing your email at ${when(began, clock)}.`;
   if (!first) {
     return problem({
       subject: "Email isn’t going out, and signups are paused",

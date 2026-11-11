@@ -18,7 +18,7 @@ import {
   typeInto,
   unmount,
 } from "../test/support";
-import { fmt } from "../ui/format";
+import { timeAt } from "../time_zone";
 import {
   EMAIL_TEMPLATE_EXAMPLES,
   mountSampleEmailPreview,
@@ -240,7 +240,7 @@ describe("template view", () => {
     expect($(".set-chip.inuse").hasAttribute("title")).toBe(false);
     expect($(".set-page-lede").contains($("#tplWait"))).toBe(true);
     expect($("#tplWait").textContent).toBe(
-      ` A scheduled post sends at ${fmt(at)}. You can save once it has sent.`,
+      ` A scheduled post sends at ${timeAt(at)}. You can save once it has sent.`,
     );
   });
 

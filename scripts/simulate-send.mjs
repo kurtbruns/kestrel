@@ -223,6 +223,11 @@ async function main() {
       "  SES is down (SIMULATE_SENDS=ses:outage): the send backs off on the real spacing, and its line\n" +
         "  turns amber at the sixth failed try in a row. Restart with SIMULATE_SENDS=ses to end the outage.",
     );
+  } else if (simulation.send_refusal) {
+    console.log(
+      `${simulation.send_refusal === "rejected" ? "  SES rejects every post's email for its content" : "  SES refuses every list request as invalid, naming no reader"} (SIMULATE_SENDS=ses:${simulation.send_refusal}):\n` +
+        "  the send holds with no one spent. Restart with SIMULATE_SENDS=ses to let it go out at its next retry.",
+    );
   } else if (simulation.profile === "ses") {
     console.log(
       "  SES takes one request a second, each a second of the send rate (up to 50), so on the\n" +

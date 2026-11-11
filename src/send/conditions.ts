@@ -57,10 +57,13 @@ export function inWindow(send: Pick<SendSummary, "status" | "fire_at">, now: num
 }
 
 /** What the server would accept on the send right now: cancel and reschedule inside the
- *  review window, Resolve while it is wedged. */
-export function sendActions(send: SendSummary, now: number): SendAction[] {
+ *  review window, the reschedule only while the publication has a time zone (SPEC §9), and
+ *  Resolve while it is wedged. */
+export function sendActions(send: SendSummary, now: number, timeZoneSet: boolean): SendAction[] {
   if (inWindow(send, now)) {
-    return [action(send, "cancel"), action(send, "reschedule")];
+    return timeZoneSet
+      ? [action(send, "cancel"), action(send, "reschedule")]
+      : [action(send, "cancel")];
   }
   return isWedged(send) ? [action(send, "resolve")] : [];
 }
@@ -77,20 +80,26 @@ export function bySeverity<T extends Pick<SendCondition, "severity" | "since">>(
 
 /** What the deployment adds to a send's conditions: whether it runs on Workers Free's limits
  *  (`onFreePlanLimits`), whether the provider's account was last read in the sandbox
- *  (`sandboxOf`), and whether email is getting out (`sendingView`, SPEC §13), null with no
- *  provider. Read once per answer (`readConditionContext`), so every send in it reads the
- *  same moment. */
+ *  (`sandboxOf`), whether email is getting out (`sendingView`, SPEC §13), null with no
+ *  provider, and the publication's time zone, null while none is set, the clock a condition's
+ *  words name a time on (SPEC §9). Read once per answer (`readConditionContext`), so every
+ *  send in it reads the same moment. */
 export interface ConditionContext {
   freePlan: boolean;
   sandbox: boolean;
   sending: SendingView | null;
+  timeZone: string | null;
 }
+
+/** What the deployment adds to a send's view: its conditions' context, whose time zone also
+ *  decides whether a send can be rescheduled (SPEC §9). */
+export type SendViewContext = ConditionContext;
 
 /** The send's open conditions, most severe first. */
 export function sendConditions(
   send: SendSummary,
   now: number,
-  { freePlan, sandbox, sending }: ConditionContext,
+  { freePlan, sandbox, sending, timeZone }: ConditionContext,
 ): SendCondition[] {
   const out: SendCondition[] = [];
 
@@ -216,7 +225,7 @@ export function sendConditions(
         // each is worth a look rather than only shown.
         severity: isSelfThrottled(send) || long ? "warn" : "info",
         since: send.halted_at,
-        message: unavailableMessage(send, long),
+        message: unavailableMessage(send, long, timeZone),
         action: null,
         error: send.halt_error ?? "",
         retry_at: send.halt_retry_at,

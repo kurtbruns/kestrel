@@ -1,8 +1,13 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { recomputeSendCounters } from "../src/db/sends";
+import { setTimeZone } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
+
+// These specs share one database across their tests; each starts with the publication's time
+// zone set, since scheduling is refused without one (SPEC §9).
+beforeEach(() => setTimeZone());
 
 // The Drafts view scopes /api/posts to draft+scheduled via a comma status
 // list, and a sent post opens the read-only record view backed by GET /api/sends/:id

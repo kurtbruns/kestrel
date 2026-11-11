@@ -147,7 +147,7 @@ describe("the account check finds a refusal without sending (SPEC §8, §13)", (
 
   it("makes email refusing and pauses signups, telling the publisher once a day", async () => {
     await env.DB.prepare(
-      `INSERT INTO settings (id, data, updated_at) VALUES (1, json_object('notifications', json_object('to', json_array('me@example.com'))), 1)`,
+      `UPDATE settings SET data = json_set(data, '$.notifications', json_object('to', json_array('me@example.com'))), updated_at = 1 WHERE id = 1`,
     ).run();
     await recordAccepted(env.DB, "test", Date.now());
     expect(await signups(broken)).toBe("open");

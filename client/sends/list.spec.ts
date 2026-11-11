@@ -8,6 +8,7 @@ import {
   type FakeApi,
   type FakeRoute,
   fakeApi,
+  HOME_ZONE,
   jsonResponse,
   mount,
   resetShell,
@@ -117,6 +118,30 @@ describe("sent view", () => {
     expect(records()).toEqual(["x1"]);
     expect($("tr[data-id='x1'] .subject").textContent).toBe("Owls & co");
     expect($("tr[data-id='x1'] .delivered").textContent).toMatch(/147.*1 complained, 2 bounced/);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("labels its times with the publication's zone only when the browser keeps another clock (DESIGN §10)", async () => {
+    // NOW is Tue Nov 14, 2023, 5:13 PM in New York.
+    appState.appConfig = settingsResponse();
+    fake = world(sendServer([scheduled(), send({ completed_at: NOW - 86_400_000 })]));
+    await mount(renderSent);
+    await vi.advanceTimersByTimeAsync(0);
+    expect($(".sched-card .muted").textContent).toMatch(/· Tue Nov 14, 7:13 PM · /);
+    expect(document.querySelector(".sched-card .second-clock")).toBeNull();
+    expect($("thead").textContent).toMatch(/When(?! ·)/);
+    expect($("tr[data-id='x1'] td:nth-child(2)").textContent).toBe("Nov 13, 5:13 PM");
+
+    // The same page from a browser in Tokyo: every time on New York's clock, the zone named.
+    vi.stubEnv("TZ", "Asia/Tokyo");
+    await mount(renderSent);
+    await vi.advanceTimersByTimeAsync(0);
+    expect($(".sched-card .muted").textContent).toMatch(/· Tue Nov 14, 7:13 PM Eastern Time · /);
+    expect($(".sched-card .second-clock").textContent).toBe(
+      "Wed 9:13 AM your time · Japan Standard Time",
+    );
+    expect($("thead").textContent).toContain("When · Eastern Time");
+    expect($("tr[data-id='x1'] td:nth-child(2)").textContent).toBe("Nov 13, 5:13 PM");
     expect(fake.unhandled).toEqual([]);
   });
 
@@ -280,7 +305,7 @@ describe("sent view", () => {
     include.dispatchEvent(new Event("change"));
     expect($<HTMLInputElement>("#rsSlug").value).toBe("waxwings");
     const moved = new Date(NOW + 3 * 86_400_000);
-    $<HTMLInputElement>("#rsWhen").value = toLocalInput(moved);
+    $<HTMLInputElement>("#rsWhen").value = toLocalInput(moved.getTime(), HOME_ZONE);
     $("#rsGo").click();
     await vi.advanceTimersByTimeAsync(0);
     const acts = fake.calls.filter((c) => c.method !== "GET").map((c) => c.url.pathname);
@@ -289,7 +314,7 @@ describe("sent view", () => {
       email_only: false,
     });
     expect(fake.calls.find((c) => c.url.pathname === "/api/sends/sch/reschedule")?.json()).toEqual({
-      fire_at: new Date(toLocalInput(moved)).toISOString(),
+      fire_at: toLocalInput(moved.getTime(), HOME_ZONE),
     });
     expect($("#toasts").textContent).toContain("Rescheduled");
     expect(fake.unhandled).toEqual([]);
@@ -349,7 +374,7 @@ describe("sent view", () => {
     const slug = $<HTMLInputElement>("#rsSlug");
     slug.value = "taken";
     slug.dispatchEvent(new Event("input"));
-    $<HTMLInputElement>("#rsWhen").value = toLocalInput(new Date(NOW + 3 * 86_400_000));
+    $<HTMLInputElement>("#rsWhen").value = toLocalInput(NOW + 3 * 86_400_000, HOME_ZONE);
     $("#rsGo").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.calls.some((c) => c.url.pathname === "/api/sends/sch/reschedule")).toBe(false);
@@ -390,14 +415,14 @@ describe("sent view", () => {
     const include = $<HTMLInputElement>("#rsInclude");
     include.checked = true;
     include.dispatchEvent(new Event("change"));
-    $<HTMLInputElement>("#rsWhen").value = toLocalInput(new Date(NOW + 3 * 86_400_000));
+    $<HTMLInputElement>("#rsWhen").value = toLocalInput(NOW + 3 * 86_400_000, HOME_ZONE);
     $("#rsGo").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(document.querySelector(".modal")).not.toBeNull();
     expect($(".modal").textContent).toContain(
       "Settings saved. Pick a time at least 5 minutes from now.",
     );
-    $<HTMLInputElement>("#rsWhen").value = toLocalInput(new Date(NOW + 4 * 86_400_000));
+    $<HTMLInputElement>("#rsWhen").value = toLocalInput(NOW + 4 * 86_400_000, HOME_ZONE);
     $("#rsGo").click();
     await vi.advanceTimersByTimeAsync(0);
     const settingsPuts = fake.calls.filter((c) => c.url.pathname === "/api/posts/p7/settings");
@@ -428,7 +453,7 @@ describe("sent view", () => {
     const include = $<HTMLInputElement>("#rsInclude");
     include.checked = true;
     include.dispatchEvent(new Event("change"));
-    $<HTMLInputElement>("#rsWhen").value = toLocalInput(new Date(NOW + 3 * 86_400_000));
+    $<HTMLInputElement>("#rsWhen").value = toLocalInput(NOW + 3 * 86_400_000, HOME_ZONE);
     $("#rsGo").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(document.querySelector(".modal")).toBeNull();
@@ -456,13 +481,13 @@ describe("sent view", () => {
     $("[data-reschedule='sch']").click();
     await vi.advanceTimersByTimeAsync(0); // it reads the post's settings first
     const when = $<HTMLInputElement>("#rsWhen");
-    expect(when.value).toBe(toLocalInput(new Date(NOW + 2 * 3_600_000))); // opens at its time
-    const moved = new Date(NOW + 3 * 86_400_000);
-    when.value = toLocalInput(moved);
+    expect(when.value).toBe(toLocalInput(NOW + 2 * 3_600_000, HOME_ZONE)); // opens at its time
+    const moved = new Date(NOW + 4 * 86_400_000);
+    when.value = toLocalInput(moved.getTime(), HOME_ZONE);
     $("#rsGo").click();
     await vi.advanceTimersByTimeAsync(0);
     const posted = fake.calls.find((c) => c.url.pathname === "/api/sends/sch/reschedule");
-    expect(posted?.json()).toEqual({ fire_at: new Date(toLocalInput(moved)).toISOString() });
+    expect(posted?.json()).toEqual({ fire_at: toLocalInput(moved.getTime(), HOME_ZONE) });
     expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p7/settings")).toBe(false);
     expect(document.querySelector(".modal")).toBeNull();
     expect($("#toasts").textContent).toMatch(/Rescheduled/);
@@ -592,7 +617,7 @@ describe("sent view", () => {
     await mount(renderSent);
     await vi.advanceTimersByTimeAsync(0);
     expect(queue()).toEqual(["Waxwings"]);
-    srv.edit("sch", { fire_at: NOW + 3 * 86_400_000 }); // Claude moves it out
+    srv.edit("sch", { fire_at: NOW + 4 * 86_400_000 }); // Claude moves it out
     srv.put(scheduled({ id: "s2", post_id: "p9", subject: "Rails", fire_at: NOW + 86_400_000 }));
     await vi.advanceTimersByTimeAsync(60_000);
     expect(queue()).toEqual(["Rails"]); // the soonest leads; the other is behind Show all

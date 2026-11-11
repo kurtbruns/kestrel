@@ -1,6 +1,6 @@
 # Set up alerts
 
-Kestrel's own emails travel through SES, so two problems can never reach you that way: SES refusing your account, and Kestrel itself stopping. A third, SES down for over an hour, reaches you that way only once SES is back. Two Cloudflare alerts are how you hear about them. Each is a Monitor that reads the app's logs once a minute and emails you when its condition holds. Setting them up takes about ten minutes in the Cloudflare dashboard, with no DNS change and no deploy.
+Kestrel's own emails travel through SES, so two problems can never reach you that way: SES refusing your account, and Kestrel itself stopping. A third, SES down for about an hour, reaches you that way only once SES is back. Two Cloudflare alerts are how you hear about them. Each is a Monitor that reads the app's logs once a minute and emails you when its condition holds. Setting them up takes about ten minutes in the Cloudflare dashboard, with no DNS change and no deploy.
 
 This guide is optional, and recommended for any newsletter people rely on. Without the alerts, the dashboard still shows a refusal when you open it, but nothing tells you Kestrel has stopped. Monitoring of your own that reads the same logs can replace these Monitors or add to them.
 
@@ -31,7 +31,15 @@ This Monitor emails you when SES stops sending Kestrel's email, such as when SES
       AND attributes['event'] = 'alert.sending'
     ```
 
-1. Set it to fire when the value is `>= 1`, as an **Average** over `1m`, and to **Run every** `1m`. Name it, such as `Field Notes: SES can't send email`, add your email address as its destination, and select **Create**.
+1. Set it to fire when the value is `>= 1`, as an **Average** over `1m`, and to **Run every** `1m`.
+
+1. Name it, such as `Field Notes: SES can't send email`. For its description, which the dashboard shows, you can use this:
+
+    ```
+    Amazon SES has stopped sending the newsletter's email. Resolved doesn't mean fixed, so check the dashboard.
+    ```
+
+1. Add your email address as its destination, and select **Create**.
 
 ## 2. Create the stopped alert
 
@@ -47,17 +55,29 @@ This Monitor emails you when Kestrel stops running the once-a-minute schedule th
       AND attributes['ok'] = true
     ```
 
-1. Set it to fire when the value is `< 0.5`, as an **Average** over `15m`, and to **Run every** `1m`. Name it, such as `Field Notes: Kestrel has stopped`, add your email address, and select **Create**.
+1. Set it to fire when the value is `< 0.5`, as an **Average** over `15m`, and to **Run every** `1m`.
 
-This Monitor can't be tested without stopping the app. In testing, with the schedule slowed to once an hour, it emailed about 13 minutes after the last tick, and resolved about 12 minutes after ticks resumed.
+1. Name it, such as `Field Notes: Kestrel has stopped`. For its description, you can use this:
+
+    ```
+    The newsletter's once-a-minute schedule has stopped, so scheduled posts aren't going out.
+    ```
+
+1. Add your email address, and select **Create**.
+
+This Monitor can't be tested without stopping the app. If Kestrel stops, its email arrives about fifteen minutes later, and a `[Resolved]` email about as long after Kestrel is running again.
 
 ## 3. Send a test alert
 
 Cloudflare's own **Test** button sends sample data, so this is the only way to prove the real path from the app's log to your inbox.
 
+1. Wait a few minutes after creating the SES alert. A new Monitor can miss a line written right after it is created.
+
 1. In the editor, open **Settings → Notifications**, and select **Send a test alert**. Kestrel writes the line the SES alert watches for, with `cause` set to `test`, and changes nothing else.
 
-1. Wait for the alert email. In testing, it arrived about five and a half minutes after the line, from `noreply@notify.cloudflare.com`, with the subject `[Alert] Custom Alert '<name>' triggered`. A `[Resolved]` email followed about three minutes later, once no new line had arrived. Gmail filed both under **Updates**, so look there if your inbox shows nothing.
+1. Wait for the alert email. It arrives in about five minutes, from `noreply@notify.cloudflare.com`, with your Monitor's name in its subject. A `[Resolved]` email follows a few minutes later.
+
+    If nothing has arrived after ten minutes, check your spam and other folders, then send the test alert again.
 
 ## What the alert emails mean
 
@@ -83,6 +103,6 @@ Know these before you rely on the Monitors:
 - On the Workers Free plan, Cloudflare stops keeping logs for the rest of the day once the daily allowance is used, until it resets at 00:00 UTC. Until December 1, 2026, that allowance is 200,000 log events a day; from then, it is 0.5 GB a day, shared with traces. Either way it covers the whole Cloudflare account, not this Worker alone, and [Cloudflare's pricing page](https://developers.cloudflare.com/observability/pricing/) has the current terms. With no logs coming in, `Kestrel has stopped` fires falsely until the reset. An idle instance writes about 3,000 log events a day, far under either limit by Cloudflare's published average event size, so this is rare.
 - An outage at Cloudflare can silence both the logs and the alerts.
 - Kestrel can't see this setup, so the dashboard can't tell you whether the Monitors exist.
-- A destination address outside your Cloudflare account may have to be verified first. This hasn't been tested.
+- A destination address that isn't on your Cloudflare account may have to be verified with Cloudflare before it receives alerts.
 
 When the test alert reaches your inbox, your instance can tell you about the problems its own emails can't, or can tell only late.

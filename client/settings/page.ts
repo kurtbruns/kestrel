@@ -21,17 +21,24 @@ export interface SettingsBaseline {
   name: string;
   tagline: string;
   address: string;
-  recipients: string[];
   confirmation: ConfirmationEmailCopy;
+  /** The publication's time zone (SPEC §9): as saved, or as chosen and not saved yet; null
+   *  until one is chosen. */
+  timeZone: string | null;
+}
+
+/** The page's live, in-memory state: the baseline fields plus what saves on its own the
+ *  moment it changes (DESIGN §6), so it is always as saved and never feeds the save bar:
+ *  the logo and the two address lists. */
+export interface SettingsFormState extends SettingsBaseline {
+  logoUrl: string;
+  recipients: string[];
   /** Where notifications about sends go (SPEC §8); empty for none. */
   notifyTo: string[];
 }
 
-/** The page's live, in-memory state: the baseline fields plus the logo, which saves on
- *  its own the moment it changes. */
-export interface SettingsFormState extends SettingsBaseline {
-  logoUrl: string;
-}
+/** An address list that saves the moment an address is added or removed. */
+export type AddressListKey = "recipients" | "notifyTo";
 
 /** What a section is handed: the page's read, its live state, and the way back to the
  *  page when that state changes. */
@@ -53,14 +60,21 @@ export interface SettingsPage {
   changed(): void;
   /** A save landed outside the save bar (the logo's): the page adopts the saved settings. */
   applySaved(settings: SettingsView): void;
+  /** Save one address list as `next`, and only it, leaving every other unsaved edit as it
+   *  is; the page adopts the server's list once it lands. Throws the refusal, with the
+   *  list as it was. */
+  saveList(key: AddressListKey, next: string[]): Promise<void>;
 }
 
 /** What a section answers once mounted. `repaint` redraws what it derives from the state
  *  (a preview, a snippet) and runs on every change; `reset` puts its fields back to the
- *  state after a save adopts the server's result or a discard restores the baseline. */
+ *  state after a save adopts the server's result or a discard restores the baseline;
+ *  `unsaved` says whether it holds an edit of its own the save bar doesn't track (one it
+ *  saves with a button of its own), which a leave still asks about. */
 export interface SectionHandle {
   repaint?(): void;
   reset?(): void;
+  unsaved?(): boolean;
 }
 
 export const message = describeError;

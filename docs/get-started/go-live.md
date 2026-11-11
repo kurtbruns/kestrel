@@ -14,7 +14,7 @@ Open the editor at `https://newsletter.example.com/dashboard/`. The dashboard's 
 
 Three kinds of email tell you about the instance, each by its own route:
 
-- Kestrel's notifications, through SES, from the publication's name followed by `via Kestrel`, to the addresses under **Settings → Notifications**. They cover each send and each problem a send runs into. They can't arrive while SES refuses the account, and one saying SES has been down for over an hour may arrive only once it's back.
+- Kestrel's notifications, through SES, from the publication's name followed by `via Kestrel`, to the addresses under **Settings → Notifications**. They cover each send and each problem a send runs into. They can't arrive while SES refuses the account, and one saying SES has been down for about an hour may arrive only once it's back.
 - Cloudflare's alerts, from the two Monitors in [Set up alerts](../guides/alerts.md), if you created them, from `noreply@notify.cloudflare.com`. They cover SES not sending email, such as SES refusing the account or being down for about an hour, and Kestrel itself stopping. Each problem with SES alerts you once, when it begins; the `[Resolved]` email that follows means only that no new problem has begun, so check the dashboard to see whether it has cleared.
 - AWS's own notices, to the email address of the AWS account, about the account itself, such as a review of your sending or a bill. Kestrel never sees them, so make sure that address is one someone reads.
 

@@ -13,6 +13,7 @@ import type { SendView } from "./sends";
  *  section changes its title here and keeps its name. */
 const SETTINGS_SECTION_TITLES = {
   "publication-identity": "Publication identity",
+  "time-zone": "Time zone",
   "ways-to-subscribe": "Ways to subscribe",
   "confirmation-email": "Confirmation email",
   "reader-pages": "Reader pages",
@@ -104,6 +105,14 @@ export interface SettingsView {
   confirmation_email: ConfirmationEmailCopy;
   confirmation_email_default: ConfirmationEmailCopy;
   notifications: NotificationPrefs;
+  /**
+   * The publication's time zone (SPEC §9), an IANA name such as `America/New_York`: the clock
+   * its readers keep. Null until someone sets it, and while it is null nothing can be
+   * scheduled or sent.
+   */
+  time_zone: string | null;
+  /** The zone's name for people, "Eastern Time", from the runtime's locale data; null with no zone. */
+  time_zone_label: string | null;
 }
 
 /**
@@ -126,6 +135,15 @@ export const SIMULATED_ACCOUNTS = [
   "permission",
 ] as const;
 export type SimulatedAccount = (typeof SIMULATED_ACCOUNTS)[number];
+
+/**
+ * The refusals of one send's own email a local server's simulated SES can answer with
+ * (`SIMULATE_SENDS=ses:bad_request` or `ses:rejected`), each an SES error response the real
+ * adapter reads (SPEC §10, §12): a list request refused as invalid in words that name no one,
+ * or the message rejected for its content. Neither is the account's, so no other send waits.
+ */
+export const SIMULATED_SEND_REFUSALS = ["bad_request", "rejected"] as const;
+export type SimulatedSendRefusal = (typeof SIMULATED_SEND_REFUSALS)[number];
 
 /**
  * The refusals of the account a local server's simulated SES can answer every email with
@@ -172,6 +190,8 @@ export interface SimulationView {
   refuse: RefusingCause | null;
   /** Whether SES is unavailable to every email, from `SIMULATE_SENDS=ses:outage`. */
   outage: boolean;
+  /** How SES refuses each send's own email, from `SIMULATE_SENDS=ses:bad_request` (every list request invalid, in words that name no one) or `ses:rejected` (every post's email rejected for its content); null for neither. */
+  send_refusal: SimulatedSendRefusal | null;
   /** The SES account it stands in for, from `SIMULATE_ACCOUNT`; null leaves the account unread. */
   account: SimulatedAccountView | null;
 }
@@ -270,6 +290,8 @@ export interface SettingsPatchBody {
   email_template?: string;
   confirmation_email?: Partial<ConfirmationEmailCopy>;
   notifications?: Partial<NotificationPrefs>;
+  /** An IANA zone name the runtime knows. It can be changed but not cleared. */
+  time_zone?: string;
   remake?: string[];
 }
 
@@ -278,6 +300,20 @@ export interface SettingsSavedResponse {
   settings: SettingsView;
   warnings: string[];
   remade: SendView[];
+  /**
+   * When the save changed the time zone, one entry per scheduled send, by id, saying it keeps
+   * its moment and how that moment now reads (SPEC §9); empty otherwise. Information to show
+   * or relay as it stands, never a question.
+   */
+  time_zone_readings: TimeZoneReading[];
+}
+
+/** What a zone change says about one scheduled send: which send, and the sentence. */
+export interface TimeZoneReading {
+  send_id: string;
+  /** "Your scheduled post stays at the same moment, now Fri Nov 13, 8:00 AM Central Time.
+   *  Move it if you meant 9:00 AM." Text to show or relay, never to parse. */
+  message: string;
 }
 
 /** POST and DELETE /api/settings/logo: the settings as stored and the scheduled sends the change re-made. */

@@ -6,6 +6,7 @@ import {
   type DeliveryListResponse,
   type FeedCondition,
   NO_RECEIPTS_AFTER_MS,
+  type RescheduleResponse,
   type ResolveResponse,
   type SendActionResponse,
   type SendFeedResponse,
@@ -13,8 +14,10 @@ import {
   type SendResponse,
   type SendView,
 } from "../../shared/sends";
+import { readBack } from "../../shared/time_zone";
 import { getPost } from "../db/posts";
 import * as sends from "../db/sends";
+import { readTimeZone } from "../db/settings";
 import { fieldError, type JsonObject, oneOf, readJsonObject } from "../lib/body";
 import { badRequest, HttpError, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
@@ -26,10 +29,10 @@ import { actorOf, param } from "../router";
 import { bySeverity, sendConditions } from "../send/conditions";
 import { readConditionContext, viewWithCursor } from "../send/describe";
 import { feedPace, readAgainAt, SETTLE_FOLLOW_MS } from "../send/feed";
+import { parseFireAtRequest } from "../send/fire_at";
 import { resolveStuckSend } from "../send/resolve";
 import { cancel as cancelSend, reschedule as rescheduleSend } from "../send/schedule";
 import { buildSendView } from "../send/view";
-import { parseFireAt } from "./schedule";
 
 /** The `GET /api/sends` filters, each held by the router to the values the manifest
  *  declares, or absent. */
@@ -359,16 +362,22 @@ export async function cancel(c: RequestContext): Promise<Response> {
 export async function reschedule(c: RequestContext): Promise<Response> {
   const body = await readJsonObject(c);
   rejectSettingsFields(body);
-  const fireAt = parseFireAt(body.fire_at);
+  const request = parseFireAtRequest(body.fire_at, body.time_zone);
   const id = param(c, "id");
   const { changed } = await rescheduleSend(
     c.env,
     id,
-    fireAt,
+    request,
     c.config.minLeadMs,
     actorOf(unwrap(c.principal, "principal")),
   );
-  const response: SendActionResponse = { ...(await answerWith(c, id)), changed };
+  const read = await answerWith(c, id);
+  const response: RescheduleResponse = {
+    ...read,
+    changed,
+    // The move required the zone, so it is set.
+    read_back: readBack(read.send.fire_at, await readTimeZone(c.env.DB), read.send.as_of),
+  };
   return json(response);
 }
 

@@ -5,8 +5,8 @@
  * package at its own version and hands init to it. The scaffold lives in
  * `template/` and ships in the package, so a new instance always matches the release that
  * creates it. It writes the instance's package.json (pinning this exact release), its
- * wrangler config and one-line Worker entry, `.dev.vars.example`, the Claude context with its
- * headers (cli/context.mjs), and this release's migrations.
+ * wrangler config and one-line Worker entry, `.dev.vars.example`, the Claude context
+ * (cli/context.mjs), and this release's migrations.
  *
  * The scaffold's wrangler config names the Worker, the D1 database, and the R2 bucket
  * `kestrel…`; init renames each after the instance (the folder's name, or `--name`), so a

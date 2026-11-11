@@ -15,7 +15,7 @@ import { getConfig } from "../src/env";
 import { MAX_NOTIFY_ATTEMPTS, MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../src/lib/time";
 import * as channel from "../src/notify/channel";
 import { ProviderNotifier } from "../src/notify/channel";
-import { composeNotification, sendLink } from "../src/notify/compose";
+import { composeNotification, composeOutageNotification, sendLink } from "../src/notify/compose";
 import { clearFakeNotifications, failFakeNotify, fakeNotifications } from "../src/notify/fake";
 import { NOTIFY_RESERVE, notifyPublisher, stillHolds } from "../src/notify/notify";
 import * as providers from "../src/providers";
@@ -32,8 +32,10 @@ import {
   resetDatabase,
   seedConfirmed,
   sendingWorks,
+  setTimeZone,
   tick,
   ticks,
+  unsetTimeZone,
 } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
@@ -44,6 +46,9 @@ import { fetchWith, withVars } from "./support/worker_env";
 // (the test env is dev-shaped), and never at a cost to any send (I1 to I6).
 
 const PUBLISHER = "publisher@example.com";
+
+/** The clock `resetDatabase()` leaves the publication on, read now. */
+const UTC_NOW = () => ({ zone: "UTC", now: Date.now() });
 
 async function rows(sendId?: string) {
   const { results } = await env.DB.prepare(
@@ -311,17 +316,18 @@ describe("a send that needs the publisher", () => {
       receipt_since: 0,
     } satisfies notifications.DueNotification;
 
-    const none = composeNotification({ ...finished, c_unsent: 30 }, config);
+    const none = composeNotification({ ...finished, c_unsent: 30 }, config, UTC_NOW());
     expect(none.subject).toBe('"Owls" didn’t reach anyone');
     expect(none.text).toContain("A finished post can’t be sent again.");
 
-    const left = composeNotification({ ...finished, c_skipped: 4 }, config);
+    const left = composeNotification({ ...finished, c_skipped: 4 }, config, UTC_NOW());
     expect(left.subject).toBe("Sent: Owls");
     expect(left.text).toContain("no one left to send to");
 
     const some = composeNotification(
       { ...finished, c_accepted: 1_200, c_unsent: 30, c_skipped: 10 },
       config,
+      UTC_NOW(),
     );
     expect(some.text).toContain(
       "accepted 1,200 of 1,230 emails. The send report shows why the other 30 weren’t sent.",
@@ -1139,6 +1145,7 @@ describe("the link in a notification", () => {
           receipt_since: 0,
         },
         config,
+        UTC_NOW(),
       );
       const link = sendLink(config, "s 1");
       if (kind === "wedged") {
@@ -1315,7 +1322,7 @@ describe("what the publisher is told agrees with what every surface shows (SPEC 
       // The email carries what the condition does: the provider's words, the fix, the count.
       const config = getConfig(env as unknown as AppEnv);
       for (const n of due) {
-        const email = composeNotification(n, config).text;
+        const email = composeNotification(n, config, UTC_NOW()).text;
         const cond = conditions.find((x) => x.kind === n.kind);
         if (n.kind === "refused") {
           expect(email).toContain(cond?.error);
@@ -1349,7 +1356,11 @@ describe("what the publisher is told agrees with what every surface shows (SPEC 
     });
     await notifications.recordNotifications(env.DB, now);
     const [due] = await notifications.dueNotifications(env.DB, 1, Date.now());
-    const email = composeNotification(due as notifications.DueNotification, getConfig(env));
+    const email = composeNotification(
+      due as notifications.DueNotification,
+      getConfig(env),
+      UTC_NOW(),
+    );
     expect(email.text).toContain("Illegal address …@example.com");
     expect(email.html).not.toContain("ada@");
     const shownNow = await shown(send.id);
@@ -1467,10 +1478,192 @@ describe("no receipts from the provider (SPEC §8)", () => {
     const due = await notifications.dueNotifications(env.DB, 5, Date.now());
     const n = due.find((d) => d.kind === "no_receipts") as notifications.DueNotification;
     expect(stillHolds(n, Date.now())).toBe(true);
-    const email = composeNotification(n, getConfig(env));
+    const email = composeNotification(n, getConfig(env), UTC_NOW());
     expect(email.subject).toBe("Kestrel isn’t hearing back from Amazon SES");
     expect(email.text).toContain("may not be reaching Kestrel");
     expect(stillHolds({ ...n, receipt_since: 1 }, Date.now())).toBe(false);
     expect((await rows(send.id)).map((r) => r.kind)).toContain("no_receipts");
+  });
+});
+
+describe("times in a notification, on the publication's clock (SPEC §8, §9)", () => {
+  const HOUR = 60 * 60 * 1000;
+  const MINUTE = 60 * 1000;
+  /** A send in the state a notification tells of, with only what a case sets. */
+  const due = (over: Partial<notifications.DueNotification>): notifications.DueNotification => ({
+    send_id: "s1",
+    kind: "stuck",
+    episode: 0,
+    attempts: 0,
+    sent_to: [],
+    subject: "Owls",
+    send_status: "sending",
+    fire_at: 0,
+    started_at: null,
+    completed_at: null,
+    locked_until: null,
+    halt_reason: null,
+    halted_at: null,
+    halt_retries: 0,
+    halt_retry_at: null,
+    progress_at: null,
+    halt_cause: null,
+    halt_error: null,
+    c_pending: 40,
+    c_in_flight: 0,
+    c_accepted: 0,
+    c_delivered: 0,
+    c_bounced: 0,
+    c_complained: 0,
+    c_skipped: 0,
+    c_unsent: 0,
+    receipt_since: 0,
+    ...over,
+  });
+  // Tue Nov 10, 2026, 9:23 AM in Los Angeles (UTC-8). A fixed day, since a zone's rules are
+  // what's under test; every reading below is relative to it.
+  const STOPPED = Date.parse("2026-11-10T17:23:00Z");
+  const LA = { zone: "America/Los_Angeles", now: STOPPED + 2 * HOUR + 10 * MINUTE };
+
+  it("names the publication's zone, leading with how long when the point is an age", () => {
+    const stuck = composeNotification(
+      due({ progress_at: STOPPED, started_at: STOPPED - HOUR }),
+      getConfig(env),
+      LA,
+    );
+    expect(stuck.subject).toBe('"Owls" is waiting: nothing has gone out for 2 hours, 10 minutes');
+    expect(stuck.text).toContain(
+      'Nothing has gone out for "Owls" in 2 hours, 10 minutes, since 9:23 AM Pacific Time, and no provider problem explains it.',
+    );
+
+    const missed = composeNotification(
+      due({ kind: "missed", send_status: "scheduled", fire_at: STOPPED }),
+      getConfig(env),
+      { ...LA, now: STOPPED + 12 * MINUTE + 30_000 },
+    );
+    expect(missed.text).toContain(
+      '"Owls" is 12 minutes late: it was due at 9:23 AM Pacific Time and hasn’t gone out.',
+    );
+
+    const late = composeNotification(
+      due({
+        kind: "finished",
+        send_status: "sent",
+        fire_at: STOPPED - 2 * HOUR - 5 * MINUTE,
+        started_at: STOPPED,
+        completed_at: STOPPED + MINUTE,
+        c_pending: 0,
+        c_accepted: 3,
+      }),
+      getConfig(env),
+      LA,
+    );
+    expect(late.text).toContain('"Owls" finished sending at 9:24 AM Pacific Time.');
+    expect(late.text).toContain("It went out 2 hours, 5 minutes late,");
+
+    const held = composeNotification(
+      due({
+        kind: "refused",
+        halt_reason: "account",
+        halt_cause: "quota",
+        halted_at: STOPPED,
+        halt_error: "Daily quota",
+      }),
+      getConfig(env),
+      LA,
+    );
+    expect(held.text).toContain('"Owls" stopped at 9:23 AM Pacific Time because');
+
+    const refusal = {
+      cause: "credentials",
+      found_by: "account_check",
+      error: "bad key",
+      advice: "Fix the key.",
+      at: STOPPED,
+    } as const;
+    const outage = composeOutageNotification(refusal, STOPPED, [], getConfig(env), LA);
+    expect(outage.text).toContain(
+      "Kestrel’s check of your SES account found at 9:23 AM Pacific Time that SES will refuse every email.",
+    );
+  });
+
+  it("gives the day too when the time isn't on the day the email is written", () => {
+    const email = composeNotification(
+      due({
+        kind: "unavailable",
+        halt_reason: "unavailable",
+        halted_at: STOPPED,
+        episode: STOPPED,
+      }),
+      getConfig(env),
+      { ...LA, now: STOPPED + 15 * HOUR },
+    );
+    // Delivered hours in, after retries, the subject says no less than the body.
+    expect(email.subject).toBe('"Owls" is late: Amazon SES has been unavailable for over an hour');
+    expect(email.text).toContain(
+      'Amazon SES has been unavailable for 15 hours, since Tue Nov 10, 9:23 AM Pacific Time, so "Owls" is late.',
+    );
+  });
+
+  it("across a clock change, reads each time by that moment's offset and says how long it really was", () => {
+    // New York falls back at 2:00 AM on Sun Nov 1, 2026, from UTC-4 to UTC-5.
+    const NY = "America/New_York";
+    const before = Date.parse("2026-11-01T05:30:00Z"); // 1:30 AM, the first time
+    const after = Date.parse("2026-11-01T06:40:00Z"); // 1:40 AM, the second time
+    const email = composeNotification(
+      due({ progress_at: before, started_at: before }),
+      getConfig(env),
+      { zone: NY, now: after },
+    );
+    // The clock reads ten minutes apart; an hour and ten minutes passed.
+    expect(email.text).toContain(
+      'Nothing has gone out for "Owls" in 1 hour, 10 minutes, since 1:30 AM Eastern Time,',
+    );
+
+    // Saturday evening on daylight time, read on Sunday on standard time: the day is named.
+    const evening = Date.parse("2026-11-01T03:40:00Z"); // Sat Oct 31, 11:40 PM EDT
+    const unavailable = composeNotification(
+      due({
+        kind: "unavailable",
+        halt_reason: "unavailable",
+        halted_at: evening,
+        episode: evening,
+      }),
+      getConfig(env),
+      { zone: NY, now: after },
+    );
+    expect(unavailable.text).toContain(
+      "Amazon SES has been unavailable for 3 hours, since Sat Oct 31, 11:40 PM Eastern Time,",
+    );
+  });
+
+  it("with no time zone set, reads in UTC and says so", () => {
+    const email = composeNotification(
+      due({ progress_at: STOPPED, started_at: STOPPED }),
+      getConfig(env),
+      {
+        zone: null,
+        now: LA.now,
+      },
+    );
+    expect(email.text).toContain(
+      'Nothing has gone out for "Owls" in 2 hours, 10 minutes, since 5:23 PM UTC,',
+    );
+  });
+
+  it.each([
+    ["America/Los_Angeles", "Pacific Time"],
+    [null, "UTC"],
+  ])("is written on the zone saved in Settings when it goes out (%s)", async (zone, label) => {
+    if (zone) {
+      await setTimeZone(zone);
+    } else {
+      await unsetTimeZone();
+    }
+    await seedConfirmed(addresses(2));
+    await dueSend({ subject: "Owls" });
+    await ticks(3);
+    const [sent] = fakeNotifications();
+    expect(sent!.text).toMatch(new RegExp(`finished sending at \\d{1,2}:\\d{2} [AP]M ${label}\\.`));
   });
 });

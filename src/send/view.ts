@@ -20,7 +20,7 @@ import { countsOf, readActor, type SendCounts, type SendStatus } from "../db/sen
 import type { Config } from "../env";
 import { archiveAnswers } from "../lib/archive_address";
 import { archiveUrl } from "../render/render";
-import { type ConditionContext, sendActions, sendConditions } from "./conditions";
+import { type SendViewContext, sendActions, sendConditions } from "./conditions";
 import { nextChangeAt } from "./feed";
 import { isStuck } from "./stuck";
 import { isWedged } from "./wedged";
@@ -197,7 +197,7 @@ export function buildSendView(
   config: Pick<Config, "provider" | "appOrigin" | "archiveOrigin" | "archiveBasePath">,
   hasRetries: boolean,
   now: number,
-  context: ConditionContext,
+  context: SendViewContext,
 ): SendView {
   const counts = countsOf(send);
   const published = send.status === "sending" || send.status === "sent";
@@ -303,7 +303,7 @@ export function buildSendView(
     provider: { name: config.provider, halt },
     phase,
     conditions: sendConditions(send, now, context),
-    actions: sendActions(send, now),
+    actions: sendActions(send, now, context.timeZone !== null),
     next_change_at: nextChangeAt(send, now),
     links: {
       self: `/api/sends/${id}`,

@@ -543,7 +543,7 @@ const SEND_FIELDS: ReferenceField[] = [
     name: "actions",
     type: "object[]",
     description:
-      "What the server would accept now, each `{ name, method, path }`: `cancel` and `reschedule` before the fire time, `resolve` while wedged.",
+      "What the server would accept now, each `{ name, method, path }`: `cancel` and `reschedule` before the fire time, the reschedule only while the publication has a time zone, `resolve` while wedged.",
   },
   {
     name: "next_change_at",
@@ -681,12 +681,12 @@ const POST_FIELDS: ReferenceField[] = [
       {
         value: "schedule",
         description:
-          "Schedule it: a draft, while an email provider is connected. A blank subject is still refused, naming `subject`.",
+          "Schedule it: a draft, while an email provider is connected and the publication has a time zone. A blank subject is still refused, naming `subject`.",
       },
       {
         value: "send_now",
         description:
-          "Send it now: a draft, while an email provider is connected. A blank subject is still refused, naming `subject`.",
+          "Send it now: a draft, while an email provider is connected and the publication has a time zone. A blank subject is still refused, naming `subject`.",
       },
     ],
   },
@@ -888,6 +888,18 @@ const SETTINGS_FIELDS: ReferenceField[] = [
       "The runtime preferences: `test_recipients`, `publication` (`name`, `tagline`, `address`, `logo_url`), `email_template`, `confirmation_email` and its `confirmation_email_default`, and `notifications.to`, the list of addresses notifications go to (empty for none). Never a secret.",
   },
   {
+    name: "settings.time_zone",
+    type: "string | null",
+    description:
+      "The publication's time zone, an IANA name such as `America/New_York`: the clock its readers keep, which dates its posts on the reader pages. Null until someone sets it, and while it is null scheduling and sending are refused (`time_zone_not_set`). It names a zone and is not a stable string: it reads back under the server's runtime's name for the zone, which may differ from the name that was sent and can change when the runtime does, so never compare two names as text. A zone's rules are the runtime's too, and can trail a recent government change by months.",
+  },
+  {
+    name: "settings.time_zone_label",
+    type: "string | null",
+    description:
+      "The zone's name for people, such as `Eastern Time` or `Japan Standard Time`, never an abbreviation, except `UTC`, which is called that; null with no zone. Use it when naming the zone to the publisher.",
+  },
+  {
     name: "deployment",
     type: "object",
     description:
@@ -925,9 +937,9 @@ const SETTINGS_FIELDS: ReferenceField[] = [
   },
   {
     name: "deployment.simulation",
-    type: "{ profile, faults, refuse, outage, account } | null",
+    type: "{ profile, faults, refuse, outage, send_refusal, account } | null",
     description:
-      "In local development, the send simulation standing in for a provider: its `profile`, its `faults` (`realistic` or `none`), the refusal of the account it answers every email with (`refuse`, a cause such as `configuration`, or null), whether SES is down for every email (`outage`), and the SES `account` it stands in for, from `SIMULATE_ACCOUNT`: its `state` (`sandbox`, `pending`, `denied`, `production`, or `permission`), whether `bounces_routed`, and the `problem` it shows (`set_missing`, `set_paused`, `key_rejected`, `sending_disabled`, `shutdown`, `sender_unverified`, or `probation`; null for none), or null when the account is left unread. Always null once deployed.",
+      "In local development, the send simulation standing in for a provider: its `profile`, its `faults` (`realistic` or `none`), the refusal of the account it answers every email with (`refuse`, a cause such as `configuration`, or null), whether SES is down for every email (`outage`), how SES refuses each send's own email (`send_refusal`: `bad_request`, every list request refused as invalid in words that name no one, `rejected`, every post's email rejected for its content, or null), and the SES `account` it stands in for, from `SIMULATE_ACCOUNT`: its `state` (`sandbox`, `pending`, `denied`, `production`, or `permission`), whether `bounces_routed`, and the `problem` it shows (`set_missing`, `set_paused`, `key_rejected`, `sending_disabled`, `shutdown`, `sender_unverified`, or `probation`; null for none), or null when the account is left unread. Always null once deployed.",
   },
   {
     name: "deployment.free_plan_limits",
@@ -1184,7 +1196,12 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
       "The runtime preferences, one resource that never holds a secret, with deploy configuration reflected read-only.",
     fields: SETTINGS_FIELDS,
     example: {
-      settings: { email_template: "…", publication: { name: "Marsh Lane" } },
+      settings: {
+        email_template: "…",
+        publication: { name: "Marsh Lane" },
+        time_zone: "America/New_York",
+        time_zone_label: "Eastern Time",
+      },
       deployment: { provider: "ses", min_lead_ms: 300000, free_plan_limits: false },
       in_use: {
         sends: [sendBrief({ fire_at: 1768467600000 })],

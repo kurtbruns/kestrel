@@ -9,6 +9,7 @@ describe("links into the editor from outside it", () => {
     // Renaming one breaks the links already sent: retitle the section instead.
     expect(SETTINGS_SECTIONS).toEqual([
       "publication-identity",
+      "time-zone",
       "ways-to-subscribe",
       "confirmation-email",
       "reader-pages",

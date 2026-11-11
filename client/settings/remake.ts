@@ -5,7 +5,7 @@ import type { SendView } from "../../shared/sends";
 import type { InUseView, RemakeRequiredError } from "../../shared/settings";
 import { ApiError } from "../api";
 import { at } from "../lifecycle";
-import { fmt } from "../ui/format";
+import { timeAt } from "../time_zone";
 import { type Html, html } from "../ui/html";
 import { icon } from "../ui/icons";
 import { modal, toast } from "../ui/widgets";
@@ -106,7 +106,7 @@ function confirmRemake(
         <p class="hint">${verb.lead(n)} ${verb.gerund} applies the change to ${one ? "its email" : "their emails"} too.</p>
         <ul class="remake-list">${sends.map(
           (s) =>
-            html`<li><span>${s.subject || html`<em>untitled</em>`}</span><span>sends ${fmt(s.fire_at)}</span></li>`,
+            html`<li><span>${s.subject || html`<em>untitled</em>`}</span><span>sends ${timeAt(s.fire_at)}</span></li>`,
         )}</ul>
         <dl class="remake-facts">
         <div><dt>Changes</dt><dd>the look of ${one ? "its email" : "their emails"}</dd></div>
@@ -199,8 +199,8 @@ export function remakeWait(inUse: InUseView | null | undefined, now = Date.now()
   // retry_after is the last of them to fire, so every send at or before it is inside.
   const n = Math.max(1, inUse.sends.filter((s) => s.fire_at <= until).length);
   return n === 1
-    ? `A scheduled post sends at ${fmt(until)}. You can save once it has sent.`
-    : `${n} scheduled posts send by ${fmt(until)}. You can save once they have sent.`;
+    ? `A scheduled post sends at ${timeAt(until)}. You can save once it has sent.`
+    : `${n} scheduled posts send by ${timeAt(until)}. You can save once they have sent.`;
 }
 
 /** `remakeWait` as markup to append to a lede or note, marked so `expireRemakeWait` can

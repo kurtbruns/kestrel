@@ -8,6 +8,7 @@ import type { SignupsState } from "../../shared/provider";
 import type { PublicSubscribeResponse } from "../../shared/subscribers";
 import * as subscribers from "../db/subscribers";
 import type { Config } from "../env";
+import { mediaTypeOf, optString, readForm, readJsonObject } from "../lib/body";
 import { json } from "../lib/errors";
 import { escapeHtml, escapeHtmlAttr } from "../lib/html";
 import { log } from "../lib/log";
@@ -18,6 +19,7 @@ import {
   type ReaderBanner,
   type ReaderIdentity,
   readerPage,
+  siteDescription,
   subscribeFormHtml,
 } from "../lib/page";
 import type { RequestContext } from "../router";
@@ -39,22 +41,23 @@ function wantsHtml(c: RequestContext): boolean {
   );
 }
 
+/**
+ * The address a subscribe request carries, read only from its body: a JSON object's `email`,
+ * or the form's `email` field. Never from the query string, since a URL is recorded by the
+ * edge, sent on as a Referer, and kept by caches, and a reader's address belongs in none of
+ * them. `null` when the body carries none; a JSON body of the wrong shape is a 400 naming
+ * what is wrong, the same for every address.
+ */
 async function readEmail(c: RequestContext): Promise<string | null> {
-  const ct = c.req.headers.get("content-type") ?? "";
-  if (ct.includes("application/json")) {
-    try {
-      const b = (await c.req.json()) as { email?: unknown };
-      return typeof b.email === "string" ? b.email : null;
-    } catch {
-      return null;
-    }
+  const type = mediaTypeOf(c.req);
+  if (type === "application/json") {
+    return optString(await readJsonObject(c, { optional: true }), "email") ?? null;
   }
-  if (ct.includes("form")) {
-    const f = await c.req.formData();
-    const v = f.get("email");
+  if (type === "application/x-www-form-urlencoded" || type === "multipart/form-data") {
+    const v = (await readForm(c.req)).get("email");
     return typeof v === "string" ? v : null;
   }
-  return c.url.searchParams.get("email");
+  return null;
 }
 
 async function readToken(c: RequestContext): Promise<string> {
@@ -101,6 +104,8 @@ function subscribePage(
     devDashboardUrl: devDashboardUrl(c.config),
     status,
     fresh: true,
+    // A subscribe link is shared to win readers, so it previews as the publication.
+    describe: siteDescription(identity, `${c.config.appOrigin}/subscribe`),
   });
 }
 

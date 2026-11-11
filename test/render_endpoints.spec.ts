@@ -1,6 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SERIF_STACK } from "../shared/fonts";
 import type { TestSendResponse } from "../shared/posts";
 import { refusalAdvice } from "../shared/sends";
 import type { TemplateTestResponse } from "../shared/settings";
@@ -8,9 +9,13 @@ import { FakeProvider } from "../src/providers/fake";
 import type { Recipient, SendBatchResult } from "../src/providers/types";
 import { SENTTO_SENTINEL, UNSUB_SENTINEL } from "../src/render/template_engine";
 import { sweep } from "../src/send/sweep";
-import { setRow } from "./support/fixtures";
+import { setRow, setTimeZone } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, PNG_1x1, readJson } from "./support/http";
 import { logged } from "./support/log";
+
+// These specs share one database across their tests; each starts with the publication's time
+// zone set, since scheduling is refused without one (SPEC §9).
+beforeEach(() => setTimeZone());
 
 async function draftWithImage(title: string): Promise<string> {
   const created = await readJson(
@@ -502,7 +507,7 @@ describe("web version (GET /api/posts/:id/web)", () => {
     expect((await SELF.fetch(`${base}/api/posts/${id}/web`)).status).toBe(401);
   });
 
-  it("shows a draft the way its post page will: masthead and web font in, email-only parts out", async () => {
+  it("shows a draft the way its post page will: masthead in, email-only parts out", async () => {
     const id = await draftWithImage("Web Draft");
     const res = await SELF.fetch(`${base}/api/posts/${id}/web`, { headers: AUTH });
     expect(res.status).toBe(200);
@@ -513,7 +518,8 @@ describe("web version (GET /api/posts/:id/web)", () => {
     expect(html).toContain(">Hi</h1>");
     expect(html).toContain(`/media/posts/${id}/cat.png`);
     expect(html).toContain('class="k-mast"');
-    expect(html).toContain("fonts.googleapis.com/css2?family=Fraunces");
+    expect(html).toContain(`font-family:${SERIF_STACK};`);
+    expect(html).not.toContain('<link rel="stylesheet"');
     // The template's email-only footer is left out, as on the post page.
     expect(html).not.toContain(">Unsubscribe</a>");
     expect(html).not.toContain(">View in browser</a>");

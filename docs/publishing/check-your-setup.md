@@ -18,7 +18,7 @@ If SES refuses the test, the dashboard says why in red above the steps, with wha
 
 ## 2. Get notified
 
-Under **Settings → Notifications**, add your address under **Send notifications to** with **Add inbox**, save, and choose **Send a test notification**. It goes to each address. If someone else runs your instance, add their address too, so a problem reaches both of you. Kestrel then emails you when a send finishes or needs you, as [Notifications](troubleshooting.md#notifications) lists. The step is checked off once an address is saved and the last notification arrived. If the last notification didn't arrive, the dashboard says so above the steps, with the channel's words.
+Under **Settings → Notifications**, add your address under **Send notifications to** with **Add inbox**, which saves it right away, and choose **Send a test notification**. It goes to each address. If someone else runs your instance, add their address too, so a problem reaches both of you. Kestrel then emails you when a send finishes or needs you, as [Notifications](troubleshooting.md#notifications) lists. The step is checked off once an address is saved and the last notification arrived. If the last notification didn't arrive, the dashboard says so above the steps, with the channel's words.
 
 ## 3. See what your readers get
 

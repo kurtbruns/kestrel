@@ -16,11 +16,12 @@ import type { RequestContext } from "../router";
  *  carrying a name they didn't choose (SPEC §9; shape in `lib/page.ts`). A corrupt
  *  settings row reads as the defaults, so a reader page never fails on it. */
 export async function readerIdentity(c: RequestContext, config: Config): Promise<ReaderIdentity> {
-  const { publication: p } = await getSettingsForDisplay(c.env.DB);
+  const { publication: p, timeZone } = await getSettingsForDisplay(c.env.DB);
   return {
     name: p.name,
     tagline: p.tagline,
     logoUrl: publicationLogoUrl(config.mediaPublicBase, p.logo),
+    timeZone,
   };
 }
 

@@ -65,6 +65,13 @@ const CONFIRM = {
   remake_required: [409, "Name the sends the change would re-make, in `remake`."],
 } as const satisfies Record<string, Refusal>;
 
+const SET_UP = {
+  time_zone_not_set: [
+    409,
+    "Scheduling or sending before the publication has a time zone: set `time_zone` in the settings.",
+  ],
+} as const satisfies Record<string, Refusal>;
+
 const NO_LONGER_APPLIES = {
   not_found: [404, "Nothing has that id."],
   post_not_draft: [
@@ -115,6 +122,7 @@ const GROUPS: { move: string; codes: Record<string, Refusal> }[] = [
   { move: "Read again, then decide", codes: READ_AGAIN },
   { move: "Try again shortly, unchanged", codes: TRY_AGAIN },
   { move: "Confirm, then send again", codes: CONFIRM },
+  { move: "Set up the publication, then send again", codes: SET_UP },
   { move: "Fix the deployment, outside this API", codes: FIX_DEPLOYMENT },
 ];
 
@@ -125,6 +133,7 @@ const ALL = {
   ...READ_AGAIN,
   ...TRY_AGAIN,
   ...CONFIRM,
+  ...SET_UP,
   ...FIX_DEPLOYMENT,
 };
 

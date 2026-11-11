@@ -14,7 +14,11 @@ A region is a marked part, not a general `if`: `.IsEmail` is its only condition,
 
 ## Styling
 
-Put your CSS in a `<style>` block in the template. Kestrel copies its rules onto each element when it makes the email, since most mail clients drop a `<style>` block, and keeps `@media` rules, such as a dark-mode palette, in the block. A `<link rel="stylesheet">`, such as a web font from Google Fonts, is left out of the email, and the template saves with a warning saying so: most mail clients wouldn't load it either. Name the font in `font-family` with fallbacks instead, and readers whose device has it see it.
+Put your CSS in a `<style>` block in the template. Kestrel copies its rules onto each element when it makes the email, since most mail clients drop a `<style>` block, and keeps `@media` rules, such as a dark-mode palette, in the block. A `<link rel="stylesheet">` is left out of the email, and the template saves with a warning saying so: most mail clients wouldn't load it either.
+
+## Fonts
+
+Name only fonts your readers already have, and end the list with a generic family, as the starting templates do with `Georgia, 'Times New Roman', serif`. Most mail clients ignore web fonts, and your posts' public pages refuse them, so a font your template downloads shows nowhere: readers see the next font in the list. A sent email keeps the fonts it names for good.
 
 ## Variables
 

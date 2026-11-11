@@ -403,6 +403,7 @@ describe("API reference is generated from the route registration", () => {
       "reason",
       "subscriber",
       "markdown",
+      "time_zone",
     ]);
     const named = new Set(
       [...section.matchAll(/`([a-z][a-z_]+)`/g)]
