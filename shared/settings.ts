@@ -116,8 +116,9 @@ export interface SettingsView {
 }
 
 /**
- * The providers the local send simulation can model (SPEC §10): `ses` takes its traits from
- * the real adapter, and `generic` is a small-batch provider paced to be watched.
+ * The providers the local send simulation can model (SPEC §10): `ses` takes its traits and
+ * failures from the real adapter, and `generic` is a small-batch provider paced to be watched,
+ * the one profile whose provider refuses a reader once and takes them on the retry.
  */
 export const SIMULATION_PROFILES = ["generic", "ses"] as const;
 export type SimulationProfile = (typeof SIMULATION_PROFILES)[number];
@@ -193,16 +194,26 @@ export interface SimulatedAccountView {
   problem: SimulatedAccountProblem | null;
 }
 
+/**
+ * The one answer a local server's simulated SES gives every email it would otherwise take, from
+ * `SIMULATE_SENDS` (SPEC §10), each an SES error response the real adapter reads: a refusal of
+ * the account and its cause (`ses:refuse=<cause>`, or a `SIMULATE_ACCOUNT` problem that stops
+ * every email), an outage (`ses:outage`), or a refusal of each send's own email (`ses:bad_request`,
+ * every list request invalid in words that name no one, or `ses:rejected`, every post's email
+ * rejected for its content). Each kind is spelled as it is after `ses:`, and one field holds it,
+ * so two can't be set at once.
+ */
+export type SimulatedAnswer =
+  | { kind: "refuse"; cause: RefusingCause }
+  | { kind: "outage" }
+  | { kind: SimulatedSendRefusal };
+
 /** The local send simulation a dev server runs, from `SIMULATE_SENDS`; only ever set in local dev. */
 export interface SimulationView {
   profile: SimulationProfile;
   faults: SimulationFaults;
-  /** The refusal of the account it answers every email with, from `SIMULATE_SENDS=ses:refuse=<cause>`; null for none. */
-  refuse: RefusingCause | null;
-  /** Whether SES is unavailable to every email, from `SIMULATE_SENDS=ses:outage`. */
-  outage: boolean;
-  /** How SES refuses each send's own email, from `SIMULATE_SENDS=ses:bad_request` (every list request invalid, in words that name no one) or `ses:rejected` (every post's email rejected for its content); null for neither. */
-  send_refusal: SimulatedSendRefusal | null;
+  /** What SES answers in place of taking an email (`SimulatedAnswer`); null when it takes them as a working account does. */
+  answer: SimulatedAnswer | null;
   /** The SES account it stands in for, from `SIMULATE_ACCOUNT`; null leaves the account unread. */
   account: SimulatedAccountView | null;
 }

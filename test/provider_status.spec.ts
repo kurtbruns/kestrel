@@ -228,6 +228,58 @@ describe("SIMULATE_ACCOUNT", () => {
     }
   });
 
+  it("combines where bounces go, whether reports arrive, and a problem, in any order", async () => {
+    expect(simulated("sandbox:unrouted:unreported:sending_disabled")).toEqual({
+      state: "sandbox",
+      bounces_routed: false,
+      receipts: "unreported",
+      problem: "sending_disabled",
+    });
+    expect(simulated("production:set_missing:wrong_topic")).toEqual(
+      simulated("production:wrong_topic:set_missing"),
+    );
+    expect(simulated("production:wrong_topic:set_missing")).toEqual({
+      state: "production",
+      bounces_routed: true,
+      receipts: "wrong_topic",
+      problem: "set_missing",
+    });
+    // With a configuration set named at deploy, unrouted bounces leave a set to be paused.
+    expect(
+      simulated("sandbox:set_paused:unrouted", { SES_CONFIGURATION_SET: "kestrel-mail" }),
+    ).toEqual({
+      state: "sandbox",
+      bounces_routed: false,
+      receipts: "reported",
+      problem: "set_paused",
+    });
+    // Each shows its own warning, as the real check would find them together.
+    expect((await read("sandbox:unrouted:sender_unverified")).warnings.map((w) => w.code)).toEqual(
+      expect.arrayContaining(["bounces_not_routed", "sender_unverified"]),
+    );
+  });
+
+  it("refuses a combination that can't happen, saying why", () => {
+    const why = (value: string) => {
+      try {
+        simulated(value);
+      } catch (e) {
+        return (e as Error).message;
+      }
+      return "accepted";
+    };
+    expect(why("production:unreported:wrong_topic")).toContain(
+      "reports either never arrive or arrive from the wrong topic, not both",
+    );
+    expect(why("production:set_missing:shutdown")).toContain("one problem at a time");
+    expect(why("sandbox:unrouted:unrouted")).toContain("names :unrouted twice");
+    expect(why("sandbox:unreported:unreported")).toContain("names :unreported twice");
+    expect(why("permission:unreported:key_rejected")).toContain("takes no problem");
+    expect(why("sandbox:unrouted:set_missing")).toContain(
+      "set SES_CONFIGURATION_SET or drop :unrouted",
+    );
+  });
+
   it("is never on outside local dev, whatever it says", async () => {
     const deployed = { ...SES_DEPLOY, SIMULATE_SENDS: "ses", SIMULATE_ACCOUNT: "production" };
     expect(getConfig(withVars(deployed)).simulation).toBeNull();

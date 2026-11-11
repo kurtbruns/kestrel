@@ -937,9 +937,9 @@ const SETTINGS_FIELDS: ReferenceField[] = [
   },
   {
     name: "deployment.simulation",
-    type: "{ profile, faults, refuse, outage, send_refusal, account } | null",
+    type: "{ profile, faults, answer, account } | null",
     description:
-      "In local development, the send simulation standing in for a provider: its `profile`, its `faults` (`realistic` or `none`), the refusal of the account it answers every email with (`refuse`, a cause such as `configuration`, or null), whether SES is down for every email (`outage`), how SES refuses each send's own email (`send_refusal`: `bad_request`, every list request refused as invalid in words that name no one, `rejected`, every post's email rejected for its content, or null), and the SES `account` it stands in for, from `SIMULATE_ACCOUNT`: its `state` (`sandbox`, `pending`, `denied`, `production`, or `permission`), whether `bounces_routed`, and the `problem` it shows (`set_missing`, `set_paused`, `key_rejected`, `sending_disabled`, `shutdown`, `sender_unverified`, or `probation`; null for none), or null when the account is left unread. Always null once deployed.",
+      'In local development, the send simulation standing in for a provider: its `profile`, its `faults` (`realistic` or `none`), the one `answer` SES gives in place of taking an email, or null when it takes them: `{ kind: "refuse", cause }`, a refusal of the account every email meets (a cause such as `configuration`, named by `SIMULATE_SENDS` or implied by the account\'s `problem`), `{ kind: "outage" }`, SES down for every email, or a refusal of each send\'s own email, `{ kind: "bad_request" }` (every list request refused as invalid in words that name no one) or `{ kind: "rejected" }` (every post\'s email rejected for its content); and the SES `account` it stands in for, from `SIMULATE_ACCOUNT`: its `state` (`sandbox`, `pending`, `denied`, `production`, or `permission`), whether `bounces_routed`, whether its reports reach the app (`receipts`: `reported`, `unreported`, or `wrong_topic`), and the `problem` it shows (`set_missing`, `set_paused`, `key_rejected`, `sending_disabled`, `shutdown`, `sender_unverified`, or `probation`; null for none), or null when the account is left unread. Always null once deployed.',
   },
   {
     name: "deployment.free_plan_limits",

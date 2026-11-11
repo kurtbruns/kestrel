@@ -2262,7 +2262,7 @@ export async function releaseHeldReceipts(db: D1Database, ids: readonly number[]
 
 /** An accepted recipient with no delivery event yet — a candidate for the dev send
  *  simulation to fabricate a delayed delivered / bounced / complained webhook against
- *  (see src/providers/simulate.ts). Read-only; never used by the real send path. */
+ *  (see src/dev/simulated_receipts.ts). Read-only; never used by the real send path. */
 export interface AcceptedAwaitingEvent {
   send_id: string;
   email: string;

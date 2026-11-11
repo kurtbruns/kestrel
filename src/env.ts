@@ -26,6 +26,7 @@ import {
 import {
   SIMULATED_ACCOUNT_PROBLEMS,
   SIMULATED_ACCOUNTS,
+  SIMULATED_RECEIPTS,
   SIMULATED_REFUSALS,
   SIMULATED_SEND_REFUSALS,
   SIMULATION_FAULTS,
@@ -33,6 +34,8 @@ import {
   type SimulatedAccount,
   type SimulatedAccountProblem,
   type SimulatedAccountView,
+  type SimulatedAnswer,
+  type SimulatedReceipts,
   type SimulatedSendRefusal,
   type SimulationFaults,
   type SimulationProfile,
@@ -74,8 +77,8 @@ export interface Secrets {
   /**
    * What stands in for the provider in local dev (SPEC §10): the send simulation, naming the
    * provider it models, `ses` or `generic` (`1`), optionally with `:none` for no
-   * injected failures, and for `ses` optionally `:refuse=<cause>`, a refusal of the account
-   * every email meets (SPEC §13), `:outage`, `:bad_request`, or `:rejected`; `not-connected` to run as a deployment with no provider (SPEC §13);
+   * injected failures, and for `ses` optionally one answer, last: `:refuse=<cause>`, a refusal
+   * of the account every email meets (SPEC §13), `:outage`, `:bad_request`, or `:rejected`; `not-connected` to run as a deployment with no provider (SPEC §13);
    * `off` or unset for the plain, instant fake. Honored only in a dev-shaped env, so never
    * in a deployed one. `.dev.vars.example` ships it on.
    */
@@ -84,9 +87,10 @@ export interface Secrets {
    * The SES account local dev stands in for (SPEC §10), so the editor can be seen in each
    * state the account check reports: `sandbox`, `pending` (AWS reviewing a request),
    * `denied`, `production`, or `permission` (a key not allowed to read the account),
-   * optionally with `:unrouted` for bounces that reach no configuration set, `:unreported` or
-   * `:wrong_topic` for reports that never reach the app or come from another topic, or with one
-   * of the problems the check finds (`:set_missing`, `:key_rejected`, …, SPEC §13). Needs
+   * followed by any of `:unrouted` for bounces that reach no configuration set, `:unreported`
+   * or `:wrong_topic` for reports that never reach the app or come from another topic, and one
+   * of the problems the check finds (`:set_missing`, `:key_rejected`, …, SPEC §13), each at most
+   * once and in any order, as in `sandbox:unrouted:set_paused`. Needs
    * `SIMULATE_SENDS=ses`; `off` or unset leaves the account unread, as before. Honored only
    * in a dev-shaped env.
    */
@@ -320,7 +324,7 @@ export function getConfig(env: AppEnv): Config {
   if (devShaped && (local === null || local === "not-connected")) {
     // The account stands in only beside a simulated SES; set without one, it is refused here
     // rather than ignored, so the developer learns why the editor shows no account.
-    readSimulateAccount(env.SIMULATE_ACCOUNT, null);
+    readSimulateAccount(env.SIMULATE_ACCOUNT, null, env);
   }
   const notConnectedPreview = local === "not-connected";
   const sesMaxSendRateSetting = readPositiveInt("SES_MAX_SEND_RATE", env.SES_MAX_SEND_RATE);
@@ -638,28 +642,43 @@ const PROBLEM_REFUSALS: Record<SimulatedAccountProblem, RefusingCause | null> = 
   probation: null,
 };
 
-/** The simulation `SIMULATE_SENDS` and `SIMULATE_ACCOUNT` describe together. */
+/** The simulation `SIMULATE_SENDS` and `SIMULATE_ACCOUNT` describe together: the answer
+ *  `SIMULATE_SENDS` names, else the refusal the account's problem stands for. */
 function simulationOf(local: Omit<SimulationView, "account">, env: AppEnv): SimulationView {
-  const account = readSimulateAccount(env.SIMULATE_ACCOUNT, local.profile);
+  const account = readSimulateAccount(env.SIMULATE_ACCOUNT, local.profile, env);
   const implied = account?.problem ? PROBLEM_REFUSALS[account.problem] : null;
-  // A provider that is down answers no request, so an outage implies no refusal.
-  return { ...local, refuse: local.refuse ?? (local.outage ? null : implied), account };
+  const answer: SimulatedAnswer | null =
+    local.answer ?? (implied ? { kind: "refuse", cause: implied } : null);
+  return { ...local, answer, account };
 }
 
 /** The spellings that turn the simulation off, and those that pick the generic profile. */
 const SIMULATION_OFF = new Set(["", "0", "off", "false", "no"]);
 const SIMULATION_GENERIC = new Set(["1", "on", "true", "yes"]);
 
+/** The answer one part of `SIMULATE_SENDS` names, or undefined for a part that names none. */
+function readAnswer(part: string): SimulatedAnswer | undefined {
+  if (part.startsWith("refuse=")) {
+    const cause = part.slice("refuse=".length);
+    return (SIMULATED_REFUSALS as readonly string[]).includes(cause)
+      ? { kind: "refuse", cause: cause as RefusingCause }
+      : undefined;
+  }
+  if (part === "outage") {
+    return { kind: "outage" };
+  }
+  return (SIMULATED_SEND_REFUSALS as readonly string[]).includes(part)
+    ? { kind: part as SimulatedSendRefusal }
+    : undefined;
+}
+
 /**
- * `SIMULATE_SENDS` as a profile and fault level, `not-connected`, or null for the plain
+ * `SIMULATE_SENDS` as a profile, fault level, and answer, `not-connected`, or null for the plain
  * fake: `off` (or unset), `not-connected`, or a profile (`generic`, or `1`, `ses`)
- * and optionally `:realistic` (the default) or `:none`, then, for `ses`, optionally
- * `:refuse=<cause>`, a refusal of the account every email meets (SPEC §10, §13), as in
- * `ses:refuse=configuration`, `:outage`, SES unavailable to every email, or a refusal of each
- * send's own email: `:bad_request`, every list request refused as invalid in words that name
- * no one, or `:rejected`, every post's email rejected for its content. Anything else is
- * refused rather than read as off, so a typo can't quietly turn the simulation off or pick
- * the wrong provider.
+ * and optionally `:realistic` (the default) or `:none`, then, for `ses`, optionally one answer
+ * (`SimulatedAnswer`), last: `:refuse=<cause>`, as in `ses:refuse=configuration`, `:outage`,
+ * `:bad_request`, or `:rejected`. Anything else is refused rather than read as off, so a typo
+ * can't quietly turn the simulation off or pick the wrong provider.
  */
 function readSimulateSends(
   v: string | undefined,
@@ -672,37 +691,29 @@ function readSimulateSends(
     return "not-connected";
   }
   const [name = "", ...parts] = raw.split(":");
-  const last = parts.at(-1) ?? "";
-  const answerPart =
-    last.startsWith("refuse=") ||
-    last === "outage" ||
-    (SIMULATED_SEND_REFUSALS as readonly string[]).includes(last)
-      ? parts.pop()
-      : undefined;
+  const answer = readAnswer(parts.at(-1) ?? "");
+  if (answer) {
+    parts.pop();
+  }
   const [faults = "realistic", ...rest] = parts;
-  const refuse = answerPart?.startsWith("refuse=") ? answerPart.slice("refuse=".length) : undefined;
-  const outage = answerPart === "outage";
-  const sendRefusal = (SIMULATED_SEND_REFUSALS as readonly string[]).includes(answerPart ?? "")
-    ? (answerPart as SimulatedSendRefusal)
-    : null;
   const profile = SIMULATION_GENERIC.has(name) ? "generic" : name;
   if (
     rest.length > 0 ||
     !(SIMULATION_PROFILES as readonly string[]).includes(profile) ||
-    !(SIMULATION_FAULTS as readonly string[]).includes(faults) ||
-    (refuse !== undefined && !(SIMULATED_REFUSALS as readonly string[]).includes(refuse))
+    !(SIMULATION_FAULTS as readonly string[]).includes(faults)
   ) {
     throw new ConfigError(
       "SIMULATE_SENDS",
       `must be off, one of ${SIMULATION_PROFILES.join(", ")} (or 1) optionally followed by :${SIMULATION_FAULTS.join(" or :")} and, for ses, :refuse= and one of ${SIMULATED_REFUSALS.join(", ")}, :outage, or one of :${SIMULATED_SEND_REFUSALS.join(", :")}, or not-connected, not "${v?.trim()}"`,
     );
   }
-  if (answerPart !== undefined && profile !== "ses") {
-    const [does, form] = outage
-      ? ["goes down", ":outage"]
-      : sendRefusal
-        ? ["refuses a send", `:${sendRefusal}`]
-        : ["refuses", ":refuse="];
+  if (answer && profile !== "ses") {
+    const [does, form] =
+      answer.kind === "outage"
+        ? ["goes down", ":outage"]
+        : answer.kind === "refuse"
+          ? ["refuses", ":refuse="]
+          : ["refuses a send", `:${answer.kind}`];
     throw new ConfigError(
       "SIMULATE_SENDS",
       `${does} through SES's own answers, so ${form} needs the ses profile, not "${v?.trim()}"`,
@@ -711,50 +722,87 @@ function readSimulateSends(
   return {
     profile: profile as SimulationProfile,
     faults: faults as SimulationFaults,
-    refuse: (refuse as RefusingCause | undefined) ?? null,
-    outage,
-    send_refusal: sendRefusal,
+    answer: answer ?? null,
   };
 }
 
-/** The modifiers that change the simulated account's return path rather than find a problem. */
-const RETURN_PATH_MODIFIERS = new Set(["unrouted", "unreported", "wrong_topic"]);
+/** Where a simulated account's bounces go: `unrouted` reaches no configuration set. */
+const ROUTING_MODIFIERS = new Set(["unrouted"]);
+/** Whether its reports reach the app, the states other than `reported`. */
+const REPORT_MODIFIERS = new Set<string>(SIMULATED_RECEIPTS.filter((r) => r !== "reported"));
 
 /**
  * `SIMULATE_ACCOUNT` as the SES account a local server stands in for, or null to leave it
- * unread: off (or unset), or one of the states optionally followed by `:unrouted`,
- * `:unreported`, `:wrong_topic`, or one account problem the check finds, such as
- * `:set_missing` (SPEC §13). It models
- * the SES account, so it needs the `ses` send profile. Anything else is refused, as
- * `SIMULATE_SENDS` is, so a typo can't quietly show a state the developer didn't pick.
+ * unread: off (or unset), or one of the states followed by any of three independent
+ * modifiers, each at most once and in any order: where bounces go (`:unrouted`), whether
+ * reports reach the app (`:unreported` or `:wrong_topic`), and one account problem the check
+ * finds, such as `:set_missing` (SPEC §13), as in `sandbox:unrouted:unreported:set_paused`. A
+ * combination that can't happen is refused with why. It models the SES account, so it needs
+ * the `ses` send profile. Anything else is refused, as `SIMULATE_SENDS` is, so a typo can't
+ * quietly show a state the developer didn't pick.
  */
 function readSimulateAccount(
   v: string | undefined,
   profile: SimulationProfile | null,
+  env: AppEnv,
 ): SimulatedAccountView | null {
   const raw = (v ?? "").trim().toLowerCase();
   if (SIMULATION_OFF.has(raw)) {
     return null;
   }
-  const [state = "", modifier, ...rest] = raw.split(":");
-  const problem = (SIMULATED_ACCOUNT_PROBLEMS as readonly string[]).includes(modifier ?? "")
-    ? (modifier as SimulatedAccountProblem)
-    : null;
-  if (
-    rest.length > 0 ||
-    !(SIMULATED_ACCOUNTS as readonly string[]).includes(state) ||
-    (modifier !== undefined && !RETURN_PATH_MODIFIERS.has(modifier) && !problem)
-  ) {
-    throw new ConfigError(
-      "SIMULATE_ACCOUNT",
-      `must be off, or one of ${SIMULATED_ACCOUNTS.join(", ")} optionally followed by :unrouted, :unreported, :wrong_topic, or one of :${SIMULATED_ACCOUNT_PROBLEMS.join(", :")}, not "${v?.trim()}"`,
+  const refuse = (why: string) => new ConfigError("SIMULATE_ACCOUNT", `${why}, not "${v?.trim()}"`);
+  const [state = "", ...modifiers] = raw.split(":");
+  const routing: string[] = [];
+  const reports: string[] = [];
+  const problems: SimulatedAccountProblem[] = [];
+  let unknown = !(SIMULATED_ACCOUNTS as readonly string[]).includes(state);
+  for (const m of modifiers) {
+    if (ROUTING_MODIFIERS.has(m)) {
+      routing.push(m);
+    } else if (REPORT_MODIFIERS.has(m)) {
+      reports.push(m);
+    } else if ((SIMULATED_ACCOUNT_PROBLEMS as readonly string[]).includes(m)) {
+      problems.push(m as SimulatedAccountProblem);
+    } else {
+      unknown = true;
+    }
+  }
+  if (unknown) {
+    throw refuse(
+      `must be off, or one of ${SIMULATED_ACCOUNTS.join(", ")} optionally followed by any of :unrouted, one of :unreported or :wrong_topic, and one of :${SIMULATED_ACCOUNT_PROBLEMS.join(", :")}, each at most once, as in sandbox:unrouted:set_paused`,
     );
   }
+  if (routing.length > 1) {
+    throw refuse("names :unrouted twice");
+  }
+  if (reports.length > 1) {
+    throw refuse(
+      reports[0] === reports[1]
+        ? `names :${reports[0]} twice`
+        : "takes one of :unreported and :wrong_topic, since reports either never arrive or arrive from the wrong topic, not both",
+    );
+  }
+  if (problems.length > 1) {
+    throw refuse(
+      problems[0] === problems[1]
+        ? `names :${problems[0]} twice`
+        : "takes one problem at a time, since each refuses email with its own cause",
+    );
+  }
+  const problem = problems[0] ?? null;
   if (state === "permission" && problem) {
     // A key not allowed to read the account reads nothing, so it can show no problem.
-    throw new ConfigError(
-      "SIMULATE_ACCOUNT",
-      `permission reads nothing of the account, so it takes no problem, not "${v?.trim()}"`,
+    throw refuse("permission reads nothing of the account, so it takes no problem");
+  }
+  if (
+    (problem === "set_missing" || problem === "set_paused") &&
+    routing.length > 0 &&
+    !env.SES_CONFIGURATION_SET?.trim()
+  ) {
+    // Unrouted, the identity names no configuration set, and with none set at deploy there is
+    // no set to be missing or paused.
+    throw refuse(
+      `:${problem} needs a configuration set, and :unrouted leaves the identity without one: set SES_CONFIGURATION_SET or drop :unrouted`,
     );
   }
   if (profile !== "ses") {
@@ -765,8 +813,8 @@ function readSimulateAccount(
   }
   return {
     state: state as SimulatedAccount,
-    bounces_routed: modifier !== "unrouted",
-    receipts: modifier === "unreported" || modifier === "wrong_topic" ? modifier : "reported",
+    bounces_routed: routing.length === 0,
+    receipts: (reports[0] as SimulatedReceipts | undefined) ?? "reported",
     problem,
   };
 }

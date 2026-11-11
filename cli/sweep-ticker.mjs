@@ -27,7 +27,7 @@ const MINUTE = 60_000;
 const SWEEP_CRON = "* * * * *";
 
 /** The cron value the Worker reads as "settle simulated receipts only": `RECEIPTS_CRON` in
- *  src/providers/simulate.ts, which a Worker spec pins to this one. Not a cron expression,
+ *  src/dev/simulated_receipts.ts, which a Worker spec pins to this one. Not a cron expression,
  *  so no deployed trigger can carry it. */
 const RECEIPTS_CRON = "dev:receipts";
 

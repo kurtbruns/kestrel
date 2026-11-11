@@ -37,6 +37,7 @@
  */
 
 import * as sends from "../db/sends";
+import { drainSimulatedWebhooks } from "../dev/simulated_receipts";
 import type { AppEnv } from "../env";
 import { getConfig } from "../env";
 import { isD1Stall } from "../lib/d1_stall";
@@ -44,7 +45,6 @@ import { errorFields, log } from "../lib/log";
 import { HALT_RETRY_SLACK_MS, MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
 import { NOTIFY_RESERVE, notifyPublisher } from "../notify/notify";
 import { getProvider } from "../providers";
-import { drainSimulatedWebhooks } from "../providers/simulate";
 import { accountForPacing, refreshProviderAccount, sesSendRate } from "../services/provider_status";
 import { Contacts, runOutcome } from "../services/sending";
 import { applyHeldReceipts } from "../services/webhook_events";

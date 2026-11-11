@@ -41,6 +41,7 @@ import { isRefusingCause } from "../../shared/provider";
 import { haltRank } from "../../shared/sends";
 import type { DeliveryOutcome, DeliveryWork } from "../db/sends";
 import * as sends from "../db/sends";
+import { drainSimulatedWebhooks } from "../dev/simulated_receipts";
 import type { AppEnv } from "../env";
 import { getConfig } from "../env";
 import { errorText, log } from "../lib/log";
@@ -52,7 +53,6 @@ import {
   MAX_DELIVERY_ATTEMPTS,
 } from "../lib/time";
 import { getProvider } from "../providers";
-import { drainSimulatedWebhooks } from "../providers/simulate";
 import type { BatchHalt, HaltCause, HaltReason, PerRecipientResult } from "../providers/types";
 import { sendSender } from "../services/sender";
 import { alertRefusal } from "../services/sending";

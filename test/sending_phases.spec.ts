@@ -12,9 +12,9 @@ import type { ProviderStatusView, SignupsState } from "../shared/provider";
 import { refusalAdvice, refusingSendWarning, SANDBOX_SEND_WARNING } from "../shared/sends";
 import * as subscribers from "../src/db/subscribers";
 import { clearFakeNotifications } from "../src/notify/fake";
-import { resetSimulation } from "../src/providers/simulate";
 import { resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, JSON_AUTH, readJson } from "./support/http";
+import { resetSimulation } from "./support/simulation";
 import { fetchWith } from "./support/worker_env";
 
 type Phase = "not_connected" | "unproven" | "refusing" | "sandbox" | "production";

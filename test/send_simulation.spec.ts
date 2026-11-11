@@ -1,17 +1,20 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  SIMULATED_ACCOUNT_PROBLEMS,
+  SIMULATED_ACCOUNTS,
+  SIMULATED_REFUSALS,
+  type SimulatedAccountView,
+  type SimulationView,
+} from "../shared/settings";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
+import { drainSimulatedWebhooks } from "../src/dev/simulated_receipts";
 import { type AppEnv, type Config, ConfigError, getConfig } from "../src/env";
 import { getProvider } from "../src/providers";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import * as sesAdapter from "../src/providers/ses";
-import {
-  drainSimulatedWebhooks,
-  resetSimulation,
-  SimProvider,
-  simulationActive,
-} from "../src/providers/simulate";
+import { SimProvider, simulationActive } from "../src/providers/simulate/provider";
 import type { EmailProvider, RenderedEmail } from "../src/providers/types";
 import { UNSUB_SENTINEL } from "../src/render/render";
 import { freeze } from "../src/send/schedule";
@@ -22,6 +25,7 @@ import { SES_DEPLOY } from "./support/deploy";
 import { resetDatabase, tick } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
+import { resetSimulation } from "./support/simulation";
 import { fetchWith, withVars } from "./support/worker_env";
 
 // The local send simulation behind the provider seam (SPEC §10): list sends only, a profile
@@ -129,55 +133,46 @@ describe("SIMULATE_SENDS", () => {
       expect(simulation(generic)).toEqual({
         profile: "generic",
         faults: "realistic",
+        answer: null,
         account: null,
-        refuse: null,
-        outage: false,
-        send_refusal: null,
       });
     }
     expect(simulation("SES")).toEqual({
       profile: "ses",
       faults: "realistic",
+      answer: null,
       account: null,
-      refuse: null,
-      outage: false,
-      send_refusal: null,
     });
     expect(simulation("ses:none")).toEqual({
       profile: "ses",
       faults: "none",
+      answer: null,
       account: null,
-      refuse: null,
-      outage: false,
-      send_refusal: null,
     });
     expect(simulation("1:none")).toEqual({
       profile: "generic",
       faults: "none",
+      answer: null,
       account: null,
-      refuse: null,
-      outage: false,
-      send_refusal: null,
     });
     expect(simulation("ses:realistic")).toEqual({
       profile: "ses",
       faults: "realistic",
+      answer: null,
       account: null,
-      refuse: null,
-      outage: false,
-      send_refusal: null,
     });
   });
 
   it("reads a refusal of the account every email meets, through SES's answers only (SPEC §10, §13)", () => {
-    expect(simulation("ses:refuse=configuration")).toMatchObject({
+    expect(simulation("ses:refuse=configuration")).toEqual({
       profile: "ses",
       faults: "realistic",
-      refuse: "configuration",
+      answer: { kind: "refuse", cause: "configuration" },
+      account: null,
     });
     expect(simulation("ses:none:refuse=suspended")).toMatchObject({
       faults: "none",
-      refuse: "suspended",
+      answer: { kind: "refuse", cause: "suspended" },
     });
     // A cause that isn't a refusal of the account, or one SES never answers as an error, and
     // a profile without SES's answers, are refused.
@@ -187,19 +182,17 @@ describe("SIMULATE_SENDS", () => {
   });
 
   it("reads an outage of SES (SPEC §10)", () => {
-    expect(simulation("ses:outage")).toMatchObject({
+    expect(simulation("ses:outage")).toEqual({
       profile: "ses",
-      refuse: null,
-      outage: true,
-      send_refusal: null,
+      faults: "realistic",
+      answer: { kind: "outage" },
+      account: null,
     });
     expect(simulation("ses:none:outage")).toMatchObject({
       faults: "none",
-      outage: true,
-      send_refusal: null,
+      answer: { kind: "outage" },
     });
-    expect(simulation("ses")?.outage).toBe(false);
-    // An outage is no refusal, so an account problem doesn't turn it into one.
+    // An outage is SES's one answer, so an account problem doesn't add a refusal to it.
     expect(
       getConfig(
         withVars({
@@ -207,8 +200,8 @@ describe("SIMULATE_SENDS", () => {
           SIMULATE_SENDS: "ses:outage",
           SIMULATE_ACCOUNT: "production:set_missing",
         }),
-      ).simulation,
-    ).toMatchObject({ outage: true, refuse: null });
+      ).simulation?.answer,
+    ).toEqual({ kind: "outage" });
     // Only SES's own answers can go down, and an outage is no refusal or fault level.
     for (const value of [
       "ses:outage=5",
@@ -221,20 +214,17 @@ describe("SIMULATE_SENDS", () => {
   });
 
   it("reads a refusal of each send's own email, for SES only and last (SPEC §10, §12)", () => {
-    expect(simulation("ses:bad_request")).toMatchObject({
+    expect(simulation("ses:bad_request")).toEqual({
       profile: "ses",
       faults: "realistic",
-      refuse: null,
-      outage: false,
-      send_refusal: "bad_request",
+      answer: { kind: "bad_request" },
+      account: null,
     });
     expect(simulation("SES:none:BAD_REQUEST")).toMatchObject({
       faults: "none",
-      send_refusal: "bad_request",
+      answer: { kind: "bad_request" },
     });
-    expect(simulation("ses:rejected")).toMatchObject({ refuse: null, send_refusal: "rejected" });
-    expect(simulation("ses")?.send_refusal).toBeNull();
-    expect(simulation("ses:outage")?.send_refusal).toBeNull();
+    expect(simulation("ses:rejected")?.answer).toEqual({ kind: "rejected" });
     // Only SES's own answers can refuse a send, one answer at a time, after the fault level.
     for (const value of [
       "1:bad_request",
@@ -255,14 +245,77 @@ describe("SIMULATE_SENDS", () => {
   });
 
   it("refuses every email as the account would, for an account problem that stops sending (SPEC §10, §13)", () => {
-    const refuse = (sends: string, account: string) =>
-      getConfig(withVars({ SIMULATE_SENDS: sends, SIMULATE_ACCOUNT: account })).simulation?.refuse;
-    expect(refuse("ses", "production:set_missing")).toBe("configuration");
-    expect(refuse("ses", "sandbox:key_rejected")).toBe("credentials");
-    expect(refuse("ses", "production:shutdown")).toBe("paused");
-    // AWS reviewing the account leaves it sending, and a refusal named outright stands.
-    expect(refuse("ses", "production:probation")).toBeNull();
-    expect(refuse("ses:refuse=suspended", "production:set_missing")).toBe("suspended");
+    const answer = (sends: string, account: string) =>
+      getConfig(withVars({ SIMULATE_SENDS: sends, SIMULATE_ACCOUNT: account })).simulation?.answer;
+    expect(answer("ses", "production:set_missing")).toEqual({
+      kind: "refuse",
+      cause: "configuration",
+    });
+    expect(answer("ses", "sandbox:key_rejected")).toEqual({ kind: "refuse", cause: "credentials" });
+    expect(answer("ses", "production:shutdown")).toEqual({ kind: "refuse", cause: "paused" });
+    expect(answer("ses", "sandbox:unreported:sending_disabled:unrouted")).toEqual({
+      kind: "refuse",
+      cause: "paused",
+    });
+    // AWS reviewing the account leaves it sending, and an answer named outright stands.
+    expect(answer("ses", "production:probation")).toBeNull();
+    expect(answer("ses:refuse=suspended", "production:set_missing")).toEqual({
+      kind: "refuse",
+      cause: "suspended",
+    });
+    expect(answer("ses:rejected", "production:set_missing")).toEqual({ kind: "rejected" });
+  });
+
+  // Every value .dev.vars.example, CLAUDE.md, the simulate-send skill, the configuration
+  // reference, and the line `kestrel dev` prints name, each read as it always has been.
+  it("reads every documented spelling of SIMULATE_SENDS and SIMULATE_ACCOUNT as before (SPEC §10)", () => {
+    const read = (sends: string, account = "off") =>
+      getConfig(withVars({ ...LOCAL, SIMULATE_SENDS: sends, SIMULATE_ACCOUNT: account }))
+        .simulation;
+    const SENDS: [string, Omit<SimulationView, "account"> | null][] = [
+      ["off", null],
+      ["not-connected", null],
+      ["1", { profile: "generic", faults: "realistic", answer: null }],
+      ["generic", { profile: "generic", faults: "realistic", answer: null }],
+      ["generic:none", { profile: "generic", faults: "none", answer: null }],
+      ["ses", { profile: "ses", faults: "realistic", answer: null }],
+      ["ses:none", { profile: "ses", faults: "none", answer: null }],
+      ["ses:outage", { profile: "ses", faults: "realistic", answer: { kind: "outage" } }],
+      ["ses:bad_request", { profile: "ses", faults: "realistic", answer: { kind: "bad_request" } }],
+      ["ses:rejected", { profile: "ses", faults: "realistic", answer: { kind: "rejected" } }],
+      ...SIMULATED_REFUSALS.map((cause): [string, Omit<SimulationView, "account">] => [
+        `ses:refuse=${cause}`,
+        { profile: "ses", faults: "realistic", answer: { kind: "refuse", cause } },
+      ]),
+    ];
+    for (const [value, view] of SENDS) {
+      expect(read(value), value).toEqual(view && { ...view, account: null });
+    }
+    const ACCOUNTS: [string, SimulatedAccountView][] = [
+      ...SIMULATED_ACCOUNTS.map((state): [string, SimulatedAccountView] => [
+        state,
+        { state, bounces_routed: true, receipts: "reported", problem: null },
+      ]),
+      [
+        "sandbox:unrouted",
+        { state: "sandbox", bounces_routed: false, receipts: "reported", problem: null },
+      ],
+      [
+        "production:unreported",
+        { state: "production", bounces_routed: true, receipts: "unreported", problem: null },
+      ],
+      [
+        "production:wrong_topic",
+        { state: "production", bounces_routed: true, receipts: "wrong_topic", problem: null },
+      ],
+      ...SIMULATED_ACCOUNT_PROBLEMS.map((problem): [string, SimulatedAccountView] => [
+        `production:${problem}`,
+        { state: "production", bounces_routed: true, receipts: "reported", problem },
+      ]),
+    ];
+    for (const [value, account] of ACCOUNTS) {
+      expect(read("ses", value)?.account, value).toEqual(account);
+    }
   });
 
   it("refuses a value it doesn't know rather than reading it as off", () => {
@@ -300,10 +353,8 @@ describe("SIMULATE_SENDS", () => {
     expect(on.deployment.simulation).toEqual({
       profile: "ses",
       faults: "none",
+      answer: null,
       account: null,
-      refuse: null,
-      outage: false,
-      send_refusal: null,
     });
     const off = await readJson(await fetchWith({}, "/api/settings", { headers: AUTH }));
     expect(off.deployment.simulation).toBeNull();
@@ -339,9 +390,7 @@ describe("the SES profile, with the real adapter's traits", () => {
         profile: "ses",
         faults: "realistic",
         account: null,
-        refuse: null,
-        outage: false,
-        send_refusal: null,
+        answer: null,
       },
       getConfig(withVars({ SES_MAX_SEND_RATE: "3" })),
     );
@@ -366,9 +415,7 @@ describe("the SES profile, with the real adapter's traits", () => {
             profile: "generic",
             faults: "realistic",
             account: null,
-            refuse: null,
-            outage: false,
-            send_refusal: null,
+            answer: null,
           },
           config,
         ),
@@ -380,9 +427,7 @@ describe("the SES profile, with the real adapter's traits", () => {
             profile: "ses",
             faults: "realistic",
             account: null,
-            refuse: null,
-            outage: false,
-            send_refusal: null,
+            answer: null,
           },
           config,
         ),
@@ -398,9 +443,7 @@ describe("list sends only", () => {
         profile: "generic",
         faults: "realistic",
         account: null,
-        refuse: null,
-        outage: false,
-        send_refusal: null,
+        answer: null,
       },
       getConfig(env),
     );
@@ -429,9 +472,7 @@ describe("list sends only", () => {
         profile: "ses",
         faults: "none",
         account: null,
-        refuse: null,
-        outage: true,
-        send_refusal: null,
+        answer: { kind: "outage" },
       },
       getConfig(env),
     );
@@ -507,9 +548,7 @@ describe("list sends only", () => {
         profile: "generic",
         faults: "none",
         account: null,
-        refuse: null,
-        outage: false,
-        send_refusal: null,
+        answer: null,
       },
       getConfig(env),
     );
@@ -697,9 +736,7 @@ describe("drainSimulatedWebhooks (delayed synthetic receipts through the real in
       profile: "generic",
       faults: "realistic",
       account: null,
-      refuse: null,
-      outage: false,
-      send_refusal: null,
+      answer: null,
     },
   });
 
@@ -822,9 +859,7 @@ describe("the generic profile", () => {
         profile: "generic",
         faults: "realistic",
         account: null,
-        refuse: null,
-        outage: false,
-        send_refusal: null,
+        answer: null,
       },
       getConfig(env),
     );
@@ -858,9 +893,7 @@ describe("a bad request that names no one (SPEC §10, §12)", { timeout: 30_000 
     profile: "ses",
     faults: "none",
     account: null,
-    refuse: null,
-    outage: false,
-    send_refusal: "bad_request",
+    answer: { kind: "bad_request" },
   } as const;
 
   beforeEach(() => {
@@ -978,9 +1011,7 @@ describe("a message SES rejects for its content (SPEC §10, §12)", { timeout: 3
     profile: "ses",
     faults: "none",
     account: null,
-    refuse: null,
-    outage: false,
-    send_refusal: "rejected",
+    answer: { kind: "rejected" },
   } as const;
   const CONTENT = {
     reason: "account",

@@ -12,12 +12,12 @@
  */
 
 import { createRouter, isReaderPath } from "./app";
+import { drainSimulatedWebhooks, RECEIPTS_CRON } from "./dev/simulated_receipts";
 import type { AppEnv, Config } from "./env";
 import { ConfigError, getConfig } from "./env";
 import { json } from "./lib/errors";
 import { errorText, log, newRun, withRun } from "./lib/log";
 import { unavailablePage } from "./lib/page";
-import { drainSimulatedWebhooks, RECEIPTS_CRON } from "./providers/simulate";
 import type { Router } from "./router";
 import { schemaGap } from "./schema";
 import { sweep } from "./send/sweep";

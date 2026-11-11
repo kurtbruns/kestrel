@@ -213,9 +213,7 @@ describe("settings view", () => {
         profile: "ses",
         faults: "none",
         account: null,
-        refuse: null,
-        outage: false,
-        send_refusal: null,
+        answer: null,
       },
     };
     fake = fakeApi([
@@ -1809,9 +1807,7 @@ describe("settings view", () => {
         simulation: {
           profile: "ses",
           faults: "realistic",
-          refuse: null,
-          outage: false,
-          send_refusal: null,
+          answer: null,
           account: {
             state: "production",
             bounces_routed: true,
