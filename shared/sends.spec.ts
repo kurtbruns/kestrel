@@ -137,6 +137,7 @@ describe("a rate limit the deployment causes itself", () => {
     halt_cause: cause,
     halt_retries: retries,
     halt_error: "ses 429 TooManyRequestsException: Maximum sending rate exceeded.",
+    halted_at: Date.UTC(2026, 10, 10, 17, 23), // Tue Nov 10, 9:23 AM in Los Angeles
   });
 
   it("is told apart once it has refused the first request of several retries in a row (SPEC §12)", () => {
@@ -151,6 +152,28 @@ describe("a rate limit the deployment causes itself", () => {
     );
     expect(unavailableMessage(halt(1))).toBe(
       "The provider is unavailable: ses 429 TooManyRequestsException: Maximum sending rate exceeded. The send retries on its own, spaced out the longer this lasts, and no one has been marked unsent because of this.",
+    );
+  });
+});
+
+describe("an outage past an hour, on the send's page (SPEC §8, §12)", () => {
+  const down = {
+    halt_reason: "unavailable" as const,
+    halt_cause: "outage" as const,
+    halt_retries: 6,
+    halt_error: "ses 503 ServiceUnavailable.",
+    halted_at: Date.UTC(2026, 10, 10, 17, 23), // Tue Nov 10, 9:23 AM in Los Angeles
+  };
+
+  it("says since when on the publication's clock, with its day, so the words hold however long it lasts", () => {
+    expect(unavailableMessage(down, true, "America/Los_Angeles")).toMatch(
+      /^The provider has been unavailable since Tue Nov 10, 9:23 AM Pacific Time: ses 503 ServiceUnavailable\. Nothing is lost/,
+    );
+  });
+
+  it("reads in UTC, said so, with no time zone set", () => {
+    expect(unavailableMessage(down, true, null)).toMatch(
+      /^The provider has been unavailable since Tue Nov 10, 5:23 PM UTC: /,
     );
   });
 });

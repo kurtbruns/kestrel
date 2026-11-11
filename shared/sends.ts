@@ -7,6 +7,7 @@
 
 import type { PageMeta } from "./list";
 import type { SendingRefusal } from "./provider";
+import { formatInTimeZone } from "./time_zone";
 import type { Actor } from "./who_acted";
 
 /** A send's statuses, in their order, which the list's `status` filter takes. */
@@ -210,14 +211,21 @@ export function refusedMessage(cause: HaltCause | null, error: string | null): s
  * lost and what is still useful to do, as the email the publisher gets then does (SPEC §8).
  */
 export function unavailableMessage(
-  send: Pick<Send, "halt_reason" | "halt_cause" | "halt_retries" | "halt_error">,
+  send: Pick<Send, "halt_reason" | "halt_cause" | "halt_retries" | "halt_error" | "halted_at">,
   long = false,
+  zone: string | null = null,
 ): string {
   if (isSelfThrottled(send)) {
     return `The provider keeps refusing for its sending rate: ${sentence(send.halt_error)} A burst clears within a second, and this has refused the first request of ${send.halt_retries} retries in a row, minutes apart, so the instance is asking for more a second than the account allows. ${SES_RATE_ADVICE} ${PASS_THIS_ALONG} The send retries on its own meanwhile, and no one has been marked unsent because of this.`;
   }
   if (long) {
-    return `The provider has been unavailable for over an hour: ${sentence(send.halt_error)} Nothing is lost: no one has been marked unsent because of this, and the send tries again every hour and resumes on its own once the provider answers. Check AWS’s status page (${AWS_STATUS_PAGE}) for a problem with Amazon SES in your region, and if this post is time-sensitive, you may want to tell your readers it will be late.`;
+    // Since when, with its day, on the publication's clock: true for as long as the outage
+    // lasts, and words the clock never changes, so the send needn't change to stay current.
+    const since =
+      send.halted_at === null
+        ? "for about an hour"
+        : `since ${formatInTimeZone(send.halted_at, zone ?? "UTC", send.halted_at)}`;
+    return `The provider has been unavailable ${since}: ${sentence(send.halt_error)} Nothing is lost: no one has been marked unsent because of this, and the send tries again every hour and resumes on its own once the provider answers. Check AWS’s status page (${AWS_STATUS_PAGE}) for a problem with Amazon SES in your region, and if this post is time-sensitive, you may want to tell your readers it will be late.`;
   }
   return `The provider is unavailable: ${sentence(send.halt_error)} The send retries on its own, spaced out the longer this lasts, and no one has been marked unsent because of this.`;
 }

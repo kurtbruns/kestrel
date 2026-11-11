@@ -375,6 +375,7 @@ describe("a send scheduled before the provider was disconnected", () => {
         receipt_since: 0,
       } satisfies DueNotification,
       getConfig(env),
+      { zone: "UTC", now: Date.now() },
     );
     expect(email.subject).toBe('"Owls" is waiting: no email provider is connected');
     expect(email.text).not.toMatch(/refusing/);
