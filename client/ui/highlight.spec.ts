@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { highlightJson, highlightJsonText, highlightShell } from "./highlight";
+import { highlightJson, highlightJsonText, highlightMarkdown, highlightShell } from "./highlight";
 
 /** The markup as a detached element, to read its text and spans the way the page would. */
 function render(markup: string): HTMLElement {
@@ -80,5 +80,77 @@ describe("highlightShell", () => {
     expect(spans(el, "cx-tag")).toEqual(["cp", "npm", "npx", "tee", "git"]);
     expect(spans(el, "cx-punct")).toEqual(["# start fresh", "&&", "|", "# watch"]);
     expect(spans(el, "cx-num")).toEqual([]);
+  });
+});
+
+describe("highlightMarkdown links", () => {
+  // Each row is one line of a post, what the email makes of it (src/render/markdown.ts, marked),
+  // and so what the editor's overlay must mark: the address of a link the email has, or the
+  // whole link-shaped span the email shows as typed.
+  const md = (src: string) => {
+    const el = render(highlightMarkdown(src).markup);
+    expect(el.textContent).toBe(src);
+    return { url: spans(el, "cx-md-url"), broken: spans(el, "cx-md-broken") };
+  };
+
+  it("marks a working link's address, and nothing broken", () => {
+    expect(md("Read [the post](https://example.com/a) today.")).toEqual({
+      url: ["https://example.com/a"],
+      broken: [],
+    });
+  });
+
+  it("marks the whole address when its parentheses balance, past the first close", () => {
+    expect(md("[Foo](https://en.wikipedia.org/wiki/Foo_(bar))")).toEqual({
+      url: ["https://en.wikipedia.org/wiki/Foo_(bar)"],
+      broken: [],
+    });
+  });
+
+  it("marks an address in angle brackets as a link, its space included", () => {
+    expect(md("[a](<https://example.com/foo bar>)")).toEqual({
+      url: ["<https://example.com/foo bar>"],
+      broken: [],
+    });
+  });
+
+  it.each([
+    [
+      "an unbalanced parenthesis",
+      "See [Foo](https://en.wikipedia.org/wiki/Foo_(bar) for more.",
+      "[Foo](https://en.wikipedia.org/wiki/Foo_(bar)",
+    ],
+    ["a stray parenthesis", "[a](foo(bar)", "[a](foo(bar)"],
+    [
+      "a space in the address",
+      "[a](https://example.com/foo bar)",
+      "[a](https://example.com/foo bar)",
+    ],
+    ["an image with a space in its name", "![a cat](my cat.png)", "![a cat](my cat.png)"],
+  ])("marks a link with %s as broken, not as a link", (_why, src, shown) => {
+    expect(md(src)).toEqual({ url: [], broken: [shown] });
+  });
+
+  it("leaves an address with no closing parenthesis plain, since it never reads as a link", () => {
+    expect(md("[a](https://example.com/foo")).toEqual({ url: [], broken: [] });
+  });
+
+  it("tells a working link from a broken one on the same line, and inside bold", () => {
+    expect(md("[a](b) and **[c](d e) or [f](g)**")).toEqual({
+      url: ["b", "g"],
+      broken: ["[c](d e)"],
+    });
+  });
+
+  it("marks neither in a code span or after an escaped bracket, which the email shows as typed", () => {
+    expect(md("`[a](b c)` and `[d](e)`")).toEqual({ url: [], broken: [] });
+    expect(md("\\[a](b c) and \\[d](e)")).toEqual({ url: [], broken: [] });
+  });
+
+  it("escapes the line, so link text is never read as markup", () => {
+    const el = render(
+      highlightMarkdown('[<img src=x onerror="alert(1)">](https://x.test/<b>)').markup,
+    );
+    expect(el.querySelector("img, b")).toBeNull();
   });
 });
