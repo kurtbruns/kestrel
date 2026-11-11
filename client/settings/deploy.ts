@@ -8,6 +8,7 @@ import { DEFAULT_MIN_LEAD_MS, formatLead } from "../../shared/sends";
 import { type DeploymentView, type SimulationProfile, settingsRoute } from "../../shared/settings";
 import { connectProviderLink } from "../deployment";
 import {
+  lastReportHtml,
   providerStateHtml,
   sendingHtml,
   sendRateHtml,
@@ -44,13 +45,15 @@ function providerValue(d: DeploymentView, status: ProviderStatusView | null): Ht
     : null;
   // Whether email is getting out (SPEC §13), its pill beside the name and its line after.
   const sending = status ? sendingHtml(status, timeAt) : null;
+  // When SES last reported back, after whether email is getting out (SPEC §13).
+  const report = status ? lastReportHtml(status, timeAt) : null;
   if (status && status.unknown_reason !== "stand_in") {
     // A simulated account (SPEC §10) shows its state as SES would, with the simulation named
     // beside it.
     const beside = [sending?.pill, simulating].filter((x): x is Html => Boolean(x));
-    return html`${providerStateHtml(status, beside.length ? html`${beside.map((b) => html` ${b}`)}` : null)}${sending?.line ?? null}`;
+    return html`${providerStateHtml(status, beside.length ? html`${beside.map((b) => html` ${b}`)}` : null)}${sending?.line ?? null}${report}`;
   }
-  return html`<span>${providerLabel(d.provider)}${sending?.pill ? html` ${sending.pill}` : null}${simulating}</span>${sending?.line ?? null}`;
+  return html`<span>${providerLabel(d.provider)}${sending?.pill ? html` ${sending.pill}` : null}${simulating}</span>${sending?.line ?? null}${report}`;
 }
 
 /** The provider a local send simulation models, as the Email provider row names it. */

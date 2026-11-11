@@ -807,14 +807,21 @@ describe("schema (0018_notify_addresses)", () => {
   });
 });
 
+/** The sending table dropped and made again by 0019 and the migrations after it that change it,
+ *  over the records as they stand, so a later test still finds the schema as it ships. */
+async function rebuildSending(): Promise<void> {
+  await env.DB.prepare("DROP TABLE sending").run();
+  for (const name of ["0019_sending.sql", "0024_sending_receipts.sql"]) {
+    for (const q of FOLDER.find((m) => m.name === name)?.queries ?? []) {
+      await env.DB.prepare(q).run();
+    }
+  }
+}
+
 describe("schema (0019_sending)", () => {
   /** The table rebuilt by the migration's own statements, over the records as they stand. */
   async function migrate(): Promise<unknown> {
-    await env.DB.prepare("DROP TABLE sending").run();
-    const migration = FOLDER.find((m) => m.name === "0019_sending.sql");
-    for (const q of migration?.queries ?? []) {
-      await env.DB.prepare(q).run();
-    }
+    await rebuildSending();
     return env.DB.prepare(
       "SELECT state, since, last_accepted_at, last_accepted_by, refusal_cause FROM sending",
     ).first();
@@ -1008,5 +1015,47 @@ describe("schema (0023_notifications_unavailable)", () => {
         sent_to: "[]",
       },
     ]);
+  });
+});
+
+describe("schema (0024_sending_receipts)", () => {
+  const receipts = () =>
+    env.DB.prepare(
+      "SELECT last_receipt_at, waiting_since, refused_topic, refused_topic_at FROM sending",
+    ).first();
+
+  it("starts an instance that has been receiving reports from its newest one, so the upgrade shows no warning (SPEC §13)", async () => {
+    const send = await dueSend();
+    await env.DB.prepare(
+      `INSERT INTO deliveries (send_id, email, status, attempts, updated_at, event, event_at) VALUES
+         (?1, 'a@example.com', 'accepted', 1, 5000, 'delivered', 6000),
+         (?1, 'b@example.com', 'accepted', 1, 5000, 'bounced', 9000),
+         (?1, 'c@example.com', 'accepted', 1, 9500, NULL, NULL)`,
+    )
+      .bind(send.id)
+      .run();
+    await rebuildSending();
+    expect(await receipts()).toEqual({
+      last_receipt_at: 9000,
+      waiting_since: null,
+      refused_topic: null,
+      refused_topic_at: null,
+    });
+  });
+
+  it("starts one with no report on a delivery row empty, waiting for nothing yet", async () => {
+    const send = await dueSend();
+    await env.DB.prepare(
+      "INSERT INTO deliveries (send_id, email, status, attempts, updated_at) VALUES (?, 'a@example.com', 'accepted', 1, 5000)",
+    )
+      .bind(send.id)
+      .run();
+    await rebuildSending();
+    expect(await receipts()).toEqual({
+      last_receipt_at: null,
+      waiting_since: null,
+      refused_topic: null,
+      refused_topic_at: null,
+    });
   });
 });

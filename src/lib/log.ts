@@ -62,6 +62,8 @@ export const LOG_EVENTS = {
   "webhook.cert_unavailable": "warn",
   "webhook.render_failed": "error",
   "webhook.refused": "error",
+  // A report taken or refused that the record of whether reports arrive missed (SPEC §13).
+  "webhook.unrecorded": "warn",
   // Telling the publisher (SPEC §8).
   "notify.sent": "info",
   "notify.failed": "warn",
@@ -115,6 +117,7 @@ export const LOG_EVENTS = {
   "sim.quota_spent": "info",
   "sim.quota_lifted": "info",
   "sim.request_lost": "info",
+  "sim.send_refused": "info",
   "sim.receipts_error": "error",
 } as const satisfies Record<string, LogLevel>;
 

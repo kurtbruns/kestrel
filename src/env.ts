@@ -27,11 +27,13 @@ import {
   SIMULATED_ACCOUNT_PROBLEMS,
   SIMULATED_ACCOUNTS,
   SIMULATED_REFUSALS,
+  SIMULATED_SEND_REFUSALS,
   SIMULATION_FAULTS,
   SIMULATION_PROFILES,
   type SimulatedAccount,
   type SimulatedAccountProblem,
   type SimulatedAccountView,
+  type SimulatedSendRefusal,
   type SimulationFaults,
   type SimulationProfile,
   type SimulationView,
@@ -73,7 +75,7 @@ export interface Secrets {
    * What stands in for the provider in local dev (SPEC §10): the send simulation, naming the
    * provider it models, `ses` or `generic` (`1`), optionally with `:none` for no
    * injected failures, and for `ses` optionally `:refuse=<cause>`, a refusal of the account
-   * every email meets (SPEC §13); `not-connected` to run as a deployment with no provider (SPEC §13);
+   * every email meets (SPEC §13), `:outage`, `:bad_request`, or `:rejected`; `not-connected` to run as a deployment with no provider (SPEC §13);
    * `off` or unset for the plain, instant fake. Honored only in a dev-shaped env, so never
    * in a deployed one. `.dev.vars.example` ships it on.
    */
@@ -82,8 +84,9 @@ export interface Secrets {
    * The SES account local dev stands in for (SPEC §10), so the editor can be seen in each
    * state the account check reports: `sandbox`, `pending` (AWS reviewing a request),
    * `denied`, `production`, or `permission` (a key not allowed to read the account),
-   * optionally with `:unrouted` for bounces that reach no configuration set, or with one of
-   * the problems the check finds (`:set_missing`, `:key_rejected`, …, SPEC §13). Needs
+   * optionally with `:unrouted` for bounces that reach no configuration set, `:unreported` or
+   * `:wrong_topic` for reports that never reach the app or come from another topic, or with one
+   * of the problems the check finds (`:set_missing`, `:key_rejected`, …, SPEC §13). Needs
    * `SIMULATE_SENDS=ses`; `off` or unset leaves the account unread, as before. Honored only
    * in a dev-shaped env.
    */
@@ -652,7 +655,9 @@ const SIMULATION_GENERIC = new Set(["1", "on", "true", "yes"]);
  * fake: `off` (or unset), `not-connected`, or a profile (`generic`, or `1`, `ses`)
  * and optionally `:realistic` (the default) or `:none`, then, for `ses`, optionally
  * `:refuse=<cause>`, a refusal of the account every email meets (SPEC §10, §13), as in
- * `ses:refuse=configuration`, or `:outage`, SES unavailable to every email. Anything else is
+ * `ses:refuse=configuration`, `:outage`, SES unavailable to every email, or a refusal of each
+ * send's own email: `:bad_request`, every list request refused as invalid in words that name
+ * no one, or `:rejected`, every post's email rejected for its content. Anything else is
  * refused rather than read as off, so a typo can't quietly turn the simulation off or pick
  * the wrong provider.
  */
@@ -668,10 +673,18 @@ function readSimulateSends(
   }
   const [name = "", ...parts] = raw.split(":");
   const last = parts.at(-1) ?? "";
-  const answerPart = last.startsWith("refuse=") || last === "outage" ? parts.pop() : undefined;
+  const answerPart =
+    last.startsWith("refuse=") ||
+    last === "outage" ||
+    (SIMULATED_SEND_REFUSALS as readonly string[]).includes(last)
+      ? parts.pop()
+      : undefined;
   const [faults = "realistic", ...rest] = parts;
   const refuse = answerPart?.startsWith("refuse=") ? answerPart.slice("refuse=".length) : undefined;
   const outage = answerPart === "outage";
+  const sendRefusal = (SIMULATED_SEND_REFUSALS as readonly string[]).includes(answerPart ?? "")
+    ? (answerPart as SimulatedSendRefusal)
+    : null;
   const profile = SIMULATION_GENERIC.has(name) ? "generic" : name;
   if (
     rest.length > 0 ||
@@ -681,11 +694,15 @@ function readSimulateSends(
   ) {
     throw new ConfigError(
       "SIMULATE_SENDS",
-      `must be off, one of ${SIMULATION_PROFILES.join(", ")} (or 1) optionally followed by :${SIMULATION_FAULTS.join(" or :")} and, for ses, :refuse= and one of ${SIMULATED_REFUSALS.join(", ")} or :outage, or not-connected, not "${v?.trim()}"`,
+      `must be off, one of ${SIMULATION_PROFILES.join(", ")} (or 1) optionally followed by :${SIMULATION_FAULTS.join(" or :")} and, for ses, :refuse= and one of ${SIMULATED_REFUSALS.join(", ")}, :outage, or one of :${SIMULATED_SEND_REFUSALS.join(", :")}, or not-connected, not "${v?.trim()}"`,
     );
   }
   if (answerPart !== undefined && profile !== "ses") {
-    const [does, form] = outage ? ["goes down", ":outage"] : ["refuses", ":refuse="];
+    const [does, form] = outage
+      ? ["goes down", ":outage"]
+      : sendRefusal
+        ? ["refuses a send", `:${sendRefusal}`]
+        : ["refuses", ":refuse="];
     throw new ConfigError(
       "SIMULATE_SENDS",
       `${does} through SES's own answers, so ${form} needs the ses profile, not "${v?.trim()}"`,
@@ -696,13 +713,18 @@ function readSimulateSends(
     faults: faults as SimulationFaults,
     refuse: (refuse as RefusingCause | undefined) ?? null,
     outage,
+    send_refusal: sendRefusal,
   };
 }
 
+/** The modifiers that change the simulated account's return path rather than find a problem. */
+const RETURN_PATH_MODIFIERS = new Set(["unrouted", "unreported", "wrong_topic"]);
+
 /**
  * `SIMULATE_ACCOUNT` as the SES account a local server stands in for, or null to leave it
- * unread: off (or unset), or one of the states optionally followed by `:unrouted` or one
- * account problem the check finds, such as `:set_missing` (SPEC §13). It models
+ * unread: off (or unset), or one of the states optionally followed by `:unrouted`,
+ * `:unreported`, `:wrong_topic`, or one account problem the check finds, such as
+ * `:set_missing` (SPEC §13). It models
  * the SES account, so it needs the `ses` send profile. Anything else is refused, as
  * `SIMULATE_SENDS` is, so a typo can't quietly show a state the developer didn't pick.
  */
@@ -721,11 +743,11 @@ function readSimulateAccount(
   if (
     rest.length > 0 ||
     !(SIMULATED_ACCOUNTS as readonly string[]).includes(state) ||
-    (modifier !== undefined && modifier !== "unrouted" && !problem)
+    (modifier !== undefined && !RETURN_PATH_MODIFIERS.has(modifier) && !problem)
   ) {
     throw new ConfigError(
       "SIMULATE_ACCOUNT",
-      `must be off, or one of ${SIMULATED_ACCOUNTS.join(", ")} optionally followed by :unrouted or one of :${SIMULATED_ACCOUNT_PROBLEMS.join(", :")}, not "${v?.trim()}"`,
+      `must be off, or one of ${SIMULATED_ACCOUNTS.join(", ")} optionally followed by :unrouted, :unreported, :wrong_topic, or one of :${SIMULATED_ACCOUNT_PROBLEMS.join(", :")}, not "${v?.trim()}"`,
     );
   }
   if (state === "permission" && problem) {
@@ -741,7 +763,12 @@ function readSimulateAccount(
       `stands in for the SES account, so it needs SIMULATE_SENDS=ses, not "${profile ?? "off"}"`,
     );
   }
-  return { state: state as SimulatedAccount, bounces_routed: modifier !== "unrouted", problem };
+  return {
+    state: state as SimulatedAccount,
+    bounces_routed: modifier !== "unrouted",
+    receipts: modifier === "unreported" || modifier === "wrong_topic" ? modifier : "reported",
+    problem,
+  };
 }
 
 function parseEmailList(v: string | undefined): string[] | undefined {

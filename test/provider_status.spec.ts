@@ -158,17 +158,52 @@ describe("SIMULATE_ACCOUNT", () => {
   it("is off when unset or off, and names a state, and whether bounces reach the app, otherwise", () => {
     expect(simulated("off")).toBeNull();
     expect(simulated("")).toBeNull();
-    expect(simulated("Sandbox")).toEqual({ state: "sandbox", bounces_routed: true, problem: null });
+    expect(simulated("Sandbox")).toEqual({
+      state: "sandbox",
+      bounces_routed: true,
+      receipts: "reported",
+      problem: null,
+    });
     expect(simulated("denied:unrouted")).toEqual({
       state: "denied",
       bounces_routed: false,
+      receipts: "reported",
       problem: null,
     });
     expect(simulated("production:Set_Missing")).toEqual({
       state: "production",
       bounces_routed: true,
+      receipts: "reported",
       problem: "set_missing",
     });
+    // Reports that never reach the app, or arrive from another topic (SPEC §13).
+    expect(simulated("production:unreported")).toEqual({
+      state: "production",
+      bounces_routed: true,
+      receipts: "unreported",
+      problem: null,
+    });
+    expect(simulated("sandbox:wrong_topic")).toEqual({
+      state: "sandbox",
+      bounces_routed: true,
+      receipts: "wrong_topic",
+      problem: null,
+    });
+    // Beside each of SIMULATE_SENDS's other forms, which describe the sends, not the account.
+    for (const sends of [
+      "ses:none",
+      "ses:outage",
+      "ses:refuse=configuration",
+      "ses:bad_request",
+      "ses:rejected",
+    ]) {
+      expect(simulated("production:unreported", { SIMULATE_SENDS: sends })).toEqual({
+        state: "production",
+        bounces_routed: true,
+        receipts: "unreported",
+        problem: null,
+      });
+    }
   });
 
   it("refuses a value it doesn't know, and an account with no simulated SES beside it", () => {
@@ -178,6 +213,7 @@ describe("SIMULATE_ACCOUNT", () => {
       "sandbox:unrouted:x",
       ":unrouted",
       "sandbox:unrouted:set_missing",
+      "sandbox:unreported:wrong_topic",
       "set_missing",
       "permission:key_rejected",
     ]) {
@@ -281,6 +317,7 @@ describe("the account check", () => {
       warnings: [],
       checked_at: Date.now(),
       sending: { state: "unproven", since: null, last_accepted: null, refusal: null },
+      receipts: { last_at: null, waiting_since: null, refused_topic: null },
       signups: "not_open",
     } satisfies ProviderStatusView);
   });

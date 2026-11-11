@@ -137,6 +137,15 @@ export const SIMULATED_ACCOUNTS = [
 export type SimulatedAccount = (typeof SIMULATED_ACCOUNTS)[number];
 
 /**
+ * The refusals of one send's own email a local server's simulated SES can answer with
+ * (`SIMULATE_SENDS=ses:bad_request` or `ses:rejected`), each an SES error response the real
+ * adapter reads (SPEC §10, §12): a list request refused as invalid in words that name no one,
+ * or the message rejected for its content. Neither is the account's, so no other send waits.
+ */
+export const SIMULATED_SEND_REFUSALS = ["bad_request", "rejected"] as const;
+export type SimulatedSendRefusal = (typeof SIMULATED_SEND_REFUSALS)[number];
+
+/**
  * The refusals of the account a local server's simulated SES can answer every email with
  * (`SIMULATE_SENDS=ses:refuse=<cause>`), each one an SES error response the real adapter
  * reads as that cause (SPEC §10, §13). Every refusing cause but a missing sending pool, which
@@ -166,10 +175,21 @@ export const SIMULATED_ACCOUNT_PROBLEMS = [
 ] as const;
 export type SimulatedAccountProblem = (typeof SIMULATED_ACCOUNT_PROBLEMS)[number];
 
+/**
+ * Whether a simulated account's reports reach the app (SPEC §13): `reported` as a working
+ * return path does, `unreported` never (`:unreported`, as a path broken anywhere from the
+ * configuration set to the webhook), or `wrong_topic` from a topic other than `SNS_TOPIC_ARN`
+ * (`:wrong_topic`), which the webhook refuses.
+ */
+export const SIMULATED_RECEIPTS = ["reported", "unreported", "wrong_topic"] as const;
+export type SimulatedReceipts = (typeof SIMULATED_RECEIPTS)[number];
+
 /** The SES account a local server stands in for: its state, whether bounces reach the app, and any problem it has. */
 export interface SimulatedAccountView {
   state: SimulatedAccount;
   bounces_routed: boolean;
+  /** Whether its reports reach the app (`SimulatedReceipts`). */
+  receipts: SimulatedReceipts;
   problem: SimulatedAccountProblem | null;
 }
 
@@ -181,6 +201,8 @@ export interface SimulationView {
   refuse: RefusingCause | null;
   /** Whether SES is unavailable to every email, from `SIMULATE_SENDS=ses:outage`. */
   outage: boolean;
+  /** How SES refuses each send's own email, from `SIMULATE_SENDS=ses:bad_request` (every list request invalid, in words that name no one) or `ses:rejected` (every post's email rejected for its content); null for neither. */
+  send_refusal: SimulatedSendRefusal | null;
   /** The SES account it stands in for, from `SIMULATE_ACCOUNT`; null leaves the account unread. */
   account: SimulatedAccountView | null;
 }

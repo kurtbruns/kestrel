@@ -235,7 +235,7 @@ Until now the app has run with no email provider connected, refusing to send. Se
 
 1. In the editor, **Settings → Email sender** shows Amazon SES and your From address, where it said **No email provider connected** before. Within a couple of minutes, a **Sandbox** pill appears beside it, once the app has read your SES account.
 
-1. In the editor, open **Template** and select **Send test email**, to an address you verified in [Verify your test addresses](#3-verify-your-test-addresses). It arrives. Signups stay closed until SES takes an email, so the **Not proven yet** pill beside Amazon SES in **Settings → Email sender** is gone once it has. If SES refuses it, the test's line says why and what fixes it.
+1. In the editor, open **Template** and select **Send test email**, to an address you verified in [Verify your test addresses](#3-verify-your-test-addresses). It arrives. Signups stay closed until SES takes an email, so the **Not proven yet** pill beside Amazon SES in **Settings → Email sender** is gone once it has. If SES refuses it, the test's line says why and what fixes it. SES's report of this test has nowhere to go until the app subscribes to the topic in the next section, so **Settings → Email sender** says no report has reached Kestrel yet, and an hour on, warns that reports aren't arriving until you finish that section.
 
 1. In a browser, `https://newsletter.example.com/subscribe` shows the subscribe form, where it said signups aren't open yet.
 
@@ -284,6 +284,8 @@ SNS delivers events only to a subscriber that has confirmed. The app confirms on
 1. Reload the subscription. Its status changes to **Confirmed**, with nothing for you to click.
 
     If it stays **Pending confirmation**, check that your Access application covers only `/dashboard` and `/api`. Check that `SNS_TOPIC_ARN` matches the topic's ARN, and that section 6's deploy finished. A mismatched ARN shows in the app's logs as a `webhook.refused` error naming both. Then request confirmation again from the topic's subscriptions. SNS doesn't let you delete a pending subscription, and removes it on its own after 48 hours.
+
+1. Check that SES's reports now reach the app. In the editor, open **Template** and select **Send test email** again, to an address you verified. Within a few minutes, **Settings → Email sender** says when SES last reported back, at a time after this test. If it still says no report has reached Kestrel, check the configuration set's destination and the topic's access policy in [Send bounces and complaints to the app](#4-send-bounces-and-complaints-to-the-app), then this section's steps. An hour after the test, the same section shows an amber warning naming what to check. When a report came from a topic other than the one `SNS_TOPIC_ARN` names, the warning names both: check which topic the configuration set's destination uses before you change either.
 
 1. **(Optional)** Keep what SNS still can't deliver. On the subscription, choose **Edit**, and set a **Redrive policy (dead-letter queue)** to an SQS queue of your own. SNS then moves an event there instead of discarding it. [Amazon SNS dead-letter queues](https://docs.aws.amazon.com/sns/latest/dg/sns-dead-letter-queues.html) covers the queue and its permissions.
 

@@ -156,11 +156,13 @@ export function simulationLine(value) {
     return "[dev] running not connected: sends, tests and signups are refused (unset SIMULATE_SENDS to send)";
   }
   const parts = v.split(":");
-  // SES's outage (`ses:outage`) or a refusal of the account (`ses:refuse=<cause>`), last, as
-  // the Worker reads them, for SES only.
+  // SES's outage (`ses:outage`), a refusal of each send's own email (`ses:bad_request`, `ses:rejected`), or a
+  // refusal of the account (`ses:refuse=<cause>`), last, as the Worker reads them, for SES only.
   const last = parts.at(-1) ?? "";
   const answer =
     last === "outage" ||
+    last === "bad_request" ||
+    last === "rejected" ||
     (last.startsWith("refuse=") && REFUSALS.includes(last.slice("refuse=".length)));
   if (parts.length > 1 && answer && parts[0] === "ses") {
     parts.pop();
@@ -172,7 +174,7 @@ export function simulationLine(value) {
     rest.length === 0;
   return known
     ? `[dev] simulating a provider for list sends (SIMULATE_SENDS=${v}); nothing is delivered`
-    : `[dev] SIMULATE_SENDS=${value.trim()} isn't a value the app accepts, so it will refuse to run: use off, ses, or generic (optionally with :none), ses with :refuse=<cause> or :outage last, or not-connected`;
+    : `[dev] SIMULATE_SENDS=${value.trim()} isn't a value the app accepts, so it will refuse to run: use off, ses, or generic (optionally with :none), ses with :refuse=<cause>, :outage, :bad_request, or :rejected last, or not-connected`;
 }
 
 /**

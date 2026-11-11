@@ -15,9 +15,11 @@ import type {
   ProviderStatusView,
   ProviderWarning,
   ProviderWarningCode,
+  ReceiptsView,
   RefusingCause,
   SendRateSource,
 } from "../../shared/provider";
+import { NO_RECEIPTS_AFTER_MS } from "../../shared/sends";
 import {
   type AccountAnswer,
   type ProviderAccountRow,
@@ -30,7 +32,7 @@ import type { AppEnv, Config } from "../env";
 import { DEFAULT_SES_MAX_SEND_RATE } from "../env";
 import { log } from "../lib/log";
 import { checkSesAccount, MAX_ACCOUNT_REQUESTS } from "../providers/ses_account";
-import { simulatedAccountRow } from "../providers/simulate";
+import { SIMULATED_RECEIPT_WAIT, simulatedAccountRow } from "../providers/simulate";
 import type { Budget } from "../send/budget";
 import { noteRefusal, sendingView, signupsState } from "./sending";
 
@@ -387,6 +389,47 @@ function warnings(
   return out;
 }
 
+/** How long the app waits for a report after the provider takes an email before it warns:
+ *  an hour, as a send waits before `no_receipts`, since greylisting can hold a delivery report
+ *  back for many minutes (SPEC §13). Local dev's simulation waits less (`SIMULATED_RECEIPT_WAIT`). */
+export const RECEIPT_WAIT = { ms: NO_RECEIPTS_AFTER_MS, words: "an hour" } as const;
+
+/** What the webhook has heard, from the sending row; a refused topic only while it is newer
+ *  than the last report taken. */
+export function receiptsView(row: SendingRow | null): ReceiptsView {
+  const last = row?.lastReceiptAt ?? null;
+  const refused = row?.refusedTopic ?? null;
+  return {
+    last_at: last,
+    waiting_since: row?.waitingSince ?? null,
+    refused_topic: refused && (last === null || refused.at > last) ? refused : null,
+  };
+}
+
+/**
+ * The warning that the provider's reports aren't reaching the app (SPEC §13): it took an email
+ * more than an hour ago and no report has arrived since. Computed on read from the sending row,
+ * so it needs no sweep of its own and clears the moment a report lands. It names the links of
+ * the return path in the setup guide's order or, when the webhook refused a report for its
+ * topic since the last one it took, that topic and the expected one. It never says the refused
+ * topic is SES's, or to adopt it: the operator checks the destination in the SES console first. It warns only: nothing
+ * that decides whether to send, or whether signups are open, reads it.
+ */
+export function receiptsWarning(
+  receipts: ReceiptsView,
+  now: number,
+  wait: { ms: number; words: string } = RECEIPT_WAIT,
+): ProviderWarning | null {
+  if (receipts.waiting_since === null || now - receipts.waiting_since <= wait.ms) {
+    return null;
+  }
+  const refused = receipts.refused_topic;
+  const message = refused
+    ? `SES took an email more than ${wait.words} ago, and no report has reached Kestrel since. A report arrived from ${refused.topic}, which isn’t the topic SNS_TOPIC_ARN names, ${refused.expected}, so Kestrel refused it. Until a report arrives from the topic SNS_TOPIC_ARN names, a bounced address is mailed again and a complaint unsubscribes no one. In the SES console, check which topic the configuration set’s SNS destination uses before changing either side, then make the destination and SNS_TOPIC_ARN name the same topic.`
+    : `SES took an email more than ${wait.words} ago, and no report of a delivery, bounce, or complaint has reached Kestrel since. Until one does, a bounced address is mailed again and a complaint unsubscribes no one. Check that the configuration set has an enabled SNS destination and its topic lets SES publish (Connect Amazon SES, section 4), then that /webhooks/ses isn’t behind Access, the app’s subscription to the topic is confirmed, and SNS_TOPIC_ARN names that topic (section 7), or the set doesn’t report Deliveries; the guide selects them.`;
+  return { code: "receipts_not_arriving", severity: "warn", message, docs: BOUNCES_DOC };
+}
+
 /** GET /api/provider, from the deploy config, the account check's row, and the sending row. */
 export function providerStatusView(
   config: Config,
@@ -395,6 +438,8 @@ export function providerStatusView(
 ): ProviderStatusView {
   let row = read;
   const sending = sendingView(config, sendingRow);
+  // Only SES reports back, or local dev's simulation of it; elsewhere a report can't arrive.
+  const receipts = config.provider === "ses" || config.simulation ? receiptsView(sendingRow) : null;
   const none: ProviderStatusView = {
     provider: config.provider,
     state: "not_connected",
@@ -407,6 +452,7 @@ export function providerStatusView(
     warnings: [],
     checked_at: null,
     sending,
+    receipts,
     signups: signupsState(sending),
   };
   if (config.provider === "none") {
@@ -423,11 +469,18 @@ export function providerStatusView(
   }
   const answer = row?.answer ?? null;
   const set = configurationSet(config, answer);
+  const late = receipts
+    ? receiptsWarning(
+        receipts,
+        Date.now(),
+        config.simulation ? SIMULATED_RECEIPT_WAIT : RECEIPT_WAIT,
+      )
+    : null;
   const base: ProviderStatusView = {
     ...none,
     send_rate: sesSendRate(config, answer),
     configuration_set: set,
-    warnings: warnings(config, row, set),
+    warnings: late ? [...warnings(config, row, set), late] : warnings(config, row, set),
   };
   if (!answer) {
     const reason = !row
