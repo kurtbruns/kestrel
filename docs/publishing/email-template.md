@@ -12,6 +12,10 @@ Wrap a part in `{{ if .IsEmail }}` and `{{ end }}` to keep it off each post's pu
 
 A region is a marked part, not a general `if`: `.IsEmail` is its only condition, there's no `else`, and regions don't nest. Kestrel won't save a template with a region left open, an `{{ end }}` with nothing to close, another condition, or `{{ .Post.Body }}` inside a region, which would leave the post's page empty. Keep each region's two tags inside the same element, outside any attribute, and not loose between a table's rows or cells, where the browser would move what's inside. A template that breaks that rule saves, but every email shows the built-in template instead until it's fixed, and the preview and a test say so. An unsubscribe link inside a region is fine, since every email still carries it.
 
+## Styling
+
+Put your CSS in a `<style>` block in the template. Kestrel copies its rules onto each element when it makes the email, since most mail clients drop a `<style>` block, and keeps `@media` rules, such as a dark-mode palette, in the block. A `<link rel="stylesheet">` is left out of the email, and the template saves with a warning saying so: most mail clients wouldn't load it either.
+
 ## Fonts
 
 Name only fonts your readers already have, and end the list with a generic family, as the starting templates do with `Georgia, 'Times New Roman', serif`. Most mail clients ignore web fonts, and your posts' public pages refuse them, so a font your template downloads shows nowhere: readers see the next font in the list. A sent email keeps the fonts it names for good.

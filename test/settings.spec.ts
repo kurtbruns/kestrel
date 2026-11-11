@@ -286,6 +286,32 @@ describe("email template (wired to the render path)", () => {
     expect(res.status).toBe(400);
   });
 
+  it("renders a template that links a remote stylesheet, leaving the link out and saying so (SPEC §9, I5)", async () => {
+    const font = "https://fonts.googleapis.com/css2?family=Pacifico&display=swap";
+    const tpl = withUnsub(
+      `<link rel="stylesheet" href="${font}"><a href="{{ .Email.ViewInBrowserURL }}">View</a>`,
+    );
+    const put = await putSettings({ email_template: tpl });
+    expect(put.status).toBe(200);
+    expect(((await put.json()) as { warnings: string[] }).warnings).toEqual([
+      'A <link rel="stylesheet"> is left out of the email: put its CSS in the template’s <style> block instead.',
+    ]);
+    const created = (await (
+      await SELF.fetch(`${base}/api/posts`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ subject: "Fonts", markdown: "Hello" }),
+      })
+    ).json()) as { post: { id: string } };
+    const preview = await SELF.fetch(`${base}/api/posts/${created.post.id}/preview`, {
+      headers: AUTH,
+    });
+    expect(preview.status).toBe(200);
+    const html = await preview.text();
+    expect(html).toContain("Hello");
+    expect(html).not.toContain(font);
+  });
+
   it("warns (but allows) a missing view-in-browser link and unknown variables", async () => {
     const res = await putSettings({ email_template: withUnsub("{{ made.up }}") });
     expect(res.status).toBe(200);
