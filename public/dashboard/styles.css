@@ -5467,14 +5467,14 @@ button.set-field-remove {
   margin-top: 2px;
   color: var(--accent);
 }
-/* The Email preview's envelope: the sender alone, as a mail client shows it, and the mark
-   that it is set at deploy, linking to Email provider. */
+/* The Email preview's header, as a mail client heads an opened email: the sender alone, with
+   the mark that it is set at deploy, linking to Email provider, and the post's subject. */
 .set-env {
-  display: flex;
-  gap: 14px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
   align-items: baseline;
-  flex-wrap: wrap;
-  padding: 10px 14px;
+  padding: 12px 14px;
   font-size: 13px;
   background: var(--card);
   border-bottom: 1px solid var(--line);

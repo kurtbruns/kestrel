@@ -12,26 +12,25 @@ import { inUseChip, remakeWaitHtml } from "./remake";
 import { mountSampleEmailPreview } from "./template";
 
 /** The Email preview (SPEC §9): a sample email in the saved template as readers open it,
- *  from the sender they see, read-only, with the way to the Template page, where editing
- *  lives (so each surface has one save). The From line is the sender alone: the address is
- *  deploy config, explained in Email provider, which its mark links to. */
+ *  headed as a mail client heads it, from the sender they see, read-only, with the way to the
+ *  Template page, where editing lives (so each surface has one save). The From line is the
+ *  sender alone: the address is deploy config, explained in Email provider, which its mark
+ *  links to. The subject is each post's own, so the sample names it rather than inventing one. */
 export function templateSection(page: SettingsPage): Html {
   return html`
     <section class="set-sec">
       ${secHead("email-template", chip("preview", "Preview"), inUseChip(page.data.in_use))}
-      <p class="set-lede">An email as your readers open it, following Publication identity as you type. Its look is the template’s, edited on the Template page.${remakeWaitHtml(page.data.in_use)}</p>
+      <p class="set-lede">An email as your readers open it, following Publication identity as you type. Its look comes from your email template.${remakeWaitHtml(page.data.in_use)}</p>
       <div class="set-preview set-tpl-sample">
-        <div class="set-preview-bar">
-          <span class="set-preview-lbl">Sample email</span>
-          <span class="set-preview-dot">Current template</span>
-        </div>
         <div class="set-env">
           <span class="set-env-k">From</span>
           <span class="set-env-v"><span class="mono" id="senderFrom">${senderLine(page.sender())}</span> <a class="set-env-deploy" href="#${settingsRoute("email-sender")}">${icon("readonly")}Set at deploy<span class="visually-hidden">, in Email provider</span></a></span>
+          <span class="set-env-k">Subject</span>
+          <span class="set-env-v muted">Your post’s subject</span>
         </div>
-        <iframe class="set-email-frame" id="tplPreview" title="Sample email preview" scrolling="no"></iframe>
+        <iframe class="set-email-frame" id="tplPreview" title="Sample email" scrolling="no"></iframe>
       </div>
-      <div class="row" style="margin-top:12px"><button type="button" id="tplEditLink">Edit template →</button></div>
+      <div class="row" style="margin-top:12px"><button type="button" id="tplEditLink">Edit email template →</button></div>
     </section>`;
 }
 

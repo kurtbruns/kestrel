@@ -121,7 +121,7 @@ export function providerSection(page: SettingsPage): Html {
           ${row("Sending domain", html`<span class="mono">${d.sending_domain}</span>`)}
           ${rate ? row("Send rate", rate, "sendRate") : null}
         </div>
-        <div class="set-note">${icon("readonly")}<span>The provider, its keys, the From address, and the sending domain are set at deploy in <code>wrangler.jsonc</code>, with the keys stored as secrets, so none can be edited here and credentials are never shown. See the <a class="set-link" href="#/docs/configuration">setup guide</a> to change them.${read}</span></div>
+        <div class="set-note">${icon("info")}<span>The provider, the From address, and the sending domain are set at deploy. See the <a class="set-link" href="#/docs/configuration">setup guide</a> to change them.${read}</span></div>
       </div>
     </section>`;
 }

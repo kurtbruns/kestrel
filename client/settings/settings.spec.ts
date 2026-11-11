@@ -176,7 +176,7 @@ describe("settings view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("shows the template as a sample email, with the way to the Template page", async () => {
+  it("shows a sample email as readers open it, with the way to the Template page", async () => {
     const signed = "<div>{{ .Post.Body }}<p>{{ .Publication.Name }}</p></div>";
     await open([
       { path: "/api/settings", reply: () => response({ settings: { email_template: signed } }) },
@@ -188,6 +188,10 @@ describe("settings view", () => {
     // The sample follows the name as it is typed.
     typeInto($<HTMLInputElement>("#setName"), "Owls Monthly");
     expect(sample()).toContain("Owls Monthly");
+    // Headed as a mail client heads an opened email: the sender, and the post's subject to come.
+    expect($$(".set-env-k").map((k) => k.textContent)).toEqual(["From", "Subject"]);
+    expect($(".set-env .set-env-v.muted").textContent).toBe("Your post’s subject");
+    expect($("#tplEditLink").textContent).toBe("Edit email template →");
     $("#tplEditLink").click();
     expect(location.hash).toBe("#/template");
   });
@@ -861,7 +865,7 @@ describe("settings view", () => {
     const templateLede = () => chip.closest(".set-sec")?.querySelector(".set-lede")?.textContent;
     const identityNote = () => $('[data-group="publication"] .set-note > span').textContent;
     const lede =
-      "An email as your readers open it, following Publication identity as you type. Its look is the template’s, edited on the Template page.";
+      "An email as your readers open it, following Publication identity as you type. Its look comes from your email template.";
     const note =
       "Shown in every email. Saving a change updates 1 scheduled email too; you’ll confirm first.";
     expect(templateLede()).toBe(`${lede}${wait}`);
