@@ -257,6 +257,9 @@ describe("a second clock", () => {
 describe("a time zone name refused", () => {
   it("says why, in one wording for the setting and a fire time", () => {
     expect(timeZoneNameRefusal("est")).toMatch(/^EST isn’t a place/);
+    expect(timeZoneNameRefusal(" -05:00 ")).toBe(
+      "-05:00 isn’t a place: it never changes for daylight saving time. Use the place your readers keep, such as America/New_York.",
+    );
     expect(timeZoneNameRefusal("Mars/Base")).toBe(
       "“Mars/Base” isn’t a time zone this server knows. Use an IANA name, such as America/New_York.",
     );

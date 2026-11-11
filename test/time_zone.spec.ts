@@ -100,6 +100,10 @@ describe("the setting (SPEC §9)", () => {
     expect((await readJson(await saveZone("EST"))).message).toBe(
       "EST isn’t a place: it never changes for daylight saving time. Use the place your readers keep, such as America/New_York.",
     );
+    // So is a bare offset, which never changes for daylight saving time either.
+    expect((await readJson(await saveZone("-05:00"))).message).toBe(
+      "-05:00 isn’t a place: it never changes for daylight saving time. Use the place your readers keep, such as America/New_York.",
+    );
     // UTC is taken under any of its names.
     for (const utc of ["UTC", "utc", "GMT", "Etc/UTC"]) {
       expect((await readJson(await saveZone(utc))).settings.time_zone, utc).toBe("UTC");
