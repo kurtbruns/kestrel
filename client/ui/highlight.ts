@@ -73,8 +73,9 @@ export function highlightTemplate(src: string): Html {
 // marked won't make one is marked broken, so the publisher sees it where they type, not only in
 // the Preview's warning.
 const MARKED_INLINE = { gfm: true, breaks: false } as const;
-/** Text written as a link: brackets, then an address in parentheses on the same line. */
-const LINK_SHAPED = /^!?\[[^\]\n]*\]\([^)\n]*\)/;
+/** Text written as a link: brackets, then an opening parenthesis and what follows it on the
+ *  line, closed or not. The render's warning reads the same shape (src/render/markdown.ts). */
+const LINK_SHAPED = /^!?\[[^\]\n]*\]\([^)\n]*\)?/;
 
 /** Where marked makes a link or image in one line: its offset in the line, and its source. A
  *  link inside emphasis is found by walking into the emphasis, whose source holds its own. */
@@ -113,6 +114,9 @@ const MD_INLINE =
 function hlMdRun(src: string, base: number, links: Map<number, string>): string {
   let out = "";
   let last = 0;
+  // Where an escaped "\!" ends: a link shape right after it was shown as typed on purpose, and
+  // the render's warning stays quiet about it, so the highlight does too.
+  let escapedBangEnd = -1;
   const re = new RegExp(MD_INLINE);
   for (let m = re.exec(src); m; m = re.exec(src)) {
     const [whole, code, escaped, open, bd, btext, aem, uem] = m;
@@ -122,10 +126,14 @@ function hlMdRun(src: string, base: number, links: Map<number, string>): string 
       out += `<span class="cx-md-code">${esc(code)}</span>`;
     } else if (escaped !== undefined) {
       out += esc(escaped);
+      if (escaped === "\\!") {
+        escapedBangEnd = end;
+      }
     } else if (open !== undefined) {
       const rest = src.slice(m.index);
       const link = links.get(base + m.index);
-      const shaped = link === undefined ? LINK_SHAPED.exec(rest) : null;
+      const onPurpose = m.index === escapedBangEnd;
+      const shaped = link === undefined && !onPurpose ? LINK_SHAPED.exec(rest) : null;
       if (link !== undefined) {
         // Link/image: text + brackets stay plain; only what's in the parentheses is treated.
         // The address opens at the first "](" past the label's own brackets.

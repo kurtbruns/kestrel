@@ -131,8 +131,11 @@ describe("highlightMarkdown links", () => {
     expect(md(src)).toEqual({ url: [], broken: [shown] });
   });
 
-  it("leaves an address with no closing parenthesis plain, since it never reads as a link", () => {
-    expect(md("[a](https://example.com/foo")).toEqual({ url: [], broken: [] });
+  it("marks a link with no closing parenthesis as broken, through the end of the line", () => {
+    expect(md("[a](https://example.com/foo")).toEqual({
+      url: [],
+      broken: ["[a](https://example.com/foo"],
+    });
   });
 
   it("tells a working link from a broken one on the same line, and inside bold", () => {
@@ -145,6 +148,10 @@ describe("highlightMarkdown links", () => {
   it("marks neither in a code span or after an escaped bracket, which the email shows as typed", () => {
     expect(md("`[a](b c)` and `[d](e)`")).toEqual({ url: [], broken: [] });
     expect(md("\\[a](b c) and \\[d](e)")).toEqual({ url: [], broken: [] });
+  });
+
+  it("marks nothing after an escaped image mark, which shows the reference as typed on purpose", () => {
+    expect(md("\\![a cat](my cat.png)")).toEqual({ url: [], broken: [] });
   });
 
   it("escapes the line, so link text is never read as markup", () => {
