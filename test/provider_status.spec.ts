@@ -189,6 +189,21 @@ describe("SIMULATE_ACCOUNT", () => {
       receipts: "wrong_topic",
       problem: null,
     });
+    // Beside each of SIMULATE_SENDS's other forms, which describe the sends, not the account.
+    for (const sends of [
+      "ses:none",
+      "ses:outage",
+      "ses:refuse=configuration",
+      "ses:bad_request",
+      "ses:rejected",
+    ]) {
+      expect(simulated("production:unreported", { SIMULATE_SENDS: sends })).toEqual({
+        state: "production",
+        bounces_routed: true,
+        receipts: "unreported",
+        problem: null,
+      });
+    }
   });
 
   it("refuses a value it doesn't know, and an account with no simulated SES beside it", () => {
