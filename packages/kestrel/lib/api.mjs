@@ -25,6 +25,7 @@ import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { readSignIn, readSignIns, withCredentialsLock, writeSignInHeld } from "./credentials.mjs";
 import { devTarget } from "./dev-api.mjs";
+import { folderOrigins } from "./folder-instance.mjs";
 import { fileMediaType } from "./media-types.mjs";
 import {
   CLAUDE_CODE_CLIENT,
@@ -56,7 +57,8 @@ const USAGE = `Usage: kestrel api <method> <path> [options]
   --data <json|@file|->         the request body: inline, from a file, or from stdin
   --type <media type>           the body's type (default application/json)
   --form <name=value>           a multipart field, repeatable; name=@file attaches a file
-  --url <url>                   the instance (default: KESTREL_URL, else the only one you're signed in to)
+  --url <url>                   the instance (default: KESTREL_URL, else this folder's instance, from
+                                its wrangler.jsonc, else the only one you're signed in to)
   --local                       this directory's dev server, started by kestrel dev
   --client <name>               your own script's Kestrel-Client name (default ${CLAUDE_CODE_CLIENT}
                                 when Claude Code runs this, otherwise ${KESTREL_CLI_CLIENT}); never
@@ -186,14 +188,18 @@ export function parseApiArgs(argv) {
 }
 
 /**
- * Which instance a call goes to: `--url`, then `KESTREL_URL`, then the one instance this
- * person is signed in to. Several sign-ins and nothing naming one is a refusal, not a guess.
- * The one sign-in is named on stderr through `say`, since nothing in the command named it and
- * a person in another instance's folder should see the mismatch; stdout stays the answer's.
+ * Which instance a call goes to: `--url`, then `KESTREL_URL`, then the instance whose
+ * repository `dir` is (packages/kestrel/lib/folder-instance.mjs), then the one instance this
+ * person is signed in to. A folder naming several, or several sign-ins and nothing naming one,
+ * is a refusal, not a guess, and never a prompt, since an agent runs this with no terminal.
+ * An instance taken from the folder or the one sign-in is named on stderr through `say`, since
+ * nothing in the command named it and a person in another instance's folder should see the
+ * mismatch; stdout stays the answer's.
  */
 export function chooseInstance({
   url,
   env = process.env,
+  dir = process.cwd(),
   signIns,
   say = (line) => process.stderr.write(`${line}\n`),
 }) {
@@ -202,6 +208,19 @@ export function chooseInstance({
   }
   if (env.KESTREL_URL) {
     return instanceOrigin(env.KESTREL_URL);
+  }
+  const named = folderOrigins(dir);
+  if (named.length > 1) {
+    throw new SignInError(
+      `This folder's wrangler.jsonc names ${named.length} instances (${named.join(", ")}). Name one with --url.`,
+    );
+  }
+  if (named.length === 1) {
+    const origin = instanceOrigin(named[0]);
+    say(
+      `kestrel api: calling ${origin}, this folder's instance. Pass --url to call a different one.`,
+    );
+    return origin;
   }
   const origins = Object.keys(signIns);
   if (origins.length === 1) {

@@ -36,6 +36,7 @@ import {
   withCredentialsLock,
   writeSignIn,
 } from "../../packages/kestrel/lib/credentials.mjs";
+import { stripJsonc } from "../../packages/kestrel/lib/folder-instance.mjs";
 import { signIn } from "../../packages/kestrel/lib/login.mjs";
 import {
   authorizeUrl,
@@ -125,33 +126,128 @@ describe("which instance a URL names", () => {
   it("goes to --url, then KESTREL_URL, then the one instance signed in to, and never guesses among several", () => {
     const one = { [ORIGIN]: {} };
     const two = { [ORIGIN]: {}, "https://b.example.com": {} };
-    expect(chooseInstance({ url: "https://b.example.com/x", env: {}, signIns: one })).toBe(
+    expect(chooseInstance({ url: "https://b.example.com/x", env: {}, dir, signIns: one })).toBe(
       "https://b.example.com",
     );
-    expect(chooseInstance({ env: { KESTREL_URL: "https://b.example.com" }, signIns: one })).toBe(
-      "https://b.example.com",
-    );
-    expect(chooseInstance({ env: {}, signIns: one, say: () => {} })).toBe(ORIGIN);
-    expect(() => chooseInstance({ env: {}, signIns: two })).toThrow(/Name one with --url/);
-    expect(() => chooseInstance({ env: {}, signIns: {} })).toThrow(/kestrel login/);
+    expect(
+      chooseInstance({ env: { KESTREL_URL: "https://b.example.com" }, dir, signIns: one }),
+    ).toBe("https://b.example.com");
+    expect(chooseInstance({ env: {}, dir, signIns: one, say: () => {} })).toBe(ORIGIN);
+    expect(() => chooseInstance({ env: {}, dir, signIns: two })).toThrow(/Name one with --url/);
+    expect(() => chooseInstance({ env: {}, dir, signIns: {} })).toThrow(/kestrel login/);
   });
 
   it("names the one sign-in on stderr when nothing named the instance, and only then", () => {
     const one = { [ORIGIN]: {} };
     const said = [];
     const say = (line) => said.push(line);
-    chooseInstance({ url: ORIGIN, env: {}, signIns: one, say });
-    chooseInstance({ env: { KESTREL_URL: ORIGIN }, signIns: one, say });
+    chooseInstance({ url: ORIGIN, env: {}, dir, signIns: one, say });
+    chooseInstance({ env: { KESTREL_URL: ORIGIN }, dir, signIns: one, say });
     expect(said).toEqual([]);
     const stdout = vi.spyOn(process.stdout, "write");
     const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-    chooseInstance({ env: {}, signIns: one });
+    chooseInstance({ env: {}, dir, signIns: one });
     expect(stderr.mock.calls).toEqual([
       [
         `kestrel api: calling ${ORIGIN}, the only instance you're signed in to. Pass --url to call a different one.\n`,
       ],
     ]);
     expect(stdout).not.toHaveBeenCalled();
+  });
+});
+
+describe("the instance whose folder it runs in", () => {
+  const PROD = "https://news.symbolsoup.test";
+  const STAGING = "https://staging.symbolsoup.test";
+  const one = { [ORIGIN]: {} };
+
+  /** An instance folder under the test's directory: its package.json and wrangler.jsonc. */
+  function folder({ dependency = true, wrangler } = {}) {
+    const root = join(dir, "instance");
+    mkdirSync(root, { recursive: true });
+    const dependencies = dependency ? { "@kurtbruns/kestrel": "1.23.0" } : { wrangler: "4.0.0" };
+    writeFileSync(join(root, "package.json"), JSON.stringify({ name: "newsletter", dependencies }));
+    if (wrangler !== undefined) {
+      writeFileSync(join(root, "wrangler.jsonc"), wrangler);
+    }
+    return root;
+  }
+
+  /** A wrangler.jsonc as the template writes it: comments, URLs in strings, trailing commas. */
+  const config = (envs) => `{
+  // The top level is the dev server, whose origin is ignored.
+  "name": "newsletter-dev", /* a block comment */
+  "vars": { "APP_ORIGIN": "http://localhost:8787", "NOTE": "a // inside a string, and a /* too" },
+  "env": {
+${Object.entries(envs)
+  .map(([name, origin]) => `    "${name}": { "vars": { "APP_ORIGIN": "${origin}", }, }, // ${name}`)
+  .join("\n")}
+  },
+}
+`;
+
+  it("calls the one origin the env blocks set, and says on stderr that it's the folder's", () => {
+    const said = [];
+    const at = folder({ wrangler: config({ production: PROD }) });
+    expect(chooseInstance({ env: {}, dir: at, signIns: one, say: (l) => said.push(l) })).toBe(PROD);
+    expect(said).toEqual([
+      `kestrel api: calling ${PROD}, this folder's instance. Pass --url to call a different one.`,
+    ]);
+  });
+
+  it("refuses when two env blocks name instances, naming --url rather than guessing", () => {
+    const at = folder({ wrangler: config({ production: PROD, staging: STAGING }) });
+    expect(() => chooseInstance({ env: {}, dir: at, signIns: one })).toThrow(
+      `This folder's wrangler.jsonc names 2 instances (${PROD}, ${STAGING}). Name one with --url.`,
+    );
+  });
+
+  it("takes the template's example.com placeholder and a loopback origin as unset", () => {
+    const at = folder({
+      wrangler: config({
+        production: "https://newsletter.example.com",
+        apex: "https://example.com",
+        local: "http://127.0.0.1:8787",
+      }),
+    });
+    expect(chooseInstance({ env: {}, dir: at, signIns: one, say: () => {} })).toBe(ORIGIN);
+  });
+
+  it("falls through to the one sign-in with no wrangler.jsonc, or one it can't parse", () => {
+    expect(chooseInstance({ env: {}, dir: folder(), signIns: one, say: () => {} })).toBe(ORIGIN);
+    const broken = folder({ wrangler: `{ "env": { "production": ` });
+    expect(chooseInstance({ env: {}, dir: broken, signIns: one, say: () => {} })).toBe(ORIGIN);
+  });
+
+  it("is no instance when its package.json doesn't depend on @kurtbruns/kestrel", () => {
+    const at = folder({ dependency: false, wrangler: config({ production: PROD }) });
+    expect(chooseInstance({ env: {}, dir: at, signIns: one, say: () => {} })).toBe(ORIGIN);
+  });
+
+  it("reads only the folder it runs in, never a parent's", () => {
+    const at = folder({ wrangler: config({ production: PROD }) });
+    const sub = join(at, "posts");
+    mkdirSync(sub);
+    expect(chooseInstance({ env: {}, dir: sub, signIns: one, say: () => {} })).toBe(ORIGIN);
+  });
+
+  it("gives way to --url and KESTREL_URL, saying nothing", () => {
+    const said = [];
+    const say = (l) => said.push(l);
+    const at = folder({ wrangler: config({ production: PROD, staging: STAGING }) });
+    expect(chooseInstance({ url: ORIGIN, env: {}, dir: at, signIns: {}, say })).toBe(ORIGIN);
+    expect(chooseInstance({ env: { KESTREL_URL: ORIGIN }, dir: at, signIns: {}, say })).toBe(
+      ORIGIN,
+    );
+    expect(said).toEqual([]);
+  });
+
+  it("strips JSONC's comments and trailing commas but never a string's contents", () => {
+    expect(
+      JSON.parse(
+        stripJsonc(`{ "a": "x // y /* z */", // c\n "b": [1, 2, /* d */ ], "e": "\\"//", }`),
+      ),
+    ).toEqual({ a: "x // y /* z */", b: [1, 2], e: '"//' });
   });
 });
 
