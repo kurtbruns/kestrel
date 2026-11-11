@@ -1598,6 +1598,8 @@ describe("times in a notification, on the publication's clock (SPEC §8, §9)", 
       getConfig(env),
       { ...LA, now: STOPPED + 15 * HOUR },
     );
+    // Delivered hours in, after retries, the subject says no less than the body.
+    expect(email.subject).toBe('"Owls" is late: Amazon SES has been unavailable for over an hour');
     expect(email.text).toContain(
       'Amazon SES has been unavailable for 15 hours, since Tue Nov 10, 9:23 AM Pacific Time, so "Owls" is late.',
     );

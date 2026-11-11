@@ -152,7 +152,9 @@ describe("a provider outage past an hour (SPEC §8, §12)", () => {
     // The page says it at the same moment, amber.
     const shown = await provider(send.id);
     expect(shown?.severity).toBe("warn");
-    expect(shown?.message).toContain("unavailable for about an hour");
+    // Since when, with its day, so the words hold for as long as the outage does.
+    const day = `${began.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short" })} ${began.toLocaleDateString("en-US", { timeZone: "UTC", month: "short" })} ${began.getUTCDate()}`;
+    expect(shown?.message).toContain(`unavailable since ${day}, ${clock}: `);
 
     // Three hourly retries later, still down: nothing more.
     await ticks(3);

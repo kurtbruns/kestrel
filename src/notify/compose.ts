@@ -289,12 +289,15 @@ function unavailable(
   const held = n.c_pending + n.c_in_flight;
   const began = n.halted_at ?? n.episode;
   const throttled = isSelfThrottled(n);
+  // It first goes out about 53 minutes in (`LONG_OUTAGE_HALTS`), and a retry can take it out
+  // hours later, so the subject never says less than the body does.
+  const hour = clock.now - began < 60 * 60 * 1000 ? "about an hour" : "over an hour";
   const readers =
     "If this post is time-sensitive, you may want to tell your readers it will be late.";
   return problem({
     subject: throttled
-      ? `${title} is late: SES has refused it for its sending rate for about an hour`
-      : `${title} is late: Amazon SES has been unavailable for about an hour`,
+      ? `${title} is late: SES has refused it for its sending rate for ${hour}`
+      : `${title} is late: Amazon SES has been unavailable for ${hour}`,
     happened: `${throttled ? "Amazon SES has refused every try for its sending rate" : "Amazon SES has been unavailable"} for ${since(began, clock)}, since ${when(began, clock)}, so ${title} is late.`,
     affected: `${emails(held)} ${held === 1 ? "is" : "are"} still to go.`,
     said: said(n.halt_error),
