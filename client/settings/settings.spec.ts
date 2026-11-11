@@ -1660,6 +1660,66 @@ describe("settings view", () => {
       expect($("#providerLastAccepted").textContent).toBe(`SES accepted an email ${timeAt(1)}.`);
     });
 
+    it("says when SES last reported back, or that no report has arrived since it took an email (SPEC §13)", async () => {
+      const working = {
+        state: "working",
+        since: 1,
+        last_accepted: { at: 1, by: "test" },
+        refusal: null,
+      } as const;
+      await withStatus({
+        state: "production",
+        unknown_reason: null,
+        sending: working,
+        receipts: { last_at: 2, waiting_since: null, refused_topic: null },
+      });
+      expect($("#providerLastReport").textContent).toBe(`SES last reported back ${timeAt(2)}.`);
+      unmount();
+      fake.restore();
+      await withStatus({
+        state: "production",
+        unknown_reason: null,
+        sending: working,
+        receipts: { last_at: null, waiting_since: 1, refused_topic: null },
+      });
+      expect($("#providerLastReport").textContent).toBe(
+        "No report from SES has reached Kestrel yet.",
+      );
+      unmount();
+      fake.restore();
+      // Before SES has taken an email there is nothing to report yet.
+      await withStatus({
+        state: "production",
+        unknown_reason: null,
+        sending: { state: "unproven", since: null, last_accepted: null, refusal: null },
+        receipts: { last_at: null, waiting_since: null, refused_topic: null },
+      });
+      expect(document.querySelector("#providerLastReport")).toBeNull();
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("shows that reports aren't arriving in amber, linking the step that sends them to the app (SPEC §13)", async () => {
+      await withStatus({
+        state: "production",
+        unknown_reason: null,
+        warnings: [
+          {
+            code: "receipts_not_arriving",
+            severity: "warn",
+            message:
+              "SES took an email more than an hour ago, and no report has reached Kestrel since.",
+            docs: { slug: "ses", anchor: "4-send-bounces-and-complaints-to-the-app" },
+          },
+        ],
+      });
+      expect($("#providerValue .set-warn").textContent).toBe(
+        "SES took an email more than an hour ago, and no report has reached Kestrel since. Send bounces and complaints to the app",
+      );
+      expect($<HTMLAnchorElement>("#providerValue .set-warn a").getAttribute("href")).toBe(
+        "#/docs/ses/4-send-bounces-and-complaints-to-the-app",
+      );
+    });
+
     it("names the sandbox, what it limits, and the step that asks AWS to lift it", async () => {
       await withStatus({
         state: "sandbox",
@@ -1752,7 +1812,12 @@ describe("settings view", () => {
           refuse: null,
           outage: false,
           send_refusal: null,
-          account: { state: "production", bounces_routed: true, problem: null },
+          account: {
+            state: "production",
+            bounces_routed: true,
+            receipts: "reported",
+            problem: null,
+          },
         },
       };
       await open([

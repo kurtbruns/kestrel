@@ -66,7 +66,10 @@ SIMULATE_SENDS="ses"
 # real account would: sandbox, pending (AWS reviewing a request for production access),
 # denied, production, or permission (the AWS key isn't allowed to read the account). Add
 # ":unrouted" (e.g. "sandbox:unrouted") for bounces that reach no configuration set, which
-# shows the bounces warning, or one problem the account check finds, which shows its warning:
+# shows the bounces warning; ":unreported" for a return path that never reports back, or
+# ":wrong_topic" for one that reports from a topic other than SNS_TOPIC_ARN, either of which
+# shows the warning that reports aren't arriving two minutes after an email (an hour deployed);
+# or one problem the account check finds, which shows its warning:
 # ":set_missing" or ":set_paused" (the configuration set), ":key_rejected" (SES rejects the
 # AWS key), ":sending_disabled" (sending turned off), ":shutdown" (AWS paused the account),
 # ":sender_unverified" (the From address isn't verified), or ":probation" (AWS reviewing the

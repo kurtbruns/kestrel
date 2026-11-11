@@ -21,6 +21,8 @@ A test email goes through the same code as a real send. If the test looks right,
 
 1. Open the email. It arrives in your inbox, not in spam, the image loads, and the subject reads as you wrote it. Its links work, but a test email unsubscribes no one; section 5 unsubscribes for real.
 
+1. In **Settings → Email sender**, check when SES last reported back. Within a few minutes it shows a time after the test you just sent, which proves SES's reports reach the app. The amber warning that reports aren't arriving shows only an hour after an email, so its absence proves nothing yet. If no newer report comes, check [Send bounces and complaints to the app](ses.md#4-send-bounces-and-complaints-to-the-app) and [Subscribe the app to the topic](ses.md#7-subscribe-the-app-to-the-topic).
+
 1. Send a test email to your second address, not the publisher's inbox, and reply to it from there, as a reader would. The reply arrives in the publisher's inbox, the one you chose in [Connect Amazon SES](ses.md#8-receive-replies-at-your-from-address), or in your From address's own mailbox if you skipped forwarding. If it bounces, check the routing rule and the destination address there.
 
 ## 2. Check that it passes authentication
@@ -90,7 +92,7 @@ When an address bounces or marks your mail as spam, SES tells the app through SN
 
 1. In the editor, **Subscribers** lists the bounce address as **Pending** with a **bounced** flag, and the complaint address as **Unsubscribed**. Open its row: its page says it left by a complaint. The app mails neither again.
 
-If the bounce address has no flag, or the complaint address is still pending, SES's events aren't reaching the app. Check the configuration set in [Send bounces and complaints to the app](ses.md#4-send-bounces-and-complaints-to-the-app), and the subscription in [Subscribe the app to the topic](ses.md#7-subscribe-the-app-to-the-topic).
+If the bounce address has no flag, or the complaint address is still pending, SES's events aren't reaching the app, and **Settings → Email sender** warns of it an hour after the confirmations went. Check the configuration set in [Send bounces and complaints to the app](ses.md#4-send-bounces-and-complaints-to-the-app), and the subscription in [Subscribe the app to the topic](ses.md#7-subscribe-the-app-to-the-topic).
 
 ## 7. Read the logs
 
