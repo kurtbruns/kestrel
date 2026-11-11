@@ -22,7 +22,9 @@ Your published posts are dated by your publication's day, so a post sent at 8 PM
 
 You can change it at any time. A post that's already scheduled still goes out at the same moment, so its time is displayed differently on the new clock. Before you save, Settings shows each one ("“A quick note”: Thu Nov 12, 9:18 AM Pacific Time → 11:18 AM Central Time"); if that isn't the time you meant, move it with **Edit schedule** after saving. Public dates follow the new zone, so a post sent near midnight may show a different date afterward.
 
-Kestrel's time zone rules come from Cloudflare's servers, which can trail a recent government change, such as a country dropping daylight saving time, by months. If your zone's rules changed recently, times near the change may read an hour off until Cloudflare catches up.
+Every time in the dashboard reads on your publication's clock, and Claude's do too. When your browser is on another clock, while you're traveling say, the dashboard names the zone beside each time, and shows a time you can still change in your own time as well.
+
+Kestrel's time zone rules come from Cloudflare's servers, which can trail a recent government change, such as a country dropping daylight saving time, by months. If your zone's rules changed recently, a time you schedule may go out an hour off from what you meant until Cloudflare catches up. When your browser's rules and the server's disagree about a time you pick, the **Schedule** dialog says so, and the post goes out by the server's clock.
 
 ## When to provide a mailing address
 

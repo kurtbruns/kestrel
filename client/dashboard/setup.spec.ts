@@ -4,7 +4,7 @@ import type { SendView } from "../../shared/sends";
 import type { DeploymentView } from "../../shared/settings";
 import { sendView } from "../test/send_server";
 import { providerStatus, resetShell, sendSummary, settingsResponse } from "../test/support";
-import { fmt } from "../ui/format";
+import { timeAt } from "../time_zone";
 import { html, setHtml } from "../ui/html";
 import { connectedTo, type SetupFacts, type SetupStep, setupSteps, setupStepsHtml } from "./setup";
 
@@ -129,7 +129,7 @@ describe("setup steps", () => {
     const provider = ses({ review: "pending", sending: sending("working"), signups: "open" });
     expect(read(setupSteps(facts({ provider, notifyTo: 2 })))).toEqual([
       "Connect Amazon SES: done (Sends through Amazon SES in us-west-2.)",
-      `Send a test email: done (SES accepted an email ${fmt(1)}.)`,
+      `Send a test email: done (SES accepted an email ${timeAt(1)}.)`,
       "Name your publication: done (Named “Symbol Soup”.)",
       "Set the time zone: done (Set to Eastern Time.)",
       "Get notified: done (Notifications go to 2 addresses.)",
@@ -163,15 +163,15 @@ describe("setup steps", () => {
       ),
     ).toEqual([
       "Connect Amazon SES: done (Sends through Amazon SES in us-west-2.)",
-      `Send a test email: done (SES accepted an email ${fmt(1)}.)`,
+      `Send a test email: done (SES accepted an email ${timeAt(1)}.)`,
       "Name your publication: done (Named “Symbol Soup”.)",
       "Set the time zone: done (Set to Eastern Time.)",
       "Get notified: done (Notifications go to 1 address.)",
       "Request production access: done (AWS granted it.)",
       "Bring your existing list: done (40 subscribers on your list.)",
       "Write your first post: done (“The integral sign”.)",
-      `Schedule your first post: done (Goes out ${fmt(s.fire_at)}.)`,
-      `Send a test email for your first post: todo (“The integral sign” goes out ${fmt(s.fire_at)}. Send yourself a test of it first.)`,
+      `Schedule your first post: done (Goes out ${timeAt(s.fire_at)}.)`,
+      `Send a test email for your first post: todo (“The integral sign” goes out ${timeAt(s.fire_at)}. Send yourself a test of it first.)`,
       "Share your subscribe link: todo (Share it before your first post goes out, so readers get it.)",
     ]);
   });

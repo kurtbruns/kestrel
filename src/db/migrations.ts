@@ -34,6 +34,7 @@ export const SHIPPED_MIGRATIONS: readonly string[] = [
   "0021_notifications_outage_receipts.sql",
   "0022_sends_from_name.sql",
   "0023_notifications_unavailable.sql",
+  "0026_sends_requested_local_time.sql",
 ];
 
 /**

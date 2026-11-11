@@ -493,6 +493,14 @@ const CASES: Case[] = [
     },
   },
   {
+    refusal: "GET /api/time time_zone_not_set",
+    when: "a local time with no time zone",
+    run: async () => {
+      await unsetTimeZone();
+      return call("GET", "/api/time?fire_at=2026-11-13T09:00");
+    },
+  },
+  {
     refusal: "POST /api/sends/:id/resolve run_in_progress",
     when: "a send a run holds",
     run: async () => {

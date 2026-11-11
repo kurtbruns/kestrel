@@ -14,8 +14,8 @@ import {
   stopsSending,
   warningHtml,
 } from "../provider_status";
+import { timeAt } from "../time_zone";
 import { $ } from "../ui/dom";
-import { fmt } from "../ui/format";
 import { type Html, html } from "../ui/html";
 import { icon } from "../ui/icons";
 import { chip, monogram, type SectionHandle, type SettingsPage, secHead } from "./page";
@@ -43,7 +43,7 @@ function providerValue(d: DeploymentView, status: ProviderStatusView | null): Ht
     ? html`<span class="set-pill">Simulating ${SIMULATION_LABELS[d.simulation.profile]}${d.simulation.faults === "none" ? ", no failures" : ""}</span>`
     : null;
   // Whether email is getting out (SPEC §13), its pill beside the name and its line after.
-  const sending = status ? sendingHtml(status, fmt) : null;
+  const sending = status ? sendingHtml(status, timeAt) : null;
   if (status && status.unknown_reason !== "stand_in") {
     // A simulated account (SPEC §10) shows its state as SES would, with the simulation named
     // beside it.

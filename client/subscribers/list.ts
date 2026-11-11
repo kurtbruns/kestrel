@@ -23,9 +23,10 @@ import {
   signupsPausedHtml,
 } from "../provider_status";
 import { appState } from "../state";
+import { clocksFor } from "../time_zone";
 import { $, $$ } from "../ui/dom";
 import { saveFile } from "../ui/download";
-import { fmt } from "../ui/format";
+import { fmt, zoneHeader } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
 import {
   type ListState,
@@ -276,12 +277,14 @@ function renderSubTable(
     return;
   }
   // The joined cell is named so the stacked layout can label it. The wrapper is
-  // what the stacking measures: this table stacks by its own width, not the viewport's.
+  // what the stacking measures: this table stacks by its own width, not the viewport's. The
+  // header names the zone once when the browser's clock differs (DESIGN §10).
+  const c = clocksFor(rows.map((s) => s.created_at));
   setHtml(
     listEl,
-    html`<div class="table-wrap subs-wrap"><table class="list-table subs-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Email", "email", state)}${th("Status", null, state)}${th("Joined", "created_at", state)}<th></th></tr></thead><tbody>${rows.map(
+    html`<div class="table-wrap subs-wrap"><table class="list-table subs-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Email", "email", state)}${th("Status", null, state)}${th(zoneHeader("Joined", c), "created_at", state)}<th></th></tr></thead><tbody>${rows.map(
       (s) => {
-        return html`<tr class="clickable" data-id="${s.id}"><td><a class="sub-email" href="${subscriberHref(s.id)}">${breakableEmail(s.email)}</a>${suppressionFlag(s)}</td><td>${statusBadge(s)}</td><td class="muted joined">${fmt(s.created_at)}</td><td class="act"><button class="icon" data-menu="${s.id}" aria-label="Subscriber actions" aria-haspopup="menu">⋯</button></td></tr>`;
+        return html`<tr class="clickable" data-id="${s.id}"><td><a class="sub-email" href="${subscriberHref(s.id)}">${breakableEmail(s.email)}</a>${suppressionFlag(s)}</td><td>${statusBadge(s)}</td><td class="muted joined">${fmt(s.created_at, c)}</td><td class="act"><button class="icon" data-menu="${s.id}" aria-label="Subscriber actions" aria-haspopup="menu">⋯</button></td></tr>`;
       },
     )}</tbody></table></div>`,
   );

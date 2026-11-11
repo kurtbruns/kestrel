@@ -20,8 +20,9 @@ import {
   type SendsUpdate,
   stageOf,
 } from "../send_state";
+import { clocksFor } from "../time_zone";
 import { $, $$ } from "../ui/dom";
-import { fmt, recipientCount } from "../ui/format";
+import { fmt, fmtAt, recipientCount, zoneHeader } from "../ui/format";
 import { html, setHtml } from "../ui/html";
 import {
   type ListState,
@@ -46,6 +47,7 @@ import {
   sendsNow,
   titleWithLabel,
 } from "./progress";
+import { secondClockHtml } from "./when";
 
 const message = describeError;
 
@@ -291,8 +293,11 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
         return res; // a later read paints
       }
       const { sends } = res;
+      // Upcoming times, so on the publication's clock with a second clock when the browser's
+      // differs (DESIGN §10).
+      const c = clocksFor(sends.map((s) => s.fire_at));
       const schedCard = (s: SendView) =>
-        html`<div class="card spread clickable sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${recipientCount(s.audience.count)}${emailOnlyNote(s)}</div></div>${windowControls(s)}</div>`;
+        html`<div class="card spread clickable sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmtAt(s.fire_at, c, true)} · ${recipientCount(s.audience.count)}${emailOnlyNote(s)}</div>${secondClockHtml(s.fire_at, c)}</div>${windowControls(s)}</div>`;
       const [first, ...rest] = sends;
       if (!first) {
         setHtml(schedEl, html`<p class="muted">Nothing scheduled.</p>`);
@@ -384,12 +389,14 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
         return data;
       }
       // Cells are named (subject / recipients / delivered) and the count is wrapped in
-      // `.n` so the ≤720px layout can stack a row and label its numbers from CSS alone.
+      // `.n` so the ≤720px layout can stack a row and label its numbers from CSS alone. The
+      // header names the zone once when the browser's clock differs (DESIGN §10).
+      const c = clocksFor(sends.map((s) => s.completed_at ?? s.fire_at));
       setHtml(
         listEl,
-        html`<div class="table-wrap"><table class="list-table sent-table stacks"><colgroup><col><col class="c-date"><col class="c-num"><col class="c-delivered"></colgroup><thead><tr>${th("Subject", "subject", state)}${th("When", "fire_at", state)}${th("Recipients", "audience.count", state, "num")}<th class="num">Delivered</th></tr></thead><tbody>${sends.map(
+        html`<div class="table-wrap"><table class="list-table sent-table stacks"><colgroup><col><col class="c-date"><col class="c-num"><col class="c-delivered"></colgroup><thead><tr>${th("Subject", "subject", state)}${th(zoneHeader("When", c), "fire_at", state)}${th("Recipients", "audience.count", state, "num")}<th class="num">Delivered</th></tr></thead><tbody>${sends.map(
           (s) =>
-            html`<tr class="clickable" data-id="${s.id}"><td class="subject">${titleWithLabel(html`<a href="#/sent/${s.id}">${s.subject}</a>`, s)}</td><td class="muted">${fmt(s.completed_at ?? s.fire_at)}</td><td class="num recipients"><span class="n">${s.audience.count.toLocaleString()}</span></td><td class="num delivered">${deliveredCell(s.counts)}</td></tr>`,
+            html`<tr class="clickable" data-id="${s.id}"><td class="subject">${titleWithLabel(html`<a href="#/sent/${s.id}">${s.subject}</a>`, s)}</td><td class="muted">${fmt(s.completed_at ?? s.fire_at, c)}</td><td class="num recipients"><span class="n">${s.audience.count.toLocaleString()}</span></td><td class="num delivered">${deliveredCell(s.counts)}</td></tr>`,
         )}</tbody></table></div>`,
       );
       wireSort(listEl, state, loadList);

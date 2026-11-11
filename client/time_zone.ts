@@ -1,10 +1,12 @@
-// Whether the publication has its time zone (SPEC §9), read from the settings fetched at boot,
-// and the standing lines the dashboard and the send dialogs carry while it hasn't: nothing can
-// be scheduled or sent until it is set, and the fix is always in Settings.
+// The publication's time zone as the dashboard reads it (SPEC §9), from the settings fetched at
+// boot: the clocks a screen shows its times on, and, while no zone is set, the standing lines the
+// dashboard and the send dialogs carry, since nothing can be scheduled or sent until it is.
 
 import { settingsRoute } from "../shared/settings";
+import { clocksDiffer, resolveTimeZone, timeZoneLabel } from "../shared/time_zone";
 import { providerNotConnected } from "./deployment";
 import { appState } from "./state";
+import { type Clocks, fmtAt } from "./ui/format";
 import { type Html, html } from "./ui/html";
 
 /** Settings' Time zone section, where every line about the unset zone points. */
@@ -39,4 +41,48 @@ export function noTimeZoneLine(canSchedule: boolean): Html | null {
  *  longer says it (DESIGN §3): everything but scheduling and sending still works. */
 export function noTimeZoneHealthHtml(): Html {
   return html`<span class="dash-no-time-zone">No time zone set, so nothing can be scheduled or sent until it is. Set it in <a href="${TIME_ZONE_HREF}">Settings</a>.</span>`;
+}
+
+/** The zone this browser is set to, when it is one the server takes by the same rule
+ *  (`resolveTimeZone`: a name its `Intl` knows, never a bare offset); null otherwise, so a zone
+ *  the save would refuse is never offered or shown. */
+export function browserTimeZone(): string | null {
+  try {
+    return resolveTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  } catch {
+    return null;
+  }
+}
+
+/** The publication's zone, or null while none is set (or the settings haven't loaded). */
+export function homeTimeZone(): string | null {
+  const zone = appState.appConfig?.settings?.time_zone ?? null;
+  return zone === null ? null : resolveTimeZone(zone);
+}
+
+/**
+ * The clocks for a screen showing `moments` (DESIGN §10): times read on the publication's clock,
+ * and the zone named, with upcoming times on a second clock, when the browser's clock reads any
+ * of them, or now, differently. Decided by the clocks, never the zones' names, so Detroit on a
+ * New York publication is home. With no zone set, the browser's clock, unlabeled, as before.
+ */
+export function clocksFor(moments: readonly (number | null | undefined)[] = []): Clocks {
+  const browser = browserTimeZone() ?? "UTC";
+  const home = homeTimeZone();
+  if (home === null) {
+    return { home: browser, browser, away: false, label: "" };
+  }
+  const times = [Date.now(), ...moments.filter((m): m is number => typeof m === "number")];
+  return {
+    home,
+    browser,
+    away: clocksDiffer(home, browser, times),
+    label: appState.appConfig?.settings?.time_zone_label ?? timeZoneLabel(home),
+  };
+}
+
+/** A past time standing on its own, on the publication's clock, with the zone after it when the
+ *  browser's clock differs (DESIGN §10): "edited Nov 11, 1:40 AM Eastern Time". */
+export function timeAt(ms: number | null | undefined): string {
+  return fmtAt(ms, clocksFor([ms]));
 }

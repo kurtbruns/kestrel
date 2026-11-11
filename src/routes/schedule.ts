@@ -1,8 +1,10 @@
 /** Post send actions: schedule for a future time, or send now (buffered). Authed. */
 
 import type { ScheduleResponse } from "../../shared/sends";
+import { readBack } from "../../shared/time_zone";
 import { getPost } from "../db/posts";
 import { getActiveSendForPost, renderWarnings, type SendRow } from "../db/sends";
+import { readTimeZone } from "../db/settings";
 import { fieldError, readJsonObject } from "../lib/body";
 import { HttpError, json, notFound } from "../lib/errors";
 import { unwrap } from "../lib/unwrap";
@@ -10,53 +12,11 @@ import { requireConnectedProvider } from "../providers";
 import type { RequestContext } from "../router";
 import { actorOf, param } from "../router";
 import { viewWithCursor } from "../send/describe";
+import { parseFireAtRequest, resolveFireAt } from "../send/fire_at";
 import { acceptFireAt, activeSendExists, freeze, requireTimeZone } from "../send/schedule";
 import { carryingPost } from "../services/post_view";
 import { readSettingsBody, resolveSettings, type SettingsBody } from "./post_settings";
 import { carryingSettings } from "./settings";
-
-/** An ISO-8601 timestamp that names its instant: a time part ending in `Z` or `±hh:mm`. */
-const ISO_WITH_OFFSET = /T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/i;
-
-/**
- * Parse a `fire_at` field (epoch millis, or an ISO-8601 timestamp with an offset) to
- * epoch millis, or throw a 400. A timestamp without an offset is refused rather than
- * read as UTC: an API caller meaning the publisher's local 9am would fire hours off.
- */
-export function parseFireAt(input: unknown): number {
-  if (typeof input === "number" && Number.isFinite(input)) {
-    return input;
-  }
-  if (typeof input === "string") {
-    const n = Number(input);
-    if (input.trim() !== "" && Number.isFinite(n)) {
-      return n;
-    }
-    const iso = Date.parse(input);
-    if (!Number.isNaN(iso)) {
-      if (!ISO_WITH_OFFSET.test(input.trim())) {
-        throw fieldError(
-          "fire_at",
-          "fire_at must name its timezone: an ISO-8601 timestamp ending in Z or an offset like +02:00, or epoch milliseconds",
-        );
-      }
-      return iso;
-    }
-  }
-  throw fieldError(
-    "fire_at",
-    "fire_at must be an ISO-8601 timestamp with a Z or ±hh:mm offset, or epoch milliseconds",
-  );
-}
-
-/**
- * Parse `fire_at` and pass it through `acceptFireAt`, the one gate every requested fire time
- * obeys (at least the minimum lead out, stored on the minute), so scheduling and rescheduling
- * can't drift on it (I6).
- */
-export function parseFutureFireAt(input: unknown, minLeadMs: number): number {
-  return acceptFireAt(parseFireAt(input), minLeadMs);
-}
 
 /**
  * A freeze always uses the template and identity as they stand (SPEC §6): there is no
@@ -95,14 +55,25 @@ async function scheduleOnce(c: RequestContext): Promise<Response> {
   const body = await readJsonObject(c);
   rejectStrayTemplateChoice(body);
   const fields = readSettingsBody(body);
+  const request = parseFireAtRequest(body.fire_at, body.time_zone);
   requireConnectedProvider(c.config);
-  await requireTimeZone(c.env.DB);
-  const fireAt = parseFutureFireAt(body.fire_at, c.config.minLeadMs);
+  const zone = await requireTimeZone(c.env.DB);
+  // Read on the zone's clock, then held to the one gate every fire time passes (I6).
+  const requested = resolveFireAt(request, zone);
+  const fireAt = acceptFireAt(requested.at, c.config.minLeadMs);
   // A draft has no started send, so its address can still change.
   const settings = await resolveSettings(c.env.DB, post, fields);
   const by = actorOf(unwrap(c.principal, "principal"));
-  const send = await freeze(c.env, c.config, post, fireAt, settings, { act: "schedule", by });
-  return json(await frozenAnswer(c, send), 201);
+  const send = await freeze(
+    c.env,
+    c.config,
+    post,
+    fireAt,
+    settings,
+    { act: "schedule", by },
+    requested.local,
+  );
+  return json(await frozenAnswer(c, send, zone), 201);
 }
 
 async function sendNowOnce(c: RequestContext): Promise<Response> {
@@ -124,7 +95,7 @@ async function sendNowOnce(c: RequestContext): Promise<Response> {
   }
 
   requireConnectedProvider(c.config);
-  await requireTimeZone(c.env.DB);
+  const zone = await requireTimeZone(c.env.DB);
   // The soonest time the lead allows, through the same gate as a schedule, so it lands on
   // the minute at or after it like any other fire time.
   const now = Date.now();
@@ -146,15 +117,22 @@ async function sendNowOnce(c: RequestContext): Promise<Response> {
     }
     throw err;
   }
-  return json(await frozenAnswer(c, send), 201);
+  return json(await frozenAnswer(c, send, zone), 201);
 }
 
-/** A schedule's or send-now's answer: the send as it now stands, and what the render said
- *  about the copy it froze (SPEC §5), so a caller learns of a missing image before it tests. */
-async function frozenAnswer(c: RequestContext, send: SendRow): Promise<ScheduleResponse> {
+/** A schedule's or send-now's answer: the send as it now stands, what the render said about
+ *  the copy it froze (SPEC §5), so a caller learns of a missing image before it tests, and how
+ *  its fire time reads on the publication's clock (SPEC §6). */
+async function frozenAnswer(
+  c: RequestContext,
+  send: SendRow,
+  zone: string | null,
+): Promise<ScheduleResponse> {
+  const read = unwrap(await viewWithCursor(c.env, send.id), "send");
   return {
-    ...unwrap(await viewWithCursor(c.env, send.id), "send"),
+    ...read,
     warnings: renderWarnings(send),
+    read_back: readBack(read.send.fire_at, zone, read.send.as_of),
   };
 }
 
@@ -178,6 +156,8 @@ async function repeatAnswer(
   if (differs) {
     throw await activeSendExists(c.env, send);
   }
-  const repeat: ScheduleResponse = { ...(await frozenAnswer(c, send)), idempotent: true };
+  // A repeat finds the send before the zone is required, so it reads on whatever clock is set.
+  const zone = await readTimeZone(c.env.DB);
+  const repeat: ScheduleResponse = { ...(await frozenAnswer(c, send, zone)), idempotent: true };
   return json(repeat);
 }

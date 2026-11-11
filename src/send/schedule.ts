@@ -34,6 +34,7 @@ import {
   getSend,
   insertScheduledSendStmt,
   noActiveSendFor,
+  type RequestedLocalTime,
   recordActStmt,
   rescheduledTo,
   rescheduleStmt,
@@ -53,6 +54,7 @@ import { unwrap } from "../lib/unwrap";
 import { render } from "../render/render";
 import { type EmailBranding, resolveBranding } from "../render/template_engine";
 import { sendAsItStands } from "./describe";
+import { type FireAtRequest, resolveFireAt } from "./fire_at";
 
 /** The one render a freeze performs: the post's current content and images through
  *  the single render path (I5), inside `branding` (the template plus the identity), with
@@ -129,10 +131,12 @@ export const TIME_ZONE_NOT_SET =
  * on a clock nobody chose. A send already scheduled still fires; this guards only new acts.
  * Where no provider is connected either, the caller refuses for that first.
  */
-export async function requireTimeZone(db: D1Database): Promise<void> {
-  if ((await readTimeZone(db)) === null) {
+export async function requireTimeZone(db: D1Database): Promise<string> {
+  const zone = await readTimeZone(db);
+  if (zone === null) {
     throw refusal("time_zone_not_set", TIME_ZONE_NOT_SET);
   }
+  return zone;
 }
 
 /** How many times a freeze re-reads and re-renders when the settings changed under it.
@@ -148,7 +152,8 @@ const ACTIVE_SEND_EXISTS =
  *  by the caller: they are not part of the render, so they land beside the lock rather than in
  *  the frozen copy, and a refused freeze changes neither. `recorded` is the act this freeze is, a
  *  schedule or Send now, and who took it, which the same batch adds to the send's log of acts
- *  (SPEC §6, §11); null records none, as a fixture does. */
+ *  (SPEC §6, §11); null records none, as a fixture does. `requested` is the local time the fire
+ *  time was asked in, kept beside it (SPEC §6), or null for an exact moment. */
 export async function freeze(
   env: AppEnv,
   config: Config,
@@ -156,6 +161,7 @@ export async function freeze(
   fireAt: number,
   postSettings: PublishingInput = {},
   recorded: { act: "schedule" | "send_now"; by: Actor } | null = null,
+  requested: RequestedLocalTime | null = null,
 ): Promise<SendRow> {
   const active = await getActiveSendForPost(env.DB, post.id);
   if (active) {
@@ -204,7 +210,14 @@ export async function freeze(
       results = await env.DB.batch([
         insertScheduledSendStmt(
           env.DB,
-          { ...rendered, id, post_id: post.id, fire_at: fireAt, recipient_count: audience },
+          {
+            ...rendered,
+            id,
+            post_id: post.id,
+            fire_at: fireAt,
+            recipient_count: audience,
+            requested,
+          },
           now,
           settingsVersion,
         ),
@@ -320,7 +333,7 @@ async function windowClosed(env: AppEnv, send: SendRow, what: string) {
 export async function reschedule(
   env: AppEnv,
   sendId: string,
-  fireAt: number,
+  request: FireAtRequest,
   minLeadMs: number,
   by: Actor | null = null,
 ): Promise<ActionResult> {
@@ -334,8 +347,11 @@ export async function reschedule(
   if (send.status !== "scheduled" || send.fire_at <= now) {
     throw await windowClosed(env, send, "rescheduled");
   }
-  // After the send and its state, so a send that is gone or past its window says so first.
-  await requireTimeZone(env.DB);
+  // After the send and its state, so a send that is gone or past its window says so first. A
+  // local time is read on the zone's clock only then, so a time a clock change skips is refused
+  // after those too.
+  const zone = await requireTimeZone(env.DB);
+  const { at: fireAt, local } = resolveFireAt(request, zone, now);
   // Compared on the minute it would be stored at, so a retried move is recognized
   // whatever seconds the caller put on the time.
   if (send.fire_at === onTheMinute(fireAt)) {
@@ -343,7 +359,7 @@ export async function reschedule(
   }
   const target = acceptFireAt(fireAt, minLeadMs, { now });
   const [res] = await env.DB.batch([
-    rescheduleStmt(env.DB, sendId, target, now),
+    rescheduleStmt(env.DB, sendId, target, now, local),
     ...(by
       ? [
           recordActStmt(
@@ -356,7 +372,7 @@ export async function reschedule(
   ]);
   if ((res?.meta.changes ?? 0) === 0) {
     // It changed between the read and the write: answer for what it is now.
-    return reschedule(env, sendId, fireAt, minLeadMs, by);
+    return reschedule(env, sendId, request, minLeadMs, by);
   }
   log.info("send.rescheduled", {
     sendId,
