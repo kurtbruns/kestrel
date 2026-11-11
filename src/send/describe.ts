@@ -43,8 +43,7 @@ export async function readConditionContext(
     timeZoneStatement(db),
   ]);
   return {
-    timeZoneSet:
-      storedTimeZone(settings?.results[0] as { time_zone: unknown } | undefined) !== null,
+    timeZone: storedTimeZone(settings?.results[0] as { time_zone: unknown } | undefined),
     freePlan: onFreePlanLimits(config),
     sandbox: sandboxOf(
       config,

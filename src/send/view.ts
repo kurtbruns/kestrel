@@ -303,7 +303,7 @@ export function buildSendView(
     provider: { name: config.provider, halt },
     phase,
     conditions: sendConditions(send, now, context),
-    actions: sendActions(send, now, context.timeZoneSet),
+    actions: sendActions(send, now, context.timeZone !== null),
     next_change_at: nextChangeAt(send, now),
     links: {
       self: `/api/sends/${id}`,
