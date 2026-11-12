@@ -35,9 +35,9 @@ import listGrows from "../../docs/guides/as-your-list-grows.md";
 import automate from "../../docs/guides/automate.md";
 import rateLimit from "../../docs/guides/rate-limit.md";
 import upgrade from "../../docs/guides/upgrade.md";
-import checkYourSetup from "../../docs/publishing/check-your-setup.md";
 import connectClaude from "../../docs/publishing/connect-claude.md";
 import emailTemplate from "../../docs/publishing/email-template.md";
+import getNotified from "../../docs/publishing/get-notified.md";
 import nameYourPublication from "../../docs/publishing/name-your-publication.md";
 import publishingIndex from "../../docs/publishing/README.md";
 import sendingRules from "../../docs/publishing/sending-rules.md";
@@ -69,7 +69,7 @@ const PAGES: Record<string, string> = {
   "publishing/connect-claude.md": connectClaude,
   "publishing/email-template.md": emailTemplate,
   "publishing/share-your-subscribe-link.md": shareYourSubscribeLink,
-  "publishing/check-your-setup.md": checkYourSetup,
+  "publishing/get-notified.md": getNotified,
   "get-started/deploy.md": deploy,
   "get-started/access.md": access,
   "get-started/ses.md": ses,

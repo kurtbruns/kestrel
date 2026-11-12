@@ -1,6 +1,6 @@
 # Share your subscribe link
 
-Your publication's subscribe page is at `/subscribe` on your publication's address, such as `https://newsletter.example.com/subscribe`. Copy it from the dashboard's checklist or **Settings → Ways to subscribe**, and share it wherever your readers are. A reader joins only once they confirm by email.
+Your publication's subscribe page is at `/subscribe` on your publication's address, such as `https://newsletter.example.com/subscribe`. Copy it from the dashboard's checklist or **Settings → Ways to subscribe**, and share it wherever your readers are. A reader joins only once they confirm by email. The dashboard's **Share your subscribe link** step is never checked off, since Kestrel can't see where you share it.
 
 **Signups open only once email is working.** Until an email provider is connected and has sent an email, such as a test from **Template → Send test email**, the page says the newsletter isn't taking subscribers yet. If your provider starts refusing your email, the page says signups are paused, and the dashboard says what to fix. Either way every visitor gets the same page and nothing is saved. You can share the link anyway, and it opens once email works ([Connect Amazon SES](../get-started/ses.md)).
 
@@ -8,7 +8,7 @@ Your publication's subscribe page is at `/subscribe` on your publication's addre
 
 ## How a reader joins
 
-A reader enters their address, gets a confirmation email, and presses **Confirm subscription** on the page its link opens. Only then do they receive your posts. Opening the link alone records nothing, since mail scanners open links before a person does. This double opt-in is your record that each reader asked for your newsletter.
+A reader enters their address, gets a confirmation email, and presses **Confirm subscription** on the page its link opens. Only then do they receive your posts. Opening the link alone records nothing, since mail scanners open links before a person does. This double opt-in is your record that each reader asked for your newsletter. To see it as a reader does, subscribe with a personal address and confirm: you appear under **Subscribers** as **Confirmed**.
 
 Every address gets the same answer, so the form never reveals who subscribes. Behind it, Kestrel sends a confirmation only when one is due:
 

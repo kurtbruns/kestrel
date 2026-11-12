@@ -51,7 +51,7 @@ Kestrel emails each notifications address when a send finishes, and right away w
 
 Notifications travel through SES like the newsletter, so they can't tell anyone when SES refuses the account. [Set up alerts](../guides/alerts.md) covers that.
 
-The publisher sets their own address in [Check your setup](../publishing/check-your-setup.md).
+The publisher sets their own address in [Get notified](../publishing/get-notified.md).
 
 ## 4. Send a real post to yourself
 

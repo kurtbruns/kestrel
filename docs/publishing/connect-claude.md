@@ -47,6 +47,7 @@ Ask Claude in plain words, the way you'd ask a colleague, and ask it what it can
 - "Proofread my draft titled 'First frost' and schedule it to go out Friday at 7am."
 - "Add jack@example.com to the list."
 - "Import the subscribers in this CSV from my old newsletter."
+- "What's left to set up?" Claude answers with the dashboard's setup steps, from the same facts.
 
 Whatever Claude is asked, Kestrel holds these for any client:
 
