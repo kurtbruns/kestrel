@@ -108,7 +108,7 @@ export function refusalAdvice(cause: HaltCause | null): string {
     case "opt_in":
       return `The AWS account isn’t signed up for SES: enable SES for the account in the region AWS_REGION names, or settle the account’s activation or billing with AWS. ${PASS_THIS_ALONG}`;
     case "configuration":
-      return `Check that the configuration set Kestrel sends with exists in the SES region: the one SES_CONFIGURATION_SET names, or the sending identity’s default if that secret isn’t set. Or create the set in the SES console. ${PASS_THIS_ALONG}`;
+      return `Check that the configuration set Kestrel sends with exists in the SES region: the one SES_CONFIGURATION_SET names, or the sending identity’s default if that setting isn’t set. Or create the set in the SES console. ${PASS_THIS_ALONG}`;
     case "sending_pool":
       return `The configuration set SES_CONFIGURATION_SET names sends through a dedicated IP pool SES can’t find: pick an existing pool in the set’s sending options, or remove the pool, in the SES console. ${PASS_THIS_ALONG}`;
     case "unsupported":

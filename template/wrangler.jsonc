@@ -83,7 +83,9 @@
       // stored its secrets, and empty, "", until then, which means none connected: the app runs
       // but sends nothing. It is declared so wrangler doesn't warn that the top level's is
       // missing here. Never `fake`, which records every send as delivered and mails no one; the
-      // app refuses it on this hostname.
+      // app refuses it on this hostname. Connect Amazon SES also adds SES_CONFIGURATION_SET here,
+      // the configuration set SES reports bounces and complaints under, once the set exists, so
+      // nothing names a set before it's made.
       "vars": {
         "PROVIDER": "",
         "APP_ORIGIN": "https://newsletter.example.com",
