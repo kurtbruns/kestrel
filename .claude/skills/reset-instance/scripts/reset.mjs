@@ -285,7 +285,7 @@ function clear(t, expected) {
     console.log(`  NOT deleted: ${line}`);
   }
   console.log(
-    `  kept:        ${KEPT.map((table) => `${table} (${after[table]} row)`).join(", ")}${moved.length ? `; ${moved.join(", ")} changed while this ran, by the app` : ""}`,
+    `  kept:        ${KEPT.map((table) => `${table} (${after[table]} row(s))`).join(", ")}${moved.length ? `; ${moved.join(", ")} changed while this ran, by the app` : ""}`,
   );
   if (restorePoint) {
     console.log(`  restore point (database only, before the clear): ${restorePoint}`);
