@@ -14,6 +14,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -657,6 +658,39 @@ describe("kestrel check-context on files with the header line earlier releases w
     expect(Object.fromEntries(FILES.map((f) => [f, theirs(f)]))).toEqual(after);
   });
 
+  it("still notes the header removal when an answer fails partway through the run", () => {
+    publishOld();
+    for (const file of [CLAUDE_MD, MIGRATE_SKILL]) {
+      put(file, withHeader(RELEASE[file], OLD));
+    }
+    // A copy --update has to replace but can't write, so the run fails on the second file.
+    put(UPGRADE_SKILL, older(UPGRADE_SKILL));
+    chmodSync(path(UPGRADE_SKILL), 0o444);
+    upgradedFrom(OLD);
+
+    const r = check("--update");
+
+    expect(r.code).not.toBe(0);
+    expect(r.out.trim().split("\n")).toEqual([
+      `[check-context] ${CLAUDE_MD}: current`,
+      `[check-context] ${REMOVED("2 files")}`,
+    ]);
+    expect(theirs(MIGRATE_SKILL)).toBe(RELEASE[MIGRATE_SKILL]);
+  });
+
+  it("notes the header removal after --merged's answer too", () => {
+    put(CLAUDE_MD, withHeader(RELEASE[CLAUDE_MD], "1.21.0"));
+
+    const r = check("--merged");
+
+    expect(r.code).toBe(0);
+    expect(r.out.trim().split("\n")).toEqual([
+      "[check-context] --merged has nothing to record any more: check-context compares your files with the release you upgraded from, so once you commit the merge, it stands.",
+      `[check-context] ${REMOVED("1 file")}`,
+    ]);
+    expect(theirs(CLAUDE_MD)).toBe(RELEASE[CLAUDE_MD]);
+  });
+
   it("leaves a file whose header line it can't read as it is, and says so", () => {
     const damaged = withHeader(RELEASE[CLAUDE_MD], "1.21.0").replace(
       /sha256:[0-9a-f]{8}/,
@@ -672,7 +706,9 @@ describe("kestrel check-context on files with the header line earlier releases w
         `[check-context] ${CLAUDE_MD}: line 1 looks like the header line earlier releases wrote, but isn't one check-context can read, so the file is left as it is.`,
       ),
     );
-    expect(warning).toBeGreaterThan(said.indexOf(lineFor(r.out, CLAUDE_MD)));
+    const answer = said.indexOf(lineFor(r.out, CLAUDE_MD));
+    expect(answer).toBeGreaterThan(-1);
+    expect(warning).toBeGreaterThan(answer);
     expect(theirs(CLAUDE_MD)).toBe(damaged);
   });
 });

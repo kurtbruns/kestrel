@@ -301,9 +301,12 @@ function reportOneDiff(file, mine, git) {
 /** `kestrel check-context [--update] [--from <release>]`. */
 export function checkContextCommand(argv, root = process.cwd()) {
   const { stripped, unreadable } = stripHeaders(root);
-  // Said once, after every file's answer, and never "nothing else changed": a file it touched
-  // may be one Kestrel changed in this release, which its own line says.
-  const strippedNote = () => {
+  try {
+    answerEachFile(argv, root);
+  } finally {
+    // Said once, after every file's answer, and never "nothing else changed": a file it touched
+    // may be one Kestrel changed in this release, which its own line says. Said even when an
+    // answer fails partway, since the headers are already gone by then.
     for (const line of unreadable) {
       say(line);
     }
@@ -312,14 +315,16 @@ export function checkContextCommand(argv, root = process.cwd()) {
         `Removed the header line earlier releases wrote from ${stripped === 1 ? "1 file" : `${stripped} files`}, and only that line: this release keeps no record in the files, since it compares them with the releases on npm. Commit that with the upgrade.`,
       );
     }
-  };
+  }
+}
 
+/** Say, for each context file, how it stands against the release, and with --update take it. */
+function answerEachFile(argv, root) {
   if (argv.includes("--merged")) {
     // Older upgrade skills run this after a merge; the merge is the record now.
     say(
       "--merged has nothing to record any more: check-context compares your files with the release you upgraded from, so once you commit the merge, it stands.",
     );
-    strippedNote();
     return;
   }
 
@@ -444,5 +449,4 @@ export function checkContextCommand(argv, root = process.cwd()) {
       "The changelog says what changed in Claude's context and why, and marks a change that bears on safety.",
     );
   }
-  strippedNote();
 }
