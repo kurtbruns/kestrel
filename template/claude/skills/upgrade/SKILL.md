@@ -23,8 +23,8 @@ The production migration, the deploy, and anything in the page's **Go back** sec
 
 A deploy onto a database missing the release's migrations takes the instance down until they're applied: the public pages say the newsletter is unavailable, and nothing sends.
 
-- **Run the migration as a command of its own.** Never chain it with the deploy (`&&`, `;`), and never pipe it (`| tail`), since a pipe hides its exit code and a failure reads as success.
+- **Run the migration as a command of its own,** never in one command with the deploy, so you can read its output, run the check, and confirm the deploy in between. Never pipe it (`| tail`) or follow it with `;`: a pipe reports the last command's exit code, and `;` runs the next command whatever happened, so a failure reads as success.
 - **Read its whole output before going on.** Check that every migration `sync-migrations` added for this release is listed with a ✅, or, when it added none, that it says there are none to apply. Then run the page's check that nothing is left, and report what it prints.
-- **If it fails, stop, and don't deploy.** Tell the person, quoting the error line, which wrangler may bury under account details it prints after it. A passing error from Cloudflare's API is the likely cause, and running the same command again is safe, since an applied migration is recorded and never applied twice. Run it again, and deploy only once the check says nothing is left.
+- **If it fails, stop, and don't deploy.** Tell the person, quoting the error line, which wrangler may bury under account details it prints after it. A temporary error from Cloudflare's API is the likely cause, and running the same command again is safe, since an applied migration is recorded and never applied twice. Run it again, and deploy only once the check says nothing is left.
 
 Finish with the page's **Check it** list, reporting each result.

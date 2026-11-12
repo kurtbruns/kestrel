@@ -118,7 +118,7 @@ A release changes the database only by adding a migration. Applying it keeps eve
 
     It lists the migrations it's about to apply, and asks you to confirm. Run by Claude, or in any other shell that isn't interactive, it answers its own prompt and applies them without asking. As it applies each one, it prints the list again with a ✅ beside each migration applied so far. When a release has none, it says `✅ No migrations to apply!`.
 
-    If it fails, it prints an error, such as a passing one from Cloudflare's API, `Authentication error [code: 10000]`, and any migration it didn't reach has no ✅. Don't deploy. Run the same command again: a migration that applied is recorded, so a second run applies only what's left.
+    If it fails, it prints an error, and any migration it didn't reach has no ✅. The error is often a temporary one from Cloudflare's API, such as `Authentication error [code: 10000]`. Don't deploy. Run the same command again: a migration that applied is recorded, so a second run applies only what's left.
 
 1. Check that nothing is left to apply:
 
