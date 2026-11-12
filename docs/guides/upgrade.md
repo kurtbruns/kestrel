@@ -12,6 +12,12 @@ A release can ask you to change a setting or a record before it runs. The change
 
 1. Read the [release notes](https://github.com/kurtbruns/kestrel/releases) for every version after yours, up to the one you're moving to. Each release opens with an **Upgrading from…** paragraph that says what to do. Its **Breaking** entries say what changed underneath you.
 
+1. If you're more than one release behind, upgrade straight to the release you're moving to, in one pass through this guide. Each paragraph names an `npm install` of its own release, but you install only the target, once. Section 2 brings in every release between: `sync-migrations` copies each migration you don't have, and `check-context` compares from the release in your last commit. Do every other step each paragraph names, oldest release first, where it falls in this guide. Keep in mind:
+
+    - A number in a paragraph is that release's alone. If one says it changes two of your Claude Code files, `check-context` can report more, counting every release you skip.
+    - A release's change to how you upgrade, such as a new check in the upgrade skill, isn't in force until that release is installed. Until the install, you upgrade on the guide and skill you have now. After it, the target's guide and skill apply, from the step after the install.
+    - If a paragraph says it removed or renamed something your current skill or guide uses, such as a file or a command, use what it names instead.
+
 1. Check that your repository is clean, so the upgrade's commit holds only the upgrade and going back undoes nothing else:
 
     ```bash
@@ -84,11 +90,16 @@ Each step here changes only your instance's repository. Nothing reaches your dep
 
     You see the new version with your local content. It can't show how the changes treat your real data. A staging environment can.
 
-1. Commit the upgrade as one commit, and push it. Going back, below, undoes this commit:
+1. Commit the upgrade as one commit. Going back, below, undoes this commit:
 
     ```bash
     git add -A
     git commit -m "Upgrade Kestrel to X.Y.Z"
+    ```
+
+    If your repository has a remote, push it:
+
+    ```bash
     git push
     ```
 
@@ -105,6 +116,8 @@ D1 keeps a history of your database, called Time Travel, for 30 days on Workers 
     ```
 
     It prints a bookmark for the database's current state. Copy it, and keep it until the upgrade checks out.
+
+    It also prints a command to restore to that bookmark. Don't use it: it leaves out `--env production`. Without it, wrangler aims at the database named at the top level of your `wrangler.jsonc`, your local development one, not your app's. To go back, use the command in [Go back](#go-back), which names production.
 
 ## 4. Apply the database changes
 
@@ -158,7 +171,7 @@ Near its end, the output names your app's hostname, then its schedule and a vers
 
 1. Reload the editor. The foot of the **Docs** tab's contents list shows the new version, which links to its release page.
 
-1. Send yourself a test email, as in [Verify it works](../get-started/verify.md#1-send-yourself-a-test-email). Don't send a real post to check an upgrade: on a live instance, it goes to your whole list.
+1. If an email provider is connected, send yourself a test email, as in [Verify it works](../get-started/verify.md#1-send-yourself-a-test-email). Don't send a real post to check an upgrade: on a live instance, it goes to your whole list.
 
 1. In the logs, filter on `event` equal to `sweep.tick`: a line still arrives every minute. [Read the logs](../get-started/verify.md#7-read-the-logs) shows where the logs are.
 
@@ -191,7 +204,7 @@ If the new release misbehaves, deploy the previous one, and put the database bac
     npx wrangler d1 time-travel restore DB --env production --bookmark=REPLACE_WITH_BOOKMARK
     ```
 
-1. Push the revert to your repository:
+1. If your repository has a remote, push the revert to it:
 
     ```bash
     git push

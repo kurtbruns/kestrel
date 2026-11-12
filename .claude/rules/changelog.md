@@ -28,6 +28,14 @@ A non-blocking `Stop` hook (`.claude/hooks/changelog-reminder.mjs`, wired in `.c
 - **The operator's Claude context.** A change to `template/claude/` (the context `kestrel init` writes into an instance) gets a line saying what changed in it and why, since an operator who edited theirs merges it by hand. A change that bears on safety, such as a new caution, says so in the line.
 - **One story, one line.** When a later change reworks something already under `[Unreleased]`, edit that line rather than adding a second one that half-contradicts it. `[Unreleased]` describes the release as it will ship, not the order the work landed in.
 
+## The Upgrading paragraph, read by someone skipping it
+
+A release's *Upgrading* paragraph is written from the release before it, but an operator several releases behind reads every paragraph between theirs and the target, then installs only the target, once, as the upgrade guide's section 1 says. So each paragraph must still hold for someone who never installs its release:
+
+- **What an older skill or guide reads, said here.** A release that removes or renames something an earlier release's upgrade skill or guide reads (a docs path, a command, a flag, an npm script) says so in its *Upgrading* paragraph, naming what to use instead, never only in an entry under *Changed*. An operator skipping releases upgrades on the oldest skill, and the paragraph is what the guide tells them to read.
+- **A count is this release's own.** Say what this release changes (two context files, one migration), and let the guide say that `check-context` and `sync-migrations` count across every release skipped. Never write a count meant to cover more than this release.
+- **A change to the upgrade itself takes effect at its install.** A new gate or a skill change applies from the next upgrade, which the paragraph says; the guide already tells someone skipping it that the skill they have runs until the install.
+
 ## Cutting a release
 
 When to cut one and how to number it is `.claude/rules/release.md`; the `release` skill cuts one, from the version bump to the docs site and the demo.

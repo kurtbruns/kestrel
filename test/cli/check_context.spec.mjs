@@ -65,6 +65,11 @@ const RELEASED_HEADER = {
 /** The one line a run that removed headers from `count` prints about it, after every file's. */
 const REMOVED = (count) =>
   `Removed the header line earlier releases wrote from ${count}, and only that line: this release keeps no record in the files, since it compares them with the releases on npm. Commit that with the upgrade.`;
+/** The closing line of a run with a change to take, naming the releases since `from` when there is one. */
+const CHANGELOG = (from) =>
+  from
+    ? `[check-context] The changelog says what changed in Claude's context and why, and marks a change that bears on safety, in its sections for each release after ${from} up to ${VERSION}.`
+    : "[check-context] The changelog says what changed in Claude's context and why, and marks a change that bears on safety.";
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 /** `text` with the header a release `version` wrote into it. */
 const withHeader = (text, version) =>
@@ -234,7 +239,7 @@ describe("kestrel check-context", () => {
     expect(lineFor(r.out, CLAUDE_MD)).toBe(
       `[check-context] ${CLAUDE_MD}: Kestrel changed it between ${OLD} and ${VERSION}, and you haven't edited it; \`npm run check-context -- --update\` takes ${VERSION}'s`,
     );
-    expect(r.out).toContain("changelog");
+    expect(r.out.trim().split("\n").at(-1)).toBe(CHANGELOG(OLD));
     expect(theirs(CLAUDE_MD)).toBe(older(CLAUDE_MD));
     expect(npmCalls()).toMatch(
       new RegExp(`^pack --ignore-scripts --pack-destination \\S+ @kurtbruns/kestrel@${OLD}\n$`),
@@ -307,7 +312,7 @@ describe("kestrel check-context", () => {
       `[check-context] ${CLAUDE_MD}: differs from ${VERSION}'s, and there's no earlier release to compare it with: your last commit already names ${VERSION}. If you've committed an upgrade, \`npm run check-context -- --from <release>\` shows what Kestrel changed since the release you came from.`,
     );
     expect(r.out).toContain(`-${DROPPED.trim()}`);
-    expect(r.out).toContain("changelog");
+    expect(r.out.trim().split("\n").at(-1)).toBe(CHANGELOG(null));
     expect(theirs(CLAUDE_MD)).toBe(older(CLAUDE_MD));
     expect(npmCalls()).toBe("");
   });
@@ -322,6 +327,8 @@ describe("kestrel check-context", () => {
     expect(lineFor(r.out, CLAUDE_MD)).toContain(
       `Kestrel changed it between ${OLD} and ${VERSION}, and you haven't edited it`,
     );
+    // The closing line names the range, so a count is read against those changelog sections.
+    expect(r.out.trim().split("\n").at(-1)).toBe(CHANGELOG(OLD));
   });
 
   it("reports a file new in this release, one the release upgraded from didn't ship, and --update adds it", () => {
@@ -334,7 +341,7 @@ describe("kestrel check-context", () => {
     expect(lineFor(r.out, MIGRATE_SKILL)).toBe(
       `[check-context] ${MIGRATE_SKILL}: new in ${VERSION}; \`npm run check-context -- --update\` adds it`,
     );
-    expect(r.out).toContain("changelog");
+    expect(r.out.trim().split("\n").at(-1)).toBe(CHANGELOG(OLD));
     expect(existsSync(path(MIGRATE_SKILL))).toBe(false);
 
     const u = check("--update");
@@ -621,7 +628,7 @@ describe("kestrel check-context on files with the header line earlier releases w
         (f) =>
           `[check-context] ${f}: Kestrel changed it between ${OLD} and ${VERSION}, and you haven't edited it; \`npm run check-context -- --update\` takes ${VERSION}'s`,
       ),
-      "[check-context] The changelog says what changed in Claude's context and why, and marks a change that bears on safety.",
+      CHANGELOG(OLD),
       `[check-context] ${REMOVED("3 files")}`,
     ]);
     expect(r.out).not.toContain("nothing else");
