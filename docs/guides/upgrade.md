@@ -108,15 +108,33 @@ D1 keeps a history of your database, called Time Travel, for 30 days on Workers 
 
 ## 4. Apply the database changes
 
-A release changes the database only by adding a migration. Applying it keeps everything already in the database.
+A release changes the database only by adding a migration. Applying it keeps everything already in the database. The new release's code expects them, so the deploy in section 5 waits until this section's check says nothing is left.
 
-```bash
-npx wrangler d1 migrations apply DB --remote --env production
-```
+1. Apply the migrations. Run it on every upgrade, as a command of its own, never joined to the deploy:
 
-It lists the migrations it's about to apply, and asks you to confirm. Run by Claude, or in any other shell that isn't interactive, it answers its own prompt and applies them without asking. When a release has none, it says there's nothing to apply. Run it on every upgrade.
+    ```bash
+    npx wrangler d1 migrations apply DB --remote --env production
+    ```
+
+    It lists the migrations it's about to apply, and asks you to confirm. Run by Claude, or in any other shell that isn't interactive, it answers its own prompt and applies them without asking. As it applies each one, it prints the list again with a ✅ beside each migration applied so far. When a release has none, it says `✅ No migrations to apply!`.
+
+    If it fails, it prints an error, such as a passing one from Cloudflare's API, `Authentication error [code: 10000]`, and any migration it didn't reach has no ✅. Don't deploy. Run the same command again: a migration that applied is recorded, so a second run applies only what's left.
+
+1. Check that nothing is left to apply:
+
+    ```bash
+    npx wrangler d1 migrations list DB --remote --env production
+    ```
+
+    ```
+    ✅ No migrations to apply!
+    ```
+
+    If it prints `Migrations to be applied:` and a list instead, those are still missing. Apply them as in the step above, and check again.
 
 ## 5. Deploy
+
+Deploy only once section 4's check says there are no migrations to apply.
 
 ```bash
 npx wrangler deploy --env production
