@@ -53,6 +53,7 @@ export const REFERENCE_ANCHORS: Readonly<Record<string, string>> = {
   SENDING_DOMAIN: "vars",
   ARCHIVE_BASE_PATH: "vars",
   SES_MAX_SEND_RATE: "vars",
+  SES_CONFIGURATION_SET: "vars",
   SUBREQUEST_BUDGET: "vars",
   MIN_LEAD_SECONDS: "vars",
   ARCHIVE_ORIGIN: "vars",
@@ -63,7 +64,6 @@ export const REFERENCE_ANCHORS: Readonly<Record<string, string>> = {
   AWS_ACCESS_KEY_ID: "secrets",
   AWS_SECRET_ACCESS_KEY: "secrets",
   SNS_TOPIC_ARN: "secrets",
-  SES_CONFIGURATION_SET: "secrets",
   SIMULATE_SENDS: "what-the-app-refuses",
 };
 

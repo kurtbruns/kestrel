@@ -78,6 +78,10 @@ describe("the refused-configuration wall (SPEC §9)", () => {
     expect($("a", wall).getAttribute("href")).toBe(`${CONFIGURATION_REFERENCE}#vars`);
   });
 
+  it("links the SES configuration set to Vars, since the guide names it in wrangler.jsonc, not as a secret", () => {
+    expect(referenceUrl("SES_CONFIGURATION_SET")).toBe(`${CONFIGURATION_REFERENCE}#vars`);
+  });
+
   it("draws the wall once, however many calls in flight it fails", async () => {
     fake = fakeApi([{ path: "/api/posts", reply: () => jsonResponse(REFUSED, 500) }]);
     const first = api("/api/posts").catch(() => undefined);

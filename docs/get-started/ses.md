@@ -23,7 +23,7 @@ The same form sets a custom MAIL FROM domain, so SPF also passes for your domain
 
 1. Under **Configuration**, choose **Identities**, then **Create identity**.
 
-1. Select **Domain**, and enter `send.example.com`. Leave **Assign a default configuration set** and **Assign to a tenant** unchecked. Section 4 makes the configuration set, and makes it the default then.
+1. Select **Domain**, and enter `send.example.com`. Leave **Assign a default configuration set** and **Assign to a tenant** unchecked. Section 4 makes the configuration set, and the app names it on every email, so the hostname needs no default.
 
 1. Select **Use a custom MAIL FROM domain**. In **MAIL FROM domain**, enter `bounce`; the form shows `.send.example.com` after it. For **Behavior on MX failure**, keep **Use default MAIL FROM domain**.
 
@@ -83,7 +83,7 @@ A new SES account starts in the sandbox: it sends only to addresses you've verif
 
 ## 4. Send bounces and complaints to the app
 
-SES reports bounces and complaints through Amazon Simple Notification Service (SNS), which delivers them to the app. The app then stops mailing an address that bounced or complained. A configuration set says which events SES reports, and an SNS topic carries them.
+SES reports bounces and complaints through Amazon Simple Notification Service (SNS), which delivers them to the app. The app then stops mailing an address that bounced or complained. A configuration set says which events SES reports, and an SNS topic carries them. The app names the set on every email, once section 6 gives it the set's name, so the hostname needs no default set in SES.
 
 1. In SES, under **Configuration**, choose **Configuration sets**, then **Create set**. Name it `kestrel-mail`, keep every other option as it is, and choose **Create set**.
 
@@ -94,8 +94,6 @@ SES reports bounces and complaints through Amazon Simple Notification Service (S
 1. For **Destination type**, select **Amazon SNS**. Name it `kestrel-sns`, and keep **Event publishing** enabled.
 
 1. On the same screen, under **SNS topic**, choose **Create SNS topic**. Name it `kestrel-events`, leave the display name empty, and choose **Create topic**. Then select `kestrel-events` in the topic menu, if it isn't already. Choose **Next**, then **Add destination**.
-
-1. Make the set your hostname's default, so SES reports on every email sent from it. Under **Identities**, open `send.example.com`, and choose its **Configuration set** tab, below the summary. Edit the **Default configuration set**, select **Assign a default configuration set**, select `kestrel-mail`, and save.
 
 1. Open the topic in the [SNS console](https://console.aws.amazon.com/sns/), in the same region, and find its ARN. It looks like `arn:aws:sns:us-east-1:111122223333:kestrel-events`, where `us-east-1` is your region's code and `111122223333` is your account ID.
 
@@ -122,12 +120,6 @@ SES reports bounces and complaints through Amazon Simple Notification Service (S
 
     ```bash
     npx wrangler secret put SNS_TOPIC_ARN --env production
-    ```
-
-1. Store the configuration set's name, `kestrel-mail`. It's optional but recommended: the app names the set on every email, so SES reports on each one even without the hostname's default. Type it exactly as the set is named in this region, since SES refuses every email that names a set it can't find:
-
-    ```bash
-    npx wrangler secret put SES_CONFIGURATION_SET --env production
     ```
 
 ## 5. Create the app's AWS key
@@ -191,7 +183,7 @@ To update an existing key's policy, open **Policies** in the IAM console, then `
 
 Until now the app has run with no email provider connected, refusing to send. Setting `PROVIDER` to `ses` connects SES, with the secrets you stored in sections 4 and 5. If a required one is missing, the app refuses to run until you store it, and `/health` names it.
 
-1. In `wrangler.jsonc`, edit the `production` block's `vars`. Change `PROVIDER` to `ses` (it's `""` on a new instance; add it if your block has none). Change `AWS_REGION` to your region's code from section 1. Your other values stay as they are. The block ends up like this:
+1. In `wrangler.jsonc`, edit the `production` block's `vars`. Change `PROVIDER` to `ses` (it's `""` on a new instance; add it if your block has none). Change `AWS_REGION` to your region's code from section 1. Add `SES_CONFIGURATION_SET`, the configuration set from section 4, typed exactly as the set is named in this region, since SES refuses every email that names a set it can't find. Your other values stay as they are. The block ends up like this:
 
     ```jsonc
     "vars": {
@@ -200,7 +192,8 @@ Until now the app has run with no email provider connected, refusing to send. Se
       "ARCHIVE_BASE_PATH": "/archive",
       "SENDING_DOMAIN": "send.example.com",
       "FROM_ADDRESS": "newsletter@send.example.com",
-      "AWS_REGION": "us-east-1"      // ← change: your region's code
+      "AWS_REGION": "us-east-1",     // ← change: your region's code
+      "SES_CONFIGURATION_SET": "kestrel-mail"  // ← the set you created in section 4
     }
     ```
 

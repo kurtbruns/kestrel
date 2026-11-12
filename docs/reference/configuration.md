@@ -66,6 +66,14 @@ Vars go in the environment block's `vars`. Every value is a string.
 
     The SES region. The template sets `us-east-1`. SES keeps identities, quotas, and the sandbox separately in each region, so set the region where you verified your sending hostname. On an AWS page, go by the region menu at the top right, not the page's address. A page for a global service, such as IAM or Billing, has no region to choose, so open SES before you choose. A few newer regions must be [enabled for your account](https://docs.aws.amazon.com/accounts/latest/reference/manage-acct-regions.html) first.
 
+- `SES_CONFIGURATION_SET` required with SES, for bounces and complaints
+
+    The configuration set named on every email, such as `kestrel-mail`, so SES reports bounces and complaints to the app. Type it exactly as the set is named in `AWS_REGION`. The template leaves it out, and [Connect Amazon SES](../get-started/ses.md#6-connect-the-app-and-deploy) adds it once the set exists. A name set here takes precedence over a default configuration set on the sending identity in SES, so an instance needs no default there. Without it, the app still runs and sends under the identity's default, if it has one. With neither, **Settings → Email provider** warns in amber that bounces and complaints won't reach the app.
+
+    A name SES can't find in the region holds every list send until it's fixed. **Settings → Email provider** says so in red within about ten minutes, without sending anything, and does the same when the set's sending is turned off, as long as the app's key may call `ses:GetConfigurationSet`.
+
+    An instance set up by an earlier release may store the name as a secret instead. The app reads it the same way either way, so it needs no change. To move it here, delete the secret first, then add the var and deploy: `npx wrangler secret delete SES_CONFIGURATION_SET --env production`.
+
 - `FROM_ADDRESS` required with a real provider
 
     The address every email comes from, and the identity your provider authenticates. Refused unless it's an email address, and never on `example.com`, unless `PROVIDER` is `fake`. With Amazon SES, when no identity covering it is verified for sending in `AWS_REGION`, **Settings → Email provider** says so in red within about ten minutes, without sending anything.
@@ -145,10 +153,6 @@ Store each with `npx wrangler secret put NAME --env production`, which prompts f
 - `SNS_TOPIC_ARN` required with SES
 
     The SNS topic the SES webhook accepts. The webhook refuses a report from every other topic, and logs `webhook.refused` naming both. When SES took an email over an hour ago with no report since, and a report came from another topic in the same AWS account and region, **Settings → Email provider** names both topics in amber. Check which topic the configuration set's SNS destination uses in the SES console before changing either side.
-
-- `SES_CONFIGURATION_SET` optional, recommended with SES
-
-    The configuration set named on every email, so SES reports bounces and complaints. A name SES can't find in the region holds every list send until it's fixed. **Settings → Email provider** says so in red within about ten minutes, without sending anything, and does the same when the set's sending is turned off, as long as the app's key may call `ses:GetConfigurationSet`.
 
 - `DEV_AUTH_SECRET` never on a deployed environment
 
