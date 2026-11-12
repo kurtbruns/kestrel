@@ -1,6 +1,6 @@
 # Check your setup
 
-Three checks before your readers get anything: is email getting out, will you hear about problems, and what will your readers get. The dashboard's setup steps tick each one off from what Kestrel sees, so you, and Claude, can tell what's left.
+Three checks before your readers get anything: is email getting out, will you hear about problems, and what will your readers get. The dashboard's setup steps tick each one off from what Kestrel sees, so you, and Claude, can tell what's left. Setup ends when your first post goes out to the archive, and an email-only send doesn't count. Sharing your subscribe link is never checked off, since Kestrel can't see it.
 
 **Email has to be connected first.** Until it is, nothing can be sent, and **Send a test email** waits on the dashboard's **Connect Amazon SES** step, which [Connect Amazon SES](../get-started/ses.md) covers.
 

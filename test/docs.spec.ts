@@ -85,6 +85,24 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
     expect(sets[1]?.intro).toContain('href="#/docs/publishing"');
   });
 
+  it("links each page once in a section's list, an anchor included", () => {
+    // A link in the list is what puts a page in a section, so a step another step's page
+    // covers is listed without one. getkestrel.dev's sync drops an item whose link has an
+    // anchor, which the bundled-pages check below never sees.
+    for (const index of [publishingIndex, selfHostingIndex]) {
+      for (const section of index.split(/^## /m).slice(1)) {
+        const items = section.split("\n").filter((line) => /^\s*(?:\d+\.|-) /.test(line));
+        const targets = items.flatMap((line) => [...line.matchAll(/\]\(([^)#]+)(#[^)]*)?\)/g)]);
+        expect(
+          targets.filter(([, , anchor]) => anchor !== undefined).map(([link]) => link),
+          section.split("\n")[0],
+        ).toEqual([]);
+        const pages = targets.map(([, page]) => page);
+        expect(new Set(pages).size, section.split("\n")[0]).toBe(pages.length);
+      }
+    }
+  });
+
   it("lists every bundled page in exactly one index once, Publishing's pages in its folder", () => {
     // The indexes are written by hand, so a page added without listing it, listed twice, or
     // linked by a path no import provides would quietly drop out of the docs.
