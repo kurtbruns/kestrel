@@ -20,9 +20,9 @@ A wider or taller image is cropped to its center square, and a smaller one is sc
 
 Every time Kestrel shows you or Claude is on this clock: the times you schedule posts at, and the times in your notifications. Your published posts are dated by its day. A post sent at 8 PM in New York is dated that day, even in London.
 
-You can change it at any time. A scheduled post still goes out at the same moment, and Settings shows its time on the new clock before you save. Public dates follow the new zone.
+You can change it at any time. A scheduled post still goes out at the same moment, and Settings shows its time on the new clock before you save. If that isn't the time you meant, move it with **Edit schedule** after saving. Public dates follow the new zone.
 
-Kestrel's time zone rules come from Cloudflare, which can trail a government's change to them by months. If that affects a time you pick, the **Schedule** dialog says so.
+Kestrel's time zone rules come from Cloudflare, which can trail a government's change to them by months, so a time you schedule may go out an hour off until Cloudflare catches up. When your browser's rules and the server's disagree about a time you pick, the **Schedule** dialog says so, and the post goes out by the server's clock.
 
 ## When to provide a mailing address
 
