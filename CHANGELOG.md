@@ -13,6 +13,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Changed
 
 - The Publishing docs' Check your setup page is now Get notified, at `#/docs/get-notified` in the Docs tab and `docs/publishing/get-notified.md`, so the publisher's setup pages open on Name your publication rather than on the test email that whoever runs the instance sends. Its other checks moved to the pages they belong to: what to look for in a test to Write and send a post, and subscribing yourself to Share your subscribe link. A link or bookmark to `check-your-setup` no longer opens.
+- A safety change to the upgrade skill in the operator's Claude context: it now has Claude run the production migration as a command of its own, never chained with the deploy or piped, read that each of the release's migrations applied, and deploy only once `npx wrangler d1 migrations list DB --remote --env production` says none are left; on a failed run it stops and runs the migration again. A transient Cloudflare error during a migration, hidden by a pipe, had let a deploy go out onto a database without its migrations. The guide's Apply the database changes step now shows what a successful and a failed run look like, and ends with that check.
 
 ## [1.24.0] - 2026-11-11
 
