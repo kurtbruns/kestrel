@@ -18,8 +18,8 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
   it("renders the docs in the indexes' order, Publishing first, with titles from each doc's H1 and an HTML fragment", () => {
     const { docs } = renderDocs();
     expect(docs.map((d) => `${d.set}/${d.section}/${d.slug}`)).toEqual([
-      "publishing/set-up-your-publication/check-your-setup",
       "publishing/set-up-your-publication/name-your-publication",
+      "publishing/set-up-your-publication/get-notified",
       "publishing/set-up-your-publication/your-list",
       "publishing/set-up-your-publication/write-a-post",
       "publishing/set-up-your-publication/share-your-subscribe-link",
@@ -83,6 +83,24 @@ describe("docs registry (the two sets' index files and the pages they list)", ()
     // Each intro links the other set's index, which the room serves at the set's id.
     expect(sets[0]?.intro).toContain('href="#/docs/self-hosting"');
     expect(sets[1]?.intro).toContain('href="#/docs/publishing"');
+  });
+
+  it("links each page once in a section's list, an anchor included", () => {
+    // A link in the list is what puts a page in a section, so a step another step's page
+    // covers is listed without one. getkestrel.dev's sync drops an item whose link has an
+    // anchor, which the bundled-pages check below never sees.
+    for (const index of [publishingIndex, selfHostingIndex]) {
+      for (const section of index.split(/^## /m).slice(1)) {
+        const items = section.split("\n").filter((line) => /^\s*(?:\d+\.|-) /.test(line));
+        const targets = items.flatMap((line) => [...line.matchAll(/\]\(([^)#]+)(#[^)]*)?\)/g)]);
+        expect(
+          targets.filter(([, , anchor]) => anchor !== undefined).map(([link]) => link),
+          section.split("\n")[0],
+        ).toEqual([]);
+        const pages = targets.map(([, page]) => page);
+        expect(new Set(pages).size, section.split("\n")[0]).toBe(pages.length);
+      }
+    }
   });
 
   it("lists every bundled page in exactly one index once, Publishing's pages in its folder", () => {

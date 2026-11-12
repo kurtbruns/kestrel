@@ -16,11 +16,17 @@ The editor takes Markdown, and Kestrel saves as you type. The same Markdown beco
 
 Choose **Schedule**, pick a time under **Send at**, and confirm. The time is your publication's, in its [time zone](name-your-publication.md#set-the-time-zone), wherever you are: 9:00 means 9:00 for your readers. When your browser keeps another clock, the dialog names the zone and shows the same moment in your own time under it. The time must be at least five minutes away by default, or the lead whoever runs your instance set. That's your window to catch a mistake, and you can cancel or move the send until then. **Send now** sends after the same wait.
 
-**Then send yourself a test.** Scheduling locks the post and makes its email, so **Send test email** now sends exactly what your list receives. **Settings → Default test recipients** fills in the addresses. A test needs an email provider, which [Connect Amazon SES](../get-started/ses.md) sets up.
+**Then send yourself a test.** Scheduling locks the post and makes its email, so **Send test email** now sends exactly what your list receives. **Settings → Default test recipients** fills in the addresses. A test needs an email provider, which [Connect Amazon SES](../get-started/ses.md) sets up. When it arrives, check:
+
+- **The From name and address,** which readers see first. The name is your publication's ([Name your publication](name-your-publication.md)); the address is set when your instance is deployed.
+- **Where it lands:** the inbox, Promotions, or spam. If it lands in spam, check your sending domain's records, as [Sending-domain DNS](../reference/sending-domain-dns.md) describes.
+- **A reply.** Reply to the test, and check that it reaches your inbox. Kestrel never sees replies, so this depends on [forwarding your From address](../get-started/ses.md#8-receive-replies-at-your-from-address).
+
+A test sent from a draft is only a preview, and doesn't check off the dashboard's **Send a test email for your first post**. A change to your template or publication identity re-makes the scheduled email, so test again after one.
 
 To change the post, choose **Cancel** on its banner, and it's a draft again. **Edit schedule** moves the time without unlocking it.
 
-At the send time, the post goes to your confirmed subscribers, and its page goes up in your archive. Watch it go out under **Sent**. If a send needs you, its page says so, and [Troubleshooting](troubleshooting.md) covers each case.
+At the send time, the post goes to your confirmed subscribers, and its page goes up in your archive. Watch it go out under **Sent**. Your first post that goes to the archive ends the dashboard's setup steps; an email-only one doesn't. If a send needs you, its page says so, and [Troubleshooting](troubleshooting.md) covers each case.
 
 ## Post settings
 

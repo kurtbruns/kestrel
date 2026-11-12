@@ -319,9 +319,9 @@ function stepAction(step: SetupStep, f: SetupFacts, primary: boolean): Html | nu
  * fact that ticked it. On the checklist, where the head carries no New post, the first step that
  * can be taken now, past the optional list, has the view's Primary. The steps, their order, and
  * the fact that ticks each are restated by hand in DESIGN (Dashboard), the Publishing docs
- * (docs/publishing/README.md and check-your-setup.md), template/claude/CLAUDE.md, and
- * src/mcp/instructions.ts, and nothing checks them: a change here changes each
- * (.claude/rules/maintainer.md).
+ * (docs/publishing/README.md and the pages it links from them), .claude/rules/docs.md,
+ * template/claude/CLAUDE.md, and src/mcp/instructions.ts, and nothing checks them: a change
+ * here changes each (.claude/rules/maintainer.md).
  */
 export function setupStepsHtml(
   f: SetupFacts,
