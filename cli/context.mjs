@@ -50,10 +50,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, sep } from "node:path";
-import { fileURLToPath } from "node:url";
-
-const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const PACKAGE = JSON.parse(readFileSync(join(PACKAGE_ROOT, "package.json"), "utf8"));
+import { commandArgs } from "../packages/kestrel/lib/args.mjs";
+import { PACKAGE, PACKAGE_ROOT } from "./package.mjs";
 
 /** The context files an instance gets, by their path in the instance. */
 export const CONTEXT_FILES = [
@@ -139,10 +137,9 @@ function stripHeaders(root) {
  * The release the operator upgraded from: `--from`, else the version of this package their
  * last commit's package.json pins. `{ version }`, or `{ error }` saying why there is none.
  */
-function baseRelease(root, argv) {
-  const at = argv.indexOf("--from");
-  if (at !== -1) {
-    const version = argv[at + 1] ?? "";
+function baseRelease(root, fromFlag) {
+  if (fromFlag !== undefined) {
+    const version = fromFlag;
     return RELEASE.test(version)
       ? { version }
       : { error: `--from takes a release, like 1.20.0, not "${version}"` };
@@ -293,146 +290,190 @@ function reportOneDiff(file, mine, git) {
   console.log("  Merge what you want of it into yours, by hand or with Claude.");
 }
 
-/** `kestrel check-context [--update] [--from <release>]`. */
-export function checkContextCommand(argv, root = process.cwd()) {
-  const stripped = stripHeaders(root);
-  const strippedNote = () => {
-    if (stripped > 0) {
-      say(
-        "This release keeps no record in the files: it compares them with the releases on npm, so the header lines are gone. Commit that with the upgrade.",
-      );
-    }
-  };
+const USAGE = `Usage: kestrel check-context [--update] [--from <release>]
 
-  if (argv.includes("--merged")) {
-    // Older upgrade skills run this after a merge; the merge is the record now.
-    say(
-      "--merged has nothing to record any more: check-context compares your files with the release you upgraded from, so once you commit the merge, it stands.",
-    );
-    strippedNote();
-    return;
-  }
+  Show what this release changed in the Claude files in .claude/, beside your own edits.
 
-  const update = argv.includes("--update");
-  // Git and the base are looked for once, and only when a file differs from the installed copy.
+  --update            take this release's copy of each file you haven't edited, and add new ones
+  --from <release>    compare from that release, not the one your last commit's package.json pins`;
+
+/**
+ * What a check compares against, looked for once and only when a file differs from the
+ * installed copy: whether git runs (`git()`), and the release upgraded from (`base()`, a
+ * `{ version }` or `{ error }`) with its files fetched from npm (`release()`).
+ */
+function comparison(root, fromFlag) {
   let gitFound = null;
+  let from = null;
+  let fetched = null;
   const git = () => {
     gitFound ??= hasGit();
     return gitFound;
   };
-  let from = null;
-  let release = null;
   const base = () => {
     if (from === null) {
-      from = git() ? baseRelease(root, argv) : { error: "git isn't installed" };
+      from = git() ? baseRelease(root, fromFlag) : { error: "git isn't installed" };
       if (from.version && from.version !== PACKAGE.version) {
-        release = fetchRelease(from.version);
+        fetched = fetchRelease(from.version);
       }
     }
     return from;
   };
+  const release = () => {
+    base();
+    return fetched;
+  };
+  return { git, base, release };
+}
 
-  let pending = 0;
-  for (const file of CONTEXT_FILES) {
-    const path = join(root, file);
-    if (!existsSync(path)) {
-      // A file the base release shipped was removed by the operator, which is theirs to do; one
-      // it didn't ship is new in this release. Without a base the two can't be told apart.
-      const b = base();
-      const error =
-        b.error ??
-        (b.version === PACKAGE.version
-          ? `your last commit already names ${PACKAGE.version}`
-          : release.error);
-      if (error) {
-        say(
-          `${file}: not here, and it can't be told whether you removed it or ${PACKAGE.version} adds it: ${error}. If you want it, copy ${shippedPath(file)}.`,
-        );
-      } else if (release.files.has(file)) {
-        const changed = release.files.get(file) !== shipped(file);
-        say(
-          `${file}: you removed it, so it's left out${changed ? `; Kestrel changed it between ${b.version} and ${PACKAGE.version}` : ""}. To bring it back, copy ${shippedPath(file)}, or ask Claude to.`,
-        );
-      } else if (update) {
-        writeShipped(root, file);
-        say(`${file}: added from ${PACKAGE.version}`);
-      } else {
-        pending++;
-        say(`${file}: new in ${PACKAGE.version}; \`${RUN} --update\` adds it`);
-      }
-      continue;
-    }
-    const mine = read(path);
-    const installed = shipped(file);
-    if (mine === installed) {
-      say(`${file}: current`);
-      continue;
-    }
-    const b = base();
-    if (b.version === PACKAGE.version) {
-      pending++;
-      say(
-        `${file}: differs from ${PACKAGE.version}'s, and there's no earlier release to compare it with: your last commit already names ${PACKAGE.version}. If you've committed an upgrade, \`${RUN} --from <release>\` shows what Kestrel changed since the release you came from.`,
-      );
-      reportOneDiff(file, mine, git);
-      continue;
-    }
-    const error = b.error ?? release.error;
-    const old = error ? undefined : release.files.get(file);
-    if (error || old === undefined) {
-      pending++;
-      say(
-        `${file}: differs from ${PACKAGE.version}'s, and Kestrel's change can't be shown apart from your edits: ${error ?? `${b.version} didn't ship it`}.`,
-      );
-      if (b.error) {
-        console.log(`  Name the release you upgraded from with \`${RUN} --from <release>\`.`);
-      }
-      reportOneDiff(file, mine, git);
-      continue;
-    }
-    if (old === installed) {
-      say(`${file}: current, with your edits (Kestrel's copy unchanged since ${b.version})`);
-      continue;
-    }
-    if (mine === old) {
-      if (update) {
-        writeShipped(root, file);
-        say(`${file}: updated from ${b.version}'s to ${PACKAGE.version}'s`);
-      } else {
-        pending++;
-        say(
-          `${file}: Kestrel changed it between ${b.version} and ${PACKAGE.version}, and you haven't edited it; \`${RUN} --update\` takes ${PACKAGE.version}'s`,
-        );
-      }
-      continue;
-    }
-    pending++;
-    const name = basename(file);
-    const [baseLabel, installedLabel] = [`kestrel-${b.version}`, `kestrel-${PACKAGE.version}`];
+/**
+ * Report a context file that isn't in the instance, adding it with `update` when it is new in
+ * this release. Answers whether it is left for the operator to act on.
+ */
+function checkMissing(root, file, { base, release }, update) {
+  // A file the base release shipped was removed by the operator, which is theirs to do; one
+  // it didn't ship is new in this release. Without a base the two can't be told apart.
+  const b = base();
+  const error =
+    b.error ??
+    (b.version === PACKAGE.version
+      ? `your last commit already names ${PACKAGE.version}`
+      : release().error);
+  if (error) {
     say(
-      `${file}: Kestrel changed it between ${b.version} and ${PACKAGE.version}, and you've edited it.`,
+      `${file}: not here, and it can't be told whether you removed it or ${PACKAGE.version} adds it: ${error}. If you want it, copy ${shippedPath(file)}.`,
     );
-    const kestrels = diff(name, [baseLabel, old], [installedLabel, installed]);
-    const yours = diff(name, [baseLabel, old], ["yours", mine]);
-    if (kestrels === null || yours === null) {
-      console.log(
-        `  git couldn't compare the copies, so Kestrel's change can't be shown apart from your edits. Compare yours with ${shippedPath(file)}.`,
-      );
-      console.log("  Merge what you want of it into yours, by hand or with Claude.");
-      continue;
-    }
-    console.log(`  What Kestrel changed, from ${b.version}'s copy to ${PACKAGE.version}'s:`);
-    console.log(kestrels);
-    console.log(`  Your edits, from ${b.version}'s copy to yours:`);
-    console.log(yours);
+    return false;
+  }
+  if (release().files.has(file)) {
+    const changed = release().files.get(file) !== shipped(file);
+    say(
+      `${file}: you removed it, so it's left out${changed ? `; Kestrel changed it between ${b.version} and ${PACKAGE.version}` : ""}. To bring it back, copy ${shippedPath(file)}, or ask Claude to.`,
+    );
+    return false;
+  }
+  if (update) {
+    writeShipped(root, file);
+    say(`${file}: added from ${PACKAGE.version}`);
+    return false;
+  }
+  say(`${file}: new in ${PACKAGE.version}; \`${RUN} --update\` adds it`);
+  return true;
+}
+
+/** Show both differences of a file Kestrel changed and the operator edited, for them to merge. */
+function reportBothChanged(file, { old, installed, mine, version }) {
+  const name = basename(file);
+  const [baseLabel, installedLabel] = [`kestrel-${version}`, `kestrel-${PACKAGE.version}`];
+  say(
+    `${file}: Kestrel changed it between ${version} and ${PACKAGE.version}, and you've edited it.`,
+  );
+  const kestrels = diff(name, [baseLabel, old], [installedLabel, installed]);
+  const yours = diff(name, [baseLabel, old], ["yours", mine]);
+  if (kestrels === null || yours === null) {
     console.log(
-      "  Merge Kestrel's change into yours, keeping your edits; Claude can, from the two differences above.",
+      `  git couldn't compare the copies, so Kestrel's change can't be shown apart from your edits. Compare yours with ${shippedPath(file)}.`,
     );
+    console.log("  Merge what you want of it into yours, by hand or with Claude.");
+    return;
   }
-  if (pending > 0) {
+  console.log(`  What Kestrel changed, from ${version}'s copy to ${PACKAGE.version}'s:`);
+  console.log(kestrels);
+  console.log(`  Your edits, from ${version}'s copy to yours:`);
+  console.log(yours);
+  console.log(
+    "  Merge Kestrel's change into yours, keeping your edits; Claude can, from the two differences above.",
+  );
+}
+
+/**
+ * Report a context file the instance has, taking this release's copy with `update` when the
+ * operator never edited it. Answers whether it is left for the operator to act on.
+ */
+function checkPresent(root, file, { git, base, release }, update) {
+  const mine = read(join(root, file));
+  const installed = shipped(file);
+  if (mine === installed) {
+    say(`${file}: current`);
+    return false;
+  }
+  const b = base();
+  if (b.version === PACKAGE.version) {
     say(
-      "The changelog says what changed in Claude's context and why, and marks a change that bears on safety.",
+      `${file}: differs from ${PACKAGE.version}'s, and there's no earlier release to compare it with: your last commit already names ${PACKAGE.version}. If you've committed an upgrade, \`${RUN} --from <release>\` shows what Kestrel changed since the release you came from.`,
+    );
+    reportOneDiff(file, mine, git);
+    return true;
+  }
+  const error = b.error ?? release().error;
+  const old = error ? undefined : release().files.get(file);
+  if (error || old === undefined) {
+    say(
+      `${file}: differs from ${PACKAGE.version}'s, and Kestrel's change can't be shown apart from your edits: ${error ?? `${b.version} didn't ship it`}.`,
+    );
+    if (b.error) {
+      console.log(`  Name the release you upgraded from with \`${RUN} --from <release>\`.`);
+    }
+    reportOneDiff(file, mine, git);
+    return true;
+  }
+  if (old === installed) {
+    say(`${file}: current, with your edits (Kestrel's copy unchanged since ${b.version})`);
+    return false;
+  }
+  if (mine === old) {
+    if (update) {
+      writeShipped(root, file);
+      say(`${file}: updated from ${b.version}'s to ${PACKAGE.version}'s`);
+      return false;
+    }
+    say(
+      `${file}: Kestrel changed it between ${b.version} and ${PACKAGE.version}, and you haven't edited it; \`${RUN} --update\` takes ${PACKAGE.version}'s`,
+    );
+    return true;
+  }
+  reportBothChanged(file, { old, installed, mine, version: b.version });
+  return true;
+}
+
+/** `kestrel check-context [--update] [--from <release>]`. */
+export function checkContextCommand(argv, root = process.cwd()) {
+  const args = commandArgs(USAGE, argv, {
+    // --merged is an older upgrade skill's, answered below rather than refused.
+    options: {
+      update: { type: "boolean" },
+      from: { type: "string" },
+      merged: { type: "boolean" },
+    },
+    // Older skills name the merged file after --merged; nothing else takes a positional.
+    max: argv.includes("--merged") ? Number.POSITIVE_INFINITY : 0,
+  });
+  if (!args) {
+    return;
+  }
+  const stripped = stripHeaders(root);
+  if (args.values.merged) {
+    // Older upgrade skills run this after a merge; the merge is the record now.
+    say(
+      "--merged has nothing to record any more: check-context compares your files with the release you upgraded from, so once you commit the merge, it stands.",
+    );
+  } else {
+    const against = comparison(root, args.values.from);
+    const update = args.values.update === true;
+    const pending = CONTEXT_FILES.filter((file) =>
+      existsSync(join(root, file))
+        ? checkPresent(root, file, against, update)
+        : checkMissing(root, file, against, update),
+    ).length;
+    if (pending > 0) {
+      say(
+        "The changelog says what changed in Claude's context and why, and marks a change that bears on safety.",
+      );
+    }
+  }
+  if (stripped > 0) {
+    say(
+      "This release keeps no record in the files: it compares them with the releases on npm, so the header lines are gone. Commit that with the upgrade.",
     );
   }
-  strippedNote();
 }

@@ -132,7 +132,7 @@ describe("which instance a URL names", () => {
     expect(
       chooseInstance({ env: { KESTREL_URL: "https://b.example.com" }, dir, signIns: one }),
     ).toBe("https://b.example.com");
-    expect(chooseInstance({ env: {}, dir, signIns: one, say: () => {} })).toBe(ORIGIN);
+    expect(chooseInstance({ env: {}, dir, signIns: one, note: () => {} })).toBe(ORIGIN);
     expect(() => chooseInstance({ env: {}, dir, signIns: two })).toThrow(/Name one with --url/);
     expect(() => chooseInstance({ env: {}, dir, signIns: {} })).toThrow(/kestrel login/);
   });
@@ -189,7 +189,9 @@ ${Object.entries(envs)
   it("calls the one origin the env blocks set, and says on stderr that it's the folder's", () => {
     const said = [];
     const at = folder({ wrangler: config({ production: PROD }) });
-    expect(chooseInstance({ env: {}, dir: at, signIns: one, say: (l) => said.push(l) })).toBe(PROD);
+    expect(chooseInstance({ env: {}, dir: at, signIns: one, note: (l) => said.push(l) })).toBe(
+      PROD,
+    );
     expect(said).toEqual([
       `kestrel api: calling ${PROD}, this folder's instance. Pass --url to call a different one.`,
     ]);
@@ -210,25 +212,25 @@ ${Object.entries(envs)
         local: "http://127.0.0.1:8787",
       }),
     });
-    expect(chooseInstance({ env: {}, dir: at, signIns: one, say: () => {} })).toBe(ORIGIN);
+    expect(chooseInstance({ env: {}, dir: at, signIns: one, note: () => {} })).toBe(ORIGIN);
   });
 
   it("falls through to the one sign-in with no wrangler.jsonc, or one it can't parse", () => {
-    expect(chooseInstance({ env: {}, dir: folder(), signIns: one, say: () => {} })).toBe(ORIGIN);
+    expect(chooseInstance({ env: {}, dir: folder(), signIns: one, note: () => {} })).toBe(ORIGIN);
     const broken = folder({ wrangler: `{ "env": { "production": ` });
-    expect(chooseInstance({ env: {}, dir: broken, signIns: one, say: () => {} })).toBe(ORIGIN);
+    expect(chooseInstance({ env: {}, dir: broken, signIns: one, note: () => {} })).toBe(ORIGIN);
   });
 
   it("is no instance when its package.json doesn't depend on @kurtbruns/kestrel", () => {
     const at = folder({ dependency: false, wrangler: config({ production: PROD }) });
-    expect(chooseInstance({ env: {}, dir: at, signIns: one, say: () => {} })).toBe(ORIGIN);
+    expect(chooseInstance({ env: {}, dir: at, signIns: one, note: () => {} })).toBe(ORIGIN);
   });
 
   it("reads only the folder it runs in, never a parent's", () => {
     const at = folder({ wrangler: config({ production: PROD }) });
     const sub = join(at, "posts");
     mkdirSync(sub);
-    expect(chooseInstance({ env: {}, dir: sub, signIns: one, say: () => {} })).toBe(ORIGIN);
+    expect(chooseInstance({ env: {}, dir: sub, signIns: one, note: () => {} })).toBe(ORIGIN);
   });
 
   it("gives way to --url and KESTREL_URL, saying nothing", () => {

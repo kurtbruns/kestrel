@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { chooseTarget, ownsServer } from "../../packages/kestrel/lib/dev-api.mjs";
+import { ownsServer, planDevTarget } from "../../packages/kestrel/lib/dev-api.mjs";
 import {
   clearDevServer,
   readDevServer,
@@ -16,30 +16,30 @@ import {
 
 const record = { port: "8794", id: "run-a" };
 
-describe("chooseTarget and ownsServer", () => {
+describe("planDevTarget and ownsServer", () => {
   it("refuses when nothing names a server and none is recorded here, with no fallback port", () => {
-    expect(chooseTarget({})).toEqual({ refuse: "unrecorded" });
-    expect(chooseTarget({ arg: "" })).toEqual({ refuse: "unrecorded" });
+    expect(planDevTarget({})).toEqual({ refuse: "unrecorded" });
+    expect(planDevTarget({ arg: "" })).toEqual({ refuse: "unrecorded" });
   });
 
   it("goes to the recorded server when it reports the recorded run ID", () => {
-    const target = chooseTarget({ record });
+    const target = planDevTarget({ record });
     expect(target).toEqual({ base: "http://localhost:8794", expectId: "run-a" });
     expect(ownsServer(target, "run-a")).toBe(true);
   });
 
   it("refuses the recorded port when the server there reports another run ID or none", () => {
-    const target = chooseTarget({ record });
+    const target = planDevTarget({ record });
     expect(ownsServer(target, "run-b")).toBe(false);
     expect(ownsServer(target, undefined)).toBe(false);
   });
 
   it("uses a port or URL argument as given, whatever the server reports", () => {
-    const port = chooseTarget({ arg: "8795", record });
+    const port = planDevTarget({ arg: "8795", record });
     expect(port).toEqual({ base: "http://localhost:8795", explicit: true });
     expect(ownsServer(port, undefined)).toBe(true);
     expect(ownsServer(port, "run-b")).toBe(true);
-    expect(chooseTarget({ arg: "http://127.0.0.1:9001" }).base).toBe("http://127.0.0.1:9001");
+    expect(planDevTarget({ arg: "http://127.0.0.1:9001" }).base).toBe("http://127.0.0.1:9001");
   });
 });
 

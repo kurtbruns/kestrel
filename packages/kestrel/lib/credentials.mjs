@@ -36,6 +36,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { CliError } from "./errors.mjs";
 
 const VERSION = 1;
 
@@ -66,7 +67,7 @@ export function readSignIns(env = process.env) {
     if (err?.code === "ENOENT") {
       return {};
     }
-    throw new Error(`Couldn't read the sign-ins in ${file}: ${err?.message ?? err}`);
+    throw new CliError(`Couldn't read the sign-ins in ${file}: ${err?.message ?? err}`);
   }
   let data;
   try {
@@ -77,7 +78,7 @@ export function readSignIns(env = process.env) {
   if (data?.version === VERSION && data.instances && typeof data.instances === "object") {
     return data.instances;
   }
-  throw new Error(
+  throw new CliError(
     `${file} isn't a sign-ins file this release of Kestrel can read, so it was left as it is. Move it aside, then run \`npx kestrel login <url>\` again.`,
   );
 }
@@ -90,14 +91,14 @@ export function readSignIn(origin, env = process.env) {
 /**
  * Store (or, with undefined, forget) the sign-in for one origin, leaving the others. Takes
  * the credentials lock, so call it outside `withCredentialsLock`; inside one, use
- * `writeSignInHeld`.
+ * `writeSignInLocked`.
  */
 export function writeSignIn(origin, entry, env = process.env) {
-  return withCredentialsLock(() => writeSignInHeld(origin, entry, env), env);
+  return withCredentialsLock(() => writeSignInLocked(origin, entry, env), env);
 }
 
 /** `writeSignIn` for a caller already inside `withCredentialsLock`, which taking it again would deadlock. */
-export function writeSignInHeld(origin, entry, env = process.env) {
+export function writeSignInLocked(origin, entry, env = process.env) {
   const instances = { ...readSignIns(env) };
   if (entry === undefined) {
     delete instances[origin];
@@ -168,7 +169,7 @@ export async function withCredentialsLock(fn, env = process.env) {
           rmSync(lock, { force: true });
         }
       } else if (Date.now() > deadline) {
-        throw new Error(
+        throw new CliError(
           `Another kestrel command has held ${lock} for ${Math.round(LOCK_WAIT_MS / 1000)} seconds. It may still be running; try again in a minute. A lock left by a crashed command clears itself after ${Math.round(LOCK_STALE_MS / 1000)} seconds.`,
         );
       } else {

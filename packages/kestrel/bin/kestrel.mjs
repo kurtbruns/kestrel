@@ -9,60 +9,34 @@
  * release that instance runs, so they live in `@kurtbruns/kestrel`, and this hands them to that
  * install (lib/handoff.mjs). The instance package ships this same client source, so in an
  * instance's repository, where its `kestrel` is the one npx finds, nothing else is needed.
+ *
+ * The command list, the help, and how a command's error is printed are shared with the instance
+ * package's script (lib/commands.mjs); this says only how each command runs here.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { INSTANCE_COMMANDS, INSTANCE_PACKAGE, runInstanceCommand } from "../lib/handoff.mjs";
+import { INSTANCE_COMMANDS, main } from "../lib/commands.mjs";
+import { runInstanceCommand } from "../lib/handoff.mjs";
 
 const PACKAGE = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "package.json"), "utf8"),
 );
 
-const HELP = `kestrel ${PACKAGE.version}
+// How the client runs each command: its own here, an instance's through the instance package.
+const signIn = (name) => async (argv) => (await import("../lib/login.mjs"))[name](argv);
 
-Usage: kestrel <command> [options]
-
-  login <url> [--no-browser]    sign in to a deployed instance as you, in your browser
-  logout [url]                  sign out of it on this computer
-  api <method> <path> [opts]    call the API as you (kestrel api for options)
-  api --list | help <m> <path>  list the instance's routes, or describe one
-
-  init [dir] [--name <name>]    write a new instance repository here (or in dir)
-  dev, seed, reset, sync-migrations, check-context
-                                run in an instance's repository, by its ${INSTANCE_PACKAGE}
-
-  help, --help                  show this
-  version, --version            print this client's version`;
-
-const [command, ...argv] = process.argv.slice(2);
-
-if (INSTANCE_COMMANDS.includes(command)) {
-  runInstanceCommand(command, argv, PACKAGE.version);
-} else {
-  switch (command) {
-    case "login":
-      await (await import("../lib/login.mjs")).loginCommand(argv);
-      break;
-    case "logout":
-      await (await import("../lib/login.mjs")).logoutCommand(argv);
-      break;
-    case "api":
-      await (await import("../lib/api.mjs")).apiCommand(argv);
-      break;
-    case "version":
-    case "--version":
-    case "-v":
-      console.log(PACKAGE.version);
-      break;
-    case undefined:
-    case "help":
-    case "--help":
-    case "-h":
-      console.log(HELP);
-      break;
-    default:
-      console.error(`kestrel: unknown command "${command}"\n\n${HELP}`);
-      process.exit(1);
-  }
-}
+await main(process.argv.slice(2), {
+  version: PACKAGE.version,
+  run: {
+    ...Object.fromEntries(
+      INSTANCE_COMMANDS.map((name) => [
+        name,
+        (argv) => runInstanceCommand(name, argv, PACKAGE.version),
+      ]),
+    ),
+    login: signIn("loginCommand"),
+    logout: signIn("logoutCommand"),
+    api: async (argv) => (await import("../lib/api.mjs")).apiCommand(argv),
+  },
+});

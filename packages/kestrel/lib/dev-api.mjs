@@ -20,31 +20,7 @@
  * target that wipes a database has to be named on purpose.
  */
 import { readDevServer } from "./dev-server.mjs";
-
-/** Split argv into `--flag value` / `--flag=value` pairs, bare `--flag`s (true), and
- *  positionals, so a script's flags can be given in any order. */
-export function parseArgs(argv, booleans = []) {
-  const flags = {};
-  const positional = [];
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    const eq = /^--([^=]+)=(.*)$/.exec(a);
-    if (eq) {
-      flags[eq[1]] = eq[2];
-    } else if (a.startsWith("--")) {
-      const name = a.slice(2);
-      if (booleans.includes(name)) {
-        flags[name] = true;
-      } else {
-        flags[name] = argv[i + 1] ?? "";
-        i++;
-      }
-    } else {
-      positional.push(a);
-    }
-  }
-  return { flags, positional };
-}
+import { CliError } from "./errors.mjs";
 
 /**
  * Where a dev command aims, decided from what it was given and this directory's record:
@@ -53,7 +29,7 @@ export function parseArgs(argv, booleans = []) {
  * (`ownsServer`); or `{ refuse: "unrecorded" }` when nothing names a server and none is
  * recorded here. There is no fallback port: a guess could be another directory's server.
  */
-export function chooseTarget({ arg, record }) {
+export function planDevTarget({ arg, record }) {
   if (arg) {
     return { base: /^https?:\/\//.test(arg) ? arg : `http://localhost:${arg}`, explicit: true };
   }
@@ -70,14 +46,14 @@ export function ownsServer(target, reportedId) {
 }
 
 /**
- * The dev server to act on and a local admin token for it, `{ base, token }`, or exit saying
- * why there is none to act on (see `chooseTarget`). `arg` is the command's port or URL
+ * The dev server to act on and a local admin token for it, `{ base, token }`, or a CliError
+ * saying why there is none to act on (see `planDevTarget`). `arg` is the command's port or URL
  * argument, if any; `tag` names the command, as in `npm run <tag>`. `kind` is the token's
  * principal: `service` for a script, as seed and reset are, and `human` for a person working
  * through a client, as `kestrel api` is (SPEC §11, Who acted).
  */
-export async function devTarget(arg, tag, kind = "service") {
-  const target = chooseTarget({ arg, record: readDevServer() });
+export async function connectDevServer(arg, tag, kind = "service") {
+  const target = planDevTarget({ arg, record: readDevServer() });
   const naming =
     tag === "api"
       ? "`npx kestrel api --url http://localhost:<port> …`"
@@ -92,16 +68,14 @@ export async function devTarget(arg, tag, kind = "service") {
   ];
   if (target.refuse) {
     fail(
-      tag,
       "no dev server is recorded in this directory, so there is no server here to act on.",
       "Start one here with `npm run dev` (it runs `kestrel dev`, which records it), then run this again.",
       ...deliberately,
     );
   }
-  const { token, runId } = await devToken(target.base, tag, kind);
+  const { token, runId } = await devToken(target.base, kind);
   if (!ownsServer(target, runId)) {
     fail(
-      tag,
       `the server at ${target.base} isn't this directory's dev server, so it was left alone.`,
       runId === undefined
         ? "It reports no run ID, so it wasn't started by `npm run dev` here."
@@ -116,33 +90,26 @@ export async function devTarget(arg, tag, kind = "service") {
   return { base: target.base, token };
 }
 
-/** Print a failure under the script's tag and exit. */
-export function fail(tag, ...lines) {
-  const [first, ...rest] = lines;
-  console.error(`[${tag}] ${first}`);
-  for (const line of rest) {
-    console.error(`${" ".repeat(tag.length + 3)}${line}`);
-  }
-  process.exit(1);
+/** Stop the command with `first`, and `rest` indented under it (packages/kestrel/lib/errors.mjs). */
+export function fail(first, ...rest) {
+  throw new CliError(first, { lines: rest });
 }
 
 /** Mint a local admin token for a principal of `kind`, with the run ID the server reports
- *  (undefined when it reports none), as `{ token, runId }`, or exit saying why the server
- *  can't give one. */
-async function devToken(base, tag, kind) {
+ *  (undefined when it reports none), as `{ token, runId }`, or throws a CliError saying why the
+ *  server can't give one. */
+async function devToken(base, kind) {
   let res;
   try {
     res = await fetch(`${base}/api/dev/token?kind=${kind}`);
   } catch (err) {
     fail(
-      tag,
       `could not reach ${base}. Is the dev server running?`,
       err instanceof Error ? err.message : String(err),
     );
   }
   if (res.status === 404) {
     fail(
-      tag,
       "/api/dev/token is unavailable: this only works on a local dev server (fake transport, no Access, APP_ORIGIN on localhost).",
     );
   }
@@ -150,7 +117,6 @@ async function devToken(base, tag, kind) {
     // A refused deployment (a setting, or a database behind the release) says what to do.
     const { message } = await res.json().catch(() => ({}));
     fail(
-      tag,
       `could not mint a dev token: ${res.status} ${res.statusText}`,
       ...(typeof message === "string" ? [message] : []),
     );
@@ -159,9 +125,9 @@ async function devToken(base, tag, kind) {
   return { token, runId: typeof runId === "string" && runId ? runId : undefined };
 }
 
-/** Call the API as `token`: JSON in, JSON out. Resolves `{ status, ok, body }`, or exits
- *  when the server can't be reached. */
-export async function callApi(base, token, path, { method = "GET", json, tag = "dev" } = {}) {
+/** Call the API as `token`: JSON in, JSON out. Resolves `{ status, ok, body }`, or throws a
+ *  CliError when the server can't be reached. */
+export async function callApi(base, token, path, { method = "GET", json } = {}) {
   const headers = { authorization: `Bearer ${token}` };
   if (json !== undefined) {
     headers["content-type"] = "application/json";
@@ -175,7 +141,6 @@ export async function callApi(base, token, path, { method = "GET", json, tag = "
     });
   } catch (err) {
     fail(
-      tag,
       `could not reach ${base}. Is the dev server running?`,
       err instanceof Error ? err.message : String(err),
     );

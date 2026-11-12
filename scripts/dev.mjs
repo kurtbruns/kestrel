@@ -22,8 +22,16 @@ import { spawn, spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { devCommand } from "../cli/dev.mjs";
+import { asksForHelp } from "../packages/kestrel/lib/args.mjs";
+import { runCommand } from "../packages/kestrel/lib/errors.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+// Help starts nothing: no stamp, no watcher, no server.
+if (asksForHelp(process.argv.slice(2))) {
+  await devCommand(process.argv.slice(2));
+  process.exit(0);
+}
 
 process.env.KESTREL_CLIENT_DEV = "1";
 
@@ -45,4 +53,10 @@ watcher.on("exit", (code) => {
   }
 });
 
-await devCommand(process.argv.slice(2), { onStop: () => watcher.kill() });
+await runCommand("kestrel dev", () =>
+  devCommand(process.argv.slice(2), { onStop: () => watcher.kill() }),
+);
+// Refused before wrangler started: the watcher is all that would keep this running.
+if (process.exitCode) {
+  watcher.kill();
+}

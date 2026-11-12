@@ -86,8 +86,22 @@ describe("parseInitArgs", () => {
     });
   });
 
-  it("reads a bare --name as an empty name, which is refused, never as the directory", () => {
-    expect(parseInitArgs(["site", "--name"])).toEqual({ dir: "site", name: "" });
+  it("refuses a bare --name, never taking it for the directory", () => {
+    expect(() => parseInitArgs(["site", "--name"])).toThrow("--name needs a value");
+  });
+
+  it("refuses a misspelled flag, which read loosely would name the instance after its folder", () => {
+    expect(() => parseInitArgs(["--nmae", "windbreak"])).toThrow("unknown option --nmae");
+  });
+
+  it("refuses a second directory", () => {
+    expect(() => parseInitArgs(["site", "other"])).toThrow('unexpected argument "other"');
+  });
+
+  it("answers --help and -h as a request for help, wherever they stand", () => {
+    expect(parseInitArgs(["--help"])).toEqual({ help: true });
+    expect(parseInitArgs(["site", "-h"])).toEqual({ help: true });
+    expect(parseInitArgs(["--nmae", "x", "--help"])).toEqual({ help: true });
   });
 });
 
@@ -148,13 +162,18 @@ describe("initCommand", () => {
   });
 
   it("refuses an invalid --name before writing anything", () => {
-    const exit = vi.spyOn(process, "exit").mockImplementation(() => {
-      throw new Error("exit");
-    });
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(() => initCommand([join(work, "site"), "--name", "Wind_Break"])).toThrow("exit");
-    expect(exit).toHaveBeenCalledWith(1);
-    expect(error.mock.calls[0][0]).toMatch(/refused: "Wind_Break" isn't a valid instance name/);
+    expect(() => initCommand([join(work, "site"), "--name", "Wind_Break"])).toThrow(
+      /^refused: "Wind_Break" isn't a valid instance name/,
+    );
     expect(() => readFileSync(join(work, "site", "wrangler.jsonc"))).toThrow();
+  });
+
+  it("names the package after the instance, as the resources are", () => {
+    const dir = join(work, "My.Site");
+    initCommand([dir]);
+    expect(JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).name).toBe("my-site");
+    expect(resourceNames(readFileSync(join(dir, "wrangler.jsonc"), "utf8"))).toContain(
+      "my-site-production",
+    );
   });
 });

@@ -16,7 +16,11 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { findInstance, handoff, INSTANCE_COMMANDS } from "../../packages/kestrel/lib/handoff.mjs";
+import {
+  findInstance,
+  INSTANCE_COMMANDS,
+  planHandoff,
+} from "../../packages/kestrel/lib/handoff.mjs";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const CLIENT = join(ROOT, "packages", "kestrel");
@@ -53,7 +57,7 @@ describe("handing an instance command to @kurtbruns/kestrel", () => {
     mkdirSync(join(dir, "src"));
     for (const at of [dir, join(dir, "src")]) {
       expect(findInstance(at)?.bin).toBe(bin);
-      expect(handoff("seed", ["--size", "10k"], { dir: at, version: "9.9.9" })).toEqual({
+      expect(planHandoff("seed", ["--size", "10k"], { dir: at, version: "9.9.9" })).toEqual({
         cmd: process.execPath,
         args: [bin, "seed", "--size", "10k"],
         shell: false,
@@ -63,7 +67,7 @@ describe("handing an instance command to @kurtbruns/kestrel", () => {
 
   it("prefers the repository's install for init too, so it writes the release the repository runs", () => {
     const bin = installInstancePackage();
-    expect(handoff("init", ["site"], { dir, version: "9.9.9" }).args).toEqual([
+    expect(planHandoff("init", ["site"], { dir, version: "9.9.9" }).args).toEqual([
       bin,
       "init",
       "site",
@@ -72,7 +76,7 @@ describe("handing an instance command to @kurtbruns/kestrel", () => {
 
   it("fetches the instance package at the client's own version for init where none is installed", () => {
     expect(
-      handoff("init", ["site"], { dir, version: "9.9.9", env: {}, platform: "linux" }),
+      planHandoff("init", ["site"], { dir, version: "9.9.9", env: {}, platform: "linux" }),
     ).toEqual({
       cmd: "npx",
       args: ["--yes", "--package=@kurtbruns/kestrel@9.9.9", "--", "kestrel", "init", "site"],
@@ -80,13 +84,13 @@ describe("handing an instance command to @kurtbruns/kestrel", () => {
     });
     // On Windows the shell gets one command line, so a name with a space stays one argument.
     expect(
-      handoff("init", ["My Site"], { dir, version: "9.9.9", env: {}, platform: "win32" }),
+      planHandoff("init", ["My Site"], { dir, version: "9.9.9", env: {}, platform: "win32" }),
     ).toEqual({
       cmd: 'npx.cmd --yes --package=@kurtbruns/kestrel@9.9.9 -- kestrel init "My Site"',
       args: [],
       shell: true,
     });
-    const packed = handoff("init", [], {
+    const packed = planHandoff("init", [], {
       dir,
       version: "9.9.9",
       env: { KESTREL_INSTANCE_PACKAGE: "/tmp/kurtbruns-kestrel-9.9.9.tgz" },
@@ -101,7 +105,7 @@ describe("handing an instance command to @kurtbruns/kestrel", () => {
     writeFileSync(manifest, JSON.stringify({ ...readJson(manifest), bin: undefined }));
     expect(findInstance(dir)).toEqual({ root: join(bin, "..", ".."), bin: undefined });
     for (const command of ["init", "dev"]) {
-      const plan = handoff(command, [], { dir, version: "9.9.9", env: {} });
+      const plan = planHandoff(command, [], { dir, version: "9.9.9", env: {} });
       expect(plan.cmd).toBeUndefined();
       expect(plan.refuse).toContain("has no kestrel command");
     }
@@ -109,7 +113,7 @@ describe("handing an instance command to @kurtbruns/kestrel", () => {
 
   it("refuses every other instance command where none is installed, saying where it runs", () => {
     for (const command of INSTANCE_COMMANDS.filter((c) => c !== "init")) {
-      const plan = handoff(command, [], { dir, version: "9.9.9", env: {} });
+      const plan = planHandoff(command, [], { dir, version: "9.9.9", env: {} });
       expect(plan.cmd).toBeUndefined();
       expect(plan.refuse).toContain(`kestrel ${command}`);
       expect(plan.refuse).toContain("npx kestrel init");

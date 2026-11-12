@@ -16,6 +16,7 @@
  * beyond its type stays the instance's to say.
  */
 import { readFileSync } from "node:fs";
+import { CliError } from "./errors.mjs";
 
 const METHODS = ["get", "put", "post", "delete", "patch"];
 
@@ -152,7 +153,7 @@ export function listRoutes(doc, resource) {
   if (resource !== undefined) {
     const tag = tags.find((t) => t.toLowerCase() === resource.toLowerCase());
     if (!tag) {
-      throw new Error(
+      throw new CliError(
         `This instance has no resource named "${resource}"; it has ${tags.map((t) => t.toLowerCase()).join(", ")}.`,
       );
     }
@@ -226,7 +227,7 @@ export function nextMove(doc, code, op) {
 export function describeRoute(doc, method, path) {
   const found = findOperation(doc, method, path);
   if (!found) {
-    throw new Error(
+    throw new CliError(
       `This instance has no route ${method.toUpperCase()} ${path}. \`kestrel api --list\` lists them.`,
     );
   }
@@ -320,7 +321,7 @@ export function describeRoute(doc, method, path) {
 function splitField(flag, text) {
   const at = text.indexOf("=");
   if (at < 1) {
-    throw new Error(`${flag} takes name=value, not "${text}".`);
+    throw new CliError(`${flag} takes name=value, not "${text}".`);
   }
   return [text.slice(0, at), text.slice(at + 1)];
 }
@@ -404,7 +405,9 @@ export function typedValue(raw, schema, name, doc) {
       return v;
     }
   }
-  throw new Error(`${name} takes ${typeName(resolve(schema, doc))}, not ${JSON.stringify(raw)}.`);
+  throw new CliError(
+    `${name} takes ${typeName(resolve(schema, doc))}, not ${JSON.stringify(raw)}.`,
+  );
 }
 
 /** What a refusal says the route takes instead, as strict.ts words it. */
@@ -448,10 +451,12 @@ export function buildFields(
     const param = declared.find((p) => p.name === name);
     if (!param) {
       const names = declared.map((p) => p.name);
-      throw new Error(`${name} isn’t a query parameter ${label} takes; ${takes(names)}. ${help}`);
+      throw new CliError(
+        `${name} isn’t a query parameter ${label} takes; ${takes(names)}. ${help}`,
+      );
     }
     if (query.some(([n]) => n === name)) {
-      throw new Error(`${name} is given more than once; give it once.`);
+      throw new CliError(`${name} is given more than once; give it once.`);
     }
     const value = given(field.typed, raw);
     query.push([name, field.typed ? String(typedValue(value, param.schema, name, doc)) : value]);
@@ -464,7 +469,7 @@ export function buildFields(
     const params = declared.length
       ? ` Its query parameters are ${declared.map((p) => `'${p.name}'`).join(", ")}.`
       : "";
-    throw new Error(
+    throw new CliError(
       types.length
         ? `${label} takes no JSON body; it takes ${types.join(", ")}: send it with ${types.includes("multipart/form-data") ? "--form" : "--data @file --type <type>"}.${params} ${help}`
         : `${label} takes no body.${params} ${help}`,
@@ -476,7 +481,7 @@ export function buildFields(
     const list = name.endsWith("[]");
     const parts = (list ? name.slice(0, -2) : name).split(".");
     if (parts.some((p) => p === "")) {
-      throw new Error(`${name} isn't a field name: name a field, a nested one as parent.child.`);
+      throw new CliError(`${name} isn't a field name: name a field, a nested one as parent.child.`);
     }
     let schema = root;
     let node = body;
@@ -486,7 +491,7 @@ export function buildFields(
       if (s?.properties) {
         if (!Object.hasOwn(s.properties, part)) {
           const names = Object.keys(s.properties);
-          throw new Error(`${at} isn’t a field ${label} takes; ${takes(names)}. ${help}`);
+          throw new CliError(`${at} isn’t a field ${label} takes; ${takes(names)}. ${help}`);
         }
         schema = s.properties[part];
       } else {
@@ -496,7 +501,9 @@ export function buildFields(
       if (i < parts.length - 1) {
         node[part] ??= {};
         if (typeof node[part] !== "object" || node[part] === null || Array.isArray(node[part])) {
-          throw new Error(`${at} is given a value and fields of its own; give one or the other.`);
+          throw new CliError(
+            `${at} is given a value and fields of its own; give one or the other.`,
+          );
         }
         node = node[part];
       }
@@ -508,16 +515,18 @@ export function buildFields(
       const alts = schema === undefined ? [] : alternatives(schema, doc);
       const array = alts.find((a) => a.type === "array");
       if (alts.length && !array) {
-        throw new Error(`${key} isn't a list; give it without [].`);
+        throw new CliError(`${key} isn't a list; give it without [].`);
       }
       node[last] ??= [];
       if (!Array.isArray(node[last])) {
-        throw new Error(`${key} is given as a list and as a value; give one or the other.`);
+        throw new CliError(`${key} is given as a list and as a value; give one or the other.`);
       }
       node[last].push(typed ? typedValue(value, array?.items, `${key}[]`, doc) : value);
     } else {
       if (Object.hasOwn(node, last)) {
-        throw new Error(`${key} is given more than once; give it once, or as ${key}[] for a list.`);
+        throw new CliError(
+          `${key} is given more than once; give it once, or as ${key}[] for a list.`,
+        );
       }
       node[last] = typed ? typedValue(value, schema, key, doc) : value;
     }

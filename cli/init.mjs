@@ -27,13 +27,13 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { commandArgs, readArgs } from "../packages/kestrel/lib/args.mjs";
+import { CliError } from "../packages/kestrel/lib/errors.mjs";
 import { CONTEXT_FILES, writeShipped } from "./context.mjs";
-import { syncMigrationsCommand } from "./sync-migrations.mjs";
+import { PACKAGE, PACKAGE_ROOT } from "./package.mjs";
+import { syncMigrations } from "./sync-migrations.mjs";
 
-const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const TEMPLATE = join(PACKAGE_ROOT, "template");
-const PACKAGE = JSON.parse(readFileSync(join(PACKAGE_ROOT, "package.json"), "utf8"));
 
 // Shipped name → name in the instance.
 const RENAMED = { gitignore: ".gitignore", npmrc: ".npmrc", claude: ".claude" };
@@ -56,15 +56,6 @@ function scaffoldFiles(dir = TEMPLATE, out = []) {
     }
   }
   return out;
-}
-
-/** An npm package name made from the directory's name, or `newsletter`. */
-function packageName(dir) {
-  const name = basename(dir)
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, "-")
-    .replace(/^[._-]+|[-]+$/g, "");
-  return name || "newsletter";
 }
 
 // The longest name init derives is `<name>-media-production`, and an R2 bucket's name, like a
@@ -125,35 +116,36 @@ export function nameResources(config, name) {
   return named;
 }
 
+const USAGE = `Usage: kestrel init [dir] [--name <name>]
+
+  Write a new instance repository here, or in dir, from the scaffold this release ships.
+  Nothing is written if any file it would write is already there.
+
+  --name <name>   names the Worker, database, and image bucket (default: the folder's name)`;
+
+const INIT_ARGS = { options: { name: { type: "string" } }, max: 1 };
+
 /** The instance directory and the `--name` flag's value, if given, from init's arguments. */
-export function parseInitArgs(argv) {
-  let dir;
-  let name;
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--name") {
-      name = argv[++i] ?? "";
-    } else if (arg.startsWith("--name=")) {
-      name = arg.slice("--name=".length);
-    } else if (!arg.startsWith("-") && dir === undefined) {
-      dir = arg;
-    }
-  }
-  return { dir: dir ?? ".", name };
+function initArgs({ values, positionals }) {
+  return { dir: positionals[0] ?? ".", name: values.name };
 }
 
-/** `kestrel init [dir] [--name <name>]`. */
-export function initCommand(argv) {
-  const args = parseInitArgs(argv);
-  const root = resolve(args.dir);
-  const name = args.name ?? nameFromFolder(root);
-  const refusal = nameRefusal(name);
-  if (refusal) {
-    const hint = args.name === undefined ? " Name it with --name, or rename the folder." : "";
-    console.error(`[init] refused: ${refusal}.${hint}`);
-    process.exit(1);
-  }
-  const files = [
+/**
+ * Init's arguments as `{ dir, name }`, or `{ help: true }`. Throws a UsageError for anything
+ * else, a misspelled flag included, which read loosely would name the instance after its folder.
+ */
+export function parseInitArgs(argv) {
+  const parsed = readArgs(argv, INIT_ARGS);
+  return parsed.help ? parsed : initArgs(parsed);
+}
+
+/**
+ * Every file init writes, as `[source, path in the instance]`, with the migrations and Claude
+ * context it writes by their own steps listed by path alone, `[undefined, path]`, so a
+ * collision with any of them is found before anything is written.
+ */
+function plannedFiles() {
+  const copies = [
     ...scaffoldFiles(),
     [join(PACKAGE_ROOT, ".dev.vars.example"), ".dev.vars.example"],
   ];
@@ -161,45 +153,73 @@ export function initCommand(argv) {
   // to overwrite one, and by then everything else would have been written.
   const migrations = readdirSync(join(PACKAGE_ROOT, "migrations"))
     .filter((f) => f.endsWith(".sql"))
-    .map((f) => `migrations/${f}`);
-  const writes = [...files.map(([, to]) => to), ...CONTEXT_FILES, ...migrations];
-  const taken = writes.filter((to) => existsSync(join(root, to)));
-  if (taken.length > 0) {
-    console.error(
-      `[init] refused: ${taken.join(", ")} already exist${taken.length === 1 ? "s" : ""} in ${root}.\n` +
-        "Run init in an empty repository (created without a README, .gitignore, or license).",
-    );
-    process.exit(1);
-  }
+    .map((f) => [undefined, `migrations/${f}`]);
+  return [...copies, ...CONTEXT_FILES.map((f) => [undefined, f]), ...migrations];
+}
 
-  for (const [from, to] of files) {
-    mkdirSync(dirname(join(root, to)), { recursive: true });
-    copyFileSync(from, join(root, to));
+/** Refuse, writing nothing, when the name can't name the resources or a file is already there. */
+function refuseInit(root, name, { named, files }) {
+  const refusal = nameRefusal(name);
+  if (refusal) {
+    const hint = named ? "" : " Name it with --name, or rename the folder.";
+    throw new CliError(`refused: ${refusal}.${hint}`);
   }
-  // The instance pins this exact release, and the tools at the versions it was tested with.
-  // @types/node is there only so `wrangler types` finds Node types installed (the Worker has
-  // nodejs_compat) and stops ending the typecheck with "Action required"; the scaffold's
-  // tsconfig lists no `types`, so they never enter the program and the Worker's types win.
-  const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-  pkg.name = args.name ?? packageName(root);
+  const taken = files.map(([, to]) => to).filter((to) => existsSync(join(root, to)));
+  if (taken.length > 0) {
+    throw new CliError(
+      `refused: ${taken.join(", ")} already exist${taken.length === 1 ? "s" : ""} in ${root}.`,
+      {
+        lines: [
+          "Run init in an empty repository (created without a README, .gitignore, or license).",
+        ],
+      },
+    );
+  }
+}
+
+/**
+ * The scaffold's package.json for instance `name`: pinning this exact release, and the tools at
+ * the versions it was tested with. @types/node is there only so `wrangler types` finds Node
+ * types installed (the Worker has nodejs_compat) and stops ending the typecheck with "Action
+ * required"; the scaffold's tsconfig lists no `types`, so they never enter the program and the
+ * Worker's types win.
+ */
+export function instancePackageJson(scaffold, name) {
+  const pkg = JSON.parse(scaffold);
+  pkg.name = name;
   pkg.dependencies[PACKAGE.name] = PACKAGE.version;
   pkg.devDependencies["@types/node"] = PACKAGE.devDependencies["@types/node"];
   pkg.devDependencies.typescript = PACKAGE.devDependencies.typescript;
   pkg.devDependencies.wrangler = PACKAGE.peerDependencies.wrangler;
-  writeFileSync(join(root, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
+  return `${JSON.stringify(pkg, null, 2)}\n`;
+}
+
+/** Write the instance: the scaffold, its package.json and resource names, the context, the migrations. */
+function writeInstance(root, name, files) {
+  for (const [from, to] of files) {
+    if (from) {
+      mkdirSync(dirname(join(root, to)), { recursive: true });
+      copyFileSync(from, join(root, to));
+    }
+  }
+  const pkg = join(root, "package.json");
+  writeFileSync(pkg, instancePackageJson(readFileSync(pkg, "utf8"), name));
   const config = join(root, "wrangler.jsonc");
   writeFileSync(config, nameResources(readFileSync(config, "utf8"), name));
   for (const file of CONTEXT_FILES) {
     writeShipped(root, file);
   }
-  syncMigrationsCommand(root);
+  syncMigrations(root);
+}
 
+/** Say what was written and what to do next. */
+function reportInit(root, name, { named }) {
   // A path from here when the instance is below this directory, else the absolute one.
   const rel = relative(process.cwd(), root);
   const where = rel.startsWith("..") ? root : rel;
   console.log(`[init] a Kestrel ${PACKAGE.version} instance${where ? ` in ${where}` : ""}.`);
   console.log(
-    `[init] named ${name}${args.name === undefined ? " after its folder (--name picks another)" : ""}: ` +
+    `[init] named ${name}${named ? "" : " after its folder (--name picks another)"}: ` +
       `Worker and database ${name}-production, image bucket ${name}-media-production. Next:`,
   );
   console.log(
@@ -212,4 +232,20 @@ export function initCommand(argv) {
       "(offline: node_modules/@kurtbruns/kestrel/docs/README.md)",
     ].join("\n"),
   );
+}
+
+/** `kestrel init [dir] [--name <name>]`. */
+export function initCommand(argv) {
+  const parsed = commandArgs(USAGE, argv, INIT_ARGS);
+  if (!parsed) {
+    return;
+  }
+  const args = initArgs(parsed);
+  const root = resolve(args.dir);
+  const name = args.name ?? nameFromFolder(root);
+  const named = args.name !== undefined;
+  const files = plannedFiles();
+  refuseInit(root, name, { named, files });
+  writeInstance(root, name, files);
+  reportInit(root, name, { named });
 }

@@ -8,7 +8,7 @@ npx kestrel api GET /api/posts
 npx kestrel api --list
 ```
 
-`login` signs you in through your instance's Cloudflare Access, in your browser, and keeps the sign-in in your user config. `api` calls a route as you, and `api --list` and `api help <method> <path>` describe the routes, read from the instance's own OpenAPI document so they match the release it runs. `logout` forgets the sign-in.
+`login` signs you in through your instance's Cloudflare Access, in your browser, and keeps the sign-in in your user config. `api` calls a route as you, and `api --list` and `api help <method> <path>` describe the routes, read from the instance's own OpenAPI document so they match the release it runs. `logout` forgets the sign-in. Each command answers `--help` with its usage, and refuses an option it doesn't know.
 
 `api` calls the instance `--url` or `KESTREL_URL` names; else, run in an instance's repository, that instance, the production `APP_ORIGIN` its `wrangler.jsonc` sets; else the only one you're signed in to. It names on stderr an instance it chose itself.
 

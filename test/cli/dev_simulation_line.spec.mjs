@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { effectiveSimulateSends, REFUSALS, simulationLine } from "../../cli/dev.mjs";
+import { REFUSALS, simulateSendsForRun, simulationLine } from "../../cli/dev.mjs";
 import {
   SIMULATED_REFUSALS,
   SIMULATION_FAULTS,
@@ -91,7 +91,7 @@ describe("simulationLine", () => {
   });
 });
 
-describe("effectiveSimulateSends", () => {
+describe("simulateSendsForRun", () => {
   let dir;
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "kestrel-dev-"));
@@ -103,23 +103,23 @@ describe("effectiveSimulateSends", () => {
 
   it("takes the shell's value over .dev.vars", () => {
     devVars("ses");
-    expect(effectiveSimulateSends("not-connected", dir)).toBe("not-connected");
+    expect(simulateSendsForRun("not-connected", dir)).toBe("not-connected");
   });
 
   it("falls through to .dev.vars when the shell's value is empty or unset", () => {
     devVars("ses");
-    expect(effectiveSimulateSends("", dir)).toBe("ses");
-    expect(effectiveSimulateSends("  ", dir)).toBe("ses");
-    expect(effectiveSimulateSends(undefined, dir)).toBe("ses");
+    expect(simulateSendsForRun("", dir)).toBe("ses");
+    expect(simulateSendsForRun("  ", dir)).toBe("ses");
+    expect(simulateSendsForRun(undefined, dir)).toBe("ses");
   });
 
   it("lets the shell's off beat .dev.vars", () => {
     devVars("not-connected");
-    expect(effectiveSimulateSends("off", dir)).toBe("off");
-    expect(simulationLine(effectiveSimulateSends("off", dir))).toBeNull();
+    expect(simulateSendsForRun("off", dir)).toBe("off");
+    expect(simulationLine(simulateSendsForRun("off", dir))).toBeNull();
   });
 
   it("reads no value when neither sets one", () => {
-    expect(effectiveSimulateSends(undefined, dir)).toBeUndefined();
+    expect(simulateSendsForRun(undefined, dir)).toBeUndefined();
   });
 });

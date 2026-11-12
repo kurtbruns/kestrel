@@ -15,6 +15,7 @@
  */
 import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
+import { CliError } from "./errors.mjs";
 
 /** The path discovery and the sign-in's check ask: protected, and it answers who signed in. */
 export const PROTECTED_PATH = "/api/whoami";
@@ -43,8 +44,8 @@ export function defaultClient() {
 // How long before its expiry an access token is refreshed rather than sent.
 const REFRESH_MARGIN_MS = 60_000;
 
-/** Thrown with words for the person: what went wrong and what to do. */
-export class SignInError extends Error {}
+/** A sign-in or a call that can't go on, with words for the person: what went wrong and what to do. */
+export class SignInError extends CliError {}
 
 /** Whether an origin is this computer (a local dev server), where Access never stands. */
 export function isLoopback(origin) {
@@ -180,17 +181,24 @@ export async function discover(origin) {
 
 /** Register a public client for this computer's loopback redirect; answers its client_id. */
 export async function registerClient(registrationEndpoint, redirectUri) {
-  const res = await fetch(registrationEndpoint, {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify({
-      client_name: "Kestrel CLI",
-      redirect_uris: [redirectUri],
-      grant_types: ["authorization_code", "refresh_token"],
-      response_types: ["code"],
-      token_endpoint_auth_method: "none",
-    }),
-  });
+  let res;
+  try {
+    res = await fetch(registrationEndpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({
+        client_name: "Kestrel CLI",
+        redirect_uris: [redirectUri],
+        grant_types: ["authorization_code", "refresh_token"],
+        response_types: ["code"],
+        token_endpoint_auth_method: "none",
+      }),
+    });
+  } catch (err) {
+    throw new SignInError(
+      `Couldn't reach ${new URL(registrationEndpoint).origin} to register: ${errText(err)}`,
+    );
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok || typeof body.client_id !== "string") {
     throw new SignInError(
