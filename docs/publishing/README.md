@@ -4,7 +4,7 @@ These pages get you publishing in the dashboard, and cover the decisions to make
 
 ## Set up your publication
 
-These are the dashboard's setup steps, in its order. Connecting Amazon SES, sending the first test email, and requesting production access are for whoever runs your Kestrel instance, in [Connect Amazon SES](../get-started/ses.md) and [Request production access](../get-started/production-access.md). If you're starting without a list, skip importing one.
+These are the steps to set up your publication and send your first post, once your Kestrel instance is deployed, as [Self-hosting](../README.md) describes. If you're starting without a list, skip Bring your existing list.
 
 1. Connect Amazon SES
 1. Send a test email
