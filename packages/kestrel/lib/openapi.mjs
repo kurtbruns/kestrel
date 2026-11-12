@@ -415,6 +415,15 @@ function takes(names) {
   return names.length ? `it takes ${names.map((n) => `'${n}'`).join(", ")}` : "it takes none";
 }
 
+/** A file a `-F name=@file` field names, as text, or a CliError saying why it can't be read. */
+function readFieldFile(file) {
+  try {
+    return readFileSync(file, "utf8");
+  } catch (err) {
+    throw new CliError(`Couldn't read ${file}: ${err.message}`);
+  }
+}
+
 /**
  * Build a call's `-f` and `-F` fields (`[{ typed, text }]`, in the order given) into what the
  * route takes: on a GET, its query string; otherwise its JSON body, except a name the route
@@ -424,12 +433,7 @@ function takes(names) {
  * route with no JSON body is refused, naming what it takes. Answers `{ query, body }`: the
  * pairs to append, and the object, absent when no field is a body field.
  */
-export function buildFields(
-  doc,
-  found,
-  fields,
-  { readFile = (f) => readFileSync(f, "utf8") } = {},
-) {
+export function buildFields(doc, found, fields, { readFile = readFieldFile } = {}) {
   const label = `${found.method} ${found.path}`;
   const help = `\`kestrel api help ${label}\` describes it.`;
   const given = (typed, raw) => (typed && raw.startsWith("@") ? readFile(raw.slice(1)) : raw);

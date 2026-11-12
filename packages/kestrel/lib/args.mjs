@@ -18,9 +18,11 @@
 import { parseArgs } from "node:util";
 import { UsageError } from "./errors.mjs";
 
-/** Whether `argv` asks for help, wherever it says so. */
+/** Whether `argv` asks for help, wherever it says so before a `--`, after which all is positional. */
 export function asksForHelp(argv) {
-  return argv.includes("--help") || argv.includes("-h");
+  const end = argv.indexOf("--");
+  const options = end === -1 ? argv : argv.slice(0, end);
+  return options.includes("--help") || options.includes("-h");
 }
 
 /** Node's words for a refused command line, in this CLI's shorter form. */

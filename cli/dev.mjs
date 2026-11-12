@@ -38,6 +38,7 @@ import { createServer } from "node:net";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { asksForHelp } from "../packages/kestrel/lib/args.mjs";
+import { usageOf } from "../packages/kestrel/lib/commands.mjs";
 import {
   clearDevServer,
   newDevRunId,
@@ -47,15 +48,7 @@ import { CliError } from "../packages/kestrel/lib/errors.mjs";
 import { startSweepTicker } from "./sweep-ticker.mjs";
 import { captureWrangler, runWrangler, spawnWrangler } from "./wrangler.mjs";
 
-const USAGE = `Usage: kestrel dev [wrangler dev options]
-
-  Run the Worker locally as it runs deployed: the send sweep once a minute, on the minute,
-  the local database migrated when it is new, and this run recorded so seed and reset find it.
-  Options go on to wrangler dev (--remote, for one), except --port: set PORT instead.
-
-  PORT=<port>                    the port to serve on (default 8787, else a free one)
-  SIMULATE_SENDS=<profile>       a provider simulation for this run, over .dev.vars's
-  SIMULATE_ACCOUNT, MIN_LEAD_SECONDS, SUBREQUEST_BUDGET   likewise, for this run`;
+const USAGE = usageOf("dev");
 
 // The port a plain `kestrel dev` prefers, matching wrangler's own default.
 const PREFERRED_PORT = 8787;

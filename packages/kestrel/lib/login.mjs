@@ -11,6 +11,7 @@ import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { signedInFetch } from "./api.mjs";
 import { commandArgs } from "./args.mjs";
+import { usageOf } from "./commands.mjs";
 import { credentialsFile, readSignIn, readSignIns, writeSignIn } from "./credentials.mjs";
 import { UsageError } from "./errors.mjs";
 import {
@@ -101,15 +102,9 @@ export async function signIn(origin, { browser }) {
   return body?.principal;
 }
 
-const LOGIN_USAGE = `Usage: kestrel login <url> [--no-browser]
+const LOGIN_USAGE = usageOf("login");
 
-  Sign this computer in to a deployed instance as you, approving it in your browser.
-
-  --no-browser   print the sign-in URL without opening a browser`;
-
-const LOGOUT_USAGE = `Usage: kestrel logout [url]
-
-  Sign this computer out of an instance; the url may be left out when you're signed in to one.`;
+const LOGOUT_USAGE = usageOf("logout");
 
 /** `kestrel login <url> [--no-browser]`. */
 export async function loginCommand(argv) {

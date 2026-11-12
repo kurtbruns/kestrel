@@ -127,7 +127,11 @@ async function getJson(url, what) {
   if (!res.ok) {
     throw new SignInError(`${what} answered ${res.status} at ${url}.`);
   }
-  return res.json();
+  try {
+    return await res.json();
+  } catch {
+    throw new SignInError(`${what} at ${url} isn't JSON.`);
+  }
 }
 
 /**
@@ -367,7 +371,11 @@ export async function listenForCode({ port, state, timeoutMs = 5 * 60_000 }) {
         if (fallback && err.code === "EADDRINUSE") {
           tryPort(0, false);
         } else {
-          reject(err);
+          reject(
+            new SignInError(
+              `Couldn't listen on 127.0.0.1 for the browser's return from the sign-in: ${err.message}`,
+            ),
+          );
         }
       });
       server.listen(p, "127.0.0.1", () => resolve(server.address().port));

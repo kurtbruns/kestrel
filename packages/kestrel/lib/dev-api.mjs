@@ -121,7 +121,12 @@ async function devToken(base, kind) {
       ...(typeof message === "string" ? [message] : []),
     );
   }
-  const { token, run_id: runId } = await res.json();
+  // Another program on that port (another app's dev server) can answer 200 with a page.
+  const answer = await res.json().catch(() => undefined);
+  if (typeof answer?.token !== "string") {
+    fail(`the server at ${base} didn't answer as a Kestrel dev server.`);
+  }
+  const { token, run_id: runId } = answer;
   return { token, runId: typeof runId === "string" && runId ? runId : undefined };
 }
 

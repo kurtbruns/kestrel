@@ -84,10 +84,12 @@ const FORWARDED = ["SIGTERM", "SIGHUP", "SIGQUIT"];
 
 /**
  * Run instance `command` through the instance package, with the terminal attached, and exit
- * as it does; throws a CliError, before anything runs, when there is no install to run it from. A Ctrl-C reaches the child from the terminal itself, so this process only waits
- * for it to finish (`kestrel dev` stops its server on the way out); another signal sent to
- * this process alone is passed on. A child ended by a signal exits 128 plus its number, as a
- * shell reports it.
+ * as it does; throws a CliError, before anything runs, when there is no install to run it
+ * from. A Ctrl-C reaches the child from the terminal itself, so this process only waits for it
+ * to finish (`kestrel dev` stops its server on the way out); another signal sent to this
+ * process alone is passed on. A child ended by a signal exits 128 plus its number, as a shell
+ * reports it, and one that can't be started at all exits 1, since the command has already
+ * returned to its runner by then.
  */
 export function runInstanceCommand(command, argv, version) {
   const plan = planHandoff(command, argv, { version });

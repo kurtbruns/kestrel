@@ -11,7 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseApiArgs } from "../../packages/kestrel/lib/api.mjs";
-import { readArgs } from "../../packages/kestrel/lib/args.mjs";
+import { asksForHelp, readArgs } from "../../packages/kestrel/lib/args.mjs";
+import { COMMANDS } from "../../packages/kestrel/lib/commands.mjs";
 import { UsageError } from "../../packages/kestrel/lib/errors.mjs";
 
 const ROOT = join(import.meta.dirname, "..", "..");
@@ -57,6 +58,11 @@ describe("readArgs", () => {
     expect(() => readArgs(argv, spec)).toThrow(message);
   });
 
+  it("reads -h after -- as an argument, not a request for help", () => {
+    expect(asksForHelp(["--", "-h"])).toBe(false);
+    expect(readArgs(["--", "-h"], spec)).toEqual({ values: {}, positionals: ["-h"] });
+  });
+
   it("answers help before anything it would refuse", () => {
     expect(readArgs(["--sise", "1k", "-h"], spec)).toEqual({ help: true });
   });
@@ -82,6 +88,17 @@ describe("--help on each command", () => {
       expect(readdirSync(dir)).toEqual([]);
     }
   });
+
+  it.each(["init", "dev", "sync-migrations", "check-context", "seed", "reset"])(
+    "answers kestrel %s --help from the client with no instance installed, fetching nothing",
+    (command) => {
+      const r = kestrel(CLIENT_BIN, command, "--help");
+      expect(r.code).toBe(0);
+      expect(r.out.startsWith(`Usage: kestrel ${command}`)).toBe(true);
+      expect(r.err).toBe("");
+      expect(readdirSync(dir)).toEqual([]);
+    },
+  );
 
   it("answers the client's own commands the same way", () => {
     for (const command of ["login", "logout", "api"]) {
@@ -131,5 +148,20 @@ describe("kestrel api's own reader", () => {
 
   it("still reads help as its subcommand", () => {
     expect(parseApiArgs(["help"])).toMatchObject({ mode: "list" });
+  });
+});
+
+describe("kestrel --help", () => {
+  it("lists every command by the first line of its own usage, so the two can't differ", () => {
+    const r = kestrel(BIN, "--help");
+    for (const { usage } of COMMANDS) {
+      expect(r.out).toContain(`  ${usage.split("\n")[0].replace("Usage: kestrel ", "")}  `);
+    }
+  });
+
+  it("refuses an unknown command with the help, and exit 1", () => {
+    const r = kestrel(BIN, "frob");
+    expect(r.code).toBe(1);
+    expect(r.err.startsWith('kestrel: unknown command "frob"\n\nkestrel ')).toBe(true);
   });
 });

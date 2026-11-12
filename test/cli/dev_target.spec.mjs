@@ -6,13 +6,18 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ownsServer, planDevTarget } from "../../packages/kestrel/lib/dev-api.mjs";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  connectDevServer,
+  ownsServer,
+  planDevTarget,
+} from "../../packages/kestrel/lib/dev-api.mjs";
 import {
   clearDevServer,
   readDevServer,
   writeDevServer,
 } from "../../packages/kestrel/lib/dev-server.mjs";
+import { CliError } from "../../packages/kestrel/lib/errors.mjs";
 
 const record = { port: "8794", id: "run-a" };
 
@@ -85,5 +90,20 @@ describe("the dev server record", () => {
     expect(readDevServer(dir)).toEqual({ port: "8794", id: "run-b" });
     clearDevServer("run-b", dir);
     expect(readDevServer(dir)).toBeUndefined();
+  });
+});
+
+describe("a server that isn't a Kestrel dev server", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("is refused in a line when it answers the dev token with a page", async () => {
+    vi.stubGlobal("fetch", async () => new Response("<html>another app</html>", { status: 200 }));
+    const refused = connectDevServer("3000", "api", "human");
+    await expect(refused).rejects.toThrow(CliError);
+    await expect(refused).rejects.toThrow(
+      "the server at http://localhost:3000 didn't answer as a Kestrel dev server.",
+    );
   });
 });

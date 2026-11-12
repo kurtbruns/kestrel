@@ -7,12 +7,10 @@
  * checklist an operator meets when they deploy. The target is found as for seed.
  */
 import { commandArgs } from "../packages/kestrel/lib/args.mjs";
+import { usageOf } from "../packages/kestrel/lib/commands.mjs";
 import { callApi, connectDevServer, fail } from "../packages/kestrel/lib/dev-api.mjs";
 
-const USAGE = `Usage: kestrel reset [port|url]
-
-  Return the local dev server to a fresh install: no posts, subscribers, or settings.
-  With no port or url, it acts only on the dev server this directory's kestrel dev started.`;
+const USAGE = usageOf("reset");
 
 /** `kestrel reset [port|url]`. */
 export async function resetCommand(argv) {

@@ -28,6 +28,7 @@ import {
 } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { commandArgs, readArgs } from "../packages/kestrel/lib/args.mjs";
+import { usageOf } from "../packages/kestrel/lib/commands.mjs";
 import { CliError } from "../packages/kestrel/lib/errors.mjs";
 import { CONTEXT_FILES, writeShipped } from "./context.mjs";
 import { PACKAGE, PACKAGE_ROOT } from "./package.mjs";
@@ -116,12 +117,7 @@ export function nameResources(config, name) {
   return named;
 }
 
-const USAGE = `Usage: kestrel init [dir] [--name <name>]
-
-  Write a new instance repository here, or in dir, from the scaffold this release ships.
-  Nothing is written if any file it would write is already there.
-
-  --name <name>   names the Worker, database, and image bucket (default: the folder's name)`;
+const USAGE = usageOf("init");
 
 const INIT_ARGS = { options: { name: { type: "string" } }, max: 1 };
 

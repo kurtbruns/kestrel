@@ -669,6 +669,20 @@ describe("kestrel api against a signed-in instance", () => {
     expect(file.type).toBe("application/octet-stream");
   });
 
+  it.each([
+    ["-F", ["POST", "/api/posts", "-F", "subject=@no-such-file"]],
+    ["--data", ["POST", "/api/posts", "--data", "@no-such-file"]],
+    ["--form", ["POST", "/api/posts/p_1/images", "--form", "file=@no-such-file"]],
+  ])("says a file %s names can't be read, in a line, and sends nothing", async (_flag, argv) => {
+    serve(() => new Response("{}"));
+    await run(argv);
+    expect(process.exitCode).toBe(1);
+    expect(err).toEqual([
+      expect.stringMatching(/^kestrel api: Couldn't read no-such-file: ENOENT/),
+    ]);
+    expect(calls.map((c) => c.path).filter((p) => p !== "/api/openapi.json")).toEqual([]);
+  });
+
   it("says an instance with no OpenAPI document runs an older release", async () => {
     vi.stubGlobal("fetch", async () => new Response("{}", { status: 404 }));
     await run(["--list"]);

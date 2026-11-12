@@ -16,7 +16,8 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { INSTANCE_COMMANDS, main } from "../lib/commands.mjs";
+import { asksForHelp } from "../lib/args.mjs";
+import { INSTANCE_COMMANDS, main, usageOf } from "../lib/commands.mjs";
 import { runInstanceCommand } from "../lib/handoff.mjs";
 
 const PACKAGE = JSON.parse(
@@ -32,7 +33,11 @@ await main(process.argv.slice(2), {
     ...Object.fromEntries(
       INSTANCE_COMMANDS.map((name) => [
         name,
-        (argv) => runInstanceCommand(name, argv, PACKAGE.version),
+        // Help is answered here, so it needs no install and fetches nothing (init's would).
+        (argv) =>
+          asksForHelp(argv)
+            ? console.log(usageOf(name))
+            : runInstanceCommand(name, argv, PACKAGE.version),
       ]),
     ),
     login: signIn("loginCommand"),

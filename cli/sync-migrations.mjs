@@ -20,6 +20,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { commandArgs } from "../packages/kestrel/lib/args.mjs";
+import { usageOf } from "../packages/kestrel/lib/commands.mjs";
 import { CliError } from "../packages/kestrel/lib/errors.mjs";
 import { PACKAGE_ROOT } from "./package.mjs";
 
@@ -29,9 +30,7 @@ const SHIPPED = join(PACKAGE_ROOT, "migrations");
 // on Windows) isn't taken for an edited migration.
 const sameText = (path) => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
 
-const USAGE = `Usage: kestrel sync-migrations
-
-  Copy this release's migrations into migrations/. A file already there is never overwritten.`;
+const USAGE = usageOf("sync-migrations");
 
 /** `kestrel sync-migrations`, into the current directory's `migrations/`. */
 export function syncMigrationsCommand(argv) {

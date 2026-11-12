@@ -51,6 +51,7 @@ import {
 import { tmpdir } from "node:os";
 import { basename, dirname, join, sep } from "node:path";
 import { commandArgs } from "../packages/kestrel/lib/args.mjs";
+import { usageOf } from "../packages/kestrel/lib/commands.mjs";
 import { PACKAGE, PACKAGE_ROOT } from "./package.mjs";
 
 /** The context files an instance gets, by their path in the instance. */
@@ -290,12 +291,7 @@ function reportOneDiff(file, mine, git) {
   console.log("  Merge what you want of it into yours, by hand or with Claude.");
 }
 
-const USAGE = `Usage: kestrel check-context [--update] [--from <release>]
-
-  Show what this release changed in the Claude files in .claude/, beside your own edits.
-
-  --update            take this release's copy of each file you haven't edited, and add new ones
-  --from <release>    compare from that release, not the one your last commit's package.json pins`;
+const USAGE = usageOf("check-context");
 
 /**
  * What a check compares against, looked for once and only when a file differs from the

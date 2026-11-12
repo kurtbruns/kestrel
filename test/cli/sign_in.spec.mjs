@@ -36,6 +36,7 @@ import {
   withCredentialsLock,
   writeSignIn,
 } from "../../packages/kestrel/lib/credentials.mjs";
+import { CliError } from "../../packages/kestrel/lib/errors.mjs";
 import { stripJsonc } from "../../packages/kestrel/lib/folder-instance.mjs";
 import { signIn } from "../../packages/kestrel/lib/login.mjs";
 import {
@@ -304,6 +305,21 @@ describe("the OAuth steps", () => {
     });
   });
 
+  it("says the metadata isn't JSON, in a line rather than a crash, when a page answers for it", async () => {
+    stubFetch(
+      () =>
+        json({ error: "invalid_token" }, 401, {
+          "www-authenticate": `Bearer resource_metadata="${ORIGIN}/.well-known/meta"`,
+        }),
+      () => new Response("<html>sign in</html>", { status: 200 }),
+    );
+    const refused = discover(ORIGIN);
+    await expect(refused).rejects.toThrow(SignInError);
+    await expect(refused).rejects.toThrow(
+      `the protected resource's metadata at ${ORIGIN}/.well-known/meta isn't JSON.`,
+    );
+  });
+
   it("says the instance offers no sign-in when Access answers without OAuth metadata", async () => {
     stubFetch(() => new Response(null, { status: 302, headers: { location: "/login" } }));
     await expect(discover(ORIGIN)).rejects.toThrow(/doesn't offer a sign-in for programs/);
@@ -484,6 +500,20 @@ describe("the loopback callback", () => {
       `${listener.redirectUri}?state=s&error=access_denied&error_description=not+allowed`,
     );
     await refused;
+  });
+});
+
+describe("a config directory it can't write", () => {
+  it("says so in a line, naming the directory, rather than crashing", async () => {
+    // A file where the directory should be: nothing can be made inside it.
+    const blocked = join(dir, "blocked");
+    writeFileSync(blocked, "");
+    vi.stubEnv("KESTREL_CONFIG_DIR", join(blocked, "kestrel"));
+    const refused = writeSignIn(ORIGIN, stored(60_000));
+    await expect(refused).rejects.toThrow(CliError);
+    await expect(refused).rejects.toThrow(
+      `Couldn't make ${join(blocked, "kestrel")} for the sign-ins`,
+    );
   });
 });
 

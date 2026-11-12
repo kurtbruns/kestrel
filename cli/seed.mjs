@@ -22,6 +22,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { commandArgs } from "../packages/kestrel/lib/args.mjs";
+import { usageOf } from "../packages/kestrel/lib/commands.mjs";
 import { connectDevServer, fail } from "../packages/kestrel/lib/dev-api.mjs";
 import { fileMediaType } from "../packages/kestrel/lib/media-types.mjs";
 
@@ -108,16 +109,12 @@ export async function seedDemo(base, token, { size, seed } = {}, tag = "seed") {
   if (!res.ok) {
     fail(`request failed: ${res.status} ${res.statusText}`, await res.text());
   }
-  return res.json();
+  return res
+    .json()
+    .catch(() => fail(`the server at ${url} answered the seed with something that isn't JSON.`));
 }
 
-const USAGE = `Usage: kestrel seed [--size <n>] [--seed <s>] [port|url]
-
-  Load the demo publication into the local dev server, replacing what it holds.
-  With no port or url, it acts only on the dev server this directory's kestrel dev started.
-
-  --size <n>   scale the list to about n subscribers: 100, 1k, 10k, or 100k
-  --seed <s>   pin the generator, so a scaled list comes out the same each time`;
+const USAGE = usageOf("seed");
 
 /** `kestrel seed [--size n] [--seed s] [port|url]`. */
 export async function seedCommand(argv) {

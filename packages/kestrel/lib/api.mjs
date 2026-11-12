@@ -23,17 +23,16 @@
  */
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
+import { usageOf } from "./commands.mjs";
 import { readSignIn, readSignIns, withCredentialsLock, writeSignInLocked } from "./credentials.mjs";
 import { connectDevServer } from "./dev-api.mjs";
 import { CliError, UsageError } from "./errors.mjs";
 import { folderOrigins } from "./folder-instance.mjs";
 import { fileMediaType } from "./media-types.mjs";
 import {
-  CLAUDE_CODE_CLIENT,
   defaultClient,
   instanceOrigin,
   isLoopback,
-  KESTREL_CLI_CLIENT,
   needsRefresh,
   refreshTokens,
   SignInError,
@@ -47,26 +46,7 @@ import {
   listRoutes,
 } from "./openapi.mjs";
 
-const USAGE = `Usage: kestrel api <method> <path> [options]
-       kestrel api --list [resource]       the instance's routes, or one resource's
-       kestrel api help <method> <path>    one route: its fields, refusals, and answer
-
-  -f, --raw-field <name=value>  a body field, as a string; repeatable. On a GET, or for a name
-                                the route takes only as one, a query parameter
-  -F, --field <name=value>      a body field typed by the route's schema (true, 3, null, JSON),
-                                or name=@file for a file's text. name.sub nests; name[] lists
-  --data <json|@file|->         the request body: inline, from a file, or from stdin
-  --type <media type>           the body's type (default application/json)
-  --form <name=value>           a multipart field, repeatable; name=@file attaches a file
-  --url <url>                   the instance (default: KESTREL_URL, else this folder's instance, from
-                                its wrangler.jsonc, else the only one you're signed in to)
-  --local                       this directory's dev server, started by kestrel dev
-  --client <name>               your own script's Kestrel-Client name (default ${CLAUDE_CODE_CLIENT}
-                                when Claude Code runs this, otherwise ${KESTREL_CLI_CLIENT}); never
-                                editor, which only the editor names itself
-
-The routes, fields, and refusals come from the instance's own /api/openapi.json, so they
-match the release it runs. A field the route doesn't take is refused before the request.`;
+const USAGE = usageOf("api");
 
 // The name only the editor sends; `kestrel api` refuses to claim it (SPEC §7, §11). Mirrored
 // from shared/who_acted.ts, since the CLI is plain Node; a spec holds the two equal.
@@ -96,9 +76,10 @@ const VALUED = {
 /**
  * Read `kestrel api`'s argv. A call is a method and a path, `--form`, `-f`, and `-F`
  * repeatable; `--list [resource]`, `help`, and `help <resource>` list the routes, and
- * `help <method> <path>` describes one; `--help` or `-h` anywhere asks for the usage. The body is sent one way: `--data`, `--form`, or
- * fields, never two at once, since merging them would leave a reader guessing which won; a
- * field that is a query parameter may go beside `--data` or `--form`.
+ * `help <method> <path>` describes one; `--help` or `-h` anywhere asks for the usage. The body
+ * is sent one way: `--data`, `--form`, or fields, never two at once, since merging them would
+ * leave a reader guessing which won; a field that is a query parameter may go beside `--data`
+ * or `--form`.
  */
 export function parseApiArgs(argv) {
   const opts = { forms: [], fields: [], local: false, list: false };

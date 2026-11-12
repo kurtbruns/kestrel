@@ -5,11 +5,12 @@
  * Two packages ship a `kestrel` script. The unscoped `kestrel` (packages/kestrel/bin) is the
  * client, which runs from anywhere and hands an instance command to the instance package
  * installed where it runs (lib/handoff.mjs); `@kurtbruns/kestrel` (bin/kestrel.mjs) runs every
- * command from its own install. Each script says only how it runs each command; the list, the
- * help, `--version`, an unknown command, and how a command's error is printed are here, so the
- * two can't drift apart. Plain Node, no dependency, as the whole client is.
+ * command from its own install. Each script says only how it runs each command; the list, each
+ * command's usage, the help, `--version`, an unknown command, and how a command's error is
+ * printed are here, so the two can't drift apart. Plain Node, no dependency, as the whole client is.
  */
 import { CliError, errorText, runCommand } from "./errors.mjs";
+import { CLAUDE_CODE_CLIENT, KESTREL_CLI_CLIENT } from "./oauth.mjs";
 
 /** The package that holds the instance commands. */
 export const INSTANCE_PACKAGE = "@kurtbruns/kestrel";
@@ -17,72 +18,143 @@ export const INSTANCE_PACKAGE = "@kurtbruns/kestrel";
 /**
  * Every command, in the order the help lists them: `instance` for one that acts on an
  * instance's repository and so runs from the instance package, `client` for one that acts as
- * the person at this computer. `usage` is its line in the help (more than one for a command
- * with more than one form).
+ * the person at this computer. `usage` is what `kestrel <command> --help` prints, kept here
+ * rather than beside each command so the client can answer it for an instance command with no
+ * instance package installed; its first line is the command's row in `kestrel --help`.
  */
 export const COMMANDS = [
   {
     name: "init",
     runs: "instance",
-    usage: [["init [dir] [--name <name>]", "write a new instance repository here (or in dir)"]],
+    summary: "write a new instance repository here (or in dir)",
+    usage: `Usage: kestrel init [dir] [--name <name>]
+
+  Write a new instance repository here, or in dir, from the scaffold this release ships.
+  Nothing is written if any file it would write is already there.
+
+  --name <name>   names the Worker, database, and image bucket (default: the folder's name)`,
   },
   {
     name: "dev",
     runs: "instance",
-    usage: [["dev [wrangler dev args]", "run locally, with the send sweep once a minute"]],
+    summary: "run locally, with the send sweep once a minute",
+    usage: `Usage: kestrel dev [wrangler dev options]
+
+  Run the Worker locally as it runs deployed: the send sweep once a minute, on the minute,
+  the local database migrated when it is new, and this run recorded so seed and reset find it.
+  Options go on to wrangler dev (--remote, for one), except --port: set PORT instead.
+
+  PORT=<port>                    the port to serve on (default 8787, else a free one)
+  SIMULATE_SENDS=<profile>       a provider simulation for this run, over .dev.vars's
+  SIMULATE_ACCOUNT, MIN_LEAD_SECONDS, SUBREQUEST_BUDGET   likewise, for this run`,
   },
   {
     name: "sync-migrations",
     runs: "instance",
-    usage: [["sync-migrations", "copy this release's migrations into migrations/"]],
+    summary: "copy this release's migrations into migrations/",
+    usage: `Usage: kestrel sync-migrations
+
+  Copy this release's migrations into migrations/. A file already there is never overwritten.`,
   },
   {
     name: "check-context",
     runs: "instance",
-    usage: [["check-context [--update]", "show what this release changed in .claude/"]],
+    summary: "show what this release changed in .claude/",
+    usage: `Usage: kestrel check-context [--update] [--from <release>]
+
+  Show what this release changed in the Claude files in .claude/, beside your own edits.
+
+  --update            take this release's copy of each file you haven't edited, and add new ones
+  --from <release>    compare from that release, not the one your last commit's package.json pins`,
   },
   {
     name: "seed",
     runs: "instance",
-    usage: [
-      ["seed [--size <n>] [port|url]", "load the demo publication into the local dev server"],
-    ],
+    summary: "load the demo publication into the local dev server",
+    usage: `Usage: kestrel seed [--size <n>] [--seed <s>] [port|url]
+
+  Load the demo publication into the local dev server, replacing what it holds.
+  With no port or url, it acts only on the dev server this directory's kestrel dev started.
+
+  --size <n>   scale the list to about n subscribers: 100, 1k, 10k, or 100k
+  --seed <s>   pin the generator, so a scaled list comes out the same each time`,
   },
   {
     name: "reset",
     runs: "instance",
-    usage: [["reset [port|url]", "return the local dev server to a fresh install"]],
+    summary: "return the local dev server to a fresh install",
+    usage: `Usage: kestrel reset [port|url]
+
+  Return the local dev server to a fresh install: no posts, subscribers, or settings.
+  With no port or url, it acts only on the dev server this directory's kestrel dev started.`,
   },
   {
     name: "login",
     runs: "client",
-    usage: [
-      ["login <url> [--no-browser]", "sign in to a deployed instance as you, in your browser"],
-    ],
+    summary: "sign in to a deployed instance as you, in your browser",
+    usage: `Usage: kestrel login <url> [--no-browser]
+
+  Sign this computer in to a deployed instance as you, approving it in your browser.
+
+  --no-browser   print the sign-in URL without opening a browser`,
   },
   {
     name: "logout",
     runs: "client",
-    usage: [["logout [url]", "sign out of it on this computer"]],
+    summary: "sign out of it on this computer",
+    usage: `Usage: kestrel logout [url]
+
+  Sign this computer out of an instance; the url may be left out when you're signed in to one.`,
   },
   {
     name: "api",
     runs: "client",
-    usage: [
-      ["api <method> <path> [opts]", "call the API as you"],
-      ["api --list | help <m> <path>", "list the instance's routes, or describe one"],
-    ],
+    summary: "call the API as you, or list and describe its routes",
+    usage: `Usage: kestrel api <method> <path> [options]
+       kestrel api --list [resource]       the instance's routes, or one resource's
+       kestrel api help <method> <path>    one route: its fields, refusals, and answer
+
+  -f, --raw-field <name=value>  a body field, as a string; repeatable. On a GET, or for a name
+                                the route takes only as one, a query parameter
+  -F, --field <name=value>      a body field typed by the route's schema (true, 3, null, JSON),
+                                or name=@file for a file's text. name.sub nests; name[] lists
+  --data <json|@file|->         the request body: inline, from a file, or from stdin
+  --type <media type>           the body's type (default application/json)
+  --form <name=value>           a multipart field, repeatable; name=@file attaches a file
+  --url <url>                   the instance (default: KESTREL_URL, else this folder's instance, from
+                                its wrangler.jsonc, else the only one you're signed in to)
+  --local                       this directory's dev server, started by kestrel dev
+  --client <name>               your own script's Kestrel-Client name (default ${CLAUDE_CODE_CLIENT}
+                                when Claude Code runs this, otherwise ${KESTREL_CLI_CLIENT}); never
+                                editor, which only the editor names itself
+
+The routes, fields, and refusals come from the instance's own /api/openapi.json, so they
+match the release it runs. A field the route doesn't take is refused before the request.`,
   },
 ];
 
 /** The names of the commands that run from the instance package. */
 export const INSTANCE_COMMANDS = COMMANDS.filter((c) => c.runs === "instance").map((c) => c.name);
 
-const row = ([form, what]) => `  ${form.padEnd(30)}${what}`;
+/** What `kestrel <name> --help` prints. */
+export function usageOf(name) {
+  const command = COMMANDS.find((c) => c.name === name);
+  if (!command) {
+    throw new Error(`no command named ${name}`);
+  }
+  return command.usage;
+}
 
 /** The help `kestrel` prints with no command, `help`, or `--help`. */
 export function helpText(version) {
-  const rows = (runs) => COMMANDS.filter((c) => c.runs === runs).flatMap((c) => c.usage.map(row));
+  // A command's row is the first line of its usage, after "Usage: kestrel ".
+  const forms = COMMANDS.map((c) => [
+    c.usage.split("\n")[0].replace(/^Usage: kestrel /, ""),
+    c.summary,
+  ]);
+  const width = Math.max(...forms.map(([form]) => form.length)) + 2;
+  const row = ([form, what]) => `  ${form.padEnd(width)}${what}`;
+  const rows = (runs) => COMMANDS.flatMap((c, i) => (c.runs === runs ? [row(forms[i])] : []));
   return [
     `kestrel ${version}`,
     "",
