@@ -30,7 +30,8 @@
  *
  * Releases before this one wrote a header line into each file, naming the release and a hash,
  * which Claude read in every session. The first run under this release removes that line, and
- * nothing else, from each file (`stripHeaders`).
+ * nothing else, from each file (`stripHeaders`), and says so in one line after every file's
+ * answer.
  *
  * The files ship under `template/claude/` and land in `.claude/`: shipped under `.claude/`,
  * they would load into a Claude session working in Kestrel's own repository as context and
@@ -113,9 +114,14 @@ export function withoutHeader(raw) {
   return { text: lines.join("\n") };
 }
 
-/** Remove the header line earlier releases wrote from each file that has one. */
+/**
+ * Remove the header line earlier releases wrote from each file that has one. Prints nothing:
+ * the count and the lines about headers it couldn't read are said after every file's answer, so
+ * the first lines a run prints are what it found, not a note about a line it removed.
+ */
 function stripHeaders(root) {
   let stripped = 0;
+  const unreadable = [];
   for (const file of CONTEXT_FILES) {
     const path = join(root, file);
     if (!existsSync(path)) {
@@ -123,16 +129,15 @@ function stripHeaders(root) {
     }
     const h = withoutHeader(readFileSync(path, "utf8"));
     if (h?.unreadable) {
-      say(
+      unreadable.push(
         `${file}: line ${h.unreadable.join(" and ")} looks like the header line earlier releases wrote, but isn't one check-context can read, so the file is left as it is. Delete that line yourself.`,
       );
     } else if (h) {
       writeFileSync(path, h.text);
       stripped++;
-      say(`${file}: removed the header line earlier releases wrote; nothing else in it changed`);
     }
   }
-  return stripped;
+  return { stripped, unreadable };
 }
 
 /**
@@ -295,11 +300,16 @@ function reportOneDiff(file, mine, git) {
 
 /** `kestrel check-context [--update] [--from <release>]`. */
 export function checkContextCommand(argv, root = process.cwd()) {
-  const stripped = stripHeaders(root);
+  const { stripped, unreadable } = stripHeaders(root);
+  // Said once, after every file's answer, and never "nothing else changed": a file it touched
+  // may be one Kestrel changed in this release, which its own line says.
   const strippedNote = () => {
+    for (const line of unreadable) {
+      say(line);
+    }
     if (stripped > 0) {
       say(
-        "This release keeps no record in the files: it compares them with the releases on npm, so the header lines are gone. Commit that with the upgrade.",
+        `Removed the header line earlier releases wrote from ${stripped === 1 ? "1 file" : `${stripped} files`}, and only that line: this release keeps no record in the files, since it compares them with the releases on npm. Commit that with the upgrade.`,
       );
     }
   };

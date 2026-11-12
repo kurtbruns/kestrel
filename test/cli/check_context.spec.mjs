@@ -61,6 +61,9 @@ const RELEASED_HEADER = {
   skill: (version, hash) =>
     `# @kurtbruns/kestrel ${version}, sha256:${hash} (kestrel check-context compares against this line)`,
 };
+/** The one line a run that removed headers from `count` prints about it, after every file's. */
+const REMOVED = (count) =>
+  `Removed the header line earlier releases wrote from ${count}, and only that line: this release keeps no record in the files, since it compares them with the releases on npm. Commit that with the upgrade.`;
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 /** `text` with the header a release `version` wrote into it. */
 const withHeader = (text, version) =>
@@ -74,9 +77,9 @@ let npmDir;
 const path = (file) => join(instance, file);
 const theirs = (file) => readFileSync(path(file), "utf8");
 const put = (file, text) => writeFileSync(path(file), text);
-/** The line check-context prints for `file`'s state: its last, after any about its header. */
+/** The line check-context prints for `file`'s state: its first, before any about its header. */
 const lineFor = (out, file) =>
-  out.split("\n").findLast((l) => l.startsWith(`[check-context] ${file}:`));
+  out.split("\n").find((l) => l.startsWith(`[check-context] ${file}:`));
 const npmCalls = () =>
   existsSync(join(npmDir, "calls")) ? readFileSync(join(npmDir, "calls"), "utf8") : "";
 
@@ -595,12 +598,32 @@ describe("kestrel check-context on files with the header line earlier releases w
 
     const r = check();
 
-    expect(r.out).toContain(
-      `[check-context] ${CLAUDE_MD}: removed the header line earlier releases wrote; nothing else in it changed`,
-    );
-    expect(r.out).toContain("Commit that with the upgrade.");
+    expect(r.out.trim().split("\n")).toEqual([
+      ...FILES.map((f) => `[check-context] ${f}: current`),
+      `[check-context] ${REMOVED("1 file")}`,
+    ]);
     expect(theirs(CLAUDE_MD)).toBe(RELEASE[CLAUDE_MD]);
-    expect(lineFor(r.out, CLAUDE_MD)).toBe(`[check-context] ${CLAUDE_MD}: current`);
+  });
+
+  it("answers for each file first, then notes the header removal once, after them, on a first run after upgrading", () => {
+    publishOld();
+    for (const file of FILES) {
+      put(file, withHeader(older(file), OLD));
+    }
+    upgradedFrom(OLD);
+
+    const r = check();
+
+    expect(r.code).toBe(0);
+    expect(r.out.trim().split("\n")).toEqual([
+      ...FILES.map(
+        (f) =>
+          `[check-context] ${f}: Kestrel changed it between ${OLD} and ${VERSION}, and you haven't edited it; \`npm run check-context -- --update\` takes ${VERSION}'s`,
+      ),
+      "[check-context] The changelog says what changed in Claude's context and why, and marks a change that bears on safety.",
+      `[check-context] ${REMOVED("3 files")}`,
+    ]);
+    expect(r.out).not.toContain("nothing else");
   });
 
   it("removes a skill's front-matter header as 1.22.0 wrote it, the front matter still opening the file", () => {
@@ -643,9 +666,13 @@ describe("kestrel check-context on files with the header line earlier releases w
 
     const r = check("--update");
 
-    expect(r.out).toContain(
-      `${CLAUDE_MD}: line 1 looks like the header line earlier releases wrote, but isn't one check-context can read, so the file is left as it is.`,
+    const said = r.out.split("\n");
+    const warning = said.findIndex((l) =>
+      l.startsWith(
+        `[check-context] ${CLAUDE_MD}: line 1 looks like the header line earlier releases wrote, but isn't one check-context can read, so the file is left as it is.`,
+      ),
     );
+    expect(warning).toBeGreaterThan(said.indexOf(lineFor(r.out, CLAUDE_MD)));
     expect(theirs(CLAUDE_MD)).toBe(damaged);
   });
 });
