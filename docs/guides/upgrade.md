@@ -110,15 +110,15 @@ D1 keeps a history of your database, called Time Travel, for 30 days on Workers 
 
 A release changes the database only by adding a migration. Applying it keeps everything already in the database. The new release's code expects them, so the deploy in section 5 waits until this section's check says nothing is left.
 
-1. Apply the migrations. Run it on every upgrade, as a command of its own, never joined to the deploy:
+1. Apply the migrations. Run it on every upgrade:
 
     ```bash
     npx wrangler d1 migrations apply DB --remote --env production
     ```
 
-    It lists the migrations it's about to apply, and asks you to confirm. Run by Claude, or in any other shell that isn't interactive, it answers its own prompt and applies them without asking. As it applies each one, it prints the list again with a ✅ beside each migration applied so far. When a release has none, it says `✅ No migrations to apply!`.
+    It lists the migrations it's about to apply, and asks you to confirm. Run by Claude, or in any other shell that isn't interactive, it answers its own prompt and applies them without asking. As it applies each one, it prints the list again, marking each migration applied so far. When a release has none, it says there are no migrations to apply.
 
-    If it fails, it prints an error, and any migration it didn't reach has no ✅. The error is often a temporary one from Cloudflare's API, such as `Authentication error [code: 10000]`. Don't deploy. Run the same command again: a migration that applied is recorded, so a second run applies only what's left.
+    If it fails, it prints an error and stops, and the migrations it didn't reach aren't marked as applied. Don't deploy. Run the same command again: a migration that applied is recorded, so a second run applies only what's left. If it fails again, stop the upgrade here. The release you run now keeps working, since a migration only adds to the database.
 
 1. Check that nothing is left to apply:
 
