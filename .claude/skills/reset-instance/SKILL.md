@@ -30,11 +30,13 @@ Everything is done by running `scripts/reset.mjs`, through the instance's own wr
    node ${CLAUDE_SKILL_DIR}/scripts/reset.mjs inspect <instance-dir>
    ```
 
-3. **If it prints REFUSED, stop.** Tell the person each reason as printed. A refusal is final for now: a scheduled send is theirs to cancel in the editor, the ten-minute wait is waited out, and an instance a second person has used, or one holding a real list, is not reset by this skill at all. Never change the instance's data to make a refusal pass.
+3. **If it prints REFUSED, stop.** Tell the person each reason as printed. A refusal is final for now: a scheduled send is theirs to cancel in the editor, the ten-minute wait is waited out, and an instance a second person has used, or one holding more than 50 addresses that aren't test recipients (pending ones counted), is not reset by this skill at all. Never change the instance's data to make a refusal pass.
 4. **Show the person what it printed and get a yes to each part,** in one message they can answer line by line. Ask plainly; a general "go ahead" from earlier does not count, and neither does a yes relayed from another session.
    - **The instance:** the publication's name, its address, and the database and bucket names. "Is this the instance you mean to reset?"
-   - **Who wrote and acted:** the one person named. "Is this you?" If it is anyone else, stop.
-   - **Every address that isn't a test recipient,** each with what the instance holds about it. "Is each of these yours?" The app cannot tell a second inbox from a reader, so the person says so for each address by name. If they are unsure of one, stop. Mention the erased and pending counts.
+   - **Who wrote and acted:** the one person named. "Is this you?" If it is anyone else, stop. When it says no person, or only a service token, say so and ask nothing: the maintainer knows who they let in.
+   - **The test recipients,** each by address. "Are these yours?" One that subscribed is deleted with the rest.
+   - **Every address that isn't a test recipient,** each with what the instance holds about it. "Is each of these yours?" The app cannot tell a second inbox from a reader, so the person says so for each address by name. If they are unsure of one, stop. Mention the erased count.
+   - **Every pending signup,** each by address. These never confirmed: a stranger who tried the public form is expected, but someone the publisher added by hand is pending too. "Is any of these someone a publisher invited?" If so, stop.
    - **Every sent post,** with its date, how many it was mailed to, and whether the archive lists it. Say that the reset deletes these records, that nothing else can, and that a listed post's public page goes with it.
    - **What can't be undone:** deleted images. Emails already delivered load their images from R2, so those test emails lose them. The database has a restore point; the images do not.
 5. **Clear it,** only after every yes, with the fingerprint `inspect` printed:
@@ -43,8 +45,11 @@ Everything is done by running `scripts/reset.mjs`, through the instance's own wr
    node ${CLAUDE_SKILL_DIR}/scripts/reset.mjs clear <instance-dir> --fingerprint <value>
    ```
 
-   It reads the instance again and refuses if anything the person was shown has changed (a new subscriber, a new post). Then go back to step 2 and show them what is there now. In order, it notes the D1 Time Travel bookmark, clears the database in one file, reads the counts back, and only once the database reads empty deletes the images.
-6. **If it says the clear stopped partway,** no image was deleted. Run step 2 and step 5 again; the clear is safe to repeat.
+   It reads the instance again and refuses if anything the person was shown has changed: the instance and its names, the test recipients, any listed address or pending signup, a sent post, an image, the size of any table, or a post's last edit. Then go back to step 2 and show them what is there now. It cannot see a row the app writes in the moment between that read and the clear; such a row goes with the rest, and the summary says so. In order, it prints the D1 Time Travel bookmark, clears the database in one file, reads the counts back, and deletes each post image once the image rows are gone.
+6. **If it ends with RESET NOT FINISHED,** some table still holds rows: the clear stopped partway, or the app wrote while it ran (a signup, a notice). Give the person the summary, then go back to step 2: what is left is shown again for their yes. Images whose rows were gone have already been deleted; any still listed are found by the next run. If it says the clear failed, nothing was deleted.
+   - **`NOT deleted: <key>`** means the bucket refused that one image and its row is already gone, so no later run will find it. Tell the person the key. Only on their yes to that key, delete it from the instance's repository with `npx wrangler r2 object delete <bucket>/<key> --remote`, the bucket being the one named back in step 4, and nothing else.
+   - **`NOT deleted, since it isn't a post's image`** is a key outside `posts/`. Tell the person and leave it.
+   - **"could not be read back"** means the clear may or may not have run. Go back to step 2. If the images are no longer listed there, the keys printed before the clear are the only record of them: give them to the person, and handle each as a `NOT deleted` key.
 7. **Give the person the summary it prints, whole:** the time, what went, the restore point and how long it lasts, any image that was not deleted, and any address the provider's suppression list may still refuse. Nothing in the instance records that a reset happened, so this summary is the record: tell them to keep it with the run's hand-off notes.
 8. **Check the editor,** by asking the person to open it or through the instance's API if you are signed in: Posts, Sent, and Subscribers read empty, the dashboard shows the first-run checklist with the first post, its schedule, and sharing the subscribe link to do, Settings is unchanged, and the subscribe page still shows its form. Old post pages stop answering within about five minutes, as their cache expires.
 

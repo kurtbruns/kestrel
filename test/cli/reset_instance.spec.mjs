@@ -195,6 +195,23 @@ describe("what a reset clears and keeps", () => {
     expect(kept()).toEqual(before);
   });
 
+  it("is refused by the foreign keys in any order that deletes a parent first", () => {
+    tested();
+
+    expect(() => db.exec("DELETE FROM posts")).toThrow(/FOREIGN KEY/);
+  });
+
+  it("leaves a table whose name only looks like one of SQLite's or Cloudflare's to be refused", () => {
+    db.exec("CREATE TABLE xcfxlist (id INTEGER PRIMARY KEY)");
+
+    expect(
+      db
+        .prepare(QUERIES.tables)
+        .all()
+        .map((r) => r.name),
+    ).toContain("xcfxlist");
+  });
+
   it("can be run again on an instance it already cleared", () => {
     tested();
     db.exec(clearSql());
@@ -240,7 +257,7 @@ describe("what the maintainer is shown", () => {
   it("names an address that left, one only the delivery record holds, and one that was suppressed", () => {
     tested();
     subscriber("left@gmail.com", "unsubscribed", "reader");
-    send("send-old", "first", "canceled", { to: ["mailed@gmail.com"] });
+    send("send-old", "first", "sent", { to: ["mailed@gmail.com"] });
     run(
       "INSERT INTO suppressions (email, reason, created_at) VALUES ('blocked@gmail.com', 'manual', ?)",
       LONG_AGO,
@@ -255,17 +272,17 @@ describe("what the maintainer is shown", () => {
     ]);
   });
 
-  it("leaves out a pending signup, the provider's simulator, and an erasure's placeholder, and counts the pending", () => {
+  it("lists a pending signup apart, and leaves out the provider's simulator and an erasure's placeholder", () => {
     tested();
     subscriber("reviewer@amazon.com", "pending");
-    send("send-old", "first", "canceled", {
+    send("send-old", "first", "sent", {
       to: ["bounce@simulator.amazonses.com", "erased:0a1b2c"],
     });
 
     const { toName } = inspect();
 
     expect(toName.addresses).toEqual([]);
-    expect(toName.pending).toBe(1);
+    expect(toName.pending).toEqual(["reviewer@amazon.com"]);
   });
 
   it("names every sent post with who it reached and whether the archive lists it", () => {
@@ -297,6 +314,109 @@ describe("what the maintainer is shown", () => {
     const { toName } = inspect();
 
     expect(toName.refusedByProvider).toEqual(["gone@gmail.com"]);
+  });
+
+  it("names an address that only begins like an erasure's placeholder", () => {
+    tested();
+    subscriber("erased:x@gmail.com");
+
+    expect(inspect().toName.addresses.map((a) => a.email)).toEqual(["erased:x@gmail.com"]);
+  });
+
+  it("counts a sent post's recipients as those the provider took, not those skipped or unsent", () => {
+    tested();
+    run(
+      "INSERT INTO deliveries (send_id, email, status, updated_at) VALUES ('send-first', 'skipped@maintainer.test', 'skipped', ?)",
+      LONG_AGO,
+    );
+    run(
+      "INSERT INTO deliveries (send_id, email, status, updated_at) VALUES ('send-first', 'unsent@maintainer.test', 'unsent', ?)",
+      LONG_AGO,
+    );
+
+    expect(inspect().toName.sent[0].recipients).toBe(1);
+  });
+
+  it("lists the test recipients themselves", () => {
+    tested();
+
+    expect(inspect().toName.testRecipients).toEqual([ME]);
+  });
+
+  it("still names every reader when the test recipients hold a null", () => {
+    tested();
+    run(
+      "UPDATE settings SET data = ?",
+      JSON.stringify({ publication: { name: "Scratch Letter" }, testRecipients: [null, ME] }),
+    );
+    subscriber("jane.reader@gmail.com");
+
+    const { toName } = inspect();
+
+    expect(toName.addresses.map((a) => a.email)).toEqual(["jane.reader@gmail.com"]);
+    expect(toName.testRecipients).toEqual([ME]);
+  });
+
+  it("names every address when no settings were ever saved", () => {
+    tested();
+    run("DELETE FROM settings");
+
+    expect(inspect().toName.addresses.map((a) => a.email)).toEqual([ME]);
+  });
+
+  it("names an address only a receipt waiting for its delivery holds", () => {
+    tested();
+    run(
+      "INSERT INTO held_receipts (provider_id, email, event, at, delivery_id) VALUES ('pid', 'waiting@gmail.com', 'delivered', ?, 1)",
+      LONG_AGO,
+    );
+
+    expect(inspect().toName.addresses).toEqual([
+      { email: "waiting@gmail.com", what: "in 1 receipt(s) waiting for a delivery" },
+    ]);
+  });
+
+  it("deletes only a post's images, and reports a key kept anywhere else", () => {
+    tested();
+    run(
+      "INSERT INTO images (id, post_id, filename, storage_key, content_type, created_at) VALUES ('odd', 'first', 'logo.png', 'branding/logo.png', 'image/png', ?)",
+      LONG_AGO,
+    );
+
+    const { toName } = inspect();
+
+    expect(toName.images).toEqual(["posts/first/cover.png"]);
+    expect(toName.strayImages).toEqual(["branding/logo.png"]);
+  });
+
+  it("gives a different fingerprint when one pending signup replaces another", () => {
+    tested();
+    subscriber("first@gmail.com", "pending");
+    const before = JSON.stringify(inspect().fingerprint);
+
+    run("DELETE FROM subscribers WHERE email = 'first@gmail.com'");
+    subscriber("second@gmail.com", "pending");
+
+    expect(JSON.stringify(inspect().fingerprint)).not.toBe(before);
+  });
+
+  it("gives a different fingerprint when a post is edited in place, the name changes, or a test recipient is added", () => {
+    tested();
+    const before = JSON.stringify(inspect().fingerprint);
+    const changed = () => JSON.stringify(inspect().fingerprint) !== before;
+
+    run("UPDATE posts SET updated_at = updated_at + 1");
+    expect(changed()).toBe(true);
+    run("UPDATE posts SET updated_at = updated_at - 1");
+    expect(changed()).toBe(false);
+
+    run("UPDATE settings SET data = json_set(data, '$.publication.name', 'Another Letter')");
+    expect(changed()).toBe(true);
+    run("UPDATE settings SET data = json_set(data, '$.publication.name', 'Scratch Letter')");
+    expect(changed()).toBe(false);
+
+    run("UPDATE settings SET data = json_set(data, '$.testRecipients[#]', 'new@maintainer.test')");
+    expect(changed()).toBe(true);
   });
 
   it("gives a different fingerprint once a reader arrives after the look", () => {
@@ -356,6 +476,17 @@ describe("what a reset refuses", () => {
     expect(refusals[0]).toContain("3 people have written or acted here");
   });
 
+  it("reads one person as one, whatever case their sign-in and their import kept the address in", () => {
+    tested();
+    post("mixed", { author: "Me@Maintainer.test" });
+    send("send-mixed", "mixed", "canceled", { by: "ME@maintainer.test" });
+
+    const { refusals, toName } = inspect();
+
+    expect(refusals).toEqual([]);
+    expect(toName.author).toBe(ME);
+  });
+
   it("lets a service token's acts through beside one person's, and says it acted", () => {
     tested();
     post("by-token", { author: "service" });
@@ -366,16 +497,23 @@ describe("what a reset refuses", () => {
     expect(toName.serviceActed).toBe(true);
   });
 
-  it("refuses a list with more addresses than a person can name", () => {
+  it("names as many addresses as a person can, pending ones counted with the rest, and refuses one more", () => {
     tested();
-    for (let i = 0; i <= MOST_TO_NAME; i++) {
+    for (let i = 0; i < MOST_TO_NAME - 10; i++) {
       subscriber(`reader${i}@gmail.com`);
     }
+    for (let i = 0; i < 10; i++) {
+      subscriber(`invited${i}@gmail.com`, "pending");
+    }
+    expect(inspect().refusals).toEqual([]);
 
+    subscriber("one.more@gmail.com", "pending");
     const { refusals } = inspect();
 
     expect(refusals).toHaveLength(1);
-    expect(refusals[0]).toContain(`${MOST_TO_NAME + 1} addresses here aren't test recipients`);
+    expect(refusals[0]).toContain(
+      `${MOST_TO_NAME + 1} addresses here aren't test recipients (11 of them pending)`,
+    );
   });
 
   it("refuses an instance whose tables it doesn't know, and reads nothing else from it", () => {

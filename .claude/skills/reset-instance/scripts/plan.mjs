@@ -32,37 +32,45 @@ export const RECENT_MS = 10 * 60 * 1000;
 /** More addresses than a person can say are theirs one by one. */
 export const MOST_TO_NAME = 50;
 
+/** Where a post's images are kept in the bucket. Logos are under `branding/`. */
+export const POST_IMAGES = "posts/";
+
 /** The clear, as one file's worth of SQL. Running it twice is harmless. */
 export function clearSql() {
   return `${CLEARED.map((t) => `DELETE FROM ${t};`).join("\n")}\n`;
 }
 
 // An address the maintainer never has to name: an erasure's placeholder, which is no
-// address, and SES's simulator, which mails no one.
+// address and so holds no @, and SES's simulator, which mails no one.
 const NAMEABLE = (email) =>
-  `${email} NOT LIKE 'erased:%' AND ${email} NOT LIKE '%@simulator.amazonses.com'`;
+  `NOT (${email} LIKE 'erased:%' AND ${email} NOT LIKE '%@%') AND ${email} NOT LIKE '%@simulator.amazonses.com'`;
 
+// Only the strings: a null among them would make `NOT IN` hold for no address at all, and
+// every reader would go unnamed.
 const TEST_RECIPIENTS =
-  "SELECT lower(value) FROM settings, json_each(json_extract(settings.data, '$.testRecipients'))";
+  "SELECT lower(value) FROM settings, json_each(json_extract(settings.data, '$.testRecipients')) WHERE json_each.type = 'text'";
 
 /** Every read a reset makes before it clears anything, each a single SELECT. */
 export const QUERIES = {
   tables:
-    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name <> 'd1_migrations' ORDER BY name",
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' AND name NOT LIKE '\\_cf\\_%' ESCAPE '\\' AND name <> 'd1_migrations' ORDER BY name",
   publication:
-    "SELECT json_extract(data, '$.publication.name') AS name, json_extract(data, '$.timeZone') AS time_zone, json_array_length(json_extract(data, '$.testRecipients')) AS test_recipients FROM settings",
+    "SELECT json_extract(data, '$.publication.name') AS name, json_extract(data, '$.timeZone') AS time_zone FROM settings",
+  testRecipients: `SELECT email FROM (${TEST_RECIPIENTS.replace("lower(value)", "lower(value) AS email")}) ORDER BY email`,
   counts: `SELECT ${[...CLEARED, ...KEPT].map((t) => `(SELECT count(*) FROM ${t}) AS ${t}`).join(", ")}`,
   active: "SELECT count(*) AS n FROM sends WHERE status IN ('scheduled', 'sending')",
   sending: "SELECT state, last_accepted_at FROM sending",
   // Everyone who saved a revision, acted on a send, or ran an import: a person's address, or
-  // `service` for a service token.
+  // `service` for a service token. Lowercased, since a revision and an act keep the address
+  // as the sign-in gave it and an import keeps it lowercase: one person, not two.
   actors: `SELECT DISTINCT who FROM (
-      SELECT author AS who FROM post_revisions WHERE author IS NOT NULL
-      UNION SELECT COALESCE(json_extract(actor, '$.email'), 'service') FROM send_acts
-      UNION SELECT COALESCE(principal_email, 'service') FROM imports
+      SELECT lower(author) AS who FROM post_revisions WHERE author IS NOT NULL
+      UNION SELECT COALESCE(lower(json_extract(actor, '$.email')), 'service') FROM send_acts
+      UNION SELECT COALESCE(lower(principal_email), 'service') FROM imports
     ) ORDER BY who`,
   // Every address that isn't a test recipient, with what the instance holds about it. A
-  // pending signup is left out: the form is public before any hand-off.
+  // pending signup is listed apart (`pending`): the form is public before any hand-off, so a
+  // stranger there is normal, but an address the publisher added by hand is pending too.
   addresses: `SELECT email, group_concat(what, '; ') AS what FROM (
       SELECT email,
              CASE status WHEN 'confirmed' THEN 'confirmed subscriber' ELSE 'unsubscribed (' || unsubscribe_cause || ')' END
@@ -72,14 +80,18 @@ export const QUERIES = {
       SELECT email, 'in the delivery record of ' || count(*) || ' send(s)' FROM deliveries GROUP BY email
       UNION ALL
       SELECT email, 'suppressed (' || reason || ')' FROM suppressions
+      UNION ALL
+      SELECT email, 'in ' || count(*) || ' receipt(s) waiting for a delivery' FROM held_receipts GROUP BY email
     )
     WHERE email NOT IN (${TEST_RECIPIENTS}) AND ${NAMEABLE("email")}
     GROUP BY email ORDER BY email`,
-  pending: "SELECT count(*) AS n FROM subscribers WHERE status = 'pending'",
+  pending: "SELECT email FROM subscribers WHERE status = 'pending' ORDER BY email",
+  // Each post and when it last changed, so an edit after the look is a change.
+  posts: "SELECT id, updated_at FROM posts ORDER BY id",
   erased:
     "SELECT count(*) AS n FROM subscribers WHERE status = 'unsubscribed' AND unsubscribe_cause = 'erased'",
   sent: `SELECT s.subject, s.fire_at, p.email_only,
-             (SELECT count(*) FROM deliveries d WHERE d.send_id = s.id) AS recipients
+             (SELECT count(*) FROM deliveries d WHERE d.send_id = s.id AND d.status = 'accepted') AS recipients
         FROM sends s JOIN posts p ON p.id = s.post_id
        WHERE s.status = 'sent' ORDER BY s.fire_at`,
   // Addresses the provider's own suppression list may still hold, which a reset leaves alone.
@@ -142,11 +154,18 @@ export function judge(read, now) {
   }
 
   const addresses = read.addresses.map((r) => ({ email: r.email, what: r.what }));
-  if (addresses.length > MOST_TO_NAME) {
+  const pending = read.pending.map((r) => r.email);
+  if (addresses.length + pending.length > MOST_TO_NAME) {
     refusals.push(
-      `${addresses.length} addresses here aren't test recipients, more than a person can say are theirs one by one. That is a list, not a test.`,
+      `${addresses.length + pending.length} addresses here aren't test recipients (${pending.length} of them pending), more than a person can say are theirs one by one. That is a list, not a test.`,
     );
   }
+
+  // Only a post's image is the reset's to delete. A key anywhere else, such as a logo's, is
+  // reported and left.
+  const keys = read.images.map((r) => r.storage_key);
+  const images = keys.filter((key) => key.startsWith(POST_IMAGES));
+  const strayImages = keys.filter((key) => !key.startsWith(POST_IMAGES));
 
   const counts = read.counts[0] ?? {};
   const sent = read.sent.map((r) => ({
@@ -157,22 +176,30 @@ export function judge(read, now) {
   }));
   const toName = {
     publication: read.publication[0] ?? null,
+    testRecipients: read.testRecipients.map((r) => r.email),
     author: people[0] ?? null,
     serviceActed: actors.includes("service"),
     addresses,
     erased: read.erased[0]?.n ?? 0,
-    pending: read.pending[0]?.n ?? 0,
+    pending,
     sent,
     counts,
-    images: read.images.map((r) => r.storage_key),
+    images,
+    strayImages,
     refusedByProvider: read.refusedByProvider.map((r) => r.email),
   };
+  // Everything the person is shown, and enough of the rest (each table's size, each post's
+  // last change) that a write after the look changes it.
   const fingerprint = {
+    publication: toName.publication,
+    testRecipients: toName.testRecipients,
     cleared: CLEARED.map((t) => counts[t] ?? 0),
+    posts: read.posts.map((r) => [r.id, r.updated_at]),
     actors,
     addresses,
+    pending,
     sent,
-    images: toName.images,
+    images: keys,
   };
   return { refusals, toName, fingerprint };
 }
