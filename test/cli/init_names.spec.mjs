@@ -109,6 +109,17 @@ describe("parseInitArgs", () => {
     });
   });
 
+  it("collects a flag init doesn't take, so it is refused rather than skipped", () => {
+    expect(parseInitArgs(["--host", "news.mysite.com"])).toEqual({
+      dir: "news.mysite.com",
+      unknown: ["--host"],
+    });
+    expect(parseInitArgs(["site", "--host=news.mysite.com", "-x"])).toEqual({
+      dir: "site",
+      unknown: ["--host", "-x"],
+    });
+  });
+
   it("reads a bare flag as an empty value, which is refused, never as the directory", () => {
     expect(parseInitArgs(["site", "--name"])).toEqual({ dir: "site", name: "" });
     expect(parseInitArgs(["site", "--sending"])).toEqual({ dir: "site", sending: "" });
@@ -202,6 +213,15 @@ describe("hostnameRefusal", () => {
     ]) {
       expect(hostnameRefusal("--sending", host)).toMatch(/isn't a hostname/);
     }
+  });
+
+  it("refuses an IP address, or any name whose last label is all digits", () => {
+    for (const host of ["192.168.1.1", "news.mysite.123"]) {
+      expect(hostnameRefusal("--hostname", host)).toBe(
+        `--hostname "${host}" isn't a hostname: an IP address can't be one, and a hostname ends in a name, such as .com`,
+      );
+    }
+    expect(hostnameRefusal("--hostname", "news.123.com")).toBeNull();
   });
 
   it("refuses example.com and any name under it, the placeholder the Worker refuses", () => {
@@ -333,6 +353,20 @@ describe("initCommand", () => {
       '[init] refused: --sending "send.example.com" is on example.com, the scaffold\'s placeholder: give your own hostname.',
     ]);
     expect(() => readFileSync(join(dir, "wrangler.jsonc"))).toThrow();
+  });
+
+  it("refuses a mistyped flag, rather than scaffold into a folder named for its value", () => {
+    vi.spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("exit");
+    });
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    // The value would be read as the directory, as `init --host news.mysite.com` reads it.
+    const value = join(work, "news.mysite.com");
+    expect(() => initCommand(["--host", value])).toThrow("exit");
+    expect(error.mock.calls[0][0]).toBe(
+      "[init] refused: init doesn't take --host; it takes --name, --hostname, and --sending.",
+    );
+    expect(() => readFileSync(join(value, "wrangler.jsonc"))).toThrow();
   });
 
   it("refuses an invalid --name before writing anything", () => {

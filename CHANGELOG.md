@@ -14,7 +14,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Added
 
-- `kestrel init` takes the app's hostname and the sending hostname, `--hostname newsletter.mysite.com --sending send.mysite.com`, and writes them into `wrangler.jsonc`'s production settings (the route, `APP_ORIGIN`, `SENDING_DOMAIN`, and `FROM_ADDRESS` as `newsletter@` the sending hostname), so they're typed once, where you choose them. Either can be given alone, a value not given keeps its `example.com` placeholder, and a value with a scheme, path, or port, or on `example.com`, is refused before anything is written. `init` ends by saying which values it filled and which are still on `example.com`.
+- `kestrel init` takes the app's hostname and the sending hostname, `--hostname newsletter.mysite.com --sending send.mysite.com`, and writes them into `wrangler.jsonc`'s production settings (the route, `APP_ORIGIN`, `SENDING_DOMAIN`, and `FROM_ADDRESS` as `newsletter@` the sending hostname), so they're typed once, where you choose them. Either can be given alone, a value not given keeps its `example.com` placeholder, and a value with a scheme, path, or port, an IP address, a value on `example.com`, or a flag `init` doesn't take is refused before anything is written. `init` ends by saying which values it filled and which are still on `example.com`.
 
 ### Changed
 

@@ -147,6 +147,10 @@ export function hostnameRefusal(flag, host) {
   if (labels.length < 2 || host.length > 253 || !labels.every((label) => LABEL.test(label))) {
     return `${flag} "${host}" isn't a hostname: use letters, digits, hyphens, and dots, such as ${flag === "--hostname" ? "newsletter" : "send"}.mysite.com`;
   }
+  // An IP address, or any name whose last label is all digits, is no hostname DNS resolves.
+  if (/^\d+$/.test(labels.at(-1))) {
+    return `${flag} "${host}" isn't a hostname: an IP address can't be one, and a hostname ends in a name, such as .com`;
+  }
   if (labels.slice(-2).join(".") === "example.com") {
     return `${flag} "${host}" is on example.com, the scaffold's placeholder: give your own hostname`;
   }
@@ -206,23 +210,38 @@ function flagValue(argv, i, flag) {
   return undefined;
 }
 
-/** The instance directory and the `--name`, `--hostname`, and `--sending` values given. */
+const INIT_FLAGS = ["--name", "--hostname", "--sending"];
+
+/**
+ * The instance directory and the `--name`, `--hostname`, and `--sending` values given, and
+ * `unknown`, each other flag, when there are any: init refuses those rather than skip one, since
+ * a mistyped `--host news.mysite.com` would otherwise scaffold into a folder of that name.
+ */
 export function parseInitArgs(argv) {
   let dir;
   const flags = {};
+  const unknown = [];
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    const found = ["--name", "--hostname", "--sending"]
-      .map((flag) => [flag, flagValue(argv, i, flag)])
-      .find(([, read]) => read);
+    const found = INIT_FLAGS.map((flag) => [flag, flagValue(argv, i, flag)]).find(
+      ([, read]) => read,
+    );
     if (found) {
       flags[found[0].slice(2)] = found[1].value;
       i += found[1].skip;
-    } else if (!arg.startsWith("-") && dir === undefined) {
+    } else if (arg.startsWith("-")) {
+      unknown.push(arg.split("=")[0]);
+    } else if (dir === undefined) {
       dir = arg;
     }
   }
-  return { dir: dir ?? ".", name: flags.name, hostname: flags.hostname, sending: flags.sending };
+  return {
+    dir: dir ?? ".",
+    name: flags.name,
+    hostname: flags.hostname,
+    sending: flags.sending,
+    ...(unknown.length > 0 ? { unknown } : {}),
+  };
 }
 
 /** init's line saying which production hostnames it filled, and which still need editing. */
@@ -246,6 +265,13 @@ export function hostnamesLine(hostname, sending) {
 /** `kestrel init [dir] [--name <name>] [--hostname <app hostname>] [--sending <sending hostname>]`. */
 export function initCommand(argv) {
   const args = parseInitArgs(argv);
+  if (args.unknown) {
+    const named = args.unknown.join(", ");
+    console.error(
+      `[init] refused: init doesn't take ${named}; it takes ${INIT_FLAGS.slice(0, -1).join(", ")}, and ${INIT_FLAGS.at(-1)}.`,
+    );
+    process.exit(1);
+  }
   const root = resolve(args.dir);
   const name = args.name ?? nameFromFolder(root);
   const refusal = nameRefusal(name);
