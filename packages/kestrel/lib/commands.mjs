@@ -27,12 +27,15 @@ export const COMMANDS = [
     name: "init",
     runs: "instance",
     summary: "write a new instance repository here (or in dir)",
-    usage: `Usage: kestrel init [dir] [--name <name>]
+    usage: `Usage: kestrel init [dir] [--name <name>] [--hostname <host>] [--sending <host>]
 
   Write a new instance repository here, or in dir, from the scaffold this release ships.
   Nothing is written if any file it would write is already there.
 
-  --name <name>   names the Worker, database, and image bucket (default: the folder's name)`,
+  --name <name>       names the Worker, database, and image bucket (default: the folder's name)
+  --hostname <host>   the app's hostname, written into production's route and APP_ORIGIN
+  --sending <host>    the sending hostname, written into SENDING_DOMAIN and FROM_ADDRESS
+                      (either left out stays on example.com, which the app won't start on)`,
   },
   {
     name: "dev",
