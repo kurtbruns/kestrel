@@ -528,8 +528,12 @@ export async function createPost(
 }
 
 /**
- * Write a new revision and advance `current_revision`. Draft-only (the caller
- * checks status first; the WHERE guard is a backstop). A slug that follows the
+ * Write a new revision and advance `current_revision`, only while the post is still the
+ * draft it was read as: still a draft, and still on the revision `post` names (SPEC §4).
+ * Both statements carry that guard, so a save that lost to another save or to a schedule
+ * writes nothing, not even a revision, and answers `null`; the caller reads the post again
+ * to tell which. The guard is the write's own, not a read before it, so two saves from one
+ * base can't both land. A slug that follows the
  * subject is derived afresh on every save, so it tracks subject edits, unless another post
  * holds the subject's slug; a slug set by hand changes only when a save names a new one, and
  * is thrown as `SlugRefused` when malformed or another post's (`resolveSlug`). Sending a slug
@@ -541,7 +545,7 @@ export async function updatePost(
   input: PostInput,
   author: string | null,
   client: string | null = null,
-): Promise<{ post: PostRow; revision: RevisionRow }> {
+): Promise<{ post: PostRow; revision: RevisionRow } | null> {
   const current = await getCurrentRevision(db, post);
   const now = Date.now();
   const revId = newId();
@@ -558,18 +562,27 @@ export async function updatePost(
   const { slug, auto } = resolved;
   const metadata = JSON.stringify({ subject, slug });
 
-  await db.batch([
+  // The revision `post` was read on, which the body this save falls back to came from. The
+  // insert runs first, while the post is still on it, and the move is guarded on it too, so
+  // the batch lands whole or not at all.
+  const base = post.current_revision;
+  const [inserted] = await db.batch([
     db
       .prepare(
-        "INSERT INTO post_revisions (id, post_id, markdown, metadata, author, client, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        `INSERT INTO post_revisions (id, post_id, markdown, metadata, author, client, created_at)
+         SELECT ?, ?, ?, ?, ?, ?, ?
+          WHERE EXISTS (SELECT 1 FROM posts WHERE id = ? AND status = 'draft' AND current_revision IS ?)`,
       )
-      .bind(revId, post.id, markdown, metadata, author, client, now),
+      .bind(revId, post.id, markdown, metadata, author, client, now, post.id, base),
     db
       .prepare(
-        "UPDATE posts SET slug = ?, slug_auto = ?, subject = ?, current_revision = ?, updated_at = ? WHERE id = ? AND status = 'draft'",
+        "UPDATE posts SET slug = ?, slug_auto = ?, subject = ?, current_revision = ?, updated_at = ? WHERE id = ? AND status = 'draft' AND current_revision IS ?",
       )
-      .bind(slug, auto ? 1 : 0, subject, revId, now, post.id),
+      .bind(slug, auto ? 1 : 0, subject, revId, now, post.id, base),
   ]);
+  if ((unwrap(inserted, "revision write").meta.changes ?? 0) === 0) {
+    return null;
+  }
 
   const updated = unwrap(await getPost(db, post.id), "post");
   const revision = unwrap(
