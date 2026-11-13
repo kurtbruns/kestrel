@@ -38,7 +38,10 @@ const FIX_REQUEST = {
 } as const satisfies Record<string, Refusal>;
 
 const READ_AGAIN = {
-  stale_revision: [409, "Another save landed since the revision a post save named."],
+  stale_revision: [
+    409,
+    "Another save landed since the revision a post save named, or since a schedule or Send now read the post.",
+  ],
   slug_taken: [409, "Another post holds the slug: choose another."],
   active_send_exists: [409, "The post already has its one active send."],
   cursor_ahead: [409, "A cursor ahead of this database: read again, follow from that cursor."],
@@ -50,10 +53,7 @@ const READ_AGAIN = {
 } as const satisfies Record<string, Refusal>;
 
 const TRY_AGAIN = {
-  settings_changed: [
-    409,
-    "A template or identity save, or a save of the post, landed under every try of a freeze.",
-  ],
+  settings_changed: [409, "A template or identity save landed while a send froze."],
   run_in_progress: [409, "A send run holds what was asked about."],
   conflict: [409, "Settings written at the same moment."],
   remake_too_close: [409, "A send the change would re-make is inside the minimum lead."],

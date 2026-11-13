@@ -726,6 +726,10 @@ const DRIVEN_ELSEWHERE: Record<string, string> = {
     "the settings must move under every try of one freeze: one_shape.spec drives it through carryingSettings",
   "POST /api/posts/:id/send settings_changed":
     "the settings must move under every try of one freeze: one_shape.spec drives it through carryingSettings",
+  "POST /api/posts/:id/schedule stale_revision":
+    "a save must land between the route's read of the post and the freeze's write: schedule.spec drives it through a racing D1 handle",
+  "POST /api/posts/:id/send stale_revision":
+    "a save must land between the route's read of the post and the freeze's write: schedule.spec drives it through a racing D1 handle",
   "PUT /api/settings conflict":
     "two writers in one moment: one_shape.spec drives it through carryingSettings",
   "POST /api/settings/logo conflict":

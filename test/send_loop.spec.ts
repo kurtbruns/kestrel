@@ -92,6 +92,11 @@ describe("the freeze reads the template it froze with", () => {
 });
 
 describe("the freeze holds the post's revision at the lock (SPEC §6, I3)", () => {
+  /** How many rows a table holds: what a refused freeze must leave as it was. */
+  const count = async (table: "sends" | "send_acts") =>
+    (await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first<{ n: number }>())!.n;
+  const BY = { kind: "human", email: "you@example.com", client: "claude-code" } as const;
+
   it("the insert lands only while the post is still on the revision the render used", async () => {
     // The other input a freeze reads: a save between its read and its write moves the post to a
     // new revision, and the write then inserts nothing. Exercised at the statement level so the
@@ -113,7 +118,7 @@ describe("the freeze holds the post's revision at the lock (SPEC §6, I3)", () =
       warnings: [],
       from_name: "",
     };
-    const saved = await posts.updatePost(env.DB, post, { markdown: "second" }, "test");
+    const saved = (await posts.updatePost(env.DB, post, { markdown: "second" }, "test"))!;
     const stale = await sends
       .insertScheduledSendStmt(
         env.DB,
@@ -136,88 +141,43 @@ describe("the freeze holds the post's revision at the lock (SPEC §6, I3)", () =
     expect(fresh.meta.changes ?? 0).toBe(1);
   });
 
-  it("freezes the post's latest content when it is handed a row a save has since moved on", async () => {
-    // The schedule's route read the post, then a save landed before the freeze wrote: the send
-    // holds the saved content, and the post and the send are on the same revision.
-    const { post } = await posts.createPost(
-      env.DB,
-      { subject: "Before", markdown: "first draft" },
-      "test",
-    );
-    const saved = await posts.updatePost(
-      env.DB,
-      post,
-      { subject: "After", markdown: "second draft" },
-      "test",
-    );
-
-    const send = await freeze(env, config(), post, Date.now() + 600_000);
-
-    expect(send.subject).toBe("After");
-    expect(send.rendered_html).toContain("second draft");
-    expect(send.rendered_html).not.toContain("first draft");
-    const locked = (await posts.getPost(env.DB, post.id))!;
-    expect([locked.status, locked.current_revision]).toEqual(["scheduled", saved.revision.id]);
-  });
-
-  it("freezes both the newer content and the newer settings when both move in one attempt", async () => {
-    await updateSettings(env.DB, { publication: { tagline: "before" } });
-    const tpl = `<div>{{ .Post.Body }} <i>{{ .Publication.Tagline }}</i> <a href="{{ .Email.UnsubscribeURL }}">u</a></div>`;
-    await updateSettings(env.DB, { email_template: tpl });
+  it("refuses a post a save has moved on since it was read, freezing nothing, and freezes it when tried again", async () => {
+    // The schedule's route read the post, then a save landed before the freeze wrote.
     const { post } = await posts.createPost(
       env.DB,
       { subject: "Subj", markdown: "first draft" },
       "test",
     );
-    const saved = await posts.updatePost(env.DB, post, { markdown: "second draft" }, "test");
-    let bumped = false;
-    vi.spyOn(subscribersDb, "audienceCount").mockImplementation(async (db) => {
-      // After the first render and before its write: a template save lands too.
-      if (!bumped) {
-        bumped = true;
-        await updateSettings(db, { publication: { tagline: "after" } });
-      }
-      return 0;
-    });
+    const saved = (await posts.updatePost(env.DB, post, { markdown: "second draft" }, "test"))!;
 
-    const send = await freeze(env, config(), post, Date.now() + 600_000);
+    const err = await freeze(env, config(), post, Date.now() + 600_000).catch((e: unknown) => e);
 
+    expect((err as HttpError).code).toBe("stale_revision");
+    expect([await count("sends"), await count("send_acts")]).toEqual([0, 0]);
+    const draft = (await posts.getPost(env.DB, post.id))!;
+    expect([draft.status, draft.current_revision]).toEqual(["draft", saved.revision.id]);
+
+    // Tried again from the post as it now stands, it freezes the saved content.
+    const send = await freeze(env, config(), draft, Date.now() + 600_000);
     expect(send.rendered_html).toContain("second draft");
-    expect(send.rendered_html).toContain("after");
     expect(send.rendered_html).not.toContain("first draft");
-    expect(send.rendered_html).not.toContain("before");
-    const locked = (await posts.getPost(env.DB, post.id))!;
-    expect([locked.status, locked.current_revision]).toEqual(["scheduled", saved.revision.id]);
   });
 
-  it("refuses, freezing nothing and leaving the post a draft, when a save lands under every try", async () => {
-    const { post } = await posts.createPost(
-      env.DB,
-      { subject: "Subj", markdown: "draft 0" },
-      "test",
-    );
-    let saves = 0;
+  it("refuses for the post even when the settings moved in the same attempt, rather than rendering again", async () => {
+    const { post } = await posts.createPost(env.DB, { subject: "Subj", markdown: "first" }, "test");
+    await posts.updatePost(env.DB, post, { markdown: "second" }, "test");
     vi.spyOn(subscribersDb, "audienceCount").mockImplementation(async (db) => {
-      // Between every render and its write, another writer saves the post.
-      saves += 1;
-      const current = (await posts.getPost(db, post.id))!;
-      await posts.updatePost(db, current, { markdown: `draft ${saves}` }, "test");
+      await updateSettings(db, { publication: { tagline: "after" } });
       return 0;
     });
 
     const err = await freeze(env, config(), post, Date.now() + 600_000).catch((e: unknown) => e);
 
-    expect([(err as HttpError).code, (err as HttpError).message]).toEqual([
-      "settings_changed",
-      "The post was saved while this was being scheduled. Try again.",
-    ]);
-    expect(saves).toBe(3);
-    expect(await sends.getActiveSendForPost(env.DB, post.id)).toBeNull();
-    const after = (await posts.getPost(env.DB, post.id))!;
-    expect(after.status).toBe("draft");
+    expect((err as HttpError).code).toBe("stale_revision");
+    expect(await count("sends")).toBe(0);
   });
 
-  it("writes neither the post's listing nor its earlier sends' numbers on a try that doesn't land", async () => {
+  it("a refused attempt writes no send, act, slug, listing, or earlier send's number", async () => {
     // A post with a canceled send behind it, whose number a landed listing change would move.
     const { post } = await posts.createPost(
       env.DB,
@@ -226,23 +186,25 @@ describe("the freeze holds the post's revision at the lock (SPEC §6, I3)", () =
     );
     const earlier = await freeze(env, config(), post, Date.now() + 600_000);
     await cancel(env, earlier.id);
-    const rev = (await sends.getSend(env.DB, earlier.id))!.rev;
+    const before = (await sends.getSend(env.DB, earlier.id))!.rev;
+    const acts = await count("send_acts");
     const draft = (await posts.getPost(env.DB, post.id))!;
-    let saves = 0;
-    vi.spyOn(subscribersDb, "audienceCount").mockImplementation(async (db) => {
-      saves += 1;
-      const current = (await posts.getPost(db, post.id))!;
-      await posts.updatePost(db, current, { markdown: `draft ${saves}` }, "test");
-      return 0;
-    });
+    await posts.updatePost(env.DB, draft, { markdown: "draft 1" }, "test");
 
-    const err = await freeze(env, config(), draft, Date.now() + 600_000, { emailOnly: true }).catch(
-      (e: unknown) => e,
-    );
+    const err = await freeze(
+      env,
+      config(),
+      draft,
+      Date.now() + 600_000,
+      { emailOnly: true, slug: { slug: "moved", auto: false } },
+      { act: "schedule", by: BY },
+    ).catch((e: unknown) => e);
 
-    expect((err as HttpError).code).toBe("settings_changed");
-    expect((await posts.getPost(env.DB, post.id))!.email_only).toBe(false);
-    expect((await sends.getSend(env.DB, earlier.id))!.rev).toBe(rev);
+    expect((err as HttpError).code).toBe("stale_revision");
+    const after = (await posts.getPost(env.DB, post.id))!;
+    expect([after.status, after.email_only, after.slug]).toEqual(["draft", false, draft.slug]);
+    expect((await sends.getSend(env.DB, earlier.id))!.rev).toBe(before);
+    expect([await count("sends"), await count("send_acts")]).toEqual([1, acts]);
   });
 
   it("answers not found, freezing nothing, when the post is deleted in the gap", async () => {
@@ -255,8 +217,7 @@ describe("the freeze holds the post's revision at the lock (SPEC §6, I3)", () =
     const err = await freeze(env, config(), post, Date.now() + 600_000).catch((e: unknown) => e);
 
     expect((err as HttpError).code).toBe("not_found");
-    const { n } = (await env.DB.prepare("SELECT COUNT(*) AS n FROM sends").first<{ n: number }>())!;
-    expect(n).toBe(0);
+    expect(await count("sends")).toBe(0);
   });
 
   it("refuses with the send that won when a freeze of the same post lands in the gap", async () => {
@@ -268,7 +229,7 @@ describe("the freeze holds the post's revision at the lock (SPEC §6, I3)", () =
       if (!raced) {
         raced = true;
         // A save, then another client's freeze of the saved post, both before this one writes.
-        const saved = await posts.updatePost(db, post, { markdown: "second" }, "test");
+        const saved = (await posts.updatePost(db, post, { markdown: "second" }, "test"))!;
         winner = await freeze(env, config(), saved.post, Date.now() + 600_000);
       }
       return 0;
@@ -278,19 +239,7 @@ describe("the freeze holds the post's revision at the lock (SPEC §6, I3)", () =
 
     expect((err as HttpError).code).toBe("active_send_exists");
     expect((err as HttpError).details).toMatchObject({ send: { id: winner!.id } });
-    const { n } = (await env.DB.prepare("SELECT COUNT(*) AS n FROM sends").first<{ n: number }>())!;
-    expect(n).toBe(1);
-  });
-
-  it("refuses with the post's own refusal when a save in the gap emptied its subject", async () => {
-    const { post } = await posts.createPost(env.DB, { subject: "Subj", markdown: "body" }, "test");
-    await posts.updatePost(env.DB, post, { subject: "  " }, "test");
-
-    const err = await freeze(env, config(), post, Date.now() + 600_000).catch((e: unknown) => e);
-
-    expect((err as HttpError).code).toBe("subject_required");
-    expect(await sends.getActiveSendForPost(env.DB, post.id)).toBeNull();
-    expect((await posts.getPost(env.DB, post.id))!.status).toBe("draft");
+    expect(await count("sends")).toBe(1);
   });
 });
 

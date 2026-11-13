@@ -904,74 +904,49 @@ function racing(before: (db: D1Database) => Promise<void>): AppEnv {
 
 /** The editor saving the post, from whatever it now holds. */
 async function saveAs(db: D1Database, id: string, input: { subject?: string; markdown: string }) {
-  return updatePost(db, (await getPost(db, id))!, input, "editor");
+  return (await updatePost(db, (await getPost(db, id))!, input, "editor"))!;
 }
 
 describe("a save landing while a post is scheduled (SPEC §6, I3)", () => {
   it.each([
     ["schedule", "schedule", { fire_at: Date.now() + 3_600_000 }],
     ["Send now", "send", {}],
-  ])("is in the email %s freezes, its following slug with it", async (_, path, timing) => {
-    const id = await makeDraft({ subject: "Owls", markdown: "first draft" });
-    // The editor saves the post just before the freeze's first write: the route has read the
-    // post on its first revision by then, and the save moves it on.
-    let saved = false;
-    const e = racing(async (db) => {
-      if (!saved) {
-        saved = true;
-        await saveAs(db, id, { subject: "Hawks", markdown: "second draft" });
-      }
-    });
-
-    const res = await fetchOn(e, `/api/posts/${id}/${path}`, {
-      method: "POST",
-      headers: JSON_AUTH,
-      body: JSON.stringify({ ...timing, email_only: true, slug_auto: true }),
-    });
-
-    expect(res.status).toBe(201);
-    const send = (await sendsDb.getActiveSendForPost(env.DB, id))!;
-    expect(send.subject).toBe("Hawks");
-    expect(send.rendered_html).toContain("second draft");
-    expect(send.rendered_html).not.toContain("first draft");
-    const post = (await getPost(env.DB, id))!;
-    // The slug follows the subject the freeze rendered, not the one the route read.
-    expect([post.status, post.subject, post.slug, post.email_only]).toEqual([
-      "scheduled",
-      "Hawks",
-      "hawks",
-      true,
-    ]);
-  });
-
-  it.each([
-    ["schedule", "schedule", { fire_at: Date.now() + 3_600_000 }],
-    ["Send now", "send", {}],
   ])(
-    "under every try of %s refuses to try again, carrying the post and the settings, and freezes nothing",
+    "refuses %s, carrying the saved post, and freezes nothing until it is asked again",
     async (_, path, timing) => {
-      const id = await makeDraft({ markdown: "draft 0" });
-      let saves = 0;
+      const id = await makeDraft({ markdown: "first draft" });
+      // The editor saves the post just before the freeze's first write: the route has read the
+      // post on its first revision by then, and the save moves it on.
+      let saved: Awaited<ReturnType<typeof saveAs>> | undefined;
       const e = racing(async (db) => {
-        saves += 1;
-        await saveAs(db, id, { markdown: `draft ${saves}` });
+        saved ??= await saveAs(db, id, { markdown: "second draft" });
       });
-
-      const res = await fetchOn(e, `/api/posts/${id}/${path}`, {
+      const request = {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ ...timing, email_only: true }),
-      });
+      };
+
+      const res = await fetchOn(e, `/api/posts/${id}/${path}`, request);
 
       expect(res.status).toBe(409);
-      const body = await readJson(res);
-      expect(body).toMatchObject({
-        error: "settings_changed",
-        message: "The post was saved while this was being scheduled. Try again.",
-        post: { id, status: "draft", email_only: false },
+      expect(await readJson(res)).toMatchObject({
+        error: "stale_revision",
+        message:
+          "This post was saved while it was being scheduled. Read it again, then schedule or send it.",
+        current_revision: saved!.revision.id,
+        author: "editor",
+        markdown: "second draft",
+        post: { id, status: "draft", email_only: false, current_revision: saved!.revision.id },
       });
-      expect(body.settings).toBeTypeOf("object");
       expect(await sendsDb.getActiveSendForPost(env.DB, id)).toBeNull();
+
+      // Asked again, with nothing landing in between, it freezes what was saved.
+      const again = await fetchOn(env as AppEnv, `/api/posts/${id}/${path}`, request);
+      expect(again.status).toBe(201);
+      const send = (await sendsDb.getActiveSendForPost(env.DB, id))!;
+      expect(send.rendered_html).toContain("second draft");
+      expect(send.rendered_html).not.toContain("first draft");
     },
   );
 

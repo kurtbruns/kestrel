@@ -242,7 +242,11 @@ export function createRouter({
   const freezeRefusals: RouteRefusal[] = [
     { code: "post_not_draft", details: ["post"] },
     { code: "subject_required" },
-    { code: "settings_changed", details: ["settings", "post"] },
+    { code: "settings_changed", details: ["settings"] },
+    {
+      code: "stale_revision",
+      details: ["current_revision", "updated_at", "author", "author_client", "post", "markdown"],
+    },
     notConnected,
     { code: "time_zone_not_set" },
     ...slugRefusals,
