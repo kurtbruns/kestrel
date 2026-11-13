@@ -181,7 +181,7 @@ describe("a subscriber carries its suppression on every route (SPEC §7)", () =>
     const suppression = { reason: "bounce", detail: "mailbox gone", created_at: since!.created_at };
     const answers = [
       (await readJson(await call(`/api/subscribers/${subscriber.id}`))).subscriber,
-      (await readJson(await call(`/api/subscribers?email=${email}`))).subscriber,
+      (await readJson(await call(`/api/subscribers?email=${email}`))).subscribers[0],
       (await readJson(await call("/api/subscribers"))).subscribers[0],
       (
         await readJson(

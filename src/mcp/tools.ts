@@ -664,6 +664,7 @@ export const TOOL_DEFS: ToolDef[] = [
       if ((args.id === undefined) === (args.email === undefined)) {
         return text("Give one of `id` or `email`.", true);
       }
+      // By address it reads the list filtered to that exact address: one row, or none.
       const a =
         args.id !== undefined
           ? await api.call(GET_SUBSCRIBER, { params: { id: args.id } })
@@ -671,7 +672,13 @@ export const TOOL_DEFS: ToolDef[] = [
       if (!a.ok) {
         return refused(a);
       }
-      const s = (a.body as SubscriberResponse).subscriber;
+      const s: Subscriber | undefined =
+        args.id !== undefined
+          ? (a.body as SubscriberResponse).subscriber
+          : (a.body as SubscriberListResponse).subscribers[0];
+      if (!s) {
+        return text(`No subscriber has the address ${String(args.email)}.`, true);
+      }
       return data({
         subscriber: {
           ...subscriberBrief(s),

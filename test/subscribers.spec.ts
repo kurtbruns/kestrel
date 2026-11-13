@@ -1129,6 +1129,58 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
   });
 });
 
+describe("the list filtered to one exact address (SPEC §7)", () => {
+  const listed = async (query: string) => {
+    const res = await SELF.fetch(`${base}/api/subscribers${query}`, { headers: AUTH });
+    expect(res.status).toBe(200);
+    const body = await readJson(res);
+    return [body.subscribers.map((s: { email: string }) => s.email), body.page.total];
+  };
+
+  beforeEach(async () => {
+    await resetDatabase();
+    await seedConfirmed(["listed@example.com"]);
+    await addPending("waiting@example.com");
+  });
+
+  for (const [what, query] of [
+    ["empty", "?email="],
+    ["only whitespace", "?email=%20"],
+    ["not an address", "?email=listed"],
+  ]) {
+    it(`refuses an email that is ${what}, naming the field`, async () => {
+      const res = await SELF.fetch(`${base}/api/subscribers${query}`, { headers: AUTH });
+      expect(res.status).toBe(400);
+      expect(await readJson(res)).toMatchObject({ error: "bad_request", field: "email" });
+    });
+  }
+
+  it("answers the list with the one subscriber at that address, matched as addresses are stored", async () => {
+    expect(await listed("?email=%20Listed@Example.com")).toEqual([["listed@example.com"], 1]);
+  });
+
+  it("answers an empty list for an address no one has, not a 404", async () => {
+    expect(await listed("?email=nobody@example.com")).toEqual([[], 0]);
+  });
+
+  it("combines with the other filters rather than ignoring them", async () => {
+    expect(await listed("?email=listed@example.com&status=pending")).toEqual([[], 0]);
+    expect(await listed("?email=waiting@example.com&status=pending")).toEqual([
+      ["waiting@example.com"],
+      1,
+    ]);
+  });
+
+  it("matches the whole address, never part of it as search does", async () => {
+    expect(await listed("?email=isted@example.com")).toEqual([[], 0]);
+  });
+
+  it("answers the whole list when no email is given", async () => {
+    const [emails, total] = await listed("");
+    expect([[...emails].sort(), total]).toEqual([["listed@example.com", "waiting@example.com"], 2]);
+  });
+});
+
 describe("the list past what Workers Free suits (SPEC §7)", () => {
   const PAID = { SUBREQUEST_BUDGET: "10000" };
   const advice = async (vars: Record<string, string> = {}) =>
