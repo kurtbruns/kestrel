@@ -10,6 +10,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiCommand, parseApiArgs } from "../../packages/kestrel/lib/api.mjs";
+import { runCommand } from "../../packages/kestrel/lib/errors.mjs";
+
+/** `kestrel api <argv>` as the bin runs it: its error printed under the command's name. */
+const run = (argv) => runCommand("kestrel api", () => apiCommand(argv));
+
 import { writeSignIn } from "../../packages/kestrel/lib/credentials.mjs";
 import { fileMediaType, IMAGE_TYPE_BY_EXTENSION } from "../../packages/kestrel/lib/media-types.mjs";
 import {
@@ -500,13 +505,16 @@ describe("kestrel api against a signed-in instance", () => {
     err = [];
     vi.spyOn(process.stdout, "write").mockImplementation((s) => out.push(String(s)) > 0);
     vi.spyOn(console, "log").mockImplementation((s) => out.push(`${s}\n`));
-    vi.spyOn(console, "error").mockImplementation((s) => err.push(String(s)));
+    // The runner prints an error as one block; its lines are read one by one.
+    vi.spyOn(console, "error").mockImplementation((s) => err.push(...String(s).split("\n")));
     vi.spyOn(process, "exit").mockImplementation((code) => {
       throw new Error(`exit ${code}`);
     });
+    process.exitCode = undefined;
     calls = [];
   });
   afterEach(() => {
+    process.exitCode = undefined;
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
@@ -529,7 +537,7 @@ describe("kestrel api against a signed-in instance", () => {
 
   it("lists the routes from the instance's own document, through the sign-in", async () => {
     serve(() => new Response("unexpected", { status: 500 }));
-    await apiCommand(["--list", "posts"]);
+    await run(["--list", "posts"]);
     expect(calls.map((c) => c.path)).toEqual(["/api/openapi.json"]);
     expect(calls[0].headers.authorization).toBe("Bearer oauth:good");
     expect(out.join("")).toContain("  POST   /api/posts              Create a post");
@@ -537,7 +545,7 @@ describe("kestrel api against a signed-in instance", () => {
 
   it("sends the body -f and -F build, as JSON", async () => {
     serve(() => new Response('{"post":{}}', { status: 201 }));
-    await apiCommand(["POST", "/api/posts", "-f", "subject=Spring update", "-F", "listed=true"]);
+    await run(["POST", "/api/posts", "-f", "subject=Spring update", "-F", "listed=true"]);
     const sent = calls.find((c) => c.path === "/api/posts");
     expect(sent.method).toBe("POST");
     expect(JSON.parse(sent.body)).toEqual({ subject: "Spring update", listed: true });
@@ -547,7 +555,8 @@ describe("kestrel api against a signed-in instance", () => {
 
   it("makes no call when a field is undeclared", async () => {
     serve(() => new Response("{}"));
-    await expect(apiCommand(["POST", "/api/posts", "-f", "subjct=Hi"])).rejects.toThrow("exit 1");
+    await run(["POST", "/api/posts", "-f", "subjct=Hi"]);
+    expect(process.exitCode).toBe(1);
     expect(calls.map((c) => c.path)).toEqual(["/api/openapi.json"]);
     expect(err.join("\n")).toMatch(/^kestrel api: subjct isn’t a field POST \/api\/posts takes/);
   });
@@ -559,15 +568,15 @@ describe("kestrel api against a signed-in instance", () => {
       field: "slug",
     };
     serve(() => new Response(JSON.stringify(refusal), { status: 409, statusText: "Conflict" }));
-    await expect(apiCommand(["POST", "/api/posts", "--data", '{"subject":"Hi"}'])).rejects.toThrow(
-      "exit 1",
-    );
+    await run(["POST", "/api/posts", "--data", '{"subject":"Hi"}']);
+    // The status is set rather than exited with, so the body reaches a pipe whole.
+    expect(process.exitCode).toBe(1);
     expect(out.join("")).toBe(`${JSON.stringify(refusal)}\n`);
     expect(err).toEqual([
       "kestrel api: HTTP 409 Conflict",
-      "  slug_taken: Another post holds that slug.",
-      "  field: slug",
-      "  next move: Read again, then decide.",
+      "             slug_taken: Another post holds that slug.",
+      "             field: slug",
+      "             next move: Read again, then decide.",
     ]);
   });
 
@@ -580,20 +589,20 @@ describe("kestrel api against a signed-in instance", () => {
             statusText: "Not Found",
           }),
     );
-    await expect(apiCommand(["GET", "/api/posts/p_1"])).rejects.toThrow("exit 1");
-    expect(err).toEqual(["kestrel api: HTTP 404 Not Found", "  not_found: post"]);
+    await run(["GET", "/api/posts/p_1"]);
+    expect(process.exitCode).toBe(1);
+    expect(err).toEqual(["kestrel api: HTTP 404 Not Found", "             not_found: post"]);
   });
 
   it("sends a query-parameter field beside a form, and refuses a body field beside one", async () => {
     serve(() => new Response("{}"));
-    await apiCommand(["POST", "/api/settings/logo", "--form", "file=x", "-f", "remake=s_1"]);
+    await run(["POST", "/api/settings/logo", "--form", "file=x", "-f", "remake=s_1"]);
     const sent = calls.find((c) => c.path.startsWith("/api/settings/logo"));
     expect(sent.path).toBe("/api/settings/logo?remake=s_1");
     expect(sent.body).toBeInstanceOf(FormData);
     calls.length = 0;
-    await expect(
-      apiCommand(["POST", "/api/posts", "--data", "{}", "-f", "subject=Hi"]),
-    ).rejects.toThrow("exit 1");
+    await run(["POST", "/api/posts", "--data", "{}", "-f", "subject=Hi"]);
+    expect(process.exitCode).toBe(1);
     expect(calls.map((c) => c.path)).toEqual(["/api/openapi.json"]);
     expect(err.at(-1)).toBe(
       "kestrel api: Send the body one way: --data, --form, or -f and -F fields, not two.",
@@ -605,7 +614,7 @@ describe("kestrel api against a signed-in instance", () => {
     const path = join(dir, name);
     writeFileSync(path, "the image's bytes");
     serve(() => new Response("{}", { status: 201 }));
-    await apiCommand(["POST", "/api/posts/p_1/images", "--form", `file=@${path}`]);
+    await run(["POST", "/api/posts/p_1/images", "--form", `file=@${path}`]);
     const sent = calls.find((c) => c.path === "/api/posts/p_1/images");
     const form = await new Response(sent.body).formData();
     return form.get("file");
@@ -660,9 +669,24 @@ describe("kestrel api against a signed-in instance", () => {
     expect(file.type).toBe("application/octet-stream");
   });
 
+  it.each([
+    ["-F", ["POST", "/api/posts", "-F", "subject=@no-such-file"]],
+    ["--data", ["POST", "/api/posts", "--data", "@no-such-file"]],
+    ["--form", ["POST", "/api/posts/p_1/images", "--form", "file=@no-such-file"]],
+  ])("says a file %s names can't be read, in a line, and sends nothing", async (_flag, argv) => {
+    serve(() => new Response("{}"));
+    await run(argv);
+    expect(process.exitCode).toBe(1);
+    expect(err).toEqual([
+      expect.stringMatching(/^kestrel api: Couldn't read no-such-file: ENOENT/),
+    ]);
+    expect(calls.map((c) => c.path).filter((p) => p !== "/api/openapi.json")).toEqual([]);
+  });
+
   it("says an instance with no OpenAPI document runs an older release", async () => {
     vi.stubGlobal("fetch", async () => new Response("{}", { status: 404 }));
-    await expect(apiCommand(["--list"])).rejects.toThrow("exit 1");
+    await run(["--list"]);
+    expect(process.exitCode).toBe(1);
     expect(err).toEqual([
       "kestrel api: This instance serves no /api/openapi.json, so its routes can't be listed or checked: it runs a release older than this CLI's. Send a body with --data instead.",
     ]);
@@ -676,7 +700,7 @@ describe("kestrel api against a signed-in instance", () => {
     async function named(value, flags = []) {
       vi.stubEnv(SESSION, value);
       serve(() => new Response("{}"));
-      await apiCommand(["GET", "/api/whoami", ...flags]);
+      await run(["GET", "/api/whoami", ...flags]);
       return calls.at(-1).headers["kestrel-client"];
     }
 
@@ -712,7 +736,10 @@ describe("kestrel api against a signed-in instance", () => {
     it.each(EACH_SESSION)(
       "refuses --client editor with the variable %j, sending nothing",
       async (value) => {
-        await expect(named(value, ["--client", "editor"])).rejects.toThrow("exit 1");
+        vi.stubEnv("CLAUDE_CODE_CHILD_SESSION", value);
+        serve(() => new Response("{}"));
+        await run(["GET", "/api/whoami", "--client", "editor"]);
+        expect(process.exitCode).toBe(1);
         expect(calls).toEqual([]);
         expect(err[0]).toMatch(/^kestrel api: --client editor is refused/);
       },
@@ -727,12 +754,18 @@ describe("kestrel api against a signed-in instance", () => {
           ? new Response(JSON.stringify({ token: "dev-token", run_id: "run-a" }))
           : new Response("{}");
       });
-      await apiCommand(["GET", "/api/whoami"]);
+      await run(["GET", "/api/whoami"]);
       expect(calls.at(-1).headers["kestrel-client"]).toBe("kestrel-cli");
     });
 
     it("says both defaults in its usage", () => {
-      expect(() => parseApiArgs(["GET"])).toThrow(
+      let usage;
+      try {
+        parseApiArgs(["GET"]);
+      } catch (e) {
+        usage = e.after;
+      }
+      expect(usage).toMatch(
         /default claude-code\s+when Claude Code runs this, otherwise kestrel-cli/,
       );
     });
@@ -747,7 +780,7 @@ describe("kestrel api against a signed-in instance", () => {
         ? new Response(JSON.stringify({ token: "dev-token", run_id: "run-a" }))
         : new Response(JSON.stringify(DOC));
     });
-    await apiCommand(["--list", "sends"]);
+    await run(["--list", "sends"]);
     expect(calls.map((c) => c.url)).toEqual([
       "http://localhost:8799/api/dev/token?kind=human",
       "http://localhost:8799/api/openapi.json",
@@ -761,7 +794,7 @@ describe("kestrel api against a signed-in instance", () => {
     const file = join(dir, "post.md");
     writeFileSync(file, "# Hello\n");
     serve(() => new Response("{}", { status: 201 }));
-    await apiCommand(["POST", "/api/posts", "-F", `subject=@${file}`]);
+    await run(["POST", "/api/posts", "-F", `subject=@${file}`]);
     expect(JSON.parse(calls.find((c) => c.path === "/api/posts").body)).toEqual({
       subject: "# Hello\n",
     });

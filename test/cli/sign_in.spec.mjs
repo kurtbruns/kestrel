@@ -36,6 +36,7 @@ import {
   withCredentialsLock,
   writeSignIn,
 } from "../../packages/kestrel/lib/credentials.mjs";
+import { CliError } from "../../packages/kestrel/lib/errors.mjs";
 import { stripJsonc } from "../../packages/kestrel/lib/folder-instance.mjs";
 import { signIn } from "../../packages/kestrel/lib/login.mjs";
 import {
@@ -132,7 +133,7 @@ describe("which instance a URL names", () => {
     expect(
       chooseInstance({ env: { KESTREL_URL: "https://b.example.com" }, dir, signIns: one }),
     ).toBe("https://b.example.com");
-    expect(chooseInstance({ env: {}, dir, signIns: one, say: () => {} })).toBe(ORIGIN);
+    expect(chooseInstance({ env: {}, dir, signIns: one, note: () => {} })).toBe(ORIGIN);
     expect(() => chooseInstance({ env: {}, dir, signIns: two })).toThrow(/Name one with --url/);
     expect(() => chooseInstance({ env: {}, dir, signIns: {} })).toThrow(/kestrel login/);
   });
@@ -189,7 +190,9 @@ ${Object.entries(envs)
   it("calls the one origin the env blocks set, and says on stderr that it's the folder's", () => {
     const said = [];
     const at = folder({ wrangler: config({ production: PROD }) });
-    expect(chooseInstance({ env: {}, dir: at, signIns: one, say: (l) => said.push(l) })).toBe(PROD);
+    expect(chooseInstance({ env: {}, dir: at, signIns: one, note: (l) => said.push(l) })).toBe(
+      PROD,
+    );
     expect(said).toEqual([
       `kestrel api: calling ${PROD}, this folder's instance. Pass --url to call a different one.`,
     ]);
@@ -210,25 +213,25 @@ ${Object.entries(envs)
         local: "http://127.0.0.1:8787",
       }),
     });
-    expect(chooseInstance({ env: {}, dir: at, signIns: one, say: () => {} })).toBe(ORIGIN);
+    expect(chooseInstance({ env: {}, dir: at, signIns: one, note: () => {} })).toBe(ORIGIN);
   });
 
   it("falls through to the one sign-in with no wrangler.jsonc, or one it can't parse", () => {
-    expect(chooseInstance({ env: {}, dir: folder(), signIns: one, say: () => {} })).toBe(ORIGIN);
+    expect(chooseInstance({ env: {}, dir: folder(), signIns: one, note: () => {} })).toBe(ORIGIN);
     const broken = folder({ wrangler: `{ "env": { "production": ` });
-    expect(chooseInstance({ env: {}, dir: broken, signIns: one, say: () => {} })).toBe(ORIGIN);
+    expect(chooseInstance({ env: {}, dir: broken, signIns: one, note: () => {} })).toBe(ORIGIN);
   });
 
   it("is no instance when its package.json doesn't depend on @kurtbruns/kestrel", () => {
     const at = folder({ dependency: false, wrangler: config({ production: PROD }) });
-    expect(chooseInstance({ env: {}, dir: at, signIns: one, say: () => {} })).toBe(ORIGIN);
+    expect(chooseInstance({ env: {}, dir: at, signIns: one, note: () => {} })).toBe(ORIGIN);
   });
 
   it("reads only the folder it runs in, never a parent's", () => {
     const at = folder({ wrangler: config({ production: PROD }) });
     const sub = join(at, "posts");
     mkdirSync(sub);
-    expect(chooseInstance({ env: {}, dir: sub, signIns: one, say: () => {} })).toBe(ORIGIN);
+    expect(chooseInstance({ env: {}, dir: sub, signIns: one, note: () => {} })).toBe(ORIGIN);
   });
 
   it("gives way to --url and KESTREL_URL, saying nothing", () => {
@@ -300,6 +303,21 @@ describe("the OAuth steps", () => {
       registration_endpoint: "https://team.cloudflareaccess.com/register",
       revocation_endpoint: undefined,
     });
+  });
+
+  it("says the metadata isn't JSON, in a line rather than a crash, when a page answers for it", async () => {
+    stubFetch(
+      () =>
+        json({ error: "invalid_token" }, 401, {
+          "www-authenticate": `Bearer resource_metadata="${ORIGIN}/.well-known/meta"`,
+        }),
+      () => new Response("<html>sign in</html>", { status: 200 }),
+    );
+    const refused = discover(ORIGIN);
+    await expect(refused).rejects.toThrow(SignInError);
+    await expect(refused).rejects.toThrow(
+      `the protected resource's metadata at ${ORIGIN}/.well-known/meta isn't JSON.`,
+    );
   });
 
   it("says the instance offers no sign-in when Access answers without OAuth metadata", async () => {
@@ -482,6 +500,20 @@ describe("the loopback callback", () => {
       `${listener.redirectUri}?state=s&error=access_denied&error_description=not+allowed`,
     );
     await refused;
+  });
+});
+
+describe("a config directory it can't write", () => {
+  it("says so in a line, naming the directory, rather than crashing", async () => {
+    // A file where the directory should be: nothing can be made inside it.
+    const blocked = join(dir, "blocked");
+    writeFileSync(blocked, "");
+    vi.stubEnv("KESTREL_CONFIG_DIR", join(blocked, "kestrel"));
+    const refused = writeSignIn(ORIGIN, stored(60_000));
+    await expect(refused).rejects.toThrow(CliError);
+    await expect(refused).rejects.toThrow(
+      `Couldn't make ${join(blocked, "kestrel")} for the sign-ins`,
+    );
   });
 });
 

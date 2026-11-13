@@ -15,19 +15,11 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { constants } from "node:os";
 import { dirname, join } from "node:path";
+import { INSTANCE_COMMANDS, INSTANCE_PACKAGE } from "./commands.mjs";
+import { CliError } from "./errors.mjs";
 
-/** The package that holds the instance commands. */
-export const INSTANCE_PACKAGE = "@kurtbruns/kestrel";
-
-/** The commands that act on an instance's repository, and so run from the instance package. */
-export const INSTANCE_COMMANDS = [
-  "init",
-  "dev",
-  "sync-migrations",
-  "check-context",
-  "seed",
-  "reset",
-];
+// Where the list lives; exported from here too, where the hand-off is.
+export { INSTANCE_COMMANDS, INSTANCE_PACKAGE };
 
 /**
  * The instance package as installed for `dir` (or a directory above it): `{ root, bin }`, with
@@ -58,7 +50,7 @@ function quoteForCmd(arg) {
  * fetches when nothing is installed. `KESTREL_INSTANCE_PACKAGE` names another package spec to
  * fetch, such as a packed tarball, which the package check uses before a release exists.
  */
-export function handoff(
+export function planHandoff(
   command,
   argv,
   { dir = process.cwd(), version, env = process.env, platform = process.platform } = {},
@@ -92,16 +84,17 @@ const FORWARDED = ["SIGTERM", "SIGHUP", "SIGQUIT"];
 
 /**
  * Run instance `command` through the instance package, with the terminal attached, and exit
- * as it does. A Ctrl-C reaches the child from the terminal itself, so this process only waits
- * for it to finish (`kestrel dev` stops its server on the way out); another signal sent to
- * this process alone is passed on. A child ended by a signal exits 128 plus its number, as a
- * shell reports it.
+ * as it does; throws a CliError, before anything runs, when there is no install to run it
+ * from. A Ctrl-C reaches the child from the terminal itself, so this process only waits for it
+ * to finish (`kestrel dev` stops its server on the way out); another signal sent to this
+ * process alone is passed on. A child ended by a signal exits 128 plus its number, as a shell
+ * reports it, and one that can't be started at all exits 1, since the command has already
+ * returned to its runner by then.
  */
 export function runInstanceCommand(command, argv, version) {
-  const plan = handoff(command, argv, { version });
+  const plan = planHandoff(command, argv, { version });
   if (plan.refuse) {
-    console.error(`kestrel: ${plan.refuse}`);
-    process.exit(1);
+    throw new CliError(plan.refuse);
   }
   const child = spawn(plan.cmd, plan.args, { stdio: "inherit", shell: plan.shell });
   process.on("SIGINT", () => {});
@@ -109,7 +102,7 @@ export function runInstanceCommand(command, argv, version) {
     process.on(signal, () => child.kill(signal));
   }
   child.on("error", (err) => {
-    console.error(`kestrel: could not run ${INSTANCE_PACKAGE}: ${err.message}`);
+    console.error(`kestrel ${command}: could not run ${INSTANCE_PACKAGE}: ${err.message}`);
     process.exit(1);
   });
   child.on("exit", (code, signal) => {

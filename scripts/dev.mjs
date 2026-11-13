@@ -22,27 +22,45 @@ import { spawn, spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { devCommand } from "../cli/dev.mjs";
+import { asksForHelp } from "../packages/kestrel/lib/args.mjs";
+import { runCommand } from "../packages/kestrel/lib/errors.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-process.env.KESTREL_CLIENT_DEV = "1";
+/** `kestrel dev` with the build stamp and the editor's watch build beside it. */
+async function serve(argv) {
+  process.env.KESTREL_CLIENT_DEV = "1";
 
-const version = spawnSync(process.execPath, [join(ROOT, "scripts", "stamp-version.mjs")], {
-  stdio: "inherit",
-});
-if (version.status !== 0) {
-  console.warn("[dev] build-version stamp failed (continuing)");
+  const version = spawnSync(process.execPath, [join(ROOT, "scripts", "stamp-version.mjs")], {
+    stdio: "inherit",
+  });
+  if (version.status !== 0) {
+    console.warn("[dev] build-version stamp failed (continuing)");
+  }
+
+  const watcher = spawn(process.execPath, [join(ROOT, "scripts", "build-client.mjs"), "--watch"], {
+    stdio: "inherit",
+  });
+  watcher.on("exit", (code) => {
+    if (code !== null && code !== 0) {
+      console.warn(
+        `[dev] client watcher exited (${code}); run \`npm run client:watch\` to restart it`,
+      );
+    }
+  });
+
+  const started = await runCommand("kestrel dev", () =>
+    devCommand(argv, { onStop: () => watcher.kill() }),
+  );
+  // Refused before wrangler started: the watcher is all that would keep this running.
+  if (!started) {
+    watcher.kill();
+  }
 }
 
-const watcher = spawn(process.execPath, [join(ROOT, "scripts", "build-client.mjs"), "--watch"], {
-  stdio: "inherit",
-});
-watcher.on("exit", (code) => {
-  if (code !== null && code !== 0) {
-    console.warn(
-      `[dev] client watcher exited (${code}); run \`npm run client:watch\` to restart it`,
-    );
-  }
-});
-
-await devCommand(process.argv.slice(2), { onStop: () => watcher.kill() });
+// Help starts nothing: no stamp, no watcher, no server.
+if (asksForHelp(process.argv.slice(2))) {
+  await devCommand(process.argv.slice(2));
+} else {
+  await serve(process.argv.slice(2));
+}

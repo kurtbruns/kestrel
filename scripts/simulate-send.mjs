@@ -27,7 +27,9 @@ import { triggerSweep } from "../cli/sweep-ticker.mjs";
  * The target is found as for the seed: this worktree's own dev server, proven by its run ID,
  * or a server named deliberately with a URL or port argument.
  */
-import { callApi, devTarget, fail, parseArgs } from "../packages/kestrel/lib/dev-api.mjs";
+import { commandArgs } from "../packages/kestrel/lib/args.mjs";
+import { callApi, connectDevServer, fail } from "../packages/kestrel/lib/dev-api.mjs";
+import { runCommand } from "../packages/kestrel/lib/errors.mjs";
 
 const TAG = "simulate-send";
 /** The demo's scheduled post (`demo/posts/5-a-quick-note.md`): the one a demo send moves when it can. */
@@ -63,46 +65,57 @@ function words(ms) {
 
 const clock = (ms) => new Date(ms).toLocaleTimeString();
 
+const USAGE = `Usage: npm run simulate-send -- [--in <duration>] [--profile <name>] [--size <n>] [--punctual] [port|url]
+
+  Schedule a demo send on this directory's dev server and print its watch URL.
+
+  --in <duration>    when it fires: 90s, 2m, 1m30s, 1h (default: the server's minimum lead)
+  --profile <name>   ses or generic: check the server runs that simulation profile
+  --size <n>         the list size to seed an empty database with (100, 1k, 10k, 100k)
+  --punctual         stay until the send comes due and run one extra sweep tick then`;
+
 async function main() {
-  const { flags, positional } = parseArgs(process.argv.slice(2), ["punctual"]);
-  const { base, token } = await devTarget(positional[0], TAG);
-  const api = (path, init = {}) => callApi(base, token, path, { ...init, tag: TAG });
+  const args = commandArgs(USAGE, process.argv.slice(2), {
+    options: {
+      in: { type: "string" },
+      profile: { type: "string" },
+      size: { type: "string" },
+      punctual: { type: "boolean" },
+    },
+    max: 1,
+  });
+  if (!args) {
+    return;
+  }
+  const flags = args.values;
+  const { base, token } = await connectDevServer(args.positionals[0], TAG);
+  const api = (path, init = {}) => callApi(base, token, path, init);
 
   const settings = await api("/api/settings");
   if (!settings.ok) {
-    fail(
-      TAG,
-      `could not read the server's settings: ${settings.status}`,
-      JSON.stringify(settings.body),
-    );
+    fail(`could not read the server's settings: ${settings.status}`, JSON.stringify(settings.body));
   }
   const { min_lead_ms: minLeadMs, simulation, provider } = settings.body.deployment;
 
   // The simulation is the server's to run, fixed when it starts.
   const wanted = flags.profile === "1" ? "generic" : flags.profile;
   if (wanted !== undefined && !(wanted in PROFILES)) {
-    fail(
-      TAG,
-      `--profile must be one of ${Object.keys(PROFILES).join(", ")}, not "${flags.profile}"`,
-    );
+    fail(`--profile must be one of ${Object.keys(PROFILES).join(", ")}, not "${flags.profile}"`);
   }
   if (provider === "none") {
     fail(
-      TAG,
       "this dev server runs not connected (SIMULATE_SENDS=not-connected), so it refuses every send.",
       `Restart it with a profile: SIMULATE_SENDS=${wanted ?? "ses"} npm run dev`,
     );
   }
   if (!simulation) {
     fail(
-      TAG,
       "this dev server isn't simulating sends (SIMULATE_SENDS is off), so a send would finish at once with nothing to watch.",
       `Restart it with a profile: SIMULATE_SENDS=${wanted ?? "ses"} npm run dev`,
     );
   }
   if (wanted !== undefined && wanted !== simulation.profile) {
     fail(
-      TAG,
       `this dev server simulates ${PROFILES[simulation.profile]}, not ${PROFILES[wanted]}. The profile is fixed when the server starts.`,
       `Stop it and run: SIMULATE_SENDS=${wanted} npm run dev   (or set SIMULATE_SENDS in .dev.vars)`,
     );
@@ -111,7 +124,7 @@ async function main() {
   // The fire time: never inside the minimum lead, which every send gets (docs/SPEC.md §6).
   const inMs = flags.in === undefined ? minLeadMs : parseDuration(flags.in);
   if (inMs === null) {
-    fail(TAG, `--in takes a duration like 90s, 2m, or 1m30s, not "${flags.in}"`);
+    fail(`--in takes a duration like 90s, 2m, or 1m30s, not "${flags.in}"`);
   }
   if (inMs < minLeadMs) {
     const lower =
@@ -119,7 +132,6 @@ async function main() {
         ? ` This server's lead is MIN_LEAD_SECONDS in .dev.vars; it can go as low as 60, the floor.`
         : "";
     fail(
-      TAG,
       `--in ${flags.in} is inside this server's minimum lead of ${words(minLeadMs)}.`,
       `Every send stays visible and cancelable at least that long before it fires, so it can be stopped (docs/SPEC.md §6).`,
       `The floor is 1 minute in every environment, local dev included: the send sweep runs once a minute, so under that the tick, not the lead, would decide when a send fires.${lower}`,
@@ -137,7 +149,6 @@ async function main() {
     await seedDemo(base, token, { size: flags.size }, TAG);
   } else if (flags.size !== undefined) {
     fail(
-      TAG,
       "--size applies only when the database is empty and gets seeded; this one already has data.",
       `Run \`npm run seed -- --size ${flags.size}\` (it replaces the local data), then run this again.`,
     );
@@ -151,7 +162,6 @@ async function main() {
   if (!scheduled.ok) {
     // Never read a refusal as "no scheduled sends": that would schedule a new post every run.
     fail(
-      TAG,
       `the scheduled sends couldn't be read (${scheduled.status}): ${scheduled.body?.message ?? JSON.stringify(scheduled.body)}`,
     );
   }
@@ -171,7 +181,6 @@ async function main() {
     });
     if (!moved.ok) {
       fail(
-        TAG,
         `the reschedule was refused (${moved.status}): ${moved.body?.message ?? JSON.stringify(moved.body)}`,
       );
     }
@@ -186,7 +195,7 @@ async function main() {
       },
     });
     if (!created.ok) {
-      fail(TAG, `could not create a post (${created.status}): ${JSON.stringify(created.body)}`);
+      fail(`could not create a post (${created.status}): ${JSON.stringify(created.body)}`);
     }
     const frozen = await api(`/api/posts/${created.body.post.id}/schedule`, {
       method: "POST",
@@ -194,7 +203,6 @@ async function main() {
     });
     if (!frozen.ok) {
       fail(
-        TAG,
         `the schedule was refused (${frozen.status}): ${frozen.body?.message ?? JSON.stringify(frozen.body)}`,
       );
     }
@@ -253,4 +261,4 @@ async function main() {
   }
 }
 
-main();
+await runCommand(TAG, main);

@@ -23,16 +23,16 @@
  */
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
-import { readSignIn, readSignIns, withCredentialsLock, writeSignInHeld } from "./credentials.mjs";
-import { devTarget } from "./dev-api.mjs";
+import { usageOf } from "./commands.mjs";
+import { readSignIn, readSignIns, withCredentialsLock, writeSignInLocked } from "./credentials.mjs";
+import { connectDevServer } from "./dev-api.mjs";
+import { CliError, UsageError } from "./errors.mjs";
 import { folderOrigins } from "./folder-instance.mjs";
 import { fileMediaType } from "./media-types.mjs";
 import {
-  CLAUDE_CODE_CLIENT,
   defaultClient,
   instanceOrigin,
   isLoopback,
-  KESTREL_CLI_CLIENT,
   needsRefresh,
   refreshTokens,
   SignInError,
@@ -46,26 +46,7 @@ import {
   listRoutes,
 } from "./openapi.mjs";
 
-const USAGE = `Usage: kestrel api <method> <path> [options]
-       kestrel api --list [resource]       the instance's routes, or one resource's
-       kestrel api help <method> <path>    one route: its fields, refusals, and answer
-
-  -f, --raw-field <name=value>  a body field, as a string; repeatable. On a GET, or for a name
-                                the route takes only as one, a query parameter
-  -F, --field <name=value>      a body field typed by the route's schema (true, 3, null, JSON),
-                                or name=@file for a file's text. name.sub nests; name[] lists
-  --data <json|@file|->         the request body: inline, from a file, or from stdin
-  --type <media type>           the body's type (default application/json)
-  --form <name=value>           a multipart field, repeatable; name=@file attaches a file
-  --url <url>                   the instance (default: KESTREL_URL, else this folder's instance, from
-                                its wrangler.jsonc, else the only one you're signed in to)
-  --local                       this directory's dev server, started by kestrel dev
-  --client <name>               your own script's Kestrel-Client name (default ${CLAUDE_CODE_CLIENT}
-                                when Claude Code runs this, otherwise ${KESTREL_CLI_CLIENT}); never
-                                editor, which only the editor names itself
-
-The routes, fields, and refusals come from the instance's own /api/openapi.json, so they
-match the release it runs. A field the route doesn't take is refused before the request.`;
+const USAGE = usageOf("api");
 
 // The name only the editor sends; `kestrel api` refuses to claim it (SPEC §7, §11). Mirrored
 // from shared/who_acted.ts, since the CLI is plain Node; a spec holds the two equal.
@@ -95,9 +76,10 @@ const VALUED = {
 /**
  * Read `kestrel api`'s argv. A call is a method and a path, `--form`, `-f`, and `-F`
  * repeatable; `--list [resource]`, `help`, and `help <resource>` list the routes, and
- * `help <method> <path>` describes one. The body is sent one way: `--data`, `--form`, or
- * fields, never two at once, since merging them would leave a reader guessing which won; a
- * field that is a query parameter may go beside `--data` or `--form`.
+ * `help <method> <path>` describes one; `--help` or `-h` anywhere asks for the usage. The body
+ * is sent one way: `--data`, `--form`, or fields, never two at once, since merging them would
+ * leave a reader guessing which won; a field that is a query parameter may go beside `--data`
+ * or `--form`.
  */
 export function parseApiArgs(argv) {
   const opts = { forms: [], fields: [], local: false, list: false };
@@ -111,10 +93,14 @@ export function parseApiArgs(argv) {
       positional.push(arg);
       continue;
     }
+    if (name === "help" || name === "h") {
+      // `--help` anywhere is a request for this usage, whatever else the line says.
+      return { mode: "usage" };
+    }
     if (name === "local" || name === "list") {
       // `--list=sends` names its resource as `--list sends` does; --local names nothing.
       if (eq && name === "local") {
-        throw new SignInError(`--local takes no value; to name a server, use --url <url>.`);
+        throw new UsageError(`--local takes no value; to name a server, use --url <url>.`);
       }
       if (eq) {
         positional.push(eq[2]);
@@ -125,11 +111,11 @@ export function parseApiArgs(argv) {
     const key = VALUED[name];
     const flag = short ? `-${name}` : `--${name}`;
     if (!key) {
-      throw new SignInError(`unknown option ${flag}\n\n${USAGE}`);
+      throw new UsageError(`unknown option ${flag}`, USAGE);
     }
     const value = eq ? eq[2] : argv[++i];
     if (value === undefined) {
-      throw new SignInError(`${flag} needs a value\n\n${USAGE}`);
+      throw new UsageError(`${flag} needs a value`, USAGE);
     }
     if (key === "fields") {
       opts.fields.push({ typed: name === "F" || name === "field", text: value });
@@ -145,12 +131,12 @@ export function parseApiArgs(argv) {
       opts.client.length > CLIENT_NAME_MAX ||
       !new RegExp(CLIENT_NAME_PATTERN).test(opts.client)
     ) {
-      throw new SignInError(
+      throw new UsageError(
         `--client takes one short lowercase word, its parts joined by hyphens (my-script), up to ${CLIENT_NAME_MAX} characters.`,
       );
     }
     if (opts.client === EDITOR_CLIENT) {
-      throw new SignInError(
+      throw new UsageError(
         "--client editor is refused: only the editor names itself the editor, since some acts only a person in the editor may confirm. Name your own program, or leave --client out.",
       );
     }
@@ -161,28 +147,31 @@ export function parseApiArgs(argv) {
   if (list || help) {
     const args = help ? positional.slice(1) : positional;
     if (bodies.some(Boolean)) {
-      throw new SignInError("--list and help send nothing, so they take no body or fields.");
+      throw new UsageError("--list and help send nothing, so they take no body or fields.");
     }
     if (args.length === 2 && help) {
       const [method, path] = args;
       return { mode: "help", method: method.toUpperCase(), path, ...rest };
     }
     if (args.length > 1) {
-      throw new SignInError(USAGE);
+      throw new UsageError("help names one route, as a method and a path", USAGE);
     }
     return { mode: "list", resource: args[0], ...rest };
   }
   const [method, path, ...extra] = positional;
   if (!method || !path || extra.length) {
-    throw new SignInError(USAGE);
+    throw new UsageError(
+      extra.length ? `unexpected argument "${extra[0]}"` : "name a method and a path",
+      USAGE,
+    );
   }
   if (!path.startsWith("/")) {
-    throw new SignInError(`The path starts with a slash, as in /api/posts.\n\n${USAGE}`);
+    throw new UsageError("the path starts with a slash, as in /api/posts", USAGE);
   }
   // Fields may go with --data or --form only as query parameters, which apiCommand checks
   // once it knows where each field goes.
   if (bodies[0] && bodies[1]) {
-    throw new SignInError(ONE_WAY);
+    throw new UsageError(ONE_WAY);
   }
   return { mode: "call", method: method.toUpperCase(), path, ...rest };
 }
@@ -192,7 +181,7 @@ export function parseApiArgs(argv) {
  * repository `dir` is (packages/kestrel/lib/folder-instance.mjs), then the one instance this
  * person is signed in to. A folder naming several, or several sign-ins and nothing naming one,
  * is a refusal, not a guess, and never a prompt, since an agent runs this with no terminal.
- * An instance taken from the folder or the one sign-in is named on stderr through `say`, since
+ * An instance taken from the folder or the one sign-in is named on stderr through `note`, since
  * nothing in the command named it and a person in another instance's folder should see the
  * mismatch; stdout stays the answer's.
  */
@@ -201,7 +190,7 @@ export function chooseInstance({
   env = process.env,
   dir = process.cwd(),
   signIns,
-  say = (line) => process.stderr.write(`${line}\n`),
+  note = (line) => process.stderr.write(`${line}\n`),
 }) {
   if (url) {
     return instanceOrigin(url);
@@ -217,14 +206,14 @@ export function chooseInstance({
   }
   if (named.length === 1) {
     const origin = instanceOrigin(named[0]);
-    say(
+    note(
       `kestrel api: calling ${origin}, this folder's instance. Pass --url to call a different one.`,
     );
     return origin;
   }
   const origins = Object.keys(signIns);
   if (origins.length === 1) {
-    say(
+    note(
       `kestrel api: calling ${origins[0]}, the only instance you're signed in to. Pass --url to call a different one.`,
     );
     return origins[0];
@@ -237,6 +226,15 @@ export function chooseInstance({
   throw new SignInError(
     `You're signed in to ${origins.length} instances (${origins.join(", ")}). Name one with --url or KESTREL_URL.`,
   );
+}
+
+/** A file named on the command line, or a CliError saying why it can't be read. */
+function readInput(file) {
+  try {
+    return readFileSync(file);
+  } catch (err) {
+    throw new CliError(`Couldn't read ${file}: ${err.message}`);
+  }
 }
 
 /** The request body and its headers, from --data, --type, and --form. */
@@ -253,7 +251,7 @@ async function requestBody({ data, type, forms }) {
       if (value.startsWith("@")) {
         const file = value.slice(1);
         const type = fileMediaType(file);
-        form.append(name, new Blob([readFileSync(file)], { type }), basename(file));
+        form.append(name, new Blob([readInput(file)], { type }), basename(file));
       } else {
         form.append(name, value);
       }
@@ -271,7 +269,7 @@ async function requestBody({ data, type, forms }) {
     }
     body = Buffer.concat(chunks);
   } else if (data.startsWith("@")) {
-    body = readFileSync(data.slice(1));
+    body = readInput(data.slice(1));
   } else {
     body = data;
   }
@@ -313,7 +311,7 @@ export async function accessToken(origin, { force = false, env = process.env } =
     }
     try {
       const fields = tokenFields(await refreshTokens(now), now);
-      writeSignInHeld(origin, { ...now, ...fields }, env);
+      writeSignInLocked(origin, { ...now, ...fields }, env);
       return fields.access_token;
     } catch (err) {
       if (!(err instanceof SignInError)) {
@@ -346,17 +344,7 @@ export async function accessToken(origin, { force = false, env = process.env } =
  */
 export async function signedInFetch(origin, path, { method = "GET", body, headers = {}, client }) {
   const send = async (token) =>
-    fetch(`${origin}${path}`, {
-      method,
-      body,
-      redirect: "manual",
-      headers: {
-        accept: "application/json",
-        ...headers,
-        "kestrel-client": client,
-        authorization: `Bearer ${token}`,
-      },
-    });
+    bearerFetch(`${origin}${path}`, token, { method, body, headers, client, redirect: "manual" });
   let res = await send(await accessToken(origin));
   // Access's own refusal names its OAuth metadata; the app's 401 doesn't, and a fresh token
   // wouldn't change it. A streamed body (stdin) can't be sent twice, but it is read whole.
@@ -367,34 +355,47 @@ export async function signedInFetch(origin, path, { method = "GET", body, header
 }
 
 /**
+ * One request as `token`, naming `client`: the headers every call carries, the signed-in one
+ * and the dev server's alike. A network failure is a CliError naming where it couldn't reach.
+ */
+async function bearerFetch(url, token, { method = "GET", body, headers = {}, client, redirect }) {
+  try {
+    return await fetch(url, {
+      method,
+      body,
+      redirect,
+      headers: {
+        accept: "application/json",
+        ...headers,
+        "kestrel-client": client,
+        authorization: `Bearer ${token}`,
+      },
+    });
+  } catch (err) {
+    const cause =
+      err instanceof Error && err.cause instanceof Error ? ` (${err.cause.message})` : "";
+    throw new CliError(`Couldn't reach ${new URL(url).origin}: ${err.message ?? err}${cause}`);
+  }
+}
+
+/**
  * How a run reaches its instance: a function that sends one request there and answers the
  * Response. A loopback address, given or in KESTREL_URL, is a dev server, which has no sign-in:
  * its own human token is minted as the editor's is (SPEC §10). Anything else is the stored
  * sign-in, refreshed as it needs.
  */
-async function openTarget(args, client) {
+async function instanceCaller(args, client) {
   const named = args.url || process.env.KESTREL_URL || undefined;
   if (args.local || (named && isLoopback(instanceOrigin(named)))) {
-    const { base, token } = await devTarget(
+    const { base, token } = await connectDevServer(
       args.local ? undefined : instanceOrigin(named),
       "api",
       "human",
     );
-    return (path, { method = "GET", body, headers = {} } = {}) =>
-      fetch(`${base}${path}`, {
-        method,
-        body,
-        headers: {
-          accept: "application/json",
-          ...headers,
-          "kestrel-client": client,
-          authorization: `Bearer ${token}`,
-        },
-      });
+    return (path, init = {}) => bearerFetch(`${base}${path}`, token, { ...init, client });
   }
   const origin = chooseInstance({ url: args.url, signIns: readSignIns() });
-  return (path, { method = "GET", body, headers = {} } = {}) =>
-    signedInFetch(origin, path, { method, body, headers, client });
+  return (path, init = {}) => signedInFetch(origin, path, { ...init, client });
 }
 
 /** The instance's OpenAPI document, read through `call`, or a refusal saying why there is none. */
@@ -431,63 +432,75 @@ function withQuery(path, query) {
 }
 
 /**
- * `kestrel api`: list the routes, describe one, or call one. A call prints the answer's body
- * on stdout as it came; on a non-2xx answer it also prints the status and, for a refusal, its
- * code, message, field, and next move on stderr, and exits 1.
+ * The request a call sends: its path with any query fields, and its body and headers from
+ * --data, --form, or the -f and -F fields, which are checked against the route's schema in the
+ * instance's document. `doc` and `found` are that document and the route, when the fields
+ * needed them, so a refusal can be explained without reading the document again.
  */
-export async function apiCommand(argv) {
-  let res;
-  let doc;
-  let found;
-  let call;
-  try {
-    const args = parseApiArgs(argv);
-    const client = args.client ?? defaultClient();
-    call = await openTarget(args, client);
-    if (args.mode === "list") {
-      console.log(listRoutes(await readOpenApi(call), args.resource));
-      return;
-    }
-    if (args.mode === "help") {
-      console.log(describeRoute(await readOpenApi(call), args.method, args.path));
-      return;
-    }
-    let path = args.path;
-    let { body, headers } = await requestBody(args);
-    if (args.fields.length) {
-      doc = await readOpenApi(call);
-      found = findOperation(doc, args.method, path);
-      if (!found) {
-        throw new SignInError(
-          `This instance has no route ${args.method} ${path.split("?")[0]}, so its fields can't be checked. \`kestrel api --list\` lists them.`,
-        );
-      }
-      const built = buildFields(doc, found, args.fields);
-      path = withQuery(path, built.query);
-      if (built.body && body !== undefined) {
-        throw new SignInError(ONE_WAY);
-      }
-      if (built.body) {
-        body = JSON.stringify(built.body);
-        headers = { "content-type": "application/json" };
-      }
-    }
-    res = await call(path, { method: args.method, body, headers });
-  } catch (err) {
-    console.error(`kestrel api: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(1);
+async function buildRequest(args, call) {
+  let path = args.path;
+  let { body, headers } = await requestBody(args);
+  if (!args.fields.length) {
+    return { path, body, headers };
   }
+  const doc = await readOpenApi(call);
+  const found = findOperation(doc, args.method, path);
+  if (!found) {
+    throw new SignInError(
+      `This instance has no route ${args.method} ${path.split("?")[0]}, so its fields can't be checked. \`kestrel api --list\` lists them.`,
+    );
+  }
+  const built = buildFields(doc, found, args.fields);
+  path = withQuery(path, built.query);
+  if (built.body && body !== undefined) {
+    throw new UsageError(ONE_WAY);
+  }
+  if (built.body) {
+    body = JSON.stringify(built.body);
+    headers = { "content-type": "application/json" };
+  }
+  return { path, body, headers, doc, found };
+}
+
+/**
+ * Print an answer's body on stdout as it came, and for a non-2xx answer throw a CliError naming
+ * its status, with a refusal's code, message, field, and next move under it.
+ */
+async function printAnswer(res, { doc, found, call }) {
   const text = await res.text();
   if (text) {
     process.stdout.write(text.endsWith("\n") ? text : `${text}\n`);
   }
   if (!res.ok) {
-    console.error(`kestrel api: HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ""}`);
-    for (const line of (await refusalLines(text, { doc, found, call })) ?? []) {
-      console.error(`  ${line}`);
-    }
-    process.exit(1);
+    throw new CliError(`HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ""}`, {
+      lines: (await refusalLines(text, { doc, found, call })) ?? [],
+    });
   }
+}
+
+/**
+ * `kestrel api`: list the routes, describe one, or call one. A call prints the answer's body
+ * on stdout as it came; a non-2xx answer is also a CliError, so its status and, for a refusal,
+ * its code, message, field, and next move go to stderr, and the command exits 1.
+ */
+export async function apiCommand(argv) {
+  const args = parseApiArgs(argv);
+  if (args.mode === "usage") {
+    console.log(USAGE);
+    return;
+  }
+  const call = await instanceCaller(args, args.client ?? defaultClient());
+  if (args.mode === "list") {
+    console.log(listRoutes(await readOpenApi(call), args.resource));
+    return;
+  }
+  if (args.mode === "help") {
+    console.log(describeRoute(await readOpenApi(call), args.method, args.path));
+    return;
+  }
+  const { path, body, headers, doc, found } = await buildRequest(args, call);
+  const res = await call(path, { method: args.method, body, headers });
+  await printAnswer(res, { doc, found, call });
 }
 
 /**

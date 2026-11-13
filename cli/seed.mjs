@@ -21,7 +21,9 @@ import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { devTarget, fail, parseArgs } from "../packages/kestrel/lib/dev-api.mjs";
+import { commandArgs } from "../packages/kestrel/lib/args.mjs";
+import { usageOf } from "../packages/kestrel/lib/commands.mjs";
+import { connectDevServer, fail } from "../packages/kestrel/lib/dev-api.mjs";
 import { fileMediaType } from "../packages/kestrel/lib/media-types.mjs";
 
 // The demo ships beside the CLI, in this repository and in the package.
@@ -100,21 +102,31 @@ export async function seedDemo(base, token, { size, seed } = {}, tag = "seed") {
     });
   } catch (err) {
     fail(
-      tag,
       `could not reach ${url}. Is the dev server running?`,
       err instanceof Error ? err.message : String(err),
     );
   }
   if (!res.ok) {
-    fail(tag, `request failed: ${res.status} ${res.statusText}`, await res.text());
+    fail(`request failed: ${res.status} ${res.statusText}`, await res.text());
   }
-  return res.json();
+  return res
+    .json()
+    .catch(() => fail(`the server at ${url} answered the seed with something that isn't JSON.`));
 }
+
+const USAGE = usageOf("seed");
 
 /** `kestrel seed [--size n] [--seed s] [port|url]`. */
 export async function seedCommand(argv) {
-  const { flags, positional } = parseArgs(argv);
-  const { base, token } = await devTarget(positional[0], "seed");
+  const args = commandArgs(USAGE, argv, {
+    options: { size: { type: "string" }, seed: { type: "string" } },
+    max: 1,
+  });
+  if (!args) {
+    return;
+  }
+  const flags = args.values;
+  const { base, token } = await connectDevServer(args.positionals[0], "seed");
   const summary = await seedDemo(base, token, { size: flags.size, seed: flags.seed });
   console.log("[seed] done:");
   if (flags.size) {

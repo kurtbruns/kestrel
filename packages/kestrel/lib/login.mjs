@@ -10,7 +10,10 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { signedInFetch } from "./api.mjs";
+import { commandArgs } from "./args.mjs";
+import { usageOf } from "./commands.mjs";
 import { credentialsFile, readSignIn, readSignIns, writeSignIn } from "./credentials.mjs";
+import { UsageError } from "./errors.mjs";
 import {
   authorizeUrl,
   defaultClient,
@@ -99,57 +102,61 @@ export async function signIn(origin, { browser }) {
   return body?.principal;
 }
 
+const LOGIN_USAGE = usageOf("login");
+
+const LOGOUT_USAGE = usageOf("logout");
+
 /** `kestrel login <url> [--no-browser]`. */
 export async function loginCommand(argv) {
-  const browser = !argv.includes("--no-browser");
-  const urls = argv.filter((a) => a !== "--no-browser");
-  try {
-    if (urls.length !== 1) {
-      throw new SignInError("Usage: kestrel login <url> [--no-browser]");
-    }
-    const origin = instanceOrigin(urls[0]);
-    if (isLoopback(origin)) {
-      throw new SignInError(
-        "A local dev server needs no sign-in: `npx kestrel api --local …` calls it as you.",
-      );
-    }
-    const principal = await signIn(origin, { browser });
-    const who = principal?.email ?? principal?.kind ?? "someone";
-    console.log(`Signed in to ${origin} as ${who}.`);
-    console.log(
-      `Stored in ${credentialsFile()}. \`npx kestrel api GET /api/posts\` calls it as you.`,
-    );
-  } catch (err) {
-    console.error(`kestrel login: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(1);
+  const args = commandArgs(LOGIN_USAGE, argv, {
+    options: { "no-browser": { type: "boolean" } },
+    max: 1,
+  });
+  if (!args) {
+    return;
   }
+  if (args.positionals.length !== 1) {
+    throw new UsageError("name the instance to sign in to", LOGIN_USAGE);
+  }
+  const origin = instanceOrigin(args.positionals[0]);
+  if (isLoopback(origin)) {
+    throw new SignInError(
+      "A local dev server needs no sign-in: `npx kestrel api --local …` calls it as you.",
+    );
+  }
+  const principal = await signIn(origin, { browser: !args.values["no-browser"] });
+  const who = principal?.email ?? principal?.kind ?? "someone";
+  console.log(`Signed in to ${origin} as ${who}.`);
+  console.log(
+    `Stored in ${credentialsFile()}. \`npx kestrel api GET /api/posts\` calls it as you.`,
+  );
 }
 
 /** `kestrel logout [url]`: revoke and forget one sign-in, or the only one stored. */
 export async function logoutCommand(argv) {
-  try {
-    const origins = Object.keys(readSignIns());
-    const origin = argv[0] ? instanceOrigin(argv[0]) : origins.length === 1 ? origins[0] : null;
-    if (!origin) {
-      throw new SignInError(
-        origins.length
-          ? `You're signed in to ${origins.join(", ")}. Name the one to sign out of.`
-          : "You aren't signed in to any instance.",
-      );
-    }
-    const entry = readSignIn(origin);
-    if (!entry) {
-      throw new SignInError(`You aren't signed in to ${origin}.`);
-    }
-    const revoked = await revokeTokens(entry);
-    await writeSignIn(origin, undefined);
-    console.log(
-      revoked
-        ? `Signed out of ${origin}, and Access revoked the sign-in.`
-        : `Signed out of ${origin} on this computer. Access didn't confirm revoking it; it ends with the Access application's grant session.`,
-    );
-  } catch (err) {
-    console.error(`kestrel logout: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(1);
+  const args = commandArgs(LOGOUT_USAGE, argv, { max: 1 });
+  if (!args) {
+    return;
   }
+  const [named] = args.positionals;
+  const origins = Object.keys(readSignIns());
+  const origin = named ? instanceOrigin(named) : origins.length === 1 ? origins[0] : null;
+  if (!origin) {
+    throw new SignInError(
+      origins.length
+        ? `You're signed in to ${origins.join(", ")}. Name the one to sign out of.`
+        : "You aren't signed in to any instance.",
+    );
+  }
+  const entry = readSignIn(origin);
+  if (!entry) {
+    throw new SignInError(`You aren't signed in to ${origin}.`);
+  }
+  const revoked = await revokeTokens(entry);
+  await writeSignIn(origin, undefined);
+  console.log(
+    revoked
+      ? `Signed out of ${origin}, and Access revoked the sign-in.`
+      : `Signed out of ${origin} on this computer. Access didn't confirm revoking it; it ends with the Access application's grant session.`,
+  );
 }

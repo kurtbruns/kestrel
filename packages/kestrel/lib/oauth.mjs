@@ -15,6 +15,7 @@
  */
 import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
+import { CliError } from "./errors.mjs";
 
 /** The path discovery and the sign-in's check ask: protected, and it answers who signed in. */
 export const PROTECTED_PATH = "/api/whoami";
@@ -43,8 +44,8 @@ export function defaultClient() {
 // How long before its expiry an access token is refreshed rather than sent.
 const REFRESH_MARGIN_MS = 60_000;
 
-/** Thrown with words for the person: what went wrong and what to do. */
-export class SignInError extends Error {}
+/** A sign-in or a call that can't go on, with words for the person: what went wrong and what to do. */
+export class SignInError extends CliError {}
 
 /** Whether an origin is this computer (a local dev server), where Access never stands. */
 export function isLoopback(origin) {
@@ -124,9 +125,14 @@ async function getJson(url, what) {
     throw new SignInError(`Couldn't reach ${new URL(url).origin} for ${what}: ${errText(err)}`);
   }
   if (!res.ok) {
+    await discardBody(res);
     throw new SignInError(`${what} answered ${res.status} at ${url}.`);
   }
-  return res.json();
+  try {
+    return await res.json();
+  } catch {
+    throw new SignInError(`${what} at ${url} isn't JSON.`);
+  }
 }
 
 /**
@@ -145,6 +151,8 @@ export async function discover(origin) {
   } catch (err) {
     throw new SignInError(`Couldn't reach ${origin}: ${errText(err)}`);
   }
+  // Only the headers are read; the 401's body is Access's page, and nothing waits on it.
+  await discardBody(res);
   const metadataUrl = resourceMetadataUrl(res.headers.get("www-authenticate"));
   if (res.status !== 401 || !metadataUrl) {
     throw new SignInError(
@@ -180,17 +188,24 @@ export async function discover(origin) {
 
 /** Register a public client for this computer's loopback redirect; answers its client_id. */
 export async function registerClient(registrationEndpoint, redirectUri) {
-  const res = await fetch(registrationEndpoint, {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify({
-      client_name: "Kestrel CLI",
-      redirect_uris: [redirectUri],
-      grant_types: ["authorization_code", "refresh_token"],
-      response_types: ["code"],
-      token_endpoint_auth_method: "none",
-    }),
-  });
+  let res;
+  try {
+    res = await fetch(registrationEndpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({
+        client_name: "Kestrel CLI",
+        redirect_uris: [redirectUri],
+        grant_types: ["authorization_code", "refresh_token"],
+        response_types: ["code"],
+        token_endpoint_auth_method: "none",
+      }),
+    });
+  } catch (err) {
+    throw new SignInError(
+      `Couldn't reach ${new URL(registrationEndpoint).origin} to register: ${errText(err)}`,
+    );
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok || typeof body.client_id !== "string") {
     throw new SignInError(
@@ -304,6 +319,7 @@ export async function revokeTokens(entry) {
         client_id: entry.client_id,
       }).toString(),
     });
+    await discardBody(res);
     return res.ok;
   } catch {
     return false;
@@ -359,7 +375,11 @@ export async function listenForCode({ port, state, timeoutMs = 5 * 60_000 }) {
         if (fallback && err.code === "EADDRINUSE") {
           tryPort(0, false);
         } else {
-          reject(err);
+          reject(
+            new SignInError(
+              `Couldn't listen on 127.0.0.1 for the browser's return from the sign-in: ${err.message}`,
+            ),
+          );
         }
       });
       server.listen(p, "127.0.0.1", () => resolve(server.address().port));
@@ -380,6 +400,14 @@ export async function listenForCode({ port, state, timeoutMs = 5 * 60_000 }) {
   };
   code.then(close, close);
   return { redirectUri: `http://127.0.0.1:${bound}/callback`, code, close };
+}
+
+/**
+ * Let go of a response's body that won't be read. Left unread, a body the server never finishes
+ * holds the connection, and the process with it, open after the command is done.
+ */
+export async function discardBody(res) {
+  await res.body?.cancel().catch(() => {});
 }
 
 function errText(err) {

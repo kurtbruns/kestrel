@@ -36,6 +36,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { CliError } from "./errors.mjs";
 
 const VERSION = 1;
 
@@ -66,7 +67,7 @@ export function readSignIns(env = process.env) {
     if (err?.code === "ENOENT") {
       return {};
     }
-    throw new Error(`Couldn't read the sign-ins in ${file}: ${err?.message ?? err}`);
+    throw new CliError(`Couldn't read the sign-ins in ${file}: ${err?.message ?? err}`);
   }
   let data;
   try {
@@ -77,7 +78,7 @@ export function readSignIns(env = process.env) {
   if (data?.version === VERSION && data.instances && typeof data.instances === "object") {
     return data.instances;
   }
-  throw new Error(
+  throw new CliError(
     `${file} isn't a sign-ins file this release of Kestrel can read, so it was left as it is. Move it aside, then run \`npx kestrel login <url>\` again.`,
   );
 }
@@ -90,30 +91,46 @@ export function readSignIn(origin, env = process.env) {
 /**
  * Store (or, with undefined, forget) the sign-in for one origin, leaving the others. Takes
  * the credentials lock, so call it outside `withCredentialsLock`; inside one, use
- * `writeSignInHeld`.
+ * `writeSignInLocked`.
  */
 export function writeSignIn(origin, entry, env = process.env) {
-  return withCredentialsLock(() => writeSignInHeld(origin, entry, env), env);
+  return withCredentialsLock(() => writeSignInLocked(origin, entry, env), env);
 }
 
 /** `writeSignIn` for a caller already inside `withCredentialsLock`, which taking it again would deadlock. */
-export function writeSignInHeld(origin, entry, env = process.env) {
+export function writeSignInLocked(origin, entry, env = process.env) {
   const instances = { ...readSignIns(env) };
   if (entry === undefined) {
     delete instances[origin];
   } else {
     instances[origin] = entry;
   }
-  const dir = configDir(env);
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
   const file = credentialsFile(env);
   const tmp = `${file}.${process.pid}.tmp`;
-  writeFileSync(tmp, `${JSON.stringify({ version: VERSION, instances }, null, 2)}\n`, {
-    mode: 0o600,
-  });
-  // The mode on create is masked by umask, so set it outright before the file takes its name.
-  chmodSync(tmp, 0o600);
-  renameSync(tmp, file);
+  try {
+    makeConfigDir(env);
+    writeFileSync(tmp, `${JSON.stringify({ version: VERSION, instances }, null, 2)}\n`, {
+      mode: 0o600,
+    });
+    // The mode on create is masked by umask, so set it outright before the file takes its name.
+    chmodSync(tmp, 0o600);
+    renameSync(tmp, file);
+  } catch (err) {
+    if (err instanceof CliError) {
+      throw err;
+    }
+    throw new CliError(`Couldn't save the sign-ins in ${file}: ${err.message}`);
+  }
+}
+
+/** The config directory, made (owner only) if it isn't there, or a CliError saying why it can't be. */
+function makeConfigDir(env) {
+  const dir = configDir(env);
+  try {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+  } catch (err) {
+    throw new CliError(`Couldn't make ${dir} for the sign-ins: ${err.message}`);
+  }
 }
 
 // How long a lock is waited for, and when one left behind by a crashed process is taken over.
@@ -129,7 +146,7 @@ export const LOCK_STALE_MS = 30_000;
  * so a holder that outlived the staleness rule never deletes the lock of whoever took over.
  */
 export async function withCredentialsLock(fn, env = process.env) {
-  mkdirSync(configDir(env), { recursive: true, mode: 0o700 });
+  makeConfigDir(env);
   const lock = `${credentialsFile(env)}.lock`;
   const deadline = Date.now() + LOCK_WAIT_MS;
   const token = `${process.pid}:${randomBytes(8).toString("hex")}`;
@@ -145,7 +162,7 @@ export async function withCredentialsLock(fn, env = process.env) {
       held = true;
     } catch (err) {
       if (err?.code !== "EEXIST") {
-        throw err;
+        throw new CliError(`Couldn't take the lock ${lock}: ${err.message}`);
       }
       let age = 0;
       let seen;
@@ -168,7 +185,7 @@ export async function withCredentialsLock(fn, env = process.env) {
           rmSync(lock, { force: true });
         }
       } else if (Date.now() > deadline) {
-        throw new Error(
+        throw new CliError(
           `Another kestrel command has held ${lock} for ${Math.round(LOCK_WAIT_MS / 1000)} seconds. It may still be running; try again in a minute. A lock left by a crashed command clears itself after ${Math.round(LOCK_STALE_MS / 1000)} seconds.`,
         );
       } else {

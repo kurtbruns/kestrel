@@ -37,13 +37,18 @@ import { existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
+import { asksForHelp } from "../packages/kestrel/lib/args.mjs";
+import { usageOf } from "../packages/kestrel/lib/commands.mjs";
 import {
   clearDevServer,
   newDevRunId,
   writeDevServer,
 } from "../packages/kestrel/lib/dev-server.mjs";
+import { CliError } from "../packages/kestrel/lib/errors.mjs";
 import { startSweepTicker } from "./sweep-ticker.mjs";
 import { captureWrangler, runWrangler, spawnWrangler } from "./wrangler.mjs";
+
+const USAGE = usageOf("dev");
 
 // The port a plain `kestrel dev` prefers, matching wrangler's own default.
 const PREFERRED_PORT = 8787;
@@ -182,7 +187,7 @@ export function simulationLine(value) {
  * (`off` included, which overrides `.dev.vars` like any other), else `.dev.vars`'s in `dir`.
  * An empty shell value falls through, as it is not forwarded to wrangler (see `devCommand`).
  */
-export function effectiveSimulateSends(shell, dir) {
+export function simulateSendsForRun(shell, dir) {
   if (shell?.trim()) {
     return shell;
   }
@@ -191,101 +196,54 @@ export function effectiveSimulateSends(shell, dir) {
 }
 
 /**
- * `kestrel dev [wrangler dev args]`. `onStop` runs when the server stops, for whatever the
- * caller started beside it.
+ * The port this run serves on: PORT when the shell sets it, else 8787, else a free one.
+ * Resolved as late as possible before the spawn, to keep the check-then-bind window small.
  */
-export async function devCommand(argv, { onStop = () => {} } = {}) {
-  const isRemote = argv.includes("--remote");
-
-  // A second `--port` would rebind wrangler while the origins kept pointing at the resolved
-  // port, so absolute reader URLs would silently 404. PORT drives both in lockstep.
-  if (argv.some((a) => a === "--port" || a === "-p" || a.startsWith("--port="))) {
-    console.error(
-      "[dev] set the port with the PORT variable, not --port: `PORT=9000 kestrel dev`\n" +
-        "      (PORT also sets APP_ORIGIN, ARCHIVE_ORIGIN, and MEDIA_PUBLIC_BASE to match).",
-    );
-    process.exit(1);
-  }
-
-  if (!isRemote) {
-    bootstrapDatabase();
-  }
-
-  // Resolved as late as possible before the spawn, to keep the check-then-bind window small.
-  let port;
+async function resolvePort() {
   if (process.env.PORT) {
-    port = process.env.PORT;
-  } else if (await isPortFree(PREFERRED_PORT)) {
-    port = String(PREFERRED_PORT);
-  } else {
-    port = String(await findFreePort());
-    console.log(`[dev] port ${PREFERRED_PORT} is busy — using ${port}`);
+    return process.env.PORT;
   }
+  if (await isPortFree(PREFERRED_PORT)) {
+    return String(PREFERRED_PORT);
+  }
+  const port = String(await findFreePort());
+  console.log(`[dev] port ${PREFERRED_PORT} is busy — using ${port}`);
+  return port;
+}
 
+/**
+ * The `--var` arguments a local run adds to `wrangler dev`: the origins at the port actually
+ * bound, the per-run settings the shell sets, and the run's ID. None for `--remote`, which runs
+ * against deployed resources under their real origins and settings, and whose database an
+ * unnamed seed must never reach.
+ */
+export function localVars({ port, runId, fromShell, env = process.env }) {
   // Kestrel renders absolute reader URLs (an email needs them) from the origins, which the
   // dev config pins to :8787. Override them to the port actually bound (a no-op at 8787).
-  // Not for --remote, which runs against deployed resources under their real origins.
   const origin = `http://localhost:${port}`;
-  const originArgs = isRemote
-    ? []
-    : [
-        "--var",
-        `APP_ORIGIN:${origin}`,
-        "--var",
-        `ARCHIVE_ORIGIN:${origin}`,
-        "--var",
-        `MEDIA_PUBLIC_BASE:${origin}/media`,
-      ];
+  const vars = [
+    `APP_ORIGIN:${origin}`,
+    `ARCHIVE_ORIGIN:${origin}`,
+    `MEDIA_PUBLIC_BASE:${origin}/media`,
+    // `--var` wins over `.dev.vars`. An empty one is left out (see `fromShell` in devCommand).
+    ...fromShell.map((name) => `${name}:${env[name]}`),
+    // The Worker reports this beside the dev token, and seed and reset with no target given
+    // check it against the record, so they never wipe a server this directory didn't start.
+    `DEV_RUN_ID:${runId}`,
+  ];
+  return vars.flatMap((v) => ["--var", v]);
+}
 
-  // `--var` wins over `.dev.vars`. An empty one is left out: forwarded, it would override
-  // `.dev.vars` with the app's default (`MIN_LEAD_SECONDS=` would bring back the five minutes).
-  const fromShell = OVERRIDABLE.filter((name) => process.env[name]?.trim());
-  const overrideArgs = isRemote
-    ? []
-    : fromShell.flatMap((name) => ["--var", `${name}:${process.env[name]}`]);
-
-  if (!isRemote) {
-    checkDevVars(fromShell);
-    const line = simulationLine(effectiveSimulateSends(process.env.SIMULATE_SENDS, process.cwd()));
-    if (line) {
-      console.log(line);
-    }
-  }
-
-  // The Worker reports this ID beside the dev token, and seed and reset with no target given
-  // check it against the record, so they never wipe a server this directory didn't start.
-  // Not for --remote: its database is a deployed one, which an unnamed seed must never reach.
-  const runId = newDevRunId();
-  const runIdArgs = isRemote ? [] : ["--var", `DEV_RUN_ID:${runId}`];
-
-  if (!isRemote) {
-    writeDevServer(port, runId);
-  }
-  // A remote session runs against deployed resources, where the real cron and the real
-  // webhooks are the ones that count.
-  const stopTicker = isRemote ? () => {} : startSweepTicker(origin);
-  const stop = () => {
-    clearDevServer(runId);
-    stopTicker();
-    onStop();
-  };
-
-  const child = spawnWrangler([
-    "dev",
-    "--port",
-    port,
-    ...originArgs,
-    ...overrideArgs,
-    ...runIdArgs,
-    ...argv,
-  ]);
-
-  // A signal aimed at this process alone (a harness stop, `kill <pid>`) must not leave
-  // wrangler serving, the ticker calling a server that is gone, or the caller's companions
-  // running. Stop the rest at once and pass the signal to wrangler, then end once wrangler has
-  // (the exit handler below re-raises it), or after a few seconds if it doesn't. A terminal's
-  // Ctrl-C already reaches wrangler with the whole group, so SIGINT is passed on only if
-  // wrangler is still running a moment later: a second SIGINT would cut its shutdown short.
+/**
+ * Stop `stop`'s companions and wrangler together when this process is signalled, then end once
+ * wrangler has. A signal aimed at this process alone (a harness stop, `kill <pid>`) must not
+ * leave wrangler serving, the ticker calling a server that is gone, or the caller's companions
+ * running: the rest stop at once and the signal goes on to wrangler, and this ends once wrangler
+ * has (the exit handler re-raises it), or after a few seconds if it doesn't. A terminal's Ctrl-C
+ * already reaches wrangler with the whole group, so SIGINT is passed on only if wrangler is
+ * still running a moment later: a second SIGINT would cut its shutdown short.
+ */
+function forwardSignals(child, stop) {
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
     process.once(signal, () => {
       stop();
@@ -302,7 +260,6 @@ export async function devCommand(argv, { onStop = () => {} } = {}) {
       setTimeout(() => process.kill(process.pid, signal), 5000).unref();
     });
   }
-
   // Exit with wrangler's own status: mirror a fatal signal by re-raising it, else its code.
   child.on("exit", (code, signal) => {
     stop();
@@ -312,4 +269,51 @@ export async function devCommand(argv, { onStop = () => {} } = {}) {
       process.exit(code ?? 0);
     }
   });
+}
+
+/**
+ * `kestrel dev [wrangler dev args]`. `onStop` runs when the server stops, for whatever the
+ * caller started beside it.
+ */
+export async function devCommand(argv, { onStop = () => {} } = {}) {
+  // The rest of argv is wrangler's, so only a request for help is read here.
+  if (asksForHelp(argv)) {
+    console.log(USAGE);
+    return;
+  }
+  // A second `--port` would rebind wrangler while the origins kept pointing at the resolved
+  // port, so absolute reader URLs would silently 404. PORT drives both in lockstep.
+  if (argv.some((a) => a === "--port" || a === "-p" || a.startsWith("--port="))) {
+    throw new CliError("set the port with the PORT variable, not --port: `PORT=9000 kestrel dev`", {
+      lines: ["(PORT also sets APP_ORIGIN, ARCHIVE_ORIGIN, and MEDIA_PUBLIC_BASE to match)."],
+    });
+  }
+  const isRemote = argv.includes("--remote");
+  if (!isRemote) {
+    bootstrapDatabase();
+  }
+  const port = await resolvePort();
+  const runId = newDevRunId();
+  // An empty shell value is left out: forwarded, it would override `.dev.vars` with the app's
+  // default (`MIN_LEAD_SECONDS=` would bring back the five minutes).
+  const fromShell = OVERRIDABLE.filter((name) => process.env[name]?.trim());
+
+  if (!isRemote) {
+    checkDevVars(fromShell);
+    const line = simulationLine(simulateSendsForRun(process.env.SIMULATE_SENDS, process.cwd()));
+    if (line) {
+      console.log(line);
+    }
+    writeDevServer(port, runId);
+  }
+  // A remote session runs against deployed resources, where the real cron and the real
+  // webhooks are the ones that count.
+  const stopTicker = isRemote ? () => {} : startSweepTicker(`http://localhost:${port}`);
+  const stop = () => {
+    clearDevServer(runId);
+    stopTicker();
+    onStop();
+  };
+  const vars = isRemote ? [] : localVars({ port, runId, fromShell });
+  forwardSignals(spawnWrangler(["dev", "--port", port, ...vars, ...argv]), stop);
 }

@@ -91,6 +91,24 @@ describe("parseInitArgs", () => {
     });
   });
 
+  it("refuses a bare --name, never taking it for the directory", () => {
+    expect(() => parseInitArgs(["site", "--name"])).toThrow("--name needs a value");
+  });
+
+  it("refuses a misspelled flag, which read loosely would name the instance after its folder", () => {
+    expect(() => parseInitArgs(["--nmae", "windbreak"])).toThrow("unknown option --nmae");
+  });
+
+  it("refuses a second directory", () => {
+    expect(() => parseInitArgs(["site", "other"])).toThrow('unexpected argument "other"');
+  });
+
+  it("answers --help and -h as a request for help, wherever they stand", () => {
+    expect(parseInitArgs(["--help"])).toEqual({ help: true });
+    expect(parseInitArgs(["site", "-h"])).toEqual({ help: true });
+    expect(parseInitArgs(["--nmae", "x", "--help"])).toEqual({ help: true });
+  });
+
   it("reads --hostname and --sending in either spelling, beside --name and the directory", () => {
     expect(
       parseInitArgs([
@@ -109,20 +127,15 @@ describe("parseInitArgs", () => {
     });
   });
 
-  it("collects a flag init doesn't take, so it is refused rather than skipped", () => {
-    expect(parseInitArgs(["--host", "news.mysite.com"])).toEqual({
-      dir: "news.mysite.com",
-      unknown: ["--host"],
-    });
-    expect(parseInitArgs(["site", "--host=news.mysite.com", "-x"])).toEqual({
-      dir: "site",
-      unknown: ["--host", "-x"],
-    });
+  it("refuses a mistyped --host, rather than take its value for the directory", () => {
+    expect(() => parseInitArgs(["--host", "news.mysite.com"])).toThrow("unknown option --host");
+    expect(() => parseInitArgs(["site", "--host=news.mysite.com"])).toThrow(
+      "unknown option --host",
+    );
   });
 
-  it("reads a bare flag as an empty value, which is refused, never as the directory", () => {
-    expect(parseInitArgs(["site", "--name"])).toEqual({ dir: "site", name: "" });
-    expect(parseInitArgs(["site", "--sending"])).toEqual({ dir: "site", sending: "" });
+  it("refuses a bare --sending, never taking it for the directory", () => {
+    expect(() => parseInitArgs(["site", "--sending"])).toThrow("--sending needs a value");
   });
 });
 
@@ -339,44 +352,38 @@ describe("initCommand", () => {
   });
 
   it("refuses a hostname with a scheme, or on example.com, before writing anything", () => {
-    vi.spyOn(process, "exit").mockImplementation(() => {
-      throw new Error("exit");
-    });
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const dir = join(work, "site");
-    expect(() => initCommand([dir, "--hostname", "https://news.mysite.com"])).toThrow("exit");
+    expect(() => initCommand([dir, "--hostname", "https://news.mysite.com"])).toThrow(
+      'refused: --hostname "https://news.mysite.com" isn\'t a bare hostname: give the name alone, with no scheme, path, or port.',
+    );
     expect(() =>
       initCommand([dir, "--hostname", "news.mysite.com", "--sending", "send.example.com"]),
-    ).toThrow("exit");
-    expect(error.mock.calls.map((call) => call[0])).toEqual([
-      '[init] refused: --hostname "https://news.mysite.com" isn\'t a bare hostname: give the name alone, with no scheme, path, or port.',
-      '[init] refused: --sending "send.example.com" is on example.com, the scaffold\'s placeholder: give your own hostname.',
-    ]);
+    ).toThrow(
+      'refused: --sending "send.example.com" is on example.com, the scaffold\'s placeholder: give your own hostname.',
+    );
     expect(() => readFileSync(join(dir, "wrangler.jsonc"))).toThrow();
   });
 
   it("refuses a mistyped flag, rather than scaffold into a folder named for its value", () => {
-    vi.spyOn(process, "exit").mockImplementation(() => {
-      throw new Error("exit");
-    });
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    // The value would be read as the directory, as `init --host news.mysite.com` reads it.
+    // Read loosely, the value would be the directory, as `init --host news.mysite.com` reads it.
     const value = join(work, "news.mysite.com");
-    expect(() => initCommand(["--host", value])).toThrow("exit");
-    expect(error.mock.calls[0][0]).toBe(
-      "[init] refused: init doesn't take --host; it takes --name, --hostname, and --sending.",
-    );
+    expect(() => initCommand(["--host", value])).toThrow("unknown option --host");
     expect(() => readFileSync(join(value, "wrangler.jsonc"))).toThrow();
   });
 
   it("refuses an invalid --name before writing anything", () => {
-    const exit = vi.spyOn(process, "exit").mockImplementation(() => {
-      throw new Error("exit");
-    });
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(() => initCommand([join(work, "site"), "--name", "Wind_Break"])).toThrow("exit");
-    expect(exit).toHaveBeenCalledWith(1);
-    expect(error.mock.calls[0][0]).toMatch(/refused: "Wind_Break" isn't a valid instance name/);
+    expect(() => initCommand([join(work, "site"), "--name", "Wind_Break"])).toThrow(
+      /^refused: "Wind_Break" isn't a valid instance name/,
+    );
     expect(() => readFileSync(join(work, "site", "wrangler.jsonc"))).toThrow();
+  });
+
+  it("names the package after the instance, as the resources are", () => {
+    const dir = join(work, "My.Site");
+    initCommand([dir]);
+    expect(JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).name).toBe("my-site");
+    expect(resourceNames(readFileSync(join(dir, "wrangler.jsonc"), "utf8"))).toContain(
+      "my-site-production",
+    );
   });
 });
