@@ -29,6 +29,8 @@ Usage: kestrel <command> [options]
   api --list | help <m> <path>  list the instance's routes, or describe one
 
   init [dir] [--name <name>]    write a new instance repository here (or in dir)
+       [--hostname <host>] [--sending <host>]
+                                and put production on the app and sending hostnames
   dev, seed, reset, sync-migrations, check-context
                                 run in an instance's repository, by its ${INSTANCE_PACKAGE}
 

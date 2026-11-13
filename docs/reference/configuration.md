@@ -60,7 +60,7 @@ Vars go in the environment block's `vars`. Every value is a string.
 
 - `APP_ORIGIN` required
 
-    The origin the app is served from: scheme and host, no path. Refused unless it's a plain `http` or `https` origin with no path, and never on `example.com` or a name under it, unless `PROVIDER` is `fake`. A trailing slash is dropped.
+    The origin the app is served from: scheme and host, no path. `kestrel init --hostname` writes it, and the route's `pattern`, in `production`. Refused unless it's a plain `http` or `https` origin with no path, and never on `example.com` or a name under it, unless `PROVIDER` is `fake`. A trailing slash is dropped.
 
 - `AWS_REGION` required with SES
 
@@ -84,7 +84,7 @@ Vars go in the environment block's `vars`. Every value is a string.
 
 - `SENDING_DOMAIN` optional
 
-    The sending domain, shown in Settings beside the From address. The app never checks that it matches `FROM_ADDRESS`, so set it to the part of `FROM_ADDRESS` after the `@`. Never on `example.com`, unless `PROVIDER` is `fake`.
+    The sending domain, shown in Settings beside the From address. The app never checks that it matches `FROM_ADDRESS`, so set it to the part of `FROM_ADDRESS` after the `@`. `kestrel init --sending` writes both in `production`, the address as `newsletter@` the sending hostname. Never on `example.com`, unless `PROVIDER` is `fake`.
 
 - `ARCHIVE_BASE_PATH` optional
 

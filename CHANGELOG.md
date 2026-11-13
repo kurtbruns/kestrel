@@ -12,6 +12,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 **Upgrading.** Nothing is required for the configuration set: an instance that stores `SES_CONFIGURATION_SET` as a secret, or relies on the sending identity's default configuration set in SES, keeps working and is checked as before. To name the set in `wrangler.jsonc` instead, keep this order, since Cloudflare may refuse a var with the same name as a secret: delete the secret with `npx wrangler secret delete SES_CONFIGURATION_SET --env production`, then add `"SES_CONFIGURATION_SET": "kestrel-mail"` (your set's name) to the `production` block's `vars`, and deploy. Between the delete and the deploy, SES sends under the identity's default, if it has one. A default left on the identity from the earlier guide is harmless: the name the app sets on each email takes precedence over it.
 
+### Added
+
+- `kestrel init` takes the app's hostname and the sending hostname, `--hostname newsletter.mysite.com --sending send.mysite.com`, and writes them into `wrangler.jsonc`'s production settings (the route, `APP_ORIGIN`, `SENDING_DOMAIN`, and `FROM_ADDRESS` as `newsletter@` the sending hostname), so they're typed once, where you choose them. Either can be given alone, a value not given keeps its `example.com` placeholder, and a value with a scheme, path, or port, an IP address, a value on `example.com`, or a flag `init` doesn't take is refused before anything is written. `init` ends by saying which values it filled and which are still on `example.com`.
+
 ### Changed
 
 - Connect Amazon SES names the configuration set in `wrangler.jsonc`, as the `SES_CONFIGURATION_SET` var in the same `production` edit as `PROVIDER` and `AWS_REGION`, rather than as a secret, and no longer makes the set the sending hostname's default in SES, a step on a screen buried in the SES console. The name isn't sensitive, so it's now visible and reviewable in the repository, and the configuration reference lists it under Vars as required with SES for bounces and complaints to reach the app.

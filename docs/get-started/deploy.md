@@ -32,15 +32,17 @@ Your instance's repository holds its configuration, its database migrations, and
 
 1. On GitHub, [create a new repository](https://github.com/new) named after your publication. These guides use `newsletter`. It can be private. Leave it empty, with no README, license, or `.gitignore`.
 
-1. Clone it, and write a new instance into it. Replace `YOUR_USERNAME` with your GitHub username, and `newsletter` with your repository's name:
+1. Clone it, and write a new instance into it. Replace `YOUR_USERNAME` with your GitHub username, `newsletter` with your repository's name, and the two hostnames with the ones you chose:
 
     ```bash
     git clone https://github.com/YOUR_USERNAME/newsletter.git
     cd newsletter
-    npx kestrel init
+    npx kestrel init --hostname newsletter.example.com --sending send.example.com
     ```
 
     This writes the instance's files: `wrangler.jsonc` for its settings, `package.json` with the release it runs, the release's database migrations, and a starting point for Claude Code in `.claude/`. The instance's `README.md` lists its commands.
+
+    `--hostname` puts the app on its hostname in `wrangler.jsonc`'s production settings, and `--sending` sends its email from `newsletter@` your sending hostname. Each takes the hostname alone, with no `https://`. `init` refuses a name on `example.com`, so a command copied without your own names writes nothing. Either can be left out, and you fill in that value by hand in section 4. `init` ends by saying which it filled and which are still on `example.com`.
 
 1. Install the release and its tools:
 
@@ -107,7 +109,7 @@ Each prints a snippet to add to your configuration. There's nothing to paste: `-
 
 `wrangler.jsonc` holds two sets of settings. The top level is for local development, so leave it alone. The `production` block under `env` is yours to fill in.
 
-1. Open `wrangler.jsonc` and change the values marked here in the `production` block. Only the settings you change are shown; leave the others as they are:
+1. Open `wrangler.jsonc` and check the values marked here in the `production` block. If you gave `init` both hostnames in section 1, the route's `pattern`, `APP_ORIGIN`, `SENDING_DOMAIN`, and `FROM_ADDRESS` are already filled in; change any it said are still on `example.com`. Only these settings are shown; leave the others as they are:
 
     ```jsonc
     "production": {

@@ -13,6 +13,13 @@
  * second instance in the same Cloudflare account never deploys over the first or collides
  * with its database and bucket. An instance already written keeps the names it has.
  *
+ * `--hostname` and `--sending` write the two hostnames the operator chose into the
+ * `production` block, the same kind of edit: the app's hostname into the route's `pattern` and
+ * `APP_ORIGIN`, the sending hostname into `SENDING_DOMAIN` and `FROM_ADDRESS`. Each is
+ * optional, and a value not given keeps the scaffold's `example.com` placeholder, which the
+ * Worker refuses to start on, so a value left unset fails loudly rather than deploying to a
+ * workers.dev address. Init never guesses one from the other.
+ *
  * A few files ship under other names and are renamed here: npm leaves `.gitignore` and
  * `.npmrc` out of a published package, and the Claude files sit outside `.claude/` so they
  * don't load into sessions in Kestrel's own repository. Init never overwrites: if any file it
@@ -125,26 +132,146 @@ export function nameResources(config, name) {
   return named;
 }
 
-/** The instance directory and the `--name` flag's value, if given, from init's arguments. */
+// A DNS label: letters, digits, and inner hyphens, at most 63 characters.
+const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/** Why `host` can't be the `flag` hostname, or null when it can. */
+export function hostnameRefusal(flag, host) {
+  if (host === "") {
+    return `${flag} takes a hostname, such as ${flag === "--hostname" ? "newsletter" : "send"}.mysite.com`;
+  }
+  if (/[/:]/.test(host)) {
+    return `${flag} "${host}" isn't a bare hostname: give the name alone, with no scheme, path, or port`;
+  }
+  const labels = host.toLowerCase().split(".");
+  if (labels.length < 2 || host.length > 253 || !labels.every((label) => LABEL.test(label))) {
+    return `${flag} "${host}" isn't a hostname: use letters, digits, hyphens, and dots, such as ${flag === "--hostname" ? "newsletter" : "send"}.mysite.com`;
+  }
+  // An IP address, or any name whose last label is all digits, is no hostname DNS resolves.
+  if (/^\d+$/.test(labels.at(-1))) {
+    return `${flag} "${host}" isn't a hostname: an IP address can't be one, and a hostname ends in a name, such as .com`;
+  }
+  if (labels.slice(-2).join(".") === "example.com") {
+    return `${flag} "${host}" is on example.com, the scaffold's placeholder: give your own hostname`;
+  }
+  return null;
+}
+
+// The production block's placeholders each flag replaces, as [pattern, replacement]. Each is
+// matched by its key, so a scaffold whose value moved fails loudly instead of keeping a
+// placeholder the operator was told is filled.
+const HOSTNAME_VALUES = {
+  hostname: [
+    [/("pattern":\s*")newsletter\.example\.com(")/, (host) => host],
+    [/("APP_ORIGIN":\s*")https:\/\/newsletter\.example\.com(")/, (host) => `https://${host}`],
+  ],
+  sending: [
+    [/("SENDING_DOMAIN":\s*")send\.example\.com(")/, (host) => host],
+    [/("FROM_ADDRESS":\s*")newsletter@send\.example\.com(")/, (host) => `newsletter@${host}`],
+  ],
+};
+
+/**
+ * The scaffold's wrangler config with the `production` block's hostnames filled in, each of
+ * `hostname` (the app's) and `sending` (the sending hostname) only when given. The top level
+ * is local development, so its values stay as they are.
+ */
+export function fillHostnames(config, { hostname, sending }) {
+  const at = config.search(/"production":\s*\{/);
+  if (at < 0) {
+    throw new Error("template/wrangler.jsonc has no production block");
+  }
+  let production = config.slice(at);
+  for (const [key, host] of Object.entries({ hostname, sending })) {
+    if (host === undefined) {
+      continue;
+    }
+    for (const [pattern, value] of HOSTNAME_VALUES[key]) {
+      if (!pattern.test(production)) {
+        throw new Error(`template/wrangler.jsonc's production block has no ${pattern.source}`);
+      }
+      production = production.replace(
+        pattern,
+        (_, before, after) => `${before}${value(host)}${after}`,
+      );
+    }
+  }
+  return config.slice(0, at) + production;
+}
+
+/** A flag's value from `argv` at `i`, as `--flag value` or `--flag=value`, or undefined. */
+function flagValue(argv, i, flag) {
+  if (argv[i] === flag) {
+    return { value: argv[i + 1] ?? "", skip: 1 };
+  }
+  if (argv[i].startsWith(`${flag}=`)) {
+    return { value: argv[i].slice(flag.length + 1), skip: 0 };
+  }
+  return undefined;
+}
+
+const INIT_FLAGS = ["--name", "--hostname", "--sending"];
+
+/**
+ * The instance directory and the `--name`, `--hostname`, and `--sending` values given, and
+ * `unknown`, each other flag, when there are any: init refuses those rather than skip one, since
+ * a mistyped `--host news.mysite.com` would otherwise scaffold into a folder of that name.
+ */
 export function parseInitArgs(argv) {
   let dir;
-  let name;
+  const flags = {};
+  const unknown = [];
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === "--name") {
-      name = argv[++i] ?? "";
-    } else if (arg.startsWith("--name=")) {
-      name = arg.slice("--name=".length);
-    } else if (!arg.startsWith("-") && dir === undefined) {
+    const found = INIT_FLAGS.map((flag) => [flag, flagValue(argv, i, flag)]).find(
+      ([, read]) => read,
+    );
+    if (found) {
+      flags[found[0].slice(2)] = found[1].value;
+      i += found[1].skip;
+    } else if (arg.startsWith("-")) {
+      unknown.push(arg.split("=")[0]);
+    } else if (dir === undefined) {
       dir = arg;
     }
   }
-  return { dir: dir ?? ".", name };
+  return {
+    dir: dir ?? ".",
+    name: flags.name,
+    hostname: flags.hostname,
+    sending: flags.sending,
+    ...(unknown.length > 0 ? { unknown } : {}),
+  };
 }
 
-/** `kestrel init [dir] [--name <name>]`. */
+/** init's line saying which production hostnames it filled, and which still need editing. */
+export function hostnamesLine(hostname, sending) {
+  const filled = [
+    ...(hostname ? [`the app on ${hostname} (route and APP_ORIGIN)`] : []),
+    ...(sending ? [`sending from newsletter@${sending} (SENDING_DOMAIN and FROM_ADDRESS)`] : []),
+  ];
+  const left = [
+    ...(hostname ? [] : ["the route's pattern and APP_ORIGIN (--hostname)"]),
+    ...(sending ? [] : ["SENDING_DOMAIN and FROM_ADDRESS (--sending)"]),
+  ];
+  return [
+    ...(filled.length ? [`[init] production: ${filled.join(", ")}.`] : []),
+    ...(left.length
+      ? [`[init] still on example.com in wrangler.jsonc's production block: ${left.join(", ")}.`]
+      : []),
+  ].join("\n");
+}
+
+/** `kestrel init [dir] [--name <name>] [--hostname <app hostname>] [--sending <sending hostname>]`. */
 export function initCommand(argv) {
   const args = parseInitArgs(argv);
+  if (args.unknown) {
+    const named = args.unknown.join(", ");
+    console.error(
+      `[init] refused: init doesn't take ${named}; it takes ${INIT_FLAGS.slice(0, -1).join(", ")}, and ${INIT_FLAGS.at(-1)}.`,
+    );
+    process.exit(1);
+  }
   const root = resolve(args.dir);
   const name = args.name ?? nameFromFolder(root);
   const refusal = nameRefusal(name);
@@ -153,6 +280,16 @@ export function initCommand(argv) {
     console.error(`[init] refused: ${refusal}.${hint}`);
     process.exit(1);
   }
+  for (const flag of ["hostname", "sending"]) {
+    const hostRefusal = args[flag] === undefined ? null : hostnameRefusal(`--${flag}`, args[flag]);
+    if (hostRefusal) {
+      console.error(`[init] refused: ${hostRefusal}.`);
+      process.exit(1);
+    }
+  }
+  // DNS names are case-insensitive, and the Worker compares origins as written.
+  const hostname = args.hostname?.toLowerCase();
+  const sending = args.sending?.toLowerCase();
   const files = [
     ...scaffoldFiles(),
     [join(PACKAGE_ROOT, ".dev.vars.example"), ".dev.vars.example"],
@@ -188,7 +325,10 @@ export function initCommand(argv) {
   pkg.devDependencies.wrangler = PACKAGE.peerDependencies.wrangler;
   writeFileSync(join(root, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
   const config = join(root, "wrangler.jsonc");
-  writeFileSync(config, nameResources(readFileSync(config, "utf8"), name));
+  writeFileSync(
+    config,
+    fillHostnames(nameResources(readFileSync(config, "utf8"), name), { hostname, sending }),
+  );
   for (const file of CONTEXT_FILES) {
     writeShipped(root, file);
   }
@@ -200,8 +340,10 @@ export function initCommand(argv) {
   console.log(`[init] a Kestrel ${PACKAGE.version} instance${where ? ` in ${where}` : ""}.`);
   console.log(
     `[init] named ${name}${args.name === undefined ? " after its folder (--name picks another)" : ""}: ` +
-      `Worker and database ${name}-production, image bucket ${name}-media-production. Next:`,
+      `Worker and database ${name}-production, image bucket ${name}-media-production.`,
   );
+  console.log(hostnamesLine(hostname, sending));
+  console.log("[init] Next:");
   console.log(
     [
       ...(where ? [`  cd ${where}`] : []),
