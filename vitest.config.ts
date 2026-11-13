@@ -92,9 +92,8 @@ export default defineConfig(async () => {
             // import included; the font spec reads the editor's stylesheet as text.
             css: { include: [/public\/dashboard\/styles\.css/] },
             // Every client spec starts with the real admin shell in the document (the
-            // shell module reads its roots at import time) and a scripted fetch at hand; a line
-            // written to the console's error stream fails the test that wrote it.
-            setupFiles: ["./client/test/setup.ts", "./client/test/console_guard.ts"],
+            // shell module reads its roots at import time) and a scripted fetch at hand.
+            setupFiles: ["./client/test/setup.ts"],
             // happy-dom loads an inserted <script src> for real by default, so a test would do
             // DNS + TCP; these are DOM tests, not fetch tests. A stylesheet stays unloaded by its
             // own default.
@@ -107,8 +106,8 @@ export default defineConfig(async () => {
                   // An <iframe> with no src still loads about:blank, and with page loading off
                   // (happy-dom's default since 21) each one prints a refused-load stack trace,
                   // hundreds a run. No frame in client/ sets a src (every preview is a srcdoc),
-                  // so turning it on reaches no network; the console guard
-                  // (client/test/console_guard.ts) fails a test if the trace comes back.
+                  // so turning it on reaches no network. client/test/frames.spec.ts fails if the
+                  // trace comes back.
                   enableIframePageLoading: true,
                 },
               },
