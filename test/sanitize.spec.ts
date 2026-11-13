@@ -32,13 +32,37 @@ describe("sanitizeEmailHtml (hygiene pass)", () => {
     expect(out).toContain('src="x.png"');
   });
 
-  it("neutralizes javascript: / vbscript: URLs", () => {
-    const out = sanitizeEmailHtml(
-      '<a href="javascript:evil()">x</a><a href="vbscript:bad()">y</a>',
-    );
-    expect(out).not.toMatch(/javascript:/i);
-    expect(out).not.toMatch(/vbscript:/i);
-    expect(out).toContain("unsafe:");
+  describe("a post's words about script URLs, mailed as written", () => {
+    it("leaves the words in prose", () => {
+      const html = "<h2>JavaScript: the good parts</h2><p>Why VBScript: a eulogy.</p>";
+      expect(sanitizeEmailHtml(html)).toBe(html);
+    });
+
+    it("leaves a code sample that shows a script URL", () => {
+      const html =
+        "<pre><code>&lt;a href=&quot;javascript:void(0)&quot;&gt;</code></pre><p><code>javascript:alert(1)</code></p>";
+      expect(sanitizeEmailHtml(html)).toBe(html);
+    });
+
+    it("leaves an ordinary link whose address contains the word", () => {
+      const html =
+        '<p><a href="https://en.wikipedia.org/wiki/JavaScript:_The_Good_Parts">the book</a></p>';
+      expect(sanitizeEmailHtml(html)).toBe(html);
+    });
+
+    it("leaves the words in an image's alt text and a link's title", () => {
+      const html =
+        '<img src="cover.png" alt="JavaScript: the good parts"><a href="https://x.com" title="JavaScript: a primer">x</a>';
+      expect(sanitizeEmailHtml(html)).toBe(html);
+    });
+
+    // Not a security boundary (the module header): a script link is left as the author wrote
+    // it, and the reader pages' policy, which runs no script, is what keeps it dead
+    // (test/response_hardening.spec.ts).
+    it("leaves a script link itself as written", () => {
+      const html = '<a href="javascript:evil()">x</a><a href="vbscript:bad()">y</a>';
+      expect(sanitizeEmailHtml(html)).toBe(html);
+    });
   });
 
   it("leaves ordinary content untouched", () => {
