@@ -1873,7 +1873,7 @@ export function createRouter({
         {
           name: "email",
           description:
-            "An exact address: answers `{ subscriber }`, as `GET /api/subscribers/:id` does, in place of the list, or 404 when no one has it.",
+            "An exact address: answers `{ subscriber }`, as `GET /api/subscribers/:id` does, in place of the list, or 404 when no one has it. An `email` given empty, or only spaces, is refused (400, `field` `email`), never read as absent.",
         },
       ],
       returns: {
