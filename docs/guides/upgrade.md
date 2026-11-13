@@ -10,13 +10,7 @@ A release can ask you to change a setting or a record before it runs. The change
 
 1. Find the version you run. In the editor, open the **Docs** or **API** tab. The foot of its contents list shows the version, then the commit. Your instance's `package.json` names it too, as the version of `@kurtbruns/kestrel`.
 
-1. Read the [release notes](https://github.com/kurtbruns/kestrel/releases) for every version after yours, up to the one you're moving to. Each release opens with an **Upgrading from…** paragraph that says what to do. Its **Breaking** entries say what changed underneath you.
-
-1. If you're more than one release behind, upgrade straight to the release you're moving to, in one pass through this guide. Each paragraph names an `npm install` of its own release, but you install only the target, once. Section 2 brings in every release between: `sync-migrations` copies each migration you don't have, and `check-context` compares from the release in your last commit. Do every other step each paragraph names, oldest release first, where it falls in this guide. Keep in mind:
-
-    - A number in a paragraph is that release's alone. If one says it changes two of your Claude Code files, `check-context` can report more, counting every release you skip.
-    - A release's change to how you upgrade, such as a new check in the upgrade skill, isn't in force until that release is installed. Until the install, you upgrade on the guide and skill you have now. After it, the target's guide and skill apply, from the step after the install.
-    - If a paragraph says it removed or renamed something your current skill or guide uses, such as a file or a command, use what it names instead.
+1. Read the [release notes](https://github.com/kurtbruns/kestrel/releases) for every version after yours, up to the one you're moving to. Each release opens with an **Upgrading from…** paragraph that says what to do. Its **Breaking** entries say what changed underneath you. If you're more than one release behind, read [Skipping releases](#skipping-releases) too.
 
 1. Check that your repository is clean, so the upgrade's commit holds only the upgrade and going back undoes nothing else:
 
@@ -38,7 +32,7 @@ Each step here changes only your instance's repository. Nothing reaches your dep
     npm install @kurtbruns/kestrel@X.Y.Z
     ```
 
-    Your `package.json` now names exactly that version. Kestrel's versions aren't semantic versioning, so your instance never moves to a release you didn't choose.
+    Your `package.json` now names exactly that version.
 
     If npm stops with `ERESOLVE` and names wrangler, your `package.json` pins a wrangler older than the release needs. The error's `peer wrangler@` line gives the range it needs. Install both together, with that range in place of `WRANGLER_RANGE`:
 
@@ -54,24 +48,13 @@ Each step here changes only your instance's repository. Nothing reaches your dep
 
     It copies each new migration into `migrations/` and names the ones it added. It never overwrites one that's there.
 
-1. Check the Claude Code files Kestrel gave your instance:
+1. Check the Claude Code files Kestrel gave your instance. Run it before you commit, since it finds the release you're upgrading from in your last commit:
 
     ```bash
     npm run check-context
     ```
 
-    It compares each file in `.claude/` with the copy this release ships and, where they differ, with the copy of the release you're upgrading from, which it fetches from npm. It finds that release in your last commit's `package.json`, which is why it runs before you commit the upgrade. It says what to do for each file:
-
-    - **current**: nothing to do, with or without your edits.
-    - **Kestrel changed it, and you haven't edited it**: take the new one with `npm run check-context -- --update`.
-    - **new in this release**: a file the release you're upgrading from didn't have; add it with `npm run check-context -- --update`.
-    - **you removed it**: a file you deleted stays deleted, and `--update` never brings it back. The line names this release's copy, so to bring it back, copy it from there, or ask Claude to.
-    - **Kestrel changed it, and you've edited it**: it shows what Kestrel changed, then your own edits, each from the release you're upgrading from. Merge Kestrel's change into yours, by hand or with Claude, keeping your edits.
-    - **Kestrel's change can't be shown apart from your edits**: without the network, `tar`, git, or a commit naming the release you're upgrading from, or when your last commit already names this release, it says why and shows one difference from yours to the release's; merge what you want of it. If you've already committed the upgrade, name the release you came from with `npm run check-context -- --from X.Y.Z`.
-
-    A change you don't take now isn't offered again at the next upgrade, which starts from the release you're on.
-
-    Releases before 1.24.0 wrote a header line at the top of each of these files. The first `check-context` after upgrading from one removes that line, changing nothing else in the file. Commit that with the upgrade.
+    It names each file in `.claude/` and says what to do with it. A file you haven't edited takes Kestrel's change with `npm run check-context -- --update`. A file you've edited is never overwritten: merge Kestrel's change into it, by hand or with Claude. [What check-context reports](#what-check-context-reports) explains each answer.
 
 1. If the release's **Upgrading from…** paragraph names a setting to add or remove, change `wrangler.jsonc` as it says. When you remove one, remove any comment that describes it too.
 
@@ -117,7 +100,7 @@ D1 keeps a history of your database, called Time Travel, for 30 days on Workers 
 
     It prints a bookmark for the database's current state. Copy it, and keep it until the upgrade checks out.
 
-    It also prints a command to restore to that bookmark. Don't use it: it leaves out `--env production`. Without it, wrangler aims at the database the top level of your `wrangler.jsonc` names, its development entry, not production's. To go back, use the command in [Go back](#go-back), which names production.
+    It also prints a restore command. Don't use it: it leaves out `--env production`, so it aims at the database the top level of your `wrangler.jsonc` names, not production's. [Go back](#go-back) has the command to use.
 
 ## 4. Apply the database changes
 
@@ -129,9 +112,9 @@ A release changes the database only by adding a migration. Applying it keeps eve
     npx wrangler d1 migrations apply DB --remote --env production
     ```
 
-    It lists the migrations it's about to apply, and asks you to confirm. Run by Claude, or in any other shell that isn't interactive, it answers its own prompt and applies them without asking. As it applies each one, it prints the list again, marking each migration applied so far. When a release has none, it says there are no migrations to apply.
+    It lists the migrations it's about to apply, asks you to confirm, then marks each one as it applies it. A shell that isn't interactive, such as Claude's, confirms on its own. When a release has none, it says there are no migrations to apply.
 
-    If it fails, it prints an error and stops, and the migrations it didn't reach aren't marked as applied. Don't deploy. Run the same command again: a migration that applied is recorded, so a second run applies only what's left. If it fails again, stop the upgrade here. The release you run now keeps working, since a migration only adds to the database.
+    If it fails, don't deploy. Run the same command again: an applied migration is recorded, so a second run applies only what's left. If it fails again, stop the upgrade here. The release you run now keeps working.
 
 1. Check that nothing is left to apply:
 
@@ -179,6 +162,10 @@ Near its end, the output names your app's hostname, then its schedule and a vers
 
 If the new release misbehaves, deploy the previous one, and put the database back to your bookmark.
 
+A restore returns the whole database to that moment. Everything written since is gone: edits to posts, new subscribers, and the record of anything sent. Restore only soon after the upgrade.
+
+Never restore past a send that went out, or an unsubscribe recorded since the bookmark. The restored database wouldn't know of them, so it could mail those readers again, or mail someone who left. If either happened, stay on the new release, and fix forward.
+
 1. Find the upgrade's commit. Replace `X.Y.Z` with the release you're backing out. Its id comes first on the line:
 
     ```bash
@@ -210,6 +197,25 @@ If the new release misbehaves, deploy the previous one, and put the database bac
     git push
     ```
 
-A restore returns the whole database to that moment. Everything written since is gone: edits to posts, new subscribers, and the record of anything sent. Restore only soon after the upgrade.
+## Skipping releases
 
-Never restore past a send that went out, or an unsubscribe recorded since the bookmark. The restored database wouldn't know of them, so it could mail those readers again, or mail someone who left. If either happened, stay on the new release, and fix forward.
+If you're more than one release behind, upgrade straight to the release you're moving to, in one pass through this guide. Each paragraph names an `npm install` of its own release, but you install only the target, once. Section 2 brings in every release between: `sync-migrations` copies each migration you don't have, and `check-context` compares from the release in your last commit.
+
+Do every other step each paragraph names, oldest release first, where it falls in this guide. Keep in mind:
+
+- A number in a paragraph counts that release alone. If one says it changes two of your Claude Code files, `check-context` can report more, counting every release you skip.
+- A release's change to how you upgrade, such as a new check in the upgrade skill, isn't in force until that release is installed. Until the install, you upgrade on the guide and skill you have now. After it, the new release's guide and skill apply, from the step after the install.
+- A paragraph may say it removed or renamed something your current skill or guide uses, such as a file or a command. Use what it names instead.
+
+## What check-context reports
+
+`npm run check-context` compares each file in `.claude/` with the copy the installed release ships. Where they differ, it also compares with the copy of the release you're upgrading from, which it fetches from npm. Each file gets one of these answers:
+
+- **current**: nothing to do, with or without your edits.
+- **Kestrel changed it, and you haven't edited it**: take the new one with `npm run check-context -- --update`.
+- **new in this release**: a file the release you're upgrading from didn't have. Add it with `npm run check-context -- --update`.
+- **you removed it**: a file you deleted stays deleted, and `--update` never brings it back. The line names this release's copy, so to bring it back, copy it from there, or ask Claude to.
+- **Kestrel changed it, and you've edited it**: it shows what Kestrel changed, then your own edits, each from the release you're upgrading from. Merge Kestrel's change into yours, by hand or with Claude, keeping your edits.
+- **Kestrel's change can't be shown apart from your edits**: something it needs is missing, such as the network, `tar`, git, or a commit naming the release you came from. It says what, and shows one difference from yours to the release's; merge what you want of it. If you've already committed the upgrade, name the release you came from with `npm run check-context -- --from X.Y.Z`.
+
+When a file has a change to take, its last line names the changelog sections that describe it, one for each release since yours. A change you don't take now isn't offered again at the next upgrade, which starts from the release you're on.
