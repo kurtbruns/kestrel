@@ -492,7 +492,9 @@ function answerEachFile(root, { merged, update, from }) {
   if (pending > 0) {
     // Named as a range, since a changelog section counts only its own release's changes: an
     // upgrade that skips releases can see more files here than the target's section names.
-    const since = from?.version && from.version !== PACKAGE.version ? from.version : null;
+    // A file is pending only once it was compared, so the base is already looked up here.
+    const base = against.base().version;
+    const since = base && base !== PACKAGE.version ? base : null;
     say(
       since
         ? `The changelog says what changed in Claude's context and why, and marks a change that bears on safety, in its sections for each release after ${since} up to ${PACKAGE.version}.`
