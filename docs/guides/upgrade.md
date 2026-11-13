@@ -8,7 +8,15 @@ In this guide, you first read what changed and check that your repository is cle
 
 A release can ask you to change a setting or a record before it runs. The changelog says so, release by release. The upgrade also has to start from a clean repository.
 
-1. Find the version you run. In the editor, open the **Docs** or **API** tab. The foot of its contents list shows the version, then the commit. Your instance's `package.json` names it too, as the version of `@kurtbruns/kestrel`.
+1. Find the version your repository pins. The upgrade starts from this one:
+
+    ```bash
+    npm pkg get "dependencies.@kurtbruns/kestrel"
+    ```
+
+    It prints the version, such as `1.24.0`.
+
+1. Check that it's the version you run. In the editor, open the **Docs** tab: the foot of its contents list shows the version, then the commit. If the two differ, an earlier upgrade was committed but not deployed, or a deploy came from somewhere else. Find out which before you go on.
 
 1. Read the [release notes](https://github.com/kurtbruns/kestrel/releases) for every version after yours, up to the one you're moving to. Each release opens with an **Upgrading from…** paragraph that says what to do. Its **Breaking** entries say what changed underneath you. If you're more than one release behind, read [Skipping releases](#skipping-releases) too.
 
