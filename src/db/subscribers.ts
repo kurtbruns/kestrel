@@ -462,23 +462,30 @@ export async function counts(db: D1Database): Promise<Counts> {
   return c;
 }
 
-/** The authoritative send audience: confirmed subscribers minus suppressions (I1). */
+/**
+ * Who a send reaches (SPEC §7, I1): a confirmed subscriber whose address is not suppressed.
+ * A condition on `subscribers` under the alias `s`, and the one place the rule is written:
+ * a send fixing its audience (`resolveAudience`), the estimate shown before it fires
+ * (`audienceCount`), and the listing (`audienceEmails`) all read it, so none can differ
+ * from the send.
+ */
+export const IN_AUDIENCE =
+  "s.status = 'confirmed' AND s.email NOT IN (SELECT email FROM suppressions)";
+
+/** The addresses a send firing now would reach, by `IN_AUDIENCE`. The dev seed reads it
+ *  to fix its demo sends' audiences; a send fixes its own with `resolveAudience`. */
 export async function audienceEmails(db: D1Database): Promise<string[]> {
   const { results } = await db
-    .prepare(
-      "SELECT email FROM subscribers WHERE status = 'confirmed' AND email NOT IN (SELECT email FROM suppressions) ORDER BY email ASC",
-    )
+    .prepare(`SELECT s.email AS email FROM subscribers s WHERE ${IN_AUDIENCE} ORDER BY s.email ASC`)
     .all<{ email: string }>();
   return results.map((r) => r.email);
 }
 
-/** How many addresses a send would reach now: confirmed minus suppressed, the same
- *  set `audienceEmails` lists, counted without loading it. */
+/** How many addresses a send firing now would reach, by `IN_AUDIENCE`: the estimate a
+ *  scheduled send shows before it fixes its audience. */
 export async function audienceCount(db: D1Database): Promise<number> {
   const row = await db
-    .prepare(
-      "SELECT COUNT(*) AS n FROM subscribers WHERE status = 'confirmed' AND email NOT IN (SELECT email FROM suppressions)",
-    )
+    .prepare(`SELECT COUNT(*) AS n FROM subscribers s WHERE ${IN_AUDIENCE}`)
     .first<{ n: number }>();
   return row?.n ?? 0;
 }

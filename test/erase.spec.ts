@@ -17,7 +17,13 @@ import { type AppEnv, getConfig } from "../src/env";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { sweep } from "../src/send/sweep";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
-import { frozenSend, resetDatabase, seedConfirmed, sendingWorks } from "./support/fixtures";
+import {
+  frozenSend,
+  resetDatabase,
+  seedConfirmed,
+  sendAudience,
+  sendingWorks,
+} from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 
 // Erasing a subscriber (SPEC §7): they are unsubscribed by it and their record is stripped to
@@ -291,7 +297,7 @@ describe("erasing a subscriber (SPEC §7)", () => {
 
     expect(await readJson(await publicSubscribe(email))).toEqual({ status: "check_inbox" });
     expect(await confirmationsTo(email)).toBe(1);
-    expect(await subs.audienceEmails(env.DB)).toEqual([]); // not until they confirm
+    expect(await sendAudience()).toEqual([]); // not until they confirm
     const token = (await stored(email))!.confirm_token!;
     await SELF.fetch(`${base}/confirm`, {
       method: "POST",
@@ -305,7 +311,7 @@ describe("erasing a subscriber (SPEC §7)", () => {
       origin: "kestrel",
       opt_in: "double",
     });
-    expect(await subs.audienceEmails(env.DB)).toEqual([email]);
+    expect(await sendAudience()).toEqual([email]);
   });
 
   it("keeps a bounce the address already had, without the provider's words", async () => {
@@ -439,7 +445,7 @@ describe("an import row whose person left by an erasure (SPEC §7)", () => {
     const result = await importCsv([`${email},subscribed,double,sendy,erased,,,,,`]);
     expect(result.rows).toEqual([{ row: 1, email, outcome: "erased", suppression_added: false }]);
     expect(await stored(email)).toMatchObject(STRIPPED_ROW);
-    expect(await subs.audienceEmails(env.DB)).toEqual([]);
+    expect(await sendAudience()).toEqual([]);
 
     // Erasing them here changes nothing more.
     expect((await eraseOk(email)).deliveries).toBe(0);
@@ -447,7 +453,7 @@ describe("an import row whose person left by an erasure (SPEC §7)", () => {
     await publicSubscribe(email);
     expect(await confirmationsTo(email)).toBe(1);
     await confirmByLink();
-    expect(await subs.audienceEmails(env.DB)).toEqual([email]);
+    expect(await sendAudience()).toEqual([email]);
   });
 
   it("erases a pending sign-up, whose confirmation link then no longer confirms", async () => {

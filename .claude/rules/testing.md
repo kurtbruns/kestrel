@@ -27,7 +27,7 @@ A test is evidence that the app does what `docs/SPEC.md` says. Keep each one pla
 
 ## Use the shared helpers
 
-- Worker: `test/support/fixtures.ts` (`resetDatabase`, `seedConfirmed`, `frozenSend`, `dueSend`, `tick`, `seedDelivery`), `test/support/http.ts` (`base`, `AUTH`, `JSON_AUTH`, `readJson`, `adminAuth` for another principal), and `test/support/worker_env.ts` (`withVars`, `fetchWith`) to run the Worker under other deploy settings. The other `test/support/` modules each say in their header what they are for.
+- Worker: `test/support/fixtures.ts` (`resetDatabase`, `seedConfirmed`, `frozenSend`, `dueSend`, `tick`, `seedDelivery`, and `sendAudience`, which a spec of who a send reaches asserts on rather than a copy of the rule), `test/support/http.ts` (`base`, `AUTH`, `JSON_AUTH`, `readJson`, `adminAuth` for another principal), and `test/support/worker_env.ts` (`withVars`, `fetchWith`) to run the Worker under other deploy settings. The other `test/support/` modules each say in their header what they are for.
 - Client: `client/test/support.ts` (`fakeApi`, `settle`, `resetShell`, `sendSummary`, `settingsResponse`, `stubClipboard`) and `client/test/send_server.ts` (the fake send feed: `sendServer`, `feedReads`, `listReads`). How a view test uses them is below.
 - Add a helper there when a second spec needs it. A fixture that really differs stays in its spec, named for what it does differently.
 

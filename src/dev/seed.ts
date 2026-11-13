@@ -488,8 +488,9 @@ function isConfirmedAt(s: SeedSubscriber, t: number): boolean {
 }
 
 /** The mailable audience as it stood at `t`: confirmed then, minus anything already
- *  suppressed then (I1). This is the JS mirror of `audienceEmails` run against a past
- *  moment, which is what lets each completed send freeze the list as it really was. */
+ *  suppressed then (I1). The audience rule (`IN_AUDIENCE`) read at a past moment, which
+ *  the SQL can't do since the list keeps only its current state; it lets each completed
+ *  send freeze the list as it really was. The current send reads the rule itself. */
 function mailableAt(subs: SeedSubscriber[], sups: SeedSuppression[], t: number): string[] {
   const suppressedByThen = new Set(sups.filter((x) => x.created_at <= t).map((x) => x.email));
   return subs
@@ -1204,7 +1205,7 @@ export async function seedDatabase(
   await insertSubscribers(db, built.subscribers);
   await insertSuppressions(db, built.suppressions);
 
-  const audience = await audienceEmails(db); // the authoritative confirmed-minus-suppressed list
+  const audience = await audienceEmails(db); // who a send firing now reaches, by the one rule
 
   // Post images: each post's Markdown shows its images by filename, and each file sits beside
   // the post's `index.md` in its bundle. The row is recorded either way so the render

@@ -11,7 +11,7 @@ import { runSend } from "../src/send/loop";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { toNextTick } from "./support/clock";
-import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
+import { frozenSend, resetDatabase, seedConfirmed, sendAudience } from "./support/fixtures";
 import { allowErrorLogs, logged } from "./support/log";
 
 const config = () => getConfig(env);
@@ -230,7 +230,7 @@ describe("send loop + sweep", () => {
       .run();
 
     const send = await frozenSend(Date.now() + 600_000);
-    expect(send.recipient_count).toBe((await subscribersDb.audienceEmails(env.DB)).length);
+    expect(send.recipient_count).toBe((await sendAudience()).length);
     expect(send.recipient_count).toBe(2);
     expect(send.audience_resolved_at).toBeNull();
 

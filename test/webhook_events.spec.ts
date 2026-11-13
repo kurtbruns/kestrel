@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HELD_RECEIPT_TTL_MS } from "../src/db/sends";
-import { audienceEmails, erase, getByEmail, isSuppressed } from "../src/db/subscribers";
+import { erase, getByEmail, isSuppressed } from "../src/db/subscribers";
 import { clearFakeOutbox, FakeProvider } from "../src/providers/fake";
 import type { DeliveryEvent } from "../src/providers/types";
 import { sweep } from "../src/send/sweep";
@@ -13,6 +13,7 @@ import {
   SEEDED_SEND_ID,
   seedConfirmed,
   seedDelivery,
+  sendAudience,
 } from "./support/fixtures";
 import { logged } from "./support/log";
 
@@ -234,7 +235,7 @@ describe("applyDeliveryEvents: a worse outcome is never replaced by a better one
 describe("applyDeliveryEvents: suppression casing", () => {
   it("suppresses subscriber bob@x.com on a Bob@X.com bounce", async () => {
     await seedConfirmed("bob@x.com");
-    expect(await audienceEmails(env.DB)).toContain("bob@x.com");
+    expect(await sendAudience()).toContain("bob@x.com");
 
     const applied = await applyDeliveryEvents(env.DB, [
       { type: "bounced", providerId: "msg-case", email: "Bob@X.com", hard: true },
@@ -242,7 +243,7 @@ describe("applyDeliveryEvents: suppression casing", () => {
 
     expect(applied.suppressed).toBe(1);
     expect(await isSuppressed(env.DB, "bob@x.com")).toBe(true);
-    expect(await audienceEmails(env.DB)).not.toContain("bob@x.com");
+    expect(await sendAudience()).not.toContain("bob@x.com");
   });
 
   it("suppresses the matched delivery's address over the event's", async () => {
@@ -352,7 +353,7 @@ describe("a complaint is leaving (SPEC §7, Leaving)", () => {
     await applyDeliveryEvents(env.DB, [{ type: "complained", providerId: "msg-spam" }]);
 
     expect(await standing("spam@example.com")).toEqual(["unsubscribed", "complaint"]);
-    expect(await audienceEmails(env.DB)).toEqual([]);
+    expect(await sendAudience()).toEqual([]);
     expect(await isSuppressed(env.DB, "spam@example.com")).toBe(false);
   });
 

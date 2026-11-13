@@ -1,8 +1,8 @@
 /**
- * The Worker suite's shared fixtures: an empty database, email that works, confirmed readers, a frozen send,
- * a send wedged on a recipient, the sweep's tick, a send's row set by hand, a delivery for a
- * receipt to land on, and a
- * template a spec can tell apart from another. One copy, so a schema change (a new table, a new NOT NULL column)
+ * The Worker suite's shared fixtures: an empty database, email that works, confirmed readers,
+ * a frozen send, who a send firing now reaches, a send wedged on a recipient, the sweep's
+ * tick, a send's row set by hand, a delivery for a receipt to land on, and a template a spec
+ * can tell apart from another. One copy, so a schema change (a new table, a new NOT NULL column)
  * is made here once rather than in every spec that seeds a reader or clears a table.
  *
  * A spec whose fixture is genuinely different (readers it needs by index, a send under
@@ -120,6 +120,30 @@ export async function frozenSend(
 ): Promise<SendRow> {
   const { post } = await posts.createPost(env.DB, { subject, markdown }, "test");
   return freeze(env, getConfig(env), post, fireAt);
+}
+
+/**
+ * Who a send firing now reaches: a send frozen and its audience fixed by the send's own
+ * code (`resolveAudience`), read back from its deliveries, sorted. The send and its post
+ * are removed after, so a spec can ask again later and the list is left as it was. A spec
+ * of consent (I1, I2) asks this, never a copy of the rule.
+ */
+export async function sendAudience(): Promise<string[]> {
+  const send = await frozenSend(Date.now() + 3_600_000);
+  await sends.resolveAudience(env.DB, send.id, Date.now());
+  const { results } = await env.DB.prepare(
+    "SELECT email FROM deliveries WHERE send_id = ? ORDER BY email ASC",
+  )
+    .bind(send.id)
+    .all<{ email: string }>();
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM deliveries WHERE send_id = ?").bind(send.id),
+    env.DB.prepare("DELETE FROM send_acts WHERE send_id = ?").bind(send.id),
+    env.DB.prepare("DELETE FROM sends WHERE id = ?").bind(send.id),
+    env.DB.prepare("DELETE FROM post_revisions WHERE post_id = ?").bind(send.post_id),
+    env.DB.prepare("DELETE FROM posts WHERE id = ?").bind(send.post_id),
+  ]);
+  return results.map((r) => r.email);
 }
 
 /** A send wedged on one recipient the provider never answered for (SPEC §12), its id. */
