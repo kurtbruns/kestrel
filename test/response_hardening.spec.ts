@@ -5,6 +5,7 @@ import * as posts from "../src/db/posts";
 import { getConfig } from "../src/env";
 import { serverErrorPage, unavailablePage } from "../src/lib/page";
 import { CONFIRM_LINK_TTL_MS } from "../src/lib/time";
+import { unwrap } from "../src/lib/unwrap";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { resetDatabase, seedConfirmed, sendingWorks } from "./support/fixtures";
@@ -57,6 +58,28 @@ describe("reader and preview pages", () => {
     // A form in the post's body can't submit: it would carry the publisher's session to
     // the admin API on this same origin.
     expect(csp).toContain("form-action 'none'");
+  });
+
+  it("serve a script link in a post as written, under the policy that keeps it from running (SPEC §5)", async () => {
+    // The render leaves a `javascript:` link as the author wrote it (it is no security
+    // boundary), so this policy is what keeps one dead on the app's own origin: on a listed
+    // post's archive page, and on an email-only post's unlisted link, its only page.
+    const listed = await sentPost("Script link", "[Click](javascript:evil())");
+    const { post: emailOnly } = await posts.createPost(
+      env.DB,
+      { subject: "Script link, email only", markdown: "[Click](javascript:evil())" },
+      "test",
+    );
+    await posts.setPublishingStmt(env.DB, emailOnly, { emailOnly: true }).run();
+    const frozen = unwrap(await posts.getPost(env.DB, emailOnly.id), "email-only post");
+    await freeze(env, getConfig(env), frozen, Date.now() - 1000);
+    await sweep(env);
+    for (const path of [`/archive/${listed.slug}`, `/email/${emailOnly.unlisted_token}`]) {
+      const res = await SELF.fetch(`${base}${path}`, { redirect: "manual" });
+      expect(res.status, path).toBe(200);
+      expectHardenedPage(res);
+      expect(await res.text(), path).toMatch(/<a href="javascript:evil\(\)"[^>]*>Click<\/a>/);
+    }
   });
 
   it("serve the home page, the archive index, a not-found post, and the subscribe, confirm, and unsubscribe pages the same way", async () => {

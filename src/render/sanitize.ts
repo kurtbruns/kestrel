@@ -1,11 +1,15 @@
 /**
- * Email-HTML hygiene pass — NOT a hardened XSS sanitizer.
+ * Email-HTML hygiene pass — NOT a hardened XSS sanitizer, and not a security boundary.
  *
- * Authors are trusted (only the operator + Claude, behind auth), so this is
- * defense-in-depth for the public archive, not a security boundary. It removes
- * the highest-risk, never-legitimate constructs and nothing else, so it won't
- * mangle real content. This is the single seam where a full allowlist sanitizer
- * would drop in if authorship ever widens.
+ * Authors are trusted (only the operator + Claude, behind auth). The pass removes a few
+ * constructs no email body needs and nothing else, so it never changes the author's words.
+ * Script URLs (`javascript:`, `vbscript:`) are deliberately left as written: rewriting them
+ * anywhere in the HTML changed posts' prose, code, and ordinary links, and narrowing that to
+ * attributes takes a real parser and still leaves gaps. What keeps one dead is where it is
+ * read: every page Kestrel serves with a post's HTML runs no script (`shared/page_policy.ts`,
+ * SPEC §5), and in an inbox the link is the mail client's to handle, as every other link
+ * is, never on Kestrel's origin. This is the single seam where a full allowlist
+ * sanitizer would drop in if authorship ever widens.
  */
 export function sanitizeEmailHtml(html: string): string {
   let out = html;
@@ -29,7 +33,5 @@ export function sanitizeEmailHtml(html: string): string {
   } while (out !== before);
   // Strip inline event-handler attributes (onclick, onerror, ...).
   out = out.replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
-  // Neutralize script URL schemes wherever they appear in attributes.
-  out = out.replace(/(javascript|vbscript)\s*:/gi, "unsafe:");
   return out;
 }

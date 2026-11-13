@@ -356,13 +356,41 @@ describe("render (the single render path)", async () => {
     const result = await render(
       {
         post: post(),
-        revision: revision('Hi\n\n<script>alert(1)</script>\n\n<a href="javascript:evil()">x</a>'),
+        revision: revision("Hi\n\n<script>alert(1)</script>"),
         images: [],
       },
       config,
     );
     expect(result.html).not.toContain("<script");
-    expect(result.html).not.toContain("javascript:");
+  });
+
+  it("keeps a post's words about script URLs as written, in the HTML and the text part (I5)", async () => {
+    const markdown = [
+      "## JavaScript: the good parts",
+      "",
+      "A link like `javascript:void(0)` does nothing, and [the book](https://en.wikipedia.org/wiki/JavaScript:_The_Good_Parts) says why.",
+      "",
+      "```html",
+      '<a href="javascript:void(0)">Close</a>',
+      "```",
+    ].join("\n");
+    const result = await render({ post: post(), revision: revision(markdown), images: [] }, config);
+    expect(result.html).toContain("JavaScript: the good parts</h2>");
+    expect(result.html).toContain("<code>javascript:void(0)</code>");
+    expect(result.html).toContain(
+      'href="https://en.wikipedia.org/wiki/JavaScript:_The_Good_Parts"',
+    );
+    expect(result.html).toContain('&lt;a href="javascript:void(0)"&gt;Close&lt;/a&gt;');
+    expect(result.html).not.toContain("unsafe:");
+    expect(result.text).toContain(
+      [
+        "JavaScript: the good parts",
+        "",
+        "A link like javascript:void(0) does nothing, and the book (https://en.wikipedia.org/wiki/JavaScript:_The_Good_Parts) says why.",
+        "",
+        '<a href="javascript:void(0)">Close</a>',
+      ].join("\n"),
+    );
   });
 
   it("links every email's web version through the post's unlisted link on the app's origin, never its archive address (SPEC §5)", async () => {
