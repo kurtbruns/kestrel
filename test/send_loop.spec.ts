@@ -277,7 +277,7 @@ describe("the freeze holds the post's revision at the lock (SPEC §6, I3)", () =
     const err = await freeze(env, config(), post, Date.now() + 600_000).catch((e: unknown) => e);
 
     expect((err as HttpError).code).toBe("active_send_exists");
-    expect(((err as HttpError).details?.send as { id: string }).id).toBe(winner!.id);
+    expect((err as HttpError).details).toMatchObject({ send: { id: winner!.id } });
     const { n } = (await env.DB.prepare("SELECT COUNT(*) AS n FROM sends").first<{ n: number }>())!;
     expect(n).toBe(1);
   });
