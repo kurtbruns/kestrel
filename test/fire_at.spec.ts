@@ -133,6 +133,16 @@ describe("the forms fire_at takes (SPEC §6)", () => {
     }
   });
 
+  it("refuses a schedule with no fire_at as required, not as a time it can't read", async () => {
+    for (const body of [{}, { time_zone: "Asia/Tokyo" }]) {
+      const res = await schedule(body);
+      expect(res.status).toBe(400);
+      const read = await readJson(res);
+      expect(read.field).toBe("fire_at");
+      expect(read.message).toMatch(/^fire_at is required\. Send a local time/);
+    }
+  });
+
   it("refuses what isn't a time, naming the forms it takes", async () => {
     for (const fire_at of [
       `${YEAR}-11-13`,

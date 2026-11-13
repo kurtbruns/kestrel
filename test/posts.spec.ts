@@ -1,6 +1,9 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as postsDb from "../src/db/posts";
+import { getConfig } from "../src/env";
+import { freeze } from "../src/send/schedule";
 import { frozenSend, setRow, setTimeZone } from "./support/fixtures";
 import { AUTH, adminAuth, base, JSON_AUTH, readJson } from "./support/http";
 
@@ -464,5 +467,128 @@ describe("posts list: filter, sort, paginate", () => {
     );
     expect(sent.posts).toHaveLength(0);
     expect(sent.page.total).toBe(0);
+  });
+});
+
+// A save reads the post, checks its base, then writes; another write can land in between.
+// The write itself checks the base (SPEC §4), so the save that lost writes nothing and is
+// told why. Each race is run in order: the first writer lands from inside the second save's
+// write, after its read, through a spy on the write the route calls.
+describe("a save racing another write (SPEC §4)", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const realUpdate = postsDb.updatePost;
+
+  async function draft(markdown: string) {
+    return postsDb.createPost(env.DB, { subject: "Race", markdown }, "tester@example.com");
+  }
+
+  const revisionCount = async (id: string) => (await postsDb.listRevisions(env.DB, id)).length;
+
+  const putSave = (id: string, body: unknown) =>
+    SELF.fetch(`${base}/api/posts/${id}`, {
+      method: "PUT",
+      headers: JSON_AUTH,
+      body: JSON.stringify(body),
+    });
+
+  /** Run `between` once, inside the route's write, after the save has read the post. */
+  function landFirst(between: (post: postsDb.PostRow) => Promise<unknown>): void {
+    vi.spyOn(postsDb, "updatePost").mockImplementationOnce(async (db, post, ...rest) => {
+      await between(post);
+      return realUpdate(db, post, ...rest);
+    });
+  }
+
+  it("writes nothing when handed a post another save has moved past", async () => {
+    const { post: read } = await draft("v1");
+    const won = await realUpdate(env.DB, read, { markdown: "v2" }, "service");
+    expect(won).not.toBeNull();
+
+    expect(await realUpdate(env.DB, read, { markdown: "v3" }, "tester@example.com")).toBeNull();
+    const now = await postsDb.getPost(env.DB, read.id);
+    expect(now?.current_revision).toBe(won?.revision.id);
+    expect((await postsDb.getCurrentRevision(env.DB, now!))?.markdown).toBe("v2");
+    expect(await revisionCount(read.id)).toBe(2);
+  });
+
+  it("does not put an old body back when a subject-only save loses to a body save", async () => {
+    const { post: read } = await draft("old body");
+    await realUpdate(env.DB, read, { markdown: "new body" }, "service");
+
+    expect(await realUpdate(env.DB, read, { subject: "Renamed" }, "tester@example.com")).toBeNull();
+    const now = await postsDb.getPost(env.DB, read.id);
+    expect(now?.subject).toBe("Race");
+    expect((await postsDb.getCurrentRevision(env.DB, now!))?.markdown).toBe("new body");
+    expect(await revisionCount(read.id)).toBe(2);
+  });
+
+  it("writes no revision when handed a draft that has since been scheduled", async () => {
+    const { post: read } = await draft("v1");
+    await freeze(env, getConfig(env), read, Date.now() + 3_600_000);
+
+    expect(await realUpdate(env.DB, read, { markdown: "late" }, "tester@example.com")).toBeNull();
+    const now = await postsDb.getPost(env.DB, read.id);
+    expect([now?.status, now?.current_revision]).toEqual(["scheduled", read.current_revision]);
+    expect(await revisionCount(read.id)).toBe(1);
+  });
+
+  it("answers the second of two saves from one base stale_revision, with what the first saved", async () => {
+    const { post: read } = await draft("v1");
+    let theirs: string | undefined;
+    landFirst(async (post) => {
+      theirs = (await realUpdate(env.DB, post, { markdown: "theirs" }, "service"))?.revision.id;
+    });
+
+    const res = await putSave(read.id, { markdown: "mine", base_revision: read.current_revision });
+    expect(res.status).toBe(409);
+    const body = await readJson(res);
+    expect([body.error, body.current_revision, body.markdown, body.author]).toEqual([
+      "stale_revision",
+      theirs,
+      "theirs",
+      "service",
+    ]);
+    expect(res.headers.get("ETag")).toBe(`"${theirs}"`);
+    expect(await revisionCount(read.id)).toBe(2);
+  });
+
+  it("refuses a save whose post was scheduled since it read it as not a draft, and writes no revision", async () => {
+    const { post: read } = await draft("v1");
+    landFirst((post) => freeze(env, getConfig(env), post, Date.now() + 3_600_000));
+
+    const res = await putSave(read.id, { markdown: "late", base_revision: read.current_revision });
+    expect(res.status).toBe(409);
+    const refused = await readJson(res);
+    expect([refused.error, refused.message, refused.post.status]).toEqual([
+      "post_not_draft",
+      "This post is scheduled, so it’s locked. Cancel the schedule to edit it.",
+      "scheduled",
+    ]);
+    expect(await revisionCount(read.id)).toBe(1);
+  });
+
+  it("lands a save from the current revision", async () => {
+    const { post: read } = await draft("v1");
+    const res = await putSave(read.id, { markdown: "v2", base_revision: read.current_revision });
+    expect(res.status).toBe(200);
+    const saved = await readJson(res);
+    expect(saved.post.current_revision).toBe(saved.revision_id);
+    expect(saved.revision_id).not.toBe(read.current_revision);
+    expect(await revisionCount(read.id)).toBe(2);
+  });
+
+  it("lands one author's saves in quick succession, each based on the last one's answer, as the editor chains them", async () => {
+    const { post: read } = await draft("v1");
+    let base_revision = read.current_revision;
+    for (const markdown of ["v2", "v3", "v4"]) {
+      const res = await putSave(read.id, { markdown, base_revision });
+      expect(res.status).toBe(200);
+      base_revision = (await readJson(res)).revision_id;
+    }
+    const now = await postsDb.getPost(env.DB, read.id);
+    expect(now?.current_revision).toBe(base_revision);
+    expect((await postsDb.getCurrentRevision(env.DB, now!))?.markdown).toBe("v4");
+    expect(await revisionCount(read.id)).toBe(4);
   });
 });
