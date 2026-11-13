@@ -36,8 +36,9 @@ const sesEnv = {
 /** A topic in someone else's account: SNS signs its messages just as validly. */
 const FOREIGN_TOPIC_ARN = "arn:aws:sns:us-east-1:999999999999:not-ours";
 
-function newProvider(): SesProvider {
-  return new SesProvider(getConfig(env), sesEnv, null);
+/** The adapter as a deployment builds it: its config read from the same vars it is given. */
+function newProvider(vars: AppEnv = sesEnv): SesProvider {
+  return new SesProvider(getConfig({ ...env, ...vars }), vars, null);
 }
 
 const UNSUB = "https://app.example.com/unsubscribe?token=deadbeef";
@@ -213,6 +214,20 @@ describe("SesProvider.sendBatch", () => {
       },
     );
     expect(deliveredBy(requests[0]!, 0).headers).toEqual({});
+  });
+
+  it("names the configuration set the account check reads, trimmed, and none for a blank name (SPEC §9)", async () => {
+    const sentUnder = async (name: string) => {
+      const { requests } = answerSes();
+      await newProvider({ ...sesEnv, SES_CONFIGURATION_SET: name }).sendBatch(
+        renderedFixture(),
+        [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
+        { purpose: "list", tag: "send-1" },
+      );
+      return requests[0]!.ConfigurationSetName;
+    };
+    expect(await sentUnder(" kestrel-events\n")).toBe("kestrel-events");
+    expect(await sentUnder(" \t\n")).toBeUndefined();
   });
 
   it("encodes a display name with non-ASCII in it, as SES requires of FromEmailAddress", async () => {
