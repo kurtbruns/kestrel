@@ -184,7 +184,7 @@ Never restore past a send that went out, or an unsubscribe recorded since the bo
     git revert --no-edit REPLACE_WITH_COMMIT_ID
     ```
 
-1. Install the previous release, and deploy it:
+1. Install the previous release, and deploy it before the restore. It runs on the newer database, and the new release can't run on the restored one:
 
     ```bash
     npm ci
