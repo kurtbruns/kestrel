@@ -72,9 +72,10 @@ export async function viewPost(env: AppEnv, config: Config, row: PostRow): Promi
 
 /**
  * Run an act on a post. A refusal about the post's state, that it is no longer a draft
- * (`post_not_draft`) or that its address is fixed (`slug_permanent`), carries the post as it
- * now stands (docs/API.md, principle 5), read after the refusal, so a client redraws it
- * without a second read.
+ * (`post_not_draft`), that its address is fixed (`slug_permanent`), or that it or the settings
+ * kept moving under a freeze (`settings_changed`), carries the post as it now stands
+ * (docs/API.md, principle 5), read after the refusal, so a client redraws it without a second
+ * read.
  */
 export async function carryingPost<T>(
   env: AppEnv,
@@ -87,7 +88,9 @@ export async function carryingPost<T>(
   } catch (err) {
     if (
       err instanceof HttpError &&
-      (err.code === "post_not_draft" || err.code === "slug_permanent") &&
+      (err.code === "post_not_draft" ||
+        err.code === "slug_permanent" ||
+        err.code === "settings_changed") &&
       err.details?.post === undefined
     ) {
       const row = await getPost(env.DB, postId);

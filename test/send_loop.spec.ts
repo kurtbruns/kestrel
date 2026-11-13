@@ -9,7 +9,7 @@ import type { HttpError } from "../src/lib/errors";
 import { LEASE_TTL_MS, MISSED_THRESHOLD_MS } from "../src/lib/time";
 import { clearFakeOutbox, failFakeSendBatch, fakeOutbox } from "../src/providers/fake";
 import { runSend } from "../src/send/loop";
-import { freeze } from "../src/send/schedule";
+import { cancel, freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { toNextTick } from "./support/clock";
 import { frozenSend, resetDatabase, seedConfirmed, sendAudience } from "./support/fixtures";
@@ -215,6 +215,71 @@ describe("the freeze holds the post's revision at the lock (SPEC §6, I3)", () =
     expect(await sends.getActiveSendForPost(env.DB, post.id)).toBeNull();
     const after = (await posts.getPost(env.DB, post.id))!;
     expect(after.status).toBe("draft");
+  });
+
+  it("writes neither the post's listing nor its earlier sends' numbers on a try that doesn't land", async () => {
+    // A post with a canceled send behind it, whose number a landed listing change would move.
+    const { post } = await posts.createPost(
+      env.DB,
+      { subject: "Subj", markdown: "draft 0" },
+      "test",
+    );
+    const earlier = await freeze(env, config(), post, Date.now() + 600_000);
+    await cancel(env, earlier.id);
+    const rev = (await sends.getSend(env.DB, earlier.id))!.rev;
+    const draft = (await posts.getPost(env.DB, post.id))!;
+    let saves = 0;
+    vi.spyOn(subscribersDb, "audienceCount").mockImplementation(async (db) => {
+      saves += 1;
+      const current = (await posts.getPost(db, post.id))!;
+      await posts.updatePost(db, current, { markdown: `draft ${saves}` }, "test");
+      return 0;
+    });
+
+    const err = await freeze(env, config(), draft, Date.now() + 600_000, { emailOnly: true }).catch(
+      (e: unknown) => e,
+    );
+
+    expect((err as HttpError).code).toBe("settings_changed");
+    expect((await posts.getPost(env.DB, post.id))!.email_only).toBe(false);
+    expect((await sends.getSend(env.DB, earlier.id))!.rev).toBe(rev);
+  });
+
+  it("answers not found, freezing nothing, when the post is deleted in the gap", async () => {
+    const { post } = await posts.createPost(env.DB, { subject: "Subj", markdown: "body" }, "test");
+    vi.spyOn(subscribersDb, "audienceCount").mockImplementation(async (db) => {
+      await posts.deletePost(db, post.id);
+      return 0;
+    });
+
+    const err = await freeze(env, config(), post, Date.now() + 600_000).catch((e: unknown) => e);
+
+    expect((err as HttpError).code).toBe("not_found");
+    const { n } = (await env.DB.prepare("SELECT COUNT(*) AS n FROM sends").first<{ n: number }>())!;
+    expect(n).toBe(0);
+  });
+
+  it("refuses with the send that won when a freeze of the same post lands in the gap", async () => {
+    const { post } = await posts.createPost(env.DB, { subject: "Subj", markdown: "first" }, "test");
+    let winner: sends.SendRow | undefined;
+    let raced = false;
+    vi.spyOn(subscribersDb, "audienceCount").mockImplementation(async (db) => {
+      // Once, and set first: the other client's freeze below counts the audience too.
+      if (!raced) {
+        raced = true;
+        // A save, then another client's freeze of the saved post, both before this one writes.
+        const saved = await posts.updatePost(db, post, { markdown: "second" }, "test");
+        winner = await freeze(env, config(), saved.post, Date.now() + 600_000);
+      }
+      return 0;
+    });
+
+    const err = await freeze(env, config(), post, Date.now() + 600_000).catch((e: unknown) => e);
+
+    expect((err as HttpError).code).toBe("active_send_exists");
+    expect(((err as HttpError).details?.send as { id: string }).id).toBe(winner!.id);
+    const { n } = (await env.DB.prepare("SELECT COUNT(*) AS n FROM sends").first<{ n: number }>())!;
+    expect(n).toBe(1);
   });
 
   it("refuses with the post's own refusal when a save in the gap emptied its subject", async () => {

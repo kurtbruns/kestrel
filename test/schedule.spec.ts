@@ -6,9 +6,9 @@ import { DEFAULT_MIN_LEAD_MS } from "../shared/sends";
 import { getPost, updatePost } from "../src/db/posts";
 import * as sendsDb from "../src/db/sends";
 import { updateSettings } from "../src/db/settings";
-import type { AppEnv } from "../src/env";
+import { type AppEnv, getConfig } from "../src/env";
 import * as providers from "../src/providers";
-import { acceptFireAt, cancel, onTheMinute } from "../src/send/schedule";
+import { acceptFireAt, cancel, freeze, onTheMinute } from "../src/send/schedule";
 import { addresses, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, PNG_1x1, readJson } from "./support/http";
 import { fetchOn, fetchWith } from "./support/worker_env";
@@ -883,34 +883,47 @@ describe("the sender's name frozen at schedule (SPEC §9)", () => {
   });
 });
 
+/** An env whose D1 handle runs `before` ahead of each of the freeze's batches, as another writer
+ *  landing between the route's read of the post and the freeze's write would. */
+function racing(before: (db: D1Database) => Promise<void>): AppEnv {
+  const db = env.DB;
+  const handle = new Proxy(db, {
+    get(target, prop) {
+      if (prop === "batch") {
+        return async (stmts: D1PreparedStatement[]) => {
+          await before(db);
+          return target.batch(stmts);
+        };
+      }
+      const value = Reflect.get(target, prop);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return { ...env, DB: handle } as AppEnv;
+}
+
+/** The editor saving the post, from whatever it now holds. */
+async function saveAs(db: D1Database, id: string, input: { subject?: string; markdown: string }) {
+  return updatePost(db, (await getPost(db, id))!, input, "editor");
+}
+
 describe("a save landing while a post is scheduled (SPEC §6, I3)", () => {
   it.each([
     ["schedule", "schedule", { fire_at: Date.now() + 3_600_000 }],
     ["Send now", "send", {}],
   ])("is in the email %s freezes, its following slug with it", async (_, path, timing) => {
     const id = await makeDraft({ subject: "Owls", markdown: "first draft" });
-    // A D1 handle on which the editor saves the post just before the freeze's first write: the
-    // route has read the post on its first revision by then, and the save moves it on.
-    const db = env.DB;
+    // The editor saves the post just before the freeze's first write: the route has read the
+    // post on its first revision by then, and the save moves it on.
     let saved = false;
-    const racing = new Proxy(db, {
-      get(target, prop) {
-        if (prop === "batch") {
-          return async (stmts: D1PreparedStatement[]) => {
-            if (!saved) {
-              saved = true;
-              const post = (await getPost(db, id))!;
-              await updatePost(db, post, { subject: "Hawks", markdown: "second draft" }, "editor");
-            }
-            return target.batch(stmts);
-          };
-        }
-        const value = Reflect.get(target, prop);
-        return typeof value === "function" ? value.bind(target) : value;
-      },
+    const e = racing(async (db) => {
+      if (!saved) {
+        saved = true;
+        await saveAs(db, id, { subject: "Hawks", markdown: "second draft" });
+      }
     });
 
-    const res = await fetchOn({ ...env, DB: racing } as AppEnv, `/api/posts/${id}/${path}`, {
+    const res = await fetchOn(e, `/api/posts/${id}/${path}`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ ...timing, email_only: true, slug_auto: true }),
@@ -929,5 +942,71 @@ describe("a save landing while a post is scheduled (SPEC §6, I3)", () => {
       "hawks",
       true,
     ]);
+  });
+
+  it.each([
+    ["schedule", "schedule", { fire_at: Date.now() + 3_600_000 }],
+    ["Send now", "send", {}],
+  ])(
+    "under every try of %s refuses to try again, carrying the post and the settings, and freezes nothing",
+    async (_, path, timing) => {
+      const id = await makeDraft({ markdown: "draft 0" });
+      let saves = 0;
+      const e = racing(async (db) => {
+        saves += 1;
+        await saveAs(db, id, { markdown: `draft ${saves}` });
+      });
+
+      const res = await fetchOn(e, `/api/posts/${id}/${path}`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ ...timing, email_only: true }),
+      });
+
+      expect(res.status).toBe(409);
+      const body = await readJson(res);
+      expect(body).toMatchObject({
+        error: "settings_changed",
+        message: "The post was saved while this was being scheduled. Try again.",
+        post: { id, status: "draft", email_only: false },
+      });
+      expect(body.settings).toBeTypeOf("object");
+      expect(await sendsDb.getActiveSendForPost(env.DB, id)).toBeNull();
+    },
+  );
+
+  it.each([
+    [
+      "schedule refuses with the send that won",
+      "schedule",
+      { fire_at: Date.now() + 3_600_000 },
+      409,
+    ],
+    ["Send now answers with the send that won, as a repeat", "send", {}, 200],
+  ])("when a freeze of the same post wins in the gap, %s", async (_, path, timing, status) => {
+    const id = await makeDraft({ markdown: "first draft" });
+    let winner: sendsDb.SendRow | undefined;
+    let raced = false;
+    const e = racing(async (db) => {
+      if (!raced) {
+        raced = true;
+        // The editor saves and Claude schedules the saved post, both before this freeze writes.
+        const { post } = await saveAs(db, id, { markdown: "second draft" });
+        winner = await freeze(env, getConfig(env), post, Date.now() + 3_600_000);
+      }
+    });
+
+    const res = await fetchOn(e, `/api/posts/${id}/${path}`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify(timing),
+    });
+
+    expect(res.status).toBe(status);
+    const body = await readJson(res);
+    expect(body.send.id).toBe(winner!.id);
+    expect(body.error).toBe(status === 409 ? "active_send_exists" : undefined);
+    const active = (await sendsDb.getActiveSendForPost(env.DB, id))!;
+    expect([active.id, active.rendered_html.includes("second draft")]).toEqual([winner!.id, true]);
   });
 });
