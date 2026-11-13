@@ -11,6 +11,8 @@ import type { DeploymentView, SettingsResponse, SettingsView } from "../../share
 import { unmount } from "../lifecycle";
 import { appState } from "../state";
 
+export { allowConsoleErrors } from "./console_guard";
+
 /** One request the script saw. `url` is absolute against a placeholder origin. */
 
 /** The publication's zone in `settingsResponse`, which the specs' browser keeps too. */

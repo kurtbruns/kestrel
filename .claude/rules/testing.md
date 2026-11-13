@@ -33,7 +33,7 @@ A test is evidence that the app does what `docs/SPEC.md` says. Keep each one pla
 
 ## Client view tests
 
-- `client/test/setup.ts` puts the real admin shell (`public/dashboard/index.html`) in the document before a spec's imports, because the shell reads its roots at import time. happy-dom's file loading is off so an inserted `<link>` is never fetched.
+- `client/test/setup.ts` puts the real admin shell (`public/dashboard/index.html`) in the document before a spec's imports, because the shell reads its roots at import time. happy-dom's file loading is off so an inserted `<link>` is never fetched; its frame page loading is on so a frame with no `src` loads `about:blank` quietly, and no frame in `client/` sets a `src`, so nothing reaches the network.
 - A view test runs the real view over `fakeApi(routes)`, which replaces the global `fetch`, so `api()` itself runs. Mount the view as the router does (`mount(renderDrafts)`), `settle()`, query the DOM, act, assert, and assert `fake.unhandled` is empty; `unmount()` is navigating away. `posts/drafts.spec.ts` is the pattern.
 - `settle()` waits on a real timer: under `vi.useFakeTimers()` use `vi.advanceTimersByTimeAsync(0)` instead.
 - A client spec never reaches the Worker, and `client/test/` never enters the bundle.
@@ -47,4 +47,6 @@ A test is evidence that the app does what `docs/SPEC.md` says. Keep each one pla
 ## Logs and output
 
 - A Worker test that causes an error-level log line on purpose allows it, at the start of the test: `allowErrorLogs("send.wedged")` (`test/support/log.ts`). Any other error line fails the test. Allowing doesn't assert; to prove a failure was logged, read the line back with `logged()`.
+- A client test that writes to the console's error stream fails (`client/test/console_guard.ts`): a view's `console.error` or `console.warn`, or happy-dom's own messages, which go straight to stderr past `silent` and past a console spy. No client module logs, so such a line is a view going wrong or happy-dom refusing something. A test that causes one on purpose allows it, at the start of the test, by substring or pattern: `allowConsoleErrors("Failed to load")` (`client/test/support.ts`). Allowing doesn't assert; to prove the line was written, spy on the console.
+- Keep a green run's output to the run's result. When happy-dom starts printing, change its settings in `vitest.config.ts` (frame page loading is on there for this reason), never allow the line everywhere.
 - A passing test's console output isn't printed (`--silent=false` shows it), so don't mock the console to keep a spec quiet. Spy on it only to assert on a line.
