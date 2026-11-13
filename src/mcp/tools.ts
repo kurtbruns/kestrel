@@ -891,27 +891,28 @@ export const TOOL_DEFS: ToolDef[] = [
     name: "schedule_send",
     title: "Schedule a post",
     description:
-      "Schedule the post's send at `fire_at`, or, with no `fire_at`, for the soonest it can go: one minimum lead out (the editor's Send now). Either way it waits out the review window, cancelable until it fires. Only when the publisher asks, after telling them whether the post goes in the public archive (`email_only`). Then tell them when it fires in `read_back`'s words, `fire_at_local` and `fire_at_in`, and how to cancel, and offer a test of the scheduled send, the frozen copy that will fire; if the test shows a problem, cancel, fix the draft, and schedule again.",
+      "Schedule the post's send at `fire_at`, or, with neither `fire_at` nor `time_zone`, for the soonest it can go: one minimum lead out (the editor's Send now). Either way it waits out the review window, cancelable until it fires. Only when the publisher asks, after telling them whether the post goes in the public archive (`email_only`). Then tell them when it fires in `read_back`'s words, `fire_at_local` and `fire_at_in`, and how to cancel, and offer a test of the scheduled send, the frozen copy that will fire; if the test shows a problem, cancel, fix the draft, and schedule again.",
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     routes: [SCHEDULE_POST, SEND_NOW],
     args: {
       id: pick([SCHEDULE_POST, SEND_NOW], "path", "id"),
       fire_at: pick(SCHEDULE_POST, "body", "fire_at", {
         required: false,
-        note: "Omit it for the soonest. A time the publisher names is a local time with no offset.",
+        note: "Omit it, and time_zone, for the soonest. A time the publisher names is a local time with no offset, and time_zone goes only with one.",
       }),
       time_zone: pick(SCHEDULE_POST, "body", "time_zone"),
       email_only: pick([SCHEDULE_POST, SEND_NOW], "body", "email_only"),
     },
     async run(api, args) {
-      const settings = only(args, ["email_only"]);
-      const a =
-        args.fire_at === undefined
-          ? await api.call(SEND_NOW, { params: { id: args.id }, body: settings })
-          : await api.call(SCHEDULE_POST, {
-              params: { id: args.id },
-              body: { ...settings, ...only(args, ["fire_at", "time_zone"]) },
-            });
+      // Send now only when the call names no time at all. A time_zone alone meant to name one, so it
+      // goes to Schedule, whose own refusal of the missing fire_at answers it; Send now would drop it.
+      const soonest = args.fire_at === undefined && args.time_zone === undefined;
+      const a = soonest
+        ? await api.call(SEND_NOW, { params: { id: args.id }, body: only(args, ["email_only"]) })
+        : await api.call(SCHEDULE_POST, {
+            params: { id: args.id },
+            body: only(args, ["email_only", "fire_at", "time_zone"]),
+          });
       if (!a.ok) {
         return refused(a);
       }

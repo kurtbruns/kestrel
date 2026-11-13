@@ -2,7 +2,7 @@ import { createExecutionContext, SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import type { McpTool } from "../shared/mcp";
-import { formatInTimeZone } from "../shared/time_zone";
+import { formatInTimeZone, formatLocalTime, parseLocalTime, wallAt } from "../shared/time_zone";
 import { createRouter } from "../src/app";
 import { type AppEnv, getConfig } from "../src/env";
 import { HttpError } from "../src/lib/errors";
@@ -275,7 +275,7 @@ describe("the tools are a curated set over the API's routes (SPEC §11)", () => 
     });
     const fireAt = op?.requestBody?.content["application/json"]?.schema.properties?.fire_at;
     expect(props.fire_at?.description).toBe(
-      `${fireAt?.description} Omit it for the soonest. A time the publisher names is a local time with no offset.`,
+      `${fireAt?.description} Omit it, and time_zone, for the soonest. A time the publisher names is a local time with no offset, and time_zone goes only with one.`,
     );
     // Each schema stands alone: an object it names is under its own `$defs`.
     for (const t of tools) {
@@ -416,6 +416,30 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
     expect(now.send.status).toBe("scheduled");
     const listed = await callOk("list_sends", { status: "scheduled" });
     expect(listed.sends.map((s: { id: string }) => s.id)).toEqual([now.send.id]);
+  });
+
+  it("refuses a time_zone with no fire_at rather than sending at the soonest, and schedules when both come", async () => {
+    const post = (await callOk("save_draft", { subject: "When", markdown: "x" })).post;
+    const muddled = await callTool("schedule_send", { id: post.id, time_zone: "Australia/Sydney" });
+    expect(muddled.isError).toBe(true);
+    // Schedule's own refusal of the missing time, naming fire_at as the field to fix.
+    expect(muddled.text).toMatch(
+      /^Refused: HTTP 400 bad_request\. fire_at isn’t a time Kestrel reads\. /,
+    );
+    expect(muddled.text).toMatch(/\nFix: `fire_at`\.$/);
+    expect((await callOk("list_sends", {})).sends).toEqual([]);
+    expect((await callOk("get_post", { id: post.id })).post.status).toBe("draft");
+
+    const local = new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10);
+    const both = await callOk("schedule_send", {
+      id: post.id,
+      fire_at: `${local}T09:00`,
+      time_zone: "Australia/Sydney",
+    });
+    expect(both.send.status).toBe("scheduled");
+    expect(formatLocalTime(wallAt(Date.parse(both.send.fire_at), "Australia/Sydney"))).toBe(
+      formatLocalTime(parseLocalTime(`${local}T09:00`)!),
+    );
   });
 
   it("changes a post's listing and address, in any state, and says when an address is taken", async () => {
