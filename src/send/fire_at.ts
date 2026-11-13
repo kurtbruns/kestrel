@@ -64,6 +64,9 @@ export function parseFireAtRequest(input: unknown, timeZone: unknown): FireAtReq
 }
 
 function shapeOf(input: unknown): FireAtRequest {
+  if (input === undefined) {
+    throw fieldError("fire_at", `fire_at is required. ${FORMS}`);
+  }
   if (typeof input === "number" && Number.isFinite(input)) {
     return { kind: "exact", at: input };
   }
