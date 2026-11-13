@@ -36,6 +36,15 @@ function usageMessage(err) {
   if (named && err.code === "ERR_PARSE_ARGS_UNKNOWN_OPTION") {
     return `unknown option ${named}`;
   }
+  // `--size -5`: Node won't guess whether `-5` is the value or another option, and says so in
+  // three lines; the one thing to do is give the value with an `=`.
+  if (
+    named &&
+    err.code === "ERR_PARSE_ARGS_INVALID_OPTION_VALUE" &&
+    /argument is ambiguous/.test(err.message)
+  ) {
+    return `${named}'s value starts with a dash: give it as ${named}=<value>`;
+  }
   // Node names the option as `--name <value>`, or `-n, --name` for one with a short form.
   if (
     named &&

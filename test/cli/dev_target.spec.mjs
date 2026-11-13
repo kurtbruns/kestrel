@@ -3,7 +3,9 @@
  * server they reach, so a target found implicitly must prove it is this directory's, and one
  * the caller names is used as given. Plain Node: cli/ is plain Node, and so is its suite.
  */
+import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -106,4 +108,38 @@ describe("a server that isn't a Kestrel dev server", () => {
       "the server at http://localhost:3000 didn't answer as a Kestrel dev server.",
     );
   });
+});
+
+describe("a dev token route that answers 404 and never finishes its body", () => {
+  let server;
+  let scratch;
+  afterEach(() => {
+    server?.closeAllConnections();
+    server?.close();
+    rmSync(scratch, { recursive: true, force: true });
+  });
+
+  it("is refused, and the command exits at once rather than wait on the body", async () => {
+    scratch = mkdtempSync(join(tmpdir(), "kestrel-404-"));
+    server = createServer((_req, res) => {
+      res.writeHead(404, { "content-type": "text/plain" });
+      res.write("not here");
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const bin = join(import.meta.dirname, "..", "..", "bin", "kestrel.mjs");
+    const started = Date.now();
+    const { code, err } = await new Promise((resolve) => {
+      const child = spawn(process.execPath, [bin, "reset", base], { cwd: scratch });
+      let err = "";
+      child.stderr.on("data", (chunk) => {
+        err += chunk;
+      });
+      child.on("exit", (code) => resolve({ code, err }));
+    });
+    expect(code).toBe(1);
+    expect(err).toMatch(/^kestrel reset: \/api\/dev\/token is unavailable/m);
+    // Waiting on the body, it took about eight seconds; at once is well under three.
+    expect(Date.now() - started).toBeLessThan(3_000);
+  }, 20_000);
 });

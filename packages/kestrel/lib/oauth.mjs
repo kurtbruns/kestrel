@@ -125,6 +125,7 @@ async function getJson(url, what) {
     throw new SignInError(`Couldn't reach ${new URL(url).origin} for ${what}: ${errText(err)}`);
   }
   if (!res.ok) {
+    await discardBody(res);
     throw new SignInError(`${what} answered ${res.status} at ${url}.`);
   }
   try {
@@ -150,6 +151,8 @@ export async function discover(origin) {
   } catch (err) {
     throw new SignInError(`Couldn't reach ${origin}: ${errText(err)}`);
   }
+  // Only the headers are read; the 401's body is Access's page, and nothing waits on it.
+  await discardBody(res);
   const metadataUrl = resourceMetadataUrl(res.headers.get("www-authenticate"));
   if (res.status !== 401 || !metadataUrl) {
     throw new SignInError(
@@ -316,6 +319,7 @@ export async function revokeTokens(entry) {
         client_id: entry.client_id,
       }).toString(),
     });
+    await discardBody(res);
     return res.ok;
   } catch {
     return false;
@@ -396,6 +400,14 @@ export async function listenForCode({ port, state, timeoutMs = 5 * 60_000 }) {
   };
   code.then(close, close);
   return { redirectUri: `http://127.0.0.1:${bound}/callback`, code, close };
+}
+
+/**
+ * Let go of a response's body that won't be read. Left unread, a body the server never finishes
+ * holds the connection, and the process with it, open after the command is done.
+ */
+export async function discardBody(res) {
+  await res.body?.cancel().catch(() => {});
 }
 
 function errText(err) {

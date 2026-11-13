@@ -21,6 +21,7 @@
  */
 import { readDevServer } from "./dev-server.mjs";
 import { CliError } from "./errors.mjs";
+import { discardBody } from "./oauth.mjs";
 
 /**
  * Where a dev command aims, decided from what it was given and this directory's record:
@@ -109,6 +110,7 @@ async function devToken(base, kind) {
     );
   }
   if (res.status === 404) {
+    await discardBody(res);
     fail(
       "/api/dev/token is unavailable: this only works on a local dev server (fake transport, no Access, APP_ORIGIN on localhost).",
     );

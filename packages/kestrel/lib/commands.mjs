@@ -116,6 +116,7 @@ export const COMMANDS = [
     usage: `Usage: kestrel api <method> <path> [options]
        kestrel api --list [resource]       the instance's routes, or one resource's
        kestrel api help <method> <path>    one route: its fields, refusals, and answer
+       kestrel api --help                  this
 
   -f, --raw-field <name=value>  a body field, as a string; repeatable. On a GET, or for a name
                                 the route takes only as one, a query parameter

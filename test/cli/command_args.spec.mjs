@@ -53,6 +53,7 @@ describe("readArgs", () => {
     [["--sise", "1k"], "unknown option --sise"],
     [["-x"], "unknown option -x"],
     [["--size"], "--size needs a value"],
+    [["--size", "-5"], "--size's value starts with a dash: give it as --size=<value>"],
     [["8790", "8791"], 'unexpected argument "8791"'],
   ])("refuses %j: %s", (argv, message) => {
     expect(() => readArgs(argv, spec)).toThrow(UsageError);
@@ -96,6 +97,18 @@ describe("--help on each command", () => {
       expect(readdirSync(dir)).toEqual([]);
     },
   );
+});
+
+describe("kestrel init's usage", () => {
+  it("names every option init takes, the hostnames the setup guide passes included", () => {
+    const r = kestrel(BIN, "init", "--help");
+    expect(r.out.split("\n")[0]).toBe(
+      "Usage: kestrel init [dir] [--name <name>] [--hostname <host>] [--sending <host>]",
+    );
+    for (const flag of ["--name <name>", "--hostname <host>", "--sending <host>"]) {
+      expect(r.out).toContain(`  ${flag}`);
+    }
+  });
 });
 
 describe("a command line a command can't run", () => {
