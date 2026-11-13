@@ -20,6 +20,7 @@ import { listImages } from "../db/images";
 import type { PostRow } from "../db/posts";
 import {
   getCurrentRevision,
+  getPost,
   isSlugCollision,
   type PublishingInput,
   publishingChanges,
@@ -30,6 +31,7 @@ import {
   canceledAt,
   cancelStmt,
   type FrozenRender,
+  freezeGuard,
   getActiveSendForPost,
   getSend,
   insertScheduledSendStmt,
@@ -40,7 +42,6 @@ import {
   rescheduleStmt,
   type SendRow,
   sendExists,
-  settingsVersionIs,
   stampSendsOfPostStmt,
 } from "../db/sends";
 import { readSettings, readTimeZone } from "../db/settings";
@@ -140,8 +141,14 @@ export async function requireTimeZone(db: D1Database): Promise<string> {
 }
 
 /** How many times a freeze re-reads and re-renders when the settings changed under it.
- *  A template save landing in that gap is rare; a couple of retries settles it. */
+ *  A template save landing in that gap is rare; a couple of retries settles it. A save of the
+ *  post is not retried: it refuses (`stale_revision`). */
 const FREEZE_RETRIES = 3;
+
+/** The refusal for a schedule or Send now a save of the post landed under. The route adds the
+ *  post as it stands and its current revision, as a save's own `stale_revision` carries. */
+const POST_SAVED =
+  "This post was saved while it was being scheduled. Read it again, then schedule or send it.";
 
 /** The refusal for a post that already has its one active send (SPEC §6). */
 const ACTIVE_SEND_EXISTS =
@@ -153,7 +160,12 @@ const ACTIVE_SEND_EXISTS =
  *  the frozen copy, and a refused freeze changes neither. `recorded` is the act this freeze is, a
  *  schedule or Send now, and who took it, which the same batch adds to the send's log of acts
  *  (SPEC §6, §11); null records none, as a fixture does. `requested` is the local time the fire
- *  time was asked in, kept beside it (SPEC §6), or null for an exact moment. */
+ *  time was asked in, kept beside it (SPEC §6), or null for an exact moment.
+ *
+ *  The frozen copy is the post's revision at the lock (SPEC §6). `post` is the row the caller read,
+ *  and a save can land after that read: the batch lands only while the post is still on the
+ *  revision rendered, and a schedule a save landed under is refused (`stale_revision`), writing
+ *  nothing, rather than frozen on content the post has left. */
 export async function freeze(
   env: AppEnv,
   config: Config,
@@ -185,24 +197,26 @@ export async function freeze(
   }
 
   for (let attempt = 0; attempt < FREEZE_RETRIES; attempt++) {
-    // Render with the settings as they stand, and remember which: the insert below
-    // lands only while the settings row is still at this version. A template or
-    // identity save that commits in between (a re-make of every scheduled send, SPEC
-    // §9) would otherwise leave this new send on the older look, unlisted; instead
-    // the insert changes zero rows and the freeze renders again with the new settings.
+    // Render with the settings and the post as they stand, and remember which: every statement
+    // below lands only while the settings row is still at this version and the post still on
+    // this revision (`freezeGuard`). A template or identity save that commits in between (a
+    // re-make of every scheduled send, SPEC §9) would otherwise leave this new send on the older
+    // look, unlisted; instead the batch changes nothing and the freeze renders again with the new
+    // settings. A save of the post in between changes nothing either, and refuses below.
     const { settings, version } = await readSettings(env.DB);
     const rendered = await renderPost(env, config, post, resolveBranding(settings, config));
+    const revision = unwrap(post.current_revision, "rendered revision");
     const audience = await audienceCount(env.DB);
 
     const now = Date.now();
     const id = newId();
-    const settingsVersion = version ?? 0;
-    // The post's settings land only with the lock, under the same settings guard, and stamp
-    // the post's earlier sends, whose views carry them too (SPEC §8).
+    const guard = freezeGuard(version ?? 0, post.id, revision);
+    // The post's settings land only with the lock, under the same guard, and stamp the post's
+    // earlier sends, whose views carry them too (SPEC §8).
     const listing = publishingChanges(post, postSettings)
       ? [
-          setPublishingStmt(env.DB, post, postSettings, settingsVersionIs(settingsVersion)),
-          stampSendsOfPostStmt(env.DB, post.id),
+          setPublishingStmt(env.DB, post, postSettings, guard),
+          stampSendsOfPostStmt(env.DB, post.id, guard),
         ]
       : [];
     let results: D1Result[];
@@ -219,16 +233,9 @@ export async function freeze(
             requested,
           },
           now,
-          settingsVersion,
+          guard,
         ),
-        setPostStatusStmt(
-          env.DB,
-          post.id,
-          "draft",
-          "scheduled",
-          now,
-          settingsVersionIs(settingsVersion),
-        ),
+        setPostStatusStmt(env.DB, post.id, "draft", "scheduled", now, guard),
         ...listing,
         ...(recorded
           ? [
@@ -266,6 +273,19 @@ export async function freeze(
         ...(recorded ? whoActed(recorded.by) : {}),
       });
       return unwrap(await getSend(env.DB, id), "send");
+    }
+    // Nothing landed. Find out what moved: the post (deleted, frozen by another writer, or
+    // saved), or else the settings, which the next attempt renders again.
+    const current = await getPost(env.DB, post.id);
+    if (!current) {
+      throw notFound("post");
+    }
+    const winner = await getActiveSendForPost(env.DB, post.id);
+    if (winner) {
+      throw await activeSendExists(env, winner);
+    }
+    if (current.current_revision !== revision) {
+      throw refusal("stale_revision", POST_SAVED);
     }
   }
   throw refusal(

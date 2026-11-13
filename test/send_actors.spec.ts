@@ -332,7 +332,7 @@ describe("the log records an act only when its change landed (SPEC §6)", () => 
           from_name: "",
         },
         now,
-        -1,
+        sends.settingsVersionIs(-1),
       ),
       sends.recordActStmt(
         env.DB,

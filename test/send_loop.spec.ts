@@ -5,10 +5,11 @@ import * as sends from "../src/db/sends";
 import { readSettings, updateSettings } from "../src/db/settings";
 import * as subscribersDb from "../src/db/subscribers";
 import { getConfig } from "../src/env";
+import type { HttpError } from "../src/lib/errors";
 import { LEASE_TTL_MS, MISSED_THRESHOLD_MS } from "../src/lib/time";
 import { clearFakeOutbox, failFakeSendBatch, fakeOutbox } from "../src/providers/fake";
 import { runSend } from "../src/send/loop";
-import { freeze } from "../src/send/schedule";
+import { cancel, freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { toNextTick } from "./support/clock";
 import { frozenSend, resetDatabase, seedConfirmed, sendAudience } from "./support/fixtures";
@@ -52,12 +53,14 @@ describe("the freeze reads the template it froze with", () => {
       from_name: "",
     };
     const stale = await sends
-      .insertScheduledSendStmt(env.DB, row, Date.now(), (version ?? 0) - 1)
+      .insertScheduledSendStmt(env.DB, row, Date.now(), sends.settingsVersionIs((version ?? 0) - 1))
       .run();
     expect(stale.meta.changes ?? 0).toBe(0);
     expect(await sends.getSend(env.DB, "s-guard")).toBeNull();
 
-    const fresh = await sends.insertScheduledSendStmt(env.DB, row, Date.now(), version ?? 0).run();
+    const fresh = await sends
+      .insertScheduledSendStmt(env.DB, row, Date.now(), sends.settingsVersionIs(version ?? 0))
+      .run();
     expect(fresh.meta.changes ?? 0).toBe(1);
     expect((await sends.getSend(env.DB, "s-guard"))?.status).toBe("scheduled");
   });
@@ -85,6 +88,158 @@ describe("the freeze reads the template it froze with", () => {
     expect(send.rendered_html).toContain("after");
     expect(send.rendered_html).not.toContain("before");
     expect((await posts.getPost(env.DB, post.id))!.status).toBe("scheduled");
+  });
+});
+
+describe("the freeze holds the post's revision at the lock (SPEC §6, I3)", () => {
+  /** How many rows a table holds: what a refused freeze must leave as it was. */
+  const count = async (table: "sends" | "send_acts") =>
+    (await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first<{ n: number }>())!.n;
+  const BY = { kind: "human", email: "you@example.com", client: "claude-code" } as const;
+
+  it("the insert lands only while the post is still on the revision the render used", async () => {
+    // The other input a freeze reads: a save between its read and its write moves the post to a
+    // new revision, and the write then inserts nothing. Exercised at the statement level so the
+    // order is deterministic.
+    const { post, revision } = await posts.createPost(
+      env.DB,
+      { subject: "Subj", markdown: "first" },
+      "test",
+    );
+    const { version } = await readSettings(env.DB);
+    const row = {
+      id: "s-revision",
+      post_id: post.id,
+      fire_at: Date.now() + 600_000,
+      recipient_count: 0,
+      rendered_html: "<p>first</p>",
+      rendered_text: "first",
+      subject: "Subj",
+      warnings: [],
+      from_name: "",
+    };
+    const saved = (await posts.updatePost(env.DB, post, { markdown: "second" }, "test"))!;
+    const stale = await sends
+      .insertScheduledSendStmt(
+        env.DB,
+        row,
+        Date.now(),
+        sends.freezeGuard(version ?? 0, post.id, revision.id),
+      )
+      .run();
+    expect(stale.meta.changes ?? 0).toBe(0);
+    expect(await sends.getSend(env.DB, "s-revision")).toBeNull();
+
+    const fresh = await sends
+      .insertScheduledSendStmt(
+        env.DB,
+        row,
+        Date.now(),
+        sends.freezeGuard(version ?? 0, post.id, saved.revision.id),
+      )
+      .run();
+    expect(fresh.meta.changes ?? 0).toBe(1);
+  });
+
+  it("refuses a post a save has moved on since it was read, freezing nothing, and freezes it when tried again", async () => {
+    // The schedule's route read the post, then a save landed before the freeze wrote.
+    const { post } = await posts.createPost(
+      env.DB,
+      { subject: "Subj", markdown: "first draft" },
+      "test",
+    );
+    const saved = (await posts.updatePost(env.DB, post, { markdown: "second draft" }, "test"))!;
+
+    const err = await freeze(env, config(), post, Date.now() + 600_000).catch((e: unknown) => e);
+
+    expect((err as HttpError).code).toBe("stale_revision");
+    expect([await count("sends"), await count("send_acts")]).toEqual([0, 0]);
+    const draft = (await posts.getPost(env.DB, post.id))!;
+    expect([draft.status, draft.current_revision]).toEqual(["draft", saved.revision.id]);
+
+    // Tried again from the post as it now stands, it freezes the saved content.
+    const send = await freeze(env, config(), draft, Date.now() + 600_000);
+    expect(send.rendered_html).toContain("second draft");
+    expect(send.rendered_html).not.toContain("first draft");
+  });
+
+  it("refuses for the post even when the settings moved in the same attempt, rather than rendering again", async () => {
+    const { post } = await posts.createPost(env.DB, { subject: "Subj", markdown: "first" }, "test");
+    await posts.updatePost(env.DB, post, { markdown: "second" }, "test");
+    vi.spyOn(subscribersDb, "audienceCount").mockImplementation(async (db) => {
+      await updateSettings(db, { publication: { tagline: "after" } });
+      return 0;
+    });
+
+    const err = await freeze(env, config(), post, Date.now() + 600_000).catch((e: unknown) => e);
+
+    expect((err as HttpError).code).toBe("stale_revision");
+    expect(await count("sends")).toBe(0);
+  });
+
+  it("a refused attempt writes no send, act, slug, listing, or earlier send's number", async () => {
+    // A post with a canceled send behind it, whose number a landed listing change would move.
+    const { post } = await posts.createPost(
+      env.DB,
+      { subject: "Subj", markdown: "draft 0" },
+      "test",
+    );
+    const earlier = await freeze(env, config(), post, Date.now() + 600_000);
+    await cancel(env, earlier.id);
+    const before = (await sends.getSend(env.DB, earlier.id))!.rev;
+    const acts = await count("send_acts");
+    const draft = (await posts.getPost(env.DB, post.id))!;
+    await posts.updatePost(env.DB, draft, { markdown: "draft 1" }, "test");
+
+    const err = await freeze(
+      env,
+      config(),
+      draft,
+      Date.now() + 600_000,
+      { emailOnly: true, slug: { slug: "moved", auto: false } },
+      { act: "schedule", by: BY },
+    ).catch((e: unknown) => e);
+
+    expect((err as HttpError).code).toBe("stale_revision");
+    const after = (await posts.getPost(env.DB, post.id))!;
+    expect([after.status, after.email_only, after.slug]).toEqual(["draft", false, draft.slug]);
+    expect((await sends.getSend(env.DB, earlier.id))!.rev).toBe(before);
+    expect([await count("sends"), await count("send_acts")]).toEqual([1, acts]);
+  });
+
+  it("answers not found, freezing nothing, when the post is deleted in the gap", async () => {
+    const { post } = await posts.createPost(env.DB, { subject: "Subj", markdown: "body" }, "test");
+    vi.spyOn(subscribersDb, "audienceCount").mockImplementation(async (db) => {
+      await posts.deletePost(db, post.id);
+      return 0;
+    });
+
+    const err = await freeze(env, config(), post, Date.now() + 600_000).catch((e: unknown) => e);
+
+    expect((err as HttpError).code).toBe("not_found");
+    expect(await count("sends")).toBe(0);
+  });
+
+  it("refuses with the send that won when a freeze of the same post lands in the gap", async () => {
+    const { post } = await posts.createPost(env.DB, { subject: "Subj", markdown: "first" }, "test");
+    let winner: sends.SendRow | undefined;
+    let raced = false;
+    vi.spyOn(subscribersDb, "audienceCount").mockImplementation(async (db) => {
+      // Once, and set first: the other client's freeze below counts the audience too.
+      if (!raced) {
+        raced = true;
+        // A save, then another client's freeze of the saved post, both before this one writes.
+        const saved = (await posts.updatePost(db, post, { markdown: "second" }, "test"))!;
+        winner = await freeze(env, config(), saved.post, Date.now() + 600_000);
+      }
+      return 0;
+    });
+
+    const err = await freeze(env, config(), post, Date.now() + 600_000).catch((e: unknown) => e);
+
+    expect((err as HttpError).code).toBe("active_send_exists");
+    expect((err as HttpError).details).toMatchObject({ send: { id: winner!.id } });
+    expect(await count("sends")).toBe(1);
   });
 });
 

@@ -3,14 +3,15 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DAILY_WRITES_SEND_RECIPIENTS } from "../shared/free_plan";
 import { DEFAULT_MIN_LEAD_MS } from "../shared/sends";
+import { getPost, updatePost } from "../src/db/posts";
 import * as sendsDb from "../src/db/sends";
 import { updateSettings } from "../src/db/settings";
-import type { AppEnv } from "../src/env";
+import { type AppEnv, getConfig } from "../src/env";
 import * as providers from "../src/providers";
-import { acceptFireAt, cancel, onTheMinute } from "../src/send/schedule";
+import { acceptFireAt, cancel, freeze, onTheMinute } from "../src/send/schedule";
 import { addresses, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, PNG_1x1, readJson } from "./support/http";
-import { fetchWith } from "./support/worker_env";
+import { fetchOn, fetchWith } from "./support/worker_env";
 
 // Each test starts from an empty database, so a count or a list read sees only its own rows.
 beforeEach(async () => {
@@ -879,5 +880,108 @@ describe("the sender's name frozen at schedule (SPEC §9)", () => {
       name: "Renamed",
       address: "newsletter@send.example.com",
     });
+  });
+});
+
+/** An env whose D1 handle runs `before` ahead of each of the freeze's batches, as another writer
+ *  landing between the route's read of the post and the freeze's write would. */
+function racing(before: (db: D1Database) => Promise<void>): AppEnv {
+  const db = env.DB;
+  const handle = new Proxy(db, {
+    get(target, prop) {
+      if (prop === "batch") {
+        return async (stmts: D1PreparedStatement[]) => {
+          await before(db);
+          return target.batch(stmts);
+        };
+      }
+      const value = Reflect.get(target, prop);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return { ...env, DB: handle } as AppEnv;
+}
+
+/** The editor saving the post, from whatever it now holds. */
+async function saveAs(db: D1Database, id: string, input: { subject?: string; markdown: string }) {
+  return (await updatePost(db, (await getPost(db, id))!, input, "editor"))!;
+}
+
+describe("a save landing while a post is scheduled (SPEC §6, I3)", () => {
+  it.each([
+    ["schedule", "schedule", { fire_at: Date.now() + 3_600_000 }],
+    ["Send now", "send", {}],
+  ])(
+    "refuses %s, carrying the saved post, and freezes nothing until it is asked again",
+    async (_, path, timing) => {
+      const id = await makeDraft({ markdown: "first draft" });
+      // The editor saves the post just before the freeze's first write: the route has read the
+      // post on its first revision by then, and the save moves it on.
+      let saved: Awaited<ReturnType<typeof saveAs>> | undefined;
+      const e = racing(async (db) => {
+        saved ??= await saveAs(db, id, { markdown: "second draft" });
+      });
+      const request = {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ ...timing, email_only: true }),
+      };
+
+      const res = await fetchOn(e, `/api/posts/${id}/${path}`, request);
+
+      expect(res.status).toBe(409);
+      expect(await readJson(res)).toMatchObject({
+        error: "stale_revision",
+        message:
+          "This post was saved while it was being scheduled. Read it again, then schedule or send it.",
+        current_revision: saved!.revision.id,
+        author: "editor",
+        markdown: "second draft",
+        post: { id, status: "draft", email_only: false, current_revision: saved!.revision.id },
+      });
+      expect(await sendsDb.getActiveSendForPost(env.DB, id)).toBeNull();
+
+      // Asked again, with nothing landing in between, it freezes what was saved.
+      const again = await fetchOn(env as AppEnv, `/api/posts/${id}/${path}`, request);
+      expect(again.status).toBe(201);
+      const send = (await sendsDb.getActiveSendForPost(env.DB, id))!;
+      expect(send.rendered_html).toContain("second draft");
+      expect(send.rendered_html).not.toContain("first draft");
+    },
+  );
+
+  it.each([
+    [
+      "schedule refuses with the send that won",
+      "schedule",
+      { fire_at: Date.now() + 3_600_000 },
+      409,
+    ],
+    ["Send now answers with the send that won, as a repeat", "send", {}, 200],
+  ])("when a freeze of the same post wins in the gap, %s", async (_, path, timing, status) => {
+    const id = await makeDraft({ markdown: "first draft" });
+    let winner: sendsDb.SendRow | undefined;
+    let raced = false;
+    const e = racing(async (db) => {
+      if (!raced) {
+        raced = true;
+        // The editor saves and Claude schedules the saved post, both before this freeze writes.
+        const { post } = await saveAs(db, id, { markdown: "second draft" });
+        winner = await freeze(env, getConfig(env), post, Date.now() + 3_600_000);
+      }
+    });
+
+    const res = await fetchOn(e, `/api/posts/${id}/${path}`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify(timing),
+    });
+
+    expect(res.status).toBe(status);
+    const body = await readJson(res);
+    expect(body.send.id).toBe(winner!.id);
+    expect(body.error).toBe(status === 409 ? "active_send_exists" : undefined);
+    const active = (await sendsDb.getActiveSendForPost(env.DB, id))!;
+    expect([active.id, active.rendered_html.includes("second draft")]).toEqual([winner!.id, true]);
   });
 });

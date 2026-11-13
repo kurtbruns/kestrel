@@ -7,7 +7,7 @@
  */
 
 import type { Post, PostAction } from "../../shared/posts";
-import { currentAuthors, getPost, type PostRow } from "../db/posts";
+import { currentAuthors, getCurrentRevision, getPost, type PostRow } from "../db/posts";
 import { postSendRefs, publicationsFor } from "../db/sends";
 import { readTimeZone } from "../db/settings";
 import type { AppEnv, Config } from "../env";
@@ -72,9 +72,10 @@ export async function viewPost(env: AppEnv, config: Config, row: PostRow): Promi
 
 /**
  * Run an act on a post. A refusal about the post's state, that it is no longer a draft
- * (`post_not_draft`) or that its address is fixed (`slug_permanent`), carries the post as it
- * now stands (docs/API.md, principle 5), read after the refusal, so a client redraws it
- * without a second read.
+ * (`post_not_draft`), that its address is fixed (`slug_permanent`), or that it was saved since
+ * the act read it (`stale_revision`), carries the post as it now stands (docs/API.md, principle
+ * 5), read after the refusal, so a client redraws it without a second read. A `stale_revision`
+ * also carries the current revision, as a save's does: who wrote it, when, and its Markdown.
  */
 export async function carryingPost<T>(
   env: AppEnv,
@@ -87,17 +88,32 @@ export async function carryingPost<T>(
   } catch (err) {
     if (
       err instanceof HttpError &&
-      (err.code === "post_not_draft" || err.code === "slug_permanent") &&
+      (err.code === "post_not_draft" ||
+        err.code === "slug_permanent" ||
+        err.code === "stale_revision") &&
       err.details?.post === undefined
     ) {
       const row = await getPost(env.DB, postId);
       if (row) {
         throw new HttpError(err.code, err.message, {
           ...err.details,
+          ...(err.code === "stale_revision" ? await revisionAsItStands(env, row) : {}),
           post: await viewPost(env, config, row),
         });
       }
     }
     throw err;
   }
+}
+
+/** The post's current revision as a `stale_revision` carries it (`StaleRevisionError`). */
+async function revisionAsItStands(env: AppEnv, row: PostRow) {
+  const current = await getCurrentRevision(env.DB, row);
+  return {
+    current_revision: row.current_revision,
+    updated_at: row.updated_at,
+    author: current?.author ?? null,
+    author_client: current?.client ?? null,
+    markdown: current?.markdown ?? "",
+  };
 }

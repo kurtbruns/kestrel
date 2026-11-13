@@ -92,9 +92,17 @@ export function tombstoneSendsStmt(
 
 /** Give every send of a post a new number, with nothing else changed: a change to the post
  *  that its sends' views carry (its listing, SPEC §5) is a change to those sends a client
- *  following them must see (SPEC §8). */
-export function stampSendsOfPostStmt(db: D1Database, postId: string): D1PreparedStatement {
-  return db.prepare(`UPDATE sends SET rev = ${NEXT_REV} WHERE post_id = ?`).bind(postId);
+ *  following them must see (SPEC §8). `guard`, when given, is the predicate of the batch it
+ *  rides in (a freeze's), so it lands only with the rest. */
+export function stampSendsOfPostStmt(
+  db: D1Database,
+  postId: string,
+  guard?: { sql: string; binds: unknown[] },
+): D1PreparedStatement {
+  const extra = guard ? ` AND ${guard.sql}` : "";
+  return db
+    .prepare(`UPDATE sends SET rev = ${NEXT_REV} WHERE post_id = ?${extra}`)
+    .bind(postId, ...(guard?.binds ?? []));
 }
 
 // --- denormalized counter maintenance (`sends.c_*`) --------------------------
@@ -992,11 +1000,38 @@ export function settingsVersionIs(version: number): { sql: string; binds: unknow
   };
 }
 
+/** The predicate that ties a freeze's write to the content it rendered: the post must still
+ *  be on `revision`, the one the frozen copy was made from. A save that lands between the
+ *  freeze's read and its write moves the post on, and the write then changes nothing, so a
+ *  send is never frozen on a revision its post has already left (SPEC §6, I3). */
+export function postRevisionIs(
+  postId: string,
+  revision: string,
+): { sql: string; binds: unknown[] } {
+  return {
+    sql: "EXISTS (SELECT 1 FROM posts AS frozen_post WHERE frozen_post.id = ? AND frozen_post.current_revision = ?)",
+    binds: [postId, revision],
+  };
+}
+
+/** The predicate every statement of a freeze's batch carries: the settings are still at the
+ *  version the render used and the post is still on the revision it rendered, so the batch
+ *  lands whole, or as nothing, against both inputs a freeze reads (SPEC §6). */
+export function freezeGuard(
+  settingsVersion: number,
+  postId: string,
+  revision: string,
+): { sql: string; binds: unknown[] } {
+  const settings = settingsVersionIs(settingsVersion);
+  const post = postRevisionIs(postId, revision);
+  return { sql: `${settings.sql} AND ${post.sql}`, binds: [...settings.binds, ...post.binds] };
+}
+
 /**
- * Insert a `scheduled` send holding a frozen render, guarded on the settings version
- * the render used (`settingsVersionIs`): `meta.changes === 0` means the template or
- * identity changed between the read and this write, and the caller re-renders. The
- * partial unique index on active sends still fails the insert for a second active
+ * Insert a `scheduled` send holding a frozen render, guarded on the inputs the render read
+ * (`freezeGuard`): `meta.changes === 0` means the template, the identity, or the post's
+ * content changed between the read and this write, and the caller reads and renders again.
+ * The partial unique index on active sends still fails the insert for a second active
  * send, which the caller maps to a conflict.
  */
 export function insertScheduledSendStmt(
@@ -1009,9 +1044,8 @@ export function insertScheduledSendStmt(
     requested?: RequestedLocalTime | null;
   },
   now: number,
-  settingsVersion: number,
+  guard: { sql: string; binds: unknown[] },
 ): D1PreparedStatement {
-  const guard = settingsVersionIs(settingsVersion);
   return db
     .prepare(
       `INSERT INTO sends (id, post_id, status, fire_at, requested_local_time, requested_time_zone, rendered_html, rendered_text, subject, render_warnings, from_name, recipient_count, scheduled_at, web_link, rev)

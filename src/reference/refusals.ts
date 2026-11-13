@@ -38,7 +38,10 @@ const FIX_REQUEST = {
 } as const satisfies Record<string, Refusal>;
 
 const READ_AGAIN = {
-  stale_revision: [409, "Another save landed since the revision a post save named."],
+  stale_revision: [
+    409,
+    "Another save landed since the revision a post save named, or since a schedule or Send now read the post.",
+  ],
   slug_taken: [409, "Another post holds the slug: choose another."],
   active_send_exists: [409, "The post already has its one active send."],
   cursor_ahead: [409, "A cursor ahead of this database: read again, follow from that cursor."],
