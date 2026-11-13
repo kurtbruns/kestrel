@@ -103,6 +103,12 @@ export default defineConfig(async () => {
                   disableJavaScriptFileLoading: true,
                   // ...and a disabled load is a silent `load`, not a logged `error`.
                   handleDisabledFileLoadingAsSuccess: true,
+                  // An <iframe> with no src still loads about:blank, and with page loading off
+                  // (happy-dom's default since 21) each one prints a refused-load stack trace,
+                  // hundreds a run. No frame in client/ sets a src (every preview is a srcdoc),
+                  // so turning it on reaches no network. client/test/frames.spec.ts fails if the
+                  // trace comes back.
+                  enableIframePageLoading: true,
                 },
               },
             },

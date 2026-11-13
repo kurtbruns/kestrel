@@ -33,7 +33,7 @@ A test is evidence that the app does what `docs/SPEC.md` says. Keep each one pla
 
 ## Client view tests
 
-- `client/test/setup.ts` puts the real admin shell (`public/dashboard/index.html`) in the document before a spec's imports, because the shell reads its roots at import time. happy-dom's file loading is off so an inserted `<link>` is never fetched.
+- `client/test/setup.ts` puts the real admin shell (`public/dashboard/index.html`) in the document before a spec's imports, because the shell reads its roots at import time. happy-dom's file loading is off so an inserted `<link>` is never fetched; its frame page loading is on so a frame with no `src` loads `about:blank` without printing a trace, and no frame in `client/` sets a `src`, so nothing reaches the network.
 - A view test runs the real view over `fakeApi(routes)`, which replaces the global `fetch`, so `api()` itself runs. Mount the view as the router does (`mount(renderDrafts)`), `settle()`, query the DOM, act, assert, and assert `fake.unhandled` is empty; `unmount()` is navigating away. `posts/drafts.spec.ts` is the pattern.
 - `settle()` waits on a real timer: under `vi.useFakeTimers()` use `vi.advanceTimersByTimeAsync(0)` instead.
 - A client spec never reaches the Worker, and `client/test/` never enters the bundle.
@@ -47,4 +47,5 @@ A test is evidence that the app does what `docs/SPEC.md` says. Keep each one pla
 ## Logs and output
 
 - A Worker test that causes an error-level log line on purpose allows it, at the start of the test: `allowErrorLogs("send.wedged")` (`test/support/log.ts`). Any other error line fails the test. Allowing doesn't assert; to prove a failure was logged, read the line back with `logged()`.
+- A green run prints only its result. happy-dom's own messages go straight to stderr, past `silent` and past a console spy, so when an upgrade starts them printing, change its settings in `vitest.config.ts` and pin the quiet case in `client/test/frames.spec.ts`, as frame page loading is.
 - A passing test's console output isn't printed (`--silent=false` shows it), so don't mock the console to keep a spec quiet. Spy on it only to assert on a line.
