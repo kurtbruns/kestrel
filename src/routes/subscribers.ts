@@ -61,9 +61,18 @@ export async function create(c: RequestContext): Promise<Response> {
 }
 
 export async function list(c: RequestContext): Promise<Response> {
+  // Present is a lookup, absent is the list: an `email` with nothing in it is refused, never
+  // read as absent, so a caller that built the URL from a blank value isn't answered the list.
   const emailQuery = c.url.searchParams.get("email");
-  if (emailQuery) {
-    const subscriber = await subscribers.getByEmail(c.env.DB, normalizeEmail(emailQuery));
+  if (emailQuery !== null) {
+    const email = normalizeEmail(emailQuery);
+    if (!email) {
+      throw fieldError(
+        "email",
+        "email is empty; give the address to look up, or leave it out to list subscribers.",
+      );
+    }
+    const subscriber = await subscribers.getByEmail(c.env.DB, email);
     if (!subscriber) {
       throw notFound("subscriber");
     }

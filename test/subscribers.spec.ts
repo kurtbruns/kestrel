@@ -1129,6 +1129,38 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
   });
 });
 
+describe("looking up one subscriber by address answers that subscriber or a refusal, never the list", () => {
+  const lookup = (query: string) =>
+    SELF.fetch(`${base}/api/subscribers${query}`, { headers: AUTH });
+
+  beforeEach(async () => {
+    await resetDatabase();
+    await seedConfirmed(["listed@example.com"]);
+  });
+
+  for (const [what, query] of [
+    ["empty", "?email="],
+    ["only whitespace", "?email=%20"],
+  ]) {
+    it(`refuses an email that is ${what}, naming the field`, async () => {
+      const res = await lookup(query!);
+      expect(res.status).toBe(400);
+      expect(await readJson(res)).toMatchObject({ error: "bad_request", field: "email" });
+    });
+  }
+
+  it("answers the subscriber an address names", async () => {
+    const res = await lookup("?email=Listed@example.com");
+    expect(res.status).toBe(200);
+    expect((await readJson(res)).subscriber.email).toBe("listed@example.com");
+  });
+
+  it("answers the list when no email is given", async () => {
+    const body = await readJson(await lookup(""));
+    expect(body.subscribers.map((s: { email: string }) => s.email)).toEqual(["listed@example.com"]);
+  });
+});
+
 describe("the list past what Workers Free suits (SPEC §7)", () => {
   const PAID = { SUBREQUEST_BUDGET: "10000" };
   const advice = async (vars: Record<string, string> = {}) =>

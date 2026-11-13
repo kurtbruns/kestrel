@@ -729,6 +729,13 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
     expect((await callTool("get_subscriber", {})).text).toBe("Give one of `id` or `email`.");
   });
 
+  it("refuses an empty address, naming the field, rather than stopping on an error", async () => {
+    expect(await callTool("get_subscriber", { email: "" })).toEqual({
+      isError: true,
+      text: "Refused: HTTP 400 bad_request. email is empty; give the address to look up, or leave it out to list subscribers.\nNext move: Fix the request.\nFix: `email`.",
+    });
+  });
+
   it("reads the publication: who is signed in, and its identity, provider, and list", async () => {
     const pub = await callOk("get_publication", {});
     expect(pub.signed_in_as).toEqual({ kind: "human", email: "you@example.com", client: "claude" });
