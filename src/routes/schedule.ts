@@ -2,7 +2,7 @@
 
 import type { ScheduleResponse } from "../../shared/sends";
 import { readBack } from "../../shared/time_zone";
-import { getPost } from "../db/posts";
+import { getPost, type PostRow, type PublishingInput } from "../db/posts";
 import { getActiveSendForPost, renderWarnings, type SendRow } from "../db/sends";
 import { readTimeZone } from "../db/settings";
 import { fieldError, readJsonObject } from "../lib/body";
@@ -13,7 +13,13 @@ import type { RequestContext } from "../router";
 import { actorOf, param } from "../router";
 import { viewWithCursor } from "../send/describe";
 import { parseFireAtRequest, resolveFireAt } from "../send/fire_at";
-import { acceptFireAt, activeSendExists, freeze, requireTimeZone } from "../send/schedule";
+import {
+  acceptFireAt,
+  activeSendExists,
+  type FreezeSettings,
+  freeze,
+  requireTimeZone,
+} from "../send/schedule";
 import { carryingPost } from "../services/post_view";
 import { readSettingsBody, resolveSettings, type SettingsBody } from "./post_settings";
 import { carryingSettings } from "./settings";
@@ -31,6 +37,19 @@ function rejectStrayTemplateChoice(body: unknown): void {
       "template_revision is not a field: a send is made with the template and identity as they stand, and a later change re-makes it",
     );
   }
+}
+
+/** The post's settings for each read of the post a freeze makes: as the route resolved them,
+ *  checked before anything is frozen, for the post it read, and resolved again for a newer read
+ *  after a save, since a slug that follows the subject follows the subject the freeze renders. */
+function settingsFor(
+  c: RequestContext,
+  read: PostRow,
+  resolved: PublishingInput,
+  fields: SettingsBody,
+): FreezeSettings {
+  return (post) =>
+    post === read ? Promise.resolve(resolved) : resolveSettings(c.env.DB, post, fields);
 }
 
 /** A refusal about the post or the settings a freeze read carries that resource as it stands. */
@@ -69,7 +88,7 @@ async function scheduleOnce(c: RequestContext): Promise<Response> {
     c.config,
     post,
     fireAt,
-    settings,
+    settingsFor(c, post, settings, fields),
     { act: "schedule", by },
     requested.local,
   );
@@ -104,7 +123,10 @@ async function sendNowOnce(c: RequestContext): Promise<Response> {
   const by = actorOf(unwrap(c.principal, "principal"));
   let send: SendRow;
   try {
-    send = await freeze(c.env, c.config, post, fireAt, settings, { act: "send_now", by });
+    send = await freeze(c.env, c.config, post, fireAt, settingsFor(c, post, settings, fields), {
+      act: "send_now",
+      by,
+    });
   } catch (err) {
     // A concurrent send-now (the editor and Claude at once) passed the check above too and froze first.
     // The repeat gets the same answer as one that came after it (SPEC §6); a schedule

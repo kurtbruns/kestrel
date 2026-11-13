@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DAILY_WRITES_SEND_RECIPIENTS } from "../shared/free_plan";
 import { DEFAULT_MIN_LEAD_MS } from "../shared/sends";
+import { getPost, updatePost } from "../src/db/posts";
 import * as sendsDb from "../src/db/sends";
 import { updateSettings } from "../src/db/settings";
 import type { AppEnv } from "../src/env";
@@ -10,7 +11,7 @@ import * as providers from "../src/providers";
 import { acceptFireAt, cancel, onTheMinute } from "../src/send/schedule";
 import { addresses, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, PNG_1x1, readJson } from "./support/http";
-import { fetchWith } from "./support/worker_env";
+import { fetchOn, fetchWith } from "./support/worker_env";
 
 // Each test starts from an empty database, so a count or a list read sees only its own rows.
 beforeEach(async () => {
@@ -879,5 +880,54 @@ describe("the sender's name frozen at schedule (SPEC §9)", () => {
       name: "Renamed",
       address: "newsletter@send.example.com",
     });
+  });
+});
+
+describe("a save landing while a post is scheduled (SPEC §6, I3)", () => {
+  it.each([
+    ["schedule", "schedule", { fire_at: Date.now() + 3_600_000 }],
+    ["Send now", "send", {}],
+  ])("is in the email %s freezes, its following slug with it", async (_, path, timing) => {
+    const id = await makeDraft({ subject: "Owls", markdown: "first draft" });
+    // A D1 handle on which the editor saves the post just before the freeze's first write: the
+    // route has read the post on its first revision by then, and the save moves it on.
+    const db = env.DB;
+    let saved = false;
+    const racing = new Proxy(db, {
+      get(target, prop) {
+        if (prop === "batch") {
+          return async (stmts: D1PreparedStatement[]) => {
+            if (!saved) {
+              saved = true;
+              const post = (await getPost(db, id))!;
+              await updatePost(db, post, { subject: "Hawks", markdown: "second draft" }, "editor");
+            }
+            return target.batch(stmts);
+          };
+        }
+        const value = Reflect.get(target, prop);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    const res = await fetchOn({ ...env, DB: racing } as AppEnv, `/api/posts/${id}/${path}`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ ...timing, email_only: true, slug_auto: true }),
+    });
+
+    expect(res.status).toBe(201);
+    const send = (await sendsDb.getActiveSendForPost(env.DB, id))!;
+    expect(send.subject).toBe("Hawks");
+    expect(send.rendered_html).toContain("second draft");
+    expect(send.rendered_html).not.toContain("first draft");
+    const post = (await getPost(env.DB, id))!;
+    // The slug follows the subject the freeze rendered, not the one the route read.
+    expect([post.status, post.subject, post.slug, post.email_only]).toEqual([
+      "scheduled",
+      "Hawks",
+      "hawks",
+      true,
+    ]);
   });
 });

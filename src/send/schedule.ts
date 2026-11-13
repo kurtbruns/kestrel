@@ -20,6 +20,7 @@ import { listImages } from "../db/images";
 import type { PostRow } from "../db/posts";
 import {
   getCurrentRevision,
+  getPost,
   isSlugCollision,
   type PublishingInput,
   publishingChanges,
@@ -30,6 +31,7 @@ import {
   canceledAt,
   cancelStmt,
   type FrozenRender,
+  freezeGuard,
   getActiveSendForPost,
   getSend,
   insertScheduledSendStmt,
@@ -40,7 +42,6 @@ import {
   rescheduleStmt,
   type SendRow,
   sendExists,
-  settingsVersionIs,
   stampSendsOfPostStmt,
 } from "../db/sends";
 import { readSettings, readTimeZone } from "../db/settings";
@@ -139,70 +140,69 @@ export async function requireTimeZone(db: D1Database): Promise<string> {
   return zone;
 }
 
-/** How many times a freeze re-reads and re-renders when the settings changed under it.
- *  A template save landing in that gap is rare; a couple of retries settles it. */
+/** How many times a freeze reads and renders before it gives up: a template or identity
+ *  save, or a save of the post, landing between its read and its write sends it round
+ *  again. Either is rare in that gap; a couple of retries settles it. */
 const FREEZE_RETRIES = 3;
 
 /** The refusal for a post that already has its one active send (SPEC §6). */
 const ACTIVE_SEND_EXISTS =
   "This post already has a send scheduled or going out. Edit its schedule or cancel it instead.";
 
+/** The post's settings a freeze sets beside its lock: resolved already, or resolved from the
+ *  post as the freeze last read it, for a change whose slug follows the subject. */
+export type FreezeSettings = PublishingInput | ((post: PostRow) => Promise<PublishingInput>);
+
 /** Create a scheduled Send from the post's current content and lock the post. `postSettings`, when
- *  given, sets the post's listing and slug in the same batch (SPEC §4, §5), already resolved
- *  by the caller: they are not part of the render, so they land beside the lock rather than in
- *  the frozen copy, and a refused freeze changes neither. `recorded` is the act this freeze is, a
- *  schedule or Send now, and who took it, which the same batch adds to the send's log of acts
- *  (SPEC §6, §11); null records none, as a fixture does. `requested` is the local time the fire
- *  time was asked in, kept beside it (SPEC §6), or null for an exact moment. */
+ *  given, sets the post's listing and slug in the same batch (SPEC §4, §5), resolved by the caller,
+ *  or by the function it passes, against the post as each attempt read it: they are not part of
+ *  the render, so they land beside the lock rather than in the frozen copy, and a refused freeze
+ *  changes neither. `recorded` is the act this freeze is, a schedule or Send now, and who took it,
+ *  which the same batch adds to the send's log of acts (SPEC §6, §11); null records none, as a
+ *  fixture does. `requested` is the local time the fire time was asked in, kept beside it
+ *  (SPEC §6), or null for an exact moment.
+ *
+ *  The frozen copy is the post's revision at the lock (SPEC §6). `post` is the row the caller
+ *  read, and a save can land after that read: the batch lands only while the post is still on
+ *  the revision rendered, and when it has moved on the freeze reads the post again and renders
+ *  that, so a save landing just before the schedule or just after the caller's read ends the
+ *  same way, the send and the post on one revision, the latest. */
 export async function freeze(
   env: AppEnv,
   config: Config,
   post: PostRow,
   fireAt: number,
-  postSettings: PublishingInput = {},
+  postSettings: FreezeSettings = {},
   recorded: { act: "schedule" | "send_now"; by: Actor } | null = null,
   requested: RequestedLocalTime | null = null,
 ): Promise<SendRow> {
-  const active = await getActiveSendForPost(env.DB, post.id);
-  if (active) {
-    throw await activeSendExists(env, active);
-  }
-  if (post.status !== "draft") {
-    throw refusal(
-      "post_not_draft",
-      post.status === "sent"
-        ? "This post has already been sent, so it can’t be scheduled again."
-        : "This post is already scheduled. Edit its schedule or cancel it instead.",
-    );
-  }
-  // The subject is the one field the reader sees in their inbox (SPEC §6). One
-  // check here covers both Schedule and Send-now and both clients (editor + API);
-  // whitespace-only counts as empty.
-  if (!post.subject.trim()) {
-    throw refusal("subject_required", "Add a subject before you schedule or send this post.", {
-      field: "subject",
-    });
-  }
-
+  let current = post;
+  let postMoved = false;
   for (let attempt = 0; attempt < FREEZE_RETRIES; attempt++) {
-    // Render with the settings as they stand, and remember which: the insert below
-    // lands only while the settings row is still at this version. A template or
-    // identity save that commits in between (a re-make of every scheduled send, SPEC
-    // §9) would otherwise leave this new send on the older look, unlisted; instead
-    // the insert changes zero rows and the freeze renders again with the new settings.
+    // Every read of the post is held to the same refusals, so a save that emptied the subject,
+    // or a freeze of the same post that won, refuses as it would have on the first read.
+    await requireFreezable(env, current);
+    const input = typeof postSettings === "function" ? await postSettings(current) : postSettings;
+    // Render with the settings and the post as they stand, and remember which: the batch below
+    // lands only while the settings row is still at this version and the post still on this
+    // revision. A template or identity save that commits in between (a re-make of every
+    // scheduled send, SPEC §9) would otherwise leave this new send on the older look, unlisted,
+    // and a save of the post would leave it on content the post has left; instead the batch
+    // changes zero rows and the freeze reads and renders again.
     const { settings, version } = await readSettings(env.DB);
-    const rendered = await renderPost(env, config, post, resolveBranding(settings, config));
+    const rendered = await renderPost(env, config, current, resolveBranding(settings, config));
+    const revision = unwrap(current.current_revision, "rendered revision");
     const audience = await audienceCount(env.DB);
 
     const now = Date.now();
     const id = newId();
-    const settingsVersion = version ?? 0;
-    // The post's settings land only with the lock, under the same settings guard, and stamp
-    // the post's earlier sends, whose views carry them too (SPEC §8).
-    const listing = publishingChanges(post, postSettings)
+    const guard = freezeGuard(version ?? 0, current.id, revision);
+    // The post's settings land only with the lock, under the same guard, and stamp the post's
+    // earlier sends, whose views carry them too (SPEC §8).
+    const listing = publishingChanges(current, input)
       ? [
-          setPublishingStmt(env.DB, post, postSettings, settingsVersionIs(settingsVersion)),
-          stampSendsOfPostStmt(env.DB, post.id),
+          setPublishingStmt(env.DB, current, input, guard),
+          stampSendsOfPostStmt(env.DB, current.id, guard),
         ]
       : [];
     let results: D1Result[];
@@ -213,22 +213,15 @@ export async function freeze(
           {
             ...rendered,
             id,
-            post_id: post.id,
+            post_id: current.id,
             fire_at: fireAt,
             recipient_count: audience,
             requested,
           },
           now,
-          settingsVersion,
+          guard,
         ),
-        setPostStatusStmt(
-          env.DB,
-          post.id,
-          "draft",
-          "scheduled",
-          now,
-          settingsVersionIs(settingsVersion),
-        ),
+        setPostStatusStmt(env.DB, current.id, "draft", "scheduled", now, guard),
         ...listing,
         ...(recorded
           ? [
@@ -250,7 +243,7 @@ export async function freeze(
         throw slugRefusal("slug_taken");
       }
       if (isActiveSendConflict(err)) {
-        const winner = await getActiveSendForPost(env.DB, post.id);
+        const winner = await getActiveSendForPost(env.DB, current.id);
         throw winner
           ? await activeSendExists(env, winner)
           : refusal("active_send_exists", ACTIVE_SEND_EXISTS);
@@ -260,18 +253,54 @@ export async function freeze(
     if ((results[0]?.meta.changes ?? 0) > 0) {
       log.info("send.scheduled", {
         sendId: id,
-        postId: post.id,
+        postId: current.id,
         fireAt: new Date(fireAt).toISOString(),
         act: recorded?.act,
         ...(recorded ? whoActed(recorded.by) : {}),
       });
       return unwrap(await getSend(env.DB, id), "send");
     }
+    // Nothing landed: the settings moved, or the post did. Read the post again, so the next
+    // attempt renders its content as it now stands; a post deleted in the gap is gone.
+    const fresh = await getPost(env.DB, current.id);
+    if (!fresh) {
+      throw notFound("post");
+    }
+    postMoved = fresh.current_revision !== revision;
+    current = fresh;
   }
+  // The same remedy either way, so the same code, with the cause in its words (docs/API.md).
   throw refusal(
     "settings_changed",
-    "The template or the publication’s details changed while this was being scheduled. Try again.",
+    postMoved
+      ? "The post was saved while this was being scheduled. Try again."
+      : "The template or the publication’s details changed while this was being scheduled. Try again.",
   );
+}
+
+/** The refusals a post is held to before anything is frozen, on every read of it a freeze
+ *  makes: one active send, a draft, and a subject. */
+async function requireFreezable(env: AppEnv, post: PostRow): Promise<void> {
+  const active = await getActiveSendForPost(env.DB, post.id);
+  if (active) {
+    throw await activeSendExists(env, active);
+  }
+  if (post.status !== "draft") {
+    throw refusal(
+      "post_not_draft",
+      post.status === "sent"
+        ? "This post has already been sent, so it can’t be scheduled again."
+        : "This post is already scheduled. Edit its schedule or cancel it instead.",
+    );
+  }
+  // The subject is the one field the reader sees in their inbox (SPEC §6). One
+  // check here covers both Schedule and Send-now and both clients (editor + API);
+  // whitespace-only counts as empty.
+  if (!post.subject.trim()) {
+    throw refusal("subject_required", "Add a subject before you schedule or send this post.", {
+      field: "subject",
+    });
+  }
 }
 
 /** The refusal for a post that already has its one active send, carrying that send. */

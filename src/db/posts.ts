@@ -77,8 +77,8 @@ function fromStored<T extends PostRow>(row: Stored<T>): T {
 
 /**
  * Move a post between lifecycle states by compare-and-swap, as a statement so the
- * freeze can batch the lock with its send insert. `guard` (the settings-version
- * predicate the insert carries) keeps the two in step: neither lands without the other.
+ * freeze can batch the lock with its send insert. `guard` (the predicate the insert
+ * carries, `freezeGuard`) keeps the two in step: neither lands without the other.
  */
 export function setPostStatusStmt(
   db: D1Database,
