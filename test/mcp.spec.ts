@@ -2,7 +2,7 @@ import { createExecutionContext, SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import type { McpTool } from "../shared/mcp";
-import { formatInTimeZone } from "../shared/time_zone";
+import { formatInTimeZone, formatLocalTime, parseLocalTime, wallAt } from "../shared/time_zone";
 import { createRouter } from "../src/app";
 import { type AppEnv, getConfig } from "../src/env";
 import { HttpError } from "../src/lib/errors";
@@ -123,6 +123,7 @@ describe("the tools are a curated set over the API's routes (SPEC §11)", () => 
       "delete_draft",
       "send_test",
       "schedule_send",
+      "send_now",
       "reschedule_send",
       "cancel_send",
       "resolve_send",
@@ -156,6 +157,7 @@ describe("the tools are a curated set over the API's routes (SPEC §11)", () => 
       destructiveHint: true,
       openWorldHint: true,
     });
+    expect(byName.get("send_now")).toMatchObject({ destructiveHint: true, openWorldHint: true });
     expect(byName.get("save_draft")).toMatchObject({ destructiveHint: false });
     expect(byName.get("change_post_settings")).toMatchObject({
       destructiveHint: true,
@@ -252,14 +254,14 @@ describe("the tools are a curated set over the API's routes (SPEC §11)", () => 
   });
 
   it("stops a call that sends a route a field its tool doesn't declare for it", () => {
-    const def = TOOL_DEFS.find((d) => d.name === "schedule_send") as ToolDef;
-    const send = { method: "POST", path: "/api/posts/:id/send" } as const;
+    // change_post_settings calls two routes, and picks `id` for only one of them.
+    const def = TOOL_DEFS.find((d) => d.name === "change_post_settings") as ToolDef;
+    const settings = { method: "PUT", path: "/api/posts/:id/settings" } as const;
+    const time = { method: "GET", path: "/api/time" } as const;
     expect(
-      undeclaredField(def, send, { params: { id: "p" }, body: { email_only: true } }),
+      undeclaredField(def, settings, { params: { id: "p" }, body: { email_only: true } }),
     ).toBeNull();
-    expect(undeclaredField(def, send, { params: { id: "p" }, body: { fire_at: "x" } })).toBe(
-      "body fire_at",
-    );
+    expect(undeclaredField(def, time, { params: { id: "p" } })).toBe("path id");
   });
 
   it("reads each argument's schema and words from its route", async () => {
@@ -267,7 +269,7 @@ describe("the tools are a curated set over the API's routes (SPEC §11)", () => 
     const schedule = tools.find((t) => t.name === "schedule_send");
     const props = schedule?.inputSchema.properties as Record<string, { description: string }>;
     expect(Object.keys(props)).toEqual(["id", "fire_at", "time_zone", "email_only"]);
-    expect(schedule?.inputSchema.required).toEqual(["id"]);
+    expect(schedule?.inputSchema.required).toEqual(["id", "fire_at"]);
     expect(schedule?.inputSchema.additionalProperties).toBe(false);
     const op = operationOf(manifestDocument(), {
       method: "POST",
@@ -275,8 +277,11 @@ describe("the tools are a curated set over the API's routes (SPEC §11)", () => 
     });
     const fireAt = op?.requestBody?.content["application/json"]?.schema.properties?.fire_at;
     expect(props.fire_at?.description).toBe(
-      `${fireAt?.description} Omit it for the soonest. A time the publisher names is a local time with no offset.`,
+      `${fireAt?.description} A time the publisher names is a local time with no offset.`,
     );
+    const now = tools.find((t) => t.name === "send_now");
+    expect(Object.keys(now?.inputSchema.properties ?? {})).toEqual(["id", "email_only"]);
+    expect(now?.inputSchema.required).toEqual(["id"]);
     // Each schema stands alone: an object it names is under its own `$defs`.
     for (const t of tools) {
       const text = JSON.stringify(t.inputSchema);
@@ -412,10 +417,42 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
       client: "claude",
     });
     expect((await callOk("cancel_send", { id: scheduled.send.id })).send.status).toBe("canceled");
-    const now = await callOk("schedule_send", { id: post.id });
+    const now = await callOk("send_now", { id: post.id });
     expect(now.send.status).toBe("scheduled");
     const listed = await callOk("list_sends", { status: "scheduled" });
     expect(listed.sends.map((s: { id: string }) => s.id)).toEqual([now.send.id]);
+  });
+
+  it("never sends at the soonest unless asked by name: schedule_send takes a time, and send_now none", async () => {
+    const post = (await callOk("save_draft", { subject: "When", markdown: "x" })).post;
+    // A time zone with no time is Schedule's own refusal of the missing fire_at.
+    const noTime = await callTool("schedule_send", { id: post.id, time_zone: "Australia/Sydney" });
+    expect(noTime.isError).toBe(true);
+    expect(noTime.text).toMatch(
+      /^Refused: HTTP 400 bad_request\. fire_at is required\. Send a local time /,
+    );
+    expect(noTime.text).toMatch(/\nFix: `fire_at`\.$/);
+    const bare = await callTool("schedule_send", { id: post.id });
+    expect(bare.isError).toBe(true);
+    expect(bare.text).toMatch(/^Refused: HTTP 400 bad_request\. fire_at is required\. /);
+    const zoned = await callTool("send_now", { id: post.id, time_zone: "Australia/Sydney" });
+    expect(zoned).toEqual({
+      isError: true,
+      text: "`time_zone` isn't an argument send_now takes; it takes `id`, `email_only`.",
+    });
+    expect((await callOk("list_sends", {})).sends).toEqual([]);
+    expect((await callOk("get_post", { id: post.id })).post.status).toBe("draft");
+
+    const local = new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10);
+    const both = await callOk("schedule_send", {
+      id: post.id,
+      fire_at: `${local}T09:00`,
+      time_zone: "Australia/Sydney",
+    });
+    expect(both.send.status).toBe("scheduled");
+    expect(formatLocalTime(wallAt(Date.parse(both.send.fire_at), "Australia/Sydney"))).toBe(
+      formatLocalTime(parseLocalTime(`${local}T09:00`)!),
+    );
   });
 
   it("changes a post's listing and address, in any state, and says when an address is taken", async () => {

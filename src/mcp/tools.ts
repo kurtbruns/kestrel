@@ -477,6 +477,21 @@ const PAGE_NOTE = `This tool reads ${TOOL_PAGE} unless told.`;
 const NEXT_NOTE = "Pass `next_offset` for the next page.";
 
 /** The curated tools, in the order `tools/list` lists them: reads, then writes. */
+/** What schedule_send and send_now answer: the send as scheduled, and when it fires in words. */
+function scheduled(api: Api, a: Answer): ToolResult {
+  if (!a.ok) {
+    return refused(a);
+  }
+  const r = a.body as ScheduleResponse & { idempotent?: true };
+  return data({
+    send: sendBrief(r.send, null),
+    read_back: r.read_back,
+    warnings: r.warnings,
+    ...(r.idempotent ? { already_scheduled: true } : {}),
+    editor: api.editor(`/edit/${encodeURIComponent(r.send.post_id)}`),
+  });
+}
+
 export const TOOL_DEFS: ToolDef[] = [
   {
     name: "search_posts",
@@ -891,38 +906,42 @@ export const TOOL_DEFS: ToolDef[] = [
     name: "schedule_send",
     title: "Schedule a post",
     description:
-      "Schedule the post's send at `fire_at`, or, with no `fire_at`, for the soonest it can go: one minimum lead out (the editor's Send now). Either way it waits out the review window, cancelable until it fires. Only when the publisher asks, after telling them whether the post goes in the public archive (`email_only`). Then tell them when it fires in `read_back`'s words, `fire_at_local` and `fire_at_in`, and how to cancel, and offer a test of the scheduled send, the frozen copy that will fire; if the test shows a problem, cancel, fix the draft, and schedule again.",
+      "Schedule the post's send at `fire_at`, the time the publisher names; for the soonest it can go, use send_now instead. It waits out the review window, cancelable until it fires. Only when the publisher asks, after telling them whether the post goes in the public archive (`email_only`). Then tell them when it fires in `read_back`'s words, `fire_at_local` and `fire_at_in`, and how to cancel, and offer a test of the scheduled send, the frozen copy that will fire; if the test shows a problem, cancel, fix the draft, and schedule again.",
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
-    routes: [SCHEDULE_POST, SEND_NOW],
+    routes: [SCHEDULE_POST],
     args: {
-      id: pick([SCHEDULE_POST, SEND_NOW], "path", "id"),
+      id: pick(SCHEDULE_POST, "path", "id"),
       fire_at: pick(SCHEDULE_POST, "body", "fire_at", {
-        required: false,
-        note: "Omit it for the soonest. A time the publisher names is a local time with no offset.",
+        note: "A time the publisher names is a local time with no offset.",
       }),
       time_zone: pick(SCHEDULE_POST, "body", "time_zone"),
-      email_only: pick([SCHEDULE_POST, SEND_NOW], "body", "email_only"),
+      email_only: pick(SCHEDULE_POST, "body", "email_only"),
     },
     async run(api, args) {
-      const settings = only(args, ["email_only"]);
-      const a =
-        args.fire_at === undefined
-          ? await api.call(SEND_NOW, { params: { id: args.id }, body: settings })
-          : await api.call(SCHEDULE_POST, {
-              params: { id: args.id },
-              body: { ...settings, ...only(args, ["fire_at", "time_zone"]) },
-            });
-      if (!a.ok) {
-        return refused(a);
-      }
-      const r = a.body as ScheduleResponse & { idempotent?: true };
-      return data({
-        send: sendBrief(r.send, null),
-        read_back: r.read_back,
-        warnings: r.warnings,
-        ...(r.idempotent ? { already_scheduled: true } : {}),
-        editor: api.editor(`/edit/${encodeURIComponent(r.send.post_id)}`),
+      const a = await api.call(SCHEDULE_POST, {
+        params: { id: args.id },
+        body: only(args, ["email_only", "fire_at", "time_zone"]),
       });
+      return scheduled(api, a);
+    },
+  },
+  {
+    name: "send_now",
+    title: "Send a post now",
+    description:
+      "Schedule the post's send for the soonest it can go: one minimum lead out, the editor's Send now. It waits out the review window like any send, cancelable until it fires; for a time the publisher names, use schedule_send instead. Only when the publisher asks to send now, after telling them whether the post goes in the public archive (`email_only`). Then tell them when it fires in `read_back`'s words, `fire_at_local` and `fire_at_in`, and how to cancel, and offer a test of the scheduled send, the frozen copy that will fire; if the test shows a problem, cancel, fix the draft, and send again.",
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    routes: [SEND_NOW],
+    args: {
+      id: pick(SEND_NOW, "path", "id"),
+      email_only: pick(SEND_NOW, "body", "email_only"),
+    },
+    async run(api, args) {
+      const a = await api.call(SEND_NOW, {
+        params: { id: args.id },
+        body: only(args, ["email_only"]),
+      });
+      return scheduled(api, a);
     },
   },
   {
