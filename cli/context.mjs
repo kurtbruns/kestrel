@@ -28,6 +28,10 @@
  * A change the operator didn't take at the upgrade it came in isn't offered again: the next
  * upgrade's base is the release they were on, which already had it.
  *
+ * An upgrade can skip releases, so the base may be several releases back. When there is a change
+ * to take, the closing line names that range of changelog sections, since each section counts
+ * only its own release's changes.
+ *
  * Releases before this one wrote a header line into each file, naming the release and a hash,
  * which Claude read in every session. The first run under this release removes that line, and
  * nothing else, from each file (`stripHeaders`), and says so in one line after every file's
@@ -445,8 +449,13 @@ function answerEachFile(argv, root) {
     );
   }
   if (pending > 0) {
+    // Named as a range, since a changelog section counts only its own release's changes: an
+    // upgrade that skips releases can see more files here than the target's section names.
+    const since = from?.version && from.version !== PACKAGE.version ? from.version : null;
     say(
-      "The changelog says what changed in Claude's context and why, and marks a change that bears on safety.",
+      since
+        ? `The changelog says what changed in Claude's context and why, and marks a change that bears on safety, in its sections for each release after ${since} up to ${PACKAGE.version}.`
+        : "The changelog says what changed in Claude's context and why, and marks a change that bears on safety.",
     );
   }
 }
