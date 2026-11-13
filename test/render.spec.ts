@@ -665,3 +665,26 @@ describe("the publication name in the email (SPEC §9)", () => {
     expect(brandingFrom("news@send.example").branding.senderName).toBe("");
   });
 });
+
+// The text part is read from the content HTML, where the renderer escaped what the
+// publisher wrote, so undoing that escaping has to give back exactly what they wrote.
+describe("the text part shows what the post says (SPEC §10)", () => {
+  async function textOf(markdown: string): Promise<string> {
+    return (await render({ post: post(), revision: revision(markdown), images: [] }, config)).text;
+  }
+
+  it("shows a literal HTML entity as written, as the HTML part does", async () => {
+    const text = await textOf("Write `&lt;div&gt;` to show a tag.");
+    expect(text).toContain("Write &lt;div&gt; to show a tag.");
+  });
+
+  it("shows each literal entity it knows as written, not as its character", async () => {
+    const text = await textOf("`&quot;` and `&#39;` and `&nbsp;` and `&amp;`");
+    expect(text).toContain("&quot; and &#39; and &nbsp; and &amp;");
+  });
+
+  it("shows the characters the renderer escapes as themselves", async () => {
+    const text = await textOf(`a < b, a > b, AT&T, "quoted" and it's`);
+    expect(text).toContain(`a < b, a > b, AT&T, "quoted" and it's`);
+  });
+});

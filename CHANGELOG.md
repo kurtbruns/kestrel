@@ -28,6 +28,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
+- An email's plain-text part shows an HTML entity a post writes out as text, such as `&lt;div&gt;` in a code span, as written, as the HTML part does. It showed the character instead, `<div>`, so a post about escaping said something different in its two parts.
 - Every `kestrel` command answers `--help` and `-h` with its usage and does nothing else, and refuses an option it doesn't know, a flag missing its value, or an extra argument, with its usage, before anything runs. The `kestrel` client answers an instance command's `--help` itself, with nothing installed or fetched. Before, `kestrel init --help` wrote an instance into the folder, `kestrel sync-migrations --help` wrote `migrations/`, a misspelled `--name` on `init` was ignored so the Worker, database, and bucket took the folder's name, and `reset --help` took `--help` for a port. `kestrel api` also no longer cuts a long refusal's body short when its output is piped.
 - A configuration set name with a space or line break around it in `SES_CONFIGURATION_SET` is now sent as the name **Settings → Email provider** checks, trimmed. Until now Settings found the set and showed nothing wrong while every email named it with the padding, which SES is expected to refuse, holding the first send. A name of only spaces is now no configuration set to the sending too, as it already was to Settings.
 

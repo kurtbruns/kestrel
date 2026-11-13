@@ -4,14 +4,19 @@ function stripTags(s: string): string {
   return s.replace(/<[^>]+>/g, "");
 }
 
+/**
+ * Undo the renderer's escaping. `&amp;` goes last: a literal entity the post shows, such as
+ * `&lt;`, is `&amp;lt;` here, and decoding `&amp;` first would hand `&lt;` to the next step,
+ * which would turn it into `<`. No step may read another step's output.
+ */
 function decodeEntities(s: string): string {
   return s
     .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
 }
 
 export function htmlToText(html: string): string {
