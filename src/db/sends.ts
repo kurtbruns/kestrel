@@ -23,6 +23,7 @@ import type { Actor } from "../../shared/who_acted";
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
 import { log } from "../lib/log";
 import { unwrap } from "../lib/unwrap";
+import { IN_AUDIENCE } from "./subscribers";
 
 // The row shapes live in shared/ so the editor reads the same definitions; the names
 // here are the Worker's own.
@@ -1505,12 +1506,12 @@ export async function completeSend(
 
 /**
  * Fix the send's audience, once (SPEC §6, §8): confirmed subscribers minus suppressed
- * addresses as they stand now, inserted as `pending` deliveries. One batch, so one
- * transaction: the insert runs only while `audience_resolved_at` is null and the same
- * batch sets it, so a crash can't leave a send marked resolved without its rows, and a
- * resolved send is never widened by a later run. The same write sets `recipient_count`
- * to the audience at fire and `c_pending` to the rows queued. True when this call
- * resolved it, false when it already was.
+ * addresses as they stand now, by `IN_AUDIENCE`, the one statement of that rule, inserted
+ * as `pending` deliveries. One batch, so one transaction: the insert runs only while
+ * `audience_resolved_at` is null and the same batch sets it, so a crash can't leave a send
+ * marked resolved without its rows, and a resolved send is never widened by a later run.
+ * The same write sets `recipient_count` to the audience at fire and `c_pending` to the
+ * rows queued. True when this call resolved it, false when it already was.
  */
 export async function resolveAudience(
   db: D1Database,
@@ -1523,8 +1524,7 @@ export async function resolveAudience(
         `INSERT OR IGNORE INTO deliveries (send_id, email, status, attempts, updated_at)
            SELECT ?, s.email, 'pending', 0, ?
              FROM subscribers s
-            WHERE s.status = 'confirmed'
-              AND s.email NOT IN (SELECT email FROM suppressions)
+            WHERE ${IN_AUDIENCE}
               AND EXISTS (SELECT 1 FROM sends WHERE id = ? AND audience_resolved_at IS NULL)`,
       )
       .bind(sendId, now, sendId),

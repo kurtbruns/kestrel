@@ -8,7 +8,7 @@ import { type AppEnv, getConfig } from "../src/env";
 import { CONFIRM_COOLDOWN_MS, CONFIRM_LINK_TTL_MS } from "../src/lib/time";
 import * as providers from "../src/providers";
 import type { EmailProvider, SendBatchResult } from "../src/providers/types";
-import { resetDatabase, seedConfirmed, sendingWorks } from "./support/fixtures";
+import { resetDatabase, seedConfirmed, sendAudience, sendingWorks } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
 import { fetchWith } from "./support/worker_env";
@@ -155,7 +155,7 @@ describe("subscribers: double opt-in (I1) and unsubscribe (I2)", () => {
     const res = await confirmEmail(confirmedEmail);
     expect(res.status).toBe(200);
 
-    const audience = await subs.audienceEmails(env.DB);
+    const audience = await sendAudience();
     expect(audience).toContain(confirmedEmail);
     expect(audience).not.toContain(pendingEmail);
   });
@@ -164,7 +164,7 @@ describe("subscribers: double opt-in (I1) and unsubscribe (I2)", () => {
     const email = uniqueEmail();
     await publicSubscribe(email);
     await confirmEmail(email);
-    expect(await subs.audienceEmails(env.DB)).toContain(email);
+    expect(await sendAudience()).toContain(email);
 
     // one-click unsubscribe via the durable unsub token (empty body, no html accept)
     const unsub = await SELF.fetch(`${base}/unsubscribe?token=${await unsubTokenFor(email)}`, {
@@ -173,17 +173,17 @@ describe("subscribers: double opt-in (I1) and unsubscribe (I2)", () => {
     expect(unsub.status).toBe(200);
     // Kept as the reader's own leaving (SPEC §7, Leaving).
     expect((await subs.getByEmail(env.DB, email))?.unsubscribe_cause).toBe("reader");
-    expect(await subs.audienceEmails(env.DB)).not.toContain(email);
+    expect(await sendAudience()).not.toContain(email);
 
     // re-subscribe once the cooldown has passed → pending again (NOT auto-confirmed)
     await ageConfirmation(email, CONFIRM_COOLDOWN_MS);
     await publicSubscribe(email);
     expect((await subs.getByEmail(env.DB, email))?.status).toBe("pending");
-    expect(await subs.audienceEmails(env.DB)).not.toContain(email);
+    expect(await sendAudience()).not.toContain(email);
 
     // confirm with the fresh confirm token → back in the audience
     await confirmEmail(email);
-    expect(await subs.audienceEmails(env.DB)).toContain(email);
+    expect(await sendAudience()).toContain(email);
   });
 
   it("the unsubscribe link in already-sent mail still works after unsubscribe→resubscribe", async () => {
@@ -193,7 +193,7 @@ describe("subscribers: double opt-in (I1) and unsubscribe (I2)", () => {
 
     // The durable token that past posts embedded in their one-click unsubscribe link.
     const deliveredUnsubToken = await unsubTokenFor(email);
-    expect(await subs.audienceEmails(env.DB)).toContain(email);
+    expect(await sendAudience()).toContain(email);
 
     // Leave, then return (re-subscribe rotates the confirm token) and re-confirm.
     await SELF.fetch(`${base}/unsubscribe?token=${deliveredUnsubToken}`, { method: "POST" });
@@ -202,14 +202,14 @@ describe("subscribers: double opt-in (I1) and unsubscribe (I2)", () => {
     // The durable unsub token is NOT rotated by a re-subscribe.
     expect(await unsubTokenFor(email)).toBe(deliveredUnsubToken);
     await confirmEmail(email);
-    expect(await subs.audienceEmails(env.DB)).toContain(email);
+    expect(await sendAudience()).toContain(email);
 
     // The OLD post's unsubscribe link (same durable token) still resolves and unsubscribes.
     const late = await SELF.fetch(`${base}/unsubscribe?token=${deliveredUnsubToken}`, {
       method: "POST",
     });
     expect(late.status).toBe(200);
-    expect(await subs.audienceEmails(env.DB)).not.toContain(email);
+    expect(await sendAudience()).not.toContain(email);
   });
 
   it("a confirm token cannot be used to unsubscribe", async () => {
@@ -217,12 +217,12 @@ describe("subscribers: double opt-in (I1) and unsubscribe (I2)", () => {
     await publicSubscribe(email);
     const confirmTok = await tokenFor(email);
     await confirmToken(confirmTok);
-    expect(await subs.audienceEmails(env.DB)).toContain(email);
+    expect(await sendAudience()).toContain(email);
 
     // POSTing the confirm token to /unsubscribe must not resolve a subscriber → 400.
     const res = await SELF.fetch(`${base}/unsubscribe?token=${confirmTok}`, { method: "POST" });
     expect(res.status).toBe(400);
-    expect(await subs.audienceEmails(env.DB)).toContain(email);
+    expect(await sendAudience()).toContain(email);
   });
 
   it("confirm with a bad token returns 400, on the page and on the button", async () => {
@@ -384,7 +384,7 @@ describe("subscribing: no flood, and no reveal of who is on the list", () => {
       // Pending, and still read as having left by that cause, until they confirm.
       const pending = await subs.getByEmail(env.DB, email);
       expect([pending?.status, pending?.unsubscribe_cause]).toEqual(["pending", cause]);
-      expect(await subs.audienceEmails(env.DB)).not.toContain(email);
+      expect(await sendAudience()).not.toContain(email);
 
       await confirmEmail(email);
       const back = await subs.getByEmail(env.DB, email);
@@ -393,7 +393,7 @@ describe("subscribing: no flood, and no reveal of who is on the list", () => {
         null,
         "kestrel",
       ]);
-      expect(await subs.audienceEmails(env.DB)).toContain(email);
+      expect(await sendAudience()).toContain(email);
     }
   });
 
@@ -781,7 +781,7 @@ describe("subscribers: admin + suppressions", () => {
     const email = uniqueEmail();
     await publicSubscribe(email);
     await confirmEmail(email);
-    expect(await subs.audienceEmails(env.DB)).toContain(email);
+    expect(await sendAudience()).toContain(email);
 
     const add = await SELF.fetch(`${base}/api/suppressions`, {
       method: "POST",
@@ -798,7 +798,7 @@ describe("subscribers: admin + suppressions", () => {
       },
       added: true,
     });
-    expect(await subs.audienceEmails(env.DB)).not.toContain(email);
+    expect(await sendAudience()).not.toContain(email);
     // The block is the publisher's; the subscriber's consent is untouched.
     expect((await subs.getByEmail(env.DB, email))?.status).toBe("confirmed");
 
@@ -808,7 +808,7 @@ describe("subscribers: admin + suppressions", () => {
       body: JSON.stringify({ email, reason: "manual" }),
     });
     expect(await readJson(lifted)).toEqual({ email, lifted: true });
-    expect(await subs.audienceEmails(env.DB)).toContain(email);
+    expect(await sendAudience()).toContain(email);
   });
 });
 
@@ -1116,7 +1116,7 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     const email = uniqueEmail();
     await publicSubscribe(email);
     await confirmEmail(email);
-    expect(await subs.audienceEmails(env.DB)).toContain(email);
+    expect(await sendAudience()).toContain(email);
 
     const id = (await subs.getByEmail(env.DB, email))!.id;
     const res = await SELF.fetch(`${base}/api/subscribers/${id}/unsubscribe`, {
@@ -1125,7 +1125,7 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     });
     expect(res.status).toBe(200);
     expect(await readJson(res)).toMatchObject({ subscriber: { status: "unsubscribed" } });
-    expect(await subs.audienceEmails(env.DB)).not.toContain(email);
+    expect(await sendAudience()).not.toContain(email);
   });
 });
 
