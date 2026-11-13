@@ -6,19 +6,7 @@ In this guide, you first read what changed and check that your repository is cle
 
 ## 1. Check before you change anything
 
-A release can ask you to change a setting or a record before it runs. The changelog says so, release by release. The upgrade also has to start from a clean repository.
-
-1. Find the version your repository pins. The upgrade starts from this one:
-
-    ```bash
-    npm pkg get "dependencies.@kurtbruns/kestrel"
-    ```
-
-    It prints the version, such as `1.24.0`.
-
-1. Check that it's the version you run. In the editor, open the **Docs** tab: the foot of its contents list shows the version, then the commit. If the two differ, an earlier upgrade was committed but not deployed, or a deploy came from somewhere else. Find out which before you go on.
-
-1. Read the [release notes](https://github.com/kurtbruns/kestrel/releases) for every version after yours, up to the one you're moving to. Each release opens with an **Upgrading from…** paragraph that says what to do. Its **Breaking** entries say what changed underneath you. If you're more than one release behind, read [Skipping releases](#skipping-releases) too.
+The upgrade starts from a clean repository. A release can also ask you to change a setting or a record before it runs, and the changelog says so, release by release.
 
 1. Check that your repository is clean, so the upgrade's commit holds only the upgrade and going back undoes nothing else:
 
@@ -27,6 +15,16 @@ A release can ask you to change a setting or a record before it runs. The change
     ```
 
     It has to say `nothing to commit, working tree clean`. If it lists anything, untracked files included, the upgrade waits until it doesn't.
+
+1. Find the version your repository pins. It's the version you run, and the one the upgrade starts from:
+
+    ```bash
+    npm pkg get "dependencies.@kurtbruns/kestrel"
+    ```
+
+    It prints the version, such as `1.24.0`.
+
+1. Read the [release notes](https://github.com/kurtbruns/kestrel/releases) for every version after yours, up to the one you're moving to. Each release opens with an **Upgrading from…** paragraph that says what to do. Its **Breaking** entries say what changed underneath you. If you're more than one release behind, read [Skipping releases](#skipping-releases) too.
 
 Nothing has changed yet. If you aren't going on, stop here.
 
