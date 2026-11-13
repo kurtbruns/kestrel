@@ -41,17 +41,20 @@ export function errorText(name, err) {
 }
 
 /**
- * Run a command under `name` (`kestrel init`): a CliError it throws is printed on stderr and
- * the exit status set to 1; anything else is a fault, and is thrown on.
+ * Run a command under `name` (`kestrel init`), answering whether it ran through: a CliError it
+ * throws is printed on stderr, the exit status set to 1, and false answered; anything else is
+ * a fault, and is thrown on.
  */
 export async function runCommand(name, command) {
   try {
     await command();
+    return true;
   } catch (err) {
     if (!(err instanceof CliError)) {
       throw err;
     }
     console.error(errorText(name, err));
     process.exitCode = 1;
+    return false;
   }
 }

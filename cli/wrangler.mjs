@@ -28,8 +28,10 @@ export function runWrangler(args, options = {}) {
     stdio: "inherit",
     ...options,
   });
+  // Only `kestrel dev` runs it this way, and carries on without it, so this is one of its
+  // warnings, under its tag, rather than an error that ends a command.
   if (run.error) {
-    console.error(`[kestrel] could not run wrangler: ${run.error.message}`);
+    console.warn(`[dev] could not run wrangler: ${run.error.message}`);
   }
   return run.status ?? 1;
 }

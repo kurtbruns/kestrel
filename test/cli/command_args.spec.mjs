@@ -12,12 +12,13 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseApiArgs } from "../../packages/kestrel/lib/api.mjs";
 import { asksForHelp, readArgs } from "../../packages/kestrel/lib/args.mjs";
-import { COMMANDS } from "../../packages/kestrel/lib/commands.mjs";
-import { UsageError } from "../../packages/kestrel/lib/errors.mjs";
+import { COMMANDS, main } from "../../packages/kestrel/lib/commands.mjs";
+import { CliError, runCommand, UsageError } from "../../packages/kestrel/lib/errors.mjs";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const BIN = join(ROOT, "bin", "kestrel.mjs");
 const CLIENT_BIN = join(ROOT, "packages", "kestrel", "bin", "kestrel.mjs");
+const SIMULATE_SEND = join(ROOT, "scripts", "simulate-send.mjs");
 
 let dir;
 beforeEach(() => {
@@ -69,28 +70,24 @@ describe("readArgs", () => {
 });
 
 describe("--help on each command", () => {
-  it.each([
-    ["init", "Usage: kestrel init"],
-    ["sync-migrations", "Usage: kestrel sync-migrations"],
-    ["check-context", "Usage: kestrel check-context"],
-    ["seed", "Usage: kestrel seed"],
-    ["reset", "Usage: kestrel reset"],
-    ["dev", "Usage: kestrel dev"],
-    ["login", "Usage: kestrel login"],
-    ["logout", "Usage: kestrel logout"],
-    ["api", "Usage: kestrel api"],
-  ])("kestrel %s --help prints its usage, exits 0, and writes nothing", (command, usage) => {
-    for (const flag of ["--help", "-h"]) {
-      const r = kestrel(BIN, command, flag);
-      expect(r.code).toBe(0);
-      expect(r.out.startsWith(usage)).toBe(true);
-      expect(r.err).toBe("");
-      expect(readdirSync(dir)).toEqual([]);
-    }
+  // One process per test: a test that starts several can outlast the timeout on a busy machine.
+  const NAMES = COMMANDS.map((c) => c.name);
+
+  it.each(
+    NAMES.flatMap((name) => [
+      [name, "--help"],
+      [name, "-h"],
+    ]),
+  )("kestrel %s %s prints its usage, exits 0, and writes nothing", (command, flag) => {
+    const r = kestrel(BIN, command, flag);
+    expect(r.code).toBe(0);
+    expect(r.out.startsWith(`Usage: kestrel ${command}`)).toBe(true);
+    expect(r.err).toBe("");
+    expect(readdirSync(dir)).toEqual([]);
   });
 
-  it.each(["init", "dev", "sync-migrations", "check-context", "seed", "reset"])(
-    "answers kestrel %s --help from the client with no instance installed, fetching nothing",
+  it.each(NAMES)(
+    "answers kestrel %s --help from the client, with no instance installed and nothing fetched",
     (command) => {
       const r = kestrel(CLIENT_BIN, command, "--help");
       expect(r.code).toBe(0);
@@ -99,14 +96,6 @@ describe("--help on each command", () => {
       expect(readdirSync(dir)).toEqual([]);
     },
   );
-
-  it("answers the client's own commands the same way", () => {
-    for (const command of ["login", "logout", "api"]) {
-      const r = kestrel(CLIENT_BIN, command, "--help");
-      expect(r.code).toBe(0);
-      expect(r.out.startsWith(`Usage: kestrel ${command}`)).toBe(true);
-    }
-  });
 });
 
 describe("a command line a command can't run", () => {
@@ -163,5 +152,68 @@ describe("kestrel --help", () => {
     const r = kestrel(BIN, "frob");
     expect(r.code).toBe(1);
     expect(r.err.startsWith('kestrel: unknown command "frob"\n\nkestrel ')).toBe(true);
+  });
+});
+
+describe("refusals a command makes itself, before anything runs", () => {
+  it("refuses kestrel dev --port, since PORT sets the origins with it, and starts nothing", () => {
+    const r = kestrel(BIN, "dev", "--port", "9000");
+    expect(r.code).toBe(1);
+    expect(r.err.split("\n")[0]).toBe(
+      "kestrel dev: set the port with the PORT variable, not --port: `PORT=9000 kestrel dev`",
+    );
+    expect(readdirSync(dir)).toEqual([]);
+  });
+
+  it("refuses kestrel login with no instance named, with its usage", () => {
+    const r = kestrel(BIN, "login");
+    expect(r.code).toBe(1);
+    expect(
+      r.err.startsWith("kestrel login: name the instance to sign in to\n\nUsage: kestrel login"),
+    ).toBe(true);
+  });
+});
+
+describe("npm run simulate-send's arguments", () => {
+  it("answers --help with its usage and reaches no server", () => {
+    const r = kestrel(SIMULATE_SEND, "--help");
+    expect(r.code).toBe(0);
+    expect(r.out.startsWith("Usage: npm run simulate-send")).toBe(true);
+    expect(r.err).toBe("");
+  });
+
+  it.each([
+    [["--punctaul"], "simulate-send: unknown option --punctaul"],
+    [["--in"], "simulate-send: --in needs a value"],
+    [["8787", "8788"], 'simulate-send: unexpected argument "8788"'],
+  ])("refuses %j before looking for a server", (args, first) => {
+    const r = kestrel(SIMULATE_SEND, ...args);
+    expect(r.code).toBe(1);
+    expect(r.err.split("\n")[0]).toBe(first);
+    expect(r.err).toContain("Usage: npm run simulate-send");
+  });
+});
+
+describe("the shared dispatch", () => {
+  it("refuses to start a script that has no runner for a command", async () => {
+    const { init: _init, ...rest } = Object.fromEntries(COMMANDS.map((c) => [c.name, () => {}]));
+    await expect(main(["--help"], { version: "9.9.9", run: rest })).rejects.toThrow(
+      "no runner for init",
+    );
+  });
+
+  it("answers whether a command ran through, printing a CliError and setting the status", async () => {
+    try {
+      expect(await runCommand("kestrel x", () => {})).toBe(true);
+      expect(process.exitCode).toBeUndefined();
+      expect(
+        await runCommand("kestrel x", () => {
+          throw new CliError("no");
+        }),
+      ).toBe(false);
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = undefined;
+    }
   });
 });

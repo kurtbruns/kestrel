@@ -53,10 +53,10 @@ watcher.on("exit", (code) => {
   }
 });
 
-await runCommand("kestrel dev", () =>
+const started = await runCommand("kestrel dev", () =>
   devCommand(process.argv.slice(2), { onStop: () => watcher.kill() }),
 );
 // Refused before wrangler started: the watcher is all that would keep this running.
-if (process.exitCode) {
+if (!started) {
   watcher.kill();
 }

@@ -25,25 +25,29 @@ export function asksForHelp(argv) {
   return options.includes("--help") || options.includes("-h");
 }
 
-/** Node's words for a refused command line, in this CLI's shorter form. */
+/**
+ * Node's words for a refused command line, in this CLI's shorter form. They are read from
+ * Node's English message, so a message this doesn't recognize is given as Node wrote it, never
+ * with a blank where the option's name should be. An unexpected positional never reaches here:
+ * positionals are always allowed, and `readArgs` counts them itself.
+ */
 function usageMessage(err) {
-  const named = /'([^']+)'/.exec(err.message)?.[1] ?? "";
-  switch (err.code) {
-    case "ERR_PARSE_ARGS_UNKNOWN_OPTION":
-      return `unknown option ${named}`;
-    case "ERR_PARSE_ARGS_INVALID_OPTION_VALUE":
-      // Node names the option as `--name <value>`, or `-n, --name` for one with a short form.
-      return /argument missing/.test(err.message)
-        ? `${named
-            .replace(/ <value>$/, "")
-            .split(", ")
-            .at(-1)} needs a value`
-        : err.message;
-    case "ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL":
-      return `unexpected argument "${named}"`;
-    default:
-      return err.message;
+  const named = /'([^']+)'/.exec(err.message)?.[1];
+  if (named && err.code === "ERR_PARSE_ARGS_UNKNOWN_OPTION") {
+    return `unknown option ${named}`;
   }
+  // Node names the option as `--name <value>`, or `-n, --name` for one with a short form.
+  if (
+    named &&
+    err.code === "ERR_PARSE_ARGS_INVALID_OPTION_VALUE" &&
+    /argument missing/.test(err.message)
+  ) {
+    return `${named
+      .replace(/ <value>$/, "")
+      .split(", ")
+      .at(-1)} needs a value`;
+  }
+  return err.message;
 }
 
 /**
