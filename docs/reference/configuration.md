@@ -72,7 +72,7 @@ Vars go in the environment block's `vars`. Every value is a string.
 
     A name SES can't find in the region holds every list send until it's fixed. **Settings → Email provider** says so in red within about ten minutes, without sending anything, and does the same when the set's sending is turned off, as long as the app's key may call `ses:GetConfigurationSet`.
 
-    An instance set up by an earlier release may store the name as a secret instead. The app reads it the same way either way, so it needs no change. To move it here, delete the secret first, then add the var and deploy: `npx wrangler secret delete SES_CONFIGURATION_SET --env production`.
+    An instance set up by an earlier release may store the name as a secret instead. The app reads it the same way either way, so it needs no change. To move it here, add the var and deploy. The deploy replaces the stored secret of that name with the var and says nothing about it, so the secret is then gone. To go back to a secret, remove the var and deploy first, then store the secret. Cloudflare refuses a secret with the name of a deployed var.
 
 - `FROM_ADDRESS` required with a real provider
 
