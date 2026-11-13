@@ -169,7 +169,9 @@ export interface Config {
   sesMaxSendRate: number;
   /** `SES_MAX_SEND_RATE` as set, or null when unset: a cap on the account's own rate (SPEC §12). */
   sesMaxSendRateSetting: number | null;
-  /** `SES_CONFIGURATION_SET`, or undefined when unset. */
+  /** `SES_CONFIGURATION_SET` trimmed, or undefined when unset or blank: the one name the
+   *  adapter sends under and the account check reads, so the check can't pass a name SES
+   *  never sees. */
   sesConfigurationSet?: string;
   /** Cloudflare Access: both set, enabling JWT validation, or neither (one alone is refused). */
   accessTeamDomain?: string;

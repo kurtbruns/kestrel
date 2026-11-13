@@ -482,10 +482,9 @@ export class SesProvider implements EmailProvider {
     const traits = sesTraits(config);
     this.maxBatch = traits.maxBatch;
     this.maxRequestRate = traits.maxRequestRate;
-    this.configurationSet =
-      env.SES_CONFIGURATION_SET && env.SES_CONFIGURATION_SET.length > 0
-        ? env.SES_CONFIGURATION_SET
-        : undefined;
+    // The name the account check reads (getConfig, trimmed), so a set it finds is the set
+    // every email names.
+    this.configurationSet = config.sesConfigurationSet;
     this.client = new AwsClient({
       accessKeyId: env.AWS_ACCESS_KEY_ID ?? "",
       secretAccessKey: env.AWS_SECRET_ACCESS_KEY ?? "",
