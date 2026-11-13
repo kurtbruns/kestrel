@@ -732,7 +732,14 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
   it("refuses an empty address, naming the field, rather than stopping on an error", async () => {
     expect(await callTool("get_subscriber", { email: "" })).toEqual({
       isError: true,
-      text: "Refused: HTTP 400 bad_request. email is empty; give the address to look up, or leave it out to list subscribers.\nNext move: Fix the request.\nFix: `email`.",
+      text: "Refused: HTTP 400 bad_request. email is empty; give the exact address to filter by, or leave it out.\nNext move: Fix the request.\nFix: `email`.",
+    });
+  });
+
+  it("says so when no subscriber has the address", async () => {
+    expect(await callTool("get_subscriber", { email: "nobody@example.com" })).toEqual({
+      isError: true,
+      text: "No subscriber has the address nobody@example.com.",
     });
   });
 

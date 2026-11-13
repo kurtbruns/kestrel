@@ -1851,7 +1851,7 @@ export function createRouter({
       title: "List subscribers",
       summary: "List subscribers, filtered, sorted, and paged, with the list's counts.",
       description:
-        "`status` filters the roster by consent, and `suppressed` is a facet over it. An address suppressed with no subscriber is listed only by `GET /api/suppressions`. Pass `email` instead to look up one subscriber.",
+        "`status` filters the roster by consent, and `suppressed` is a facet over it. An address suppressed with no subscriber is listed only by `GET /api/suppressions`. `email` narrows it to one exact address, so a lookup by address answers a list of one subscriber or none.",
       query: [
         {
           name: "status",
@@ -1873,7 +1873,7 @@ export function createRouter({
         {
           name: "email",
           description:
-            "An exact address: answers `{ subscriber }`, as `GET /api/subscribers/:id` does, in place of the list, or 404 when no one has it. An `email` given empty, or only spaces, is refused (400, `field` `email`), never read as absent.",
+            "One exact address, matched as addresses are stored (trimmed, any case): the list holds that subscriber, or no one. It combines with the other filters. An `email` that is empty, only spaces, or not an address is refused (400, `field` `email`).",
         },
       ],
       returns: {

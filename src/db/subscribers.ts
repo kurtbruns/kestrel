@@ -346,6 +346,8 @@ export async function signupOnly(db: D1Database, email: string): Promise<Subscri
  *  "hide" drops them, absent leaves both. */
 export interface SubscriberFilter {
   status?: SubscriberStatus;
+  /** One exact address, already normalized as stored: the row with it, or none. */
+  email?: string;
   search?: string;
   suppressed?: SuppressedFilter;
 }
@@ -376,6 +378,10 @@ function subscriberWhere(filter: SubscriberFilter): { clause: string; binds: unk
   if (filter.status) {
     where.push("status = ?");
     binds.push(filter.status);
+  }
+  if (filter.email !== undefined) {
+    where.push("email = ?");
+    binds.push(filter.email);
   }
   if (filter.suppressed === "only") {
     where.push("email IN (SELECT email FROM suppressions)");

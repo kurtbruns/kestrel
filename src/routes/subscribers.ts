@@ -60,33 +60,36 @@ export async function create(c: RequestContext): Promise<Response> {
   return json(response, outcome.action === "created" ? 201 : 200);
 }
 
-export async function list(c: RequestContext): Promise<Response> {
-  // Present is a lookup, absent is the list: an `email` with nothing in it is refused, never
-  // read as absent, so a caller that built the URL from a blank value isn't answered the list.
-  const emailQuery = c.url.searchParams.get("email");
-  if (emailQuery !== null) {
-    const email = normalizeEmail(emailQuery);
-    if (!email) {
-      throw fieldError(
-        "email",
-        "email is empty; give the address to look up, or leave it out to list subscribers.",
-      );
-    }
-    const subscriber = await subscribers.getByEmail(c.env.DB, email);
-    if (!subscriber) {
-      throw notFound("subscriber");
-    }
-    const body: SubscriberResponse = {
-      subscriber: await subscribers.withSuppression(c.env.DB, subscriber),
-    };
-    return json(body);
+/**
+ * The list's `email` filter, normalized as addresses are stored. Present but empty, or not an
+ * address, is refused naming the field rather than read as no filter or as a filter that can
+ * match no one, so a caller that built the URL from a bad value learns so.
+ */
+function emailFilter(raw: string | null): string | undefined {
+  if (raw === null) {
+    return undefined;
   }
+  const email = normalizeEmail(raw);
+  if (!email) {
+    throw fieldError(
+      "email",
+      "email is empty; give the exact address to filter by, or leave it out.",
+    );
+  }
+  if (!isValidEmail(email)) {
+    throw fieldError("email", "email isn’t an address; give the exact address to filter by.");
+  }
+  return email;
+}
+
+export async function list(c: RequestContext): Promise<Response> {
   // The router has held `status` and `suppressed` to the values the manifest declares.
   // Suppression is an overlay, not a status, so it's its own facet (see subscriberWhere):
   // "only" narrows to suppressed addresses, "hide" drops them, absent leaves both.
   const q = c.url.searchParams;
   const filter: subscribers.SubscriberFilter = {
     status: (q.get("status") as SubscriberStatus | null) ?? undefined,
+    email: emailFilter(q.get("email")),
     search: q.get("search") ?? undefined,
     suppressed: (q.get("suppressed") as subscribers.SuppressedFilter | null) ?? undefined,
   };
