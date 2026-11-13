@@ -202,28 +202,40 @@ export async function updatePost(c: RequestContext): Promise<Response> {
     return json(required, 428, revisionHeaders(post));
   }
   if (post.current_revision && base !== post.current_revision) {
-    const current = await posts.getCurrentRevision(c.env.DB, post);
-    const stale: StaleRevisionError = {
-      error: "stale_revision",
-      message: "This draft changed since you loaded it. Read it again before saving.",
-      current_revision: post.current_revision,
-      updated_at: post.updated_at,
-      author: current?.author ?? null,
-      author_client: current?.client ?? null,
-      post: await answered(c, post),
-      markdown: current?.markdown ?? "",
-    };
-    return json(stale, 409, revisionHeaders(post));
+    return staleRevision(c, post);
   }
-  const { post: updated, revision } = await slugGuarded(body.input, () =>
+  const written = await slugGuarded(body.input, () =>
     posts.updatePost(c.env.DB, post, body.input, ...authorship(c)),
   );
+  if (!written) {
+    // The post moved between the read above and the write, which wrote nothing: scheduled
+    // since (refused as not a draft), or saved by another writer (stale, with what they saved).
+    return staleRevision(c, await requireDraft(c));
+  }
+  const { post: updated, revision } = written;
   const saved: PostSavedResponse = {
     post: await answered(c, updated),
     subject_slug_held: await posts.subjectSlugHeld(c.env.DB, updated),
     revision_id: revision.id,
   };
   return json(saved, 200, revisionHeaders(updated));
+}
+
+/** The 409 a save from an older revision gets (SPEC §4), carrying the post as it stands, its
+ *  current Markdown, and who saved it, so the writer can merge rather than overwrite. */
+async function staleRevision(c: RequestContext, post: posts.PostRow): Promise<Response> {
+  const current = await posts.getCurrentRevision(c.env.DB, post);
+  const stale: StaleRevisionError = {
+    error: "stale_revision",
+    message: "This draft changed since you loaded it. Read it again before saving.",
+    current_revision: post.current_revision,
+    updated_at: post.updated_at,
+    author: current?.author ?? null,
+    author_client: current?.client ?? null,
+    post: await answered(c, post),
+    markdown: current?.markdown ?? "",
+  };
+  return json(stale, 409, revisionHeaders(post));
 }
 
 export async function deletePost(c: RequestContext): Promise<Response> {
