@@ -117,7 +117,7 @@ D1 keeps a history of your database, called Time Travel, for 30 days on Workers 
 
     It prints a bookmark for the database's current state. Copy it, and keep it until the upgrade checks out.
 
-    It also prints a command to restore to that bookmark. Don't use it: it leaves out `--env production`. Without it, wrangler aims at the database named at the top level of your `wrangler.jsonc`, your local development one, not your app's. To go back, use the command in [Go back](#go-back), which names production.
+    It also prints a command to restore to that bookmark. Don't use it: it leaves out `--env production`. Without it, wrangler aims at the database the top level of your `wrangler.jsonc` names, its development entry, not production's. To go back, use the command in [Go back](#go-back), which names production.
 
 ## 4. Apply the database changes
 
