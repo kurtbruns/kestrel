@@ -74,6 +74,7 @@ import { activeSend, postAction } from "./actions";
 import { createAutosave } from "./autosave";
 import { DirtyTracker } from "./dirty";
 import { formatEdit } from "./format";
+import { LatestRender, type Render } from "./latest_render";
 import { trackSaves } from "./pending_save";
 import {
   destinationHtml,
@@ -275,12 +276,14 @@ export async function renderEditor(
             <button type="button" class="ctab active" data-tab="edit" data-text="Edit" role="tab" aria-selected="true"><span class="ctab-label">${icon("editable")}Edit</span></button>
             <button type="button" class="ctab" data-tab="preview" data-text="Preview" role="tab" aria-selected="false"><span class="ctab-label">${icon("preview")}Preview</span></button>
           </div>
+          <span class="preview-status" id="previewStatus" role="status"></span>
           <div class="toolbar" role="toolbar" aria-label="Formatting">${toolbarHtml}</div>
         </div>
         <div class="composer-body${locked ? " locked" : ""}" id="composerBody">
           <pre class="md-hl" id="mdHl" aria-hidden="true"><code></code></pre>
           <textarea id="f-markdown" class="editor"${locked ? null : html` placeholder="Type your post in Markdown…"`}${ro}>${markdown}</textarea>
-          <iframe id="previewFrame" class="preview" sandbox="${EMAIL_FRAME_SANDBOX}" title="Email preview" hidden></iframe>
+          <iframe class="preview" sandbox="${EMAIL_FRAME_SANDBOX}" title="Email preview" hidden></iframe>
+          <iframe class="preview staging" sandbox="${EMAIL_FRAME_SANDBOX}" title="Email preview" hidden></iframe>
         </div>
         ${
           locked
@@ -316,7 +319,6 @@ export async function renderEditor(
   nameTab();
   const ta = $<HTMLTextAreaElement>("#f-markdown");
   const toolbarEl = $(".toolbar", root);
-  const previewFrame = $<HTMLIFrameElement>("#previewFrame");
 
   // Syntax-highlight overlay: a transparent <textarea> over a highlighted
   // <pre>, kept in scroll sync — the template editor's scaffolding, tokenizing Markdown.
@@ -468,7 +470,9 @@ export async function renderEditor(
 
   // --- tabs ---
   const tabs = $$<HTMLButtonElement>(".ctab", root);
+  let tab: ComposerTab = "edit";
   function showTab(name: ComposerTab) {
+    tab = name;
     for (const t of tabs) {
       const on = t.dataset.tab === name;
       t.classList.toggle("active", on);
@@ -476,7 +480,7 @@ export async function renderEditor(
     }
     ta.hidden = name !== "edit";
     mdHl.hidden = name !== "edit"; // the highlight layer travels with the textarea
-    previewFrame.hidden = name !== "preview";
+    front.hidden = name !== "preview";
     toolbarEl.classList.toggle("off", name !== "edit");
     // The image foot dims with the toolbar: a click on Preview would insert into a hidden
     // textarea behind a preview that doesn't change. A drop still lands (it switches to Edit).
@@ -484,6 +488,7 @@ export async function renderEditor(
     if (name === "edit") {
       syncMdScroll();
     }
+    paintPreview();
   }
 
   const warningsEl = $("#warnings");
@@ -496,44 +501,169 @@ export async function renderEditor(
     );
   }
 
+  // --- the preview ---
+  // The Preview tab shows the server's render of what is saved (I5), fetched ahead: after each
+  // save, and when the pointer or focus reaches the tab, so a click usually finds it ready
+  // (./latest_render.ts). Two frames take turns: `front` is the one the tab shows, and `back`
+  // loads the next render out of sight, swapping in only once it has loaded and been sized, so
+  // the email never blanks or jumps. An older render is never shown as the current one: until
+  // the fresh one swaps in, it is dimmed under "Updating…".
+  let [front, back] = $$<HTMLIFrameElement>("iframe.preview", root) as [
+    HTMLIFrameElement,
+    HTMLIFrameElement,
+  ];
+  const previewStatus = $("#previewStatus");
+  const renders = new LatestRender(async () => {
+    // The page carries only the email, so what the render found wrong with it is read beside
+    // it: a broken image reference reads as text in the email itself.
+    const [page, { warnings }] = await Promise.all([
+      apiText(`/api/posts/${id}/preview`, { signal }),
+      api<PreviewResponse>(`/api/posts/${id}/preview.json`, { signal }),
+    ]);
+    return { html: page, warnings };
+  });
+  let shown: Render | null = null; // in `front`
+  let loading: Render | null = null; // loading in `back`
+  let previewFailed = false;
+  /** The key of what is saved: its revision ("" for a post never saved since it had one). */
+  const savedKey = () => (locked ? post.current_revision : revisions.base) ?? "";
+  /** The saved revision the text on screen is, or null while an edit is unsaved, a save is in
+   *  flight, or a save is paused by the out-of-date banner. */
+  function savedRevision(): string | null {
+    return !locked && (dirty.dirty || saving || conflicted) ? null : savedKey();
+  }
+  /** Whether the front frame is the render of what is saved now. */
+  function previewCurrent(): boolean {
+    return shown !== null && shown === renders.latest && shown.revision === savedRevision();
+  }
+  function paintPreview() {
+    const current = previewCurrent();
+    const updating = tab === "preview" && !current;
+    front.classList.toggle("updating", updating);
+    previewStatus.textContent = !updating ? "" : previewFailed ? "Not up to date" : "Updating…";
+    if (tab === "preview" && current && shown) {
+      showWarnings(shown.warnings);
+    }
+  }
+  /** Load `r` into the back frame, out of sight; once it has loaded it is sized and swapped in. */
+  function stage(r: Render) {
+    if (shown === r || loading === r) {
+      return;
+    }
+    loading = r;
+    const frame = back;
+    frame.style.height = "";
+    frame.classList.add("staging");
+    frame.hidden = false;
+    frame.onload = () => {
+      // The frame's first empty page can answer before the render's: wait for the render.
+      if (loading !== r || frame !== back || frame.contentDocument?.URL !== "about:srcdoc") {
+        return; // or a newer render took this frame over
+      }
+      loading = null;
+      let height = "";
+      try {
+        const doc = frame.contentDocument;
+        if (doc) {
+          openLinksInNewTab(doc);
+          // The email's link is the post's unlisted link, which never changes. The
+          // editor holds only an unpublished post: once its send starts, the editor hands
+          // off to the send page (and a web version opened after that goes on to the
+          // public page itself).
+          previewOpensWebVersion(doc, post.unlisted_url, webVersionUrl);
+          height = `${doc.body.scrollHeight + 24}px`;
+        }
+      } catch {}
+      swap(r, height);
+    };
+    frame.srcdoc = r.html;
+  }
+  function swap(r: Render, height: string) {
+    // The page scrolls, not the frame (it is as tall as the email), so a swap keeps every
+    // scrolled ancestor where it was: a reader partway down stays there.
+    const scrolled: [Element, number][] = [];
+    for (let el = front.parentElement; el; el = el.parentElement) {
+      if (el.scrollTop) {
+        scrolled.push([el, el.scrollTop]);
+      }
+    }
+    back.style.height = height;
+    back.classList.remove("staging");
+    back.hidden = tab !== "preview";
+    front.hidden = true;
+    front.classList.add("staging");
+    front.classList.remove("updating");
+    front.style.height = "";
+    [front, back] = [back, front];
+    for (const [el, top] of scrolled) {
+      el.scrollTop = top;
+    }
+    shown = r;
+    previewFailed = false;
+    paintPreview();
+  }
+  /** Fetch the render of what is saved, if it isn't held already, and load it out of sight. */
+  function renderAhead() {
+    const revision = savedRevision();
+    if (revision === null || previewCurrent()) {
+      return;
+    }
+    renders
+      .want(revision)
+      .then((r) => r && stage(r))
+      .catch(() => {}); // in the background; a click on Preview asks again and says why
+  }
+  // Each Preview opened since the editor mounted, so an older one's render doesn't land late.
+  let previewRound = 0;
   async function showPreview() {
     showTab("preview");
+    if (previewCurrent()) {
+      return; // rendered ahead: shown as it is
+    }
+    const round = ++previewRound;
     try {
       if (!locked) {
         await saveDraft(true);
       }
-      // The page carries only the email, so what the render found wrong with it is read beside
-      // it: a broken image reference reads as text in the email itself.
-      const [page, { warnings }] = await Promise.all([
-        apiText(`/api/posts/${id}/preview`),
-        api<PreviewResponse>(`/api/posts/${id}/preview.json`, { signal }),
-      ]);
-      previewFrame.srcdoc = page;
-      previewFrame.onload = () => {
-        try {
-          const doc = previewFrame.contentDocument;
-          if (doc) {
-            openLinksInNewTab(doc);
-            // The email's link is the post's unlisted link, which never changes. The
-            // editor holds only an unpublished post: once its send starts, the editor hands
-            // off to the send page (and a web version opened after that goes on to the
-            // public page itself).
-            previewOpensWebVersion(doc, post.unlisted_url, webVersionUrl);
-            previewFrame.style.height = `${doc.body.scrollHeight + 24}px`;
-          }
-        } catch {}
-      };
-      showWarnings(warnings);
+      // Paused by the out-of-date banner, the server holds another writer's newer text, which
+      // a render now shows: nothing held is the render of it.
+      if (!locked && conflicted) {
+        renders.forget();
+      }
+      // A write landing while the render is in flight (our own save, a pause's flush) makes
+      // that render unattributable, so it is asked for again once the post is still.
+      let r: Render | null = null;
+      for (let tries = 0; !r && tries < 3; tries++) {
+        r = await renders.want(savedKey());
+      }
+      if (r && round === previewRound) {
+        stage(r);
+      }
     } catch (e) {
       if (signal.aborted || foundGone(e)) {
         return;
       }
+      previewFailed = true;
+      paintPreview();
       toast(message(e));
     }
   }
   for (const t of tabs) {
     t.onclick = () => (t.dataset.tab === "preview" ? showPreview() : showTab("edit"));
   }
+  const previewTab = $<HTMLButtonElement>(".ctab[data-tab='preview']", root);
+  // The pointer reaching the tab, or focus landing on it, is the cue a click is coming: the
+  // render starts then if no save started it. A press starts the save a click would, ahead
+  // of the click.
+  previewTab.addEventListener("pointerenter", renderAhead);
+  previewTab.addEventListener("focus", renderAhead);
+  previewTab.addEventListener("pointerdown", () => {
+    if (!locked && tab === "edit" && dirty.dirty && !conflicted) {
+      saveDraft(true).catch(() => {}); // the save cue says why; the click asks again
+    } else {
+      renderAhead();
+    }
+  });
   // A scheduled post opens on Preview: the preview is the copy that will send, and the
   // Edit tab is read-only, so it is somewhere the publisher goes deliberately and finds
   // the way out written on it (DESIGN §3).
@@ -695,6 +825,8 @@ export async function renderEditor(
     // dirty and goes with the next one.
     const fields = collect();
     const sent = JSON.stringify(fields);
+    renders.writing(); // a render in flight now can't say which revision it is of
+    let landed = false;
     try {
       const body: PostEditBody = { ...fields, base_revision: revisions.base };
       const { post: u, subject_slug_held } = await api<PostSavedResponse>(`/api/posts/${id}`, {
@@ -712,6 +844,7 @@ export async function renderEditor(
       if (!silent) {
         toast("Saved");
       }
+      landed = true;
       return "saved";
     } catch (e) {
       // A stale-revision 409 isn't a plain failure: another writer got there first.
@@ -766,6 +899,9 @@ export async function renderEditor(
     } finally {
       saving = false;
       refreshDirty();
+      if (landed) {
+        renderAhead(); // so Preview is ready when it's opened
+      }
     }
   }
   if (saveBtn) {
@@ -1246,6 +1382,9 @@ export async function renderEditor(
           if (signal.aborted) {
             return;
           }
+          // The render changes with the post's images, not only its revision: even with its
+          // placeholder gone, the stored image is one the post now has.
+          renders.forget();
           // The stored name on both sides: the name sent can hold a bracket that would end the alt text.
           const next = replacePlaceholder(
             textState(),

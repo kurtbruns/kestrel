@@ -2844,6 +2844,27 @@ body.web-mode .content {
   background: #fff;
   display: block;
 }
+/* The Preview tab's next render loads in the second frame out of sight, at the composer's
+   width so it can be measured, and swaps in once sized (DESIGN §3). */
+.composer-body iframe.preview.staging {
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+/* An older render shown while the fresh one loads, never passed off as the current email. */
+.composer-body iframe.preview.updating {
+  opacity: 0.45;
+}
+.preview-status {
+  align-self: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+.preview-status:empty {
+  display: none;
+}
 /* A scheduled post's Edit tab (DESIGN §3): the text stays fully legible, selectable, and
    copyable (the fields are readonly, not disabled, since a disabled textarea cannot even be
    selected), on the recessed surface Settings uses for a read-only card (`.set-card.sunken`);
