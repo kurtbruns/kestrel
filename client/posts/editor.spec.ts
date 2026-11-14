@@ -3095,6 +3095,7 @@ describe("editor view", () => {
       { path: "/api/posts/p1", reply: server.get },
       { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
       uploads.route,
+      ...previewRoutes(),
     ]);
     pasteImage("owl.png");
     await vi.advanceTimersByTimeAsync(30_000); // autosave has saved the placeholder line
@@ -3116,6 +3117,7 @@ describe("editor view", () => {
       { path: "/api/posts/p1", reply: server.get },
       { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
       uploads.route,
+      ...previewRoutes(),
     ]);
     pasteImage("owl.png");
     await vi.advanceTimersByTimeAsync(30_000); // autosave has saved the placeholder line
