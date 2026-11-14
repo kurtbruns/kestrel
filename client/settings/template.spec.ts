@@ -59,6 +59,13 @@ describe("starting templates", () => {
     }
   });
 
+  it("sets a quote off with the built-in template's grey bar, light and dark", () => {
+    for (const ex of Object.values(EMAIL_TEMPLATE_EXAMPLES)) {
+      expect(ex.html).toMatch(/\.email blockquote \{[^}]*border-left: 3px solid #d4d4d8;/);
+      expect(ex.html).toMatch(/\.email blockquote \{[^}]*border-left-color: #3f3f46 !important;/);
+    }
+  });
+
   it("marks each footer's inbox links as email-only, and the sample (the email) shows them with no tags", () => {
     for (const ex of Object.values(EMAIL_TEMPLATE_EXAMPLES)) {
       expect(ex.html).toContain("{{ if .IsEmail }}");

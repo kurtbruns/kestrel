@@ -10,6 +10,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Changed
+
+- The built-in template, and both starting templates, now set a quote (`> …` in Markdown) off as a pull quote: a grey bar on its left, a little padding, and muted text, lighter in dark mode. Emails already sent or frozen keep the look they were made with, and a scheduled send picks it up only if a template or identity change re-makes it. A custom template keeps its own styles; to match, copy the `.email blockquote` rules (and their dark-mode pair) from **Start from example**.
+
 ### Fixed
 
 - A focused text field, such as a post's subject, rings flush with its border, as the body's editor does, instead of with a gap between the field's edge and the blue ring.

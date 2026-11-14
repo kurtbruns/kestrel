@@ -139,6 +139,12 @@ export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
   .email a {
     color: #3355cc;
   }
+  .email blockquote {
+    margin: 20px 0;
+    padding: 0 0 0 16px;
+    border-left: 3px solid #d4d4d8;
+    color: #52525b;
+  }
   .email .rule {
     border: 0;
     border-top: 1px solid #e4e4e7;
@@ -179,6 +185,10 @@ export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
     }
     .email a {
       color: #93c5fd !important;
+    }
+    .email blockquote {
+      border-left-color: #3f3f46 !important;
+      color: #a1a1aa !important;
     }
     .email .rule {
       border-color: #2e2e33 !important;
@@ -242,6 +252,12 @@ export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
   .email a {
     color: #3355cc;
   }
+  .email blockquote {
+    margin: 20px 0;
+    padding: 0 0 0 16px;
+    border-left: 3px solid #d4d4d8;
+    color: #52525b;
+  }
   .email .rule {
     border: 0;
     border-top: 1px solid #e4e4e7;
@@ -265,6 +281,10 @@ export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
     }
     .email a {
       color: #93c5fd !important;
+    }
+    .email blockquote {
+      border-left-color: #3f3f46 !important;
+      color: #a1a1aa !important;
     }
     .email .rule {
       border-color: #2e2e33 !important;
@@ -304,6 +324,7 @@ const EMAIL_TEMPLATE_SAMPLE_BODY =
   "<span style=\"position:absolute;top:-8px;left:10px;font:650 10px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#3355cc;background:#fff;padding:0 6px\">Your post’s Markdown renders here</span>" +
   '<h2 style="margin:0 0 10px">Lorem ipsum,</h2>' +
   '<p style="margin:0">Dolor sit amet, consectetur adipiscing elit. Proin sed ex ipsum. Suspendisse vulputate nisi et odio dapibus, quis pellentesque felis sollicitudin. Proin vel cursus enim. Phasellus sollicitudin malesuada elementum. Suspendisse euismod eros turpis, ut mollis est imperdiet ut. Sed luctus accumsan erat, at eleifend purus eleifend quis.</p>' +
+  '<blockquote><p style="margin:0">Quisque vitae nibh at lorem pulvinar tincidunt, ut fringilla magna.</p></blockquote>' +
   "</div>";
 
 // Fill logic-less {{ token }} placeholders from a flat context. {{ .Post.Body }} (the
