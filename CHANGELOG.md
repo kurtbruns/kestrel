@@ -19,7 +19,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Fixed
 
 - A focused text field, such as a post's subject, rings flush with its border, as the body's editor does, instead of with a gap between the field's edge and the blue ring.
-- In the post editor, ⌘Z and ⌘⇧Z now undo and redo a toolbar button, its shortcut, or an inserted image in one step, as they do typing. Before, any of them could not be undone and also cleared everything typed before it from the undo history.
+- In the post editor, ⌘Z and ⌘⇧Z now undo and redo a toolbar button or its shortcut in one step, as they do typing, and an inserted image in two, its placeholder and then the image. Before, any of them could not be undone and also cleared everything typed before it from the undo history.
+- Adding an image to a post shows at once: a placeholder comment goes in where you dropped, pasted, or picked it and becomes the image when the upload finishes, so a large image no longer looks like nothing happened, and several land in the order you added them. An image over 5 MB or in a format Kestrel doesn't take is refused straight away rather than after it has uploaded, and Send test email and Schedule wait while an image is still uploading.
 
 ## [1.25.0] - 2026-11-12
 
