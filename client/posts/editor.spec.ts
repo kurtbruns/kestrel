@@ -1113,6 +1113,25 @@ describe("editor view", () => {
     expect(ran).toHaveLength(5); // one step per button, nothing written around them
   });
 
+  it("takes a button's markup off again on a second click, rather than stacking it", async () => {
+    const ran = stubEditingCommands();
+    await open([{ path: "/api/posts/p1", reply: () => draft() }]);
+    const ta = body();
+    ta.setSelectionRange(2, 6); // "Owls"
+    $(".tb[data-fmt='bold']").click();
+    $(".tb[data-fmt='bold']").click();
+    expect(ta.value).toBe("# Owls\n\nHoot.");
+    expect(ta.value.slice(ta.selectionStart, ta.selectionEnd)).toBe("Owls");
+    ta.setSelectionRange(9, 9); // the caret on "Hoot."
+    $(".tb[data-fmt='ul']").click();
+    expect(ta.value).toBe("# Owls\n\n- Hoot.");
+    $(".tb[data-fmt='ol']").click(); // the other list switches it
+    expect(ta.value).toBe("# Owls\n\n1. Hoot.");
+    $(".tb[data-fmt='ol']").click();
+    expect(ta.value).toBe("# Owls\n\nHoot.");
+    expect(ran).toHaveLength(5); // each click one step the browser can undo
+  });
+
   it("refuses a toolbar edit on a scheduled post and points at the way out instead", async () => {
     const ran = stubEditingCommands();
     await open(scheduledPost().routes);

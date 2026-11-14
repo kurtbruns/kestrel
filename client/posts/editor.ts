@@ -73,6 +73,7 @@ import { bannerActedBy, whoActed } from "../who_acted";
 import { activeSend, postAction } from "./actions";
 import { createAutosave } from "./autosave";
 import { DirtyTracker } from "./dirty";
+import { formatEdit } from "./format";
 import { trackSaves } from "./pending_save";
 import {
   destinationHtml,
@@ -549,55 +550,21 @@ export async function renderEditor(
   }
 
   // --- formatting toolbar ---
-  function wrapSel(before: string, after: string, placeholder: string) {
-    const s = ta.selectionStart;
-    const e = ta.selectionEnd;
-    const sel = ta.value.slice(s, e) || placeholder;
-    replaceRange(ta, s, e, before + sel + after, {
-      start: s + before.length,
-      end: s + before.length + sel.length,
-    });
-  }
-  function prefixLines(prefix: string) {
-    const s = ta.selectionStart;
-    const e = ta.selectionEnd;
-    const start = ta.value.lastIndexOf("\n", s - 1) + 1;
-    const out = (ta.value.slice(start, e) || "")
-      .split("\n")
-      .map((l) => prefix + l)
-      .join("\n");
-    replaceRange(ta, start, e, out, { start, end: start + out.length });
-  }
+  // What a button does to the text is posts/format.ts (each toggles); here it only lands, as
+  // one edit the browser can undo.
   function applyFormat(kind: string) {
     if (locked) {
       nudge(); // reached by a toolbar click or a Cmd+B / I / K shortcut
       return;
     }
     showTab("edit");
-    if (kind === "bold") {
-      wrapSel("**", "**", "bold text");
-    } else if (kind === "italic") {
-      wrapSel("*", "*", "italic text");
-    } else if (kind === "heading") {
-      prefixLines("## ");
-    } else if (kind === "quote") {
-      prefixLines("> ");
-    } else if (kind === "ul") {
-      prefixLines("- ");
-    } else if (kind === "ol") {
-      prefixLines("1. ");
-    } else if (kind === "indent") {
-      prefixLines("  ");
-    } else if (kind === "link") {
-      wrapSel("[", "](https://)", "link text");
-    } else if (kind === "code") {
-      const s = ta.selectionStart;
-      const e = ta.selectionEnd;
-      if (s === e || ta.value.slice(s, e).includes("\n")) {
-        wrapSel("```\n", "\n```", "code");
-      } else {
-        wrapSel("`", "`", "code");
-      }
+    const edit = formatEdit(kind, {
+      text: ta.value,
+      start: ta.selectionStart,
+      end: ta.selectionEnd,
+    });
+    if (edit) {
+      replaceRange(ta, edit.start, edit.end, edit.insert, edit.select);
     }
   }
   for (const b of $$<HTMLButtonElement>(".tb[data-fmt]", root)) {
