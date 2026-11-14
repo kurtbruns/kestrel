@@ -13,6 +13,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Changed
 
 - The built-in template, and both starting templates, now set a quote (`> …` in Markdown) off as a pull quote: a grey bar on its left, a little padding, and muted text, lighter in dark mode. Emails already sent or frozen keep the look they were made with, and a scheduled send picks it up only if a template or identity change re-makes it. A custom template keeps its own styles; to match, copy the `.email blockquote` rules (and their dark-mode pair) from **Start from example**.
+- The page a reader sees after subscribing leads with what to do, "A confirmation link is on its way. Check your inbox to finish subscribing.", and then says nothing is sent to an address already subscribed, where it opened with that condition.
 
 ### Fixed
 
