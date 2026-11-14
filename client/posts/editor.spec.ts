@@ -25,8 +25,10 @@ import {
   sendSummary,
   setHidden,
   settingsResponse,
+  stubEditingCommands,
   typeInto,
   unmount,
+  unstubEditingCommands,
 } from "../test/support";
 import { clocksFor } from "../time_zone";
 import { fmt, toLocalInput } from "../ui/format";
@@ -252,6 +254,7 @@ describe("editor view", () => {
   afterEach(() => {
     fake?.restore();
     restoreHidden();
+    unstubEditingCommands();
     vi.restoreAllMocks();
     vi.useRealTimers();
     appState.session = null;
@@ -1075,6 +1078,50 @@ describe("editor view", () => {
     expect(ta.value).toMatch(/\[link text\]\(https:\/\/\)$/);
     $(".tb[data-fmt='quote']").click();
     expect(ta.value.split("\n").at(-1)).toMatch(/^> /);
+  });
+
+  it("makes each toolbar change one edit the browser can undo, as typing is, keeping the selection each sets", async () => {
+    const ran = stubEditingCommands();
+    await open([{ path: "/api/posts/p1", reply: () => draft() }]);
+    const ta = body();
+    ta.setSelectionRange(2, 6); // "Owls"
+    $(".tb[data-fmt='bold']").click();
+    expect(ran).toEqual([["insertText", "**Owls**"]]);
+    expect(ta.value).toBe("# **Owls**\n\nHoot.");
+    expect([ta.selectionStart, ta.selectionEnd]).toEqual([4, 8]); // the words, inside the marks
+    expect(document.activeElement).toBe(ta);
+    // The edit's input event is what repaints the highlight and marks the draft dirty.
+    expect($("#mdHl").textContent).toBe("# **Owls**Hoot."); // one row per line, no newlines
+    expect($("#saveStatus").textContent).toBe("Unsaved changes");
+
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+    ta.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }));
+    expect(ran.at(-1)).toEqual(["insertText", "[link text](https://)"]);
+    expect(ta.value.slice(ta.selectionStart, ta.selectionEnd)).toBe("link text");
+
+    ta.setSelectionRange(12, ta.value.length); // the line "Hoot.[link text](https://)"
+    $(".tb[data-fmt='ul']").click();
+    expect(ran.at(-1)).toEqual(["insertText", "- Hoot.[link text](https://)"]);
+    $(".tb[data-fmt='quote']").click();
+    expect(ran.at(-1)).toEqual(["insertText", "> - Hoot.[link text](https://)"]);
+    $(".tb[data-fmt='indent']").click();
+    expect(ran.at(-1)).toEqual(["insertText", "  > - Hoot.[link text](https://)"]);
+    expect(ta.value).toBe("# **Owls**\n\n  > - Hoot.[link text](https://)");
+    expect(ta.value.slice(ta.selectionStart, ta.selectionEnd)).toBe(
+      "  > - Hoot.[link text](https://)",
+    );
+    expect(ran).toHaveLength(5); // one step per button, nothing written around them
+  });
+
+  it("refuses a toolbar edit on a scheduled post and points at the way out instead", async () => {
+    const ran = stubEditingCommands();
+    await open(scheduledPost().routes);
+    const before = body().value;
+    $(".tb[data-fmt='bold']").click();
+    await vi.advanceTimersByTimeAsync(16);
+    expect(ran).toEqual([]);
+    expect(body().value).toBe(before);
+    expect($("#lockFoot").classList.contains("nudge")).toBe(true);
   });
 
   it("opens the preview: a silent save, then the rendered email into the frame", async () => {
@@ -2450,6 +2497,61 @@ describe("editor view", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(body().value).toMatch(/^\n!\[owl\.png\]\(owl\.png\)\n# Owls/);
     expect($("#toasts").textContent).toMatch(/Image added/);
+    expect($("#saveStatus").textContent).toBe("Unsaved changes");
+  });
+
+  it("inserts an uploaded image as one edit the browser can undo", async () => {
+    const ran = stubEditingCommands();
+    await open([
+      { path: "/api/posts/p1", reply: () => draft() },
+      {
+        method: "POST",
+        path: "/api/posts/p1/images",
+        reply: () => ({ image: { filename: "owl.png", url: "http://m/owl.png" } }),
+      },
+    ]);
+    body().focus();
+    body().setSelectionRange(6, 6); // after "# Owls"
+    const input = $<HTMLInputElement>("#imgInput");
+    const file = new File(["png"], "owl.png", { type: "image/png" });
+    Object.defineProperty(input, "files", { value: [file], configurable: true });
+    input.dispatchEvent(new Event("change"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(ran).toEqual([["insertText", "\n![owl.png](owl.png)\n"]]);
+    expect(body().value).toBe("# Owls\n![owl.png](owl.png)\n\n\nHoot.");
+    expect(body().selectionStart).toBe(27); // the caret after the snippet, as before
+    expect($("#saveStatus").textContent).toBe("Unsaved changes");
+  });
+
+  it("inserts an image that lands mid-subject without taking the subject's focus, so a half-typed subject isn't saved", async () => {
+    const ran = stubEditingCommands();
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+      {
+        method: "POST",
+        path: "/api/posts/p1/images",
+        reply: () => ({ image: { filename: "owl.png", url: "http://m/owl.png" } }),
+      },
+    ]);
+    body().setSelectionRange(6, 6);
+    const subject = $<HTMLInputElement>("#f-subject");
+    subject.focus(); // still typing the subject when the upload lands
+    let blurs = 0;
+    subject.addEventListener("blur", () => {
+      blurs += 1;
+    });
+    const input = $<HTMLInputElement>("#imgInput");
+    const file = new File(["png"], "owl.png", { type: "image/png" });
+    Object.defineProperty(input, "files", { value: [file], configurable: true });
+    input.dispatchEvent(new Event("change"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(body().value).toBe("# Owls\n![owl.png](owl.png)\n\n\nHoot.");
+    expect(ran).toEqual([]); // landed without the body's focus, so not as an undo step
+    expect(blurs).toBe(0);
+    expect(document.activeElement).toBe(subject);
+    expect(puts()).toHaveLength(0); // the subject's save-on-blur never ran
     expect($("#saveStatus").textContent).toBe("Unsaved changes");
   });
 

@@ -18,6 +18,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Fixed
 
 - A focused text field, such as a post's subject, rings flush with its border, as the body's editor does, instead of with a gap between the field's edge and the blue ring.
+- In the post editor, ⌘Z and ⌘⇧Z now undo and redo a toolbar button, its shortcut, or an inserted image in one step, as they do typing. Before, any of them could not be undone and also cleared everything typed before it from the undo history.
 
 ## [1.25.0] - 2026-11-12
 

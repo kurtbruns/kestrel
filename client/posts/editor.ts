@@ -84,6 +84,7 @@ import {
   showSlugRefusal,
 } from "./publishing";
 import { type Conflict, conflictFromError, RevisionTracker } from "./revisions";
+import { replaceRange } from "./text_edit";
 import { previewOpensWebVersion, webVersionHash } from "./web";
 
 const message = describeError;
@@ -552,10 +553,10 @@ export async function renderEditor(
     const s = ta.selectionStart;
     const e = ta.selectionEnd;
     const sel = ta.value.slice(s, e) || placeholder;
-    ta.value = ta.value.slice(0, s) + before + sel + after + ta.value.slice(e);
-    ta.focus();
-    ta.selectionStart = s + before.length;
-    ta.selectionEnd = s + before.length + sel.length;
+    replaceRange(ta, s, e, before + sel + after, {
+      start: s + before.length,
+      end: s + before.length + sel.length,
+    });
   }
   function prefixLines(prefix: string) {
     const s = ta.selectionStart;
@@ -565,10 +566,7 @@ export async function renderEditor(
       .split("\n")
       .map((l) => prefix + l)
       .join("\n");
-    ta.value = ta.value.slice(0, start) + out + ta.value.slice(e);
-    ta.focus();
-    ta.selectionStart = start;
-    ta.selectionEnd = start + out.length;
+    replaceRange(ta, start, e, out, { start, end: start + out.length });
   }
   function applyFormat(kind: string) {
     if (locked) {
@@ -601,7 +599,6 @@ export async function renderEditor(
         wrapSel("`", "`", "code");
       }
     }
-    markEdited();
   }
   for (const b of $$<HTMLButtonElement>(".tb[data-fmt]", root)) {
     b.onclick = () => applyFormat(b.dataset.fmt ?? "");
@@ -686,7 +683,7 @@ export async function renderEditor(
   function scheduleAutosave() {
     mine.touch();
   }
-  // Called after any edit — typed, formatted, or an inserted image.
+  // Called after any edit — typed, formatted, or an inserted image — through the body's input event.
   function markEdited() {
     if (locked) {
       return;
@@ -1230,9 +1227,8 @@ export async function renderEditor(
       const s = ta.selectionStart;
       // The stored name on both sides: the name sent can hold a bracket that would end the alt text.
       const snippet = `\n![${image.filename}](${image.filename})\n`;
-      ta.value = ta.value.slice(0, s) + snippet + ta.value.slice(s);
-      ta.selectionStart = ta.selectionEnd = s + snippet.length;
-      markEdited();
+      const caret = s + snippet.length;
+      replaceRange(ta, s, s, snippet, { start: caret, end: caret });
       toast("Image added");
     } catch (e) {
       if (!foundGone(e)) {
