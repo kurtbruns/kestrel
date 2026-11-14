@@ -2500,7 +2500,7 @@ describe("editor view", () => {
     expect($("#saveStatus").textContent).toBe("Unsaved changes");
   });
 
-  it("inserts an uploaded image as one edit the browser can undo, handing focus back to the subject", async () => {
+  it("inserts an uploaded image as one edit the browser can undo", async () => {
     const ran = stubEditingCommands();
     await open([
       { path: "/api/posts/p1", reply: () => draft() },
@@ -2510,9 +2510,8 @@ describe("editor view", () => {
         reply: () => ({ image: { filename: "owl.png", url: "http://m/owl.png" } }),
       },
     ]);
+    body().focus();
     body().setSelectionRange(6, 6); // after "# Owls"
-    const subject = $<HTMLInputElement>("#f-subject");
-    subject.focus(); // still typing the subject when the upload lands
     const input = $<HTMLInputElement>("#imgInput");
     const file = new File(["png"], "owl.png", { type: "image/png" });
     Object.defineProperty(input, "files", { value: [file], configurable: true });
@@ -2521,7 +2520,38 @@ describe("editor view", () => {
     expect(ran).toEqual([["insertText", "\n![owl.png](owl.png)\n"]]);
     expect(body().value).toBe("# Owls\n![owl.png](owl.png)\n\n\nHoot.");
     expect(body().selectionStart).toBe(27); // the caret after the snippet, as before
+    expect($("#saveStatus").textContent).toBe("Unsaved changes");
+  });
+
+  it("inserts an image that lands mid-subject without taking the subject's focus, so a half-typed subject isn't saved", async () => {
+    const ran = stubEditingCommands();
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+      {
+        method: "POST",
+        path: "/api/posts/p1/images",
+        reply: () => ({ image: { filename: "owl.png", url: "http://m/owl.png" } }),
+      },
+    ]);
+    body().setSelectionRange(6, 6);
+    const subject = $<HTMLInputElement>("#f-subject");
+    subject.focus(); // still typing the subject when the upload lands
+    let blurs = 0;
+    subject.addEventListener("blur", () => {
+      blurs += 1;
+    });
+    const input = $<HTMLInputElement>("#imgInput");
+    const file = new File(["png"], "owl.png", { type: "image/png" });
+    Object.defineProperty(input, "files", { value: [file], configurable: true });
+    input.dispatchEvent(new Event("change"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(body().value).toBe("# Owls\n![owl.png](owl.png)\n\n\nHoot.");
+    expect(ran).toEqual([]); // landed without the body's focus, so not as an undo step
+    expect(blurs).toBe(0);
     expect(document.activeElement).toBe(subject);
+    expect(puts()).toHaveLength(0); // the subject's save-on-blur never ran
     expect($("#saveStatus").textContent).toBe("Unsaved changes");
   });
 

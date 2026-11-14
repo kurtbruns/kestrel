@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetShell, stubEditingCommands, unstubEditingCommands } from "../test/support";
 import { replaceRange } from "./text_edit";
 
@@ -16,6 +16,7 @@ describe("replaceRange", () => {
   afterEach(() => {
     ta.remove();
     unstubEditingCommands();
+    vi.restoreAllMocks();
   });
 
   it("edits through the browser's insertText, so the change is one undo step", () => {
@@ -41,19 +42,37 @@ describe("replaceRange", () => {
     expect(inputs).toEqual(["one **two** three"]);
   });
 
-  it("never runs the command on another field when the body can't take focus", () => {
+  it("takes the body's focus without scrolling the page", () => {
+    stubEditingCommands();
+    const focus = vi.spyOn(ta, "focus");
+    replaceRange(ta, 4, 7, "**two**", { start: 6, end: 9 });
+    expect(focus.mock.calls).toEqual([[{ preventScroll: true }]]);
+  });
+
+  it("leaves another field's focus alone, landing the edit without an undo step, so that field never blurs", () => {
     const ran = stubEditingCommands();
-    const subject = document.createElement("textarea");
-    subject.value = "Subject";
+    const subject = document.createElement("input");
     document.body.append(subject);
     subject.focus();
+    let blurs = 0;
+    subject.addEventListener("blur", () => {
+      blurs += 1;
+    });
+    replaceRange(ta, 4, 7, "**two**", { start: 6, end: 9 });
+    expect(ta.value).toBe("one **two** three");
+    expect(inputs).toEqual(["one **two** three"]);
+    expect(ran).toEqual([]);
+    expect(blurs).toBe(0);
+    expect(document.activeElement).toBe(subject);
+    subject.remove();
+  });
+
+  it("still makes the edit when the body can't take focus, as on the Preview tab", () => {
+    const ran = stubEditingCommands();
     ta.disabled = true; // refuses focus, as the hidden body on the Preview tab does in a browser
     replaceRange(ta, 0, 3, "ONE", { start: 3, end: 3 });
     expect(ran).toEqual([]);
     expect(ta.value).toBe("ONE two three");
-    expect(subject.value).toBe("Subject");
     expect(inputs).toEqual(["ONE two three"]);
-    expect(document.activeElement).toBe(subject);
-    subject.remove();
   });
 });

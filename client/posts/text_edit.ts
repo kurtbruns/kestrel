@@ -7,8 +7,8 @@
 /**
  * Replaces `start`–`end` of the textarea with `text` as one undoable edit, then selects
  * `select` (offsets in the new text), and fires `input` either way. Where the browser can't
- * run the editing command on this textarea (no support, or the field can't take focus while
- * hidden), it falls back to `setRangeText`, which still fires `input` but isn't undoable.
+ * run the editing command on this textarea (no support, the field can't take focus while
+ * hidden, or the publisher is typing in another field), it falls back to `setRangeText`, which still fires `input` but isn't undoable.
  */
 export function replaceRange(
   ta: HTMLTextAreaElement,
@@ -18,17 +18,18 @@ export function replaceRange(
   select: { start: number; end: number },
 ): void {
   const doc = ta.ownerDocument;
-  // An image can land while the publisher types elsewhere (the subject): the edit borrows the
-  // body's focus and hands it back, so their next keystroke stays where they put it.
+  // An image can land while the publisher types elsewhere (the subject). Taking the body's
+  // focus for the edit would blur that field, and its blur saves, so a half-typed subject would
+  // be saved; the edit lands without the focus instead, as the fallback, with no undo step.
   const prior = doc.activeElement;
-  const giveBack =
+  const typingElsewhere =
     prior !== ta &&
     (prior instanceof HTMLInputElement ||
       prior instanceof HTMLTextAreaElement ||
-      (prior instanceof HTMLElement && prior.isContentEditable))
-      ? prior
-      : null;
-  ta.focus();
+      (prior instanceof HTMLElement && prior.isContentEditable));
+  if (!typingElsewhere) {
+    ta.focus({ preventScroll: true }); // the edit is where the publisher is looking; never scroll
+  }
   ta.setSelectionRange(start, end);
   // The command acts on whatever has focus, so it runs only once the body really has it: a
   // hidden textarea (the Preview tab) refuses focus, and the command would land elsewhere.
@@ -52,5 +53,4 @@ export function replaceRange(
     );
   }
   ta.setSelectionRange(select.start, select.end);
-  giveBack?.focus();
 }
