@@ -1308,6 +1308,33 @@ describe("editor view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
+    it("renders a toolbar edit afresh rather than showing the render held from before it", async () => {
+      stubEditingCommands();
+      const server = draftServer();
+      let page = "<p>Owls</p>";
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        ...previewRoutes(() => page),
+      ]);
+      $(".ctab[data-tab='preview']").dispatchEvent(new Event("pointerenter"));
+      await previewLoads();
+      expect(renderReads()).toHaveLength(1);
+      const ta = body();
+      ta.focus();
+      ta.setSelectionRange(2, 6); // "Owls"
+      $(".tb[data-fmt='bold']").click(); // one undoable edit, through the browser's own command
+      page = "<p><strong>Owls</strong></p>";
+      $(".ctab[data-tab='preview']").click();
+      expect(shownFrame().classList.contains("updating")).toBe(true); // the held one, marked old
+      await previewLoads();
+      expect(puts()[0]?.json()).toMatchObject({ markdown: "# **Owls**\n\nHoot." });
+      expect(renderReads()).toHaveLength(2);
+      expect(shownFrame().contentDocument?.body?.innerHTML).toBe("<p><strong>Owls</strong></p>");
+      expect(shownFrame().classList.contains("updating")).toBe(false);
+      expect(fake.unhandled).toEqual([]);
+    });
+
     it("keeps the last render dimmed, saying it's not up to date, when the edit's render fails", async () => {
       const server = draftServer();
       let fail = false;
