@@ -619,7 +619,8 @@ export async function renderEditor(
   const saveStatus = locked ? null : $("#saveStatus");
   const dirty = new DirtyTracker(collect);
   let saving = false;
-  let uploadsOut = 0; // images on their way up, each holding a placeholder in the text
+  // The placeholders of images still on their way up; its size is how many are out.
+  const uploading = new Set<string>();
   // The autosave editor's counterpart to the shared save bar's dot: same amber
   // "unsaved" cue (dot + text), extended to the autosave lifecycle it actually has —
   // Saving… while a save is in flight, Saved once it lands. Empty while locked
@@ -840,7 +841,7 @@ export async function renderEditor(
   };
   const handle: ViewHandle = {
     // An image still uploading is work the page would lose: its placeholder never becomes the image.
-    dirty: () => editorDirty || uploadsOut > 0,
+    dirty: () => editorDirty || uploading.size > 0,
     beforeLeave() {
       if (gone) {
         return "leave"; // on its way to Drafts: there is nothing left to save to
@@ -850,7 +851,7 @@ export async function renderEditor(
       }
       leaveFlush();
       // The text is saved either way; leaving mid-upload keeps the placeholder in it, so ask.
-      return uploadsOut > 0 ? "confirm" : "leave";
+      return uploading.size > 0 ? "confirm" : "leave";
     },
     manualSave() {
       if (saveBtn && !saveBtn.disabled) {
@@ -1196,6 +1197,7 @@ export async function renderEditor(
   // test and Schedule wait, so a placeholder never reaches an email.
   const footDefault = "Paste, drop, or click to add images";
   function paintUploads() {
+    const uploadsOut = uploading.size;
     const foot = root.querySelector("#dropFoot span");
     if (foot) {
       foot.textContent = uploadsOut
@@ -1230,9 +1232,9 @@ export async function renderEditor(
       toast(refusal);
       return;
     }
-    const placeholder = placeholderFor(file.name, ta.value);
+    const placeholder = placeholderFor(file.name, ta.value, uploading);
     editText(insertPlaceholder(textState(), placeholder));
-    uploadsOut += 1;
+    uploading.add(placeholder);
     paintUploads();
     const fd = new FormData();
     fd.append("file", file);
@@ -1273,7 +1275,7 @@ export async function renderEditor(
         },
       )
       .finally(() => {
-        uploadsOut -= 1;
+        uploading.delete(placeholder);
         if (!signal.aborted) {
           paintUploads();
         }

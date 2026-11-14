@@ -2543,6 +2543,7 @@ describe("editor view", () => {
     expect(body().value).toBe("# Owls\n![owl.png](owl.png)\n\n\nHoot.");
     expect(body().selectionStart).toBe(27); // the caret after the image's line
     expect($("#saveStatus").textContent).toBe("Unsaved changes");
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("takes a refused upload's placeholder out as an edit the browser can undo, leaving the text as it was", async () => {
@@ -2602,6 +2603,7 @@ describe("editor view", () => {
     expect(document.activeElement).toBe(subject);
     expect(puts()).toHaveLength(0); // the subject's save-on-blur never ran
     expect($("#saveStatus").textContent).toBe("Unsaved changes");
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("inserts an uploaded image by the name the upload answered, not the name it sent (SPEC §4)", async () => {
@@ -2693,6 +2695,103 @@ describe("editor view", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect($("#toasts").textContent).toContain(refusal);
     expect(body().value).toBe(before);
+  });
+
+  /** An upload route whose answers the test gives, one per request, in the order they came. */
+  function heldUploads() {
+    const answers: ((r: Response) => void)[] = [];
+    return {
+      route: {
+        method: "POST",
+        path: "/api/posts/p1/images",
+        reply: () => new Promise<Response>((resolve) => answers.push(resolve)),
+      } satisfies FakeRoute,
+      answer(i: number, filename: string) {
+        answers[i]!(jsonResponse({ image: { filename, url: `http://m/${filename}` } }));
+      },
+    };
+  }
+  function pasteImage(name: string) {
+    const paste = new Event("paste", { cancelable: true });
+    const item = {
+      type: "image/png",
+      getAsFile: () => new File(["png"], name, { type: "image/png" }),
+    };
+    Object.defineProperty(paste, "clipboardData", { value: { items: [item] } });
+    body().dispatchEvent(paste);
+  }
+
+  it("lands a pasted image in its own line when an earlier paste of the same name, still uploading, was undone", async () => {
+    const uploads = heldUploads();
+    await open([{ path: "/api/posts/p1", reply: () => draft() }, uploads.route]);
+    body().setSelectionRange(0, 0);
+    pasteImage("image.png"); // a browser names every pasted image this
+    await vi.advanceTimersByTimeAsync(0);
+    typeInto(body(), body().value.replace('\n<!-- Uploading "image.png"… -->\n', "")); // undone
+    body().setSelectionRange(0, 0);
+    pasteImage("image.png"); // the screenshot actually wanted
+    await vi.advanceTimersByTimeAsync(0);
+    uploads.answer(0, "image.png"); // the undone one answers first
+    await vi.advanceTimersByTimeAsync(0);
+    expect(body().value).toMatch(/^\n<!-- Uploading "image\.png" \(2\)… -->\n# Owls/);
+    uploads.answer(1, "image-2.png");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(body().value).toMatch(/^\n!\[image-2\.png\]\(image-2\.png\)\n# Owls/);
+    expect(body().value).not.toContain("![image.png]");
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("warns before the tab closes while an image is uploading, even once the text is saved", async () => {
+    const uploads = heldUploads();
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+      uploads.route,
+    ]);
+    pasteImage("owl.png");
+    await vi.advanceTimersByTimeAsync(30_000); // autosave has saved the placeholder line
+    expect(puts()).toHaveLength(1);
+    expect($("#saveStatus").textContent).toBe("Saved");
+    expect(handle().dirty?.()).toBe(true); // the image would be lost with the tab
+    uploads.answer(0, "owl.png");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(handle().dirty?.()).toBe(true); // the swapped-in image is an unsaved edit
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(handle().dirty?.()).toBe(false);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("asks before leaving while an image is uploading, even once the text is saved", async () => {
+    const uploads = heldUploads();
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+      uploads.route,
+    ]);
+    pasteImage("owl.png");
+    await vi.advanceTimersByTimeAsync(30_000); // autosave has saved the placeholder line
+    expect($("#saveStatus").textContent).toBe("Saved");
+    expect(handle().beforeLeave?.()).toBe("confirm");
+    uploads.answer(0, "owl.png");
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(handle().beforeLeave?.()).toBe("leave");
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("leaves the text alone when an upload answers after the publisher has left", async () => {
+    const uploads = heldUploads();
+    await open([{ path: "/api/posts/p1", reply: () => draft() }, uploads.route]);
+    pasteImage("owl.png");
+    await vi.advanceTimersByTimeAsync(0);
+    const left = body();
+    unmount();
+    uploads.answer(0, "owl.png");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(left.value).toContain('<!-- Uploading "owl.png"… -->'); // its line stays as text
+    expect($("#toasts").textContent).toBe("");
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("shows a placeholder at once, and holds Send test and Schedule until the upload answers", async () => {

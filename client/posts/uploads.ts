@@ -31,18 +31,21 @@ export function uploadRefusal(file: File): string | null {
 }
 
 /**
- * The placeholder for an upload of `name`, unlike any already in `text`, so two uploads of one
- * name each find their own. The name loses the characters that could end the comment or its
- * quotes, or break the line, since a placeholder has to stay one comment to be found again.
+ * The placeholder for an upload of `name`, unlike any in `text` and any of `uploading`, the
+ * placeholders of uploads still out, so two uploads of one name each find their own. An upload
+ * still out keeps its name even when its line has left the text (an undo took it out), or a
+ * later paste, which a browser names image.png too, would take its line and land its image.
+ * The name loses the characters that could end the comment or its quotes, or break the line,
+ * since a placeholder has to stay one comment to be found again.
  */
-export function placeholderFor(name: string, text: string): string {
+export function placeholderFor(name: string, text: string, uploading: ReadonlySet<string>): string {
   const shown =
     name
       .replace(/[<>"\n\r]/g, "")
       .replace(/-{2,}/g, "-")
       .trim() || "image";
   let candidate = `<!-- Uploading "${shown}"… -->`;
-  for (let n = 2; text.includes(candidate); n++) {
+  for (let n = 2; text.includes(candidate) || uploading.has(candidate); n++) {
     candidate = `<!-- Uploading "${shown}" (${n})… -->`;
   }
   return candidate;

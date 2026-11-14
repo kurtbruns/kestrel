@@ -41,16 +41,23 @@ describe("uploadRefusal", () => {
 
 describe("placeholderFor", () => {
   it("names the file being uploaded", () => {
-    expect(placeholderFor("owl.png", "")).toBe('<!-- Uploading "owl.png"… -->');
+    expect(placeholderFor("owl.png", "", new Set())).toBe('<!-- Uploading "owl.png"… -->');
   });
 
   it("numbers a second upload of a name already uploading, so each finds its own", () => {
     const text = '<!-- Uploading "owl.png"… -->\n<!-- Uploading "owl.png" (2)… -->';
-    expect(placeholderFor("owl.png", text)).toBe('<!-- Uploading "owl.png" (3)… -->');
+    expect(placeholderFor("owl.png", text, new Set())).toBe('<!-- Uploading "owl.png" (3)… -->');
+  });
+
+  it("numbers past an upload still out whose line has left the text, so a later one can't take its place", () => {
+    const out = new Set(['<!-- Uploading "image.png"… -->']); // undo took its line out
+    expect(placeholderFor("image.png", "", out)).toBe('<!-- Uploading "image.png" (2)… -->');
   });
 
   it("drops the characters that could end the comment or its quotes", () => {
-    expect(placeholderFor('a "b" -->c<.png', "")).toBe('<!-- Uploading "a b -c.png"… -->');
+    expect(placeholderFor('a "b" -->c<.png', "", new Set())).toBe(
+      '<!-- Uploading "a b -c.png"… -->',
+    );
   });
 });
 
