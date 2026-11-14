@@ -181,7 +181,7 @@ function closedPage(
 export function subscribeCheckInboxPage(c: RequestContext, identity: ReaderIdentity): Response {
   const main =
     `<p class="r-ey">Newsletter</p><h1 class="r-h1">Almost there</h1>` +
-    `<p class="r-lead">If that address isn’t subscribed yet, a confirmation link is on its way. Check your inbox to finish subscribing.</p>`;
+    `<p class="r-lead">A confirmation link is on its way. Check your inbox to finish subscribing. If you’re already subscribed, nothing is sent.</p>`;
   return subscribePage(c, identity, main);
 }
 
