@@ -183,6 +183,44 @@ export function stubClipboard() {
   return writeText;
 }
 
+/**
+ * The browser's editing commands, which happy-dom lacks: `insertText` and `delete` edit the
+ * focused textarea's selection and fire `input`, as a browser does when it records an undo
+ * step. Returns each command run, by name and text; `unstubEditingCommands()` in afterEach
+ * takes it away again.
+ */
+export function stubEditingCommands(): [string, string | undefined][] {
+  const ran: [string, string | undefined][] = [];
+  Object.defineProperty(document, "execCommand", {
+    configurable: true,
+    value(command: string, _ui: boolean, text?: string): boolean {
+      const ta = document.activeElement;
+      if (
+        !(ta instanceof HTMLTextAreaElement) ||
+        (command !== "insertText" && command !== "delete")
+      ) {
+        return false;
+      }
+      ran.push([command, text]);
+      ta.setRangeText(
+        command === "insertText" ? (text ?? "") : "",
+        ta.selectionStart,
+        ta.selectionEnd,
+        "end",
+      );
+      ta.dispatchEvent(
+        new InputEvent("input", { bubbles: true, inputType: command, data: text ?? null }),
+      );
+      return true;
+    },
+  });
+  return ran;
+}
+
+export function unstubEditingCommands(): void {
+  Reflect.deleteProperty(document, "execCommand");
+}
+
 /** A ResizeObserver that never fires and reports what is still being watched, since
  *  happy-dom has none; `vi.unstubAllGlobals()` in afterEach puts it back. */
 export function stubResizeObserver(): { watching(): Element[] } {
