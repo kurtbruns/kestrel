@@ -1111,6 +1111,7 @@ describe("editor view", () => {
       "  > - Hoot.[link text](https://)",
     );
     expect(ran).toHaveLength(5); // one step per button, nothing written around them
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("takes a button's markup off again on a second click, rather than stacking it", async () => {
@@ -1130,6 +1131,7 @@ describe("editor view", () => {
     $(".tb[data-fmt='ol']").click();
     expect(ta.value).toBe("# Owls\n\nHoot.");
     expect(ran).toHaveLength(5); // each click one step the browser can undo
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("refuses a toolbar edit on a scheduled post and points at the way out instead", async () => {
@@ -1141,6 +1143,7 @@ describe("editor view", () => {
     expect(ran).toEqual([]);
     expect(body().value).toBe(before);
     expect($("#lockFoot").classList.contains("nudge")).toBe(true);
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("opens the preview: a silent save, then the rendered email into the frame", async () => {

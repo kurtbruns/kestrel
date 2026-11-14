@@ -14,7 +14,7 @@ A region is a marked part, not a general `if`: `.IsEmail` is its only condition,
 
 ## Styling
 
-Put your CSS in a `<style>` block in the template. Kestrel copies its rules onto each element when it makes the email, since most mail clients drop a `<style>` block, and keeps `@media` rules, such as a dark-mode palette, in the block. The starting templates style what a post's Markdown makes, headings, links, and quotes (set off by a grey bar on the left), so a template of your own can copy those rules from **Start from example** to match. A `<link rel="stylesheet">` is left out of the email, and the template saves with a warning saying so: most mail clients wouldn't load it either.
+Put your CSS in a `<style>` block in the template. Kestrel copies its rules onto each element when it makes the email, since most mail clients drop a `<style>` block, and keeps `@media` rules, such as a dark-mode palette, in the block. The starting templates style the headings, links, and quotes a post's Markdown makes, and set a quote off with a grey bar on its left. To match them in a template of your own, copy those rules from **Start from example**. A `<link rel="stylesheet">` is left out of the email, and the template saves with a warning saying so: most mail clients wouldn't load it either.
 
 ## Fonts
 
