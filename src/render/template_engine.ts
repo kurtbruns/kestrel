@@ -462,6 +462,12 @@ export const DEFAULT_EMAIL_TEMPLATE = `<style>
   .email a {
     color: #3355cc;
   }
+  .email blockquote {
+    margin: 20px 0;
+    padding: 0 0 0 16px;
+    border-left: 3px solid #d4d4d8;
+    color: #52525b;
+  }
   .email .rule {
     border: 0;
     border-top: 1px solid #e4e4e7;
@@ -502,6 +508,10 @@ export const DEFAULT_EMAIL_TEMPLATE = `<style>
     }
     .email a {
       color: #93c5fd !important;
+    }
+    .email blockquote {
+      border-left-color: #3f3f46 !important;
+      color: #a1a1aa !important;
     }
     .email .rule {
       border-color: #2e2e33 !important;

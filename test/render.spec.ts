@@ -585,6 +585,26 @@ describe("render (the single render path)", async () => {
     expect(result.html).toContain("#ededed"); // light body text in dark mode
   });
 
+  it("sets a quote off with a grey bar and muted text, inline so mail clients keep it, and a dark variant", async () => {
+    const result = await render(
+      {
+        post: post(),
+        revision: revision("Before.\n\n> A line worth quoting.\n\nAfter."),
+        images: [],
+      },
+      config,
+    );
+    const quote = result.html.match(/<blockquote\b[^>]*>/)?.[0] ?? "";
+    expect(quote).toMatch(/style="[^"]*border-left: 3px solid #d4d4d8/);
+    expect(quote).toMatch(/style="[^"]*padding: 0 0 0 16px/);
+    expect(quote).toMatch(/style="[^"]*color: #52525b/);
+    // The dark palette can't be inlined, so it rides the kept @media block.
+    const dark = result.html.slice(result.html.indexOf("prefers-color-scheme: dark"));
+    expect(dark).toMatch(/\.email blockquote\s*\{[^}]*border-left-color: #3f3f46 !important/);
+    // Only the quote takes the bar: the paragraphs around it stay plain.
+    expect(result.html).not.toMatch(/<p\b[^>]*border-left/);
+  });
+
   it("falls back to the default template (with a warning) when the active one is invalid", async () => {
     const branding = {
       template: "<div>{{ .Post.Body }}</div>", // no unsubscribe → invalid
