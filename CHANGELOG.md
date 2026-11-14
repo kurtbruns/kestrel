@@ -14,6 +14,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 - The built-in template, and both starting templates, now set a quote (`> …` in Markdown) off as a pull quote: a grey bar on its left, a little padding, and muted text, lighter in dark mode. Emails already sent or frozen keep the look they were made with, and a scheduled send picks it up only if a template or identity change re-makes it. A custom template keeps its own styles; to match, copy the `.email blockquote` rules (and their dark-mode pair) from **Start from example**.
 - The page a reader sees after subscribing leads with what to do, "A confirmation link is on its way. Check your inbox to finish subscribing.", and then says nothing is sent to an address already subscribed, where it opened with that condition.
+- The post editor's formatting buttons toggle: a second click of Bold, Italic, Code, Heading, Quote, or a list takes its markup off rather than adding it again, including markup written by hand (italic in `*` or `_`, bold in `**` or `__`, a fence that names its language). The other list button switches a bulleted list to numbered and back, and a numbered list counts 1, 2, 3, with nested items keeping their own markers. Italic now adds `_word_`, or `*` inside a word, where an underscore wouldn't render; bold and italic combine and come off separately. Link and Indent still add each time, since taking a link apart would lose its address and repeated indents nest a list.
 
 ### Fixed
 
