@@ -347,6 +347,18 @@ describe("render (the single render path)", async () => {
     expect(addressLine(set.html)).toBe("PO Box 1142, Portland, OR 97207");
   });
 
+  it("shows readers nothing of an upload placeholder left in the post, and warns of nothing", async () => {
+    // The editor's placeholder, left behind by a tab closed while the image was uploading.
+    const placeholder = '<!-- Uploading "cat.png"… -->';
+    const result = await render(
+      { post: post(), revision: revision(`Before.\n\n${placeholder}\n\nAfter.`), images: [] },
+      config,
+    );
+    expect(result.html).toContain(placeholder); // still a comment, not escaped into text
+    expect(result.text).not.toContain("Uploading");
+    expect(result.warnings).toEqual([]);
+  });
+
   it("is deterministic (same input → same bytes)", async () => {
     const input = { post: post(), revision: revision("# Same\n\ntext"), images: [] };
     expect((await render(input, config)).html).toBe((await render(input, config)).html);

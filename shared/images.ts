@@ -21,6 +21,15 @@ export interface ImageListResponse {
   images: PostImage[];
 }
 
+/** Generous for a photo, still small enough to send: every recipient downloads it. */
+export const MAX_POST_IMAGE_BYTES = 5 * 1024 * 1024;
+
+/** The refusal of an image over the limit, in the words the route and the editor both use. */
+export const IMAGE_TOO_LARGE = `An image must be ${MAX_POST_IMAGE_BYTES / (1024 * 1024)} MB or smaller.`;
+
+/** The refusal of a file that isn't one of the formats below. */
+export const NOT_AN_IMAGE = "An image must be a PNG, JPEG, WebP, or GIF.";
+
 /** The extensions of the raster image formats an upload may be, and the type each names. */
 export const IMAGE_TYPE_BY_EXTENSION: Readonly<Record<string, string>> = {
   ".png": "image/png",

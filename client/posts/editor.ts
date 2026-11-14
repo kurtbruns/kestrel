@@ -86,6 +86,14 @@ import {
 } from "./publishing";
 import { type Conflict, conflictFromError, RevisionTracker } from "./revisions";
 import { replaceRange } from "./text_edit";
+import {
+  insertPlaceholder,
+  placeholderFor,
+  replacePlaceholder,
+  type TextEdit,
+  type TextState,
+  uploadRefusal,
+} from "./uploads";
 import { previewOpensWebVersion, webVersionHash } from "./web";
 
 const message = describeError;
@@ -277,7 +285,7 @@ export async function renderEditor(
         ${
           locked
             ? html`<div class="composer-foot composer-foot-lock" id="lockFoot" role="status">${icon("readonly")}<span>Cancel the schedule to edit</span></div>`
-            : html`<div class="composer-foot" id="dropFoot">${icon("paperclip")}<span>Paste, drop, or click to add images</span></div>`
+            : html`<div class="composer-foot" id="dropFoot">${icon("paperclip")}<span aria-live="polite">Paste, drop, or click to add images</span></div>`
         }
         <input type="file" id="imgInput" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
       </div>
@@ -611,6 +619,7 @@ export async function renderEditor(
   const saveStatus = locked ? null : $("#saveStatus");
   const dirty = new DirtyTracker(collect);
   let saving = false;
+  let uploadsOut = 0; // images on their way up, each holding a placeholder in the text
   // The autosave editor's counterpart to the shared save bar's dot: same amber
   // "unsaved" cue (dot + text), extended to the autosave lifecycle it actually has —
   // Saving… while a save is in flight, Saved once it lands. Empty while locked
@@ -830,7 +839,8 @@ export async function renderEditor(
     trackSaves(saveChain);
   };
   const handle: ViewHandle = {
-    dirty: () => editorDirty,
+    // An image still uploading is work the page would lose: its placeholder never becomes the image.
+    dirty: () => editorDirty || uploadsOut > 0,
     beforeLeave() {
       if (gone) {
         return "leave"; // on its way to Drafts: there is nothing left to save to
@@ -839,7 +849,8 @@ export async function renderEditor(
         return "confirm"; // a silent flush would fail (or clobber): the reader decides
       }
       leaveFlush();
-      return "leave";
+      // The text is saved either way; leaving mid-upload keeps the placeholder in it, so ask.
+      return uploadsOut > 0 ? "confirm" : "leave";
     },
     manualSave() {
       if (saveBtn && !saveBtn.disabled) {
@@ -1180,28 +1191,93 @@ export async function renderEditor(
     return new File([file], `image${extension}`, { type: file.type });
   }
 
-  async function uploadAndInsert(file: File) {
-    if (!file.type.startsWith("image/")) {
-      return;
+  // An image goes in as a placeholder line the moment it arrives (posts/uploads.ts), and the
+  // upload swaps it for the real reference. While any upload is out, the foot says so, and Send
+  // test and Schedule wait, so a placeholder never reaches an email.
+  const footDefault = "Paste, drop, or click to add images";
+  function paintUploads() {
+    const foot = root.querySelector("#dropFoot span");
+    if (foot) {
+      foot.textContent = uploadsOut
+        ? `Uploading ${uploadsOut} image${uploadsOut === 1 ? "" : "s"}…`
+        : footDefault;
     }
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const { image } = await api<ImageUploadResponse>(`/api/posts/${id}/images`, {
-        method: "POST",
-        body: fd,
-      });
-      const s = ta.selectionStart;
-      // The stored name on both sides: the name sent can hold a bracket that would end the alt text.
-      const snippet = `\n![${image.filename}](${image.filename})\n`;
-      const caret = s + snippet.length;
-      replaceRange(ta, s, s, snippet, { start: caret, end: caret });
-      toast("Image added");
-    } catch (e) {
-      if (!foundGone(e)) {
-        toast(message(e));
+    for (const b of $$<HTMLButtonElement>("#testBtn, #scheduleBtn", root)) {
+      b.disabled = uploadsOut > 0;
+      if (uploadsOut) {
+        b.title = "Waiting for an image to finish uploading";
+      } else {
+        b.removeAttribute("title");
       }
     }
+  }
+  // Each edit goes through replaceRange, so it is an undo step and its input event marks the
+  // draft edited. An upload is two steps, the placeholder and its swap, and undoing the swap
+  // brings back a placeholder nothing will replace; a second undo takes it out. Folding the two
+  // into one would mean an undo when the upload answers, at a moment of the browser's choosing,
+  // and the browser's undo history is the page's, not the body's: it could take back what the
+  // publisher was just typing in the subject. A placeholder left this way is a comment, so it
+  // shows readers nothing.
+  function editText(edit: TextEdit) {
+    replaceRange(ta, edit.from, edit.to, edit.text, edit.select);
+  }
+  function textState(): TextState {
+    return { text: ta.value, start: ta.selectionStart, end: ta.selectionEnd };
+  }
+  function uploadAndInsert(file: File) {
+    const refusal = uploadRefusal(file);
+    if (refusal) {
+      toast(refusal);
+      return;
+    }
+    const placeholder = placeholderFor(file.name, ta.value);
+    editText(insertPlaceholder(textState(), placeholder));
+    uploadsOut += 1;
+    paintUploads();
+    const fd = new FormData();
+    fd.append("file", file);
+    // A write, so not bound to the signal: the image is stored whether or not the publisher
+    // stayed. Only the swap needs the page, and a left page keeps its placeholder as text.
+    api<ImageUploadResponse>(`/api/posts/${id}/images`, { method: "POST", body: fd })
+      .then(
+        ({ image }) => {
+          if (signal.aborted) {
+            return;
+          }
+          // The stored name on both sides: the name sent can hold a bracket that would end the alt text.
+          const next = replacePlaceholder(
+            textState(),
+            placeholder,
+            `![${image.filename}](${image.filename})`,
+          );
+          if (next) {
+            editText(next);
+            toast("Image added");
+          } else {
+            toast(
+              `Uploaded “${image.filename}”, but its placeholder was removed, so it wasn’t added.`,
+            );
+          }
+        },
+        (e) => {
+          if (signal.aborted) {
+            return;
+          }
+          const next = replacePlaceholder(textState(), placeholder, "");
+          if (next) {
+            editText(next);
+          }
+          if (!foundGone(e)) {
+            toast(message(e));
+          }
+        },
+      )
+      .finally(() => {
+        uploadsOut -= 1;
+        if (!signal.aborted) {
+          paintUploads();
+        }
+      });
   }
   const composerBody = $("#composerBody");
   if (!locked) {

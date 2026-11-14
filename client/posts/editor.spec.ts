@@ -2519,7 +2519,7 @@ describe("editor view", () => {
     expect($("#saveStatus").textContent).toBe("Unsaved changes");
   });
 
-  it("inserts an uploaded image as one edit the browser can undo", async () => {
+  it("adds an uploaded image as two edits the browser can undo: its placeholder, then the image", async () => {
     const ran = stubEditingCommands();
     await open([
       { path: "/api/posts/p1", reply: () => draft() },
@@ -2536,10 +2536,40 @@ describe("editor view", () => {
     Object.defineProperty(input, "files", { value: [file], configurable: true });
     input.dispatchEvent(new Event("change"));
     await vi.advanceTimersByTimeAsync(0);
-    expect(ran).toEqual([["insertText", "\n![owl.png](owl.png)\n"]]);
+    expect(ran).toEqual([
+      ["insertText", '\n<!-- Uploading "owl.png"… -->\n'],
+      ["insertText", "![owl.png](owl.png)"], // the placeholder alone, swapped in place
+    ]);
     expect(body().value).toBe("# Owls\n![owl.png](owl.png)\n\n\nHoot.");
-    expect(body().selectionStart).toBe(27); // the caret after the snippet, as before
+    expect(body().selectionStart).toBe(27); // the caret after the image's line
     expect($("#saveStatus").textContent).toBe("Unsaved changes");
+  });
+
+  it("takes a refused upload's placeholder out as an edit the browser can undo, leaving the text as it was", async () => {
+    const ran = stubEditingCommands();
+    await open([
+      { path: "/api/posts/p1", reply: () => draft() },
+      {
+        method: "POST",
+        path: "/api/posts/p1/images",
+        reply: () => jsonResponse({ error: "bad_request", message: "Not this one." }, 400),
+      },
+    ]);
+    const before = body().value;
+    body().focus();
+    body().setSelectionRange(6, 6);
+    const input = $<HTMLInputElement>("#imgInput");
+    const file = new File(["png"], "owl.png", { type: "image/png" });
+    Object.defineProperty(input, "files", { value: [file], configurable: true });
+    input.dispatchEvent(new Event("change"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(ran).toEqual([
+      ["insertText", '\n<!-- Uploading "owl.png"… -->\n'],
+      ["delete", undefined],
+    ]);
+    expect(body().value).toBe(before);
+    expect($("#toasts").textContent).toBe("Not this one.");
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("inserts an image that lands mid-subject without taking the subject's focus, so a half-typed subject isn't saved", async () => {
@@ -2663,6 +2693,53 @@ describe("editor view", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect($("#toasts").textContent).toContain(refusal);
     expect(body().value).toBe(before);
+  });
+
+  it("shows a placeholder at once, and holds Send test and Schedule until the upload answers", async () => {
+    let answer: (r: Response) => void = () => {};
+    await open([
+      { path: "/api/posts/p1", reply: () => draft() },
+      {
+        method: "POST",
+        path: "/api/posts/p1/images",
+        reply: () => new Promise<Response>((resolve) => (answer = resolve)),
+      },
+    ]);
+    body().setSelectionRange(0, 0);
+    const input = $<HTMLInputElement>("#imgInput");
+    const file = new File(["png"], "owl.png", { type: "image/png" });
+    Object.defineProperty(input, "files", { value: [file], configurable: true });
+    input.dispatchEvent(new Event("change"));
+    await vi.advanceTimersByTimeAsync(0); // the upload is still out
+    expect(body().value).toMatch(/^\n<!-- Uploading "owl\.png"… -->\n# Owls/);
+    expect($("#dropFoot span").textContent).toBe("Uploading 1 image…");
+    expect($<HTMLButtonElement>("#testBtn").disabled).toBe(true);
+    expect($<HTMLButtonElement>("#scheduleBtn").disabled).toBe(true);
+    typeInto(body(), `${body().value}typed meanwhile`); // the publisher keeps writing
+    answer(jsonResponse({ image: { filename: "owl.png", url: "http://m/owl.png" } }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(body().value).toMatch(/^\n!\[owl\.png\]\(owl\.png\)\n# Owls[\s\S]*typed meanwhile$/);
+    expect($("#dropFoot span").textContent).toBe("Paste, drop, or click to add images");
+    expect($<HTMLButtonElement>("#testBtn").disabled).toBe(false);
+    expect($<HTMLButtonElement>("#scheduleBtn").disabled).toBe(false);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("refuses an image over the size limit at once, sending nothing", async () => {
+    await open([{ path: "/api/posts/p1", reply: () => draft() }]);
+    const before = body().value;
+    const input = $<HTMLInputElement>("#imgInput");
+    const file = new File(["png"], "huge.png", { type: "image/png" });
+    Object.defineProperty(file, "size", { value: 6 * 1024 * 1024 });
+    Object.defineProperty(input, "files", { value: [file], configurable: true });
+    input.dispatchEvent(new Event("change"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#toasts").textContent).toBe(
+      "“huge.png” is 6.0 MB. An image must be 5 MB or smaller.",
+    );
+    expect(body().value).toBe(before);
+    expect(fake.calls.filter((c) => c.url.pathname.endsWith("/images"))).toHaveLength(0);
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("mounts a scheduled post read-only, with no autosave", async () => {

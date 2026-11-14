@@ -20,7 +20,7 @@
 
 import { UNLISTED_PATH } from "../shared/archive_url";
 import { FREE_PLAN_LIST } from "../shared/free_plan";
-import type { ImageUploadResponse } from "../shared/images";
+import { type ImageUploadResponse, MAX_POST_IMAGE_BYTES } from "../shared/images";
 import { IMPORT_LIMITS } from "../shared/imports";
 import { SORT_DIRS } from "../shared/list";
 import { POST_STATUSES } from "../shared/posts";
@@ -1144,7 +1144,7 @@ export function createRouter({
           name: "file",
           type: "file",
           required: true,
-          description: `The image: a PNG, JPEG, WebP, or GIF, at most ${imageRoutes.MAX_POST_IMAGE_BYTES / (1024 * 1024)} MB. Its format is read from its bytes, and a name or declared type that names another of these formats is refused, as is a PNG or WebP whose header states a width or height of zero, or a JPEG whose header states a width of zero.`,
+          description: `The image: a PNG, JPEG, WebP, or GIF, at most ${MAX_POST_IMAGE_BYTES / (1024 * 1024)} MB. Its format is read from its bytes, and a name or declared type that names another of these formats is refused, as is a PNG or WebP whose header states a width or height of zero, or a JPEG whose header states a width of zero.`,
         },
         {
           name: "filename",

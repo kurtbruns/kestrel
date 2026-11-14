@@ -5,7 +5,14 @@
  * `/media` route is the local-dev equivalent (and any Worker-proxied serving).
  */
 
-import type { ImageListResponse, ImageUploadResponse, PostImage } from "../../shared/images";
+import {
+  IMAGE_TOO_LARGE,
+  type ImageListResponse,
+  type ImageUploadResponse,
+  MAX_POST_IMAGE_BYTES,
+  NOT_AN_IMAGE,
+  type PostImage,
+} from "../../shared/images";
 import type { ImageRow } from "../db/images";
 import * as images from "../db/images";
 import * as posts from "../db/posts";
@@ -22,9 +29,6 @@ import {
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { requireDraft } from "./posts";
-
-/** Generous for a photo, still small enough to send: every recipient downloads it. */
-export const MAX_POST_IMAGE_BYTES = 5 * 1024 * 1024;
 
 function storageKey(postId: string, filename: string): string {
   return `posts/${postId}/${filename}`;
@@ -77,8 +81,6 @@ function publicImage(c: RequestContext, row: ImageRow): PostImage {
     url: `${c.config.mediaPublicBase}/${row.storage_key}`,
   };
 }
-
-const NOT_AN_IMAGE = "An image must be a PNG, JPEG, WebP, or GIF.";
 
 export async function uploadImage(c: RequestContext): Promise<Response> {
   const post = await requireDraft(c);
@@ -133,10 +135,7 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
     throw badRequest(conflict, imageField);
   }
   if (bytes.byteLength > MAX_POST_IMAGE_BYTES) {
-    throw badRequest(
-      `An image must be ${MAX_POST_IMAGE_BYTES / (1024 * 1024)} MB or smaller.`,
-      imageField,
-    );
+    throw badRequest(IMAGE_TOO_LARGE, imageField);
   }
   // A header stating no size is a file no one can be shown (SPEC §4). A size that can't be read
   // is another matter: it stays unknown, and the image uploads.
