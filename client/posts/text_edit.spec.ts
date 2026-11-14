@@ -5,6 +5,7 @@ import { replaceRange } from "./text_edit";
 describe("replaceRange", () => {
   let ta: HTMLTextAreaElement;
   let inputs: string[];
+  let other: HTMLElement | undefined; // a second field a test adds, removed even if it fails
   beforeEach(() => {
     resetShell();
     ta = document.createElement("textarea");
@@ -15,6 +16,8 @@ describe("replaceRange", () => {
   });
   afterEach(() => {
     ta.remove();
+    other?.remove();
+    other = undefined;
     unstubEditingCommands();
     vi.restoreAllMocks();
   });
@@ -52,6 +55,7 @@ describe("replaceRange", () => {
   it("leaves another field's focus alone, landing the edit without an undo step, so that field never blurs", () => {
     const ran = stubEditingCommands();
     const subject = document.createElement("input");
+    other = subject;
     document.body.append(subject);
     subject.focus();
     let blurs = 0;
@@ -64,7 +68,6 @@ describe("replaceRange", () => {
     expect(ran).toEqual([]);
     expect(blurs).toBe(0);
     expect(document.activeElement).toBe(subject);
-    subject.remove();
   });
 
   it("still makes the edit when the body can't take focus, as on the Preview tab", () => {
