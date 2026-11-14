@@ -206,6 +206,17 @@ a {
   outline-offset: 2px;
   border-radius: 6px;
 }
+/* A bordered field rings flush instead: the outline is pulled in over the field's own 1px
+   border, so it reads as the border thickening to 2px in the ring's color, the same footprint
+   as the composer's focus-within ring, with no gap between the field's edge and the ring.
+   Checkboxes, radios, and the other native controls without a drawn border keep the offset. */
+:where(
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]),
+  textarea,
+  select
+):focus-visible {
+  outline-offset: -1px;
+}
 
 h1 {
   font-size: 22px;
