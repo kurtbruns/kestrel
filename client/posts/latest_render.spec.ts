@@ -79,20 +79,6 @@ describe("the post's latest render", () => {
     expect((await again)?.html).toBe("<p>image</p>");
   });
 
-  it("tells each subscriber of every render as it becomes the latest, until it stops", async () => {
-    const s = source();
-    const seen: string[] = [];
-    const stop = s.renders.subscribe((r) => seen.push(r.revision));
-    const a = s.renders.want("r2");
-    s.answer(0, "<p>two</p>");
-    await a;
-    stop();
-    const b = s.renders.want("r3");
-    s.answer(1, "<p>three</p>");
-    await b;
-    expect(seen).toEqual(["r2"]);
-  });
-
   it("passes a failed request on, and asks afresh the next time", async () => {
     const s = source();
     s.failWith(new Error("The render failed."));

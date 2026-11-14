@@ -1335,6 +1335,176 @@ describe("editor view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
+    /** The preview page's reads held until the spec answers each, in order, with the page as
+     *  the server renders it then; the warnings answer at once. */
+    function heldPreview() {
+      const waiting: Array<(r: Response) => void> = [];
+      return {
+        routes: [
+          {
+            path: "/api/posts/p1/preview",
+            reply: () => new Promise<Response>((r) => waiting.push(r)),
+          },
+          { path: "/api/posts/p1/preview.json", reply: () => ({ warnings: [] }) },
+        ] as FakeRoute[],
+        answer(n: number, page: string | Response) {
+          waiting[n]!(typeof page === "string" ? new Response(page) : page);
+        },
+      };
+    }
+
+    it("never loads a render a save overlapped, which can't say which revision it is of", async () => {
+      const server = draftServer();
+      const preview = heldPreview();
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        ...preview.routes,
+      ]);
+      $(".ctab[data-tab='preview']").dispatchEvent(new Event("pointerenter")); // r1's render, asked
+      await previewLoads();
+      typeInto(body(), "# Owls\n\nHoot hoot.");
+      await vi.advanceTimersByTimeAsync(5000); // the autosave writes r2 while r1's is in flight
+      expect(puts()).toHaveLength(1);
+      // Answered after the save landed, so it may be either revision's: it goes nowhere.
+      preview.answer(0, "<p>Hoot hoot, or Hoot.</p>");
+      await previewLoads();
+      const pages = [...document.querySelectorAll<HTMLIFrameElement>("iframe.preview")].map(
+        (f) => f.srcdoc,
+      );
+      expect(pages).not.toContain("<p>Hoot hoot, or Hoot.</p>");
+      preview.answer(1, "<p>Hoot hoot.</p>"); // r2's own, asked once the save landed
+      await previewLoads();
+      $(".ctab[data-tab='preview']").click();
+      expect(shownText()).toBe("Hoot hoot.");
+      expect(shownFrame().classList.contains("updating")).toBe(false);
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("renders afresh after an image upload, which changes the email without a new revision", async () => {
+      const server = draftServer(draft({ current_revision: "r1" }));
+      const text = "# Owls\n\n![owl.png](owl.png)";
+      let uploaded = false;
+      await open([
+        {
+          path: "/api/posts/p1",
+          reply: () => {
+            const d = server.get();
+            return { ...d, markdown: text };
+          },
+        },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        {
+          method: "POST",
+          path: "/api/posts/p1/images",
+          reply: () => {
+            uploaded = true;
+            return { image: { filename: "owl-2.png", url: "http://m/owl-2.png" } };
+          },
+        },
+        ...previewRoutes(() => (uploaded ? "<p>an owl</p>" : "<p>a broken image</p>")),
+      ]);
+      $(".ctab[data-tab='preview']").dispatchEvent(new Event("pointerenter"));
+      await previewLoads();
+      expect(renderReads()).toHaveLength(1);
+      // An image the text already names, uploaded; its own insert taken back out (⌘Z), so the
+      // text is the saved revision again.
+      const input = $<HTMLInputElement>("#imgInput");
+      Object.defineProperty(input, "files", {
+        value: [new File(["png"], "owl.png", { type: "image/png" })],
+        configurable: true,
+      });
+      input.dispatchEvent(new Event("change"));
+      await vi.advanceTimersByTimeAsync(0);
+      typeInto(body(), text);
+      expect($("#saveStatus").textContent).toBe("Saved");
+      $(".ctab[data-tab='preview']").click();
+      await previewLoads();
+      expect(puts()).toHaveLength(0);
+      expect(renderReads()).toHaveLength(2);
+      expect(shownText()).toBe("an owl");
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("shows the other writer's version while saving is paused, marked as not up to date, and the current email once Keep editing is chosen", async () => {
+      const server = draftServer();
+      let page = "<p>Hoot.</p>";
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        ...previewRoutes(() => page),
+      ]);
+      $(".ctab[data-tab='preview']").click();
+      await previewLoads();
+      $(".ctab[data-tab='edit']").click();
+      server.elsewhere("service");
+      page = "<p>Claude’s hoot.</p>";
+      await vi.advanceTimersByTimeAsync(10000); // the freshness poll finds Claude's save
+      expect($("#freshnessBanner").hidden).toBe(false);
+      $(".ctab[data-tab='preview']").click();
+      await previewLoads();
+      expect(shownText()).toBe("Claude’s hoot.");
+      expect(shownFrame().classList.contains("updating")).toBe(true);
+      expect($("#previewStatus").textContent).toBe("Not up to date");
+
+      $("#freshKeep").click(); // nothing unsaved here, so what is saved is Claude's version
+      await previewLoads();
+      expect(shownText()).toBe("Claude’s hoot.");
+      expect(shownFrame().classList.contains("updating")).toBe(false);
+      expect($("#previewStatus").textContent).toBe("");
+      expect(puts()).toHaveLength(0);
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("says “Updating…”, not the last try's failure, while a new try is in flight", async () => {
+      const server = draftServer();
+      const preview = heldPreview();
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        ...preview.routes,
+      ]);
+      $(".ctab[data-tab='preview']").click();
+      await previewLoads();
+      preview.answer(0, "<p>Hoot.</p>");
+      await previewLoads();
+      $(".ctab[data-tab='edit']").click();
+      typeInto(body(), "more");
+      $(".ctab[data-tab='preview']").click();
+      await previewLoads();
+      preview.answer(1, jsonResponse({ error: "internal", message: "The render failed." }, 500));
+      await previewLoads();
+      expect($("#previewStatus").textContent).toBe("Not up to date");
+
+      $(".ctab[data-tab='edit']").click();
+      typeInto(body(), "more still");
+      $(".ctab[data-tab='preview']").click();
+      await previewLoads();
+      expect($("#previewStatus").textContent).toBe("Updating…");
+      preview.answer(2, "<p>more still</p>");
+      await previewLoads();
+      expect(shownText()).toBe("more still");
+      expect($("#previewStatus").textContent).toBe("");
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("says nothing of a render that fails after the publisher has gone back to Edit", async () => {
+      const server = draftServer();
+      const preview = heldPreview();
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        ...preview.routes,
+      ]);
+      $(".ctab[data-tab='preview']").click();
+      await previewLoads();
+      $(".ctab[data-tab='edit']").click();
+      preview.answer(0, jsonResponse({ error: "internal", message: "The render failed." }, 500));
+      await previewLoads();
+      expect($("#toasts").textContent).toBe("");
+      expect(fake.unhandled).toEqual([]);
+    });
+
     it("keeps the last render dimmed, saying it's not up to date, when the edit's render fails", async () => {
       const server = draftServer();
       let fail = false;

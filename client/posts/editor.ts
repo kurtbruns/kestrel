@@ -487,6 +487,7 @@ export async function renderEditor(
     root.querySelector("#dropFoot")?.classList.toggle("off", name !== "edit");
     if (name === "edit") {
       syncMdScroll();
+      previewRound += 1; // the look at Preview is over
     }
     paintPreview();
   }
@@ -506,8 +507,10 @@ export async function renderEditor(
   // save, and when the pointer or focus reaches the tab, so a click usually finds it ready
   // (./latest_render.ts). Two frames take turns: `front` is the one the tab shows, and `back`
   // loads the next render out of sight, swapping in only once it has loaded and been sized, so
-  // the email never blanks or jumps. An older render is never shown as the current one: until
-  // the fresh one swaps in, it is dimmed under "Updating…".
+  // the email never blanks or jumps. A render that isn't of the text on screen is never shown as
+  // the current one: it is dimmed, under "Updating…" until the fresh one swaps in, or under "Not
+  // up to date" when none is coming (the render failed, or saving is paused by the out-of-date
+  // banner, which shows the other writer's version).
   let [front, back] = $$<HTMLIFrameElement>("iframe.preview", root) as [
     HTMLIFrameElement,
     HTMLIFrameElement,
@@ -525,8 +528,13 @@ export async function renderEditor(
   let shown: Render | null = null; // in `front`
   let loading: Render | null = null; // loading in `back`
   let previewFailed = false;
-  /** The key of what is saved: its revision ("" for a post never saved since it had one). */
-  const savedKey = () => (locked ? post.current_revision : revisions.base) ?? "";
+  // Each look at Preview since the editor mounted, counting a move back to Edit as the end of
+  // one, so a look the publisher has left doesn't report on itself late.
+  let previewRound = 0;
+  /** The key of what is saved: its revision ("" for a post never saved since it had one). While
+   *  the out-of-date banner is up, what is saved is the other writer's newer revision. */
+  const savedKey = () =>
+    (locked ? post.current_revision : (revisions.warnedRevision ?? revisions.base)) ?? "";
   /** The saved revision the text on screen is, or null while an edit is unsaved, a save is in
    *  flight, or a save is paused by the out-of-date banner. */
   function savedRevision(): string | null {
@@ -540,7 +548,8 @@ export async function renderEditor(
     const current = previewCurrent();
     const updating = tab === "preview" && !current;
     front.classList.toggle("updating", updating);
-    previewStatus.textContent = !updating ? "" : previewFailed ? "Not up to date" : "Updating…";
+    const stuck = previewFailed || (!locked && conflicted);
+    previewStatus.textContent = !updating ? "" : stuck ? "Not up to date" : "Updating…";
     if (tab === "preview" && current && shown) {
       showWarnings(shown.warnings);
     }
@@ -555,15 +564,17 @@ export async function renderEditor(
     frame.style.height = "";
     frame.classList.add("staging");
     frame.hidden = false;
+    // The page in the frame now: its first empty one, or an older render still loading its
+    // images. Either can answer before this render's does, so only a new page counts.
+    const before = frame.contentDocument;
     frame.onload = () => {
-      // The frame's first empty page can answer before the render's: wait for the render.
-      if (loading !== r || frame !== back || frame.contentDocument?.URL !== "about:srcdoc") {
+      const doc = frame.contentDocument;
+      if (loading !== r || frame !== back || doc === before || doc?.URL !== "about:srcdoc") {
         return; // or a newer render took this frame over
       }
       loading = null;
       let height = "";
       try {
-        const doc = frame.contentDocument;
         if (doc) {
           openLinksInNewTab(doc);
           // The email's link is the post's unlisted link, which never changes. The
@@ -613,22 +624,17 @@ export async function renderEditor(
       .then((r) => r && stage(r))
       .catch(() => {}); // in the background; a click on Preview asks again and says why
   }
-  // Each Preview opened since the editor mounted, so an older one's render doesn't land late.
-  let previewRound = 0;
   async function showPreview() {
     showTab("preview");
     if (previewCurrent()) {
       return; // rendered ahead: shown as it is
     }
     const round = ++previewRound;
+    previewFailed = false; // a new try: "Updating…" until it lands or fails
+    paintPreview();
     try {
       if (!locked) {
         await saveDraft(true);
-      }
-      // Paused by the out-of-date banner, the server holds another writer's newer text, which
-      // a render now shows: nothing held is the render of it.
-      if (!locked && conflicted) {
-        renders.forget();
       }
       // A write landing while the render is in flight (our own save, a pause's flush) makes
       // that render unattributable, so it is asked for again once the post is still.
@@ -636,11 +642,16 @@ export async function renderEditor(
       for (let tries = 0; !r && tries < 3; tries++) {
         r = await renders.want(savedKey());
       }
-      if (r && round === previewRound) {
+      // A render of a saved revision is safe to load whenever it lands: a swap marks it if it
+      // isn't the text on screen.
+      if (r) {
         stage(r);
+      } else if (round === previewRound) {
+        previewFailed = true; // the post kept changing under it: none of the tries can be shown
+        paintPreview();
       }
     } catch (e) {
-      if (signal.aborted || foundGone(e)) {
+      if (signal.aborted || foundGone(e) || round !== previewRound) {
         return;
       }
       previewFailed = true;
@@ -1067,6 +1078,13 @@ export async function renderEditor(
         refreshDirty();
         if (editorDirty) {
           scheduleAutosave();
+        }
+        // Preview showed the other writer's version, marked as not the email now: open on it,
+        // it saves what is on screen and renders that.
+        if (tab === "preview") {
+          showPreview();
+        } else {
+          paintPreview();
         }
       };
     }

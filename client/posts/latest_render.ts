@@ -22,7 +22,6 @@ export class LatestRender {
   private inFlight: { revision: string; promise: Promise<Render | null> } | null = null;
   // Bumped by every write to the post, so a render that overlapped one is known not to match.
   private generation = 0;
-  private readonly listeners = new Set<(r: Render) => void>();
 
   constructor(private readonly fetchRender: FetchRender) {}
 
@@ -54,9 +53,6 @@ export class LatestRender {
         }
         const render: Render = { revision, html, warnings };
         this.held = render;
-        for (const fn of this.listeners) {
-          fn(render);
-        }
         return render;
       },
       (e: unknown) => {
@@ -82,11 +78,5 @@ export class LatestRender {
   forget(): void {
     this.writing();
     this.held = null;
-  }
-
-  /** Call `fn` with each render as it becomes the latest; returns a function that stops. */
-  subscribe(fn: (r: Render) => void): () => void {
-    this.listeners.add(fn);
-    return () => this.listeners.delete(fn);
   }
 }
