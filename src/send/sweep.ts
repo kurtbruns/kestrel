@@ -1,18 +1,19 @@
 /**
- * The reconciling sweep — runs once a minute from scheduled(). Five jobs:
- *   1. fire due sends (and loudly flag any that missed their fire time), after a halted
- *      send whose retry is due has asked the provider, so a send fired this tick joins a
+ * The reconciling sweep — runs once a minute from scheduled(). Seven steps, in the order
+ * the body numbers them:
+ *   1. retry a halted send whose backoff is due, first, so a send fired this tick joins a
  *      halt that still stands instead of starting it over (SPEC §12),
- *   2. resume sends left mid-flight by a crash (expired lease), never a wedged one, which
+ *   2. fire due sends, and loudly flag any that missed their fire time,
+ *   3. resume sends left mid-flight by a crash (expired lease), never a wedged one, which
  *      no run can move until Resolve (`WEDGED_SEND`),
- *   3. apply receipts held for a row that had not learned its message id yet
+ *   4. apply receipts held for a row that had not learned its message id yet
  *      (`applyHeldReceipts`), after the sends, so a batch answered this tick takes its own,
- *      then flag anomalies (sends in flight too long with nothing handed off, wedged sends
- *      awaiting Resolve),
- *   4. notify the publisher of sends that went out or ran into a problem (`notify/notify.ts`),
+ *   5. flag anomalies: sends in flight too long with nothing handed off, and wedged sends
+ *      awaiting Resolve,
+ *   6. notify the publisher of sends that went out or ran into a problem (`notify/notify.ts`),
  *      then record what the tick's emails said about whether email is getting out
- *      (`services/sending.ts`), in one statement held back for it,
- *   5. on a tick that sent nothing, ask the provider about its account when the last answer
+ *      (`services/sending.ts`), with what notifying left of the budget,
+ *   7. on a tick that sent nothing, ask the provider about its account when the last answer
  *      is old (`services/provider_status.ts`), with what notifying left of the budget.
  *
  * The sends a tick runs keep to the account's own send rate once that check has read it
@@ -24,8 +25,9 @@
  * One tick is one invocation, so it shares one subrequest budget (`budget.ts`) across
  * its own queries and every send it runs, and one clock (`pace.ts`), so the sends it runs
  * keep the provider's rate between them and stop before the next tick; a send the budget
- * or the clock can't reach this tick is picked up on the next. A send the provider halted is left alone until its backoff
- * says its next retry is due (`HALT_BACKOFF_MS`), so waiting costs only the query.
+ * or the clock can't reach this tick is picked up on the next. A send the provider halted
+ * is left alone until its backoff says its next retry is due (`HALT_BACKOFF_MS`), so
+ * waiting costs only the query.
  * Notifying gets what the sends leave plus a reserve held back up front, so a long send
  * spending every tick's budget can't starve the notification that says it is stuck.
  *

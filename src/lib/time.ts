@@ -6,7 +6,7 @@
 
 import type { HaltReason } from "../../shared/sends";
 
-// --- send loop / sweep (M6) ---
+// --- send loop / sweep ---
 /** How long a runSend holds its lease before another tick may resume the send. */
 export const LEASE_TTL_MS = 5 * 60 * 1000;
 /** A scheduled send later than this past its fire time is flagged (`send.missed`), and still delivered. */
@@ -76,5 +76,3 @@ export const CONFIRM_COOLDOWN_MS = 15 * 60 * 1000;
 /** How long a confirmation link stays good after it was sent. An older one offers to send
  *  a fresh link instead, so a months-old email can't record consent. */
 export const CONFIRM_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
-export const now = (): number => Date.now();

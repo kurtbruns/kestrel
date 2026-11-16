@@ -1361,7 +1361,7 @@ export function createRouter({
       },
     ),
 
-    // --- schedule / send / cancel (authed); freeze + soft-lock (M5) ---
+    // --- schedule / send / cancel (authed); freeze + soft-lock ---
     {
       method: "POST",
       path: "/api/posts/:id/schedule",
@@ -2590,8 +2590,6 @@ export function createRouter({
       ],
       handler: publicRoutes.unsubscribe,
     },
-
-    // --- delivery webhooks (public; provider-signature-verified, not requireAuth) ---
 
     // --- unlisted links (public; the "view in browser" every email carries, SPEC §5) ---
     // On the app's own origin and independent of ARCHIVE_BASE_PATH, so moving the archive

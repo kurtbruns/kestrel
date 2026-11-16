@@ -201,7 +201,7 @@ a {
 }
 
 /* one deliberate focus ring, everywhere */
-:where(button, a, input, textarea, select, summary, .ctab, .tb, .brand, .info):focus-visible {
+:where(button, a, input, textarea, select, summary, .ctab, .tb, .brand):focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
   border-radius: 6px;
@@ -3396,70 +3396,6 @@ textarea.is-invalid {
    reader is looking rather than in a toast at the foot of the screen (DESIGN §5). */
 .modal .dialog-error {
   margin-top: 12px;
-}
-/* Info icon: the field explanation lives in its hover/focus tooltip. The padding
-   + equal negative margin enlarge the hover/click target to ~28px without moving
-   the glyph or growing the label row. */
-.info {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px;
-  margin: -6px;
-  border-radius: 6px;
-  color: var(--muted);
-  cursor: help;
-}
-.info svg {
-  width: 16px;
-  height: 16px;
-  fill: currentColor;
-  display: block;
-}
-/* :focus (not just :focus-visible) so the tip also opens for touch — a tap
-   focuses the span but doesn't count as "visible" focus. */
-.info:hover,
-.info:focus {
-  color: var(--fg);
-  background: var(--hover);
-}
-.info::after {
-  content: attr(data-tip);
-  /* Decorative + non-interactive: the aria-label carries the text for AT, and the
-     tip must never swallow a tap/click meant for what sits beneath it. */
-  pointer-events: none;
-  position: absolute;
-  /* Anchored to the icon's left edge; --tip-x lets JS nudge it left so it never
-     runs off the right edge on a narrow screen (see positionInfoTip in app.js).
-     max-width is also capped to the viewport so the box itself always fits. */
-  left: var(--tip-x, 0px);
-  bottom: calc(100% + 8px);
-  z-index: var(--z-menu);
-  width: max-content;
-  /* Cap the content box so the border box never exceeds the viewport minus an 8px
-     gutter each side: 34px = 2×8 gutter + 2×9 horizontal padding (content-box). */
-  max-width: min(230px, calc(100vw - 34px));
-  background: var(--fg);
-  color: var(--bg);
-  font-size: 12px;
-  line-height: 1.4;
-  padding: 6px 9px;
-  border-radius: 6px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(2px);
-  transition:
-    opacity 0.12s,
-    transform 0.12s,
-    visibility 0.12s;
-}
-.info:hover::after,
-.info:focus::after {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
 }
 /* --- Editor-state banner (DESIGN §5): a standing, in-flow line at the top of the
    editor, in two variants. `scheduled` marks a frozen, soft-locked post (SPEC §6);

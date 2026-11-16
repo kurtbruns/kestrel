@@ -50,11 +50,6 @@ export function minLeadMs(): number {
   return appState.appConfig?.deployment.min_lead_ms ?? DEFAULT_MIN_LEAD_MS;
 }
 
-/** The minimum lead in words, "5 minutes", for the editor's hints and toasts. */
-export function minLeadText(): string {
-  return formatLead(minLeadMs());
-}
-
 /**
  * Why a picked time is refused for being too soon, checked before asking the server: the
  * server's own `fire_at_too_soon` words for this deployment's lead (SPEC §6), so the editor's

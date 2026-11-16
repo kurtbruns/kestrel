@@ -31,10 +31,7 @@ export class HttpError extends Error {
 
 export const badRequest = (message?: string, details?: Record<string, unknown>) =>
   new HttpError("bad_request", message, details);
-export const unauthorized = (message?: string) => new HttpError("unauthorized", message);
-export const forbidden = (message?: string) => new HttpError("forbidden", message);
 export const notFound = (message?: string) => new HttpError("not_found", message);
-export const conflict = (message?: string) => new HttpError("conflict", message);
 /**
  * A refusal with a code of its own, so a client tells one reason from another without
  * parsing the message: `window_closed`, `not_wedged`, and the rest the API reference

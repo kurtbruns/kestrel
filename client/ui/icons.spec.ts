@@ -14,7 +14,6 @@ const ALL = {
   heading: true,
   indent: true,
   info: true,
-  "info-filled": true,
   italic: true,
   kestrel: true,
   lines: true,

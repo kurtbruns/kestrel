@@ -15,13 +15,11 @@ import { installRoomBar } from "./room/shell";
 import { adoptLinkedRoute, installRouter, route } from "./router";
 import { app, installShell } from "./shell";
 import { appState } from "./state";
-import { installTooltips } from "./ui/widgets";
 
 async function boot(): Promise<unknown> {
   // Wire the app before anything asynchronous, in one visible sequence: no module does
   // anything at load but define things, so what the app does at boot is read from here.
   installShell();
-  installTooltips();
   installRoomBar();
   installRouter();
   const session = await probeSession();

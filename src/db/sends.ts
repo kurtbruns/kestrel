@@ -199,16 +199,6 @@ function activeRetriesSql(sendIdExpr: string): string {
   return `EXISTS (SELECT 1 FROM deliveries d WHERE d.send_id = ${sendIdExpr} AND d.status IN ('pending', 'dispatched') AND d.attempts > 0)`;
 }
 
-/** Whether the send still has a retried recipient in flight (`activeRetriesSql`): one
- *  probe, which keeps `/progress` off a full aggregate. */
-export async function hasActiveRetries(db: D1Database, sendId: string): Promise<boolean> {
-  const row = await db
-    .prepare(`SELECT ${activeRetriesSql("?")} AS x`)
-    .bind(sendId)
-    .first<{ x: number }>();
-  return row?.x === 1;
-}
-
 export type { SendSummary };
 
 export function getSend(db: D1Database, id: string): Promise<SendRow | null> {
@@ -639,11 +629,11 @@ const CHANGED_SINCE = `(${IN_PAGE})
  * One read of the send feed (SPEC §8), over send rows only, never the delivery record: with
  * `since`, every send that changed after it (`CHANGED_SINCE`) and every send removed after
  * it, the changes cut at `limit` in sequence order; without, every send that can change on
- * its own (`LIVE_SEND`). Soonest fire first, with `hasActiveRetries`'s indexed probe folded
- * in for a sending send. Read in one batch with the sequence and the pace, so they are one
- * snapshot: a change either shows in the rows or lands after `seq`. The settling clause and
- * the pace walk the sends by status, one small row each: the scan the sends table accepts
- * at newsletter scale rather than another index.
+ * its own (`LIVE_SEND`). Soonest fire first, with the indexed retries probe
+ * (`activeRetriesSql`) folded in for a sending send. Read in one batch with the sequence
+ * and the pace, so they are one snapshot: a change either shows in the rows or lands after
+ * `seq`. The settling clause and the pace walk the sends by status, one small row each: the
+ * scan the sends table accepts at newsletter scale rather than another index.
  */
 export async function sendFeed(
   db: D1Database,
@@ -1285,7 +1275,7 @@ export function remakeSendStmt(
     );
 }
 
-// --- send-loop / sweep (M6) -------------------------------------------------
+// --- send-loop / sweep ------------------------------------------------------
 
 /** Scheduled sends whose fire time has arrived. */
 export async function dueSends(db: D1Database, now: number): Promise<SendRow[]> {
@@ -1961,7 +1951,7 @@ export async function countDeliveries(
   return row?.n ?? 0;
 }
 
-// --- provider delivery events (M9: SES via SNS) -----------------------------
+// --- provider delivery events (SES via SNS) ---------------------------------
 
 export type DeliveryEventType = DeliveryEvent;
 
