@@ -106,6 +106,8 @@ D1 keeps a history of your database, called Time Travel, for 30 days on Workers 
 
     It prints a bookmark for the database's current state. Copy it, and keep it until the upgrade checks out.
 
+    If it prints an error and no bookmark, run it again. An error such as `Authentication error [code: 10000]` can pass on its own a minute later, so don't change your API token for it. Don't go on to section 4 without a bookmark: without one, [Go back](#go-back) can't restore the database.
+
     It also prints a restore command. Don't use it: it leaves out `--env production`, so it aims at the database the top level of your `wrangler.jsonc` names, not production's. [Go back](#go-back) has the command to use.
 
 ## 4. Apply the database changes
@@ -160,7 +162,7 @@ Near its end, the output names your app's hostname, then its schedule and a vers
 
 1. Reload the editor. The foot of the **Docs** tab's contents list shows the new version, which links to its release page.
 
-1. If an email provider is connected, send yourself a test email, as in [Verify it works](../get-started/verify.md#1-send-yourself-a-test-email). Don't send a real post to check an upgrade: on a live instance, it goes to your whole list.
+1. If an email provider is connected, send yourself a test email. Open **Template** and select **Send test email**, or send a test of a draft you already have. It arrives in your inbox. Within a few minutes, **Settings → Email provider** says SES last reported back at a time after the test. Don't send a real post to check an upgrade: on a live instance, it goes to your whole list.
 
 1. In the logs, filter on `event` equal to `sweep.tick`: a line still arrives every minute. [Read the logs](../get-started/verify.md#7-read-the-logs) shows where the logs are.
 
