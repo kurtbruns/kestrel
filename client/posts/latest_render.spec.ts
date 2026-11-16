@@ -46,7 +46,7 @@ describe("the post's latest render", () => {
     expect(s.asked()).toBe(1);
   });
 
-  it("never answers a want with a render the server says is of another revision", async () => {
+  it("never answers a want with a render the server says is of another revision (SPEC §5)", async () => {
     const s = source();
     const before = s.renders.want("r2");
     s.answer(0, "r3", "<p>three</p>"); // another save landed before the render read the post
@@ -58,7 +58,7 @@ describe("the post's latest render", () => {
     expect((await again)?.html).toBe("<p>two</p>");
   });
 
-  it("holds a render of another revision as that revision's, so it is ready when the editor reaches it", async () => {
+  it("holds a render of another revision as that revision's, so it is ready when the editor reaches it (SPEC §5)", async () => {
     const s = source();
     const before = s.renders.want("r2");
     s.answer(0, "r3", "<p>three</p>");
@@ -68,7 +68,7 @@ describe("the post's latest render", () => {
     expect(s.asked()).toBe(1);
   });
 
-  it("drops an older request's answer that lands after a newer render, never handing it back to be shown", async () => {
+  it("drops an older request's answer that lands after a newer render, never handing it back to be shown (SPEC §5)", async () => {
     const s = source();
     const older = s.renders.want("r2");
     const newer = s.renders.want("r3");
@@ -79,7 +79,7 @@ describe("the post's latest render", () => {
     expect(s.renders.latest?.revision).toBe("r3");
   });
 
-  it("forgets what it holds when the render changes without a new revision (an image uploaded)", async () => {
+  it("forgets what it holds when the render changes without a new revision (an image uploaded) (SPEC §5)", async () => {
     const s = source();
     const first = s.renders.want("r2");
     s.answer(0, "r2", "<p>broken image</p>");
@@ -92,7 +92,7 @@ describe("the post's latest render", () => {
     expect((await again)?.html).toBe("<p>image</p>");
   });
 
-  it("drops a render asked for before an upload, of the same revision but maybe the old images", async () => {
+  it("drops a render asked for before an upload, of the same revision but maybe the old images (SPEC §5)", async () => {
     const s = source();
     const before = s.renders.want("r2");
     s.renders.forget();
