@@ -452,7 +452,9 @@ export async function unsubscribe(c: RequestContext): Promise<Response> {
       ? unsubscribeInvalidPage(c)
       : new Response("invalid token", { status: 400 });
   }
-  // Plain 200 for the RFC 8058 one-click POST; a friendly page for humans.
+  // A mail client's one-click POST (RFC 8058) is form-encoded, so it gets the page as a
+  // person does, a 200 either way; only a request that is neither a form nor asks for HTML
+  // gets the plain text.
   return wantsHtml(c)
     ? unsubscribedPage(c, row.email)
     : new Response("unsubscribed", { status: 200 });

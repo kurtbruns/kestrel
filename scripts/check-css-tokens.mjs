@@ -32,8 +32,8 @@ const CSS = join(ADMIN, "styles.css");
 const CLIENT = join(ROOT, "client");
 
 /* Custom properties set at runtime from JS (never declared in :root), so a var()
- * reference to one is legitimate even though no static definition exists. */
-const RUNTIME_TOKENS = new Set(["--tip-x"]);
+ * reference to one is legitimate even though no static definition exists. None today. */
+const RUNTIME_TOKENS = new Set();
 
 /** Index of the `}` that closes the `{` at `openIdx` (brace-depth match). */
 function matchBrace(text, openIdx) {

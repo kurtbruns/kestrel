@@ -1,7 +1,6 @@
 // Small shared widgets, each independent of the others: the toast, the status badge, the
-// modal, the info tooltip, the row-action menu, the busy state on a button, the error
-// view with its retry, and a standing line that needs a look. The tooltip's document
-// listeners are wired by installTooltips() when boot calls it.
+// modal, the row-action menu, the busy state on a button, the error view with its retry,
+// and a standing line that needs a look.
 
 import { toasts } from "../shell";
 import { type Html, html, setHtml } from "./html";
@@ -252,58 +251,6 @@ function trapTab(dialog: HTMLElement, e: KeyboardEvent): void {
     e.preventDefault();
     first.focus();
   }
-}
-
-// Keep an info tooltip within the viewport. The tip is a CSS pseudo-element
-// anchored to the icon's left edge; pure CSS can't see the viewport, so before it
-// shows we measure the icon and, if the (width-capped) tip would run off the right
-// edge on a narrow screen, slide it left via --tip-x. Delegated so it survives view
-// re-renders; with JS off the tip falls back to left:0.
-const TIP_GUTTER = 8;
-function positionInfoTip(el: HTMLElement): void {
-  // Measure the rendered tip (laid out even while hidden) so this stays in step
-  // with the CSS max-width/padding rather than duplicating them here.
-  const tip = getComputedStyle(el, "::after");
-  const tipW = parseFloat(tip.width) + parseFloat(tip.paddingLeft) + parseFloat(tip.paddingRight);
-  if (!Number.isFinite(tipW)) {
-    return;
-  }
-  const iconLeft = el.getBoundingClientRect().left;
-  const vw = document.documentElement.clientWidth;
-  // Slide left enough to clear the right gutter, but never so far that the left
-  // edge crosses the gutter (very narrow screens) and never rightward (shift ≤ 0).
-  const shift = Math.min(0, Math.max(vw - TIP_GUTTER - tipW - iconLeft, TIP_GUTTER - iconLeft));
-  el.style.setProperty("--tip-x", `${Math.round(shift)}px`);
-}
-/** Wire the tooltip's positioning and dismissal, delegated on the document; boot calls this once. */
-export function installTooltips(): void {
-  // Position before the tip shows on either trigger: pointer hover, or focus — the
-  // latter is how keyboard (Tab) and touch (tap focuses the span) reach it.
-  for (const type of ["pointerover", "focusin"]) {
-    document.addEventListener(type, (e) => {
-      const el = e.target instanceof Element ? e.target.closest<HTMLElement>(".info") : null;
-      if (el) {
-        positionInfoTip(el);
-      }
-    });
-  }
-  // Escape dismisses a focus-shown tip without tabbing away (the pointer tip just
-  // needs the mouse to leave).
-  document.addEventListener("keydown", (e) => {
-    const active = document.activeElement;
-    if (e.key === "Escape" && active instanceof HTMLElement && active.classList.contains("info")) {
-      active.blur();
-    }
-  });
-}
-
-/**
- * The ⓘ affordance whose explanation shows as a tooltip. Focusable and role/aria-labelled
- * so it's reachable by keyboard and touch (the tip shows on :focus, not only :hover) and
- * read by screen readers — the aria-label mirrors the visible tip.
- */
-export function infoTip(tip: string): Html {
-  return html`<span class="info" role="img" tabindex="0" aria-label="${tip}" data-tip="${tip}">${icon("info-filled")}</span>`;
 }
 
 export interface MenuItem {

@@ -186,8 +186,9 @@ export type SendViewRow = SendSummary &
   };
 
 /**
- * Build the view of a send (the frozen bodies play no part). `hasRetries` is the cheap
- * EXISTS probe (see `hasActiveRetries`) — pass false when the send is not `sending`, where
+ * Build the view of a send (the frozen bodies play no part). `hasRetries` is whether a
+ * retried recipient is still in flight, the cheap EXISTS probe each send read folds in
+ * (`activeRetriesSql` in db/sends.ts) — pass false when the send is not `sending`, where
  * it never affects the phase. `now` is the server's clock for everything derived, carried
  * as `as_of`. `context` is what the deployment adds to the send's conditions, read once for
  * every send in an answer (`readConditionContext`).

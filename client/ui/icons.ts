@@ -18,7 +18,6 @@ import editable from "./icons/editable.svg";
 import heading from "./icons/heading.svg";
 import indent from "./icons/indent.svg";
 import info from "./icons/info.svg";
-import infoFilled from "./icons/info-filled.svg";
 import italic from "./icons/italic.svg";
 import kestrel from "./icons/kestrel.svg";
 import lines from "./icons/lines.svg";
@@ -51,7 +50,6 @@ const ICONS = {
   heading: unsafeHtml(heading),
   indent: unsafeHtml(indent),
   info: unsafeHtml(info),
-  "info-filled": unsafeHtml(infoFilled),
   italic: unsafeHtml(italic),
   kestrel: unsafeHtml(kestrel),
   lines: unsafeHtml(lines),
