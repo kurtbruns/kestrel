@@ -2,8 +2,7 @@
  * Preview, test-send, and the fake outbox. All authed.
  *   GET  /api/posts/:id/preview.json   → { url, revision_id, subject, text, warnings, frozen }, and
  *                                    the page itself as `html` with `?include=html`
- *   GET  /api/posts/:id/preview        → the rendered HTML (generic unsubscribe link), its
- *                                    revision as the ETag
+ *   GET  /api/posts/:id/preview        → the rendered HTML (generic unsubscribe link)
  *   GET  /api/posts/:id/web            → the same copy as its archive page will show it
  *   POST /api/posts/:id/test           → send the post's email to one address via the provider
  *                                    (a scheduled post's frozen copy; a draft's live render)
@@ -76,7 +75,10 @@ interface PostEmail {
   input: RenderInput;
   /** The post revision this copy is of: the current revision of the one post row the copy was
    *  read with. A frozen copy is of it too, since a scheduled or sent post takes no edit and a
-   *  freeze lands only while its post is still on the revision it rendered (SPEC §6). */
+   *  freeze lands only while its post is still on the revision it rendered (SPEC §6). A send
+   *  records no revision, so one window is open: a cancel, an edit, and a reschedule all landing
+   *  between this read of the post and the read of its send would name the old revision beside
+   *  the new copy. */
   revision: string;
   email: RenderedEmail;
   warnings: string[];
@@ -124,10 +126,9 @@ async function loadPostEmail(c: RequestContext): Promise<PostEmail> {
 
 /** An authed page carrying a post's HTML: no script, no form, never framed by another
  *  site, never indexed. */
-function postPage(html: string, headers: Record<string, string> = {}): Response {
+function postPage(html: string): Response {
   return new Response(html, {
     headers: {
-      ...headers,
       ...POST_PAGE_SECURITY_HEADERS,
       "content-type": "text/html; charset=utf-8",
       "x-robots-tag": "noindex",
@@ -170,10 +171,9 @@ export async function preview(c: RequestContext): Promise<Response> {
   return json(body);
 }
 
-/** The email as a page, its ETag the revision it is of, as `GET /api/posts/:id` tags the post. */
 export async function previewPage(c: RequestContext): Promise<Response> {
-  const { revision, email } = await loadPostEmail(c);
-  return postPage(asPreviewed(c, email).html, { ETag: `"${revision}"` });
+  const { email } = await loadPostEmail(c);
+  return postPage(asPreviewed(c, email).html);
 }
 
 /**

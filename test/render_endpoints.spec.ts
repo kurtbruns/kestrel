@@ -48,7 +48,7 @@ describe("preview + test endpoints", () => {
     expect(body.subject).toBe("Subject: Preview One");
   });
 
-  it("names the revision each render is of, on the description and as the page's ETag (SPEC §5)", async () => {
+  it("names the revision each render is of, the one saved when it read the post (SPEC §5)", async () => {
     const id = await draftWithImage("Preview Revision");
     const post = await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH }));
     const first = post.post.current_revision as string;
@@ -56,11 +56,8 @@ describe("preview + test endpoints", () => {
       await SELF.fetch(`${base}/api/posts/${id}/preview.json`, { headers: AUTH }),
     );
     expect(described.revision_id).toBe(first);
-    const page = await SELF.fetch(`${base}/api/posts/${id}/preview`, { headers: AUTH });
-    expect(page.headers.get("etag")).toBe(`"${first}"`);
-    await page.text();
 
-    // A save moves both on to the revision it wrote.
+    // A save moves it on to the revision the save wrote, named as the save names it.
     const saved = await readJson(
       await SELF.fetch(`${base}/api/posts/${id}`, {
         method: "PUT",
@@ -68,15 +65,12 @@ describe("preview + test endpoints", () => {
         body: JSON.stringify({ markdown: "# Again", base_revision: first }),
       }),
     );
-    const second = saved.post.current_revision as string;
+    const second = saved.revision_id as string;
     expect(second).not.toBe(first);
     const after = await readJson(
       await SELF.fetch(`${base}/api/posts/${id}/preview.json`, { headers: AUTH }),
     );
     expect(after.revision_id).toBe(second);
-    const pageAfter = await SELF.fetch(`${base}/api/posts/${id}/preview`, { headers: AUTH });
-    expect(pageAfter.headers.get("etag")).toBe(`"${second}"`);
-    await pageAfter.text();
   });
 
   it("carries the page in the description only when asked, from the same render (SPEC §5)", async () => {

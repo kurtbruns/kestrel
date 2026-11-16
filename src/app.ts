@@ -1234,7 +1234,7 @@ export function createRouter({
             name: "url",
             type: "string",
             description:
-              "The rendered email as a page behind the admin gate, `GET /api/posts/:id/preview`: not a public link. It renders again when opened, so it may be of a later revision; its `ETag` names which.",
+              "The rendered email as a page behind the admin gate, `GET /api/posts/:id/preview`: not a public link. It renders again when opened, so it may be of a later revision: for the page of this render, ask with `include=html`.",
           },
           {
             name: "revision_id",
@@ -1277,7 +1277,7 @@ export function createRouter({
       title: "Preview a post's email",
       summary: "The rendered email as a standalone HTML page (the editor's preview).",
       description:
-        "Once the post is scheduled this is its frozen copy, exactly as it will fire, and once sent the record's; a draft renders live. The answer carries `ETag`, the post revision it is of, as `GET /api/posts/:id` tags the post. To read the page and its warnings from one render, use `GET /api/posts/:id/preview.json?include=html`.",
+        "Once the post is scheduled this is its frozen copy, exactly as it will fire, and once sent the record's; a draft renders live. It names no revision, since it renders whatever is saved when it is opened: to read the page with the revision it is of and its warnings, all from one render, use `GET /api/posts/:id/preview.json?include=html`.",
       handler: renderRoutes.previewPage,
     },
     {

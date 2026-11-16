@@ -19,7 +19,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Added
 
-- `GET /api/posts/:id/preview.json` answers `revision_id`, the post revision the render is of, named as a save names the revision it wrote, and with `?include=html` carries the email's page from the same render; `GET /api/posts/:id/preview` names that revision as its `ETag`. Claude's `preview_post` answers `revision_id` too, so it can tell whether the preview is of the draft it just saved. The editor's Preview now reads the page and its warnings in one request and shows a render only as the revision the server says it is, so a save from another tab or from Claude landing mid-render is never shown as your text.
+- `GET /api/posts/:id/preview.json` answers `revision_id`, the post revision the render is of, named as a save names the revision it wrote, and with `?include=html` carries the email's page from the same render. Claude's `preview_post` answers `revision_id` too, so it can tell whether the preview is of the draft it just saved. The editor's Preview now reads the page and its warnings in one request and shows a render only as the revision the server says it is, so a save from another tab or from Claude landing mid-render is never shown as your text.
 
 ### Fixed
 

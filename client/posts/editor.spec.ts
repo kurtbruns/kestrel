@@ -1402,6 +1402,30 @@ describe("editor view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
+    it("never lets an older render that answers late take the Preview over from the newer one", async () => {
+      const server = draftServer();
+      const preview = heldPreview(server);
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        ...preview.routes,
+      ]);
+      $(".ctab[data-tab='preview']").dispatchEvent(new Event("pointerenter")); // r1's, slow
+      await previewLoads();
+      typeInto(body(), "# Owls\n\nHoot hoot.");
+      await vi.advanceTimersByTimeAsync(5000); // the autosave writes r2, and asks for its render
+      expect(puts()).toHaveLength(1);
+      preview.answer(1, "<p>Hoot hoot.</p>"); // r2's lands first
+      await previewLoads();
+      preview.answer(0, "<p>Hoot.</p>", "r1"); // r1's, read before the save, lands late
+      await previewLoads();
+      $(".ctab[data-tab='preview']").click();
+      await previewLoads();
+      expect(shownText()).toBe("Hoot hoot.");
+      expect(shownFrame().classList.contains("updating")).toBe(false);
+      expect(fake.unhandled).toEqual([]);
+    });
+
     it("renders afresh after an image upload, which changes the email without a new revision", async () => {
       const server = draftServer(draft({ current_revision: "r1" }));
       const text = "# Owls\n\n![owl.png](owl.png)";
@@ -1482,7 +1506,7 @@ describe("editor view", () => {
       await open([
         { path: "/api/posts/p1", reply: server.get },
         { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
-        ...previewRoutes(() => "<p>Hoot.</p>"),
+        ...previewRoutes(server, () => "<p>Hoot.</p>"),
       ]);
       $(".ctab[data-tab='preview']").click();
       await previewLoads();

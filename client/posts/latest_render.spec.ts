@@ -46,27 +46,36 @@ describe("the post's latest render", () => {
     expect(s.asked()).toBe(1);
   });
 
-  it("drops a render the server says is of another revision than the one asked for", async () => {
+  it("never answers a want with a render the server says is of another revision", async () => {
     const s = source();
     const before = s.renders.want("r2");
     s.answer(0, "r3", "<p>three</p>"); // another save landed before the render read the post
     expect(await before).toBe(null);
-    expect(s.renders.latest).toBe(null);
-    // Asked again, it is held.
+    // Asked again, it is fetched afresh.
     const again = s.renders.want("r2");
     expect(s.asked()).toBe(2);
     s.answer(1, "r2", "<p>two</p>");
     expect((await again)?.html).toBe("<p>two</p>");
   });
 
-  it("keeps the newest render it was asked for when an older request answers late", async () => {
+  it("holds a render of another revision as that revision's, so it is ready when the editor reaches it", async () => {
+    const s = source();
+    const before = s.renders.want("r2");
+    s.answer(0, "r3", "<p>three</p>");
+    await before;
+    expect(s.renders.latest?.revision).toBe("r3");
+    expect((await s.renders.want("r3"))?.html).toBe("<p>three</p>");
+    expect(s.asked()).toBe(1);
+  });
+
+  it("drops an older request's answer that lands after a newer render, never handing it back to be shown", async () => {
     const s = source();
     const older = s.renders.want("r2");
     const newer = s.renders.want("r3");
     s.answer(1, "r3", "<p>three</p>");
     await newer;
     s.answer(0, "r2", "<p>two</p>");
-    expect((await older)?.revision).toBe("r2"); // still the render of what was asked
+    expect(await older).toBe(null);
     expect(s.renders.latest?.revision).toBe("r3");
   });
 
