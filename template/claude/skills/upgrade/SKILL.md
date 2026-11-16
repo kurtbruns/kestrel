@@ -24,7 +24,7 @@ The production migration, the deploy, and anything in the page's **Go back** sec
 The bookmark from the page's **Note a restore point** step is the only way **Go back** can restore the database, so the upgrade doesn't go on without one.
 
 - **Show the person the bookmark,** and say to keep it until the upgrade checks out.
-- **If the command prints an error and no bookmark, run it again.** Quote the error line. An error such as `Authentication error [code: 10000]` can pass on its own a minute later, so don't suggest changing API tokens for it. If it still prints no bookmark, stop before the migration and say so: production is unchanged so far, and the running release keeps working.
+- **If the command prints an error instead of a bookmark, run it again.** If it still prints no bookmark, quote the error, stop before the migration, and say so: production is unchanged so far, and the running release keeps working.
 
 ## The migration before the deploy
 
