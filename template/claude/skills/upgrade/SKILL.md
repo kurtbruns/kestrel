@@ -23,8 +23,8 @@ The production migration, the deploy, and anything in the page's **Go back** sec
 
 The bookmark from the page's **Note a restore point** step is the only way **Go back** can restore the database, so the upgrade doesn't go on without one.
 
-- **Show the person the bookmark,** and say to keep it until the upgrade checks out.
-- **If the command prints an error instead of a bookmark, don't go on.** Quote the error line, which wrangler may bury under account details. Run it once more, since some errors clear on a second try. If it fails again, help the person fix what the error says, and go on to the migration only once it prints a bookmark. Until then production is unchanged, and the running release keeps working.
+- **Show the person the bookmark before the migration,** and say to keep it until the upgrade checks out.
+- **If the command printed no bookmark, stop before the migration.** Show the person what it printed, and work it out with them. Until then production is unchanged, and the running release keeps working.
 
 ## The migration before the deploy
 

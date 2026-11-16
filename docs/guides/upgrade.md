@@ -106,7 +106,7 @@ D1 keeps a history of your database, called Time Travel, for 30 days on Workers 
 
     It prints a bookmark for the database's current state. Copy it, and keep it until the upgrade checks out.
 
-    If it prints an error instead of a bookmark, fix the error and run it again. Some errors clear on a second try alone. Don't go on to section 4 without a bookmark: [Go back](#go-back) needs it to restore the database.
+    Make sure you have the bookmark before you go on. [Apply the database changes](#4-apply-the-database-changes) changes the database, and [Go back](#go-back) needs the bookmark to undo it.
 
     It also prints a restore command. Don't use it: it leaves out `--env production`, so it aims at the database the top level of your `wrangler.jsonc` names, not production's. [Go back](#go-back) has the command to use.
 
@@ -138,7 +138,7 @@ A release changes the database only by adding a migration. Applying it keeps eve
 
 ## 5. Deploy
 
-Deploy only once section 4's check says there are no migrations to apply.
+Deploy only once the check in [Apply the database changes](#4-apply-the-database-changes) says there are no migrations to apply.
 
 ```bash
 npx wrangler deploy --env production
@@ -158,11 +158,11 @@ Near its end, the output names your app's hostname, then its schedule and a vers
     {"status":"ok","service":"kestrel"}
     ```
 
-    If it answers `500` with `{"error":"schema_behind","missing":[…],…}` instead, the release was deployed before its database changes: the public pages say the newsletter is temporarily unavailable and nothing is sent. Apply them as in section 4; the app answers as soon as they're applied, with no new deploy.
+    If it answers `500` with `{"error":"schema_behind","missing":[…],…}` instead, the release was deployed before its database changes: the public pages say the newsletter is temporarily unavailable and nothing is sent. Apply them as in [Apply the database changes](#4-apply-the-database-changes); the app answers as soon as they're applied, with no new deploy.
 
 1. Reload the editor. The foot of the **Docs** tab's contents list shows the new version, which links to its release page.
 
-1. If an email provider is connected, send yourself a test email. Open **Template** and select **Send test email**, or send a test of a draft you already have. It arrives in your inbox. Within a few minutes, **Settings → Email provider** says SES last reported back at a time after the test. Don't send a real post to check an upgrade: on a live instance, it goes to your whole list.
+1. If an email provider is connected, send yourself a test email. Open **Template** and select **Send test email**, or open a draft you already have and select **Send test email** there. It arrives in your inbox. Within a few minutes, **Settings → Email provider** says SES last reported back at a time after the test. Don't send a real post to check an upgrade: on a live instance, it goes to your whole list.
 
 1. In the logs, filter on `event` equal to `sweep.tick`: a line still arrives every minute. [Read the logs](../get-started/verify.md#7-read-the-logs) shows where the logs are.
 
