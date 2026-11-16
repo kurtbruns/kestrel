@@ -1,7 +1,8 @@
 // Optimistic concurrency on the client (SPEC §4): the revision this editor is based on,
 // and what a failed save or a freshness poll means against it. The server rejects a save
-// whose base is not the newest revision (409) rather than clobber another writer's; the
-// editor's job is to tell the publisher, not to decide for them.
+// whose base is not the newest revision (409) rather than clobber another writer's. With
+// nothing unsaved here the editor takes the newer version in, since no one's words are at
+// stake; with something unsaved it tells the publisher, and never decides for them.
 
 import { ApiError } from "../api";
 
@@ -80,6 +81,12 @@ export class RevisionTracker {
     this.warnedRevision = null;
   }
 
+  /** Another writer's revision was taken into an editor with nothing unsaved: it is the base now. */
+  took(revision: string): void {
+    this.base = revision;
+    this.warnedRevision = null;
+  }
+
   clearWarning(): void {
     this.warnedRevision = null;
   }
@@ -103,4 +110,26 @@ export class RevisionTracker {
     }
     return "fresh";
   }
+}
+
+/** What the editor's state is when another writer's newer revision is found. */
+export interface NewerContext {
+  /** Anything on screen the server doesn't hold: an edit, or an image still uploading. */
+  unsaved: boolean;
+  /** An input method is mid-composition, so the text on screen isn't settled yet. */
+  composing: boolean;
+}
+
+/**
+ * What to do about another writer's newer revision (SPEC §4). "take" when nothing here is
+ * unsaved: their version replaces the text on screen, since keeping ours would lose nothing
+ * and overwriting theirs would lose their words. "later" while a composition is unsettled:
+ * look again on the next read, by which time it has become an edit or nothing. "banner"
+ * when something here is unsaved: both versions hold words, so the publisher chooses.
+ */
+export function answerNewer(at: NewerContext): "take" | "later" | "banner" {
+  if (at.unsaved) {
+    return "banner";
+  }
+  return at.composing ? "later" : "take";
 }

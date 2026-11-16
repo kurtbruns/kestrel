@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../api";
-import { conflictFromError, RevisionTracker } from "./revisions";
+import { answerNewer, conflictFromError, RevisionTracker } from "./revisions";
 
 describe("conflictFromError", () => {
   it("reads a stale-revision 409 into who and what", () => {
@@ -97,5 +97,28 @@ describe("RevisionTracker", () => {
     expect(t.base).toBe("r2");
     expect(t.warnedRevision).toBeNull();
     expect(t.decide(draft("r2"), { saving: false, baseAtRequest: "r2" })).toBe("fresh");
+  });
+
+  it("takes another writer's revision as the base, with nothing left warned", () => {
+    const t = new RevisionTracker("r1");
+    t.took("r2");
+    expect(t.base).toBe("r2");
+    expect(t.warnedRevision).toBeNull();
+    expect(t.decide(draft("r2"), { saving: false, baseAtRequest: "r2" })).toBe("fresh");
+  });
+});
+
+describe("answerNewer (SPEC §4)", () => {
+  it("takes the newer version in when nothing here is unsaved", () => {
+    expect(answerNewer({ unsaved: false, composing: false })).toBe("take");
+  });
+
+  it("asks the publisher when something here is unsaved, composing or not", () => {
+    expect(answerNewer({ unsaved: true, composing: false })).toBe("banner");
+    expect(answerNewer({ unsaved: true, composing: true })).toBe("banner");
+  });
+
+  it("waits out a composition that hasn't become an edit yet", () => {
+    expect(answerNewer({ unsaved: false, composing: true })).toBe("later");
   });
 });

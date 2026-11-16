@@ -23,4 +23,16 @@ describe("DirtyTracker", () => {
     d.markSaved();
     expect(d.dirty).toBe(false);
   });
+
+  it("is dirty once marked unsaved, even with no field changed, until a save lands", () => {
+    const fields = { subject: "a", body: "b" };
+    const d = new DirtyTracker(() => fields);
+    d.markUnsaved();
+    expect(d.dirty).toBe(true);
+    fields.body = "bb";
+    fields.body = "b"; // back to what was ours: still not what the server holds
+    expect(d.dirty).toBe(true);
+    d.markSaved(d.snapshot());
+    expect(d.dirty).toBe(false);
+  });
 });

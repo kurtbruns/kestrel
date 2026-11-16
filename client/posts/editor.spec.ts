@@ -180,18 +180,32 @@ function draftServer(initial = draft(), sendOf?: () => SendView | null) {
           post.slug = want;
         }
       }
-      state = { ...state, post, subject_slug_held };
+      // The body is read beside the post, as the server answers it.
+      const markdown = typeof body.markdown === "string" ? body.markdown : state.markdown;
+      state = { ...state, post, subject_slug_held, markdown };
       return { post: answer(state.post), subject_slug_held };
     },
     /** Slugs other posts hold. */
     taken: new Set<string>(),
-    /** Another writer saved, through `client` (none named by default): the server moves on to
-     *  a new revision. */
-    elsewhere(author: string, client: string | null = null): string {
+    /** Another writer saved, through `client` (none named by default), with what they
+     *  changed: the server moves on to a new revision. */
+    elsewhere(
+      author: string,
+      client: string | null = null,
+      change: { subject?: string; markdown?: string } = {},
+    ): string {
       n += 1;
+      const { markdown = state.markdown, ...fields } = change;
       state = {
         ...state,
-        post: { ...state.post, current_revision: `r${n}`, author, author_client: client },
+        markdown,
+        post: {
+          ...state.post,
+          ...fields,
+          current_revision: `r${n}`,
+          author,
+          author_client: client,
+        },
       };
       return `r${n}`;
     },
@@ -288,6 +302,13 @@ describe("editor view", () => {
   const puts = () =>
     fake.calls.filter((c) => c.method === "PUT" && c.url.pathname === "/api/posts/p1");
   const body = () => $<HTMLTextAreaElement>("#f-markdown");
+  /** Type `text` just before the freshness poll's next read (at a multiple of ten seconds
+   *  since mount), so the read finds it unsaved: typed any earlier, its autosave lands first. */
+  async function editBeforeTheRead(text: string) {
+    await vi.advanceTimersByTimeAsync(9000);
+    typeInto(body(), text);
+    await vi.advanceTimersByTimeAsync(1000);
+  }
   /** The frame the Preview tab shows; the other loads the next render out of sight. */
   const shownFrame = () => $<HTMLIFrameElement>("#composerBody iframe.preview:not(.staging)");
   /** Let a render reach the Preview tab: its reads answer, and its frame loads and swaps in. */
@@ -439,11 +460,14 @@ describe("editor view", () => {
     expect($("#saveStatus").textContent).toBe("Saved");
   });
 
-  it("warns when the freshness poll finds a newer revision, and locks when the post left draft", async () => {
+  it("warns when the freshness poll finds a newer revision over unsaved edits, and locks when the post left draft", async () => {
     const server = draftServer();
-    await open([{ path: "/api/posts/p1", reply: server.get }]);
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+    ]);
     server.elsewhere("x@y.z");
-    await vi.advanceTimersByTimeAsync(10000);
+    await editBeforeTheRead("mine");
     const banner = $("#freshnessBanner");
     expect(banner.hidden).toBe(false);
     expect(banner.textContent).toMatch(/x@y\.z/);
@@ -455,22 +479,164 @@ describe("editor view", () => {
     expect(document.querySelector("#freshKeep")).toBeNull(); // nothing to keep editing
   });
 
+  describe("another writer's save, with nothing unsaved here (SPEC §4)", () => {
+    it("takes their version in with no banner and no save, says whose it is until the next edit, and saves over it from then on", async () => {
+      const server = draftServer();
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        ...previewRoutes(server),
+      ]);
+      const theirs = server.elsewhere("x@y.z", "claude-code", {
+        subject: "Barn owls",
+        markdown: "# Barn owls\n\nHoot.",
+      });
+      await vi.advanceTimersByTimeAsync(10000);
+      expect($("#freshnessBanner").hidden).toBe(true);
+      expect($<HTMLInputElement>("#f-subject").value).toBe("Barn owls");
+      expect(body().value).toBe("# Barn owls\n\nHoot.");
+      expect(document.title).toBe("Barn owls - Kestrel");
+      expect($("#saveStatus").textContent).toMatch(
+        /^Updated with changes by x@y\.z via Claude Code · \S/,
+      );
+      expect(handle().dirty()).toBe(false);
+      await vi.advanceTimersByTimeAsync(30000);
+      expect(puts()).toHaveLength(0);
+      typeInto(body(), "# Barn owls\n\nHoot hoot.");
+      expect($("#saveStatus").textContent).toBe("Unsaved changes");
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(puts()[0]?.json()).toMatchObject({ base_revision: theirs });
+      expect($("#saveStatus").textContent).toBe("Saved");
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("raises the banner instead when a keystroke lands while the read is out", async () => {
+      const server = draftServer();
+      let hold: ((d: unknown) => void) | null = null;
+      let reads = 0;
+      await open([
+        {
+          path: "/api/posts/p1",
+          reply: () => {
+            reads += 1;
+            return reads === 1 ? server.get() : new Promise((r) => (hold = r));
+          },
+        },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+      ]);
+      server.elsewhere("x@y.z", null, { markdown: "theirs" });
+      await vi.advanceTimersByTimeAsync(10000); // the read is out
+      typeInto(body(), "mine");
+      hold!(server.get());
+      await vi.advanceTimersByTimeAsync(0);
+      expect($("#freshnessBanner").hidden).toBe(false);
+      expect(body().value).toBe("mine");
+      expect(puts()).toHaveLength(0);
+    });
+
+    it("keeps the caret, the selection, and the body's scroll where the same words are, without taking focus", async () => {
+      const server = draftServer();
+      await open([{ path: "/api/posts/p1", reply: server.get }]);
+      const ta = body();
+      ta.focus();
+      const at = ta.value.indexOf("Hoot");
+      ta.setSelectionRange(at, at + 4);
+      ta.scrollTop = 40;
+      server.elsewhere("x@y.z", null, { markdown: "# Barn owls\n\nHoot." });
+      await vi.advanceTimersByTimeAsync(10000);
+      const moved = ta.value.indexOf("Hoot");
+      expect([ta.selectionStart, ta.selectionEnd]).toEqual([moved, moved + 4]);
+      expect(ta.scrollTop).toBe(40);
+      expect(document.activeElement).toBe(ta);
+
+      const subject = $<HTMLInputElement>("#f-subject");
+      subject.focus();
+      server.elsewhere("x@y.z", null, { markdown: "# Barn owls\n\nHoot hoot." });
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(ta.value).toBe("# Barn owls\n\nHoot hoot.");
+      expect(document.activeElement).toBe(subject); // the body never took focus
+    });
+
+    it("waits out an input method's composition, and takes their version in once it ends", async () => {
+      const server = draftServer();
+      await open([{ path: "/api/posts/p1", reply: server.get }]);
+      body().dispatchEvent(new Event("compositionstart"));
+      server.elsewhere("x@y.z", null, { markdown: "theirs" });
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(body().value).toBe("# Owls\n\nHoot.");
+      expect($("#freshnessBanner").hidden).toBe(true);
+      body().dispatchEvent(new Event("compositionend"));
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(body().value).toBe("theirs");
+    });
+
+    it("takes their version in when Save draft with nothing new is refused as stale", async () => {
+      const server = draftServer();
+      let theirs = "";
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        {
+          method: "PUT",
+          path: "/api/posts/p1",
+          reply: () =>
+            jsonResponse(
+              {
+                error: "stale_revision",
+                message: "changed",
+                current_revision: theirs,
+                author: "x@y.z",
+              },
+              409,
+            ),
+        },
+      ]);
+      theirs = server.elsewhere("x@y.z", null, { markdown: "theirs" });
+      $("#saveBtn").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(puts()).toHaveLength(1);
+      expect($("#freshnessBanner").hidden).toBe(true);
+      expect(body().value).toBe("theirs");
+      expect($("#saveStatus").textContent).toMatch(/^Updated with changes by x@y\.z via the API/);
+    });
+
+    it("still saves yours when Keep editing is chosen after undoing back to your last save", async () => {
+      const server = draftServer();
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+      ]);
+      const theirs = server.elsewhere("x@y.z", null, { markdown: "theirs" });
+      await editBeforeTheRead("mine");
+      expect($("#freshnessBanner").hidden).toBe(false);
+      typeInto(body(), "# Owls\n\nHoot."); // back to what this editor last saved
+      $("#freshKeep").click();
+      expect($("#saveStatus").textContent).toBe("Unsaved changes");
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(puts()[0]?.json()).toMatchObject({
+        markdown: "# Owls\n\nHoot.",
+        base_revision: theirs,
+      });
+      expect(server.get().markdown).toBe("# Owls\n\nHoot.");
+    });
+  });
+
   it("names the client another writer came through, and a person in the editor alone (SPEC §11)", async () => {
     const server = draftServer();
     await open([{ path: "/api/posts/p1", reply: server.get }]);
-    const banner = $("#freshnessBanner");
-    const who = () => banner.querySelector("strong")?.textContent;
+    const cue = () => $("#saveStatus").textContent;
     server.elsewhere("x@y.z", "claude-code");
     await vi.advanceTimersByTimeAsync(10000);
-    expect(who()).toBe("x@y.z via Claude Code");
-    $("#freshKeep").click();
+    expect(cue()).toMatch(/^Updated with changes by x@y\.z via Claude Code · /);
     server.elsewhere("x@y.z");
     await vi.advanceTimersByTimeAsync(10000);
-    expect(who()).toBe("x@y.z via the API");
-    $("#freshKeep").click();
+    expect(cue()).toMatch(/^Updated with changes by x@y\.z via the API · /);
     server.elsewhere("x@y.z", "editor");
     await vi.advanceTimersByTimeAsync(10000);
-    expect(who()).toBe("x@y.z");
+    expect(cue()).toMatch(/^Updated with changes by x@y\.z · /);
+    // Over an unsaved edit, the banner names them the same way.
+    server.elsewhere("x@y.z", "claude-code");
+    await editBeforeTheRead("mine");
+    expect($("#freshnessBanner strong").textContent).toBe("x@y.z via Claude Code");
   });
 
   it("makes Save draft unavailable while the out-of-date banner is up, pointing at it instead of pretending to save", async () => {
@@ -483,13 +649,12 @@ describe("editor view", () => {
     // happy-dom has no layout, so scrollIntoView is only observable as a call.
     const intoView = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
     server.elsewhere("service");
-    await vi.advanceTimersByTimeAsync(10000); // the freshness poll finds Claude's save
+    await editBeforeTheRead("mine"); // the freshness poll finds Claude's save over it
     const banner = $("#freshnessBanner");
     expect(banner.hidden).toBe(false);
     // The copy names the control that works, and says saving waits on it.
     expect(banner.textContent).toMatch(/Saving is paused until you choose/);
     expect(banner.textContent).toMatch(/Keep editing to keep yours/);
-    typeInto(body(), "mine");
     const save = $<HTMLButtonElement>("#saveBtn");
     expect(save.getAttribute("aria-disabled")).toBe("true");
     expect(save.title).toMatch(/Reload or Keep editing/);
@@ -613,11 +778,11 @@ describe("editor view", () => {
     setHidden(true);
     await vi.advanceTimersByTimeAsync(10000);
     expect(reads()).toHaveLength(1);
-    server.elsewhere("service");
+    server.elsewhere("service", null, { markdown: "Claude’s hoot." });
     setHidden(false);
     await vi.advanceTimersByTimeAsync(0);
     expect(reads()).toHaveLength(2);
-    expect($("#freshnessBanner").hidden).toBe(false);
+    expect(body().value).toBe("Claude’s hoot.");
   });
 
   it("stops reading on a shown tab once the editor is torn down", async () => {
@@ -1471,20 +1636,18 @@ describe("editor view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
-    it("shows the other writer's version while saving is paused, marked as not up to date, and the current email once Keep editing is chosen", async () => {
+    it("shows the other writer's version while saving is paused over an unsaved edit, marked as not up to date, and the email of the edit once Keep editing is chosen", async () => {
       const server = draftServer();
-      let page = "<p>Hoot.</p>";
       await open([
         { path: "/api/posts/p1", reply: server.get },
         { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
-        ...previewRoutes(server, () => page),
+        ...previewRoutes(server, () => `<p>${server.get().markdown}</p>`),
       ]);
       $(".ctab[data-tab='preview']").click();
       await previewLoads();
       $(".ctab[data-tab='edit']").click();
-      server.elsewhere("service");
-      page = "<p>Claude’s hoot.</p>";
-      await vi.advanceTimersByTimeAsync(10000); // the freshness poll finds Claude's save
+      server.elsewhere("service", null, { markdown: "Claude’s hoot." });
+      await editBeforeTheRead("mine"); // the freshness poll finds Claude's save over it
       expect($("#freshnessBanner").hidden).toBe(false);
       $(".ctab[data-tab='preview']").click();
       await previewLoads();
@@ -1492,7 +1655,35 @@ describe("editor view", () => {
       expect(shownFrame().classList.contains("updating")).toBe(true);
       expect($("#previewStatus").textContent).toBe("Not up to date");
 
-      $("#freshKeep").click(); // nothing unsaved here, so what is saved is Claude's version
+      $("#freshKeep").click(); // saves the edit over Claude's, and renders that
+      await previewLoads();
+      expect(puts()).toHaveLength(1);
+      expect(shownText()).toBe("mine");
+      expect(shownFrame().classList.contains("updating")).toBe(false);
+      expect($("#previewStatus").textContent).toBe("");
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("follows another writer's save into a clean editor: the old email dims while theirs renders, then theirs is current, with nothing saved (SPEC §4)", async () => {
+      const server = draftServer();
+      const preview = heldPreview(server);
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        ...preview.routes,
+      ]);
+      $(".ctab[data-tab='preview']").click();
+      await previewLoads();
+      preview.answer(0, "<p>Hoot.</p>");
+      await previewLoads();
+      expect(shownFrame().classList.contains("updating")).toBe(false);
+      server.elsewhere("service", null, { markdown: "Claude’s hoot." });
+      await vi.advanceTimersByTimeAsync(10000); // the freshness poll takes Claude's save in
+      expect($("#freshnessBanner").hidden).toBe(true);
+      expect(shownText()).toBe("Hoot.");
+      expect(shownFrame().classList.contains("updating")).toBe(true);
+      expect($("#previewStatus").textContent).toBe("Updating…");
+      preview.answer(1, "<p>Claude’s hoot.</p>");
       await previewLoads();
       expect(shownText()).toBe("Claude’s hoot.");
       expect(shownFrame().classList.contains("updating")).toBe(false);
@@ -1501,21 +1692,28 @@ describe("editor view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
-    it("marks the email on screen as not up to date the moment the poll finds another writer's save", async () => {
+    it("shows a render the server already named as the taken-in revision's as current, without asking again (SPEC §4)", async () => {
       const server = draftServer();
+      const preview = heldPreview(server);
       await open([
         { path: "/api/posts/p1", reply: server.get },
         { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
-        ...previewRoutes(server, () => "<p>Hoot.</p>"),
+        ...preview.routes,
       ]);
+      $(".ctab[data-tab='preview']").dispatchEvent(new Event("pointerenter")); // r1's render, asked
+      await previewLoads();
+      server.elsewhere("service", null, { markdown: "Claude’s hoot." });
+      preview.answer(0, "<p>Claude’s hoot.</p>"); // rendered after Claude's save: r2's
+      await previewLoads();
+      await vi.advanceTimersByTimeAsync(10000); // the freshness poll takes r2 in
+      expect(body().value).toBe("Claude’s hoot.");
       $(".ctab[data-tab='preview']").click();
       await previewLoads();
+      expect(shownText()).toBe("Claude’s hoot.");
       expect(shownFrame().classList.contains("updating")).toBe(false);
-      server.elsewhere("service");
-      await vi.advanceTimersByTimeAsync(10000); // the freshness poll finds Claude's save
-      expect($("#freshnessBanner").hidden).toBe(false);
-      expect(shownFrame().classList.contains("updating")).toBe(true);
-      expect($("#previewStatus").textContent).toBe("Not up to date");
+      expect($("#previewStatus").textContent).toBe("");
+      expect(renderReads()).toHaveLength(1);
+      expect(puts()).toHaveLength(0);
       expect(fake.unhandled).toEqual([]);
     });
 
@@ -2128,9 +2326,8 @@ describe("editor view", () => {
       { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
     ]);
     server.elsewhere("service");
-    await vi.advanceTimersByTimeAsync(10000); // the freshness poll finds Claude's save
+    await editBeforeTheRead("mine"); // the freshness poll finds Claude's save over it
     expect($("#freshnessBanner").hidden).toBe(false);
-    typeInto(body(), "mine"); // held, since saving waits on the banner
     const before = reads().length;
     $("#freshReload").click();
     await vi.advanceTimersByTimeAsync(0);
