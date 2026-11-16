@@ -1380,7 +1380,7 @@ describe("editor view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
-    it("never files another writer's save under the revision on screen, when it lands between the ask and the render", async () => {
+    it("never files another writer's save under the revision on screen, when it lands between the ask and the render (SPEC §5)", async () => {
       const server = draftServer();
       const preview = heldPreview(server);
       await open([
@@ -1402,7 +1402,7 @@ describe("editor view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
-    it("never lets an older render that answers late take the Preview over from the newer one", async () => {
+    it("never lets an older render that answers late take the Preview over from the newer one (SPEC §5)", async () => {
       const server = draftServer();
       const preview = heldPreview(server);
       await open([
