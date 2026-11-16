@@ -48,6 +48,58 @@ describe("preview + test endpoints", () => {
     expect(body.subject).toBe("Subject: Preview One");
   });
 
+  it("names the revision each render is of, on the description and as the page's ETag (SPEC §5)", async () => {
+    const id = await draftWithImage("Preview Revision");
+    const post = await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH }));
+    const first = post.post.current_revision as string;
+    const described = await readJson(
+      await SELF.fetch(`${base}/api/posts/${id}/preview.json`, { headers: AUTH }),
+    );
+    expect(described.revision_id).toBe(first);
+    const page = await SELF.fetch(`${base}/api/posts/${id}/preview`, { headers: AUTH });
+    expect(page.headers.get("etag")).toBe(`"${first}"`);
+    await page.text();
+
+    // A save moves both on to the revision it wrote.
+    const saved = await readJson(
+      await SELF.fetch(`${base}/api/posts/${id}`, {
+        method: "PUT",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ markdown: "# Again", base_revision: first }),
+      }),
+    );
+    const second = saved.post.current_revision as string;
+    expect(second).not.toBe(first);
+    const after = await readJson(
+      await SELF.fetch(`${base}/api/posts/${id}/preview.json`, { headers: AUTH }),
+    );
+    expect(after.revision_id).toBe(second);
+    const pageAfter = await SELF.fetch(`${base}/api/posts/${id}/preview`, { headers: AUTH });
+    expect(pageAfter.headers.get("etag")).toBe(`"${second}"`);
+    await pageAfter.text();
+  });
+
+  it("carries the page in the description only when asked, from the same render (SPEC §5)", async () => {
+    const id = await draftWithImage("Preview Html");
+    const plain = await readJson(
+      await SELF.fetch(`${base}/api/posts/${id}/preview.json`, { headers: AUTH }),
+    );
+    expect("html" in plain).toBe(false);
+    const withPage = await readJson(
+      await SELF.fetch(`${base}/api/posts/${id}/preview.json?include=html`, { headers: AUTH }),
+    );
+    const page = await (
+      await SELF.fetch(`${base}/api/posts/${id}/preview`, { headers: AUTH })
+    ).text();
+    expect(withPage.html).toBe(page);
+    expect(withPage.revision_id).toBe(plain.revision_id);
+    // A value the route doesn't take is refused, never ignored.
+    const wrong = await SELF.fetch(`${base}/api/posts/${id}/preview.json?include=text`, {
+      headers: AUTH,
+    });
+    expect(wrong.status).toBe(400);
+  });
+
   it("answers the preview's description only to a GET, since it writes nothing", async () => {
     const id = await draftWithImage("Preview Read");
     const res = await SELF.fetch(`${base}/api/posts/${id}/preview`, {
@@ -179,6 +231,9 @@ describe("preview + test endpoints", () => {
       await SELF.fetch(`${base}/api/posts/${id}/preview.json`, { headers: AUTH }),
     );
     expect(action.frozen).toBe(true);
+    // The frozen copy is of the revision it was made from, which a scheduled post stays on.
+    const read = await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH }));
+    expect(action.revision_id).toBe(read.post.current_revision);
 
     // A post whose send is in flight is still the frozen copy (the post stays
     // `scheduled` while its send is `sending`).

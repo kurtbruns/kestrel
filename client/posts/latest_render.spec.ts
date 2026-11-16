@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { LatestRender, type Render } from "./latest_render";
 
-/** A render source over a fake server whose answers the spec releases one at a time. */
+/** A render source over a fake server whose answers the spec releases one at a time, each naming
+ *  the revision the server rendered. */
 function source() {
-  const pending: Array<(page: string) => void> = [];
+  const pending: Array<(revision: string, page: string) => void> = [];
   let fails: Error | null = null;
   const renders = new LatestRender(
     () =>
@@ -12,15 +13,17 @@ function source() {
           reject(fails);
           return;
         }
-        pending.push((page) => resolve({ html: page, warnings: [`about ${page}`] }));
+        pending.push((revision, page) =>
+          resolve({ revision, html: page, warnings: [`about ${page}`] }),
+        );
       }),
   );
   return {
     renders,
     /** Requests made so far. */
     asked: () => pending.length,
-    /** Answer request `n` (0-based) with `page`. */
-    answer: (n: number, page: string) => pending[n]!(page),
+    /** Answer request `n` (0-based) with the render of `revision`. */
+    answer: (n: number, revision: string, page: string) => pending[n]!(revision, page),
     failWith: (e: Error) => {
       fails = e;
     },
@@ -33,7 +36,7 @@ describe("the post's latest render", () => {
     const a = s.renders.want("r2");
     const b = s.renders.want("r2");
     expect(s.asked()).toBe(1);
-    s.answer(0, "<p>two</p>");
+    s.answer(0, "r2", "<p>two</p>");
     const want: Render = { revision: "r2", html: "<p>two</p>", warnings: ["about <p>two</p>"] };
     expect(await a).toEqual(want);
     expect(await b).toEqual(want);
@@ -43,40 +46,50 @@ describe("the post's latest render", () => {
     expect(s.asked()).toBe(1);
   });
 
-  it("drops a render a write overlapped, since it can't say which revision it is of", async () => {
+  it("drops a render the server says is of another revision than the one asked for", async () => {
     const s = source();
     const before = s.renders.want("r2");
-    s.renders.writing();
-    s.answer(0, "<p>two or three</p>");
+    s.answer(0, "r3", "<p>three</p>"); // another save landed before the render read the post
     expect(await before).toBe(null);
     expect(s.renders.latest).toBe(null);
-    // Asked again once the post is still, it is held.
-    const after = s.renders.want("r3");
+    // Asked again, it is held.
+    const again = s.renders.want("r2");
     expect(s.asked()).toBe(2);
-    s.answer(1, "<p>three</p>");
-    expect((await after)?.revision).toBe("r3");
+    s.answer(1, "r2", "<p>two</p>");
+    expect((await again)?.html).toBe("<p>two</p>");
   });
 
-  it("keeps what it holds across a write, still the render of its own revision", async () => {
+  it("keeps the newest render it was asked for when an older request answers late", async () => {
     const s = source();
-    const first = s.renders.want("r2");
-    s.answer(0, "<p>two</p>");
-    await first;
-    s.renders.writing();
-    expect(s.renders.latest?.revision).toBe("r2");
+    const older = s.renders.want("r2");
+    const newer = s.renders.want("r3");
+    s.answer(1, "r3", "<p>three</p>");
+    await newer;
+    s.answer(0, "r2", "<p>two</p>");
+    expect((await older)?.revision).toBe("r2"); // still the render of what was asked
+    expect(s.renders.latest?.revision).toBe("r3");
   });
 
   it("forgets what it holds when the render changes without a new revision (an image uploaded)", async () => {
     const s = source();
     const first = s.renders.want("r2");
-    s.answer(0, "<p>broken image</p>");
+    s.answer(0, "r2", "<p>broken image</p>");
     await first;
     s.renders.forget();
     expect(s.renders.latest).toBe(null);
     const again = s.renders.want("r2");
     expect(s.asked()).toBe(2);
-    s.answer(1, "<p>image</p>");
+    s.answer(1, "r2", "<p>image</p>");
     expect((await again)?.html).toBe("<p>image</p>");
+  });
+
+  it("drops a render asked for before an upload, of the same revision but maybe the old images", async () => {
+    const s = source();
+    const before = s.renders.want("r2");
+    s.renders.forget();
+    s.answer(0, "r2", "<p>broken image</p>");
+    expect(await before).toBe(null);
+    expect(s.renders.latest).toBe(null);
   });
 
   it("passes a failed request on, and asks afresh the next time", async () => {

@@ -387,7 +387,13 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
       markdown: "Waxwings **arrived**.",
     });
     const preview = await callOk("preview_post", { id: created.post.id });
-    expect(preview).toMatchObject({ subject: "Hello", frozen: false, warnings: [] });
+    // The revision it rendered, so Claude can tell it's the draft it just saved.
+    expect(preview).toMatchObject({
+      subject: "Hello",
+      revision_id: created.revision_id,
+      frozen: false,
+      warnings: [],
+    });
     expect(preview.text).toContain("Waxwings arrived.");
     // Filled as the preview page fills it: a test's unsubscribe page, never a raw placeholder.
     expect(preview.text).toMatch(/Unsubscribe: \S+\/unsubscribe\?test=1/);

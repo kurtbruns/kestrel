@@ -64,15 +64,19 @@ function actionsFor(post: Record<string, unknown>): PostAction[] {
   return actions;
 }
 
-/** The post's render as the preview routes answer it: the email as a page, and its warnings.
- *  The editor reads it ahead after each save, so a spec that saves serves it. */
+/** The post's render as `preview.json?include=html` answers it: the email as a page, its
+ *  warnings, and the revision it is of, the one saved when the request arrives. The editor
+ *  reads it ahead after each save, so a spec that saves serves it. */
 function previewRoutes(
+  server: { revision(): string },
   page: () => string = () => "<p>rendered</p>",
   warnings: () => string[] = () => [],
 ): FakeRoute[] {
   return [
-    { path: "/api/posts/p1/preview", reply: () => new Response(page()) },
-    { path: "/api/posts/p1/preview.json", reply: () => ({ warnings: warnings() }) },
+    {
+      path: "/api/posts/p1/preview.json",
+      reply: () => ({ revision_id: server.revision(), html: page(), warnings: warnings() }),
+    },
   ];
 }
 
@@ -117,6 +121,8 @@ function draftServer(initial = draft(), sendOf?: () => SendView | null) {
   };
   const server = {
     get: () => ({ ...state, post: answer(state.post) }),
+    /** The revision saved now, the one a render of the post is of. */
+    revision: () => String(state.post.current_revision),
     /** Apply a save, unless `intercept` answers instead (a 409, or a promise to answer later). */
     put(
       req: FakeRequest,
@@ -222,8 +228,7 @@ function scheduledPost(fireAt = Date.now() + 3_600_000, remadeAt: number | null 
     routes: [
       postRoute,
       // A scheduled post opens on Preview, its frozen email.
-      { path: "/api/posts/p1/preview", reply: () => new Response("<p>Owls</p>") },
-      { path: "/api/posts/p1/preview.json", reply: () => ({ warnings: [] }) },
+      ...previewRoutes(post, () => "<p>Owls</p>"),
       ...sends.routes,
     ],
     /** The sweep starts it. */
@@ -291,9 +296,9 @@ describe("editor view", () => {
       await vi.advanceTimersByTimeAsync(0);
     }
   }
-  /** The draft's renders: each preview page read is one. */
+  /** The draft's renders: each preview read is one. */
   const renderReads = () =>
-    fake.calls.filter((c) => c.method === "GET" && c.url.pathname === "/api/posts/p1/preview");
+    fake.calls.filter((c) => c.method === "GET" && c.url.pathname === "/api/posts/p1/preview.json");
 
   it("mounts a draft into its fields and reads as saved", async () => {
     await open([{ path: "/api/posts/p1", reply: () => draft() }]);
@@ -323,7 +328,7 @@ describe("editor view", () => {
     await open([
       { path: "/api/posts/p1", reply: server.get },
       { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
-      ...previewRoutes(),
+      ...previewRoutes(server),
     ]);
     typeInto(body(), "# Owls\n\nHoot hoot.");
     expect($("#saveStatus").textContent).toBe("Unsaved changes");
@@ -473,7 +478,7 @@ describe("editor view", () => {
     await open([
       { path: "/api/posts/p1", reply: server.get },
       { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
-      ...previewRoutes(),
+      ...previewRoutes(server),
     ]);
     // happy-dom has no layout, so scrollIntoView is only observable as a call.
     const intoView = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
@@ -1176,11 +1181,7 @@ describe("editor view", () => {
     await open([
       { path: "/api/posts/p1", reply: server.get },
       { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
-      {
-        path: "/api/posts/p1/preview",
-        reply: () => new Response("<p>rendered</p>", { headers: { "content-type": "text/html" } }),
-      },
-      { path: "/api/posts/p1/preview.json", reply: () => ({ warnings: [] }) },
+      ...previewRoutes(server),
     ]);
     typeInto(body(), "changed");
     $(".ctab[data-tab='preview']").click();
@@ -1206,7 +1207,7 @@ describe("editor view", () => {
     await open([
       { path: "/api/posts/p1", reply: server.get },
       { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
-      ...previewRoutes(undefined, () => warnings),
+      ...previewRoutes(server, undefined, () => warnings),
     ]);
     expect($("#warnings").textContent).toBe("");
     $(".ctab[data-tab='preview']").click();
@@ -1231,7 +1232,7 @@ describe("editor view", () => {
       await open([
         { path: "/api/posts/p1", reply: server.get },
         { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
-        ...previewRoutes(() => "<p>Hoot hoot.</p>"),
+        ...previewRoutes(server, () => "<p>Hoot hoot.</p>"),
       ]);
       typeInto(body(), "# Owls\n\nHoot hoot.");
       await vi.advanceTimersByTimeAsync(5000); // the autosave, and the render behind it
@@ -1254,7 +1255,7 @@ describe("editor view", () => {
       const server = draftServer();
       await open([
         { path: "/api/posts/p1", reply: server.get },
-        ...previewRoutes(() => "<p>Hoot.</p>"),
+        ...previewRoutes(server, () => "<p>Hoot.</p>"),
       ]);
       expect(renderReads()).toHaveLength(0); // opening the editor renders nothing
       $(".ctab[data-tab='preview']").dispatchEvent(new Event("pointerenter"));
@@ -1276,13 +1277,12 @@ describe("editor view", () => {
         { path: "/api/posts/p1", reply: server.get },
         { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
         {
-          path: "/api/posts/p1/preview",
+          path: "/api/posts/p1/preview.json",
           reply: () => {
-            const now = new Response(page);
-            return hold ? new Promise<Response>((r) => (answer = () => r(now))) : now;
+            const now = { revision_id: server.revision(), html: page, warnings: [] };
+            return hold ? new Promise((r) => (answer = () => r(now))) : now;
           },
         },
-        { path: "/api/posts/p1/preview.json", reply: () => ({ warnings: [] }) },
       ]);
       $(".ctab[data-tab='preview']").click();
       await previewLoads();
@@ -1315,7 +1315,7 @@ describe("editor view", () => {
       await open([
         { path: "/api/posts/p1", reply: server.get },
         { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
-        ...previewRoutes(() => page),
+        ...previewRoutes(server, () => page),
       ]);
       $(".ctab[data-tab='preview']").dispatchEvent(new Event("pointerenter"));
       await previewLoads();
@@ -1335,27 +1335,26 @@ describe("editor view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
-    /** The preview page's reads held until the spec answers each, in order, with the page as
-     *  the server renders it then; the warnings answer at once. */
-    function heldPreview() {
-      const waiting: Array<(r: Response) => void> = [];
+    /** The preview's reads held until the spec answers each, in order, with the page as the
+     *  server renders it then: of the revision saved when it answers, unless `revision` says
+     *  the render read an earlier one. */
+    function heldPreview(server: { revision(): string }) {
+      const waiting: Array<(r: unknown) => void> = [];
       return {
         routes: [
-          {
-            path: "/api/posts/p1/preview",
-            reply: () => new Promise<Response>((r) => waiting.push(r)),
-          },
-          { path: "/api/posts/p1/preview.json", reply: () => ({ warnings: [] }) },
+          { path: "/api/posts/p1/preview.json", reply: () => new Promise((r) => waiting.push(r)) },
         ] as FakeRoute[],
-        answer(n: number, page: string | Response) {
-          waiting[n]!(typeof page === "string" ? new Response(page) : page);
+        answer(n: number, page: string | Response, revision = server.revision()) {
+          waiting[n]!(
+            typeof page === "string" ? { revision_id: revision, html: page, warnings: [] } : page,
+          );
         },
       };
     }
 
-    it("never loads a render a save overlapped, which can't say which revision it is of", async () => {
+    it("loads a render only as the revision the server says it is of, so one a save overtook is never passed off as the edit's", async () => {
       const server = draftServer();
-      const preview = heldPreview();
+      const preview = heldPreview(server);
       await open([
         { path: "/api/posts/p1", reply: server.get },
         { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
@@ -1366,17 +1365,39 @@ describe("editor view", () => {
       typeInto(body(), "# Owls\n\nHoot hoot.");
       await vi.advanceTimersByTimeAsync(5000); // the autosave writes r2 while r1's is in flight
       expect(puts()).toHaveLength(1);
-      // Answered after the save landed, so it may be either revision's: it goes nowhere.
-      preview.answer(0, "<p>Hoot hoot, or Hoot.</p>");
+      // Rendered after the save landed: r2's, not the r1 it was asked as, so it goes nowhere.
+      preview.answer(0, "<p>Hoot hoot, early.</p>");
       await previewLoads();
       const pages = [...document.querySelectorAll<HTMLIFrameElement>("iframe.preview")].map(
         (f) => f.srcdoc,
       );
-      expect(pages).not.toContain("<p>Hoot hoot, or Hoot.</p>");
+      expect(pages).not.toContain("<p>Hoot hoot, early.</p>");
       preview.answer(1, "<p>Hoot hoot.</p>"); // r2's own, asked once the save landed
       await previewLoads();
       $(".ctab[data-tab='preview']").click();
       expect(shownText()).toBe("Hoot hoot.");
+      expect(shownFrame().classList.contains("updating")).toBe(false);
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("never files another writer's save under the revision on screen, when it lands between the ask and the render", async () => {
+      const server = draftServer();
+      const preview = heldPreview(server);
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        ...preview.routes,
+      ]);
+      $(".ctab[data-tab='preview']").click(); // r1's render, asked
+      await previewLoads();
+      server.elsewhere("service"); // Claude saves r2; this tab hasn't heard yet
+      preview.answer(0, "<p>Claude’s hoot.</p>");
+      await previewLoads();
+      // The text on screen is still r1's, and this render is r2's: it isn't shown as r1's.
+      expect(shownText()).not.toBe("Claude’s hoot.");
+      preview.answer(1, "<p>Hoot.</p>", "r1"); // a retry, rendered as r1 (it read before the save)
+      await previewLoads();
+      expect(shownText()).toBe("Hoot.");
       expect(shownFrame().classList.contains("updating")).toBe(false);
       expect(fake.unhandled).toEqual([]);
     });
@@ -1402,7 +1423,7 @@ describe("editor view", () => {
             return { image: { filename: "owl-2.png", url: "http://m/owl-2.png" } };
           },
         },
-        ...previewRoutes(() => (uploaded ? "<p>an owl</p>" : "<p>a broken image</p>")),
+        ...previewRoutes(server, () => (uploaded ? "<p>an owl</p>" : "<p>a broken image</p>")),
       ]);
       $(".ctab[data-tab='preview']").dispatchEvent(new Event("pointerenter"));
       await previewLoads();
@@ -1432,7 +1453,7 @@ describe("editor view", () => {
       await open([
         { path: "/api/posts/p1", reply: server.get },
         { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
-        ...previewRoutes(() => page),
+        ...previewRoutes(server, () => page),
       ]);
       $(".ctab[data-tab='preview']").click();
       await previewLoads();
@@ -1476,7 +1497,7 @@ describe("editor view", () => {
 
     it("says “Updating…”, not the last try's failure, while a new try is in flight", async () => {
       const server = draftServer();
-      const preview = heldPreview();
+      const preview = heldPreview(server);
       await open([
         { path: "/api/posts/p1", reply: server.get },
         { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
@@ -1508,7 +1529,7 @@ describe("editor view", () => {
 
     it("says nothing of a render that fails after the publisher has gone back to Edit", async () => {
       const server = draftServer();
-      const preview = heldPreview();
+      const preview = heldPreview(server);
       await open([
         { path: "/api/posts/p1", reply: server.get },
         { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
@@ -1531,12 +1552,11 @@ describe("editor view", () => {
         { path: "/api/posts/p1", reply: server.get },
         { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
         {
-          path: "/api/posts/p1/preview",
-          reply: () => (fail ? refuse() : new Response("<p>Hoot.</p>")),
-        },
-        {
           path: "/api/posts/p1/preview.json",
-          reply: () => (fail ? refuse() : { warnings: [] }),
+          reply: () =>
+            fail
+              ? refuse()
+              : { revision_id: server.revision(), html: "<p>Hoot.</p>", warnings: [] },
         },
       ]);
       $(".ctab[data-tab='preview']").click();
@@ -1558,8 +1578,8 @@ describe("editor view", () => {
     const server = draftServer();
     await open([
       { path: "/api/posts/p1", reply: server.get },
-      ...["/api/posts/p1/preview", "/api/posts/p1/preview.json"].map((path) => ({
-        path,
+      {
+        path: "/api/posts/p1/preview.json",
         reply: () =>
           jsonResponse(
             {
@@ -1568,7 +1588,7 @@ describe("editor view", () => {
             },
             400,
           ),
-      })),
+      },
     ]);
     $(".ctab[data-tab='preview']").click();
     await vi.advanceTimersByTimeAsync(0);
@@ -1582,7 +1602,6 @@ describe("editor view", () => {
     let deleted = false;
     await open([
       { path: "/api/posts/p1", reply: () => (deleted ? postGone() : draft()) },
-      { path: "/api/posts/p1/preview", reply: postGone },
       { path: "/api/posts/p1/preview.json", reply: postGone },
     ]);
     deleted = true;
@@ -1623,15 +1642,12 @@ describe("editor view", () => {
       await open([
         { path: "/api/posts/p1", reply: server.get },
         { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
-        {
-          path: "/api/posts/p1/preview",
-          reply: () =>
-            new Response(
-              // The host spelled differently is still the same address.
-              `<a href="https://NEWSLETTER.example.com/email/t0k3n">View in browser</a><a href="${ARCHIVE}/owls-at-dusk">Its archive address</a><a href="${ARCHIVE}/herons">Herons</a><a href="https://x.example">x</a>`,
-            ),
-        },
-        { path: "/api/posts/p1/preview.json", reply: () => ({ warnings: [] }) },
+        ...previewRoutes(
+          server,
+          // The host spelled differently is still the same address.
+          () =>
+            `<a href="https://NEWSLETTER.example.com/email/t0k3n">View in browser</a><a href="${ARCHIVE}/owls-at-dusk">Its archive address</a><a href="${ARCHIVE}/herons">Herons</a><a href="https://x.example">x</a>`,
+        ),
       ]);
       $(".ctab[data-tab='preview']").click();
       await previewLoads();
@@ -1650,13 +1666,10 @@ describe("editor view", () => {
     it("opens a scheduled post's web version from its frozen copy", async () => {
       const post = scheduledPost();
       await open([
-        {
-          path: "/api/posts/p1/preview",
-          reply: () =>
-            new Response(
-              `<a href="${UNLISTED}">View in browser</a><a href="${ARCHIVE}/herons">Herons</a>`,
-            ),
-        },
+        ...previewRoutes(
+          post.server,
+          () => `<a href="${UNLISTED}">View in browser</a><a href="${ARCHIVE}/herons">Herons</a>`,
+        ),
         ...post.routes,
       ]);
       const [own, other] = previewLinks();
@@ -1672,7 +1685,7 @@ describe("editor view", () => {
     await open([
       { path: "/api/posts/p1", reply: server.get },
       { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
-      ...previewRoutes(),
+      ...previewRoutes(server),
     ]);
     const link = $<HTMLAnchorElement>("#webLink");
     expect(link.tagName).toBe("A");
@@ -3113,7 +3126,7 @@ describe("editor view", () => {
       { path: "/api/posts/p1", reply: server.get },
       { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
       uploads.route,
-      ...previewRoutes(),
+      ...previewRoutes(server),
     ]);
     pasteImage("owl.png");
     await vi.advanceTimersByTimeAsync(30_000); // autosave has saved the placeholder line
@@ -3135,7 +3148,7 @@ describe("editor view", () => {
       { path: "/api/posts/p1", reply: server.get },
       { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
       uploads.route,
-      ...previewRoutes(),
+      ...previewRoutes(server),
     ]);
     pasteImage("owl.png");
     await vi.advanceTimersByTimeAsync(30_000); // autosave has saved the placeholder line
