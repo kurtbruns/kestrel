@@ -72,6 +72,7 @@ import { busy, fieldError, modal, renderError, toast } from "../ui/widgets";
 import { bannerActedBy, whoActed } from "../who_acted";
 import { activeSend, postAction } from "./actions";
 import { createAutosave } from "./autosave";
+import { carryOffset } from "./caret";
 import { DirtyTracker } from "./dirty";
 import { formatEdit } from "./format";
 import { LatestRender, type Render } from "./latest_render";
@@ -85,7 +86,7 @@ import {
   settingsChange,
   showSlugRefusal,
 } from "./publishing";
-import { type Conflict, conflictFromError, RevisionTracker } from "./revisions";
+import { answerNewer, type Conflict, conflictFromError, RevisionTracker } from "./revisions";
 import { replaceRange } from "./text_edit";
 import {
   insertPlaceholder,
@@ -766,6 +767,10 @@ export async function renderEditor(
   let saving = false;
   // The placeholders of images still on their way up; its size is how many are out.
   const uploading = new Set<string>();
+  // Another writer's version, taken into the editor with nothing unsaved here (SPEC §4), said
+  // on the save cue in place of Saved until the next edit, so the change on screen is
+  // explained where the save state is read, not in a toast that fades (DESIGN §5).
+  let tookIn: string | null = null;
   // The autosave editor's counterpart to the shared save bar's dot: same amber
   // "unsaved" cue (dot + text), extended to the autosave lifecycle it actually has —
   // Saving… while a save is in flight, Saved once it lands. Empty while locked
@@ -788,7 +793,7 @@ export async function renderEditor(
       saveStatus.textContent = "Unsaved changes";
     } else {
       saveStatus.className = "save-status is-saved";
-      saveStatus.textContent = "Saved";
+      saveStatus.textContent = tookIn ?? "Saved";
     }
   }
   function refreshDirty() {
@@ -811,6 +816,7 @@ export async function renderEditor(
       return;
     }
     paintMarkdown(); // repaint the highlight overlay from the new textarea value
+    tookIn = null; // the cue is about this edit now
     refreshDirty();
     if (!conflicted) {
       scheduleAutosave();
@@ -841,6 +847,7 @@ export async function renderEditor(
     const fields = collect();
     const sent = JSON.stringify(fields);
     let landed = false;
+    let readAgain = false; // a stale refusal of a save that carried nothing new
     try {
       const body: PostEditBody = { ...fields, base_revision: revisions.base };
       const { post: u, subject_slug_held } = await api<PostSavedResponse>(`/api/posts/${id}`, {
@@ -855,6 +862,7 @@ export async function renderEditor(
       saveFailed = false;
       saveError = null;
       retryDelay = 0;
+      tookIn = null; // ours is the newest version now, so the note about theirs is done
       if (!silent) {
         toast("Saved");
       }
@@ -864,6 +872,12 @@ export async function renderEditor(
       // A stale-revision 409 isn't a plain failure: another writer got there first.
       // Surface the out-of-date banner (notify, don't clobber) instead of an error toast.
       const conflict = conflictFromError(e);
+      if (conflict?.kind === "stale" && !dirty.dirty && uploading.size === 0) {
+        // Nothing here is unsaved (a Save draft with nothing new, say): read the newer
+        // version and take it in, as the freshness poll would, once this save has let go.
+        readAgain = true;
+        return "refused";
+      }
       if (conflict) {
         showConflict(conflict);
         return "refused";
@@ -915,6 +929,9 @@ export async function renderEditor(
       refreshDirty();
       if (landed) {
         renderAhead(); // so Preview is ready when it's opened
+      }
+      if (readAgain) {
+        readFreshness();
       }
     }
   }
@@ -1035,11 +1052,72 @@ export async function renderEditor(
 
   // --- concurrent-edit detection (SPEC §4) ---
   // Another tab, Claude, or a script through the API can save this draft while it's open
-  // here. A save carries base_revision so the server rejects a stale write (409);
-  // a light poll warns before the writer invests more effort. We notify, never
-  // adopt: Reload takes the other version, Keep editing keeps yours (your next
-  // save overwrites it). Re-arm only on a genuinely newer revision.
+  // here. A save carries base_revision so the server rejects a stale write (409), and a
+  // light poll finds a newer revision before the writer invests more effort. With nothing
+  // unsaved here the newer version is taken in place, so the editor follows the draft while
+  // Claude works on it; with something unsaved the banner asks: Reload takes the other
+  // version, Keep editing keeps yours (your next save overwrites it). Re-arm only on a
+  // genuinely newer revision.
   const freshnessEl = $("#freshnessBanner");
+
+  // An input method's composition is text not yet settled, which taking a version in would
+  // break into: the read waits for the next one.
+  let composing = false;
+  if (!locked) {
+    for (const el of [subjectEl, ta]) {
+      el.addEventListener("compositionstart", () => {
+        composing = true;
+      });
+      el.addEventListener("compositionend", () => {
+        composing = false;
+      });
+    }
+  }
+
+  /** Put `text` in `el` in place of what it holds, keeping its caret, selection, and scroll
+   *  where the same words are, without taking focus. */
+  function replaceKeepingPlace(el: HTMLInputElement | HTMLTextAreaElement, text: string) {
+    const before = el.value;
+    if (before === text) {
+      return;
+    }
+    const focused = document.activeElement === el;
+    const start = carryOffset(before, text, el.selectionStart ?? 0);
+    const end = carryOffset(before, text, el.selectionEnd ?? 0);
+    const top = el.scrollTop;
+    el.value = text;
+    if (focused) {
+      el.setSelectionRange(start, end, el.selectionDirection ?? "none");
+    }
+    el.scrollTop = top;
+  }
+
+  /** Take another writer's newer version into an editor with nothing unsaved (SPEC §4): it
+   *  becomes the text on screen and the base, and the save cue says whose it is. */
+  function takeIn(fresh: PostResponse, revision: string) {
+    replaceKeepingPlace(subjectEl, fresh.post.subject);
+    replaceKeepingPlace(ta, fresh.markdown);
+    nameTab();
+    paintMarkdown();
+    revisions.took(revision);
+    dirty.markSaved();
+    pub = publishingOf(fresh.post, fresh.subject_slug_held);
+    paintPublishing();
+    const who = whoActed(fresh.post.author, fresh.post.author_client);
+    const at = fresh.post.updated_at; // when they saved, not when this editor noticed
+    const when = fmtAt(at, clocksFor([at]));
+    tookIn = `Updated with changes ${who ? `by ${who}` : "made elsewhere"} · ${when}`;
+    refreshDirty();
+    // The email on screen is the old version's. On the Preview tab, ask for the new one the
+    // way opening the tab does, so a render that fails says so rather than staying on
+    // Updating…; elsewhere, mark it and render ahead.
+    if (tab === "preview") {
+      showPreview();
+    } else {
+      paintPreview();
+      renderAhead();
+    }
+  }
 
   function clearConflict() {
     conflicted = false;
@@ -1077,11 +1155,14 @@ export async function renderEditor(
     if (keep) {
       keep.onclick = () => {
         revisions.adoptWarned(); // the newer revision becomes our base — our next save wins
+        // The banner rose over unsaved edits, but an undo can bring the text back to our
+        // last save before the click. The server holds theirs, so ours is still owed a save.
+        if (!dirty.dirty) {
+          dirty.markUnsaved();
+        }
         clearConflict();
         refreshDirty();
-        if (editorDirty) {
-          scheduleAutosave();
-        }
+        scheduleAutosave();
         // Preview showed the other writer's version, marked as not the email now: open on it,
         // it saves what is on screen and renders that.
         if (tab === "preview") {
@@ -1105,35 +1186,54 @@ export async function renderEditor(
     return true;
   }
 
-  if (!locked) {
-    // Skipped while hidden, saving, or already warned — poll GET is cheap and only
-    // re-warns on a revision we haven't surfaced yet. Read at once when the tab is shown.
-    const pollFreshness = async () => {
-      if (saving || conflicted || gone || document.hidden) {
+  // Skipped while hidden, saving, or showing the banner: the read is cheap, and it acts only
+  // on a revision not yet taken in or warned of. Read at once when the tab is shown.
+  async function pollFreshness() {
+    if (locked || saving || conflicted || gone || document.hidden) {
+      return;
+    }
+    const baseAtRequest = revisions.base; // to tell our own save landing mid-poll from another writer's
+    try {
+      const fresh = await api<PostResponse>(`/api/posts/${id}`, { signal });
+      if (conflicted || gone) {
+        return; // a save's refusal answered first
+      }
+      const decision = revisions.decide(
+        {
+          status: fresh.post.status,
+          revision: fresh.post.current_revision,
+          author: fresh.post.author,
+          client: fresh.post.author_client,
+        },
+        { saving, baseAtRequest },
+      );
+      if (decision === "ignore" || decision === "fresh") {
         return;
       }
-      const baseAtRequest = revisions.base; // to tell our own save landing mid-poll from another writer's
-      try {
-        const fresh = await api<PostResponse>(`/api/posts/${id}`, { signal });
-        const decision = revisions.decide(
-          {
-            status: fresh.post.status,
-            revision: fresh.post.current_revision,
-            author: fresh.post.author,
-            client: fresh.post.author_client,
-          },
-          { saving, baseAtRequest },
-        );
-        if (decision !== "ignore" && decision !== "fresh") {
-          showConflict(decision);
-        }
-      } catch (e) {
-        if (isNotFound(e)) {
-          removed();
-        }
-        // Anything else is transient: try again next tick.
+      if (decision.kind === "locked") {
+        showConflict(decision);
+        return;
       }
-    };
+      // Read now, after the wait: a keystroke that landed while the read was out makes this a
+      // choice for the publisher, and nothing runs between this check and the swap.
+      const answer = answerNewer({ unsaved: dirty.dirty || uploading.size > 0, composing });
+      if (answer === "take") {
+        takeIn(fresh, decision.revision);
+      } else if (answer === "banner") {
+        showConflict(decision);
+      }
+    } catch (e) {
+      if (isNotFound(e)) {
+        removed();
+      }
+      // Anything else is transient: try again next tick.
+    }
+  }
+  /** Read the post's freshness now, outside the poll's pace. */
+  function readFreshness() {
+    pollFreshness().catch(() => {});
+  }
+  if (!locked) {
     every(10000, pollFreshness, signal);
     readWhenShown(pollFreshness, signal);
   }

@@ -2987,6 +2987,11 @@ body.web-mode .content {
   min-width: 0;
   flex-wrap: nowrap;
 }
+/* The cue wraps, never Save draft beside it. */
+.actions-bar > .row:first-child:not(:only-child) > button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 /* The autosave cue (DESIGN §5, §6), beside Save draft. The editor's save lifecycle:
    Unsaved (amber --warn dot) · Saving… (pulsing --accent dot) · Saved (green --ok
    dot). The dot is a reinforcement, never the whole signal — the text label carries

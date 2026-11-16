@@ -73,7 +73,7 @@ The script sends the two values as headers on every request: `CF-Access-Client-I
 
 1. Call `GET /api/posts`. It answers with the posts the editor shows.
 
-1. Open a draft in the editor, and have the script save a change to it. The editor shows that the draft was changed elsewhere, last edited by **a service token**.
+1. Open a draft in the editor, and have the script save a change to it. The editor shows the change, and beside **Save draft** it reads "Updated with changes by a service token", with the time.
 
 If the script gets a `401`, a `403`, or a login page, check the policy from section 2, and the token's two values. The policy's action must be Service Auth, since the app refuses a login through any other kind of policy with a `401` whose `reason` is `access_unidentified`. Check that the token hasn't expired, too.
 

@@ -3,7 +3,8 @@
 // guards, and whether an autosave has anything to do.
 
 export class DirtyTracker<T> {
-  #saved: string;
+  /** The snapshot the server holds, or null when it holds none of what is on screen. */
+  #saved: string | null;
 
   constructor(private readonly read: () => T) {
     this.#saved = JSON.stringify(read());
@@ -25,5 +26,15 @@ export class DirtyTracker<T> {
    */
   markSaved(sent: string = this.snapshot()): void {
     this.#saved = sent;
+  }
+
+  /**
+   * Nothing on screen is saved, whatever it matches. The publisher chose Keep editing over
+   * another writer's newer version (SPEC §4) after undoing back to our last save: the server
+   * holds theirs, so these fields are owed a save even though they match ours, and stay so
+   * until one lands.
+   */
+  markUnsaved(): void {
+    this.#saved = null;
   }
 }
