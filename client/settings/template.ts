@@ -5,6 +5,7 @@ import { emailLogoHtml } from "../../shared/email_logo";
 import { SANS_STACK, SERIF_STACK } from "../../shared/fonts";
 import {
   ADDRESS_NOT_PRINTED,
+  isBuiltInText,
   type SettingsPatchBody,
   type SettingsResponse,
   type SettingsSavedResponse,
@@ -518,6 +519,10 @@ export async function renderTemplate(
     address: p.address || "",
   };
   let templateBaseline = s.email_template || "";
+  // Whether the saved template follows the built-in one, which changes as Kestrel is
+  // upgraded (SPEC §9); the server's answer after each save replaces it.
+  let followsBuiltIn = s.email_template_is_default;
+  const builtIn = s.email_template_default;
   const defaultRecipients = Array.isArray(s.test_recipients) ? s.test_recipients : [];
   // Standing: whether scheduled posts are using this template (SPEC §9, DESIGN §8).
   setHtml($("#tplInUse"), inUseChip(data.in_use));
@@ -552,6 +557,10 @@ export async function renderTemplate(
     <div class="set-card">
       <div class="set-card-pad">
         <div class="set-tpl-block">
+          <div class="set-tpl-source" id="tplSource">
+            <p class="set-tpl-source-text" id="tplSourceText" aria-live="polite"></p>
+            <button type="button" class="ghost" id="tplReset" hidden>Reset to built-in</button>
+          </div>
           <div class="set-tpl-editor-head">
             <div class="set-tpl-tools">
               <button type="button" class="ghost set-menu-btn" id="tplExamplesBtn" aria-haspopup="menu" aria-expanded="false"><span>Start from example</span><span class="set-menu-caret"></span></button>
@@ -638,9 +647,39 @@ export async function renderTemplate(
   const guard = guardUnsaved(isDirty, signal);
   const bar = savebar.attach({ onSave: onSaveTemplate, onDiscard: revertTemplate }, signal);
 
+  // Which template the page holds: the built-in one, which upgrades improve, or the
+  // publisher's own, which they don't, with Reset to built-in on the latter. Reset only
+  // fills the editor; the save bar saves it, and the server, finding the built-in text,
+  // follows the built-in template again rather than keeping a copy.
+  const sourceText = $("#tplSourceText");
+  const resetBtn = $<HTMLButtonElement>("#tplReset");
+  const paintSource = () => {
+    const holdsBuiltIn = isBuiltInText(tplEditor.value, builtIn);
+    let line: Html;
+    if (followsBuiltIn && !isDirty()) {
+      line = html`<strong>Built-in template.</strong> New releases of Kestrel improve it, and your emails get each change. Saving a change of your own stops that.`;
+    } else if (followsBuiltIn) {
+      line = html`<strong>Built-in template, with unsaved changes.</strong> Saving them makes it your own, which new releases of Kestrel don’t change.`;
+    } else if (holdsBuiltIn) {
+      line = html`<strong>Built-in template, not saved yet.</strong> Save to use it again, and your emails get each change new releases of Kestrel make to it.`;
+    } else {
+      line = html`<strong>Your own template.</strong> New releases of Kestrel don’t change it.`;
+    }
+    setHtml(sourceText, line);
+    resetBtn.hidden = followsBuiltIn || holdsBuiltIn;
+  };
+  resetBtn.onclick = () => {
+    tplEditor.value = builtIn;
+    showWarnings([]);
+    preview.repaint();
+    refreshDirty();
+    tplEditor.focus();
+  };
+
   function refreshDirty() {
     paintEditor();
     paintReq();
+    paintSource();
     syncScroll();
     bar.setDirty(isDirty());
     // A test always sends the SAVED template (what will ship, I5). When there are
@@ -699,8 +738,9 @@ export async function renderTemplate(
     if (!r) {
       return null;
     }
-    // The server may resolve "" to the default — reflect what was actually stored.
+    // The server may follow the built-in template instead of storing the text: reflect it.
     templateBaseline = r.settings.email_template;
+    followsBuiltIn = r.settings.email_template_is_default;
     tplEditor.value = templateBaseline;
     // The cached config the sidebar reads: this page's own response, with the saved half.
     appState.appConfig = { ...data, settings: r.settings };

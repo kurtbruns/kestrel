@@ -667,6 +667,22 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
     );
   });
 
+  it("tells Claude a saved template stops following the built-in one, and follows it again on null (SPEC §9)", async () => {
+    const tool = (await listTools()).find((t) => t.name === "update_template")!;
+    expect(tool.description).toContain("Saving opts it out of upgrades; say so.");
+    const arg = (tool.inputSchema.properties as Record<string, { description: string }>)
+      .email_template;
+    expect(arg?.description).toContain("`null`, or the default's text, follows the default again.");
+    expect(await callOk("update_template", { email_template: tpl("v1") })).toMatchObject({
+      saved: true,
+      follows_built_in: false,
+    });
+    expect(await callOk("update_template", { email_template: null })).toMatchObject({
+      saved: true,
+      follows_built_in: true,
+    });
+  });
+
   it("plans an import before committing, and never gives the attestation for the person", async () => {
     const file = { name: "l.txt", text: "a@x.io\n" };
     const plan = await callOk("import_subscribers", { file });
@@ -891,11 +907,12 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
 
 describe("what a tool answers stays small and whole", () => {
   // Raised from 25 KB for the publication's clock (get_time, and `time_zone` beside each fire
-  // time a tool takes).
-  it("keeps the whole tool list under 28 KB, so growing it is a decision", async () => {
+  // time a tool takes), and from 28 KB for following the built-in email template, which
+  // update_template has to tell Claude a save gives up.
+  it("keeps the whole tool list under 29 KB, so growing it is a decision", async () => {
     const res = await rpc("tools/list", {}, await adminAuth(PERSON));
     const size = new TextEncoder().encode(await res.text()).length;
-    expect(size).toBeLessThan(28 * 1024);
+    expect(size).toBeLessThan(29 * 1024);
   });
 
   it("cuts a long Markdown answer at a line, or at the limit when no line ends before it", () => {

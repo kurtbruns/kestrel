@@ -45,6 +45,8 @@ async function getSettings() {
           logo_url: string;
         };
         email_template: string;
+        email_template_is_default: boolean;
+        email_template_default: string;
         confirmation_email: {
           subject: string;
           body: string;
@@ -318,6 +320,59 @@ describe("email template (wired to the render path)", () => {
     const warnings = ((await res.json()) as { warnings: string[] }).warnings.join(" ");
     expect(warnings).toMatch(/view.?in.?browser/i);
     expect(warnings).toMatch(/made\.up/);
+  });
+
+  /** The template as the settings row stores it: blank while it follows the built-in one. */
+  async function storedTemplate(): Promise<string> {
+    const row = await env.DB.prepare("SELECT data FROM settings").first<{ data: string }>();
+    return (JSON.parse(row?.data ?? "{}") as { emailTemplate?: string }).emailTemplate ?? "";
+  }
+
+  it("follows the built-in template while none is saved, and says so (SPEC §9)", async () => {
+    const { body } = await getSettings();
+    expect(body.settings.email_template_is_default).toBe(true);
+    expect(body.settings.email_template).toBe(body.settings.email_template_default);
+    expect(body.settings.email_template_default).toContain("Powered by Kestrel");
+  });
+
+  it("stops following the built-in template once one of the publisher's own is saved (SPEC §9)", async () => {
+    expect((await putSettings({ email_template: withUnsub() })).status).toBe(200);
+    const { body } = await getSettings();
+    expect(body.settings.email_template_is_default).toBe(false);
+    expect(body.settings.email_template).toBe(withUnsub());
+    expect(body.settings.email_template_default).toContain("Powered by Kestrel");
+  });
+
+  it("follows the built-in template again on a save of null, storing no copy of it (SPEC §9)", async () => {
+    await putSettings({ email_template: withUnsub() });
+    const res = await putSettings({ email_template: null });
+    expect(res.status).toBe(200);
+    const saved = (await res.json()) as {
+      settings: { email_template: string; email_template_is_default: boolean };
+      warnings: string[];
+    };
+    expect(saved.settings.email_template_is_default).toBe(true);
+    expect(saved.warnings).toEqual([]);
+    expect(await storedTemplate()).toBe("");
+    const { body } = await getSettings();
+    expect(body.settings.email_template).toBe(body.settings.email_template_default);
+  });
+
+  it("follows the built-in template when a save is its text, whatever its line endings and outer whitespace (SPEC §9)", async () => {
+    const builtIn = (await getSettings()).body.settings.email_template_default;
+    await putSettings({ email_template: withUnsub() });
+    const res = await putSettings({ email_template: `\n${builtIn.replace(/\n/g, "\r\n")}  \n` });
+    expect(res.status).toBe(200);
+    expect(await storedTemplate()).toBe("");
+    expect((await getSettings()).body.settings.email_template_is_default).toBe(true);
+  });
+
+  it("keeps a one-character change to the built-in template as the publisher's own (SPEC §9)", async () => {
+    const builtIn = (await getSettings()).body.settings.email_template_default;
+    const edited = builtIn.replace("Powered by Kestrel", "Powered by Kestrel!");
+    expect((await putSettings({ email_template: edited })).status).toBe(200);
+    expect(await storedTemplate()).toBe(edited);
+    expect((await getSettings()).body.settings.email_template_is_default).toBe(false);
   });
 
   it("rejects an empty template (400) instead of silently resetting to the default", async () => {

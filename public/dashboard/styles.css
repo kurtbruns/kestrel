@@ -6124,6 +6124,28 @@ button.set-embed-copy svg {
 .set-tpl-block {
   margin-top: 0;
 }
+/* Which template the page holds, built-in or the publisher's own, with Reset beside it. */
+.set-tpl-source {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.set-tpl-source-text {
+  margin: 0;
+  flex: 1 1 280px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.set-tpl-source-text strong {
+  color: var(--fg);
+  font-weight: 600;
+}
 .set-tpl-editor-head {
   display: flex;
   align-items: center;

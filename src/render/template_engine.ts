@@ -27,7 +27,7 @@ import { initWasm, inline } from "@css-inline/css-inline-wasm";
 import wasmModule from "@css-inline/css-inline-wasm/index_bg.wasm";
 import { SANS_STACK, SERIF_STACK } from "../../shared/fonts";
 import { senderName } from "../../shared/publication";
-import type { IdentityField } from "../../shared/settings";
+import { type IdentityField, isBuiltInText } from "../../shared/settings";
 import type { AppSettings } from "../db/settings";
 import { publicationLogoUrl } from "../db/settings";
 import type { Config } from "../env";
@@ -417,13 +417,28 @@ export interface EmailBranding {
 export function resolveBranding(settings: AppSettings, config: Config): EmailBranding {
   const p = settings.publication;
   return {
-    template: settings.emailTemplate.trim() ? settings.emailTemplate : DEFAULT_EMAIL_TEMPLATE,
+    template: resolveEmailTemplate(settings.emailTemplate),
     name: p.name,
     tagline: p.tagline,
     logoUrl: publicationLogoUrl(config.mediaPublicBase, p.logo),
     address: p.address,
     senderName: senderName(p.name, config.fromAddress),
   };
+}
+
+/** The template a stored one stands for: a blank one follows the built-in template (SPEC §9). */
+export function resolveEmailTemplate(stored: string): string {
+  return followsBuiltInTemplate(stored) ? DEFAULT_EMAIL_TEMPLATE : stored;
+}
+
+/** Whether a stored template follows the built-in one rather than being the publisher's own. */
+export function followsBuiltInTemplate(stored: string): boolean {
+  return !stored.trim();
+}
+
+/** Whether a template a client saves is the built-in one's text (`isBuiltInText`). */
+export function matchesBuiltInTemplate(template: string): boolean {
+  return isBuiltInText(template, DEFAULT_EMAIL_TEMPLATE);
 }
 
 /** Neutral branding (the default template, empty identity) — for tests and the dev

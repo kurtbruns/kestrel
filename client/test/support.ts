@@ -282,6 +282,10 @@ export function settingsResponse(
       test_recipients: [],
       publication: { name: "Birds Weekly", tagline: "", address: "", logo_url: "" },
       email_template: '<div>{{ .Post.Body }}<a href="{{ .Email.UnsubscribeURL }}">out</a></div>',
+      // A template of the publisher's own; the built-in one is a short stand-in.
+      email_template_is_default: false,
+      email_template_default:
+        '<main>{{ .Post.Body }}<a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a></main>',
       confirmation_email: { subject: "", body: "", button_label: "", reassurance: "" },
       confirmation_email_default: {
         subject: "Confirm your subscription",
