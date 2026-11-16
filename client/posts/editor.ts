@@ -862,6 +862,7 @@ export async function renderEditor(
       saveFailed = false;
       saveError = null;
       retryDelay = 0;
+      tookIn = null; // ours is the newest version now, so the note about theirs is done
       if (!silent) {
         toast("Saved");
       }
@@ -1103,12 +1104,19 @@ export async function renderEditor(
     pub = publishingOf(fresh.post, fresh.subject_slug_held);
     paintPublishing();
     const who = whoActed(fresh.post.author, fresh.post.author_client);
-    const when = fmtAt(Date.now(), clocksFor([Date.now()]));
+    const at = fresh.post.updated_at; // when they saved, not when this editor noticed
+    const when = fmtAt(at, clocksFor([at]));
     tookIn = `Updated with changes ${who ? `by ${who}` : "made elsewhere"} · ${when}`;
     refreshDirty();
-    // The email on screen is the old version's: mark it, and render the new one ahead.
-    paintPreview();
-    renderAhead();
+    // The email on screen is the old version's. On the Preview tab, ask for the new one the
+    // way opening the tab does, so a render that fails says so rather than staying on
+    // Updating…; elsewhere, mark it and render ahead.
+    if (tab === "preview") {
+      showPreview();
+    } else {
+      paintPreview();
+      renderAhead();
+    }
   }
 
   function clearConflict() {
@@ -1178,8 +1186,8 @@ export async function renderEditor(
     return true;
   }
 
-  // Skipped while hidden, saving, or already warned — poll GET is cheap and only
-  // re-warns on a revision we haven't surfaced yet. Read at once when the tab is shown.
+  // Skipped while hidden, saving, or showing the banner: the read is cheap, and it acts only
+  // on a revision not yet taken in or warned of. Read at once when the tab is shown.
   async function pollFreshness() {
     if (locked || saving || conflicted || gone || document.hidden) {
       return;

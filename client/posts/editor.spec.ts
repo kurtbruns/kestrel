@@ -192,7 +192,7 @@ function draftServer(initial = draft(), sendOf?: () => SendView | null) {
     elsewhere(
       author: string,
       client: string | null = null,
-      change: { subject?: string; markdown?: string } = {},
+      change: { subject?: string; markdown?: string; updated_at?: number } = {},
     ): string {
       n += 1;
       const { markdown = state.markdown, ...fields } = change;
@@ -311,6 +311,8 @@ describe("editor view", () => {
   }
   /** The frame the Preview tab shows; the other loads the next render out of sight. */
   const shownFrame = () => $<HTMLIFrameElement>("#composerBody iframe.preview:not(.staging)");
+  /** The text the Preview tab shows now. */
+  const shownText = () => shownFrame().contentDocument?.body?.textContent ?? "";
   /** Let a render reach the Preview tab: its reads answer, and its frame loads and swaps in. */
   async function previewLoads() {
     for (let i = 0; i < 3; i++) {
@@ -597,6 +599,151 @@ describe("editor view", () => {
       expect($("#freshnessBanner").hidden).toBe(true);
       expect(body().value).toBe("theirs");
       expect($("#saveStatus").textContent).toMatch(/^Updated with changes by x@y\.z via the API/);
+    });
+
+    it("names the time the other writer saved, and drops the note once a save of yours lands", async () => {
+      const server = draftServer();
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        ...previewRoutes(server),
+      ]);
+      server.elsewhere("x@y.z", null, {
+        markdown: "theirs",
+        updated_at: Date.parse("2020-01-02T12:00:00Z"),
+      });
+      await vi.advanceTimersByTimeAsync(10000);
+      expect($("#saveStatus").textContent).toMatch(/· Jan 2, 2020, /);
+      $("#saveBtn").click(); // nothing new, but it lands: ours is the newest version now
+      await vi.advanceTimersByTimeAsync(0);
+      expect(puts()).toHaveLength(1);
+      expect($("#saveStatus").textContent).toBe("Saved");
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    /** An image picked into the body, its upload held until the spec answers it. */
+    function heldUpload() {
+      let answer: ((r: unknown) => void) | null = null;
+      return {
+        route: {
+          method: "POST",
+          path: "/api/posts/p1/images",
+          reply: () => new Promise((r) => (answer = r)),
+        } as FakeRoute,
+        pick() {
+          const input = $<HTMLInputElement>("#imgInput");
+          const file = new File(["png"], "owl.png", { type: "image/png" });
+          Object.defineProperty(input, "files", { value: [file], configurable: true });
+          input.dispatchEvent(new Event("change"));
+        },
+        answer: () => answer!({ image: { filename: "owl.png", url: "http://m/owl.png" } }),
+      };
+    }
+
+    it("asks instead while an image is still uploading, though its placeholder is saved, so the image keeps its line", async () => {
+      const server = draftServer();
+      const upload = heldUpload();
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        upload.route,
+        ...previewRoutes(server),
+      ]);
+      upload.pick();
+      await vi.advanceTimersByTimeAsync(5000); // the placeholder is saved; the upload is still out
+      expect(puts()).toHaveLength(1);
+      const mine = body().value;
+      expect(mine).toMatch(/Uploading "owl\.png"/);
+      server.elsewhere("x@y.z", null, { markdown: "theirs" });
+      await vi.advanceTimersByTimeAsync(5000); // the freshness poll
+      expect($("#freshnessBanner").hidden).toBe(false);
+      expect(body().value).toBe(mine);
+    });
+
+    it("raises the banner at once, without reading the post again, when a save with edits in it is refused as stale", async () => {
+      const server = draftServer();
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        {
+          method: "PUT",
+          path: "/api/posts/p1",
+          reply: () =>
+            jsonResponse(
+              {
+                error: "stale_revision",
+                message: "changed",
+                current_revision: "r9",
+                author: "x@y.z",
+              },
+              409,
+            ),
+        },
+      ]);
+      typeInto(body(), "mine");
+      $("#saveBtn").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect($("#freshnessBanner").hidden).toBe(false);
+      expect(reads()).toHaveLength(1); // the mount's own
+      expect(body().value).toBe("mine");
+    });
+
+    it("raises the banner at once, without reading the post again, when Save draft is refused as stale while an image is uploading", async () => {
+      const server = draftServer();
+      const upload = heldUpload();
+      let stale = false;
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        {
+          method: "PUT",
+          path: "/api/posts/p1",
+          reply: (req) =>
+            stale
+              ? jsonResponse(
+                  {
+                    error: "stale_revision",
+                    message: "changed",
+                    current_revision: "r9",
+                    author: "x@y.z",
+                  },
+                  409,
+                )
+              : server.put(req),
+        },
+        upload.route,
+        ...previewRoutes(server),
+      ]);
+      upload.pick();
+      await vi.advanceTimersByTimeAsync(5000); // the placeholder is saved; the upload is still out
+      stale = true;
+      $("#saveBtn").click(); // nothing unsaved in the text, but the image is
+      await vi.advanceTimersByTimeAsync(0);
+      expect($("#freshnessBanner").hidden).toBe(false);
+      expect(reads()).toHaveLength(1);
+    });
+
+    it("says a failed render of the taken-in version on the Preview tab, rather than staying on Updating…", async () => {
+      const server = draftServer();
+      let fail = false;
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        {
+          path: "/api/posts/p1/preview.json",
+          reply: () =>
+            fail
+              ? jsonResponse({ error: "internal", message: "The render failed." }, 500)
+              : { revision_id: server.revision(), html: "<p>Hoot.</p>", warnings: [] },
+        },
+      ]);
+      $(".ctab[data-tab='preview']").click();
+      await previewLoads();
+      fail = true;
+      server.elsewhere("service", null, { markdown: "Claude’s hoot." });
+      await vi.advanceTimersByTimeAsync(10000); // the freshness poll takes Claude's save in
+      await previewLoads();
+      expect(shownText()).toBe("Hoot.");
+      expect($("#previewStatus").textContent).toBe("Not up to date");
+      expect($("#toasts").textContent).toBe("The render failed.");
     });
 
     it("still saves yours when Keep editing is chosen after undoing back to your last save", async () => {
@@ -1389,9 +1536,6 @@ describe("editor view", () => {
   });
 
   describe("the preview, rendered ahead (DESIGN §3)", () => {
-    /** The text the Preview tab shows now. */
-    const shownText = () => shownFrame().contentDocument?.body?.textContent ?? "";
-
     it("shows the render read after a save the moment Preview opens, without saving or rendering again", async () => {
       const server = draftServer();
       await open([

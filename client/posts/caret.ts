@@ -17,6 +17,14 @@ export function carryOffset(before: string, after: string, offset: number): numb
   ) {
     tail++;
   }
+  // Never split a character written as two UTF-16 units (an emoji, say): a head that ends on
+  // the first of a pair, or a tail that starts on the second, gives that unit back to the change.
+  if (head > 0 && isHigh(before.charCodeAt(head - 1))) {
+    head--;
+  }
+  if (tail > 0 && isLow(before.charCodeAt(before.length - tail))) {
+    tail--;
+  }
   if (offset <= head) {
     return Math.min(offset, after.length);
   }
@@ -25,3 +33,6 @@ export function carryOffset(before: string, after: string, offset: number): numb
   }
   return after.length - tail;
 }
+
+const isHigh = (unit: number) => unit >= 0xd800 && unit <= 0xdbff;
+const isLow = (unit: number) => unit >= 0xdc00 && unit <= 0xdfff;

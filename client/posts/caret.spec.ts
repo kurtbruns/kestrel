@@ -29,4 +29,14 @@ describe("carryOffset", () => {
   it("leaves an unchanged text's offsets alone", () => {
     expect(carryOffset(before, before, 10)).toBe(10);
   });
+
+  it("never lands inside a character written as two units, when the change ends or starts on one", () => {
+    // 😀 is D83D DE00 and 🨀 is D83E DE00: the same second unit.
+    const before = "abX\u{1F600}";
+    const after = "abYZ\u{1FA00}";
+    expect(carryOffset(before, after, 3)).toBe(after.length);
+    // 😀 and 😃 (D83D DE03) share their first unit instead.
+    expect(carryOffset("a\u{1F600}b", "a\u{1F603}b", 3)).toBe(3);
+    expect(carryOffset("a\u{1F600}b", "a\u{1F603}cb", 1)).toBe(1);
+  });
 });
