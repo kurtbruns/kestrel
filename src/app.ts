@@ -1217,16 +1217,30 @@ export function createRouter({
       resource: "posts",
       title: "Render a post's email",
       summary:
-        "Render the post to its email and describe it (the preview's URL, subject, plain text, warnings, and `frozen`), as JSON.",
+        "Render the post to its email and describe it (the preview's URL, the revision it is of, subject, plain text, warnings, and `frozen`), as JSON.",
       description:
-        "Once the post is scheduled this is its frozen copy, exactly as it will fire, and once sent the record's; a draft renders live. A frozen copy's `warnings` are the ones its render gave when it was frozen or last re-made.",
+        "Once the post is scheduled this is its frozen copy, exactly as it will fire, and once sent the record's; a draft renders live. A frozen copy's `warnings` are the ones its render gave when it was frozen or last re-made. `revision_id` names what was rendered: compare it with the `revision_id` a save answered to tell whether this is the render of that save. With `include=html` the answer carries the page too, from the same render, so the page and its warnings can't come from two different saves.",
+      query: [
+        {
+          name: "include",
+          values: ["html"],
+          description:
+            "`html` adds the email as a page, `html`, from the same render. Leave it out for a short answer: the page is the size of the email.",
+        },
+      ],
       returns: {
         fields: [
           {
             name: "url",
             type: "string",
             description:
-              "The rendered email as a page behind the admin gate, `GET /api/posts/:id/preview`: not a public link.",
+              "The rendered email as a page behind the admin gate, `GET /api/posts/:id/preview`: not a public link. It renders again when opened, so it may be of a later revision: for the page of this render, ask with `include=html`.",
+          },
+          {
+            name: "revision_id",
+            type: "string",
+            description:
+              "The post revision this render is of, named as a save names the revision it wrote: the post's `current_revision` when the render read it. A scheduled or sent post's frozen copy is of its current revision too, since such a post takes no edit.",
           },
           { name: "subject", type: "string", description: "The email's subject." },
           {
@@ -1245,6 +1259,12 @@ export function createRouter({
             type: "boolean",
             description: "Whether it is a scheduled or sent send's frozen copy.",
           },
+          {
+            name: "html",
+            type: "string",
+            description:
+              "Only with `include=html`: the email as a page, as `GET /api/posts/:id/preview` serves it, from the same render as the rest of the answer.",
+          },
         ],
       },
       handler: renderRoutes.preview,
@@ -1257,7 +1277,7 @@ export function createRouter({
       title: "Preview a post's email",
       summary: "The rendered email as a standalone HTML page (the editor's preview).",
       description:
-        "Once the post is scheduled this is its frozen copy, exactly as it will fire, and once sent the record's; a draft renders live.",
+        "Once the post is scheduled this is its frozen copy, exactly as it will fire, and once sent the record's; a draft renders live. It names no revision, since it renders whatever is saved when it is opened: to read the page with the revision it is of and its warnings, all from one render, use `GET /api/posts/:id/preview.json?include=html`.",
       handler: renderRoutes.previewPage,
     },
     {

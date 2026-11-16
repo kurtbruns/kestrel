@@ -146,12 +146,18 @@ export interface PostSavedResponse {
 /** GET /api/posts/:id/preview.json: where the rendered page is, and whether it is a frozen send's copy. */
 export interface PreviewResponse {
   url: string;
+  /** The post revision this render is of (SPEC §5): the post's current revision when the render
+   *  read it, which a scheduled or sent post's frozen copy was made from too. Named as a save's
+   *  answer names the revision it wrote, so the two compare directly. */
+  revision_id: string;
   subject: string;
   /** The email's plain-text part, from the same render as the page: what a mail client shows
    *  a reader who doesn't load HTML, and a client that can't show a page reads instead. */
   text: string;
   warnings: string[];
   frozen: boolean;
+  /** The email as a page, from the same render, only when asked for with `include=html`. */
+  html?: string;
 }
 
 /**

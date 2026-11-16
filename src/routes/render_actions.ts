@@ -1,6 +1,7 @@
 /**
  * Preview, test-send, and the fake outbox. All authed.
- *   GET  /api/posts/:id/preview.json   → { url, subject, warnings, frozen } (where the preview is)
+ *   GET  /api/posts/:id/preview.json   → { url, revision_id, subject, text, warnings, frozen }, and
+ *                                    the page itself as `html` with `?include=html`
  *   GET  /api/posts/:id/preview        → the rendered HTML (generic unsubscribe link)
  *   GET  /api/posts/:id/web            → the same copy as its archive page will show it
  *   POST /api/posts/:id/test           → send the post's email to one address via the provider
@@ -72,6 +73,13 @@ async function loadBranding(c: RequestContext): Promise<EmailBranding> {
  *  three instruments can never disagree about what went, or is going, out. */
 interface PostEmail {
   input: RenderInput;
+  /** The post revision this copy is of: the current revision of the one post row the copy was
+   *  read with. A frozen copy is of it too, since a scheduled or sent post takes no edit and a
+   *  freeze lands only while its post is still on the revision it rendered (SPEC §6). A send
+   *  records no revision, so one window is open: a cancel, an edit, and a reschedule all landing
+   *  between this read of the post and the read of its send would name the old revision beside
+   *  the new copy. */
+  revision: string;
   email: RenderedEmail;
   warnings: string[];
   /** The send whose frozen copy this is, with the display name frozen beside it (SPEC §9);
@@ -90,9 +98,13 @@ async function loadPostEmail(c: RequestContext): Promise<PostEmail> {
       : input.post.status === "sent"
         ? await latestSentSendForPost(c.env.DB, input.post.id)
         : null;
+  // The one read of the post decides the revision, and the render reads that revision's row
+  // by id, which never changes: so the copy and the revision it names can't come apart.
+  const revision = input.revision.id;
   if (send) {
     return {
       input,
+      revision,
       email: { subject: send.subject, html: send.rendered_html, text: send.rendered_text },
       // What the render said when it froze this copy, kept with it: the copy is what goes
       // out, so a test of it reports what it found (SPEC §5).
@@ -102,7 +114,14 @@ async function loadPostEmail(c: RequestContext): Promise<PostEmail> {
     };
   }
   const result = await render(input, c.config, await loadBranding(c));
-  return { input, email: result, warnings: result.warnings, frozen: null, dateMs: Date.now() };
+  return {
+    input,
+    revision,
+    email: result,
+    warnings: result.warnings,
+    frozen: null,
+    dateMs: Date.now(),
+  };
 }
 
 /** An authed page carrying a post's HTML: no script, no form, never framed by another
@@ -129,15 +148,26 @@ function asPreviewed(c: RequestContext, email: RenderedEmail): RenderedEmail {
   });
 }
 
+/**
+ * Describe the post's email, naming the revision it is of (SPEC §5). With `include=html` the
+ * page comes in the same answer, so a client that shows the email beside its warnings has both
+ * from one render: two requests could straddle a write, or an image upload that changes the
+ * render without a new revision, and pair one copy's page with another's warnings.
+ */
 export async function preview(c: RequestContext): Promise<Response> {
-  const { input, email, warnings, frozen } = await loadPostEmail(c);
+  const { input, revision, email, warnings, frozen } = await loadPostEmail(c);
+  const previewed = asPreviewed(c, email);
   const body: PreviewResponse = {
     url: `${c.config.appOrigin}/api/posts/${input.post.id}/preview`,
+    revision_id: revision,
     subject: email.subject,
-    text: asPreviewed(c, email).text,
+    text: previewed.text,
     warnings,
     frozen: frozen !== null,
   };
+  if (c.url.searchParams.get("include") === "html") {
+    body.html = previewed.html;
+  }
   return json(body);
 }
 

@@ -547,7 +547,7 @@ export const TOOL_DEFS: ToolDef[] = [
     name: "preview_post",
     title: "Preview a post's email",
     description:
-      "The post's email as it would go out, from the one render path every test and send uses: its subject, its plain text, and what the render found wrong. Once scheduled it is the frozen copy that will fire. To see the designed email, the publisher opens `editor`.",
+      "The post's email as it would go out, from the one render path every test and send uses: its `revision_id` (another save landed if it isn't save_draft's), subject, plain text, and what the render found wrong. Once scheduled it is the frozen copy that will fire. To see the designed email, the publisher opens `editor`.",
     annotations: READ,
     routes: [PREVIEW_POST],
     args: { id: pick(PREVIEW_POST, "path", "id") },
@@ -558,6 +558,7 @@ export const TOOL_DEFS: ToolDef[] = [
       }
       const r = a.body as PreviewResponse;
       return data({
+        revision_id: r.revision_id,
         subject: r.subject,
         frozen: r.frozen,
         warnings: r.warnings,

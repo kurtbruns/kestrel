@@ -17,6 +17,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - The post editor's formatting buttons toggle: a second click of Bold, Italic, Code, Heading, Quote, or a list takes its markup off rather than adding it again, including markup written by hand (italic in `*` or `_`, bold in `**` or `__`, a fence that names its language). The other list button switches a bulleted list to numbered and back, and a numbered list counts 1, 2, 3, with nested items keeping their own markers. Italic now adds `_word_`, or `*` inside a word, where an underscore wouldn't render; bold and italic combine and come off separately. Link and Indent still add each time, since taking a link apart would lose its address and repeated indents nest a list.
 - The post editor's Preview tab opens at once: the email is rendered after each save and when the pointer reaches the tab, then shown without going blank or jumping. Opened before the latest edit's render is ready, it shows the last one dimmed under "Updating…" until the fresh one takes its place.
 
+### Added
+
+- `GET /api/posts/:id/preview.json` answers `revision_id`, the post revision the render is of, named as a save names the revision it wrote, and with `?include=html` carries the email's page from the same render. Claude's `preview_post` answers `revision_id` too, so it can tell whether the preview is of the draft it just saved. The editor's Preview now reads the page and its warnings in one request and shows a render only as the revision the server says it is, so a save from another tab or from Claude landing mid-render is never shown as your text.
+
 ### Fixed
 
 - A focused text field, such as a post's subject, rings flush with its border, as the body's editor does, instead of with a gap between the field's edge and the blue ring.

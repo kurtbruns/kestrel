@@ -28,7 +28,7 @@ import {
 import type { SettingsResponse } from "../../shared/settings";
 import { slugify } from "../../shared/slug";
 import type { SubscriberListResponse } from "../../shared/subscribers";
-import { ApiError, api, apiText, describeError, isNetworkFailure } from "../api";
+import { ApiError, api, describeError, isNetworkFailure } from "../api";
 import {
   connectProviderLink,
   dailyWritesLine,
@@ -517,13 +517,17 @@ export async function renderEditor(
   ];
   const previewStatus = $("#previewStatus");
   const renders = new LatestRender(async () => {
-    // The page carries only the email, so what the render found wrong with it is read beside
-    // it: a broken image reference reads as text in the email itself.
-    const [page, { warnings }] = await Promise.all([
-      apiText(`/api/posts/${id}/preview`, { signal }),
-      api<PreviewResponse>(`/api/posts/${id}/preview.json`, { signal }),
-    ]);
-    return { html: page, warnings };
+    // The page and what the render found wrong with it (a broken image reference reads as text
+    // in the email itself) come from one render, which names the revision it is of.
+    const {
+      revision_id: revision,
+      html: page,
+      warnings,
+    } = await api<PreviewResponse>(`/api/posts/${id}/preview.json?include=html`, { signal });
+    if (page === undefined) {
+      throw new Error("The preview came back without its page.");
+    }
+    return { revision, html: page, warnings };
   });
   let shown: Render | null = null; // in `front`
   let loading: Render | null = null; // loading in `back`
@@ -636,8 +640,8 @@ export async function renderEditor(
       if (!locked) {
         await saveDraft(true);
       }
-      // A write landing while the render is in flight (our own save, a pause's flush) makes
-      // that render unattributable, so it is asked for again once the post is still.
+      // A write landing first (our own save's echo, a pause's flush, another writer) answers
+      // with a render of another revision, which is dropped and asked for again.
       let r: Render | null = null;
       for (let tries = 0; !r && tries < 3; tries++) {
         r = await renders.want(savedKey());
@@ -836,7 +840,6 @@ export async function renderEditor(
     // dirty and goes with the next one.
     const fields = collect();
     const sent = JSON.stringify(fields);
-    renders.writing(); // a render in flight now can't say which revision it is of
     let landed = false;
     try {
       const body: PostEditBody = { ...fields, base_revision: revisions.base };
