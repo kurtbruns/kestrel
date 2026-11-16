@@ -19,6 +19,13 @@ An upgrade moves the instance to a newer release of `@kurtbruns/kestrel`. The gu
 
 The production migration, the deploy, and anything in the page's **Go back** section reach real readers: say what each does and confirm first. Going back's database restore erases everything written since the backup.
 
+## The restore point before the migration
+
+The bookmark from the page's **Note a restore point** step is the only way **Go back** can restore the database, so the upgrade doesn't go on without one.
+
+- **Show the person the bookmark before the migration,** and say to keep it until the upgrade checks out.
+- **If the command printed no bookmark, stop before the migration.** Show the person what it printed, and work it out with them. Until then production is unchanged, and the running release keeps working.
+
 ## The migration before the deploy
 
 A deploy onto a database missing the release's migrations takes the instance down until they're applied: the public pages say the newsletter is unavailable, and nothing sends.
