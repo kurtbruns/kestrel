@@ -1088,6 +1088,8 @@ export async function renderEditor(
         }
       };
     }
+    // The email on screen is no longer the saved post's: mark it now, not on the next look.
+    paintPreview();
   }
 
   // A read or write that found the post gone (a 404) answers it here, whichever control

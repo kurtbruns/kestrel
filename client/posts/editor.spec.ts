@@ -1456,6 +1456,24 @@ describe("editor view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
+    it("marks the email on screen as not up to date the moment the poll finds another writer's save", async () => {
+      const server = draftServer();
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        ...previewRoutes(() => "<p>Hoot.</p>"),
+      ]);
+      $(".ctab[data-tab='preview']").click();
+      await previewLoads();
+      expect(shownFrame().classList.contains("updating")).toBe(false);
+      server.elsewhere("service");
+      await vi.advanceTimersByTimeAsync(10000); // the freshness poll finds Claude's save
+      expect($("#freshnessBanner").hidden).toBe(false);
+      expect(shownFrame().classList.contains("updating")).toBe(true);
+      expect($("#previewStatus").textContent).toBe("Not up to date");
+      expect(fake.unhandled).toEqual([]);
+    });
+
     it("says “Updating…”, not the last try's failure, while a new try is in flight", async () => {
       const server = draftServer();
       const preview = heldPreview();
