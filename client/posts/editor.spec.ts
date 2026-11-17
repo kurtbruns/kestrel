@@ -3464,6 +3464,26 @@ describe("editor view", () => {
     body().dispatchEvent(paste);
   }
 
+  function drag(type: "dragover" | "dragleave", from: Element, to: Element | null = null) {
+    const e = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(e, "relatedTarget", { value: to });
+    from.dispatchEvent(e);
+  }
+
+  it("frames the body for a held file and names the drop in the foot, until the drag leaves from any child", async () => {
+    await open([{ path: "/api/posts/p1", reply: () => draft() }]);
+    const frame = $("#composerBody");
+    drag("dragover", body());
+    expect(frame.classList.contains("dragover")).toBe(true);
+    expect($("#dropFoot span").textContent).toBe("Drop images to upload");
+    drag("dragleave", body(), $("#mdHl")); // between the body's own children: still over it
+    expect(frame.classList.contains("dragover")).toBe(true);
+    drag("dragleave", body()); // out of the window, straight from the textarea
+    expect(frame.classList.contains("dragover")).toBe(false);
+    expect($("#dropFoot span").textContent).toBe("Paste, drop, or click to add images");
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("lands a pasted image in its own line when an earlier paste of the same name, still uploading, was undone", async () => {
     const uploads = heldUploads();
     await open([{ path: "/api/posts/p1", reply: () => draft() }, uploads.route]);

@@ -2895,17 +2895,14 @@ body.web-mode .content {
 #f-subject[readonly]:focus-visible {
   outline-color: var(--muted);
 }
+/* A file held over the body: a dashed frame and nothing over the text, since the image goes
+   in at the caret and the publisher needs to see where that is. The foot says what a drop
+   does (`.composer-foot.dragover`). */
 .composer-body.dragover::after {
-  content: "Drop images to upload";
+  content: "";
   position: absolute;
   inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in srgb, var(--ring) 14%, var(--card));
   border: 2px dashed var(--ring);
-  color: var(--fg);
-  font-weight: 600;
   pointer-events: none;
 }
 .composer-foot {
@@ -2928,6 +2925,13 @@ body.web-mode .content {
 .composer-foot.off {
   opacity: 0.4;
   pointer-events: none;
+}
+/* While a file is held over the body the foot names the drop, at full strength on the
+   Preview tab too, where a drop still works. */
+.composer-foot.dragover {
+  opacity: 1;
+  color: var(--fg);
+  font-weight: 600;
 }
 .composer-foot svg {
   width: 16px;
