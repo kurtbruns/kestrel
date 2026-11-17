@@ -4,6 +4,10 @@
 // instead of stacking marks. Link and Indent are the exceptions: taking a link apart would
 // throw away its address, and stacking an indent is how a list nests. Pure, so the view only
 // applies the edit (posts/text_edit.ts), as one step the browser can undo.
+//
+// Bold, Italic, and Code act on the words, not on exactly what was selected: spaces at the ends
+// of a selection stay outside the marks (a double-click often takes the space after a word, and
+// `** word **` marks nothing), and a caret inside a word stands for that word.
 
 /** The post body as the toolbar reads it: its text and the selection in it. */
 export interface TextSelection {
@@ -46,6 +50,35 @@ export function formatEdit(kind: string, at: TextSelection): FormatEdit | null {
 }
 
 // --- marks around the selection ---
+
+/**
+ * What an inline mark goes around: the selection without the `space` at its ends, or the word
+ * a bare caret sits inside. A selection of nothing but space, and a caret at a word's edge or
+ * outside one, are left as they are, so the button still inserts its placeholder there.
+ */
+function words(at: TextSelection, space: RegExp): TextSelection {
+  const { text } = at;
+  let { start, end } = at;
+  if (start === end) {
+    if (!isWord(text[start - 1]) || !isWord(text[start])) {
+      return at;
+    }
+    while (isWord(text[start - 1])) {
+      start -= 1;
+    }
+    while (isWord(text[end])) {
+      end += 1;
+    }
+    return { text, start, end };
+  }
+  while (start < end && space.test(text[start] ?? "")) {
+    start += 1;
+  }
+  while (end > start && space.test(text[end - 1] ?? "")) {
+    end -= 1;
+  }
+  return start === end ? at : { text, start, end };
+}
 
 function wrap(at: TextSelection, before: string, after: string, placeholder: string): FormatEdit {
   const inner = at.text.slice(at.start, at.end) || placeholder;
@@ -190,7 +223,9 @@ function marked(at: TextSelection, mark: Mark): FormatEdit | null {
 /** Bold or italic, off if the selection is one span of it in either character, else on. Bold
  *  adds `**`; italic adds `_`, or `*` where it touches a word, since CommonMark leaves an
  *  underscore inside a word literal (un*believ*able is emphasis, un_believ_able is not). */
-function toggleEmphasis(at: TextSelection, size: 1 | 2, placeholder: string): FormatEdit {
+function toggleEmphasis(selected: TextSelection, size: 1 | 2, placeholder: string): FormatEdit {
+  // Line breaks come off the ends too: a mark can't reach across one to close.
+  const at = words(selected, /\s/);
   for (const ch of size === 1 ? ["_", "*"] : ["*", "_"]) {
     const off = marked(at, emphasis(ch, size)) ?? throughOther(at, ch, emphasis(ch, size));
     if (off) {
@@ -255,7 +290,10 @@ function fenced(at: TextSelection): FormatEdit | null {
 /** Inline code for a selection within a line, a fenced block for none or several lines; either
  *  comes off again on a second click, a fence with a language or a span of longer backtick
  *  runs (``a`b``) included. */
-function toggleCode(at: TextSelection): FormatEdit {
+function toggleCode(selected: TextSelection): FormatEdit {
+  // Only spaces and tabs come off: a selection ending in a line break is whole lines, which
+  // fence as they were selected.
+  const at = words(selected, /[ \t]/);
   const off = fenced(at) ?? marked(at, CODE);
   if (off) {
     return off;

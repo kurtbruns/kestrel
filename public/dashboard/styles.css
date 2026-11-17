@@ -2905,6 +2905,18 @@ body.web-mode .content {
   border: 2px dashed var(--ring);
   pointer-events: none;
 }
+/* Where a dropped image will go (posts/drop_caret.ts): the text caret, which a textarea
+   doesn't draw during a drag, so it is drawn here, wider than a caret and ringed so it is
+   found at a glance. */
+.drop-caret {
+  position: absolute;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 25%, transparent);
+  pointer-events: none;
+}
 .composer-foot {
   display: flex;
   align-items: center;

@@ -18,7 +18,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - The post editor's Preview tab opens at once: the email is rendered after each save and when the pointer reaches the tab, then shown without going blank or jumping. Opened before the latest edit's render is ready, it shows the last one dimmed under "Updating…" until the fresh one takes its place.
 - The upgrade guide now checks that you have a restore point's bookmark before applying the database changes, since Go back needs it to restore the database. Its Check it list now checks email with a test of the email template or of a draft you already have, then SES's report in Settings → Email provider, which leaves no stray post behind. The upgrade skill in the operator's Claude context now stops before the migration when there is no bookmark, which bears on safety. A copy you've edited is merged by hand.
 - When another tab, Claude, or a script saves a draft you have open with nothing unsaved, the editor now shows their version in place, keeping your place in the text, and says beside **Save draft** whose changes it took in and when; Preview follows. The changed-elsewhere banner, with Reload and Keep editing, now appears only when you have unsaved edits. Before, it appeared either way, and choosing Keep editing with nothing unsaved left the draft holding their text while the editor showed yours as saved.
-- While an image is dragged over the post editor, the text stays readable: a dashed frame marks the editor and the line under it reads "Drop images to upload", where a tinted panel used to cover the text and hide the caret the image goes in at.
+- While an image is dragged over the post editor, the text stays readable: a dashed frame marks the editor, the line under it reads "Drop images to upload", and a marker shows the place in the text the image will go, where a tinted panel used to cover the text.
 
 ### Added
 
@@ -26,6 +26,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
+- In the post editor, Bold, Italic, and Code on a selection with a space at either end, as a double-click often leaves, now put their marks around the words and leave the spaces outside, where the marks used to take the spaces in and so marked nothing. With nothing selected and the caret inside a word, they now mark that word instead of inserting placeholder text in the middle of it.
+- An image added to a post now goes in as a paragraph of its own, with one blank line on each side. Before, an image added at the start of a paragraph was joined to that paragraph's text, with an extra blank line left above it.
 - Dragging an image over the post editor and away again without dropping it, back to another window for instance, no longer leaves "Drop images to upload" covering the text until the page is reloaded.
 - A focused text field, such as a post's subject, rings flush with its border, as the body's editor does, instead of with a gap between the field's edge and the blue ring.
 - In the post editor, ⌘Z and ⌘⇧Z now undo and redo a toolbar button or its shortcut in one step, as they do typing, and an inserted image in two, its placeholder and then the image. Before, any of them could not be undone and also cleared everything typed before it from the undo history.

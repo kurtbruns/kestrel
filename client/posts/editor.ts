@@ -74,6 +74,7 @@ import { activeSend, postAction } from "./actions";
 import { createAutosave } from "./autosave";
 import { carryOffset } from "./caret";
 import { DirtyTracker } from "./dirty";
+import { showDropCaret } from "./drop_caret";
 import { formatEdit } from "./format";
 import { LatestRender, type Render } from "./latest_render";
 import { trackSaves } from "./pending_save";
@@ -1497,7 +1498,8 @@ export async function renderEditor(
       return;
     }
     const placeholder = placeholderFor(file.name, ta.value, uploading);
-    editText(insertPlaceholder(textState(), placeholder));
+    const placed = insertPlaceholder(textState(), placeholder);
+    editText(placed.edit);
     uploading.add(placeholder);
     paintUploads();
     const fd = new FormData();
@@ -1532,7 +1534,7 @@ export async function renderEditor(
           if (signal.aborted) {
             return;
           }
-          const next = replacePlaceholder(textState(), placeholder, "");
+          const next = replacePlaceholder(textState(), placeholder, "", placed.pad);
           if (next) {
             editText(next);
           }
@@ -1559,6 +1561,7 @@ export async function renderEditor(
       dragOver = on;
       composerBody.classList.toggle("dragover", on);
       foot.classList.toggle("dragover", on);
+      showDropCaret(composerBody, mdHlCode, ta, on);
       paintUploads();
     };
     composerBody.addEventListener("dragover", (e) => {
