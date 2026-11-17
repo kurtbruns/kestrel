@@ -187,7 +187,7 @@ export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
       color: #93c5fd !important;
     }
     .email blockquote {
-      border-left-color: #3f3f46 !important;
+      border-left-color: #52525b !important;
       color: #a1a1aa !important;
     }
     .email .rule {
@@ -283,7 +283,7 @@ export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
       color: #93c5fd !important;
     }
     .email blockquote {
-      border-left-color: #3f3f46 !important;
+      border-left-color: #52525b !important;
       color: #a1a1aa !important;
     }
     .email .rule {

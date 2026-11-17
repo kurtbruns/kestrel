@@ -62,7 +62,7 @@ describe("starting templates", () => {
   it("sets a quote off with the built-in template's grey bar, light and dark", () => {
     for (const ex of Object.values(EMAIL_TEMPLATE_EXAMPLES)) {
       expect(ex.html).toMatch(/\.email blockquote \{[^}]*border-left: 3px solid #d4d4d8;/);
-      expect(ex.html).toMatch(/\.email blockquote \{[^}]*border-left-color: #3f3f46 !important;/);
+      expect(ex.html).toMatch(/\.email blockquote \{[^}]*border-left-color: #52525b !important;/);
     }
   });
 

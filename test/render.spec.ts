@@ -612,7 +612,7 @@ describe("render (the single render path)", async () => {
     expect(quote).toMatch(/style="[^"]*color: #52525b/);
     // The dark palette can't be inlined, so it rides the kept @media block.
     const dark = result.html.slice(result.html.indexOf("prefers-color-scheme: dark"));
-    expect(dark).toMatch(/\.email blockquote\s*\{[^}]*border-left-color: #3f3f46 !important/);
+    expect(dark).toMatch(/\.email blockquote\s*\{[^}]*border-left-color: #52525b !important/);
     // Only the quote takes the bar: the paragraphs around it stay plain.
     expect(result.html).not.toMatch(/<p\b[^>]*border-left/);
   });

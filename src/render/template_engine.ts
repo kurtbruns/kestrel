@@ -510,7 +510,7 @@ export const DEFAULT_EMAIL_TEMPLATE = `<style>
       color: #93c5fd !important;
     }
     .email blockquote {
-      border-left-color: #3f3f46 !important;
+      border-left-color: #52525b !important;
       color: #a1a1aa !important;
     }
     .email .rule {
