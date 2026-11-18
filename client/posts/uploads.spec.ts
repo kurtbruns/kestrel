@@ -67,15 +67,41 @@ function applied(state: TextState, edit: TextEdit | null): TextState | null {
 }
 
 describe("insertPlaceholder", () => {
-  it("puts the placeholder on its own line at the caret, and the caret after it", () => {
-    const edit = insertPlaceholder({ text: "ab", start: 1, end: 1 }, "P");
-    expect(edit).toEqual({ from: 1, to: 1, text: "\nP\n", select: { start: 4, end: 4 } });
+  const placed = (text: string, at: number) => {
+    const state = { text, start: at, end: at };
+    const { edit } = insertPlaceholder(state, "P");
+    const out = applyEdit(text, edit);
+    return `${out.slice(0, edit.select.start)}|${out.slice(edit.select.start)}`;
+  };
+
+  it("makes the placeholder a paragraph of its own, the caret past the blank line after it", () => {
+    expect(placed("ab", 1)).toBe("a\n\nP\n\n|b"); // mid-line: a blank line on each side
+    expect(placed("First.\n\nSecond.", 8)).toBe("First.\n\nP\n\n|Second."); // at a paragraph's start
+    expect(placed("First.\n\nSecond.", 6)).toBe("First.\n\nP\n\n|Second."); // at a paragraph's end
+    expect(placed("First.\nSecond.", 7)).toBe("First.\n\nP\n\n|Second."); // one line break there already
+  });
+
+  it("adds no blank line above a placeholder that starts the text", () => {
+    expect(placed("", 0)).toBe("P\n\n|");
+    expect(placed("# Owls", 0)).toBe("P\n\n|# Owls");
+    expect(placed("\n# Owls", 1)).toBe("\nP\n\n|# Owls");
+  });
+
+  it("says which line breaks it added, for a failed upload to take back", () => {
+    expect(insertPlaceholder({ text: "ab", start: 1, end: 1 }, "P").pad).toEqual({
+      before: 2,
+      after: 2,
+    });
+    expect(insertPlaceholder({ text: "a\n\nb", start: 3, end: 3 }, "P").pad).toEqual({
+      before: 0,
+      after: 2,
+    });
   });
 
   it("keeps two images dropped at once in the order they were dropped", () => {
     const empty = { text: "", start: 0, end: 0 };
-    const first = applied(empty, insertPlaceholder(empty, "A"))!;
-    expect(applied(first, insertPlaceholder(first, "B"))!.text).toBe("\nA\n\nB\n");
+    const first = applied(empty, insertPlaceholder(empty, "A").edit)!;
+    expect(applied(first, insertPlaceholder(first, "B").edit)!.text).toBe("A\n\nB\n\n");
   });
 });
 
@@ -99,9 +125,17 @@ describe("replacePlaceholder", () => {
   });
 
   it("removes a failed upload's placeholder and the line breaks it brought, leaving the text as it was", () => {
-    const before = { text: "# Owls\nSome text", start: 7, end: 7 };
-    const inserted = applied(before, insertPlaceholder(before, "PH"))!;
-    expect(applied(inserted, replacePlaceholder(inserted, "PH", ""))).toEqual(before);
+    for (const [text, at] of [
+      ["# Owls\nSome text", 7],
+      ["ab", 1],
+      ["First.\n\nSecond.", 8],
+      ["", 0],
+    ] as const) {
+      const before = { text, start: at, end: at };
+      const { edit, pad } = insertPlaceholder(before, "PH");
+      const inserted = applied(before, edit)!;
+      expect(applied(inserted, replacePlaceholder(inserted, "PH", "", pad))).toEqual(before);
+    }
   });
 
   it("answers null when the publisher deleted the placeholder, so nothing is put anywhere", () => {

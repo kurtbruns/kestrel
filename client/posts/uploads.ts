@@ -74,43 +74,70 @@ export function applyEdit(text: string, edit: TextEdit): string {
   return text.slice(0, edit.from) + edit.text + text.slice(edit.to);
 }
 
+/** The line breaks an inserted placeholder brought with it, which leave with it if its upload fails. */
+export interface Padding {
+  before: number;
+  after: number;
+}
+
+/** A placeholder's insertion, and the line breaks it added around itself. */
+export interface Placed {
+  edit: TextEdit;
+  pad: Padding;
+}
+
 /**
- * Inserts `placeholder` on a line of its own at the caret, the caret after it, so a second
- * image dropped at once goes below the first.
+ * Inserts `placeholder` at the caret as a paragraph of its own: a blank line before it unless
+ * it starts the text, and one after it, counting the line breaks already there, so an image
+ * never joins the paragraph beside it and no extra blank line is left. The caret goes past the
+ * blank line after it, so a second image dropped at once goes below the first.
  */
-export function insertPlaceholder(state: TextState, placeholder: string): TextEdit {
-  const snippet = `\n${placeholder}\n`;
-  const caret = state.start + snippet.length;
+export function insertPlaceholder(state: TextState, placeholder: string): Placed {
+  const { text, start } = state;
+  let behind = 0;
+  while (behind < 2 && text[start - behind - 1] === "\n") {
+    behind += 1;
+  }
+  let ahead = 0;
+  while (ahead < 2 && text[start + ahead] === "\n") {
+    ahead += 1;
+  }
+  const before = start === behind ? 0 : 2 - behind; // nothing but line breaks before it: the start
+  const after = 2 - ahead;
+  const snippet = "\n".repeat(before) + placeholder + "\n".repeat(after);
+  const caret = start + snippet.length + ahead;
   return {
-    from: state.start,
-    to: state.start,
-    text: snippet,
-    select: { start: caret, end: caret },
+    edit: { from: start, to: start, text: snippet, select: { start: caret, end: caret } },
+    pad: { before, after },
   };
 }
 
 /**
  * Swaps `placeholder` for `replacement` wherever it now is, keeping the selection on the text it
- * was on. An empty replacement removes the placeholder and the line breaks around it. Null when
- * the placeholder is gone (the publisher deleted it, or a reload replaced the text): there is no
- * place left that was the image's, so nothing is put anywhere.
+ * was on. An empty replacement removes the placeholder and the line breaks it went in with
+ * (`pad`), where they are still beside it. Null when the placeholder is gone (the publisher
+ * deleted it, or a reload replaced the text): there is no place left that was the image's, so
+ * nothing is put anywhere.
  */
 export function replacePlaceholder(
   state: TextState,
   placeholder: string,
   replacement: string,
+  pad: Padding = { before: 0, after: 0 },
 ): TextEdit | null {
   let from = state.text.indexOf(placeholder);
   if (from === -1) {
     return null;
   }
   let to = from + placeholder.length;
-  // Removed, it takes the line breaks it went in with, so a failed upload leaves the text as it was.
-  if (!replacement && state.text[from - 1] === "\n") {
-    from -= 1;
-  }
-  if (!replacement && state.text[to] === "\n") {
-    to += 1;
+  // Removed, it takes its own line breaks, so a failed upload leaves the text as it was.
+  if (!replacement) {
+    for (let n = 0; n < pad.before && state.text[from - 1] === "\n"; n++) {
+      from -= 1;
+    }
+    for (let n = 0; n < pad.after && state.text[to] === "\n"; n++) {
+      to += 1;
+    }
   }
   const delta = replacement.length - (to - from);
   const moved = (pos: number) =>

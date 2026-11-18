@@ -34,6 +34,30 @@ describe("toolbar formatting", () => {
   });
 
   it.each([
+    // A double-click often takes the space after a word, and `** word **` marks nothing.
+    ["bold", "alpha «beta »gamma", "alpha **«beta»** gamma"],
+    ["bold", "alpha« beta »gamma", "alpha **«beta»** gamma"],
+    ["italic", "alpha «beta »gamma", "alpha _«beta»_ gamma"],
+    ["code", "alpha «beta »gamma", "alpha `«beta»` gamma"],
+    ["bold", "«Hoot.\n»\nMore.", "**«Hoot.»**\n\nMore."], // a triple-click's line break
+    ["code", "«a\n»", "```\n«a\n»\n```"], // whole lines still fence as selected
+    ["bold", "alpha« »gamma", "alpha**« »**gamma"], // nothing but space: left as selected
+  ])("%s keeps the space at a selection's ends outside its marks: %j", (kind, before, after) => {
+    expect(click(kind, before)).toBe(after);
+  });
+
+  it.each([
+    ["bold", "alpha be«»ta gamma", "alpha **«beta»** gamma"],
+    ["italic", "alpha be«»ta gamma", "alpha _«beta»_ gamma"],
+    ["code", "alpha be«»ta gamma", "alpha `«beta»` gamma"],
+    ["bold", "alpha **be«»ta** gamma", "alpha «beta» gamma"], // and off again from inside it
+    ["bold", "alpha «»beta", "alpha **«bold text»**beta"], // at a word's edge: the placeholder
+    ["bold", "alpha beta«»", "alpha beta**«bold text»**"],
+  ])("%s takes the word a bare caret is inside: %j", (kind, before, after) => {
+    expect(click(kind, before)).toBe(after);
+  });
+
+  it.each([
     ["bold", "# «Owls»"],
     ["italic", "# «Owls»"],
     ["italic", "un«believ»able"],

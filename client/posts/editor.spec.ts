@@ -3257,7 +3257,7 @@ describe("editor view", () => {
     Object.defineProperty(input, "files", { value: [file], configurable: true });
     input.dispatchEvent(new Event("change"));
     await vi.advanceTimersByTimeAsync(0);
-    expect(body().value).toMatch(/^\n!\[owl\.png\]\(owl\.png\)\n# Owls/);
+    expect(body().value).toMatch(/^!\[owl\.png\]\(owl\.png\)\n\n# Owls/);
     expect($("#toasts").textContent).toMatch(/Image added/);
     expect($("#saveStatus").textContent).toBe("Unsaved changes");
   });
@@ -3280,11 +3280,11 @@ describe("editor view", () => {
     input.dispatchEvent(new Event("change"));
     await vi.advanceTimersByTimeAsync(0);
     expect(ran).toEqual([
-      ["insertText", '\n<!-- Uploading "owl.png"… -->\n'],
+      ["insertText", '\n\n<!-- Uploading "owl.png"… -->'],
       ["insertText", "![owl.png](owl.png)"], // the placeholder alone, swapped in place
     ]);
-    expect(body().value).toBe("# Owls\n![owl.png](owl.png)\n\n\nHoot.");
-    expect(body().selectionStart).toBe(27); // the caret after the image's line
+    expect(body().value).toBe("# Owls\n\n![owl.png](owl.png)\n\nHoot.");
+    expect(body().selectionStart).toBe(29); // the caret past the blank line after the image
     expect($("#saveStatus").textContent).toBe("Unsaved changes");
     expect(fake.unhandled).toEqual([]);
   });
@@ -3308,7 +3308,7 @@ describe("editor view", () => {
     input.dispatchEvent(new Event("change"));
     await vi.advanceTimersByTimeAsync(0);
     expect(ran).toEqual([
-      ["insertText", '\n<!-- Uploading "owl.png"… -->\n'],
+      ["insertText", '\n\n<!-- Uploading "owl.png"… -->'],
       ["delete", undefined],
     ]);
     expect(body().value).toBe(before);
@@ -3340,7 +3340,7 @@ describe("editor view", () => {
     Object.defineProperty(input, "files", { value: [file], configurable: true });
     input.dispatchEvent(new Event("change"));
     await vi.advanceTimersByTimeAsync(0);
-    expect(body().value).toBe("# Owls\n![owl.png](owl.png)\n\n\nHoot.");
+    expect(body().value).toBe("# Owls\n\n![owl.png](owl.png)\n\nHoot.");
     expect(ran).toEqual([]); // landed without the body's focus, so not as an undo step
     expect(blurs).toBe(0);
     expect(document.activeElement).toBe(subject);
@@ -3364,7 +3364,7 @@ describe("editor view", () => {
     Object.defineProperty(input, "files", { value: [file], configurable: true });
     input.dispatchEvent(new Event("change"));
     await vi.advanceTimersByTimeAsync(0);
-    expect(body().value).toMatch(/^\n!\[my-owl-1\.png\]\(my-owl-1\.png\)\n# Owls/);
+    expect(body().value).toMatch(/^!\[my-owl-1\.png\]\(my-owl-1\.png\)\n\n# Owls/);
   });
 
   it.each([
@@ -3464,22 +3464,42 @@ describe("editor view", () => {
     body().dispatchEvent(paste);
   }
 
+  function drag(type: "dragover" | "dragleave", from: Element, to: Element | null = null) {
+    const e = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(e, "relatedTarget", { value: to });
+    from.dispatchEvent(e);
+  }
+
+  it("frames the body for a held file and names the drop in the foot, until the drag leaves from any child", async () => {
+    await open([{ path: "/api/posts/p1", reply: () => draft() }]);
+    const frame = $("#composerBody");
+    drag("dragover", body());
+    expect(frame.classList.contains("dragover")).toBe(true);
+    expect($("#dropFoot span").textContent).toBe("Drop images to upload");
+    drag("dragleave", body(), $("#mdHl")); // between the body's own children: still over it
+    expect(frame.classList.contains("dragover")).toBe(true);
+    drag("dragleave", body()); // out of the window, straight from the textarea
+    expect(frame.classList.contains("dragover")).toBe(false);
+    expect($("#dropFoot span").textContent).toBe("Paste, drop, or click to add images");
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("lands a pasted image in its own line when an earlier paste of the same name, still uploading, was undone", async () => {
     const uploads = heldUploads();
     await open([{ path: "/api/posts/p1", reply: () => draft() }, uploads.route]);
     body().setSelectionRange(0, 0);
     pasteImage("image.png"); // a browser names every pasted image this
     await vi.advanceTimersByTimeAsync(0);
-    typeInto(body(), body().value.replace('\n<!-- Uploading "image.png"… -->\n', "")); // undone
+    typeInto(body(), body().value.replace('<!-- Uploading "image.png"… -->\n\n', "")); // undone
     body().setSelectionRange(0, 0);
     pasteImage("image.png"); // the screenshot actually wanted
     await vi.advanceTimersByTimeAsync(0);
     uploads.answer(0, "image.png"); // the undone one answers first
     await vi.advanceTimersByTimeAsync(0);
-    expect(body().value).toMatch(/^\n<!-- Uploading "image\.png" \(2\)… -->\n# Owls/);
+    expect(body().value).toMatch(/^<!-- Uploading "image\.png" \(2\)… -->\n\n# Owls/);
     uploads.answer(1, "image-2.png");
     await vi.advanceTimersByTimeAsync(0);
-    expect(body().value).toMatch(/^\n!\[image-2\.png\]\(image-2\.png\)\n# Owls/);
+    expect(body().value).toMatch(/^!\[image-2\.png\]\(image-2\.png\)\n\n# Owls/);
     expect(body().value).not.toContain("![image.png]");
     expect(fake.unhandled).toEqual([]);
   });
@@ -3555,14 +3575,14 @@ describe("editor view", () => {
     Object.defineProperty(input, "files", { value: [file], configurable: true });
     input.dispatchEvent(new Event("change"));
     await vi.advanceTimersByTimeAsync(0); // the upload is still out
-    expect(body().value).toMatch(/^\n<!-- Uploading "owl\.png"… -->\n# Owls/);
+    expect(body().value).toMatch(/^<!-- Uploading "owl\.png"… -->\n\n# Owls/);
     expect($("#dropFoot span").textContent).toBe("Uploading 1 image…");
     expect($<HTMLButtonElement>("#testBtn").disabled).toBe(true);
     expect($<HTMLButtonElement>("#scheduleBtn").disabled).toBe(true);
     typeInto(body(), `${body().value}typed meanwhile`); // the publisher keeps writing
     answer(jsonResponse({ image: { filename: "owl.png", url: "http://m/owl.png" } }));
     await vi.advanceTimersByTimeAsync(0);
-    expect(body().value).toMatch(/^\n!\[owl\.png\]\(owl\.png\)\n# Owls[\s\S]*typed meanwhile$/);
+    expect(body().value).toMatch(/^!\[owl\.png\]\(owl\.png\)\n\n# Owls[\s\S]*typed meanwhile$/);
     expect($("#dropFoot span").textContent).toBe("Paste, drop, or click to add images");
     expect($<HTMLButtonElement>("#testBtn").disabled).toBe(false);
     expect($<HTMLButtonElement>("#scheduleBtn").disabled).toBe(false);

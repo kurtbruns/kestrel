@@ -74,6 +74,7 @@ import { activeSend, postAction } from "./actions";
 import { createAutosave } from "./autosave";
 import { carryOffset } from "./caret";
 import { DirtyTracker } from "./dirty";
+import { showDropCaret } from "./drop_caret";
 import { formatEdit } from "./format";
 import { LatestRender, type Render } from "./latest_render";
 import { trackSaves } from "./pending_save";
@@ -1455,13 +1456,18 @@ export async function renderEditor(
   // upload swaps it for the real reference. While any upload is out, the foot says so, and Send
   // test and Schedule wait, so a placeholder never reaches an email.
   const footDefault = "Paste, drop, or click to add images";
+  // A file held over the body. The foot says what a drop does, since the body keeps showing
+  // its text: the image goes in at the caret, which the publisher needs to see.
+  let dragOver = false;
   function paintUploads() {
     const uploadsOut = uploading.size;
     const foot = root.querySelector("#dropFoot span");
     if (foot) {
-      foot.textContent = uploadsOut
-        ? `Uploading ${uploadsOut} image${uploadsOut === 1 ? "" : "s"}…`
-        : footDefault;
+      foot.textContent = dragOver
+        ? "Drop images to upload"
+        : uploadsOut
+          ? `Uploading ${uploadsOut} image${uploadsOut === 1 ? "" : "s"}…`
+          : footDefault;
     }
     for (const b of $$<HTMLButtonElement>("#testBtn, #scheduleBtn", root)) {
       b.disabled = uploadsOut > 0;
@@ -1492,7 +1498,8 @@ export async function renderEditor(
       return;
     }
     const placeholder = placeholderFor(file.name, ta.value, uploading);
-    editText(insertPlaceholder(textState(), placeholder));
+    const placed = insertPlaceholder(textState(), placeholder);
+    editText(placed.edit);
     uploading.add(placeholder);
     paintUploads();
     const fd = new FormData();
@@ -1527,7 +1534,7 @@ export async function renderEditor(
           if (signal.aborted) {
             return;
           }
-          const next = replacePlaceholder(textState(), placeholder, "");
+          const next = replacePlaceholder(textState(), placeholder, "", placed.pad);
           if (next) {
             editText(next);
           }
@@ -1547,18 +1554,31 @@ export async function renderEditor(
   if (!locked) {
     const imgInput = $<HTMLInputElement>("#imgInput");
     const foot = $("#dropFoot");
+    const showDragOver = (on: boolean) => {
+      if (dragOver === on) {
+        return;
+      }
+      dragOver = on;
+      composerBody.classList.toggle("dragover", on);
+      foot.classList.toggle("dragover", on);
+      showDropCaret(composerBody, mdHlCode, ta, on);
+      paintUploads();
+    };
     composerBody.addEventListener("dragover", (e) => {
       e.preventDefault();
-      composerBody.classList.add("dragover");
+      showDragOver(true);
     });
+    // Moving between the body's children fires this too, so only leaving the body clears it.
+    // A drag that leaves the window, or is called off, leaves from whichever child it was
+    // over and goes nowhere, which is why the test is where it went, not what it left.
     composerBody.addEventListener("dragleave", (e) => {
-      if (e.target === composerBody) {
-        composerBody.classList.remove("dragover");
+      if (!(e.relatedTarget instanceof Node && composerBody.contains(e.relatedTarget))) {
+        showDragOver(false);
       }
     });
     composerBody.addEventListener("drop", (e) => {
       e.preventDefault();
-      composerBody.classList.remove("dragover");
+      showDragOver(false);
       showTab("edit");
       for (const f of e.dataTransfer?.files ?? []) {
         uploadAndInsert(f);
