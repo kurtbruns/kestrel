@@ -53,6 +53,18 @@ describe("toolbar formatting", () => {
     ["bold", "alpha **be«»ta** gamma", "alpha «beta» gamma"], // and off again from inside it
     ["bold", "alpha «»beta", "alpha **«bold text»**beta"], // at a word's edge: the placeholder
     ["bold", "alpha beta«»", "alpha beta**«bold text»**"],
+    // An apostrophe between two letters is inside the word, so a contraction is one word.
+    ["bold", "I do«»n't know", "I **«don't»** know"],
+    ["bold", "I don'«»t know", "I **«don't»** know"],
+    ["bold", "I do«»n’t know", "I **«don’t»** know"], // the curly apostrophe too
+    ["italic", "I do«»n't know", "I _«don't»_ know"],
+    ["code", "I do«»n't know", "I `«don't»` know"],
+    ["bold", "I **do«»n't** know", "I «don't» know"],
+    ["bold", "i«»t's here", "**«it's»** here"],
+    // One at a word's start or end is a quote mark, and stays outside.
+    ["bold", "'ti«»s true", "'**«tis»** true"],
+    ["bold", "the do«»gs' bones", "the **«dogs»**' bones"],
+    ["bold", "the dogs«»' bones", "the dogs**«bold text»**' bones"],
   ])("%s takes the word a bare caret is inside: %j", (kind, before, after) => {
     expect(click(kind, before)).toBe(after);
   });

@@ -7,7 +7,8 @@
 //
 // Bold, Italic, and Code act on the words, not on exactly what was selected: spaces at the ends
 // of a selection stay outside the marks (a double-click often takes the space after a word, and
-// `** word **` marks nothing), and a caret inside a word stands for that word.
+// `** word **` marks nothing), and a caret inside a word stands for that word, a contraction's
+// apostrophe included.
 
 /** The post body as the toolbar reads it: its text and the selection in it. */
 export interface TextSelection {
@@ -60,13 +61,13 @@ function words(at: TextSelection, space: RegExp): TextSelection {
   const { text } = at;
   let { start, end } = at;
   if (start === end) {
-    if (!isWord(text[start - 1]) || !isWord(text[start])) {
+    if (!inWord(text, start - 1) || !inWord(text, start)) {
       return at;
     }
-    while (isWord(text[start - 1])) {
+    while (inWord(text, start - 1)) {
       start -= 1;
     }
-    while (isWord(text[end])) {
+    while (inWord(text, end)) {
       end += 1;
     }
     return { text, start, end };
@@ -118,6 +119,14 @@ function runAfter(text: string, i: number, ch: string): number {
 }
 
 const isWord = (c: string | undefined) => c !== undefined && /[\p{L}\p{N}]/u.test(c);
+
+// Whether the character at `i` belongs to the word around it: a letter or digit, or an
+// apostrophe with one on each side, so the caret in "don't" takes the whole contraction while a
+// quote mark at a word's start or end stays outside. A hyphen splits words: "well-known" could
+// be one word or two.
+const inWord = (text: string, i: number) =>
+  isWord(text[i]) ||
+  (/['\u2019]/u.test(text[i] ?? "") && isWord(text[i - 1]) && isWord(text[i + 1]));
 
 /**
  * A kind of inline mark: the character its runs are made of, which pair of runs (before, after)
