@@ -3316,6 +3316,15 @@ describe("editor view", () => {
       expect($("#saveStatus").textContent).toBe("Unsaved changes");
     });
 
+    it("inserts on a press anywhere on the row, not only on its picture and name", async () => {
+      await open([{ path: "/api/posts/p1", reply: () => draft() }, listRoute(() => ["owl.png"])]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      row("owl.png").click(); // the row's own padding, beside Delete
+      expect(dialogOpen()).toBe(false);
+      expect(body().value).toContain("![owl.png](owl.png)");
+    });
+
     it("puts the image at the end of a body never focused, where no caret was chosen", async () => {
       await open([{ path: "/api/posts/p1", reply: () => draft() }, listRoute(() => ["owl.png"])]);
       imagesButton().click();

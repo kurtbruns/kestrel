@@ -128,14 +128,15 @@ export function openImagesDialog(postId: string, signal: AbortSignal, hooks: Ima
 
   listEl.addEventListener("click", (e) => {
     const target = e.target instanceof Element ? e.target : null;
-    const insert = target?.closest<HTMLButtonElement>(".images-insert");
-    if (insert?.dataset.name) {
-      m.close();
-      hooks.insert(insert.dataset.name);
-      return;
-    }
     const del = target?.closest<HTMLButtonElement>(".images-delete");
     if (!del?.dataset.name) {
+      // Anywhere else on the row inserts its image, so the whole row answers the pointer.
+      const name = target?.closest(".images-row")?.querySelector<HTMLElement>(".images-insert")
+        ?.dataset.name;
+      if (name) {
+        m.close();
+        hooks.insert(name);
+      }
       return;
     }
     if (asking !== del) {

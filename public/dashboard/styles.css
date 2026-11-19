@@ -3008,11 +3008,15 @@ body.web-mode .content {
   border: 1px solid var(--line);
   border-radius: 8px;
 }
+/* The whole row is the target, gaps and all, so the pointer never flickers between a hand and
+   an arrow crossing it: a press anywhere but Delete inserts (images_dialog.ts), and the Insert
+   button inside carries the name and the focus for the keyboard. */
 .images-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px 6px 6px;
+  gap: 12px;
+  padding: 8px 10px;
+  cursor: pointer;
 }
 .images-row + .images-row {
   border-top: 1px solid var(--line);
@@ -3024,22 +3028,24 @@ body.web-mode .content {
   align-items: center;
   justify-content: flex-start;
   gap: 12px;
-  padding: 4px;
+  padding: 0;
   border: 0;
-  border-radius: 6px;
   background: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
-.images-insert:hover,
 .images-insert:focus-visible {
+  outline: none;
+}
+.images-row:hover,
+.images-row:has(.images-insert:focus-visible) {
   background: var(--accent-soft);
 }
-.images-insert:focus-visible {
+.images-row:has(.images-insert:focus-visible) {
   outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline-offset: -2px;
 }
 .images-thumb {
   flex: none;
@@ -3050,14 +3056,20 @@ body.web-mode .content {
   border-radius: 4px;
   background: var(--hover);
 }
-.images-insert:hover .images-thumb,
-.images-insert:focus-visible .images-thumb {
+.images-row:hover .images-thumb,
+.images-row:has(.images-insert:focus-visible) .images-thumb {
   border-color: var(--accent);
 }
 .images-row:has(.images-delete:hover),
 .images-row:has(.images-delete:focus-visible),
 .images-row:has(.images-delete.danger) {
   background: color-mix(in srgb, var(--danger-fg) 8%, transparent);
+}
+/* Delete keeps the card's fill and the text colour, so it stands up off the row's tint rather
+   than washing into it; its hover is still subtle Danger's red. */
+.images-row .images-delete {
+  background: var(--card);
+  color: var(--fg);
 }
 .images-row:has(.images-delete:hover) .images-thumb,
 .images-row:has(.images-delete:focus-visible) .images-thumb,
@@ -3093,6 +3105,7 @@ body.web-mode .content {
 .images-hint {
   flex: none;
   margin-left: auto;
+  margin-right: 6px;
   padding: 4px 11px;
   border-radius: 999px;
   background: var(--accent);
@@ -3101,9 +3114,13 @@ body.web-mode .content {
   font-weight: 600;
   visibility: hidden;
 }
-.images-insert:hover .images-hint,
-.images-insert:focus-visible .images-hint {
+.images-row:hover .images-hint,
+.images-row:has(.images-insert:focus-visible) .images-hint {
   visibility: visible;
+}
+.images-row:has(.images-delete:hover) .images-hint,
+.images-row:has(.images-delete.danger) .images-hint {
+  visibility: hidden;
 }
 /* On a phone the row's name needs the width: Delete wraps under the text, lined up with it,
    and the Insert pill gives way, since a touch has no hover to show it. */
@@ -3116,7 +3133,7 @@ body.web-mode .content {
     flex-basis: 100%;
   }
   .images-row > .images-delete {
-    margin-left: 80px;
+    margin-left: 76px;
   }
   .images-hint {
     display: none;
