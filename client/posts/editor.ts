@@ -404,9 +404,21 @@ export async function renderEditor(
       setHtml(dest, destinationHtml(pub));
     }
   };
+  // Settings changes this editor has sent. A settings write makes no revision, so a read that
+  // left before one would answer with the settings it replaced: each read notes this count as
+  // it leaves, and its settings are taken only if no write went out meanwhile.
+  let settingsWrites = 0;
   /** Take the post's settings and actions from a read or write of it, whichever client last
-   *  changed them: a settings change writes no revision, so it arrives on any answer. */
-  const adopt = (p: PostResponse["post"], held: PostResponse["subject_slug_held"]) => {
+   *  changed them: a settings change writes no revision, so it arrives on any answer. `since`
+   *  is the settings writes counted when the request left. */
+  const adopt = (
+    p: PostResponse["post"],
+    held: PostResponse["subject_slug_held"],
+    since: number,
+  ) => {
+    if (since !== settingsWrites) {
+      return; // older than a settings change this editor made since
+    }
     pub = publishingOf(p, held);
     actions = p.actions;
     paintPublishing();
@@ -414,11 +426,12 @@ export async function renderEditor(
   /** Save a change to the post's settings (`PUT /api/posts/:id/settings`), and show what the server made
    *  of it. Throws the refusal, for the dialog that asked to say it. */
   const saveListing = async (body: PostSettingsBody): Promise<void> => {
+    const since = ++settingsWrites;
     const res = await api<PostSettingsResponse>(`/api/posts/${id}/settings`, {
       method: "PUT",
       json: body,
     });
-    adopt(res.post, res.subject_slug_held);
+    adopt(res.post, res.subject_slug_held, since);
     if (res.changed) {
       readSendsNow(); // the post's sends carry the listing: let every view see it
     }
@@ -426,9 +439,10 @@ export async function renderEditor(
   /** Read the post's settings again, for a change made elsewhere; a failed read leaves what
    *  the page shows, and the next report tries again. */
   const rereadPublishing = async () => {
+    const since = settingsWrites;
     try {
       const fresh = await api<PostResponse>(`/api/posts/${id}`, { signal });
-      adopt(fresh.post, fresh.subject_slug_held);
+      adopt(fresh.post, fresh.subject_slug_held, since);
     } catch {}
   };
   $("#settingsBtn").onclick = () => {
@@ -916,6 +930,7 @@ export async function renderEditor(
     const sent = JSON.stringify(fields);
     let landed = false;
     let readAgain = false; // a stale refusal of a save that carried nothing new
+    const since = settingsWrites;
     try {
       const body: PostEditBody = { ...fields, base_revision: revisions.base };
       const { post: u, subject_slug_held } = await api<PostSavedResponse>(`/api/posts/${id}`, {
@@ -923,7 +938,7 @@ export async function renderEditor(
         json: body,
       });
       // The server derives a following slug from the subject on each save (SPEC §4).
-      adopt(u, subject_slug_held);
+      adopt(u, subject_slug_held, since);
       revisions.saved(u.current_revision); // our save is now the newest; poll against it
       dirty.markSaved(sent);
       saveFailed = false;
@@ -1162,7 +1177,7 @@ export async function renderEditor(
 
   /** Take another writer's newer version into an editor with nothing unsaved (SPEC §4): it
    *  becomes the text on screen and the base, and the save cue says whose it is. */
-  function takeIn(fresh: PostResponse, revision: string) {
+  function takeIn(fresh: PostResponse, revision: string, since: number) {
     // Setting a field's value fires no input event, so an error under the subject would stay
     // over their subject, which the publisher never typed.
     clearSubjectError();
@@ -1173,7 +1188,7 @@ export async function renderEditor(
     imagesChanged?.();
     revisions.took(revision);
     dirty.markSaved();
-    adopt(fresh.post, fresh.subject_slug_held);
+    adopt(fresh.post, fresh.subject_slug_held, since);
     const who = whoActed(fresh.post.author, fresh.post.author_client);
     const at = fresh.post.updated_at; // when they saved, not when this editor noticed
     const when = fmtAt(at, clocksFor([at]));
@@ -1264,47 +1279,72 @@ export async function renderEditor(
     if (locked || saving || conflicted || gone || document.hidden) {
       return;
     }
-    const baseAtRequest = revisions.base; // to tell our own save landing mid-poll from another writer's
     try {
-      const fresh = await api<PostResponse>(`/api/posts/${id}`, { signal });
-      if (conflicted || gone) {
-        return; // a save's refusal answered first
-      }
-      const decision = revisions.decide(
-        {
-          status: fresh.post.status,
-          revision: fresh.post.current_revision,
-          author: fresh.post.author,
-          client: fresh.post.author_client,
-        },
-        { saving, baseAtRequest },
-      );
-      if (decision === "ignore") {
-        return; // the read may predate our own save
-      }
-      // A settings change made elsewhere writes no revision, so every read carries it.
-      adopt(fresh.post, fresh.subject_slug_held);
-      if (decision === "fresh") {
-        return;
-      }
-      if (decision.kind === "locked") {
-        showConflict(decision);
-        return;
-      }
-      // Read now, after the wait: a keystroke that landed while the read was out makes this a
-      // choice for the publisher, and nothing runs between this check and the swap.
-      const answer = answerNewer({ unsaved: dirty.dirty || uploading.size > 0, composing });
-      if (answer === "take") {
-        takeIn(fresh, decision.revision);
-      } else if (answer === "banner") {
-        showConflict(decision);
-      }
+      await checkFreshness();
     } catch (e) {
       if (isNotFound(e)) {
         removed();
       }
       // Anything else is transient: try again next tick.
     }
+  }
+  /**
+   * Read the post and act on what changed elsewhere: take in its settings, and take in or warn
+   * of a newer revision, as the poll does. True when a newer revision was found (taken in, the
+   * banner raised, or waiting on an input method), so what is saved isn't what this editor
+   * was based on. Throws as the read did.
+   */
+  async function checkFreshness(): Promise<boolean> {
+    const baseAtRequest = revisions.base; // to tell our own save landing mid-poll from another writer's
+    const since = settingsWrites;
+    const fresh = await api<PostResponse>(`/api/posts/${id}`, { signal });
+    if (conflicted || gone) {
+      return true; // a save's refusal answered first
+    }
+    const decision = revisions.decide(
+      {
+        status: fresh.post.status,
+        revision: fresh.post.current_revision,
+        author: fresh.post.author,
+        client: fresh.post.author_client,
+      },
+      { saving, baseAtRequest },
+    );
+    if (decision === "ignore") {
+      return false; // the read may predate our own save, which is the newest
+    }
+    // A settings change made elsewhere writes no revision, so every read carries it.
+    adopt(fresh.post, fresh.subject_slug_held, since);
+    if (decision === "fresh") {
+      return false;
+    }
+    if (decision.kind === "locked") {
+      showConflict(decision);
+      return true;
+    }
+    // Read now, after the wait: a keystroke that landed while the read was out makes this a
+    // choice for the publisher, and nothing runs between this check and the swap.
+    const answer = answerNewer({ unsaved: dirty.dirty || uploading.size > 0, composing });
+    if (answer === "take") {
+      takeIn(fresh, decision.revision, since);
+    } else if (answer === "banner") {
+      showConflict(decision);
+    }
+    return true;
+  }
+  /**
+   * Save what is unsaved before an act that renders or freezes what is saved (a test, a
+   * schedule, a send now), and make sure what is saved is still what this editor shows.
+   * "refused" when it isn't: a save refused as stale, or, with nothing to save, another
+   * writer's newer revision found by reading the post, which the poll may not have read yet
+   * (SPEC §4, §5, §6). Throws as the save or the read did.
+   */
+  async function saveBeforeActing(): Promise<SaveResult> {
+    const result = await saveDraft(true);
+    if (result !== "unchanged") {
+      return result;
+    }
+    return (await checkFreshness()) ? "refused" : "unchanged";
   }
   /** Read the post's freshness now, outside the poll's pace. */
   function readFreshness() {
@@ -1436,9 +1476,12 @@ export async function renderEditor(
             // post again for the banner's row. A stage change hands off below instead.
             const settingsMayHaveChanged = !change && send.rev !== current.rev;
             // A re-make (a template or identity change) rewrites the frozen copy under the same
-            // revision, so the render held for it is no longer the email that will send.
+            // revision, so the render held for it is no longer the email that will send. A move
+            // or a settings change gives the send a new `rev` too, but leaves the copy as it was.
+            // (The post's reference to its send, read until the send's own read answers, carries
+            // no `remade_at`, so the first report compares against nothing.)
             const copyMayHaveChanged =
-              send.rev !== current.rev || send.remade_at !== (current.remade_at ?? null);
+              current.remade_at !== undefined && send.remade_at !== current.remade_at;
             current = send;
             if (settingsMayHaveChanged) {
               void rereadPublishing();
@@ -1839,7 +1882,7 @@ export async function renderEditor(
           // A refused save means the server holds another writer's newer revision, and a test
           // renders what is saved: it would deliver their version as the review of this text.
           // As with Schedule, close the dialog and let the out-of-date banner be the next step.
-          if (!locked && (await saveDraft(true)) === "refused") {
+          if (!locked && (await saveBeforeActing()) === "refused") {
             m.close();
             freshnessEl.scrollIntoView({ block: "nearest" });
             return;
@@ -2030,7 +2073,7 @@ export async function renderEditor(
             // A refused save means the server holds another writer's newer revision, so
             // scheduling now would freeze content the publisher never saw (SPEC §6).
             // Close the dialog and let the out-of-date banner behind it be the next step.
-            if ((await saveDraft(true)) === "refused") {
+            if ((await saveBeforeActing()) === "refused") {
               refused();
               return;
             }
@@ -2066,7 +2109,7 @@ export async function renderEditor(
           m.clearError();
           try {
             // As in doSchedule: a refused save must not become a frozen send.
-            if ((await saveDraft(true)) === "refused") {
+            if ((await saveBeforeActing()) === "refused") {
               refused();
               return;
             }

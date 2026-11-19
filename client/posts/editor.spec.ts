@@ -1116,6 +1116,12 @@ describe("editor view", () => {
     ]);
     await previewLoads();
     expect(shownText()).toBe("Field Notes");
+    const reads = renderReads().length;
+
+    linked.move(Date.now() + 2 * 3_600_000); // a move leaves the copy as it was
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(renderReads()).toHaveLength(reads);
+    expect($("#previewStatus").textContent).toBe("");
 
     name = "Field Notes REMADE"; // the publication renamed, with its re-make confirmed
     linked.remake(Date.now());
@@ -3066,6 +3072,52 @@ describe("editor view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  // SPEC §5: with nothing unsaved there is no save to be refused, so the test reads the post
+  // first, and another writer's newer version found there is taken in instead of tested.
+  it("sends no test of another writer's version saved since the last poll, with nothing unsaved here", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+      ...previewRoutes(server),
+      { path: "/api/settings", reply: () => ({ settings: { test_recipients: ["me@b.c"] } }) },
+      { method: "POST", path: "/api/posts/p1/test", reply: () => ({ sent: true, warnings: [] }) },
+    ]);
+    server.elsewhere("service", "mcp", { markdown: "Claude’s hoot." }); // within the poll's ten seconds
+    $("#testBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    $("#tGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/test")).toBe(false);
+    expect(document.querySelector(".modal")).toBeNull();
+    // Their version is on screen now, saying whose it is, so the next test is of what's seen.
+    expect(body().value).toBe("Claude’s hoot.");
+    expect($("#saveStatus").textContent).toMatch(/^Updated with changes by /);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  // SPEC §6: a schedule never freezes a version the publisher hasn't seen, saved or not.
+  it("schedules nothing when another writer saved since the last poll, with nothing unsaved here", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+      ...previewRoutes(server),
+      { path: "/api/subscribers", reply: () => ({ counts: { confirmed: 1 }, page: { total: 1 } }) },
+      { path: "/api/provider", reply: () => providerStatus({ state: "production" }) },
+      { method: "POST", path: "/api/posts/p1/schedule", reply: () => ({ send: { id: "s1" } }) },
+    ]);
+    $("#scheduleBtn").click();
+    $<HTMLInputElement>("#schWhen").value = toLocalInput(Date.now() + 86_400_000, HOME_ZONE);
+    server.elsewhere("service", "mcp", { markdown: "Claude’s hoot." });
+    $("#schGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/schedule")).toBe(false);
+    expect(document.querySelector(".modal")).toBeNull();
+    expect(body().value).toBe("Claude’s hoot.");
+    expect(fake.unhandled).toEqual([]);
+  });
+
   // DESIGN §4: the schedule dialog says no provider is connected before the publisher picks
   // a time, rather than refusing after they confirm.
   it("carries a standing line in the schedule dialog while no provider is connected, with Schedule disabled and no picker or Send now", async () => {
@@ -3281,6 +3333,38 @@ describe("editor view", () => {
       expect($<HTMLInputElement>("#psInclude").checked).toBe(false);
       $("#psCancel").click();
       expect(fake.unhandled).toEqual([]);
+    });
+
+    it("keeps a setting just saved here when a read that left before the save answers after it", async () => {
+      const server = draftServer();
+      let hold = false;
+      let release = () => {};
+      await open([
+        ...routes(server).filter((r) => r.path !== "/api/posts/p1" || r.method === "PUT"),
+        {
+          path: "/api/posts/p1",
+          reply: () => {
+            const before = server.get(); // the post as it stood when the read arrived
+            return hold ? new Promise((r) => (release = () => r(before))) : before;
+          },
+        },
+      ]);
+      hold = true;
+      await vi.advanceTimersByTimeAsync(10_000); // the freshness poll's read is out
+      hold = false;
+      $("#settingsBtn").click();
+      const include = $<HTMLInputElement>("#psInclude");
+      include.checked = false;
+      include.dispatchEvent(new Event("change"));
+      $("#psSave").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect($("#headEmailOnly").hidden).toBe(false);
+      release(); // the read answers with the settings from before the save
+      await vi.advanceTimersByTimeAsync(0);
+      expect($("#headEmailOnly").hidden).toBe(false);
+      $("#scheduleBtn").click();
+      expect($<HTMLInputElement>("#schInclude").checked).toBe(false);
+      $("#schCancel").click();
     });
 
     it("leaves a setting changed elsewhere while the dialog was open as it is", async () => {
@@ -3864,6 +3948,57 @@ describe("editor view", () => {
       land();
       await vi.advanceTimersByTimeAsync(0);
       expect(row("owl.png").querySelector(".images-meta")?.textContent).toBe("1600×1200 · 412 KB");
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("keeps the newest list when an older read of it answers last", async () => {
+      let stored: string[] = [];
+      const lands: Record<string, () => void> = {};
+      let holdNext = false;
+      let releaseHeld = () => {};
+      await open([
+        { path: "/api/posts/p1", reply: () => draft() },
+        {
+          path: "/api/posts/p1/images",
+          reply: () => {
+            const answer = { images: stored.map(img) }; // the list as it stood on arrival
+            if (!holdNext) {
+              return answer;
+            }
+            holdNext = false;
+            return new Promise((r) => (releaseHeld = () => r(answer)));
+          },
+        },
+        {
+          method: "POST",
+          path: "/api/posts/p1/images",
+          reply: (req) => {
+            const name = (req.form!.get("file") as File).name;
+            return new Promise((resolve) => {
+              lands[name] = () => {
+                stored = [...stored, name];
+                resolve({ image: img(name) });
+              };
+            });
+          },
+        },
+      ]);
+      const input = $<HTMLInputElement>("#imgInput");
+      const files = ["a.png", "b.png"].map((n) => new File(["png"], n, { type: "image/png" }));
+      Object.defineProperty(input, "files", { value: files, configurable: true });
+      input.dispatchEvent(new Event("change"));
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      holdNext = true;
+      lands["a.png"]!(); // its read of the list is held: it answers last, with only a.png
+      await vi.advanceTimersByTimeAsync(0);
+      lands["b.png"]!(); // its read answers at once, with both
+      await vi.advanceTimersByTimeAsync(0);
+      expect(document.querySelector('.images-insert[data-name="b.png"]')).not.toBeNull();
+      releaseHeld();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(document.querySelector('.images-insert[data-name="a.png"]')).not.toBeNull();
+      expect(document.querySelector('.images-insert[data-name="b.png"]')).not.toBeNull();
       expect(fake.unhandled).toEqual([]);
     });
 

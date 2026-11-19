@@ -29,7 +29,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
-- In the post editor, **Send test email** no longer delivers another writer's version: when Claude or another tab has saved the draft since you last saved, the test saves nothing, sends nothing, and points you at the changed-elsewhere banner, as Schedule does. Before, the test went out with their text while the editor showed yours.
+- In the post editor, **Send test email**, **Schedule**, and **Send now** no longer act on another writer's version you haven't seen. When Claude or another tab has saved the draft since the editor last checked, they send and schedule nothing: with unsaved edits the changed-elsewhere banner asks what to keep, and with none their version is shown in place. Before, a test could go out with their text while the editor showed yours, and with nothing unsaved, Schedule could freeze their version.
 - A draft's **Email only** mark, Post settings, and the Schedule dialog now follow a change to the post's settings made by Claude or in another tab, and scheduling sends only the settings changed in its dialog. Before, the editor kept the settings it opened with, and Schedule put a post left out of the archive elsewhere back in.
 - The Schedule dialog drops "Set the publication’s time zone…" once a zone is set elsewhere, without reloading the editor, and Send now becomes available with it.
 - The post editor's Preview follows a template or publication change made elsewhere: a scheduled post's shows the re-made email once the change re-makes it, and a draft's shows the new look when you come back to its tab. Before, both kept showing the email from before the change as current.

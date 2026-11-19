@@ -139,6 +139,10 @@ export async function openImagesDialog(
     }
   });
 
+  // Each change to the list: a read of it, or a delete. Reads can answer out of order, so one
+  // answers only if nothing changed the list since it left: an older answer could drop an image
+  // just uploaded or bring back one just deleted.
+  let listTurn = 0;
   const usedNow = () => {
     const body = hooks.body();
     return images.map((img) => imageUsedIn(body, img.filename) || imageUsedIn(saved, img.filename));
@@ -168,14 +172,20 @@ export async function openImagesDialog(
     if (!m.el.isConnected || signal.aborted) {
       return;
     }
+    const turn = ++listTurn;
+    let answer: [PostImage[], string];
     try {
-      [images, saved] = await Promise.all([
+      answer = await Promise.all([
         api<ImageListResponse>(`/api/posts/${postId}/images`, { signal }).then((r) => r.images),
         readSaved(),
       ]);
     } catch {
       return; // the editor answers a failed read of its own post
     }
+    if (turn !== listTurn) {
+      return; // a later read or a delete has the list
+    }
+    [images, saved] = answer;
     if (
       !m.el.isConnected ||
       JSON.stringify([images.map((i) => i.filename), usedNow()]) === painted
@@ -196,8 +206,14 @@ export async function openImagesDialog(
   });
 
   async function read(focusAt?: number) {
+    const turn = ++listTurn;
     try {
-      images = (await api<ImageListResponse>(`/api/posts/${postId}/images`, { signal })).images;
+      const answer = (await api<ImageListResponse>(`/api/posts/${postId}/images`, { signal }))
+        .images;
+      if (turn !== listTurn) {
+        return; // a later read or a delete has the list
+      }
+      images = answer;
     } catch (e) {
       if (signal.aborted) {
         return;
@@ -262,6 +278,7 @@ export async function openImagesDialog(
     if (signal.aborted) {
       return;
     }
+    listTurn += 1; // a read that left before the delete would bring the image back
     images = images.filter((img) => img.filename !== name);
     live.textContent = `${name} deleted`;
     paint(at);
