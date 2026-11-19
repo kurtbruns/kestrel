@@ -2969,7 +2969,7 @@ body.web-mode .content {
    each. A row's picture and name are a link that opens the image full size: over them the
    picture takes an accent edge and the ↗ a new tab takes (§7), and the name the link's
    underline. Insert (Ghost) and the trash can sit at its right; the rest of the row does
-   nothing. Over the trash, or while it asks, the row takes the danger's tint. An image the post
+   nothing, and each control lights only itself, the trash red-edged on hover. An image the post
    doesn't use says so first in the small print, "Not in the post", in the same muted text as
    the size; one it uses says nothing, since that's the normal case. */
 /* Held near the top rather than centred, so a deleted row shortens the dialog from the bottom
@@ -3028,10 +3028,6 @@ body.web-mode .content {
 }
 .images-row:only-child {
   border-radius: 8px;
-}
-.images-row:has(.images-delete:hover),
-.images-row.asking {
-  background: color-mix(in srgb, var(--danger-fg) 8%, transparent);
 }
 /* Only the picture and the name open the image, and only as wide as they are, so the space
    between them and Insert does nothing. */
@@ -3124,8 +3120,8 @@ a.images-open:hover .images-name {
   flex: none;
   font-size: 13px;
 }
-/* The trash can: a quiet icon at rest, red over it, and, for an image the post uses, widened
-   into its question in solid Danger on the first press. */
+/* The trash can: a quiet icon at rest, red-edged and red over it, and, for an image the post
+   uses, widened into its question in solid Danger on the first press. */
 .images-delete {
   flex: none;
   display: inline-flex;
@@ -3149,6 +3145,7 @@ a.images-open:hover .images-name {
   fill: currentColor;
 }
 .images-delete:hover {
+  border-color: var(--danger-fg);
   color: var(--danger-fg);
   background: color-mix(in srgb, var(--danger-fg) 10%, transparent);
 }
