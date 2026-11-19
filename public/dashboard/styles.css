@@ -2973,8 +2973,12 @@ body.web-mode .content {
    edge instead, so the row always says what the press under the pointer does. "Not used"
    is a plain fact in the row's small print, not a warning, so it takes the text
    colour at weight, never amber. */
+/* Held near the top rather than centred, so a deleted row shortens the dialog from the bottom
+   and the rows above it stay under the pointer. */
 .modal.modal-images {
   width: min(560px, 100%);
+  align-self: flex-start;
+  margin-top: min(10vh, 80px);
 }
 .images-drop {
   display: flex;
@@ -2999,14 +3003,16 @@ body.web-mode .content {
   color: var(--muted);
   font-size: 12px;
 }
+/* No frame around the list: each row is its own rounded item, so its tint and focus ring sit
+   on its own edge, never just inside a frame's line. */
 .images-list {
+  display: grid;
+  gap: 2px;
   list-style: none;
   margin: 0;
   padding: 0;
   max-height: min(50vh, 420px);
   overflow-y: auto;
-  border: 1px solid var(--line);
-  border-radius: 8px;
 }
 /* The whole row is the target, gaps and all, so the pointer never flickers between a hand and
    an arrow crossing it: a press anywhere but Delete inserts (images_dialog.ts), and the Insert
@@ -3016,11 +3022,10 @@ body.web-mode .content {
   align-items: center;
   gap: 12px;
   padding: 8px 10px;
+  border-radius: 8px;
   cursor: pointer;
 }
-.images-row + .images-row {
-  border-top: 1px solid var(--line);
-}
+
 .images-insert {
   flex: 1;
   min-width: 0;
@@ -6440,21 +6445,6 @@ button.set-embed-copy svg {
 .cx-md-url {
   color: var(--syntax-property);
   text-decoration: underline;
-}
-/* While ⌘ (Ctrl elsewhere) is held over the post body, the highlight layer takes the pointer
-   from the text above it, so an image's address shows a pointer and a heavier underline, as an
-   editor shows a link it will open, and a ⌘-click on it opens the image (DESIGN, the editor).
-   Letting go gives the pointer back to the text. */
-.composer-body.links textarea.editor {
-  pointer-events: none;
-}
-.composer-body.links .md-hl {
-  pointer-events: auto;
-  cursor: text;
-}
-.composer-body.links .cx-md-img:hover {
-  cursor: pointer;
-  text-decoration-thickness: 2px;
 }
 .cx-md-code {
   color: var(--syntax-string);

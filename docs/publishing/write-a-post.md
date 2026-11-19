@@ -12,7 +12,6 @@ The editor takes Markdown, and Kestrel saves as you type. The same Markdown beco
 - The opening lines are the preview a mail client shows beside the subject.
 - Paste or drop an image to add it: PNG, JPEG, WebP, or GIF, up to 5 MB. A photo's location, and the details of the camera that took it, are removed when it uploads, so they're never published. A file named for a different format than it really is, like a JPEG called `photo.png`, is refused until you rename it. Kestrel may change its file name, turning spaces into hyphens and numbering a name the post already has, and inserts the new name for you. While it uploads, a line like `<!-- Uploading "photo.png"… -->` holds its place, so you can keep writing; Send test email and Schedule wait until every image is in. If one is ever left behind, it's a comment, so readers never see it, and you can delete it.
 - **Images** in the toolbar lists the post's images. Choose one to put it in the post where your cursor is, or **Delete** to remove one the post no longer uses, like a photo you swapped for another: until you delete it, anyone who guesses its address can open it, and once the post is sent it stays for good. Delete asks once more, since a deleted image can't be brought back. An image the post still uses can't be deleted there; take it out of the text first.
-- ⌘-click (Ctrl-click on Windows and Linux) an image in the text to open it full size in a new tab.
 
 ## Schedule and send
 

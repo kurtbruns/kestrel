@@ -26,10 +26,29 @@ export interface ImagesDialogHooks {
 const ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
 const DROP_REGION = html`<div class="images-drop" id="imagesDrop"><span>Drop images here</span><button type="button" class="secondary" id="imagesChoose">Choose files</button><span class="images-fine">PNG, JPEG, WebP, or GIF, up to 5 MB each</span><input type="file" id="imagesInput" accept="${ACCEPT}" multiple hidden></div>`;
 
-/** Opens the dialog over the editor of draft `postId`, for as long as `signal` lives. */
-export function openImagesDialog(postId: string, signal: AbortSignal, hooks: ImagesDialogHooks) {
+/**
+ * Opens the dialog over the editor of draft `postId`, for as long as `signal` lives. The list is
+ * read first, so the dialog opens at the size it keeps rather than growing when the list lands.
+ */
+export async function openImagesDialog(
+  postId: string,
+  signal: AbortSignal,
+  hooks: ImagesDialogHooks,
+): Promise<void> {
+  let images: PostImage[];
+  try {
+    images = (await api<ImageListResponse>(`/api/posts/${postId}/images`, { signal })).images;
+  } catch (e) {
+    if (!signal.aborted) {
+      hooks.failed(e);
+    }
+    return;
+  }
+  if (signal.aborted) {
+    return;
+  }
   const m = modal(
-    html`<div class="images-dialog"><h3 id="imagesHead">Images</h3><p class="hint">Insert one where your cursor was, or add new ones. ⌘-click an image in the text to open it.</p>${DROP_REGION}<div id="imagesList"><p class="images-fine">Loading images…</p></div><p class="visually-hidden" id="imagesLive" aria-live="polite"></p><div class="actions"><button type="button" id="imagesClose">Close</button></div></div>`,
+    html`<div class="images-dialog"><h3 id="imagesHead">Images</h3><p class="hint">Insert one where your cursor was, or add new ones.</p>${DROP_REGION}<div id="imagesList"></div><p class="visually-hidden" id="imagesLive" aria-live="polite"></p><div class="actions"><button type="button" id="imagesClose">Close</button></div></div>`,
     signal,
   );
   const box = $(".modal", m.el);
@@ -66,7 +85,6 @@ export function openImagesDialog(postId: string, signal: AbortSignal, hooks: Ima
     upload([...(e.dataTransfer?.files ?? [])]);
   });
 
-  let images: PostImage[] = [];
   // The Delete waiting on its second press, so Escape or leaving it takes the question back.
   let asking: HTMLButtonElement | null = null;
   const stopAsking = () => {
@@ -176,7 +194,7 @@ export function openImagesDialog(postId: string, signal: AbortSignal, hooks: Ima
     paint(at);
   }
 
-  void read();
+  paint();
 }
 
 /** One image's row: the row itself inserts it, and Delete sits beside it. */

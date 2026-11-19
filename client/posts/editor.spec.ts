@@ -3389,43 +3389,6 @@ describe("editor view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
-    it("opens an image in a new tab on ⌘-click in the text, and only places the caret on a plain click", async () => {
-      const opened = vi.fn();
-      vi.stubGlobal("open", opened);
-      appState.appConfig = settingsResponse();
-      await open([{ path: "/api/posts/p1", reply: () => withBarn() }]);
-      const at = body().value.indexOf("barn.png");
-      body().setSelectionRange(at, at);
-      body().dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      expect(opened).not.toHaveBeenCalled();
-      body().dispatchEvent(new MouseEvent("click", { bubbles: true, metaKey: true }));
-      expect(opened).toHaveBeenCalledWith(
-        "https://app.birds.example/media/posts/p1/barn.png",
-        "_blank",
-        "noopener",
-      );
-      vi.unstubAllGlobals();
-    });
-
-    it("hands the pointer to an image's address while ⌘ is held, and opens it on a ⌘-click there", async () => {
-      const opened = vi.fn();
-      vi.stubGlobal("open", opened);
-      appState.appConfig = settingsResponse();
-      await open([{ path: "/api/posts/p1", reply: () => withBarn() }]);
-      const composer = $("#composerBody");
-      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Meta", metaKey: true }));
-      expect(composer.classList.contains("links")).toBe(true);
-      $(".cx-md-img").dispatchEvent(new MouseEvent("click", { bubbles: true, metaKey: true }));
-      expect(opened).toHaveBeenCalledWith(
-        "https://app.birds.example/media/posts/p1/barn.png",
-        "_blank",
-        "noopener",
-      );
-      document.dispatchEvent(new KeyboardEvent("keyup", { key: "Meta" }));
-      expect(composer.classList.contains("links")).toBe(false);
-      vi.unstubAllGlobals();
-    });
-
     it("never opens on a scheduled post, where the button nudges the way out", async () => {
       await open([{ path: "/api/posts/p1", reply: () => draft({ status: "scheduled" }) }]);
       imagesButton().click();

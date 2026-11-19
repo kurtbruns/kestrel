@@ -79,9 +79,8 @@ function hlMdInline(raw: string): string {
         return `<span class="cx-md-code">${code}</span>`;
       }
       if (ltext !== undefined) {
-        // Link/image: text + brackets stay plain; only the URL is treated (blue, underlined). An
-        // image's carries a class of its own, for a client that opens images from the text.
-        return `${bang || ""}${ltext}(<span class="cx-md-url${bang ? " cx-md-img" : ""}">${lurl}</span>)`;
+        // Link/image: text + brackets stay plain; only the URL is treated (blue, underlined).
+        return `${bang || ""}${ltext}(<span class="cx-md-url">${lurl}</span>)`;
       }
       if (bd) {
         return `<span class="cx-md-mark">${bd}</span><span class="cx-md-strong">${btext}</span><span class="cx-md-mark">${bd}</span>`;
