@@ -676,25 +676,35 @@ export async function renderEditor(
   /** Read the shown render again, for a change no revision marks: the template or identity
    *  changed elsewhere, while the publisher was in another tab. A render that comes back the
    *  same changes nothing on screen; a different one loads out of sight and swaps in. */
+  // One recheck at a time: the pointer reaching the tab and the click that follows ask once.
+  let rechecking = false;
   function recheckRender() {
-    if (!previewCurrent()) {
+    if (!previewCurrent() || rechecking) {
       return; // a render of what is saved is already on its way, or none is shown yet
     }
+    rechecking = true;
     renders
       .recheck()
       .then((r) => {
         if (r && r.revision === savedRevision()) {
           paintPreview(); // the email on screen is the old look until the new one swaps in
-          stage(r);
+          stage(r); // its swap paints the warnings line from it
         }
       })
-      .catch(() => {}); // in the background; the next look at Preview asks again
+      .catch(() => {}) // in the background; the next look at Preview asks again
+      .finally(() => {
+        rechecking = false;
+      });
   }
   readWhenShown(recheckRender, signal);
   async function showPreview() {
     showTab("preview");
     if (previewCurrent()) {
-      return; // rendered ahead: shown as it is
+      // Shown at once as rendered ahead. A change made elsewhere without a new revision (an
+      // image deleted, the template saved, in a window beside this one) can still have changed
+      // it, so the server is asked again, and a different render swaps in when it lands.
+      recheckRender();
+      return;
     }
     const round = ++previewRound;
     previewFailed = false; // a new try: "Updating…" until it lands or fails
@@ -744,8 +754,11 @@ export async function renderEditor(
   // The pointer reaching the tab, or focus landing on it, is the cue a click is coming: the
   // render starts then if no save started it. A press starts the save a click would, ahead
   // of the click.
-  previewTab.addEventListener("pointerenter", renderAhead);
-  previewTab.addEventListener("focus", renderAhead);
+  // With the render held looking current, the cue checks it again instead, so a change made
+  // elsewhere without a new revision is usually caught before the click.
+  const lookAhead = () => (previewCurrent() ? recheckRender() : renderAhead());
+  previewTab.addEventListener("pointerenter", lookAhead);
+  previewTab.addEventListener("focus", lookAhead);
   previewTab.addEventListener("pointerdown", () => {
     if (!locked && tab === "edit" && dirty.dirty && !conflicted) {
       saveDraft(true).catch(() => {}); // the save cue says why; the click asks again
@@ -1359,7 +1372,9 @@ export async function renderEditor(
       { saving, baseAtRequest },
     );
     if (decision === "ignore") {
-      return false; // the read may predate our own save, which is the newest
+      // The read may predate a change of base: with nothing unsaved, that is the poll taking in
+      // another writer's version this same moment, which the publisher hasn't seen yet.
+      return revisions.base !== baseAtRequest;
     }
     // A settings change made elsewhere writes no revision, so every read carries it.
     adopt(fresh.post, fresh.subject_slug_held, since);
