@@ -448,9 +448,23 @@ describe("images", () => {
   });
 
   describe("a name the post already has (SPEC §4)", () => {
-    const sendBytes = async (id: string, name: string, size: number) => {
+    // A PNG of `size` bytes, made so by a private chunk after its header that the upload
+    // keeps, so uploads can be told apart by their size: PNG_1x1 itself, or 12 bytes more or over.
+    const pngOfSize = (size: number): Uint8Array => {
+      if (size === PNG_1x1.length) {
+        return PNG_1x1;
+      }
+      const filler = new Uint8Array(size - PNG_1x1.length);
+      new DataView(filler.buffer).setUint32(0, filler.length - 12);
+      filler.set(new TextEncoder().encode("keSt"), 4);
       const bytes = new Uint8Array(size);
-      bytes.set(PNG_1x1);
+      bytes.set(PNG_1x1.subarray(0, 33));
+      bytes.set(filler, 33);
+      bytes.set(PNG_1x1.subarray(33), 33 + filler.length);
+      return bytes;
+    };
+    const sendBytes = async (id: string, name: string, size: number) => {
+      const bytes = pngOfSize(size);
       const fd = new FormData();
       fd.append("file", new File([bytes], name, { type: "image/png" }));
       const res = await SELF.fetch(`${base}/api/posts/${id}/images`, {
@@ -466,7 +480,7 @@ describe("images", () => {
 
     it("gets a number, and the image it would have replaced keeps its bytes", async () => {
       const id = await newDraft("Pasted Twice");
-      const size = PNG_1x1.length;
+      const size = PNG_1x1.length + 12;
       expect(await sendBytes(id, "image.png", size + 1)).toBe("image.png");
       expect(await sendBytes(id, "image.png", size + 2)).toBe("image-2.png");
       expect(await sendBytes(id, "image.png", size + 3)).toBe("image-3.png");
@@ -485,7 +499,7 @@ describe("images", () => {
 
     it("gives uploads sent at once a name each, with their own bytes", async () => {
       const id = await newDraft("Dropped Together");
-      const sizes = [1, 2, 3, 4, 5].map((extra) => PNG_1x1.length + extra);
+      const sizes = [1, 2, 3, 4, 5].map((extra) => PNG_1x1.length + 12 + extra);
       const names = await Promise.all(sizes.map((size) => sendBytes(id, "image.png", size)));
       expect([...names].sort()).toEqual([
         "image-2.png",

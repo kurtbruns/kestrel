@@ -548,7 +548,7 @@ describe("publication logo", () => {
 
   it("keeps showing a sent email the logo it was sent with, after a new upload and a removal (I3, SPEC §9)", async () => {
     const logoA = new Uint8Array([...PNG_1x1]);
-    const logoB = new Uint8Array([...PNG_1x1, 0]); // other bytes, so the two can be told apart
+    const logoB = new Uint8Array([...JPEG_1x1]); // other bytes, so the two can be told apart
     expect((await putLogo(logoA, "image/png")).status).toBe(200);
     const send = await dueSend();
     await tick();
@@ -562,7 +562,7 @@ describe("publication logo", () => {
     const bytesAt = async (url: string) =>
       new Uint8Array(await (await SELF.fetch(url)).arrayBuffer());
 
-    expect((await putLogo(logoB, "image/png")).status).toBe(200);
+    expect((await putLogo(logoB, "image/jpeg")).status).toBe(200);
     const newUrl = (await getSettings()).body.settings.publication.logo_url;
     expect(newUrl).not.toBe(sentUrl);
     expect(await bytesAt(newUrl)).toEqual(logoB); // a new render shows the new logo
