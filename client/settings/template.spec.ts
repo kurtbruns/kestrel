@@ -490,6 +490,22 @@ describe("template view", () => {
     expect($("#toasts").textContent).toBe("");
   });
 
+  it("scrolls the line numbers, the colors, and the text as one box, which an edit leaves where it was", async () => {
+    await open();
+    // None of the three scrolls on its own: one box around them does, so nothing has to
+    // follow the textarea's scroll a frame late.
+    const box = $("#tplEditorWrap");
+    const stack = $(":scope > .set-tpl-stack", box);
+    expect([...stack.children].map((c) => c.className)).toEqual(["set-tpl-gutter", "set-tpl-code"]);
+    expect($(".set-tpl-code", stack).contains($("#tplHl"))).toBe(true);
+    expect($(".set-tpl-code", stack).contains(editor())).toBe(true);
+    box.scrollTop = 40;
+    box.scrollLeft = 30;
+    typeInto(editor(), `${TEMPLATE}\n<p>more</p>`);
+    $("#tplLineNums").click();
+    expect([box.scrollTop, box.scrollLeft]).toEqual([40, 30]);
+  });
+
   it("remembers the line-number toggle per browser", async () => {
     await open();
     expect($("#tplEditorWrap").classList.contains("show-lines")).toBe(false);

@@ -6120,16 +6120,20 @@ button.set-embed-copy svg {
   font-size: 12px;
   color: var(--muted);
 }
-/* Syntax-highlight overlay editor: a transparent <textarea> over a
-   highlighted <pre>, plus a line-number gutter. All three share identical font
-   metrics so the caret sits exactly over the colored text; the textarea is the only
-   scroller and the gutter + overlay are synced to it in script. */
+/* Syntax-highlight overlay editor: a transparent <textarea> over a highlighted <pre>, plus a
+   line-number gutter. All three share identical font metrics so the caret sits exactly over
+   the colored text. None of them scrolls: the wrap is the one scroller, both ways, so the
+   colors, the caret, and the selection move as one surface. A textarea scrolling on its own
+   with the others synced from its scroll event trails them by a frame or more.
+   Inside it, `.set-tpl-stack` is a row as wide as the longest line and as tall as the text
+   (at least the wrap's size, so a click past the text still lands in the textarea): the
+   gutter, held at the left edge as the code scrolls sideways under it, then the code, where
+   the <pre> sits in flow and the textarea is stretched over it. */
 .set-tpl-editor-wrap {
-  position: relative;
   height: 420px;
   min-height: 240px;
   resize: vertical;
-  overflow: hidden;
+  overflow: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--syntax-bg);
@@ -6141,6 +6145,12 @@ button.set-embed-copy svg {
 .set-tpl-editor-wrap:focus-within {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
 }
+.set-tpl-stack {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  min-height: 100%;
+}
 .set-tpl-gutter,
 .set-tpl-hl,
 .set-tpl-editor {
@@ -6151,24 +6161,28 @@ button.set-embed-copy svg {
   box-sizing: border-box;
 }
 .set-tpl-gutter {
-  position: absolute;
-  inset: 0 auto 0 0;
+  position: sticky;
+  left: 0;
+  /* Above the code, which scrolls sideways under it. */
+  z-index: 1;
+  flex: none;
   width: 46px;
   padding: 12px 8px 12px 0;
   text-align: right;
   white-space: pre;
-  overflow: hidden;
   color: var(--syntax-gutter);
+  background: var(--syntax-bg);
   border-right: 1px solid var(--line);
   user-select: none;
   /* Line numbers are off by default; the toolbar toggle turns them on. */
   display: none;
 }
+.set-tpl-code {
+  position: relative;
+  flex: 1 0 auto;
+}
 .set-tpl-hl {
-  position: absolute;
-  inset: 0;
   padding: 12px 14px;
-  overflow: hidden;
   white-space: pre;
   color: var(--syntax-fg);
   pointer-events: none;
@@ -6176,11 +6190,14 @@ button.set-embed-copy svg {
 .set-tpl-editor {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   padding: 12px 14px;
   border: 0;
+  border-radius: 0;
   resize: none;
   white-space: pre;
-  overflow: auto;
+  overflow: hidden;
   background: transparent;
   color: transparent;
   caret-color: var(--syntax-fg);
@@ -6188,13 +6205,9 @@ button.set-embed-copy svg {
 .set-tpl-editor:focus {
   outline: none;
 }
-/* With line numbers on, reveal the gutter and inset the code + overlay past it. */
+/* With line numbers on, the gutter takes its place beside the code. */
 .set-tpl-editor-wrap.show-lines .set-tpl-gutter {
   display: block;
-}
-.set-tpl-editor-wrap.show-lines .set-tpl-hl,
-.set-tpl-editor-wrap.show-lines .set-tpl-editor {
-  left: 47px;
 }
 /* Syntax colors. */
 .cx-tag {

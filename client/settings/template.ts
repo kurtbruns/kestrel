@@ -565,9 +565,13 @@ export async function renderTemplate(
             </div>
           </div>
           <div class="set-tpl-editor-wrap" id="tplEditorWrap">
-            <div class="set-tpl-gutter" id="tplGutter" aria-hidden="true">1</div>
-            <pre class="set-tpl-hl" id="tplHl" aria-hidden="true"><code></code></pre>
-            <textarea id="tplEditor" class="set-tpl-editor" spellcheck="false" wrap="off" aria-label="Email template HTML"></textarea>
+            <div class="set-tpl-stack">
+              <div class="set-tpl-gutter" id="tplGutter" aria-hidden="true">1</div>
+              <div class="set-tpl-code">
+                <pre class="set-tpl-hl" id="tplHl" aria-hidden="true"><code></code></pre>
+                <textarea id="tplEditor" class="set-tpl-editor" spellcheck="false" wrap="off" aria-label="Email template HTML"></textarea>
+              </div>
+            </div>
           </div>
           <div class="set-tpl-msgs" id="tplMsgs" hidden></div>
         </div>
@@ -598,10 +602,13 @@ export async function renderTemplate(
   const tplTestLbl = $("#tplTestLbl");
   const isDirty = () => tplEditor.value !== templateBaseline;
 
-  // Syntax-highlight overlay: a transparent <textarea> over a highlighted
-  // <pre>, plus a line-number gutter, kept in scroll sync. Vanilla, no dependency.
-  const tplHl = $("#tplHl");
-  const tplHlCode = $("code", tplHl);
+  // Syntax-highlight overlay: a transparent <textarea> over a highlighted <pre>, plus a
+  // line-number gutter. Vanilla, no dependency. None of the three scrolls: the <pre> is as
+  // large as the text, the textarea is stretched over it, and the box around them is the one
+  // scroller, with the gutter held at its left edge (CSS). A textarea scrolled on its own, with
+  // the others following from its scroll event, is a frame or more ahead of them, since the
+  // browser moves it off the main thread before the event runs.
+  const tplHlCode = $("#tplHl code");
   const tplGutter = $("#tplGutter");
   const paintEditor = () => {
     const src = tplEditor.value;
@@ -614,12 +621,6 @@ export async function renderTemplate(
     }
     tplGutter.textContent = g;
   };
-  const syncScroll = () => {
-    tplHl.scrollTop = tplEditor.scrollTop;
-    tplHl.scrollLeft = tplEditor.scrollLeft;
-    tplGutter.scrollTop = tplEditor.scrollTop;
-  };
-  tplEditor.addEventListener("scroll", syncScroll);
 
   // The two blocking-required tokens, predicted live in the toolbar pills: green when
   // present, red when missing — so a rejected save is visible before you press Save.
@@ -641,7 +642,6 @@ export async function renderTemplate(
   function refreshDirty() {
     paintEditor();
     paintReq();
-    syncScroll();
     bar.setDirty(isDirty());
     // A test always sends the SAVED template (what will ship, I5). When there are
     // unsaved edits the button says so plainly: it saves first, then sends.
@@ -778,7 +778,6 @@ export async function renderTemplate(
   const setLineNums = (on: boolean) => {
     editorWrap.classList.toggle("show-lines", on);
     lineNumsBtn.setAttribute("aria-pressed", String(on));
-    syncScroll();
   };
   let lineNumsOn = false;
   try {
