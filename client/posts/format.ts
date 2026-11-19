@@ -5,6 +5,11 @@
 // throw away its address, and stacking an indent is how a list nests. Pure, so the view only
 // applies the edit (posts/text_edit.ts), as one step the browser can undo.
 //
+// Link goes where the publisher's next keystroke is needed: on selected words, which are the
+// link text already, it selects the address, so a paste replaces it; with nothing selected it
+// selects the text placeholder, and the editor lets the next Tab move on to the address
+// (`linkAddress`).
+//
 // Bold, Italic, and Code act on the words, not on exactly what was selected: spaces at the ends
 // of a selection stay outside the marks (a double-click often takes the space after a word, and
 // `** word **` marks nothing), and a caret inside a word stands for that word, a contraction's
@@ -23,6 +28,8 @@ export interface FormatEdit {
   end: number;
   insert: string;
   select: { start: number; end: number };
+  /** The edit selected a link's text placeholder, so a Tab may move on to its address. */
+  tabToAddress?: true;
 }
 
 /** The edit a toolbar button (or its shortcut) makes, or null for a kind the toolbar lacks. */
@@ -35,7 +42,7 @@ export function formatEdit(kind: string, at: TextSelection): FormatEdit | null {
     case "code":
       return toggleCode(at);
     case "link":
-      return wrap(at, "[", "](https://)", "link text");
+      return link(at);
     case "heading":
       return toggleHeading(at);
     case "quote":
@@ -90,6 +97,44 @@ function wrap(at: TextSelection, before: string, after: string, placeholder: str
     insert: before + inner + after,
     select: { start, end: start + inner.length },
   };
+}
+
+const LINK_ADDRESS = "https://";
+
+function link(at: TextSelection): FormatEdit {
+  const edit = wrap(at, "[", `](${LINK_ADDRESS})`, "link text");
+  if (at.start === at.end) {
+    return { ...edit, tabToAddress: true };
+  }
+  const address = edit.select.end + 2; // past "]("
+  return { ...edit, select: { start: address, end: address + LINK_ADDRESS.length } };
+}
+
+/**
+ * Where Tab moves to from a link's text: its address, given where the text starts (`textStart`,
+ * just past the `[`) and where the selection now ends. Only while the selection still ends at
+ * the text's closing `](` on the same line, typed over or not, and the address is still on that
+ * line; otherwise null, and Tab does what it always does.
+ */
+export function linkAddress(
+  text: string,
+  textStart: number,
+  selectionStart: number,
+  selectionEnd: number,
+): { start: number; end: number } | null {
+  if (text[textStart - 1] !== "[" || selectionStart < textStart || selectionEnd < selectionStart) {
+    return null;
+  }
+  const linkText = text.slice(textStart, selectionEnd);
+  if (/[\n[\]]/.test(linkText) || !text.startsWith("](", selectionEnd)) {
+    return null;
+  }
+  const start = selectionEnd + 2;
+  const end = text.indexOf(")", start);
+  if (end < 0 || text.slice(start, end).includes("\n")) {
+    return null;
+  }
+  return { start, end };
 }
 
 /** Takes `left` characters off before and `right` after: around the selection (`outside`), or

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatEdit } from "./format";
+import { formatEdit, linkAddress } from "./format";
 
 // The body and its selection written as one string, the selection between « and », so a case
 // reads as the text before and after a click.
@@ -158,8 +158,18 @@ describe("toolbar formatting", () => {
     expect(click(kind, before)).toBe(after);
   });
 
-  it("leaves a link alone on a second click, since taking it apart would lose its address", () => {
-    expect(twice("link", "«owls»")).toBe("[[«owls»](https://)](https://)");
+  it("links the selected words and selects the address, so a paste replaces it", () => {
+    expect(click("link", "see «the owls» here")).toBe("see [the owls](«https://») here");
+    expect(formatEdit("link", { text: "owls", start: 0, end: 4 })?.tabToAddress).toBeUndefined();
+  });
+
+  it("links at a bare caret with the text placeholder selected, and lets Tab move on", () => {
+    expect(click("link", "see «»")).toBe("see [«link text»](https://)");
+    expect(formatEdit("link", { text: "", start: 0, end: 0 })?.tabToAddress).toBe(true);
+  });
+
+  it("adds a link again on a second click, since taking it apart would lose its address", () => {
+    expect(twice("link", "«owls»")).toBe("[owls]([https://](«https://»))");
   });
 
   it("indents again on each click, as nesting a list needs", () => {
@@ -201,5 +211,31 @@ describe("toolbar formatting", () => {
 
   it("refuses a kind the toolbar has no button for", () => {
     expect(formatEdit("strike", { text: "x", start: 0, end: 1 })).toBeNull();
+  });
+});
+
+describe("Tab from a link's text", () => {
+  // A link inserted at offset 4 of "see ", its text starting at 5.
+  const inserted = "see [link text](https://) more";
+
+  it("moves to the address from the untouched placeholder", () => {
+    expect(linkAddress(inserted, 5, 5, 14)).toEqual({ start: 16, end: 24 });
+  });
+
+  it("moves to the address once the text is typed over", () => {
+    const typed = "see [the owls](https://) more";
+    expect(linkAddress(typed, 5, 13, 13)).toEqual({ start: 15, end: 23 });
+  });
+
+  it.each([
+    ["the caret moved before the text", inserted, 4, 4],
+    ["the caret is mid-text", inserted, 8, 8],
+    ["the caret moved past the text", inserted, 20, 20],
+    ["the text was taken apart", "see link text](https://)", 5, 13],
+    ["the text runs over a line", "see [link\ntext](https://)", 10, 14],
+    ["the address runs over a line", "see [owls](https:\n//)", 9, 9],
+    ["the address was never closed", "see [owls](https://", 9, 9],
+  ])("leaves Tab alone when %s", (_why, text, start, end) => {
+    expect(linkAddress(text, 5, start, end)).toBeNull();
   });
 });

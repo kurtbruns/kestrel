@@ -275,6 +275,12 @@ function unwrapHandle(
   return { dirty: h.dirty, beforeLeave: h.beforeLeave, manualSave: h.manualSave };
 }
 
+// The device the editor runs on, as navigator.platform reports it: its shortcuts take ⌘ on a
+// Mac and Ctrl elsewhere (ui/shortcut.ts). Restored by afterEach's restoreAllMocks.
+function onPlatform(platform: string): void {
+  vi.spyOn(navigator, "platform", "get").mockReturnValue(platform);
+}
+
 describe("editor view", () => {
   let fake: FakeApi;
   beforeEach(() => {
@@ -1475,6 +1481,7 @@ describe("editor view", () => {
   });
 
   it("formats the selection from the toolbar and by shortcut, and marks the draft dirty", async () => {
+    onPlatform("MacIntel");
     await open([{ path: "/api/posts/p1", reply: () => draft() }]);
     const ta = body();
     ta.setSelectionRange(2, 6); // "Owls"
@@ -1488,7 +1495,81 @@ describe("editor view", () => {
     expect(ta.value.split("\n").at(-1)).toMatch(/^> /);
   });
 
+  it("takes ⌘ for its shortcuts on a Mac, leaving Ctrl+B and Ctrl+K to the text field", async () => {
+    onPlatform("MacIntel");
+    await open([{ path: "/api/posts/p1", reply: () => draft() }]);
+    const ta = body();
+    expect($(".tb[data-fmt='link']").getAttribute("title")).toBe("Link (⌘K)");
+    for (const key of ["b", "i", "k"]) {
+      const e = new KeyboardEvent("keydown", {
+        key,
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      ta.dispatchEvent(e);
+      expect(e.defaultPrevented).toBe(false);
+    }
+    expect(ta.value).toBe("# Owls\n\nHoot.");
+  });
+
+  it("takes Ctrl for its shortcuts off a Mac, and says so on the buttons", async () => {
+    onPlatform("Win32");
+    await open([{ path: "/api/posts/p1", reply: () => draft() }]);
+    const ta = body();
+    expect($(".tb[data-fmt='bold']").getAttribute("title")).toBe("Bold (Ctrl+B)");
+    expect($(".tb[data-fmt='link']").getAttribute("aria-label")).toBe("Link (Ctrl+K)");
+    ta.setSelectionRange(2, 6); // "Owls"
+    ta.dispatchEvent(new KeyboardEvent("keydown", { key: "b", metaKey: true, bubbles: true }));
+    expect(ta.value).toBe("# Owls\n\nHoot."); // the Windows key is no shortcut
+    ta.dispatchEvent(new KeyboardEvent("keydown", { key: "b", ctrlKey: true, bubbles: true }));
+    expect(ta.value).toBe("# **Owls**\n\nHoot.");
+  });
+
+  it("moves from a new link's text to its address on the next Tab, once", async () => {
+    await open([{ path: "/api/posts/p1", reply: () => draft() }]);
+    const ta = body();
+    const tab = () => {
+      const e = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+      ta.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    const selected = () => ta.value.slice(ta.selectionStart, ta.selectionEnd);
+
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+    $(".tb[data-fmt='link']").click();
+    expect(selected()).toBe("link text");
+    // Typed over the placeholder, the caret after it (happy-dom's setRangeText puts it at the end).
+    const at = ta.selectionStart;
+    ta.setRangeText("owls", at, ta.selectionEnd);
+    ta.setSelectionRange(at + 4, at + 4);
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(tab()).toBe(true);
+    expect(selected()).toBe("https://");
+    expect(tab()).toBe(false); // the jump is spent: Tab leaves the body again
+
+    // An arrow key, a click, or leaving the body calls the jump off.
+    for (const callOff of [
+      () => ta.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true })),
+      () => ta.dispatchEvent(new Event("pointerdown", { bubbles: true })),
+      () => ta.dispatchEvent(new Event("blur")),
+    ]) {
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+      $(".tb[data-fmt='link']").click();
+      callOff();
+      expect(tab()).toBe(false);
+    }
+
+    // Linking selected words selects the address at once, with no Tab to take.
+    ta.setSelectionRange(2, 6); // "Owls"
+    $(".tb[data-fmt='link']").click();
+    expect(ta.value.startsWith("# [Owls](https://)")).toBe(true);
+    expect(selected()).toBe("https://");
+    expect(tab()).toBe(false);
+  });
+
   it("makes each toolbar change one edit the browser can undo, as typing is, keeping the selection each sets", async () => {
+    onPlatform("MacIntel");
     const ran = stubEditingCommands();
     await open([{ path: "/api/posts/p1", reply: () => draft() }]);
     const ta = body();
