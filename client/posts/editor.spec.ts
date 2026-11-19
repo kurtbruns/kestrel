@@ -3476,6 +3476,20 @@ describe("editor view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
+    it("moves a following address with a subject taken in, saying only that the post changed (SPEC §4)", async () => {
+      const server = draftServer();
+      await open(routes(server));
+      $("#scheduleBtn").click();
+      expect($<HTMLInputElement>("#schSlug").value).toBe("owls");
+      server.elsewhere("you@example.com", "claude-code", { subject: "Barn owls" });
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect($<HTMLInputElement>("#schSlug").value).toBe("barn-owls");
+      expect(noticeLines()).toEqual([
+        expect.stringMatching(/^This post was changed by Claude at \S.*\.$/),
+        "Scheduling will use the latest version.",
+      ]);
+    });
+
     it("says a change of unknown source was made elsewhere (SPEC §4)", async () => {
       const server = draftServer();
       await open(routes(server));
@@ -3551,6 +3565,42 @@ describe("editor view", () => {
           email_only: false,
           slug: "dusk-owls",
         });
+      });
+
+      it("stop the press whose own check finds a settings change, say it, and act on the next (SPEC §4)", async () => {
+        const server = draftServer();
+        await open(settingsRoutes(server));
+        $("#scheduleBtn").click();
+        expect($<HTMLInputElement>("#schInclude").checked).toBe(true);
+        // Claude leaves the post out of the archive after the last poll, before the press.
+        server.listing({ json: () => ({ email_only: true }) } as FakeRequest);
+        $("#schGo").click();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(acts("/api/posts/p1/schedule")).toHaveLength(0);
+        expect(noticeLines()).toEqual(settingsNotice);
+        expect($<HTMLInputElement>("#schInclude").checked).toBe(false);
+        $("#schGo").click();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(acts("/api/posts/p1/schedule").map((c) => c.json())).toEqual([
+          { fire_at: expect.any(String) },
+        ]);
+      });
+
+      it("keep the caret where it was in the address being typed when they follow a change (SPEC §4)", async () => {
+        const server = draftServer();
+        await open(settingsRoutes(server));
+        $("#scheduleBtn").click();
+        const slug = $<HTMLInputElement>("#schSlug");
+        typeInto(slug, "dusk");
+        slug.focus(); // which selects the whole slug
+        slug.setSelectionRange(2, 2);
+        server.listing({ json: () => ({ slug: "night-owls" }) } as FakeRequest);
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(noticeLines()).toEqual(settingsNotice);
+        const again = $<HTMLInputElement>("#schSlug");
+        expect(again.value).toBe("dusk"); // theirs, typed here
+        expect(document.activeElement).toBe(again);
+        expect([again.selectionStart, again.selectionEnd]).toEqual([2, 2]);
       });
 
       it("send nothing of a change made elsewhere back over it (SPEC §4)", async () => {

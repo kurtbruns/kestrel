@@ -107,8 +107,9 @@ import { previewOpensWebVersion, webVersionHash } from "./web";
 const message = describeError;
 
 /** What changed under an open dialog: another writer's version taken in, the out-of-date
- *  banner raised over the text, an image uploaded, or the post's settings. */
-type DialogChange = "taken" | "conflict" | "image" | "settings";
+ *  banner raised over the text, an image uploaded, the post's settings, or a following address
+ *  that moved with the subject (or another post's slug), which is no settings change. */
+type DialogChange = "taken" | "conflict" | "image" | "settings" | "address";
 
 // Each button, its name, and the letter of its shortcut, if it has one (⌘ on a Mac, Ctrl
 // elsewhere: ui/shortcut.ts).
@@ -433,7 +434,9 @@ export async function renderEditor(
     actions = p.actions;
     paintPublishing();
     if (settingsDiffer(before, pub)) {
-      dialogWatch?.("settings"); // an open Schedule or Send now follows it
+      dialogWatch?.("settings"); // an open Schedule or Send now follows it, and says so
+    } else if (before.slug !== pub.slug || before.slugTaken !== pub.slugTaken) {
+      dialogWatch?.("address"); // a following address moved with the subject: shown, not said
     }
   };
   /** Save a change to the post's settings (`PUT /api/posts/:id/settings`), and show what the server made
@@ -1429,13 +1432,17 @@ export async function renderEditor(
    * Keep an open action dialog (Schedule, Send test, Send now) honest about the post under it
    * (SPEC §4–§6, DESIGN §3). Another writer's version taken in while it is open, or by the
    * confirm's own check, is said in a notice under the dialog's heading, and the dialog stays as
-   * the publisher left it; a settings change is followed by `onSettings` and said the same way.
-   * `place` puts the notice into the view on screen, with the line saying what its act will use;
-   * a dialog with two views calls it for each. `seen` tells the confirm whether it may act.
+   * the publisher left it. A dialog that carries the post's settings passes `follow`, which takes
+   * the stored settings into its working copy: a settings change is followed and said the same
+   * way, and a version taken in, or an address that moved with the subject, is followed quietly,
+   * since only the address shown changes. `place` puts the notice into the view on screen, with
+   * the line saying what its act will use; a dialog with two views calls it for each. The confirm
+   * notes `shown()` as it is pressed and acts only if `changedSince` is false after its check.
    */
-  function watchForAction(box: HTMLElement, onSettings?: () => void) {
+  function watchForAction(box: HTMLElement, follow?: () => void) {
     let taken: { by: string | null; when: string } | null = null;
     let settings = false;
+    let followed = 0; // settings changes said, counted as take-ins are
     let uses = "";
     const slot = () => {
       // A live region that is already in the view when its words arrive, so they are announced.
@@ -1463,35 +1470,61 @@ export async function renderEditor(
       }
       setHtml(slot(), lines.length ? html`<div class="dialog-notice">${lines}</div>` : html``);
     };
+    // Re-drawing the form would drop focus from a field in it, and focusing the address selects
+    // it all, so the field gets back its focus and the caret or selection the publisher left.
+    const redraw = () => {
+      if (!follow) {
+        return;
+      }
+      const focused = document.activeElement;
+      const id = focused instanceof HTMLElement && box.contains(focused) ? focused.id : "";
+      const range =
+        focused instanceof HTMLInputElement && focused.type === "text"
+          ? [focused.selectionStart, focused.selectionEnd, focused.selectionDirection]
+          : null;
+      follow();
+      if (!id || document.activeElement === focused) {
+        return;
+      }
+      const again = box.querySelector<HTMLElement>(`#${id}`);
+      again?.focus();
+      if (again instanceof HTMLInputElement && again.type === "text" && range) {
+        const [start, end, direction] = range as [number | null, number | null, string | null];
+        if (start !== null && end !== null) {
+          again.setSelectionRange(start, end, (direction ?? "none") as "none");
+        }
+      }
+    };
     dialogWatch = (change) => {
       if (!box.isConnected) {
         return; // a dialog closed since
       }
       if (change === "taken") {
         taken = lastTaken;
+        redraw(); // a new subject moves a following address
         paint();
-      } else if (change === "settings" && onSettings) {
+      } else if (change === "address") {
+        redraw();
+      } else if (change === "settings" && follow) {
         settings = true;
-        // Re-drawing the form would drop focus from a field in it, so put it back by id.
-        const focused = document.activeElement;
-        const id = focused instanceof HTMLElement && box.contains(focused) ? focused.id : "";
-        onSettings();
-        if (id && document.activeElement !== focused) {
-          box.querySelector<HTMLElement>(`#${id}`)?.focus();
-        }
+        followed += 1;
+        redraw();
         paint();
       }
     };
+    const seen = () => revisions.taken + followed;
     return {
       place(usesLine: string) {
         uses = usesLine;
         paint();
       },
-      /** The count of versions taken in as the publisher confirms: what the dialog has shown. */
-      shown: () => revisions.taken,
-      /** Whether a version was taken in since `shown`, by the confirm's own check or the poll
-       *  beside it. Its notice is up, so the press acts on nothing and the next one acts. */
-      changedSince: (shown: number) => revisions.taken !== shown,
+      /** What the dialog has shown as the publisher confirms: versions taken in and settings
+       *  changes said, the publisher's own saves counting for neither. */
+      shown: seen,
+      /** Whether a version was taken in or a settings change said since `shown`, by the
+       *  confirm's own check or the poll beside it. Its notice is up, so the press acts on
+       *  nothing and the next one acts. */
+      changedSince: (shown: number) => seen() !== shown,
     };
   }
   /** Read the post's freshness now, outside the poll's pace. */
@@ -1858,7 +1891,7 @@ export async function renderEditor(
       body: () => ta.value,
       watch: (changed) => {
         dialogWatch = (change) => {
-          if (change !== "settings") {
+          if (change !== "settings" && change !== "address") {
             changed();
           }
         };
@@ -2206,9 +2239,10 @@ export async function renderEditor(
 
       // The form under the time edits the dialog's copy; its first line follows the copy.
       const showForm = () => mountSettingsForm($("#schForm", box), working, "sch");
-      // A change made elsewhere while the dialog is open is said in it (DESIGN §3). A settings
-      // change reaches the settings the publisher left alone, and becomes what the dialog
-      // opened with, so the act still carries only the publisher's own changes.
+      // A change made elsewhere while the dialog is open is said in it (DESIGN §3). The stored
+      // settings reach those the publisher left alone, a following address takes the subject now
+      // on screen, and the stored settings become what the dialog opened with, so the act still
+      // carries only the publisher's own changes.
       const watch = watchForAction(box, () => {
         working.subject = subjectEl.value;
         followSettings(opened, working, pub);
@@ -2216,7 +2250,8 @@ export async function renderEditor(
         if (box.querySelector("#schForm")) {
           showForm();
         }
-      }); // The dialog's settings go with the act itself, checked and applied together, so a
+      });
+      // The dialog's settings go with the act itself, checked and applied together, so a
       // refused schedule changes neither and a refused address schedules nothing.
       // Only what the dialog changed is sent, so a change made elsewhere while it was open (the
       // post left out of the archive by Claude, say) is never undone by a box left as it opened.

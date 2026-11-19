@@ -19,6 +19,8 @@ describe("settingsDiffer (SPEC §4)", () => {
       settingsDiffer(stored({ slugAuto: false }), stored({ slugAuto: false, slug: "x" })),
     ).toBe(true);
     expect(settingsDiffer(stored(), stored({ slug: "owls-at-dusk" }))).toBe(false);
+    expect(settingsDiffer(stored(), stored({ fixed: true }))).toBe(true);
+    expect(settingsDiffer(stored(), stored({ slug: "owls-2", slugTaken: "owls" }))).toBe(false);
   });
 });
 

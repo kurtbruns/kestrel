@@ -178,12 +178,16 @@ export function settingsChange(saved: Publishing, working: Publishing): PostSett
 }
 
 /**
- * Whether two reads of a post's settings differ in what a publisher sets: Include in archive, or
- * the address. A following address moves with each saved subject, which is no settings change.
+ * Whether two reads of a post's settings differ in what a publisher sets: Include in archive, the
+ * address, or whether the address is fixed. A following address moves with each saved subject,
+ * and with another post taking its slug, which is no settings change.
  */
 export function settingsDiffer(a: Publishing, b: Publishing): boolean {
   return (
-    a.emailOnly !== b.emailOnly || a.slugAuto !== b.slugAuto || (!a.slugAuto && a.slug !== b.slug)
+    a.emailOnly !== b.emailOnly ||
+    a.slugAuto !== b.slugAuto ||
+    a.fixed !== b.fixed ||
+    (!a.slugAuto && a.slug !== b.slug)
   );
 }
 
