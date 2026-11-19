@@ -5,7 +5,6 @@
 import { DAILY_WRITES_SEND_RECIPIENTS, dailyWritesSendWarning } from "../../shared/free_plan";
 import {
   IMAGE_TYPE_BY_EXTENSION,
-  type ImageListResponse,
   type ImageUploadResponse,
   imageTypeOfName,
 } from "../../shared/images";
@@ -77,7 +76,7 @@ import { carryOffset } from "./caret";
 import { DirtyTracker } from "./dirty";
 import { showDropCaret } from "./drop_caret";
 import { formatEdit } from "./format";
-import { imagesCount, imageUsedIn, insertImage } from "./images";
+import { insertImage } from "./images";
 import { openImagesDialog } from "./images_dialog";
 import { LatestRender, type Render } from "./latest_render";
 import { trackSaves } from "./pending_save";
@@ -114,7 +113,7 @@ const TOOLBAR: [IconName, string][][] = [
     ["quote", "Quote"],
     ["code", "Code"],
     ["link", "Link (⌘K)"],
-    ["image", "Add image"],
+    ["image", "Images"],
   ],
   [
     ["ul", "Bulleted list"],
@@ -298,7 +297,7 @@ export async function renderEditor(
         ${
           locked
             ? html`<div class="composer-foot composer-foot-lock" id="lockFoot" role="status">${icon("readonly")}<span>Cancel the schedule to edit</span></div>`
-            : html`<div class="composer-foot" id="dropFoot"><span class="foot-add">${icon("image")}<span id="footText" aria-live="polite">Paste, drop, or click to add images</span></span><button type="button" class="foot-count" id="imagesCount" hidden></button></div>`
+            : html`<div class="composer-foot" id="dropFoot">${icon("paperclip")}<span aria-live="polite">Paste, drop, or click to add images</span></div>`
         }
         <input type="file" id="imgInput" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
       </div>
@@ -724,9 +723,7 @@ export async function renderEditor(
       return;
     }
     if (kind === "image") {
-      // Add image: the file picker, as the foot's click opens it. The Images dialog is the
-      // foot's count, since managing images isn't an edit of the text.
-      $<HTMLInputElement>("#imgInput").click();
+      openImages();
       return;
     }
     showTab("edit");
@@ -879,7 +876,6 @@ export async function renderEditor(
       paintPublishing();
       revisions.saved(u.current_revision); // our save is now the newest; poll against it
       dirty.markSaved(sent);
-      savedBodyIs(sent);
       saveFailed = false;
       saveError = null;
       retryDelay = 0;
@@ -1012,7 +1008,6 @@ export async function renderEditor(
         });
         revisions.saved(u.current_revision);
         dirty.markSaved(sent);
-        savedBodyIs(sent);
       })
       .catch((e) => {
         if (isNotFound(e)) {
@@ -1122,8 +1117,6 @@ export async function renderEditor(
     nameTab();
     paintMarkdown();
     imagesChanged?.();
-    savedMarkdown = fresh.markdown;
-    void readImages();
     revisions.took(revision);
     dirty.markSaved();
     pub = publishingOf(fresh.post, fresh.subject_slug_held);
@@ -1486,7 +1479,7 @@ export async function renderEditor(
   let dragOver = false;
   function paintUploads() {
     const uploadsOut = uploading.size;
-    const foot = root.querySelector("#footText");
+    const foot = root.querySelector("#dropFoot span");
     if (foot) {
       foot.textContent = dragOver
         ? "Drop images to upload"
@@ -1494,7 +1487,6 @@ export async function renderEditor(
           ? `Uploading ${uploadsOut} image${uploadsOut === 1 ? "" : "s"}…`
           : footDefault;
     }
-    paintImagesCount();
     for (const b of $$<HTMLButtonElement>("#testBtn, #scheduleBtn", root)) {
       b.disabled = uploadsOut > 0;
       if (uploadsOut) {
@@ -1541,7 +1533,6 @@ export async function renderEditor(
           // The render changes with the post's images, not only its revision: even with its
           // placeholder gone, the stored image is one the post now has.
           renders.forget();
-          void readImages(); // the foot's count takes the new image in
           // The stored name on both sides: the name sent can hold a bracket that would end the alt text.
           const next = replacePlaceholder(
             textState(),
@@ -1588,54 +1579,6 @@ export async function renderEditor(
   ta.addEventListener("focus", () => {
     bodyFocused = true;
   });
-  // The foot's count of the draft's images (DESIGN, the editor), which opens the Images dialog.
-  // It reads the list when the editor opens and after an upload, a delete, or another writer's
-  // version, and judges "not used" as the dialog does, by the text on screen or as saved; the
-  // saved text moves with each save, so the count changes on a save, never on a keystroke.
-  let footImages: string[] = [];
-  let savedMarkdown = markdown;
-  const countEl = root.querySelector<HTMLButtonElement>("#imagesCount");
-  function paintImagesCount() {
-    if (!countEl) {
-      return;
-    }
-    const notUsed = footImages.filter(
-      (name) => !imageUsedIn(ta.value, name) && !imageUsedIn(savedMarkdown, name),
-    ).length;
-    const count = dragOver ? null : imagesCount(footImages.length, notUsed);
-    countEl.hidden = !count;
-    countEl.textContent = count?.text ?? "";
-    if (count) {
-      countEl.setAttribute("aria-label", count.label);
-    }
-  }
-  async function readImages() {
-    if (locked) {
-      return;
-    }
-    try {
-      const { images } = await api<ImageListResponse>(`/api/posts/${id}/images`, { signal });
-      footImages = images.map((img) => img.filename);
-    } catch {
-      return; // the count is a convenience; the dialog says what's wrong when opened
-    }
-    if (!signal.aborted) {
-      paintImagesCount();
-    }
-  }
-  /** A save landed: what is saved is now `sent`'s body. */
-  function savedBodyIs(sent: string) {
-    savedMarkdown = (JSON.parse(sent) as { markdown: string }).markdown;
-    paintImagesCount();
-  }
-  void readImages();
-  if (countEl) {
-    countEl.onclick = (e) => {
-      e.stopPropagation(); // the foot's own click opens the file picker
-      openImages();
-    };
-  }
-
   // One dialog at a time: the list is read before it opens, so a second press while that read
   // is out would otherwise open a second.
   let imagesOpening = false;
@@ -1672,7 +1615,6 @@ export async function renderEditor(
       deleted: () => {
         renders.forget();
         renderAhead();
-        void readImages();
       },
       failed: (e) => {
         if (!foundGone(e)) {

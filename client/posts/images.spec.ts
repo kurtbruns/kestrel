@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { imagesCount, imageUsedIn, insertImage, sizeText } from "./images";
+import { imageUsedIn, insertImage, sizeText } from "./images";
 import { applyEdit } from "./uploads";
 
 describe("imageUsedIn", () => {
@@ -57,20 +57,6 @@ describe("insertImage", () => {
     const edit = insertImage({ text: "", start: 0, end: 0 }, "a.png");
     expect(applyEdit("", edit)).toBe("![a.png](a.png)\n\n");
     expect(edit.select).toEqual({ start: 2, end: 7 });
-  });
-});
-
-describe("imagesCount", () => {
-  it("says nothing of a draft with no images", () => {
-    expect(imagesCount(0, 0)).toBe(null);
-  });
-
-  it.each([
-    [1, 0, "1 image", "Manage this post's 1 image"],
-    [4, 0, "4 images", "Manage this post's 4 images"],
-    [4, 1, "4 images · 1 not used", "Manage this post's 4 images, 1 not used"],
-  ])("says %i images, %i not used, as “%s”", (total, notUsed, text, label) => {
-    expect(imagesCount(total, notUsed)).toEqual({ text, label });
   });
 });
 

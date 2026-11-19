@@ -27,6 +27,7 @@ import mail from "./icons/mail.svg";
 import octagonAlert from "./icons/octagon-alert.svg";
 import ol from "./icons/ol.svg";
 import outward from "./icons/outward.svg";
+import paperclip from "./icons/paperclip.svg";
 import phone from "./icons/phone.svg";
 import plus from "./icons/plus.svg";
 import preview from "./icons/preview.svg";
@@ -59,6 +60,7 @@ const ICONS = {
   link: unsafeHtml(link),
   "octagon-alert": unsafeHtml(octagonAlert),
   ol: unsafeHtml(ol),
+  paperclip: unsafeHtml(paperclip),
   plus: unsafeHtml(plus),
   preview: unsafeHtml(preview),
   quote: unsafeHtml(quote),

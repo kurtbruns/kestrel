@@ -21,6 +21,7 @@ const ALL = {
   link: true,
   "octagon-alert": true,
   ol: true,
+  paperclip: true,
   plus: true,
   preview: true,
   quote: true,
