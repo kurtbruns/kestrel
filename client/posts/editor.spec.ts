@@ -3354,7 +3354,7 @@ describe("editor view", () => {
   });
 
   // SPEC §6: a schedule never freezes a version the publisher hasn't seen, saved or not.
-  it("schedules nothing when another writer saved since the last poll, says so, and schedules at the picked time on the next press", async () => {
+  it("schedules nothing when another writer saved since the last poll, says so, and schedules at the picked time on the next press (SPEC §4)", async () => {
     const server = draftServer();
     await open([
       { path: "/api/posts/p1", reply: server.get },
@@ -3408,7 +3408,7 @@ describe("editor view", () => {
     ];
     const acts = (path: string) => fake.calls.filter((c) => c.url.pathname === path);
 
-    it("says in Send test that the post changed, keeps the recipients and focus, and tests the latest version", async () => {
+    it("says in Send test that the post changed, keeps the recipients and focus, and tests the latest version (SPEC §4)", async () => {
       const server = draftServer();
       await open(routes(server));
       $("#testBtn").click();
@@ -3433,7 +3433,7 @@ describe("editor view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
-    it("says in Schedule that the post changed, keeps the picked time, and schedules on the first press", async () => {
+    it("says in Schedule that the post changed, keeps the picked time, and schedules on the first press (SPEC §4)", async () => {
       const server = draftServer();
       await open(routes(server));
       $("#scheduleBtn").click();
@@ -3454,7 +3454,7 @@ describe("editor view", () => {
       expect(puts()).toHaveLength(0); // nothing of this editor's was owed a save
     });
 
-    it("says in Send now that the post changed, keeps the settings changed there, and sends on the first press", async () => {
+    it("says in Send now that the post changed, keeps the settings changed there, and sends on the first press (SPEC §4)", async () => {
       const server = draftServer();
       await open(routes(server));
       $("#scheduleBtn").click();
@@ -3476,7 +3476,7 @@ describe("editor view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
-    it("says a change of unknown source was made elsewhere", async () => {
+    it("says a change of unknown source was made elsewhere (SPEC §4)", async () => {
       const server = draftServer();
       await open(routes(server));
       $("#scheduleBtn").click();
@@ -3485,7 +3485,7 @@ describe("editor view", () => {
       expect(noticeLines()[0]).toMatch(/^This post was changed elsewhere at \S.*\.$/);
     });
 
-    it("acts on the first press when it opened over unsaved edits and nothing changed elsewhere", async () => {
+    it("acts on the first press when it opened over unsaved edits and nothing changed elsewhere (SPEC §4)", async () => {
       const server = draftServer();
       await open(routes(server));
       typeInto(body(), "My own hoot.");
@@ -3512,7 +3512,7 @@ describe("editor view", () => {
         "The options below are up to date.",
       ];
 
-      it("follow a change made elsewhere into the options left alone, and say so", async () => {
+      it("follow a change made elsewhere into the options left alone, and say so (SPEC §4)", async () => {
         const server = draftServer();
         await open(settingsRoutes(server));
         $("#scheduleBtn").click();
@@ -3529,7 +3529,7 @@ describe("editor view", () => {
         });
       });
 
-      it("keep an option the publisher changed, and send only that", async () => {
+      it("keep an option the publisher changed, and send only that (SPEC §4)", async () => {
         const server = draftServer();
         await open(settingsRoutes(server));
         $("#scheduleBtn").click();
@@ -3553,7 +3553,7 @@ describe("editor view", () => {
         });
       });
 
-      it("send nothing of a change made elsewhere back over it", async () => {
+      it("send nothing of a change made elsewhere back over it (SPEC §4)", async () => {
         const server = draftServer();
         await open(settingsRoutes(server));
         $("#scheduleBtn").click();
