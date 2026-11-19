@@ -3282,7 +3282,7 @@ describe("editor view", () => {
       $<HTMLButtonElement>(`.images-insert[data-name="${name}"]`).closest("li") as HTMLElement;
     const dialogOpen = () => document.querySelector(".modal-images") !== null;
 
-    it("lists the draft's images, naming those not in the post, each row opening its image full size", async () => {
+    it("lists the draft's images, naming those the post doesn't use, each row opening its image full size", async () => {
       await open([
         { path: "/api/posts/p1", reply: () => withBarn() },
         listRoute(() => ["barn.png", "owl.png"]),
@@ -3291,7 +3291,7 @@ describe("editor view", () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(row("barn.png").querySelector(".images-meta")?.textContent).toBe("1600×1200 · 412 KB");
       expect(row("owl.png").querySelector(".images-meta")?.textContent).toBe(
-        "Not in the post · 1600×1200 · 412 KB",
+        "Not used · 1600×1200 · 412 KB",
       );
       for (const name of ["barn.png", "owl.png"]) {
         const link = row(name).querySelector("a.images-open");

@@ -215,7 +215,7 @@ function rowHtml(img: PostImage, used: boolean): Html {
   const web = /^https?:\/\//i.test(img.url);
   // Only the exception is named, as Email only is: an image the post uses is the normal case.
   const facts = [
-    used ? null : "Not in the post",
+    used ? null : "Not used",
     img.width && img.height ? `${img.width}×${img.height}` : null,
     img.bytes === null ? null : sizeText(img.bytes),
   ].filter((f) => f !== null);
