@@ -111,6 +111,9 @@ const message = describeError;
  *  that moved with the subject (or another post's slug), which is no settings change. */
 type DialogChange = "taken" | "conflict" | "image" | "settings" | "address";
 
+/** How long after a dialog's notice of a change a press counts as made before it was read. */
+const JUST_SAID_MS = 1000;
+
 // Each button, its name, and the letter of its shortcut, if it has one (⌘ on a Mac, Ctrl
 // elsewhere: ui/shortcut.ts).
 const TOOLBAR: [IconName, string, string?][][] = [
@@ -1470,37 +1473,17 @@ export async function renderEditor(
       }
       setHtml(slot(), lines.length ? html`<div class="dialog-notice">${lines}</div>` : html``);
     };
-    // Re-drawing the form would drop focus from a field in it, and focusing the address selects
-    // it all, so the field gets back its focus and the caret or selection the publisher left.
-    const redraw = () => {
-      if (!follow) {
-        return;
-      }
-      const focused = document.activeElement;
-      const id = focused instanceof HTMLElement && box.contains(focused) ? focused.id : "";
-      const range =
-        focused instanceof HTMLInputElement && focused.type === "text"
-          ? [focused.selectionStart, focused.selectionEnd, focused.selectionDirection]
-          : null;
-      follow();
-      if (!id || document.activeElement === focused) {
-        return;
-      }
-      const again = box.querySelector<HTMLElement>(`#${id}`);
-      again?.focus();
-      if (again instanceof HTMLInputElement && again.type === "text" && range) {
-        const [start, end, direction] = range as [number | null, number | null, string | null];
-        if (start !== null && end !== null) {
-          again.setSelectionRange(start, end, (direction ?? "none") as "none");
-        }
-      }
-    };
+    // When a change was last said, so a press that lands just after it, before anyone could
+    // read it, only says it too.
+    let saidAt = Number.NEGATIVE_INFINITY;
+    const redraw = () => follow?.();
     dialogWatch = (change) => {
       if (!box.isConnected) {
         return; // a dialog closed since
       }
       if (change === "taken") {
         taken = lastTaken;
+        saidAt = Date.now();
         redraw(); // a new subject moves a following address
         paint();
       } else if (change === "address") {
@@ -1508,6 +1491,7 @@ export async function renderEditor(
       } else if (change === "settings" && follow) {
         settings = true;
         followed += 1;
+        saidAt = Date.now();
         redraw();
         paint();
       }
@@ -1518,6 +1502,10 @@ export async function renderEditor(
         uses = usesLine;
         paint();
       },
+      /** Whether a change was said too recently to have been read: the freshness poll can paint
+       *  it a moment before a click already on its way. That press acts on nothing; the notice
+       *  is up, and the next press acts. */
+      justSaid: () => Date.now() - saidAt < JUST_SAID_MS,
       /** What the dialog has shown as the publisher confirms: versions taken in and settings
        *  changes said, the publisher's own saves counting for neither. */
       shown: seen,
@@ -2072,6 +2060,9 @@ export async function renderEditor(
           // it. A refused save means the server holds another writer's version over unsaved
           // edits here: as with Schedule, close the dialog onto the out-of-date banner.
           if (watch) {
+            if (watch.justSaid()) {
+              return;
+            }
             const shown = watch.shown();
             const saved = await saveBeforeActing();
             if (watch.changedSince(shown)) {
@@ -2238,7 +2229,11 @@ export async function renderEditor(
       };
 
       // The form under the time edits the dialog's copy; its first line follows the copy.
-      const showForm = () => mountSettingsForm($("#schForm", box), working, "sch");
+      // Its `sync` shows a change followed into the copy, for the view on screen.
+      let syncForm = () => {};
+      const showForm = () => {
+        syncForm = mountSettingsForm($("#schForm", box), working, "sch");
+      };
       // A change made elsewhere while the dialog is open is said in it (DESIGN §3). The stored
       // settings reach those the publisher left alone, a following address takes the subject now
       // on screen, and the stored settings become what the dialog opened with, so the act still
@@ -2247,9 +2242,7 @@ export async function renderEditor(
         working.subject = subjectEl.value;
         followSettings(opened, working, pub);
         opened = pub;
-        if (box.querySelector("#schForm")) {
-          showForm();
-        }
+        syncForm();
       });
       // The dialog's settings go with the act itself, checked and applied together, so a
       // refused schedule changes neither and a refused address schedules nothing.
@@ -2282,6 +2275,9 @@ export async function renderEditor(
             // (SPEC §6): one the check before it takes in is said here, and the next press
             // schedules it. A refused save means the server holds another writer's version
             // over unsaved edits here: close onto the out-of-date banner behind.
+            if (watch.justSaid()) {
+              return;
+            }
             const shown = watch.shown();
             const saved = await saveBeforeActing();
             if (watch.changedSince(shown)) {
@@ -2323,6 +2319,9 @@ export async function renderEditor(
           m.clearError();
           try {
             // As in doSchedule: an unshown version or a refused save never becomes a send.
+            if (watch.justSaid()) {
+              return;
+            }
             const shown = watch.shown();
             const saved = await saveBeforeActing();
             if (watch.changedSince(shown)) {

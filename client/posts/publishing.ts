@@ -216,18 +216,47 @@ export function followSettings(opened: Publishing, working: Publishing, fresh: P
 /**
  * Draw the settings form into `el` over the working copy `p`, and keep it wired: each change
  * that shows or hides a part redraws it. For a dialog that holds the form beside other fields.
+ * Returns `sync`, which shows `p` again after it changed from outside the form (a change made
+ * elsewhere, followed into it): the box, the address, and the line under it are set in place,
+ * so focus and a caret in the form stay where they are. Only a change that shows, hides, or
+ * fixes the address draws the form again.
  */
 export function mountSettingsForm(
   el: HTMLElement,
   p: Publishing,
   prefix: string,
   options: SettingsFormOptions = {},
-): void {
+): () => void {
+  const { fixedNote = FIXED_NOTE } = options;
+  let drawn = { emailOnly: p.emailOnly, fixed: p.fixed };
   const paint = () => {
     setHtml(el, settingsFormHtml(p, prefix, options));
     wireSettingsForm(el, p, prefix, paint, options);
+    drawn = { emailOnly: p.emailOnly, fixed: p.fixed };
   };
   paint();
+  return () => {
+    const include = el.querySelector<HTMLInputElement>(`#${prefix}Include`);
+    if (p.emailOnly !== drawn.emailOnly || p.fixed !== drawn.fixed) {
+      const hadFocus = include !== null && document.activeElement === include;
+      paint();
+      if (hadFocus) {
+        el.querySelector<HTMLInputElement>(`#${prefix}Include`)?.focus();
+      }
+      return;
+    }
+    if (include) {
+      include.checked = !p.emailOnly;
+    }
+    const slug = el.querySelector<HTMLInputElement>(`#${prefix}Slug`);
+    if (slug && slug.value !== p.slug) {
+      slug.value = p.slug; // never one the publisher typed: theirs is kept in `p`
+    }
+    const note = el.querySelector<HTMLElement>(`#${prefix}Note`);
+    if (note) {
+      setHtml(note, addressNoteHtml(p, fixedNote) ?? html``);
+    }
+  };
 }
 
 /**

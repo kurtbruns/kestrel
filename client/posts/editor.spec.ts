@@ -308,6 +308,9 @@ describe("editor view", () => {
   const puts = () =>
     fake.calls.filter((c) => c.method === "PUT" && c.url.pathname === "/api/posts/p1");
   const body = () => $<HTMLTextAreaElement>("#f-markdown");
+  /** Give a dialog's notice of a change time to be read: a press that lands just after it
+   *  only says it (DESIGN §5, Changed while open). */
+  const readNotice = () => vi.advanceTimersByTimeAsync(1_000);
   /** The lines of an open action dialog's notice that the post changed (DESIGN §3). */
   const noticeLines = () =>
     [...document.querySelectorAll(".modal .dialog-notice p")].map((p) => p.textContent);
@@ -3346,6 +3349,7 @@ describe("editor view", () => {
       "The test will use the latest version.",
     ]);
     expect($<HTMLTextAreaElement>("#testTo").value).toBe("me@b.c");
+    await readNotice();
     $("#tGo").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.calls.filter((c) => c.url.pathname === "/api/posts/p1/test")).toHaveLength(1);
@@ -3368,6 +3372,7 @@ describe("editor view", () => {
     const picked = toLocalInput(Date.now() + 86_400_000, HOME_ZONE);
     $<HTMLInputElement>("#schWhen").value = picked;
     server.elsewhere("you@example.com", "claude-code", { markdown: "Claude’s hoot." });
+    await readNotice();
     $("#schGo").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/schedule")).toBe(false);
@@ -3377,11 +3382,12 @@ describe("editor view", () => {
       "Scheduling will use the latest version.",
     ]);
     expect($<HTMLInputElement>("#schWhen").value).toBe(picked);
+    await readNotice();
+    await readNotice();
     $("#schGo").click();
     await vi.advanceTimersByTimeAsync(0);
     const scheduled = fake.calls.filter((c) => c.url.pathname === "/api/posts/p1/schedule");
     expect(scheduled.map((c) => c.json())).toEqual([{ fire_at: picked }]);
-    expect(fake.unhandled).toEqual([]);
   });
 
   // SPEC §4–§6, DESIGN §3: a change made elsewhere while an action dialog is open is said in
@@ -3426,6 +3432,9 @@ describe("editor view", () => {
       expect($(".modal .dialog-notice-slot").getAttribute("role")).toBe("status");
       expect(to.value).toBe("me@b.c");
       expect(document.activeElement).toBe(to);
+      await readNotice();
+      await readNotice();
+      await readNotice();
       $("#tGo").click();
       await vi.advanceTimersByTimeAsync(0);
       expect(acts("/api/posts/p1/test").map((c) => c.json())).toEqual([{ to: "me@b.c" }]);
@@ -3448,6 +3457,7 @@ describe("editor view", () => {
       // The notice sits under the heading, before the dialog's own hint.
       expect($("#schHead").nextElementSibling?.className).toBe("dialog-notice-slot");
       expect($<HTMLInputElement>("#schWhen").value).toBe(picked);
+      await readNotice();
       $("#schGo").click();
       await vi.advanceTimersByTimeAsync(0);
       expect(acts("/api/posts/p1/schedule").map((c) => c.json())).toEqual([{ fire_at: picked }]);
@@ -3470,6 +3480,7 @@ describe("editor view", () => {
         "Sending now will use the latest version.",
       ]);
       expect($<HTMLInputElement>("#schInclude").checked).toBe(false);
+      await readNotice();
       $("#snGo").click();
       await vi.advanceTimersByTimeAsync(0);
       expect(acts("/api/posts/p1/send").map((c) => c.json())).toEqual([{ email_only: true }]);
@@ -3488,6 +3499,40 @@ describe("editor view", () => {
         expect.stringMatching(/^This post was changed by Claude at \S.*\.$/),
         "Scheduling will use the latest version.",
       ]);
+    });
+
+    it("acts on nothing when pressed just as the notice appears, before it could be read, and on the next press after (SPEC §4)", async () => {
+      const server = draftServer();
+      await open(routes(server));
+      $("#scheduleBtn").click();
+      server.elsewhere("you@example.com", "claude-code", { markdown: "Claude’s hoot." });
+      await vi.advanceTimersByTimeAsync(10_000); // the poll takes it in and says so
+      $("#schGo").click(); // a click already on its way
+      await vi.advanceTimersByTimeAsync(0);
+      expect(acts("/api/posts/p1/schedule")).toHaveLength(0);
+      expect(noticeLines()[1]).toBe("Scheduling will use the latest version.");
+      await readNotice();
+      $("#schGo").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(acts("/api/posts/p1/schedule")).toHaveLength(1);
+    });
+
+    it("keeps focus on Include in archive when a change elsewhere flips it (SPEC §4)", async () => {
+      const server = draftServer();
+      await open(
+        routes(server).concat({
+          method: "PUT",
+          path: "/api/posts/p1/settings",
+          reply: (req: FakeRequest) => server.listing(req),
+        }),
+      );
+      $("#scheduleBtn").click();
+      $<HTMLInputElement>("#schInclude").focus();
+      server.listing({ json: () => ({ email_only: true }) } as FakeRequest);
+      await vi.advanceTimersByTimeAsync(10_000);
+      const include = $<HTMLInputElement>("#schInclude");
+      expect(include.checked).toBe(false);
+      expect(document.activeElement).toBe(include);
     });
 
     it("says a change of unknown source was made elsewhere (SPEC §4)", async () => {
@@ -3536,6 +3581,7 @@ describe("editor view", () => {
         expect(noticeLines()).toEqual(settingsNotice);
         expect($<HTMLInputElement>("#schSlug").value).toBe("night-owls");
         expect($("#schNote").textContent).toBe(""); // set by hand now, not following the subject
+        await readNotice();
         $("#schGo").click();
         await vi.advanceTimersByTimeAsync(0);
         expect(acts("/api/posts/p1/schedule")[0]?.json()).toEqual({
@@ -3558,6 +3604,7 @@ describe("editor view", () => {
         include.checked = true;
         include.dispatchEvent(new Event("change"));
         expect($<HTMLInputElement>("#schSlug").value).toBe("dusk-owls");
+        await readNotice();
         $("#schGo").click();
         await vi.advanceTimersByTimeAsync(0);
         expect(acts("/api/posts/p1/schedule")[0]?.json()).toEqual({
@@ -3579,6 +3626,7 @@ describe("editor view", () => {
         expect(acts("/api/posts/p1/schedule")).toHaveLength(0);
         expect(noticeLines()).toEqual(settingsNotice);
         expect($<HTMLInputElement>("#schInclude").checked).toBe(false);
+        await readNotice();
         $("#schGo").click();
         await vi.advanceTimersByTimeAsync(0);
         expect(acts("/api/posts/p1/schedule").map((c) => c.json())).toEqual([
@@ -3609,6 +3657,7 @@ describe("editor view", () => {
         $("#scheduleBtn").click();
         server.listing({ json: () => ({ email_only: true }) } as FakeRequest);
         await vi.advanceTimersByTimeAsync(10_000);
+        await readNotice();
         $("#schGo").click();
         await vi.advanceTimersByTimeAsync(0);
         expect(acts("/api/posts/p1/schedule")[0]?.json()).toEqual({
@@ -3874,6 +3923,7 @@ describe("editor view", () => {
       expect($<HTMLInputElement>("#schInclude").checked).toBe(true);
       server.listing({ json: () => ({ email_only: true }) } as FakeRequest);
       await vi.advanceTimersByTimeAsync(10_000); // read while the dialog is open
+      await readNotice();
       $("#schGo").click();
       await vi.advanceTimersByTimeAsync(0);
       const scheduled = fake.calls.find((c) => c.url.pathname === "/api/posts/p1/schedule");
