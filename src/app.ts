@@ -767,7 +767,7 @@ export function createRouter({
           name: "file",
           type: "file",
           required: true,
-          description: `The logo: a PNG, JPEG, WebP, or GIF, at most ${settingsRoutes.MAX_LOGO_BYTES / 1024} KB, square and at least 256 × 256 px, since every surface shows it as a square and an email stretches one that isn't. Its format is read from its bytes, and a name or declared type that names another of these formats is refused. It is stored without its location, camera, or other identifying metadata, keeping only its colour profile and its orientation, and a file that can't be read through to check is refused.`,
+          description: `The logo: a PNG, JPEG, WebP, or GIF, at most ${settingsRoutes.MAX_LOGO_BYTES / 1024} KB, square and at least 256 × 256 px, since every surface shows it as a square and an email stretches one that isn't. Its format is read from its bytes, and a name or declared type that names another of these formats is refused. It is stored without its location, camera, or other identifying metadata, keeping only its color profile and its orientation, and a file that can't be read through to check is refused.`,
         },
       ],
       errors: remakeRefusals,
@@ -1144,7 +1144,7 @@ export function createRouter({
           name: "file",
           type: "file",
           required: true,
-          description: `The image: a PNG, JPEG, WebP, or GIF, at most ${MAX_POST_IMAGE_BYTES / (1024 * 1024)} MB. Its format is read from its bytes, and a name or declared type that names another of these formats is refused, as is a PNG or WebP whose header states a width or height of zero, or a JPEG whose header states a width of zero. It is stored without its location, camera, or other identifying metadata, keeping only its colour profile and its orientation, and a file that can't be read through to check is refused.`,
+          description: `The image: a PNG, JPEG, WebP, or GIF, at most ${MAX_POST_IMAGE_BYTES / (1024 * 1024)} MB. Its format is read from its bytes, and a name or declared type that names another of these formats is refused, as is a PNG or WebP whose header states a width or height of zero, or a JPEG whose header states a width of zero. It is stored without its location, camera, or other identifying metadata, keeping only its color profile and its orientation, and a file that can't be read through to check is refused.`,
         },
         {
           name: "filename",
