@@ -68,6 +68,7 @@ import {
 import { highlightMarkdown } from "../ui/highlight";
 import { type Html, html, setHtml } from "../ui/html";
 import { type IconName, icon } from "../ui/icons";
+import { modifiedKeyEdits, shortcutKey, shortcutLabel, shortcutLetter } from "../ui/shortcut";
 import { busy, fieldError, modal, renderError, toast } from "../ui/widgets";
 import { bannerActedBy, whoActed } from "../who_acted";
 import { activeSend, postAction } from "./actions";
@@ -75,7 +76,7 @@ import { createAutosave } from "./autosave";
 import { carryOffset } from "./caret";
 import { DirtyTracker } from "./dirty";
 import { showDropCaret } from "./drop_caret";
-import { formatEdit } from "./format";
+import { formatEdit, linkAddress } from "./format";
 import { insertImage } from "./images";
 import { openImagesDialog } from "./images_dialog";
 import { LatestRender, type Render } from "./latest_render";
@@ -103,16 +104,18 @@ import { previewOpensWebVersion, webVersionHash } from "./web";
 
 const message = describeError;
 
-const TOOLBAR: [IconName, string][][] = [
+// Each button, its name, and the letter of its shortcut, if it has one (⌘ on a Mac, Ctrl
+// elsewhere: ui/shortcut.ts).
+const TOOLBAR: [IconName, string, string?][][] = [
   [
     ["heading", "Heading"],
-    ["bold", "Bold (⌘B)"],
-    ["italic", "Italic (⌘I)"],
+    ["bold", "Bold", "B"],
+    ["italic", "Italic", "I"],
   ],
   [
     ["quote", "Quote"],
     ["code", "Code"],
-    ["link", "Link (⌘K)"],
+    ["link", "Link", "K"],
     ["image", "Images"],
   ],
   [
@@ -253,10 +256,10 @@ export async function renderEditor(
   // branch nudges the foot line, the way out (DESIGN §3).
   const toolbarHtml = TOOLBAR.map(
     (group, i) =>
-      html`${i ? html`<span class="sep"></span>` : null}${group.map(
-        ([kind, label]) =>
-          html`<button type="button" class="tb" data-fmt="${kind}" title="${label}" aria-label="${label}"${locked ? ARIA_DISABLED : null}>${icon(kind)}</button>`,
-      )}`,
+      html`${i ? html`<span class="sep"></span>` : null}${group.map(([kind, name, key]) => {
+        const label = key ? `${name} (${shortcutLabel(key)})` : name;
+        return html`<button type="button" class="tb" data-fmt="${kind}" title="${label}" aria-label="${label}"${locked ? ARIA_DISABLED : null}>${icon(kind)}</button>`;
+      })}`,
   );
   // readonly, not disabled: a scheduled post's text can still be read, selected, and
   // copied; only a change is refused (DESIGN §3).
@@ -776,6 +779,12 @@ export async function renderEditor(
   // --- formatting toolbar ---
   // What a button does to the text is posts/format.ts (each toggles); here it only lands, as
   // one edit the browser can undo.
+  //
+  // A link inserted with nothing selected selects its text placeholder, and the next Tab moves
+  // on to its address, once. Anything else that moves the caret (a click, an arrow key,
+  // Escape, leaving the body) calls that off, so Tab never stops leaving the body for good:
+  // keyboard users rely on it to reach the next control.
+  let linkTextStart: number | null = null;
   function applyFormat(kind: string) {
     if (locked) {
       nudge(); // reached by a toolbar click or a Cmd+B / I / K shortcut
@@ -793,16 +802,55 @@ export async function renderEditor(
     });
     if (edit) {
       replaceRange(ta, edit.start, edit.end, edit.insert, edit.select);
+      linkTextStart = edit.tabToAddress ? edit.select.start : null;
     }
   }
+  const MOVES_CARET = new Set([
+    "Escape",
+    "ArrowLeft",
+    "ArrowRight",
+    "ArrowUp",
+    "ArrowDown",
+    "Home",
+    "End",
+    "PageUp",
+    "PageDown",
+  ]);
+  ta.addEventListener("keydown", (e) => {
+    // A key that picks an IME's candidate (Safari reports one with isComposing false and
+    // keyCode 229) belongs to the composition: it neither moves the caret off the link's text
+    // nor is a Tab to take.
+    if (linkTextStart === null || e.isComposing || e.keyCode === 229) {
+      return;
+    }
+    if (MOVES_CARET.has(e.key)) {
+      linkTextStart = null;
+      return;
+    }
+    if (e.key !== "Tab" || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) {
+      return;
+    }
+    const address = linkAddress(ta.value, linkTextStart, ta.selectionStart, ta.selectionEnd);
+    linkTextStart = null;
+    if (address) {
+      e.preventDefault();
+      ta.setSelectionRange(address.start, address.end);
+    }
+  });
+  ta.addEventListener("pointerdown", () => {
+    linkTextStart = null;
+  });
+  ta.addEventListener("blur", () => {
+    linkTextStart = null;
+  });
   for (const b of $$<HTMLButtonElement>(".tb[data-fmt]", root)) {
     b.onclick = () => applyFormat(b.dataset.fmt ?? "");
   }
   ta.addEventListener("keydown", (e) => {
-    if (!(e.metaKey || e.ctrlKey)) {
-      return;
+    if (!shortcutKey(e)) {
+      return; // on a Mac, Ctrl+B and Ctrl+K stay the text field's own
     }
-    const k = e.key.toLowerCase();
+    const k = shortcutLetter(e);
     if (k === "b") {
       e.preventDefault();
       applyFormat("bold");
@@ -1802,7 +1850,7 @@ export async function renderEditor(
     // Navigation, selection, and copy keys pass, so reading stays free.
     const wouldEdit = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey) {
-        return ["x", "z", "y"].includes(e.key.toLowerCase()); // cut, undo, redo (paste fires its own event)
+        return modifiedKeyEdits(e);
       }
       return e.key.length === 1 || e.key === "Enter" || e.key === "Backspace" || e.key === "Delete";
     };
