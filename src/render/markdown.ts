@@ -23,7 +23,6 @@ const UNPARSED_IMAGE = /!\[.*?\]\([^)\n]*\)?/g;
 
 export function markdownToHtml(md: string, ctx: MarkdownContext): string {
   const m = new Marked({ gfm: true, breaks: false });
-  const referenced = new Set<ImageRow>();
   m.use({
     walkTokens(token) {
       // A list item's text carries inline tokens of its own, read as the walk reaches them.
@@ -46,9 +45,6 @@ export function markdownToHtml(md: string, ctx: MarkdownContext): string {
           );
         }
         const { url, image, ownMedia } = resolveImageSrc(href, ctx.images, ctx.mediaBase);
-        if (image) {
-          referenced.add(image);
-        }
         if (image && ownMedia) {
           ctx.warnings.push(
             `The image “${href}” should be referenced as “${image.filename}”. Use its file name, not its address.`,
@@ -68,17 +64,7 @@ export function markdownToHtml(md: string, ctx: MarkdownContext): string {
       },
     },
   });
-  const html = m.parse(md) as string;
-  for (const image of ctx.images.values()) {
-    // Raw HTML and a link reach an image by its address without passing the image renderer, and
-    // what they write may be percent-encoded, HTML-escaped, or both.
-    const address = `${ctx.mediaBase}/${image.storage_key}`;
-    const written = [address, encodeURI(address)].flatMap((a) => [a, escapeHtmlAttr(a)]);
-    if (!referenced.has(image) && !written.some((a) => html.includes(a))) {
-      ctx.warnings.push(`The uploaded image “${image.filename}” isn’t used in this post.`);
-    }
-  }
-  return html;
+  return m.parse(md) as string;
 }
 
 /** Constrain declared dimensions to the email column width (byte-resizing deferred). */
