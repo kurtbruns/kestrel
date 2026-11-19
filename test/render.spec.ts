@@ -82,9 +82,9 @@ function image(over: Partial<ImageRow> = {}): ImageRow {
   };
 }
 
-/** The warning for an image uploaded to the post that it doesn't use. */
+/** The warning for an image uploaded to the post that it doesn't use, which its send deletes. */
 function unused(name: string): string {
-  return `The uploaded image “${name}” isn’t used in this post.`;
+  return `The uploaded image “${name}” isn’t used in this post, so it’s deleted when the post sends.`;
 }
 
 describe("render (the single render path)", async () => {
@@ -280,6 +280,15 @@ describe("render (the single render path)", async () => {
       for (const [markdown, img] of [
         ['<img src="https://media.example/posts/p1/my%20cat.png" alt="A cat">', spaced],
         ["[See the pair](https://media.example/posts/p1/cat&dog.png)", amp],
+        ['<img src="https://media.example/posts/p1/cat&amp;dog.png" alt="A pair">', amp],
+        [
+          '<img src="https://media.example/posts/p1/caf%C3%A9&amp;co.png" alt="A caf\u00e9">',
+          accent,
+        ],
+        [
+          '<p>50% off <img src="https://media.example/posts/p1/my%20cat.png" alt="A cat"></p>',
+          spaced,
+        ],
         ["[See the caf\u00e9](https://media.example/posts/p1/caf\u00e9&co.png)", accent],
       ] as const) {
         const result = await render(
@@ -324,7 +333,7 @@ describe("render (the single render path)", async () => {
   });
 
   it("passes an image on another host through untouched, with no warning of its own", async () => {
-    const href = "https://elsewhere.example/posts/p1/cat.png";
+    const href = "https://elsewhere.example/photos/cat.png";
     const result = await render(
       { post: post(), revision: revision(`![A cat](${href})`), images: [image()] },
       config,
@@ -332,6 +341,21 @@ describe("render (the single render path)", async () => {
     expect(result.html).toContain(`src="${href}"`);
     expect(result.html).toContain(`src="${href}" alt="A cat" style=`); // no size: not ours
     expect(result.warnings).toEqual([unused("cat.png")]); // the upload it only looks like
+  });
+
+  it("counts an address on any host whose path names the image as using it, so a changed media base never deletes one (SPEC §4)", async () => {
+    // The address the email was frozen with under an earlier media base, or the app's own
+    // `/media`: the email still shows the image from there, so the send must keep it.
+    for (const href of [
+      "https://old-media.example/posts/p1/cat.png",
+      "https://app.example/media/posts/p1/cat.png",
+    ]) {
+      const result = await render(
+        { post: post(), revision: revision(`![A cat](${href})`), images: [image()] },
+        config,
+      );
+      expect(result.warnings, href).toEqual([]);
+    }
   });
 
   it("prints the mailing address in the built-in template's footer only when one is set (SPEC §9)", async () => {

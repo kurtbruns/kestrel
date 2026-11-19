@@ -254,7 +254,7 @@ export function onFreePlanLimits(config: Pick<Config, "subrequestBudget">): bool
 /** The least a sweep tick needs to find a send and deliver one batch of it, beside what it
  *  holds back for its own checks and one notification. A lower `SUBREQUEST_BUDGET` would
  *  start nothing and stall every send silently, so it is raised to this. */
-export const MIN_SUBREQUEST_BUDGET = 30;
+export const MIN_SUBREQUEST_BUDGET = 34;
 
 const orUndefined = (v: string | undefined): string | undefined =>
   v && v.length > 0 ? v : undefined;

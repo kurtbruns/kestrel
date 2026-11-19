@@ -31,6 +31,7 @@
  * run stops starting them near the end of the tick (`pace.ts`).
  *
  * The run logs its send's lifecycle (SPEC §12): `send.fired` when it takes a scheduled send,
+ * `send.images_removed` (or `send.images_unremoved`) when it deletes the post's unused images,
  * one `send.batch` a group (counts, never addresses), `send.halted` and `send.resumed`
  * around a provider's halt, `send.ambiguous` when a batch's fate becomes unknown,
  * `send.lease_lost`, and `send.completed`. Each line is written after the step it describes
@@ -58,6 +59,7 @@ import { sendSender } from "../services/sender";
 import { alertRefusal } from "../services/sending";
 import { Budget, metered } from "./budget";
 import { SendWindow } from "./pace";
+import { REMOVE_COST, removeUnusedImages } from "./unused_images";
 
 export interface SendLoopResult {
   sendId: string;
@@ -129,9 +131,10 @@ const GROUP_RECIPIENTS = 10;
 // What a run can cost, in D1 statements (and, where noted, provider requests), so it
 // only starts what it can finish. Each is an upper bound; the budget counts what is
 // actually spent.
-/** Opening: read the send, take the lease, look for another send's halt, resolve the
- *  audience (2), list the fresh rows. */
-const OPEN_COST = 6;
+/** Opening: read the send, take the lease, look for another send's halt, remove the post's
+ *  unused images on its first hand-off (`REMOVE_COST`, its one R2 request counted with the
+ *  statements), resolve the audience (2), list the fresh rows. */
+const OPEN_COST = 6 + REMOVE_COST + 1;
 /** One group, besides a request for each of its batches: read its rows, close any no
  *  longer to be mailed (2), renew the lease, hand off (2), record the outcomes (2), and, for
  *  a refusal of the account, read whether email already refuses for it (`alertHalt`). A
@@ -271,8 +274,11 @@ export async function runSend(
 
   // The first run fixes the audience (SPEC §6); every later run works the rows that
   // exist, so a reader who confirms mid-send gets the next post, not this one. The guard
-  // in `resolveAudience` makes a racing first run a no-op.
+  // in `resolveAudience` makes a racing first run a no-op. Just before, while the send is
+  // `sending` and no one has been handed off, the post's unused images go (SPEC §4): a run
+  // lost in between leaves the audience open, so the next run removes them instead.
   if (send.audience_resolved_at === null) {
+    await removeUnusedImages(env, db, budget, send, config.mediaPublicBase);
     await sends.resolveAudience(db, sendId, now);
   }
 

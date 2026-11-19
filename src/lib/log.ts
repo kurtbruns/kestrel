@@ -52,6 +52,10 @@ export const LOG_EVENTS = {
   "send.missed": "error",
   "send.stuck": "error",
   "send.error": "error",
+  // A send's post's unused images, deleted when it first goes out (SPEC §4, §6): how many went,
+  // or, when the deletion failed and they stay, how many and why.
+  "send.images_removed": "info",
+  "send.images_unremoved": "warn",
   // Receipts and the list they feed (SPEC §10).
   "webhook.received": "info",
   "receipt.applied": "info",

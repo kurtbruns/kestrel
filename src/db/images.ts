@@ -80,3 +80,14 @@ export async function deleteImageRow(
     .bind(postId, filename)
     .run();
 }
+
+/** Delete image rows by id, as one statement whatever the count (a JSON list, never a `?` each). */
+export async function deleteImageRows(db: D1Database, ids: string[]): Promise<void> {
+  if (ids.length === 0) {
+    return;
+  }
+  await db
+    .prepare("DELETE FROM images WHERE id IN (SELECT value FROM json_each(?))")
+    .bind(JSON.stringify(ids))
+    .run();
+}

@@ -438,6 +438,18 @@ export function getCurrentRevision(db: D1Database, post: PostRow): Promise<Revis
     .first<RevisionRow>();
 }
 
+/** The Markdown of a post's current revision in one read, or null for a post or revision that
+ *  isn't there. */
+export async function currentMarkdown(db: D1Database, postId: string): Promise<string | null> {
+  const row = await db
+    .prepare(
+      "SELECT r.markdown FROM posts AS p JOIN post_revisions AS r ON r.id = p.current_revision WHERE p.id = ?",
+    )
+    .bind(postId)
+    .first<{ markdown: string }>();
+  return row?.markdown ?? null;
+}
+
 /** Who wrote each post's current revision, by post id; a post with no revision is left out. */
 export async function currentAuthors(
   db: D1Database,
