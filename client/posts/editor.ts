@@ -1580,7 +1580,13 @@ export async function renderEditor(
         showTab("edit");
         const state = textState();
         const at = bodyFocused ? state : { ...state, start: ta.value.length, end: ta.value.length };
-        editText(insertImage(at, filename));
+        const edit = insertImage(at, filename);
+        editText(edit);
+        // Neither layer scrolls on its own (#mdScroll is the scroller), and the browser keeps a
+        // caret in view only while it's typed at, so an image put at the end of a long body
+        // would land out of sight. Its line's row in the highlight stands in for the caret.
+        const line = ta.value.slice(0, edit.select.start).split("\n").length - 1;
+        mdHlCode.children[line]?.scrollIntoView({ block: "nearest" });
       },
       upload: (files) => {
         showTab("edit");

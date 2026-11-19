@@ -3371,12 +3371,18 @@ describe("editor view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
-    it("puts the image at the end of a body never focused, where no caret was chosen", async () => {
+    it("puts the image at the end of a body never focused, where no caret was chosen, and scrolls to it", async () => {
+      const shown: Element[] = [];
+      vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(function (this: Element) {
+        shown.push(this);
+      });
       await open([{ path: "/api/posts/p1", reply: () => draft() }, listRoute(() => ["owl.png"])]);
       imagesButton().click();
       await vi.advanceTimersByTimeAsync(0);
       $<HTMLButtonElement>('.images-insert[data-name="owl.png"]').click();
       expect(body().value).toBe("# Owls\n\nHoot.\n\n![owl.png](owl.png)\n\n");
+      // The scroller is the box around the text, so the image's own highlight row is shown.
+      expect(shown.map((el) => el.textContent)).toEqual(["![owl.png](owl.png)"]);
     });
 
     it("deletes an image the body doesn't use on the first press, since nothing in the post changes", async () => {
