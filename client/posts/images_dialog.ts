@@ -1,5 +1,5 @@
-// The Images dialog (DESIGN, the editor): a draft's uploaded images in one list. Pressing a row
-// opens its image full size, Insert puts it in the post, and the trash can deletes it: at once
+// The Images dialog (DESIGN, the editor): a draft's uploaded images in one list. A row's picture
+// and name open its image full size, Insert puts it in the post, and the trash can deletes it: at once
 // when the post doesn't use it, and only once asked when it does. New files dropped or chosen
 // here go to the editor's own upload, so the dialog never uploads or edits the text itself: it
 // says which, and the editor does it.
@@ -177,10 +177,7 @@ export async function openImagesDialog(
       }
       asking = null;
       void remove(del.dataset.name);
-      return;
     }
-    // Anywhere else on the row opens the image, as its link does, so the whole row answers.
-    target.closest(".images-row")?.querySelector<HTMLAnchorElement>("a.images-open")?.click();
   });
 
   async function remove(name: string) {
@@ -211,7 +208,7 @@ export async function openImagesDialog(
   paint();
 }
 
-/** One image's row: the row opens it full size, then Insert, then the trash can. */
+/** One image's row: its picture and name open it full size, then Insert, then the trash can. */
 function rowHtml(img: PostImage, used: boolean): Html {
   // The address is the instance's own media address, but it is a URL all the same: only a web
   // one is shown or linked (client.md, Markup).

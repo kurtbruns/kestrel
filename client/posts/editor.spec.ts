@@ -3320,7 +3320,7 @@ describe("editor view", () => {
       expect($("#saveStatus").textContent).toBe("Unsaved changes");
     });
 
-    it("opens the image on a press anywhere on the row, and inserts only from Insert", async () => {
+    it("opens the image only from its picture and name, and a press elsewhere on the row does nothing", async () => {
       await open([{ path: "/api/posts/p1", reply: () => draft() }, listRoute(() => ["owl.png"])]);
       imagesButton().click();
       await vi.advanceTimersByTimeAsync(0);
@@ -3331,6 +3331,8 @@ describe("editor view", () => {
         opened += 1;
       });
       row("owl.png").click(); // the row's own padding
+      expect(opened).toBe(0);
+      row("owl.png").querySelector<HTMLElement>(".images-name")?.click();
       expect(opened).toBe(1);
       expect(dialogOpen()).toBe(true);
       expect(body().value).toBe("# Owls\n\nHoot.");
