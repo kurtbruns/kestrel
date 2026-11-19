@@ -888,6 +888,24 @@ const SETTINGS_FIELDS: ReferenceField[] = [
       "The runtime preferences: `test_recipients`, `publication` (`name`, `tagline`, `address`, `logo_url`), `email_template`, `confirmation_email` and its `confirmation_email_default`, and `notifications.to`, the list of addresses notifications go to (empty for none). Never a secret.",
   },
   {
+    name: "settings.email_template",
+    type: "string",
+    description:
+      "The email template in effect, as HTML: the publisher's own, or the built-in template's text while they follow it.",
+  },
+  {
+    name: "settings.email_template_is_default",
+    type: "boolean",
+    description:
+      "Whether the template follows Kestrel's built-in one, so it changes when Kestrel is upgraded. False once the publisher saves a template of their own, which stays as it is until they change it or follow the built-in one again.",
+  },
+  {
+    name: "settings.email_template_default",
+    type: "string",
+    description:
+      "The built-in template's text, as this release of Kestrel ships it: what a publisher who follows it sends.",
+  },
+  {
     name: "settings.time_zone",
     type: "string | null",
     description:
@@ -1204,6 +1222,8 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
     example: {
       settings: {
         email_template: "…",
+        email_template_is_default: true,
+        email_template_default: "…",
         publication: { name: "Marsh Lane" },
         time_zone: "America/New_York",
         time_zone_label: "Eastern Time",

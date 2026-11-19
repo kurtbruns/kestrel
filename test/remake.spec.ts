@@ -224,6 +224,28 @@ describe("a template or identity change re-makes the scheduled emails", () => {
     expect((await getSend(a.id)).remade_at).toBeNull();
   });
 
+  it("following the built-in template again re-makes the scheduled sends on it, once acknowledged, and asks nothing when it already follows it (SPEC §9)", async () => {
+    const a = await schedule(await makeDraft("Post A"));
+    const refused = await putSettings({ email_template: null });
+    expect(refused.status).toBe(409);
+    expect((await readJson(refused)).sends.map((s: any) => s.id)).toEqual([a.id]);
+    expect((await getSettings()).settings.email_template_is_default).toBe(false);
+
+    const res = await putSettings({ email_template: null, remake: [a.id] });
+    expect(res.status).toBe(200);
+    expect((await readJson(res)).remade.map((s: any) => s.id)).toEqual([a.id]);
+    const sent = await getSend(a.id);
+    expect(sent.rendered_html).toContain("Powered by Kestrel");
+    expect(sent.rendered_html).not.toContain("v1 ·");
+
+    // Already following it, a reset or a save of the built-in text changes no email.
+    const builtIn = (await getSettings()).settings.email_template_default;
+    expect((await putSettings({ email_template: null })).status).toBe(200);
+    const again = await putSettings({ email_template: builtIn });
+    expect(again.status).toBe(200);
+    expect((await readJson(again)).remade).toEqual([]);
+  });
+
   it("a save that touches only test recipients or the confirmation email asks nothing even with scheduled sends", async () => {
     const a = await schedule(await makeDraft("Post A"));
     const res = await putSettings({

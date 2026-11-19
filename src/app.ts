@@ -673,9 +673,9 @@ export function createRouter({
         },
         {
           name: "email_template",
-          type: "string",
+          type: "string | null",
           description:
-            "The email template's HTML. One missing the unsubscribe link or the body is a 400.",
+            "The email template's HTML. One missing the unsubscribe link or the body is a 400. `null`, or the default's text, follows the default again.",
         },
         {
           name: "confirmation_email.subject",

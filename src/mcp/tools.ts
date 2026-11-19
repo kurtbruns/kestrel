@@ -1221,7 +1221,7 @@ export const TOOL_DEFS: ToolDef[] = [
     name: "update_template",
     title: "Update the email template",
     description:
-      "Replace the email template's HTML. Read it first through kestrel_api_read of /api/settings (`settings.email_template`) and edit it as it stands. Only on the publisher's word. Save without `remake`: a save that would re-make scheduled sends is refused, listing them for the publisher (see `remake`). A template missing the unsubscribe link or the body is refused, naming the field. After a save, offer a send_test of a draft, which renders through the saved template (preview_post sends nothing), and of each send in `remade`. For the identity or addresses, use update_settings.",
+      "Replace the email template's HTML. Read it first through kestrel_api_read of /api/settings (`settings.email_template`) and edit it as it stands. Only on the publisher's word. Saving opts it out of upgrades; say so. Save without `remake`: a save that would re-make scheduled sends is refused, listing them for the publisher (see `remake`). A template missing the unsubscribe link or the body is refused, naming the field. After a save, offer a send_test of a draft, which renders through the saved template (preview_post sends nothing), and of each send in `remade`. For the identity or addresses, use update_settings.",
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     routes: [SAVE_SETTINGS, TIME],
     args: {
@@ -1237,6 +1237,7 @@ export const TOOL_DEFS: ToolDef[] = [
       const r = a.body as SettingsSavedResponse;
       return data({
         saved: true,
+        follows_built_in: r.settings.email_template_is_default,
         warnings: r.warnings,
         remade: remadeBrief(r, clock),
         editor: api.editor("/settings"),

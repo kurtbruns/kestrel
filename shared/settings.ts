@@ -81,6 +81,17 @@ export interface PublicationView {
 export const ADDRESS_NOT_PRINTED =
   "You’ve added a mailing address in Settings, but this template doesn’t include the {{ .Publication.Address }} field. If you send promotional email, add it to the footer. If you’ve written your address into the template yourself, or don’t need to provide one, you can ignore this or remove the address in Settings.";
 
+/**
+ * Whether a template is the built-in one's text (SPEC §9), so saving it follows the built-in
+ * template rather than freezing a copy. The same text, ignoring only line endings and
+ * whitespace at either end, which a paste or a text box can change unseen; any other
+ * difference is an edit of the publisher's own.
+ */
+export function isBuiltInText(template: string, builtIn: string): boolean {
+  const plain = (t: string) => t.replace(/\r\n?/g, "\n").trim();
+  return plain(template) === plain(builtIn);
+}
+
 /** The identity fields an email template can carry, named as the settings surface names them. */
 export type IdentityField = "name" | "tagline" | "logo_url" | "address";
 
@@ -101,7 +112,15 @@ export interface NotificationPrefs {
 export interface SettingsView {
   test_recipients: string[];
   publication: PublicationView;
+  /** The template in effect: the publisher's own, or the built-in one while they follow it. */
   email_template: string;
+  /**
+   * Whether the template follows the built-in one (SPEC §9), which changes as Kestrel is
+   * upgraded; false once a template of the publisher's own is saved, which never does.
+   */
+  email_template_is_default: boolean;
+  /** The built-in template's text, as this release ships it. */
+  email_template_default: string;
   confirmation_email: ConfirmationEmailCopy;
   confirmation_email_default: ConfirmationEmailCopy;
   notifications: NotificationPrefs;
@@ -309,7 +328,8 @@ export interface SettingsResponse {
 export interface SettingsPatchBody {
   test_recipients?: string[];
   publication?: Partial<Pick<PublicationView, "name" | "tagline" | "address">>;
-  email_template?: string;
+  /** The template's HTML, or null to follow the built-in template again (SPEC §9). */
+  email_template?: string | null;
   confirmation_email?: Partial<ConfirmationEmailCopy>;
   notifications?: Partial<NotificationPrefs>;
   /** An IANA zone name the runtime knows. It can be changed but not cleared. */

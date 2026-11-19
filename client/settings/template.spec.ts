@@ -149,6 +149,77 @@ describe("template view", () => {
     expect(appState.appConfig?.settings.email_template).toBe(stored);
   });
 
+  it("says the template follows the built-in one, which Kestrel's releases improve, and offers no reset (SPEC §9)", async () => {
+    const builtIn = response().settings.email_template_default;
+    await open([
+      {
+        path: "/api/settings",
+        reply: () =>
+          settingsResponse({
+            settings: { email_template: builtIn, email_template_is_default: true },
+          }),
+      },
+    ]);
+    expect($("#tplSourceText").textContent).toBe(
+      "Built-in template. New releases of Kestrel improve it, and your emails get each change. Saving a change of your own stops that.",
+    );
+    expect($("#tplReset").hidden).toBe(true);
+    typeInto(editor(), `${builtIn}<p>mine</p>`);
+    expect($("#tplSourceText").textContent).toBe(
+      "Built-in template, with unsaved changes. Saving them makes it your own, which new releases of Kestrel don’t change.",
+    );
+  });
+
+  it("says a template of the publisher's own stays as it is, and resets to the built-in one through the save bar (SPEC §9)", async () => {
+    const builtIn = response().settings.email_template_default;
+    await open([
+      { path: "/api/settings", reply: () => response() },
+      {
+        method: "PUT",
+        path: "/api/settings",
+        reply: () => ({
+          settings: {
+            ...response().settings,
+            email_template: builtIn,
+            email_template_is_default: true,
+          },
+          warnings: [],
+          remade: [],
+        }),
+      },
+    ]);
+    expect($("#tplSourceText").textContent).toBe(
+      "Your own template. New releases of Kestrel don’t change it.",
+    );
+    expect($("#tplReset").hidden).toBe(false);
+
+    $("#tplReset").click();
+    expect(editor().value).toBe(builtIn);
+    expect(bar().classList.contains("show")).toBe(true);
+    expect($("#tplReset").hidden).toBe(true);
+    expect($("#tplSourceText").textContent).toBe(
+      "Built-in template, not saved yet. Save to use it again, and your emails get each change new releases of Kestrel make to it.",
+    );
+
+    $("#savebarSave").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.calls.find((c) => c.method === "PUT")?.json()).toEqual({ email_template: builtIn });
+    expect(bar().classList.contains("show")).toBe(false);
+    expect($("#tplSourceText").textContent).toMatch(/^Built-in template\. New releases/);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("discards a reset back to the publisher's own template", async () => {
+    await open();
+    $("#tplReset").click();
+    $("#savebarDiscard").click();
+    expect(editor().value).toBe(TEMPLATE);
+    expect($("#tplReset").hidden).toBe(false);
+    expect($("#tplSourceText").textContent).toBe(
+      "Your own template. New releases of Kestrel don’t change it.",
+    );
+  });
+
   it("links the mailing-address warning to the docs section, in a new tab, and no other warning", async () => {
     await open([
       { path: "/api/settings", reply: () => response() },

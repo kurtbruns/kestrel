@@ -498,9 +498,13 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
       );
     }
   }
-  if (patch.email_template !== undefined) {
+  if (patch.email_template === null) {
+    // Follow the built-in template again: stored blank, it resolves to whichever built-in
+    // template the running release ships (SPEC §9).
+    next.emailTemplate = "";
+  } else if (patch.email_template !== undefined) {
     // Structural validation (required variables, warnings) is the route's job; here
-    // we only enforce the type + storage cap. "" resets to the built-in default.
+    // we only enforce the type + storage cap.
     if (typeof patch.email_template !== "string") {
       throw new SettingsFieldError("email_template", "The email template must be text.");
     }

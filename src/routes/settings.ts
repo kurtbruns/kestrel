@@ -64,6 +64,7 @@ import {
   optObject,
   optString,
   optStringList,
+  optStringOrNull,
   readForm,
   readJsonObject,
 } from "../lib/body";
@@ -77,9 +78,12 @@ import { sampleNotification } from "../notify/compose";
 import { requireConnectedProvider } from "../providers";
 import {
   DEFAULT_EMAIL_TEMPLATE,
+  followsBuiltInTemplate,
   type IdentityField,
   identityFieldsInUse,
+  matchesBuiltInTemplate,
   resolveBranding,
+  resolveEmailTemplate,
   validateEmailTemplate,
 } from "../render/template_engine";
 import type { Principal, RequestContext } from "../router";
@@ -149,9 +153,12 @@ function settingsView(settings: AppSettings, cfg: Config): SettingsView {
   return {
     test_recipients: settings.testRecipients,
     publication: publicationView(settings, cfg),
-    // Reflect the RESOLVED template — a blank stored value means "the built-in
-    // default", so a client always receives a concrete template to show and edit.
-    email_template: settings.emailTemplate.trim() ? settings.emailTemplate : DEFAULT_EMAIL_TEMPLATE,
+    // Reflect the RESOLVED template, so a client always receives a concrete template to show
+    // and edit, plus whether it follows the built-in one and that one's text, so a client can
+    // say which it is and offer the way back (SPEC §9).
+    email_template: resolveEmailTemplate(settings.emailTemplate),
+    email_template_is_default: followsBuiltInTemplate(settings.emailTemplate),
+    email_template_default: DEFAULT_EMAIL_TEMPLATE,
     // The confirmation email: the resolved (effective) copy a client shows and edits,
     // plus the built-in default so "Reset to default" needs no hardcoded copy client-side.
     confirmation_email: resolveConfirmationEmail(settings),
@@ -292,15 +299,19 @@ export async function update(c: RequestContext): Promise<Response> {
   const body = await readJsonObject(c);
   const patch = readPatch(body);
   const ack = readAck(body);
+  // A template that is the built-in one's text follows the built-in template, as null does,
+  // rather than freezing a copy that no upgrade would reach (SPEC §9).
+  if (typeof patch.email_template === "string" && matchesBuiltInTemplate(patch.email_template)) {
+    patch.email_template = null;
+  }
   // Structural template validation: a missing unsubscribe (or body) is an error and
   // rejects the write — no email may ship without a way to leave (I2). Other issues
   // are warnings, returned so the client can surface them without blocking. An empty
   // template is rejected like any other invalid one (it's missing both required
   // variables), so clearing the editor and saving reports the error rather than
-  // silently resetting to the default. (A never-set template still resolves to the
-  // built-in default on read — see settingsView / resolveBranding.)
+  // silently resetting: following the built-in template is asked for by name, with null.
   let warnings: string[] = [];
-  if (patch.email_template !== undefined) {
+  if (typeof patch.email_template === "string") {
     const v = validateEmailTemplate(patch.email_template);
     if (v.errors.length > 0) {
       throw fieldError("email_template", v.errors.join(" "));
@@ -466,7 +477,7 @@ function readPatch(o: JsonObject): SettingsPatch {
     }
     patch.publication = pub;
   }
-  const emailTemplate = optString(o, "email_template");
+  const emailTemplate = optStringOrNull(o, "email_template");
   if (emailTemplate !== undefined) {
     patch.email_template = emailTemplate;
   }

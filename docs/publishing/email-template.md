@@ -4,6 +4,12 @@ You write each post in Markdown, and the template is the HTML frame it's sent in
 
 To change it, choose **Template** in the sidebar, edit the HTML, and choose **Save changes**. **Start from example** offers two starting points. **Signed** ends each post with your logo, name, and tagline, and **Plain** has just your post and the footer links.
 
+## The built-in template or your own
+
+Until you save a change, you use Kestrel's built-in template, and each new release of Kestrel can improve it, so your emails get those changes when your instance is upgraded. Once you save a change, the template is your own: upgrades leave it as you wrote it, and only you change it. The line above the editor says which you have.
+
+To go back, choose **Reset to built-in**, then **Save changes**. Your emails use the built-in template again, and get its improvements from then on. Saving the built-in template's text unchanged does the same. Posts already scheduled keep the email they were made with until a change re-makes it, as below.
+
 ## What every template needs
 
 Kestrel won't save a template without `{{ .Post.Body }}` and `{{ .Email.UnsubscribeURL }}`. Every email has to carry the post and a way to leave. The two **Required** pills above the editor turn green or red as your template gains or loses them.
