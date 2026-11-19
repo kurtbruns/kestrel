@@ -54,7 +54,7 @@ export const GIF_1x1 = decoded("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEA
 /** A real 1×1 PNG, for the specs that upload an image. */
 export const PNG_1x1 = Uint8Array.from(
   atob(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP4/x8AAwAB/2+Bq7YAAAAASUVORK5CYII=",
   ),
   (ch) => ch.charCodeAt(0),
 );

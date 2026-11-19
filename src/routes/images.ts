@@ -19,6 +19,7 @@ import * as posts from "../db/posts";
 import { readForm } from "../lib/body";
 import { badRequest, json, notFound } from "../lib/errors";
 import { probeImageDimensions } from "../lib/image_dims";
+import { stripImageMetadata, unreadableImageMessage } from "../lib/image_metadata";
 import {
   FORMAT_NAMES,
   imageLabelConflict,
@@ -137,9 +138,15 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
   if (bytes.byteLength > MAX_POST_IMAGE_BYTES) {
     throw badRequest(IMAGE_TOO_LARGE, imageField);
   }
+  // What's stored is the image without its location, camera, and other identifying metadata
+  // (SPEC §4); the size cap above is on what was sent.
+  const stored = stripImageMetadata(new Uint8Array(bytes), contentType);
+  if (!stored) {
+    throw badRequest(unreadableImageMessage(contentType), imageField);
+  }
   // A header stating no size is a file no one can be shown (SPEC §4). A size that can't be read
   // is another matter: it stays unknown, and the image uploads.
-  const dims = probeImageDimensions(new Uint8Array(bytes));
+  const dims = probeImageDimensions(stored);
   if (dims && (dims.width === 0 || dims.height === 0)) {
     throw badRequest(
       `This file is a ${FORMAT_NAMES[contentType]}, but its header gives it no size, so it can’t be shown. Export it again, or convert it.`,
@@ -165,7 +172,7 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
     });
   }
   try {
-    await c.env.MEDIA.put(row.storage_key, bytes, { httpMetadata: { contentType } });
+    await c.env.MEDIA.put(row.storage_key, stored, { httpMetadata: { contentType } });
   } catch (e) {
     await images.deleteImageRow(c.env.DB, post.id, row.filename);
     throw e;

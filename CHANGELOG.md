@@ -22,6 +22,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Added
 
+- Kestrel now removes a photo's location, the camera's make, model, and serial, its timestamps, and other identifying metadata from every image uploaded to a post and from the publication logo, so a phone photo dropped into a post no longer publishes where it was taken (SPEC §4). The image keeps its colour profile and which way up it goes, and its pixels are untouched. A file too damaged to check is refused with a plain next step. Images uploaded before the upgrade keep their metadata, since an image is never rewritten at its address; to clear one from a draft, delete it and upload it again.
 - `GET /api/posts/:id/preview.json` answers `revision_id`, the post revision the render is of, named as a save names the revision it wrote, and with `?include=html` carries the email's page from the same render. Claude's `preview_post` answers `revision_id` too, so it can tell whether the preview is of the draft it just saved. The editor's Preview now reads the page and its warnings in one request and shows a render only as the revision the server says it is, so a save from another tab or from Claude landing mid-render is never shown as your text.
 
 ### Fixed

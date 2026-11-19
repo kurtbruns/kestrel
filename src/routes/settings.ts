@@ -68,6 +68,7 @@ import {
   readJsonObject,
 } from "../lib/body";
 import { badRequest, HttpError, json } from "../lib/errors";
+import { stripImageMetadata, unreadableImageMessage } from "../lib/image_metadata";
 import { imageLabelConflict, imageTypeOf } from "../lib/image_types";
 import { errorText, log } from "../lib/log";
 import { unwrap } from "../lib/unwrap";
@@ -396,6 +397,12 @@ export async function uploadLogo(c: RequestContext): Promise<Response> {
   if (bytes.byteLength > MAX_LOGO_BYTES) {
     throw fieldError("file", `The logo must be ${MAX_LOGO_BYTES / 1024} KB or smaller.`);
   }
+  // Stored without its location, camera, and other identifying metadata, as a post image is
+  // (SPEC §9).
+  const stored = stripImageMetadata(new Uint8Array(bytes), type);
+  if (!stored) {
+    throw fieldError("file", unreadableImageMessage(type));
+  }
   // A timestamp names the upload's key, so a new upload never lands on an old key, even
   // after a removal, and nothing already sent changes what it shows (I3).
   const version = Date.now();
@@ -411,7 +418,7 @@ export async function uploadLogo(c: RequestContext): Promise<Response> {
       (current) => withPublicationLogo(current, { version, contentType: type, key }),
       ack,
       async () => {
-        await c.env.MEDIA.put(key, bytes, { httpMetadata: { contentType: type } });
+        await c.env.MEDIA.put(key, stored, { httpMetadata: { contentType: type } });
       },
     ),
   );
