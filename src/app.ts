@@ -754,7 +754,7 @@ export function createRouter({
       title: "Upload the logo",
       summary: "Upload the publication logo (multipart `file`); served publicly via /media.",
       description:
-        "The logo is part of the identity, so when the template renders it and sends are scheduled this re-makes their emails under the same rule as `PUT /api/settings`, acknowledged in `remake`; the bytes are written only once the refusals are ruled out. The image is stored as sent (the editor crops and scales it before uploading).",
+        "The logo is part of the identity, so when the template renders it and sends are scheduled this re-makes their emails under the same rule as `PUT /api/settings`, acknowledged in `remake`; the bytes are written only once the refusals are ruled out. The image is stored without its identifying metadata, as the `file` field says (the editor crops and scales it before uploading).",
       query: [
         {
           name: "remake",
