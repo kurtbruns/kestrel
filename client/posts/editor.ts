@@ -76,7 +76,7 @@ import { carryOffset } from "./caret";
 import { DirtyTracker } from "./dirty";
 import { showDropCaret } from "./drop_caret";
 import { formatEdit } from "./format";
-import { insertImage } from "./images";
+import { imageAddress, imageTargetAt, insertImage } from "./images";
 import { openImagesDialog } from "./images_dialog";
 import { LatestRender, type Render } from "./latest_render";
 import { trackSaves } from "./pending_save";
@@ -1565,6 +1565,20 @@ export async function renderEditor(
   let bodyFocused = false;
   ta.addEventListener("focus", () => {
     bodyFocused = true;
+  });
+  // ⌘-click (Ctrl elsewhere) on an image in the text opens it in a new tab, the way an editor
+  // opens a link. A plain click only places the caret, since the text is there to be edited.
+  // A scheduled post's text is read-only and still opens, since opening changes nothing.
+  ta.addEventListener("click", (e) => {
+    if (!(e.metaKey || e.ctrlKey)) {
+      return;
+    }
+    const target = imageTargetAt(ta.value, ta.selectionStart);
+    const base = appState.appConfig?.deployment.media_public_base;
+    const url = target && base ? imageAddress(target, base, id) : null;
+    if (url) {
+      window.open(url, "_blank", "noopener");
+    }
   });
   function openImages() {
     openImagesDialog(id, signal, {

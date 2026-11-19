@@ -3297,7 +3297,7 @@ describe("editor view", () => {
       expect(row("owl.png").querySelector(".images-delete")?.getAttribute("aria-label")).toBe(
         "Delete owl.png",
       );
-      expect(row("barn.png").querySelector("a")?.getAttribute("href")).toBe(
+      expect(row("barn.png").querySelector("img")?.getAttribute("src")).toBe(
         "https://news.example.com/media/posts/p1/barn.png",
       );
       expect(fake.unhandled).toEqual([]);
@@ -3378,6 +3378,24 @@ describe("editor view", () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(body().value).toMatch(/^!\[owl\.png\]\(owl\.png\)\n\n# Owls/);
       expect(fake.unhandled).toEqual([]);
+    });
+
+    it("opens an image in a new tab on ⌘-click in the text, and only places the caret on a plain click", async () => {
+      const opened = vi.fn();
+      vi.stubGlobal("open", opened);
+      appState.appConfig = settingsResponse();
+      await open([{ path: "/api/posts/p1", reply: () => withBarn() }]);
+      const at = body().value.indexOf("barn.png");
+      body().setSelectionRange(at, at);
+      body().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      expect(opened).not.toHaveBeenCalled();
+      body().dispatchEvent(new MouseEvent("click", { bubbles: true, metaKey: true }));
+      expect(opened).toHaveBeenCalledWith(
+        "https://app.birds.example/media/posts/p1/barn.png",
+        "_blank",
+        "noopener",
+      );
+      vi.unstubAllGlobals();
     });
 
     it("never opens on a scheduled post, where the button nudges the way out", async () => {

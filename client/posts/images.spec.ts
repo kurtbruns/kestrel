@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { imageUsedIn, insertImage, sizeText } from "./images";
+import { imageAddress, imageTargetAt, imageUsedIn, insertImage, sizeText } from "./images";
 import { applyEdit } from "./uploads";
 
 describe("imageUsedIn", () => {
@@ -52,6 +52,57 @@ describe("insertImage", () => {
     const edit = insertImage({ text: "", start: 0, end: 0 }, "a.png");
     expect(applyEdit("", edit)).toBe("![a.png](a.png)\n\n");
     expect(edit.select).toEqual({ start: 2, end: 7 });
+  });
+});
+
+describe("imageTargetAt", () => {
+  const text = 'Intro.\n\n![A barn owl](barn.png "Barn")\n\n[a link](page.html)';
+  it.each([
+    ["its !", text.indexOf("!")],
+    ["its alt text", text.indexOf("barn owl")],
+    ["its target", text.indexOf("barn.png")],
+    ["its closing parenthesis", text.indexOf('")') + 2],
+  ])("finds the image a click on %s lands on", (_, at) => {
+    expect(imageTargetAt(text, at)).toBe("barn.png");
+  });
+
+  it.each([
+    ["plain text", text.indexOf("Intro")],
+    ["a link, which isn't an image", text.indexOf("page.html")],
+  ])("finds none on %s", (_, at) => {
+    expect(imageTargetAt(text, at)).toBe(null);
+  });
+
+  it("takes a target written in angle brackets without them", () => {
+    expect(imageTargetAt("![x](<My Cover.png>)", 3)).toBe("My Cover.png");
+  });
+});
+
+describe("imageAddress", () => {
+  const base = "https://media.example.com";
+  it("puts a name under this post's images", () => {
+    expect(imageAddress("barn.png", base, "p1")).toBe(
+      "https://media.example.com/posts/p1/barn.png",
+    );
+  });
+
+  it("encodes a name once, however it was written", () => {
+    expect(imageAddress("My%20Cover.png", base, "p1")).toBe(
+      "https://media.example.com/posts/p1/My%20Cover.png",
+    );
+    expect(imageAddress("My Cover.png", base, "p1")).toBe(
+      "https://media.example.com/posts/p1/My%20Cover.png",
+    );
+  });
+
+  it("opens a web address as written", () => {
+    expect(imageAddress("https://elsewhere.example/owl.jpg", base, "p1")).toBe(
+      "https://elsewhere.example/owl.jpg",
+    );
+  });
+
+  it.each(["javascript:alert(1)", "data:image/png;base64,AAAA"])("opens nothing for %s", (t) => {
+    expect(imageAddress(t, base, "p1")).toBe(null);
   });
 });
 

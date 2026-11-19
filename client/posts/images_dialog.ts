@@ -1,12 +1,12 @@
 // The Images dialog (DESIGN, the editor): a draft's uploaded images in one list, where pressing
-// a row puts that image in the post, View opens it full size, and an image the body doesn't use
-// can be deleted. New files dropped or chosen here go to the editor's own upload, so the dialog
+// a row puts that image in the post and an image the body doesn't use can be deleted. New files dropped or chosen here go to the editor's own upload, so the dialog
 // never uploads or edits the text itself: it says which, and the editor does it.
 
 import type { ImageListResponse, PostImage } from "../../shared/images";
 import { ApiError, api } from "../api";
 import { $ } from "../ui/dom";
 import { type Html, html, setHtml } from "../ui/html";
+import { icon } from "../ui/icons";
 import { modal } from "../ui/widgets";
 import { imageUsedIn, sizeText } from "./images";
 
@@ -30,7 +30,7 @@ const DROP_REGION = html`<div class="images-drop" id="imagesDrop"><span>Drop ima
 /** Opens the dialog over the editor of draft `postId`, for as long as `signal` lives. */
 export function openImagesDialog(postId: string, signal: AbortSignal, hooks: ImagesDialogHooks) {
   const m = modal(
-    html`<div class="images-dialog"><h3 id="imagesHead">Images</h3><p class="hint">Insert one where your cursor was, or add new ones.</p>${DROP_REGION}<div id="imagesList"><p class="images-fine">Loading images…</p></div><p class="visually-hidden" id="imagesLive" aria-live="polite"></p><div class="actions"><button type="button" id="imagesClose">Close</button></div></div>`,
+    html`<div class="images-dialog"><h3 id="imagesHead">Images</h3><p class="hint">Insert one where your cursor was, or add new ones. ⌘-click an image in the text to open it.</p>${DROP_REGION}<div id="imagesList"><p class="images-fine">Loading images…</p></div><p class="visually-hidden" id="imagesLive" aria-live="polite"></p><div class="actions"><button type="button" id="imagesClose">Close</button></div></div>`,
     signal,
   );
   const box = $(".modal", m.el);
@@ -179,10 +179,10 @@ export function openImagesDialog(postId: string, signal: AbortSignal, hooks: Ima
   void read();
 }
 
-/** One image's row: the row itself inserts it, and View and Delete sit beside it. */
+/** One image's row: the row itself inserts it, and Delete sits beside it. */
 function rowHtml(img: PostImage, used: boolean): Html {
   // The address is the instance's own media address, but it is a URL all the same: only a web
-  // one is shown or linked (client.md, Markup).
+  // one is shown (client.md, Markup).
   const web = /^https?:\/\//i.test(img.url);
   const facts = [
     img.width && img.height ? `${img.width}×${img.height}` : null,
@@ -192,9 +192,8 @@ function rowHtml(img: PostImage, used: boolean): Html {
     <button type="button" class="images-insert" data-name="${img.filename}" aria-label="Insert ${img.filename}${used ? " again" : ""}">
       <span class="images-thumb">${web ? html`<img src="${img.url}" alt="" loading="lazy">` : null}</span>
       <span class="images-text"><span class="images-name">${img.filename}</span><span class="images-meta">${facts.join(" · ")}${used ? null : html`${facts.length ? " · " : null}<span class="images-unused">Not used</span>`}</span></span>
-      <span class="images-hint" aria-hidden="true">Insert</span>
+      <span class="images-hint" aria-hidden="true">${icon("plus")}Insert</span>
     </button>
-    ${web ? html`<a class="ghost btn" href="${img.url}" target="_blank" rel="noopener" aria-label="View ${img.filename} (opens in a new tab)">View</a>` : null}
     ${used ? null : html`<button type="button" class="danger-subtle images-delete" data-name="${img.filename}" aria-label="Delete ${img.filename}">Delete</button>`}
   </li>`;
 }

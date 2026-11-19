@@ -1,6 +1,6 @@
-// What the Images dialog knows about a post's images without asking the server: whether the
-// body uses one, the edit that puts one in, and how big one is in words. Pure, so the dialog
-// only wires it to the textarea and the list it reads.
+// What the editor knows about a post's images from its text alone: whether the body uses one,
+// the edit that puts one in, which image a click in the text is on and where it lives, and how
+// big one is in words. Pure, so the editor and its Images dialog only wire it up.
 
 import { insertPlaceholder, type TextEdit, type TextState } from "./uploads";
 
@@ -68,6 +68,46 @@ export function insertImage(state: TextState, filename: string): TextEdit {
   const { edit, pad } = insertPlaceholder(state, `![${filename}](${filename})`);
   const alt = edit.from + pad.before + 2; // past the line breaks and the `![`
   return { ...edit, select: { start: alt, end: alt + filename.length } };
+}
+
+// A Markdown image, `![alt](target "title")`, with its target bare or in angle brackets.
+const MARKDOWN_IMAGE =
+  /!\[(?:[^\]\\]|\\.)*\]\(\s*(<[^>\n]*>|[^\s)]+)(?:\s+(?:"[^"\n]*"|'[^'\n]*'))?\s*\)/g;
+
+/**
+ * The target of the Markdown image the text offset `at` falls on, anywhere from its `!` to its
+ * closing parenthesis, or null when it falls on none. A reference-style image (`![alt][ref]`)
+ * isn't one: its target is elsewhere in the text.
+ */
+export function imageTargetAt(text: string, at: number): string | null {
+  for (const m of text.matchAll(MARKDOWN_IMAGE)) {
+    const start = m.index;
+    if (at >= start && at <= start + m[0].length) {
+      const target = m[1] ?? "";
+      return target.startsWith("<") ? target.slice(1, -1) : target;
+    }
+  }
+  return null;
+}
+
+/**
+ * Where an image's target is served, to open it: a web address as written, or a name, which the
+ * render resolves to this post's image of that name under the media address. Null for anything
+ * else (a `data:` image, a `javascript:` address), which isn't opened.
+ */
+export function imageAddress(target: string, mediaBase: string, postId: string): string | null {
+  if (/^https?:\/\//i.test(target)) {
+    return target;
+  }
+  if (/^[a-z][a-z0-9+.-]*:/i.test(target)) {
+    return null;
+  }
+  const last = target.split("/").pop() ?? "";
+  let name = last;
+  try {
+    name = decodeURIComponent(last);
+  } catch {}
+  return name ? `${mediaBase}/posts/${postId}/${encodeURIComponent(name)}` : null;
 }
 
 /** An image's stored size as a reader would say it: `820 bytes`, `412 KB`, `1.9 MB`. */

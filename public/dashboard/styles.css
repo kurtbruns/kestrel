@@ -2966,8 +2966,10 @@ body.web-mode .content {
   fill: currentColor;
 }
 /* The Images dialog (DESIGN, the editor): a drop region over the draft's images, one row
-   each. The row itself is the Insert button, lit on hover and focus with its word at the
-   right; View and Delete sit beside it as their own controls, so pressing one never inserts.
+   each. The row itself is the Insert button: on hover and focus it takes the accent's soft
+   tint, its picture an accent edge, and an Insert pill at its right, so what a press will do
+   is shown where the press lands. Delete sits beside it as its own control, so pressing it
+   never inserts.
    "Not used" is a plain fact in the row's small print, not a warning, so it takes the text
    colour at weight, never amber. */
 .modal.modal-images {
@@ -3032,7 +3034,11 @@ body.web-mode .content {
 }
 .images-insert:hover,
 .images-insert:focus-visible {
-  background: var(--hover);
+  background: var(--accent-soft);
+}
+.images-insert:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 .images-thumb {
   flex: none;
@@ -3042,6 +3048,10 @@ body.web-mode .content {
   border: 1px solid var(--line);
   border-radius: 4px;
   background: var(--hover);
+}
+.images-insert:hover .images-thumb,
+.images-insert:focus-visible .images-thumb {
+  border-color: var(--accent);
 }
 .images-thumb img {
   display: block;
@@ -3071,19 +3081,28 @@ body.web-mode .content {
 }
 .images-hint {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   margin-left: auto;
-  padding-right: 4px;
-  color: var(--accent);
+  padding: 4px 10px 4px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-on);
   font-size: 12.5px;
   font-weight: 600;
   visibility: hidden;
+}
+.images-hint svg {
+  width: 14px;
+  height: 14px;
 }
 .images-insert:hover .images-hint,
 .images-insert:focus-visible .images-hint {
   visibility: visible;
 }
-/* On a phone the row's name needs the width: View and Delete wrap under the text, lined up
-   with it, and the Insert word gives way, since a touch has no hover to show it. */
+/* On a phone the row's name needs the width: Delete wraps under the text, lined up with it,
+   and the Insert pill gives way, since a touch has no hover to show it. */
 @media (max-width: 539px) {
   .images-row {
     flex-wrap: wrap;
@@ -3092,12 +3111,8 @@ body.web-mode .content {
   .images-insert {
     flex-basis: 100%;
   }
-  .images-row > a,
   .images-row > .images-delete {
     margin-left: 80px;
-  }
-  .images-row > a + .images-delete {
-    margin-left: 0;
   }
   .images-hint {
     display: none;
