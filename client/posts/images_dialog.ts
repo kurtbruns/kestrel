@@ -1,13 +1,14 @@
-// The Images dialog (DESIGN, the editor): a draft's uploaded images in one list. Each row's
-// picture and name open the image full size, Insert puts it in the post, and Delete deletes it,
-// asking first, and saying so when the post still uses it. New files dropped or chosen here go
-// to the editor's own upload, so the dialog never uploads or edits the text itself: it says
-// which, and the editor does it.
+// The Images dialog (DESIGN, the editor): a draft's uploaded images in one list. Pressing a row
+// opens its image full size, Insert puts it in the post, and the trash can deletes it: at once
+// when the post doesn't use it, and only once asked when it does. New files dropped or chosen
+// here go to the editor's own upload, so the dialog never uploads or edits the text itself: it
+// says which, and the editor does it.
 
 import type { ImageListResponse, PostImage } from "../../shared/images";
 import { ApiError, api } from "../api";
 import { $ } from "../ui/dom";
 import { type Html, html, setHtml } from "../ui/html";
+import { icon } from "../ui/icons";
 import { modal } from "../ui/widgets";
 import { imageUsedIn, sizeText } from "./images";
 
@@ -89,14 +90,14 @@ export async function openImagesDialog(
     upload([...(e.dataTransfer?.files ?? [])]);
   });
 
-  // The Delete waiting on its second press, so Escape or leaving it takes the question back.
+  // The delete of a used image waiting on its second press, so Escape or leaving it takes the
+  // question back.
   let asking: HTMLButtonElement | null = null;
   const stopAsking = () => {
     if (asking?.isConnected) {
-      asking.textContent = "Delete";
-      asking.closest(".images-row")?.classList.remove("asking");
+      setHtml(asking, icon("trash"));
       asking.setAttribute("aria-label", `Delete ${asking.dataset.name}`);
-      asking.classList.replace("danger", "danger-subtle");
+      asking.closest(".images-row")?.classList.remove("asking");
     }
     asking = null;
   };
@@ -151,30 +152,35 @@ export async function openImagesDialog(
 
   listEl.addEventListener("click", (e) => {
     const target = e.target instanceof Element ? e.target : null;
-    const insert = target?.closest<HTMLButtonElement>(".images-insert");
+    // The row's own link opens the image; nothing more to do.
+    if (!target || target.closest("a")) {
+      return;
+    }
+    const insert = target.closest<HTMLButtonElement>(".images-insert");
     if (insert?.dataset.name) {
       m.close();
       hooks.insert(insert.dataset.name);
       return;
     }
-    const del = target?.closest<HTMLButtonElement>(".images-delete");
-    if (!del?.dataset.name) {
+    const del = target.closest<HTMLButtonElement>(".images-delete");
+    if (del?.dataset.name) {
+      // An image the body doesn't use goes at once: nothing in the post changes. One it uses
+      // asks first, since its reference stays in the text and the preview then warns of a
+      // missing image (SPEC §4).
+      if (del.dataset.used && asking !== del) {
+        stopAsking();
+        asking = del;
+        setHtml(del, html`${icon("trash")}<span>In the post. Delete anyway?</span>`);
+        del.setAttribute("aria-label", `${del.dataset.name} is in the post. Delete anyway?`);
+        del.closest(".images-row")?.classList.add("asking");
+        return;
+      }
+      asking = null;
+      void remove(del.dataset.name);
       return;
     }
-    if (asking !== del) {
-      stopAsking();
-      asking = del;
-      // An image the post uses can go too, but the question says so: its reference stays in the
-      // text, where the preview then warns of a missing image (SPEC §4).
-      const question = del.dataset.used ? "In the post. Delete anyway?" : "Delete for good?";
-      del.textContent = question;
-      del.setAttribute("aria-label", `${del.dataset.name}: ${question}`);
-      del.classList.replace("danger-subtle", "danger");
-      del.closest(".images-row")?.classList.add("asking");
-      return;
-    }
-    asking = null;
-    void remove(del.dataset.name);
+    // Anywhere else on the row opens the image, as its link does, so the whole row answers.
+    target.closest(".images-row")?.querySelector<HTMLAnchorElement>("a.images-open")?.click();
   });
 
   async function remove(name: string) {
@@ -205,20 +211,22 @@ export async function openImagesDialog(
   paint();
 }
 
-/** One image's row: its picture and name open it full size, then Insert, then Delete. */
+/** One image's row: the row opens it full size, then Insert, then the trash can. */
 function rowHtml(img: PostImage, used: boolean): Html {
   // The address is the instance's own media address, but it is a URL all the same: only a web
   // one is shown or linked (client.md, Markup).
   const web = /^https?:\/\//i.test(img.url);
+  // Only the exception is named, as Email only is: an image the post uses is the normal case.
   const facts = [
+    used ? null : "Not in the post",
     img.width && img.height ? `${img.width}×${img.height}` : null,
     img.bytes === null ? null : sizeText(img.bytes),
   ].filter((f) => f !== null);
-  const look = html`<span class="images-thumb">${web ? html`<img src="${img.url}" alt="" loading="lazy">` : null}</span>
-      <span class="images-text"><span class="images-name">${img.filename}${web ? html`<span class="images-arrow" aria-hidden="true"> ↗</span>` : null}</span><span class="images-meta">${facts.join(" · ")}${used ? null : html`${facts.length ? " · " : null}<span class="images-unused">Not used</span>`}</span></span>`;
-  return html`<li class="images-row">
+  const look = html`<span class="images-thumb">${web ? html`<img src="${img.url}" alt="" loading="lazy"><span class="images-zoom">${icon("expand")}</span>` : null}</span>
+      <span class="images-text"><span class="images-name">${img.filename}</span><span class="images-meta">${facts.join(" · ")}</span></span>`;
+  return html`<li class="images-row${used ? "" : " unused"}">
     ${web ? html`<a class="images-open" href="${img.url}" target="_blank" rel="noopener" aria-label="Open ${img.filename} full size (new tab)">${look}</a>` : html`<span class="images-open">${look}</span>`}
     <button type="button" class="ghost images-insert" data-name="${img.filename}" aria-label="Insert ${img.filename}${used ? " again" : ""}">Insert</button>
-    <button type="button" class="danger-subtle images-delete" data-name="${img.filename}"${used ? USED : null} aria-label="Delete ${img.filename}">Delete</button>
+    <button type="button" class="images-delete" data-name="${img.filename}"${used ? USED : null} aria-label="Delete ${img.filename}">${icon("trash")}</button>
   </li>`;
 }

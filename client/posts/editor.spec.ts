@@ -3282,7 +3282,7 @@ describe("editor view", () => {
       $<HTMLButtonElement>(`.images-insert[data-name="${name}"]`).closest("li") as HTMLElement;
     const dialogOpen = () => document.querySelector(".modal-images") !== null;
 
-    it("lists the draft's images, saying which the body doesn't use, each opening full size and offering Insert and Delete", async () => {
+    it("lists the draft's images, naming those not in the post, each row opening its image full size", async () => {
       await open([
         { path: "/api/posts/p1", reply: () => withBarn() },
         listRoute(() => ["barn.png", "owl.png"]),
@@ -3291,15 +3291,15 @@ describe("editor view", () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(row("barn.png").querySelector(".images-meta")?.textContent).toBe("1600×1200 · 412 KB");
       expect(row("owl.png").querySelector(".images-meta")?.textContent).toBe(
-        "1600×1200 · 412 KB · Not used",
+        "Not in the post · 1600×1200 · 412 KB",
       );
       for (const name of ["barn.png", "owl.png"]) {
-        expect(row(name).querySelector(".images-delete")?.getAttribute("aria-label")).toBe(
-          `Delete ${name}`,
-        );
         const link = row(name).querySelector("a.images-open");
         expect(link?.getAttribute("href")).toBe(`https://news.example.com/media/posts/p1/${name}`);
         expect(link?.getAttribute("target")).toBe("_blank");
+        expect(row(name).querySelector(".images-delete")?.getAttribute("aria-label")).toBe(
+          `Delete ${name}`,
+        );
       }
       expect(row("barn.png").querySelector(".images-insert")?.getAttribute("aria-label")).toBe(
         "Insert barn.png again",
@@ -3320,11 +3320,18 @@ describe("editor view", () => {
       expect($("#saveStatus").textContent).toBe("Unsaved changes");
     });
 
-    it("does nothing on a press of the row itself, away from its link and buttons", async () => {
+    it("opens the image on a press anywhere on the row, and inserts only from Insert", async () => {
       await open([{ path: "/api/posts/p1", reply: () => draft() }, listRoute(() => ["owl.png"])]);
       imagesButton().click();
       await vi.advanceTimersByTimeAsync(0);
-      row("owl.png").click();
+      const link = row("owl.png").querySelector<HTMLAnchorElement>("a.images-open");
+      let opened = 0;
+      link?.addEventListener("click", (e) => {
+        e.preventDefault(); // no page to open in a spec
+        opened += 1;
+      });
+      row("owl.png").click(); // the row's own padding
+      expect(opened).toBe(1);
       expect(dialogOpen()).toBe(true);
       expect(body().value).toBe("# Owls\n\nHoot.");
     });
@@ -3347,8 +3354,14 @@ describe("editor view", () => {
       await vi.advanceTimersByTimeAsync(0);
       const del = () => $<HTMLButtonElement>(".images-delete");
       del().click();
-      expect(del().textContent).toBe("In the post. Delete anyway?");
+      expect(del().textContent?.trim()).toBe("In the post. Delete anyway?");
       expect(del().closest("li")?.classList.contains("asking")).toBe(true);
+      // Escape takes the question back without closing the dialog.
+      del().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(del().textContent?.trim()).toBe("");
+      expect(dialogOpen()).toBe(true);
+      expect(fake.calls.filter((c) => c.method === "DELETE")).toHaveLength(0);
+      del().click();
       del().click();
       await vi.advanceTimersByTimeAsync(0);
       expect(fake.calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
@@ -3364,7 +3377,7 @@ describe("editor view", () => {
       expect(body().value).toBe("# Owls\n\nHoot.\n\n![owl.png](owl.png)\n\n");
     });
 
-    it("deletes an unused image on a second press, and Escape takes the question back first", async () => {
+    it("deletes an image the body doesn't use on the first press, since nothing in the post changes", async () => {
       let names = ["owl.png"];
       await open([
         { path: "/api/posts/p1", reply: () => draft() },
@@ -3380,19 +3393,12 @@ describe("editor view", () => {
       ]);
       imagesButton().click();
       await vi.advanceTimersByTimeAsync(0);
-      const del = () => $<HTMLButtonElement>(".images-delete");
-      del().click();
-      expect(del().textContent).toBe("Delete for good?");
-      del().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-      expect(del().textContent).toBe("Delete");
-      expect(dialogOpen()).toBe(true);
-
-      del().click();
-      del().click();
+      $<HTMLButtonElement>(".images-delete").click();
       await vi.advanceTimersByTimeAsync(0);
       expect(fake.calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
       expect(document.querySelector(".images-row")).toBe(null);
       expect($("#imagesLive").textContent).toBe("owl.png deleted");
+      expect(dialogOpen()).toBe(true);
       expect(fake.unhandled).toEqual([]);
     });
 

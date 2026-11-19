@@ -15,6 +15,7 @@ import code from "./icons/code.svg";
 import copyout from "./icons/copyout.svg";
 import desktop from "./icons/desktop.svg";
 import editable from "./icons/editable.svg";
+import expand from "./icons/expand.svg";
 import heading from "./icons/heading.svg";
 import image from "./icons/image.svg";
 import indent from "./icons/indent.svg";
@@ -35,6 +36,7 @@ import readonly from "./icons/readonly.svg";
 import search from "./icons/search.svg";
 import send from "./icons/send.svg";
 import settings from "./icons/settings.svg";
+import trash from "./icons/trash.svg";
 import ul from "./icons/ul.svg";
 import upload from "./icons/upload.svg";
 import x from "./icons/x.svg";
@@ -48,6 +50,7 @@ const ICONS = {
   code: unsafeHtml(code),
   copyout: unsafeHtml(copyout),
   editable: unsafeHtml(editable),
+  expand: unsafeHtml(expand),
   heading: unsafeHtml(heading),
   image: unsafeHtml(image),
   indent: unsafeHtml(indent),
@@ -75,6 +78,7 @@ const ICONS = {
   desktop: unsafeHtml(desktop),
   mail: unsafeHtml(mail),
   phone: unsafeHtml(phone),
+  trash: unsafeHtml(trash),
   x: unsafeHtml(x),
 } as const;
 

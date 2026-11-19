@@ -11,6 +11,7 @@ const ALL = {
   code: true,
   copyout: true,
   editable: true,
+  expand: true,
   heading: true,
   image: true,
   indent: true,
@@ -39,6 +40,7 @@ const ALL = {
   desktop: true,
   mail: true,
   phone: true,
+  trash: true,
 } as const satisfies Record<IconName, true>;
 const names = Object.keys(ALL) as IconName[];
 

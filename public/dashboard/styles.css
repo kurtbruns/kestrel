@@ -2966,11 +2966,12 @@ body.web-mode .content {
   fill: currentColor;
 }
 /* The Images dialog (DESIGN, the editor): a drop region over the draft's images, one row
-   each. A row's picture and name are one link that opens the image full size, marked with
-   the arrow a new tab takes (§7); Insert (Ghost) and Delete (subtle Danger) sit at its right on
-   every row, used or not. Nothing else on the row responds, so it needs no hover state to say
-   what a press does. While Delete asks, the row takes the danger's tint. "Not used" is a plain
-   fact in the row's small print, not a warning, so it takes the text colour at weight. */
+   each. Pressing a row opens its image full size: the row greys on hover, and its picture
+   takes an accent edge and an expand sign. Insert (Ghost) and the trash can sit at its right as
+   controls of their own, so over either the open cue gives way; over the trash, or while it
+   asks, the row takes the danger's tint. An image the post doesn't use says so first in the small
+   print, "Not in the post", in the same muted text as the size; one it uses says nothing, since
+   that's the normal case. */
 /* Held near the top rather than centred, so a deleted row shortens the dialog from the bottom
    and the rows above it stay under the pointer. */
 .modal.modal-images {
@@ -3001,24 +3002,43 @@ body.web-mode .content {
   color: var(--muted);
   font-size: 12px;
 }
-/* No frame around the list: each row is its own rounded item, so its tint and a focus ring sit
-   on its own edge, never just inside a frame's line. */
 .images-list {
-  display: grid;
-  gap: 2px;
   list-style: none;
   margin: 0;
   padding: 0;
   max-height: min(50vh, 420px);
   overflow-y: auto;
 }
+/* The frame and the lines between rows are the rows' own borders, so a row's focus ring,
+   drawn just inside its border box, covers them rather than sitting inside a line. */
 .images-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
+  gap: 12px;
+  padding: 8px 8px 8px 10px;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  cursor: pointer;
+}
+.images-row:first-child {
+  border-radius: 8px 8px 0 0;
+}
+.images-row:last-child {
+  border-bottom: 1px solid var(--line);
+  border-radius: 0 0 8px 8px;
+}
+.images-row:only-child {
   border-radius: 8px;
 }
+.images-row:hover,
+.images-row:has(.images-open:focus-visible) {
+  background: var(--hover);
+}
+.images-row:has(.images-open:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.images-row:has(.images-delete:hover),
 .images-row.asking {
   background: color-mix(in srgb, var(--danger-fg) 8%, transparent);
 }
@@ -3028,17 +3048,16 @@ body.web-mode .content {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 2px;
-  border-radius: 6px;
   color: inherit;
   text-decoration: none;
 }
 .images-open:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline: none;
 }
 .images-thumb {
+  position: relative;
   flex: none;
+  display: block;
   width: 64px;
   height: 48px;
   overflow: hidden;
@@ -3046,20 +3065,47 @@ body.web-mode .content {
   border-radius: 4px;
   background: var(--hover);
 }
-a.images-open:hover .images-thumb {
-  border-color: var(--accent);
-}
-.images-row.asking .images-thumb {
-  border-color: var(--danger-fg);
-}
 .images-thumb img {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
+.images-zoom {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: rgb(0 0 0 / 0.6);
+  color: #fff;
+  opacity: 0;
+}
+.images-zoom svg {
+  width: 13px;
+  height: 13px;
+  fill: currentColor;
+}
+.images-row:hover:not(:has(button:hover)) .images-thumb,
+.images-row:has(.images-open:focus-visible) .images-thumb {
+  border-color: var(--accent);
+}
+.images-row:hover:not(:has(button:hover)) .images-zoom,
+.images-row:has(.images-open:focus-visible) .images-zoom {
+  opacity: 1;
+}
+/* No hover to find it by on a touch screen, so the sign stays. */
+@media (hover: none) {
+  .images-zoom {
+    opacity: 1;
+  }
+}
 .images-text {
   display: grid;
+  flex: 1;
   min-width: 0;
 }
 .images-name {
@@ -3069,55 +3115,47 @@ a.images-open:hover .images-thumb {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.images-arrow {
-  color: var(--muted);
-}
-a.images-open:hover .images-name {
-  color: var(--accent);
-  text-decoration: underline;
-}
-a.images-open:hover .images-arrow {
-  color: var(--accent);
-}
 .images-meta {
   color: var(--muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
-.images-unused {
-  color: var(--fg);
-  font-weight: 600;
-}
-/* Insert and Delete keep the card's fill, so the danger tint behind an asking row never washes
-   them out. */
-.images-row .images-insert,
-.images-row .images-delete {
+.images-row .images-insert {
   flex: none;
   font-size: 13px;
 }
-.images-row .images-insert:not(:hover) {
-  color: var(--fg);
+/* The trash can: a quiet icon at rest, red over it, and, for an image the post uses, widened
+   into its question in solid Danger on the first press. */
+.images-delete {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 32px;
+  height: 32px;
+  justify-content: center;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
 }
-.images-row .images-insert,
-.images-row .images-delete.danger-subtle:not(:hover) {
-  background: var(--card);
+.images-delete svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
 }
-.images-row .images-delete.danger-subtle:not(:hover) {
-  color: var(--fg);
+.images-delete:hover {
+  color: var(--danger-fg);
+  background: color-mix(in srgb, var(--danger-fg) 10%, transparent);
 }
-/* On a phone the row's name needs the width: Insert and Delete wrap under the text, lined up
-   with it. */
-@media (max-width: 539px) {
-  .images-row {
-    flex-wrap: wrap;
-    row-gap: 4px;
-  }
-  .images-open {
-    flex-basis: 100%;
-  }
-  .images-row > .images-insert {
-    margin-left: 78px;
-  }
+.images-row.asking .images-delete {
+  padding: 0 10px 0 8px;
+  background: var(--danger-fg);
+  color: var(--danger-on);
 }
 /* The locked composer's foot: where a draft's foot offers images, a scheduled post's says
    the way out, "Cancel the schedule to edit", with the read-only lock Settings uses. It is
