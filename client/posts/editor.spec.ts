@@ -1581,6 +1581,32 @@ describe("editor view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
+    it("clears the warnings under the composer on the Edit tab once the fixing save's render is in", async () => {
+      const server = draftServer();
+      let warnings = [
+        "The image “plain.png” isn’t on this post. Upload it, or check the file name.",
+      ];
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        ...previewRoutes(server, undefined, () => warnings),
+      ]);
+      $(".ctab[data-tab='preview']").click();
+      await previewLoads();
+      expect($("#warnings").textContent).toContain("“plain.png” isn’t on this post");
+
+      $(".ctab[data-tab='edit']").click();
+      typeInto(body(), "# Owls\n\nHoot hoot.");
+      warnings = [];
+      // Unsaved, the line keeps the last render's words rather than flicker.
+      expect($("#warnings").textContent).toContain("“plain.png” isn’t on this post");
+      await vi.advanceTimersByTimeAsync(5000); // the autosave, and the render behind it
+      await previewLoads();
+      expect(puts()).toHaveLength(1);
+      expect($("#warnings").textContent).toBe("");
+      expect(fake.unhandled).toEqual([]);
+    });
+
     it("renders ahead once the pointer reaches the Preview tab, and the click uses that render", async () => {
       const server = draftServer();
       await open([
@@ -3277,6 +3303,11 @@ describe("editor view", () => {
       path: "/api/posts/p1/images",
       reply: () => ({ images: names().map(img) }),
     });
+    // A delete reads the render again, so the warnings under the composer follow it.
+    const renderRoute: FakeRoute = {
+      path: "/api/posts/p1/preview.json",
+      reply: () => ({ revision_id: "r1", html: "<p>Owls</p>", warnings: [] }),
+    };
     const imagesButton = () => $<HTMLButtonElement>('.tb[data-fmt="image"]');
     const row = (name: string) =>
       $<HTMLButtonElement>(`.images-insert[data-name="${name}"]`).closest("li") as HTMLElement;
@@ -3343,6 +3374,7 @@ describe("editor view", () => {
       await open([
         { path: "/api/posts/p1", reply: () => withBarn() },
         listRoute(() => names),
+        renderRoute,
         {
           method: "DELETE",
           path: "/api/posts/p1/images/barn.png",
@@ -3390,6 +3422,7 @@ describe("editor view", () => {
       await open([
         { path: "/api/posts/p1", reply: () => draft() },
         listRoute(() => names),
+        renderRoute,
         {
           method: "DELETE",
           path: "/api/posts/p1/images/owl.png",
@@ -3476,6 +3509,7 @@ describe("editor view", () => {
       await open([
         { path: "/api/posts/p1", reply: () => draft() },
         listRoute(() => names),
+        renderRoute,
         {
           method: "DELETE",
           path: "/api/posts/p1/images/owl.png",
@@ -3508,6 +3542,36 @@ describe("editor view", () => {
       expect($(".images-delete").textContent?.trim()).toBe("");
       document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
       expect(dialogOpen()).toBe(false);
+    });
+
+    it("warns under the composer of a deleted image the text still uses, without opening Preview", async () => {
+      const server = draftServer(withBarn());
+      let names = ["barn.png"];
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        ...previewRoutes(server, undefined, () =>
+          names.length
+            ? []
+            : ["The image “barn.png” isn’t on this post. Upload it, or check the file name."],
+        ),
+        listRoute(() => names),
+        {
+          method: "DELETE",
+          path: "/api/posts/p1/images/barn.png",
+          reply: () => {
+            names = [];
+            return { deleted: true };
+          },
+        },
+      ]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      $<HTMLButtonElement>(".images-delete").click();
+      $<HTMLButtonElement>(".images-delete").click();
+      await vi.advanceTimersByTimeAsync(0);
+      await previewLoads();
+      expect($("#warnings").textContent).toContain("“barn.png” isn’t on this post");
+      expect(fake.unhandled).toEqual([]);
     });
 
     it("keeps a file dropped on the backdrop, just outside the dialog, from opening in the tab", async () => {

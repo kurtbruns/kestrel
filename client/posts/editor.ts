@@ -561,7 +561,12 @@ export async function renderEditor(
     front.classList.toggle("updating", updating);
     const stuck = previewFailed || (!locked && conflicted);
     previewStatus.textContent = !updating ? "" : stuck ? "Not up to date" : "Updating…";
-    if (tab === "preview" && current && shown) {
+    // The line under the composer shows on either tab, so it follows every render of what is
+    // saved, the one rendered ahead after a save included: fixing the text clears it once the
+    // save's render is in. While an edit is unsaved or the out-of-date banner is up, no render
+    // is of the text on screen, so it keeps the last one's words rather than flicker with each
+    // keystroke; the next save's render replaces them.
+    if (current && shown) {
       showWarnings(shown.warnings);
     }
   }
@@ -1601,8 +1606,12 @@ export async function renderEditor(
           uploadAndInsert(f);
         }
       },
-      // The render changes with the post's images, not only its revision.
-      deleted: () => renders.forget(),
+      // The render changes with the post's images, not only its revision: read it again, so a
+      // reference to the deleted image is warned of under the composer straight away.
+      deleted: () => {
+        renders.forget();
+        renderAhead();
+      },
       failed: (e) => {
         if (!foundGone(e)) {
           toast(message(e));
