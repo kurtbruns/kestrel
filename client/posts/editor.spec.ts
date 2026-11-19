@@ -1609,6 +1609,50 @@ describe("editor view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
+    it("clears an image warning on the Edit tab once the missing image is uploaded, with the text already saved", async () => {
+      const server = draftServer();
+      let uploaded = false;
+      let answer: () => void = () => {};
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        ...previewRoutes(server, undefined, () =>
+          uploaded
+            ? []
+            : ["The image “owl.png” isn’t on this post. Upload it, or check the file name."],
+        ),
+        {
+          method: "POST",
+          path: "/api/posts/p1/images",
+          reply: () =>
+            new Promise((r) => {
+              answer = () => {
+                uploaded = true;
+                r({ image: { filename: "owl.png", url: "http://m/owl.png" } });
+              };
+            }),
+        },
+      ]);
+      $(".ctab[data-tab='preview']").click();
+      await previewLoads();
+      $(".ctab[data-tab='edit']").click();
+      expect($("#warnings").textContent).toContain("“owl.png” isn’t on this post");
+
+      const before = body().value;
+      const input = $<HTMLInputElement>("#imgInput");
+      Object.defineProperty(input, "files", {
+        value: [new File(["png"], "owl.png", { type: "image/png" })],
+        configurable: true,
+      });
+      input.dispatchEvent(new Event("change"));
+      typeInto(body(), before); // the placeholder taken out: the text is as saved again
+      answer();
+      await vi.advanceTimersByTimeAsync(0);
+      await previewLoads();
+      expect(body().value).toBe(before);
+      expect($("#warnings").textContent).toBe("");
+    });
+
     it("renders ahead once the pointer reaches the Preview tab, and the click uses that render", async () => {
       const server = draftServer();
       await open([
@@ -2228,6 +2272,35 @@ describe("editor view", () => {
     expect($("#warnings").textContent).toMatch(/Warnings: An image has no alt text\./);
     expect(document.querySelector(".modal")).toBeNull();
     expect(fake.unhandled).toEqual([]);
+  });
+
+  it("leaves the warnings under the composer as they were when every test address fails, since nothing rendered", async () => {
+    let failing = false;
+    await open([
+      { path: "/api/posts/p1", reply: () => draft() },
+      { path: "/api/settings", reply: () => ({ settings: { test_recipients: ["me@b.c"] } }) },
+      {
+        method: "POST",
+        path: "/api/posts/p1/test",
+        reply: () =>
+          failing
+            ? jsonResponse({ error: "bad_gateway", message: "The provider didn't answer." }, 502)
+            : { sent: true, warnings: ["An image has no alt text."] },
+      },
+    ]);
+    $("#testBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    $("#tGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#warnings").textContent).toMatch(/An image has no alt text\./);
+
+    failing = true;
+    $("#testBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    $("#tGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.querySelector(".modal")).not.toBeNull(); // the dialog says it wasn't sent
+    expect($("#warnings").textContent).toMatch(/An image has no alt text\./);
   });
 
   // DESIGN §4: no provider is a standing state, so the dialog says so every time it opens

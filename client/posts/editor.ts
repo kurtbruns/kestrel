@@ -1556,6 +1556,10 @@ export async function renderEditor(
               `Uploaded “${image.filename}”, but its placeholder was removed, so it wasn’t added.`,
             );
           }
+          // An upload is often the fix a warning asks for ("isn't on this post"): read the
+          // render again so the line under the composer follows. With the text unsaved this
+          // waits for the save's own render.
+          renderAhead();
         },
         (e) => {
           if (signal.aborted) {
@@ -1839,7 +1843,11 @@ export async function renderEditor(
               missed.push({ email: addr, message: describeError(e) });
             }
           }
-          showWarnings(lastWarnings);
+          // Only a test that rendered says what the render found: one where every address
+          // failed leaves the line as it was rather than clearing a warning that still holds.
+          if (lastWarnings) {
+            showWarnings(lastWarnings);
+          }
           // A test of a scheduled post settles its re-made condition on the server; read the
           // feed now so the banner's line goes with it rather than at the next idle read.
           if (locked && sent > 0) {
