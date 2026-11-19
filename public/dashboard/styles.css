@@ -2803,7 +2803,10 @@ body.web-mode .content {
   padding: 14px;
   font-family: var(--mono);
   font-size: 13.5px;
-  line-height: 1.7;
+  /* A whole number of pixels, never a ratio: Safari lays a textarea's lines out at whole
+     pixels (1.7 x 13.5px = 22.95px becomes 22px) while the <pre> keeps the fraction, so a
+     fractional height drifts the caret and the selection a pixel a line off the colored text. */
+  line-height: 23px;
   white-space: pre-wrap;
   overflow-wrap: break-word;
   tab-size: 2;
