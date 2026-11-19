@@ -73,14 +73,33 @@ function numberedName(filename: string, n: number): string {
   return dot > 0 ? `${filename.slice(0, dot)}-${n}${filename.slice(dot)}` : `${filename}-${n}`;
 }
 
-function publicImage(c: RequestContext, row: ImageRow): PostImage {
+function publicImage(c: RequestContext, row: ImageRow, bytes: number | null): PostImage {
   return {
     filename: row.filename,
     content_type: row.content_type,
     width: row.width,
     height: row.height,
+    bytes,
     url: `${c.config.mediaPublicBase}/${row.storage_key}`,
   };
+}
+
+/**
+ * The stored size of each of a post's images, by storage key, read from one listing of the
+ * post's folder rather than a request per image. Storage is where the size is known, for an
+ * image stored before sizes were shown as much as for a new one.
+ */
+async function storedSizes(c: RequestContext, postId: string): Promise<Map<string, number>> {
+  const sizes = new Map<string, number>();
+  let cursor: string | undefined;
+  do {
+    const page = await c.env.MEDIA.list({ prefix: storageKey(postId, ""), cursor });
+    for (const obj of page.objects) {
+      sizes.set(obj.key, obj.size);
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return sizes;
 }
 
 export async function uploadImage(c: RequestContext): Promise<Response> {
@@ -177,7 +196,7 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
     await images.deleteImageRow(c.env.DB, post.id, row.filename);
     throw e;
   }
-  const body: ImageUploadResponse = { image: publicImage(c, row) };
+  const body: ImageUploadResponse = { image: publicImage(c, row, stored.byteLength) };
   return json(body, 201);
 }
 
@@ -186,8 +205,13 @@ export async function listImages(c: RequestContext): Promise<Response> {
   if (!post) {
     throw notFound("post");
   }
-  const rows = await images.listImages(c.env.DB, post.id);
-  const body: ImageListResponse = { images: rows.map((r) => publicImage(c, r)) };
+  const [rows, sizes] = await Promise.all([
+    images.listImages(c.env.DB, post.id),
+    storedSizes(c, post.id),
+  ]);
+  const body: ImageListResponse = {
+    images: rows.map((r) => publicImage(c, r, sizes.get(r.storage_key) ?? null)),
+  };
   return json(body);
 }
 

@@ -1160,7 +1160,7 @@ export function createRouter({
             name: "image",
             type: "object",
             description:
-              "`{ filename, content_type, width, height, url }`: `filename` is the name the post's Markdown references it by, `![a short description](filename)`.",
+              "`{ filename, content_type, width, height, bytes, url }`: `filename` is the name the post's Markdown references it by, `![a short description](filename)`, and `bytes` is its size as stored, after its metadata is taken out (null when storage holds no file for it).",
           },
         ],
       },
@@ -1171,6 +1171,7 @@ export function createRouter({
             content_type: "image/jpeg",
             width: 1200,
             height: 800,
+            bytes: 184320,
             url: "https://newsletter.example.com/media/posts/p_abc123/cover.jpg",
           },
         } satisfies ImageUploadResponse,
@@ -1190,7 +1191,7 @@ export function createRouter({
             name: "images",
             type: "object[]",
             description:
-              "Each `{ filename, content_type, width, height, url }`, as an upload answers it.",
+              "Each `{ filename, content_type, width, height, bytes, url }`, as an upload answers it.",
           },
         ],
       },

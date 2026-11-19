@@ -1581,6 +1581,76 @@ describe("editor view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
+    it("clears the warnings under the composer on the Edit tab once the fixing save's render is in", async () => {
+      const server = draftServer();
+      let warnings = [
+        "The image “plain.png” isn’t on this post. Upload it, or check the file name.",
+      ];
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        ...previewRoutes(server, undefined, () => warnings),
+      ]);
+      $(".ctab[data-tab='preview']").click();
+      await previewLoads();
+      expect($("#warnings").textContent).toContain("“plain.png” isn’t on this post");
+
+      $(".ctab[data-tab='edit']").click();
+      typeInto(body(), "# Owls\n\nHoot hoot.");
+      warnings = [];
+      // Unsaved, the line keeps the last render's words rather than flicker.
+      expect($("#warnings").textContent).toContain("“plain.png” isn’t on this post");
+      await vi.advanceTimersByTimeAsync(5000); // the autosave, and the render behind it
+      await previewLoads();
+      expect(puts()).toHaveLength(1);
+      expect($("#warnings").textContent).toBe("");
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("clears an image warning on the Edit tab once the missing image is uploaded, with the text already saved", async () => {
+      const server = draftServer();
+      let uploaded = false;
+      let answer: () => void = () => {};
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        ...previewRoutes(server, undefined, () =>
+          uploaded
+            ? []
+            : ["The image “owl.png” isn’t on this post. Upload it, or check the file name."],
+        ),
+        {
+          method: "POST",
+          path: "/api/posts/p1/images",
+          reply: () =>
+            new Promise((r) => {
+              answer = () => {
+                uploaded = true;
+                r({ image: { filename: "owl.png", url: "http://m/owl.png" } });
+              };
+            }),
+        },
+      ]);
+      $(".ctab[data-tab='preview']").click();
+      await previewLoads();
+      $(".ctab[data-tab='edit']").click();
+      expect($("#warnings").textContent).toContain("“owl.png” isn’t on this post");
+
+      const before = body().value;
+      const input = $<HTMLInputElement>("#imgInput");
+      Object.defineProperty(input, "files", {
+        value: [new File(["png"], "owl.png", { type: "image/png" })],
+        configurable: true,
+      });
+      input.dispatchEvent(new Event("change"));
+      typeInto(body(), before); // the placeholder taken out: the text is as saved again
+      answer();
+      await vi.advanceTimersByTimeAsync(0);
+      await previewLoads();
+      expect(body().value).toBe(before);
+      expect($("#warnings").textContent).toBe("");
+    });
+
     it("renders ahead once the pointer reaches the Preview tab, and the click uses that render", async () => {
       const server = draftServer();
       await open([
@@ -2200,6 +2270,35 @@ describe("editor view", () => {
     expect($("#warnings").textContent).toMatch(/Warnings: An image has no alt text\./);
     expect(document.querySelector(".modal")).toBeNull();
     expect(fake.unhandled).toEqual([]);
+  });
+
+  it("leaves the warnings under the composer as they were when every test address fails, since nothing rendered", async () => {
+    let failing = false;
+    await open([
+      { path: "/api/posts/p1", reply: () => draft() },
+      { path: "/api/settings", reply: () => ({ settings: { test_recipients: ["me@b.c"] } }) },
+      {
+        method: "POST",
+        path: "/api/posts/p1/test",
+        reply: () =>
+          failing
+            ? jsonResponse({ error: "bad_gateway", message: "The provider didn't answer." }, 502)
+            : { sent: true, warnings: ["An image has no alt text."] },
+      },
+    ]);
+    $("#testBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    $("#tGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#warnings").textContent).toMatch(/An image has no alt text\./);
+
+    failing = true;
+    $("#testBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    $("#tGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.querySelector(".modal")).not.toBeNull(); // the dialog says it wasn't sent
+    expect($("#warnings").textContent).toMatch(/An image has no alt text\./);
   });
 
   // DESIGN §4: no provider is a standing state, so the dialog says so every time it opens
@@ -3261,6 +3360,312 @@ describe("editor view", () => {
     expect($("#toasts").textContent).toContain(
       `Sends at ${fmt(new Date(2026, 8, 23, 10, 2).getTime(), clocksFor(), true)}, cancelable until then.`,
     );
+  });
+
+  describe("the Images dialog (DESIGN, the editor)", () => {
+    const img = (filename: string) => ({
+      filename,
+      content_type: "image/png",
+      width: 1600,
+      height: 1200,
+      bytes: 421_888,
+      url: `https://news.example.com/media/posts/p1/${filename}`,
+    });
+    const withBarn = () => ({ ...draft(), markdown: "# Owls\n\n![Barn owl](barn.png)\n\nHoot." });
+    const listRoute = (names: () => string[]): FakeRoute => ({
+      path: "/api/posts/p1/images",
+      reply: () => ({ images: names().map(img) }),
+    });
+    // A delete reads the render again, so the warnings under the composer follow it.
+    const renderRoute: FakeRoute = {
+      path: "/api/posts/p1/preview.json",
+      reply: () => ({ revision_id: "r1", html: "<p>Owls</p>", warnings: [] }),
+    };
+    const imagesButton = () => $<HTMLButtonElement>('.tb[data-fmt="image"]');
+    const row = (name: string) =>
+      $<HTMLButtonElement>(`.images-insert[data-name="${name}"]`).closest("li") as HTMLElement;
+    const dialogOpen = () => document.querySelector(".modal-images") !== null;
+
+    it("lists the draft's images, naming those the post doesn't use, each row opening its image full size", async () => {
+      await open([
+        { path: "/api/posts/p1", reply: () => withBarn() },
+        listRoute(() => ["barn.png", "owl.png"]),
+      ]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(row("barn.png").querySelector(".images-meta")?.textContent).toBe("1600×1200 · 412 KB");
+      expect(row("owl.png").querySelector(".images-meta")?.textContent).toBe(
+        "Not used · 1600×1200 · 412 KB",
+      );
+      for (const name of ["barn.png", "owl.png"]) {
+        const link = row(name).querySelector("a.images-open");
+        expect(link?.getAttribute("href")).toBe(`https://news.example.com/media/posts/p1/${name}`);
+        expect(link?.getAttribute("target")).toBe("_blank");
+        expect(row(name).querySelector(".images-delete")?.getAttribute("aria-label")).toBe(
+          `Delete ${name}`,
+        );
+      }
+      expect(row("barn.png").querySelector(".images-insert")?.getAttribute("aria-label")).toBe(
+        "Insert barn.png again",
+      );
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("puts a pressed image in at the caret, as a paragraph of its own, with its alt text selected", async () => {
+      await open([{ path: "/api/posts/p1", reply: () => draft() }, listRoute(() => ["owl.png"])]);
+      body().focus();
+      body().setSelectionRange(6, 6); // after "# Owls"
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      $<HTMLButtonElement>('.images-insert[data-name="owl.png"]').click();
+      expect(dialogOpen()).toBe(false);
+      expect(body().value).toBe("# Owls\n\n![owl.png](owl.png)\n\nHoot.");
+      expect(body().value.slice(body().selectionStart, body().selectionEnd)).toBe("owl.png");
+      expect($("#saveStatus").textContent).toBe("Unsaved changes");
+    });
+
+    it("opens the image only from its picture and name, and a press elsewhere on the row does nothing", async () => {
+      await open([{ path: "/api/posts/p1", reply: () => draft() }, listRoute(() => ["owl.png"])]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      const link = row("owl.png").querySelector<HTMLAnchorElement>("a.images-open");
+      let opened = 0;
+      link?.addEventListener("click", (e) => {
+        e.preventDefault(); // no page to open in a spec
+        opened += 1;
+      });
+      row("owl.png").click(); // the row's own padding
+      expect(opened).toBe(0);
+      row("owl.png").querySelector<HTMLElement>(".images-name")?.click();
+      expect(opened).toBe(1);
+      expect(dialogOpen()).toBe(true);
+      expect(body().value).toBe("# Owls\n\nHoot.");
+    });
+
+    it("deletes an image the post uses once asked whether to, leaving its reference in the text (SPEC §4)", async () => {
+      let names = ["barn.png"];
+      await open([
+        { path: "/api/posts/p1", reply: () => withBarn() },
+        listRoute(() => names),
+        renderRoute,
+        {
+          method: "DELETE",
+          path: "/api/posts/p1/images/barn.png",
+          reply: () => {
+            names = [];
+            return { deleted: true };
+          },
+        },
+      ]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      const del = () => $<HTMLButtonElement>(".images-delete");
+      del().click();
+      expect(del().textContent?.trim()).toBe("In the post. Delete anyway?");
+      expect(del().closest("li")?.classList.contains("asking")).toBe(true);
+      // Escape takes the question back without closing the dialog.
+      del().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(del().textContent?.trim()).toBe("");
+      expect(dialogOpen()).toBe(true);
+      expect(fake.calls.filter((c) => c.method === "DELETE")).toHaveLength(0);
+      del().click();
+      del().click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fake.calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
+      expect(body().value).toContain("![Barn owl](barn.png)");
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("puts the image at the end of a body never focused, where no caret was chosen, and scrolls to it", async () => {
+      const shown: Element[] = [];
+      vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(function (this: Element) {
+        shown.push(this);
+      });
+      await open([{ path: "/api/posts/p1", reply: () => draft() }, listRoute(() => ["owl.png"])]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      $<HTMLButtonElement>('.images-insert[data-name="owl.png"]').click();
+      expect(body().value).toBe("# Owls\n\nHoot.\n\n![owl.png](owl.png)\n\n");
+      // The scroller is the box around the text, so the image's own highlight row is shown.
+      expect(shown.map((el) => el.textContent)).toEqual(["![owl.png](owl.png)"]);
+    });
+
+    it("deletes an image the body doesn't use on the first press, since nothing in the post changes", async () => {
+      let names = ["owl.png"];
+      await open([
+        { path: "/api/posts/p1", reply: () => draft() },
+        listRoute(() => names),
+        renderRoute,
+        {
+          method: "DELETE",
+          path: "/api/posts/p1/images/owl.png",
+          reply: () => {
+            names = [];
+            return { deleted: true };
+          },
+        },
+      ]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      $<HTMLButtonElement>(".images-delete").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fake.calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
+      expect(document.querySelector(".images-row")).toBe(null);
+      expect($("#imagesLive").textContent).toBe("owl.png deleted");
+      expect(dialogOpen()).toBe(true);
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("closes for files chosen in it and uploads them at the caret, as the foot's picker does", async () => {
+      await open([
+        { path: "/api/posts/p1", reply: () => draft() },
+        listRoute(() => []),
+        {
+          method: "POST",
+          path: "/api/posts/p1/images",
+          reply: () => ({ image: img("owl.png") }),
+        },
+      ]);
+      body().focus();
+      body().setSelectionRange(0, 0);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      const input = $<HTMLInputElement>("#imagesInput");
+      const file = new File(["png"], "owl.png", { type: "image/png" });
+      Object.defineProperty(input, "files", { value: [file], configurable: true });
+      input.dispatchEvent(new Event("change"));
+      expect(dialogOpen()).toBe(false);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(body().value).toMatch(/^!\[owl\.png\]\(owl\.png\)\n\n# Owls/);
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("counts an image the saved post uses as used, though the text on screen has dropped it", async () => {
+      await open([
+        { path: "/api/posts/p1", reply: () => withBarn() },
+        listRoute(() => ["barn.png"]),
+      ]);
+      // An edit not yet saved: the server still holds the reference.
+      body().value = "# Owls\n\nHoot.";
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(row("barn.png").querySelector(".images-meta")?.textContent).toBe("1600×1200 · 412 KB");
+      expect(row("barn.png").querySelector(".images-delete")?.hasAttribute("data-used")).toBe(true);
+    });
+
+    it("says an image is used once another writer's version that uses it is taken in, with the dialog open", async () => {
+      const server = draftServer();
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        ...previewRoutes(server),
+        listRoute(() => ["barn.png"]),
+      ]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(row("barn.png").querySelector(".images-meta")?.textContent).toBe(
+        "Not used · 1600×1200 · 412 KB",
+      );
+      server.elsewhere("x@y.z", "claude-code", {
+        subject: "Owls",
+        markdown: "# Owls\n\n![Barn owl](barn.png)",
+      });
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(body().value).toBe("# Owls\n\n![Barn owl](barn.png)");
+      expect(dialogOpen()).toBe(true);
+      expect(row("barn.png").querySelector(".images-meta")?.textContent).toBe("1600×1200 · 412 KB");
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("moves focus to Choose files when the last image is deleted, rather than dropping it", async () => {
+      let names = ["owl.png"];
+      await open([
+        { path: "/api/posts/p1", reply: () => draft() },
+        listRoute(() => names),
+        renderRoute,
+        {
+          method: "DELETE",
+          path: "/api/posts/p1/images/owl.png",
+          reply: () => {
+            names = [];
+            return { deleted: true };
+          },
+        },
+      ]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      $<HTMLButtonElement>(".images-delete").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(document.activeElement?.id).toBe("imagesChoose");
+    });
+
+    it("takes a delete's question back on Escape even with focus outside the dialog, as Safari leaves it", async () => {
+      await open([
+        { path: "/api/posts/p1", reply: () => withBarn() },
+        listRoute(() => ["barn.png"]),
+      ]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      // A click that doesn't focus the button, with focus already off the box.
+      (document.activeElement as HTMLElement | null)?.blur();
+      $<HTMLButtonElement>(".images-delete").click();
+      expect($(".images-delete").textContent?.trim()).toBe("In the post. Delete anyway?");
+      document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(dialogOpen()).toBe(true);
+      expect($(".images-delete").textContent?.trim()).toBe("");
+      document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(dialogOpen()).toBe(false);
+    });
+
+    it("warns under the composer of a deleted image the text still uses, without opening Preview", async () => {
+      const server = draftServer(withBarn());
+      let names = ["barn.png"];
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        ...previewRoutes(server, undefined, () =>
+          names.length
+            ? []
+            : ["The image “barn.png” isn’t on this post. Upload it, or check the file name."],
+        ),
+        listRoute(() => names),
+        {
+          method: "DELETE",
+          path: "/api/posts/p1/images/barn.png",
+          reply: () => {
+            names = [];
+            return { deleted: true };
+          },
+        },
+      ]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      $<HTMLButtonElement>(".images-delete").click();
+      $<HTMLButtonElement>(".images-delete").click();
+      await vi.advanceTimersByTimeAsync(0);
+      await previewLoads();
+      expect($("#warnings").textContent).toContain("“barn.png” isn’t on this post");
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("keeps a file dropped on the backdrop, just outside the dialog, from opening in the tab", async () => {
+      await open([{ path: "/api/posts/p1", reply: () => draft() }, listRoute(() => ["owl.png"])]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      const backdrop = $(".modal-images").closest(".modal-backdrop") as HTMLElement;
+      for (const type of ["dragover", "drop"]) {
+        const e = new Event(type, { bubbles: true, cancelable: true });
+        backdrop.dispatchEvent(e);
+        expect(e.defaultPrevented).toBe(true);
+      }
+    });
+
+    it("never opens on a scheduled post, where the button nudges the way out", async () => {
+      await open([{ path: "/api/posts/p1", reply: () => draft({ status: "scheduled" }) }]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(dialogOpen()).toBe(false);
+      expect(fake.calls.filter((c) => c.url.pathname.endsWith("/images"))).toHaveLength(0);
+    });
   });
 
   it("uploads a picked image and inserts it at the caret", async () => {

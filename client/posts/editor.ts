@@ -76,6 +76,8 @@ import { carryOffset } from "./caret";
 import { DirtyTracker } from "./dirty";
 import { showDropCaret } from "./drop_caret";
 import { formatEdit } from "./format";
+import { insertImage } from "./images";
+import { openImagesDialog } from "./images_dialog";
 import { LatestRender, type Render } from "./latest_render";
 import { trackSaves } from "./pending_save";
 import {
@@ -111,6 +113,7 @@ const TOOLBAR: [IconName, string][][] = [
     ["quote", "Quote"],
     ["code", "Code"],
     ["link", "Link (⌘K)"],
+    ["image", "Images"],
   ],
   [
     ["ul", "Bulleted list"],
@@ -558,7 +561,12 @@ export async function renderEditor(
     front.classList.toggle("updating", updating);
     const stuck = previewFailed || (!locked && conflicted);
     previewStatus.textContent = !updating ? "" : stuck ? "Not up to date" : "Updating…";
-    if (tab === "preview" && current && shown) {
+    // The line under the composer shows on either tab, so it follows every render of what is
+    // saved, the one rendered ahead after a save included: fixing the text clears it once the
+    // save's render is in. While an edit is unsaved or the out-of-date banner is up, no render
+    // is of the text on screen, so it keeps the last one's words rather than flicker with each
+    // keystroke; the next save's render replaces them.
+    if (current && shown) {
       showWarnings(shown.warnings);
     }
   }
@@ -714,6 +722,10 @@ export async function renderEditor(
       nudge(); // reached by a toolbar click or a Cmd+B / I / K shortcut
       return;
     }
+    if (kind === "image") {
+      openImages();
+      return;
+    }
     showTab("edit");
     const edit = formatEdit(kind, {
       text: ta.value,
@@ -752,6 +764,8 @@ export async function renderEditor(
   // The last save errored, or the draft changed elsewhere (the out-of-date banner is up):
   // either way the leave guard prompts instead of silently flushing.
   let saveFailed = false;
+  // The open Images dialog's notifier, called when the post's text may have changed under it.
+  let imagesChanged: (() => void) | null = null;
   let conflicted = false;
   // Why the last save failed, in the publisher's words, kept on the save cue until a save
   // succeeds: a toast would be gone in seconds and leave the cue reading like ordinary
@@ -1102,6 +1116,7 @@ export async function renderEditor(
     replaceKeepingPlace(ta, fresh.markdown);
     nameTab();
     paintMarkdown();
+    imagesChanged?.();
     revisions.took(revision);
     dirty.markSaved();
     pub = publishingOf(fresh.post, fresh.subject_slug_held);
@@ -1134,6 +1149,7 @@ export async function renderEditor(
       return;
     }
     conflicted = true; // pauses autosave; makes the leave guard prompt
+    imagesChanged?.(); // the saved post is now another writer's
     saveError = null; // the banner is the story now; an older failure's reason would contradict it
     paintSaveBtn();
     revisions.noteWarned(conflict);
@@ -1531,6 +1547,10 @@ export async function renderEditor(
               `Uploaded “${image.filename}”, but its placeholder was removed, so it wasn’t added.`,
             );
           }
+          // An upload is often the fix a warning asks for ("isn't on this post"): read the
+          // render again so the line under the composer follows. With the text unsaved this
+          // waits for the save's own render.
+          renderAhead();
         },
         (e) => {
           if (signal.aborted) {
@@ -1551,6 +1571,59 @@ export async function renderEditor(
           paintUploads();
         }
       });
+  }
+  // The Images dialog (./images_dialog.ts) lists the draft's images and hands back what to do
+  // with the text. An image picked there goes where the caret was; a body never focused has
+  // no caret the publisher chose, so it goes at the end rather than the start.
+  let bodyFocused = false;
+  ta.addEventListener("focus", () => {
+    bodyFocused = true;
+  });
+  // One dialog at a time: the list is read before it opens, so a second press while that read
+  // is out would otherwise open a second.
+  let imagesOpening = false;
+  function openImages() {
+    if (imagesOpening) {
+      return;
+    }
+    imagesOpening = true;
+    void openImagesDialog(id, signal, {
+      body: () => ta.value,
+      watch: (changed) => {
+        imagesChanged = changed;
+      },
+      insert: (filename) => {
+        showTab("edit");
+        const state = textState();
+        const at = bodyFocused ? state : { ...state, start: ta.value.length, end: ta.value.length };
+        const edit = insertImage(at, filename);
+        editText(edit);
+        // Neither layer scrolls on its own (#mdScroll is the scroller), and the browser keeps a
+        // caret in view only while it's typed at, so an image put at the end of a long body
+        // would land out of sight. Its line's row in the highlight stands in for the caret.
+        const line = ta.value.slice(0, edit.select.start).split("\n").length - 1;
+        mdHlCode.children[line]?.scrollIntoView({ block: "nearest" });
+      },
+      upload: (files) => {
+        showTab("edit");
+        for (const f of files) {
+          uploadAndInsert(f);
+        }
+      },
+      // The render changes with the post's images, not only its revision: read it again, so a
+      // reference to the deleted image is warned of under the composer straight away.
+      deleted: () => {
+        renders.forget();
+        renderAhead();
+      },
+      failed: (e) => {
+        if (!foundGone(e)) {
+          toast(message(e));
+        }
+      },
+    }).finally(() => {
+      imagesOpening = false;
+    });
   }
   const composerBody = $("#composerBody");
   if (!locked) {
@@ -1712,7 +1785,11 @@ export async function renderEditor(
               missed.push({ email: addr, message: describeError(e) });
             }
           }
-          showWarnings(lastWarnings);
+          // Only a test that rendered says what the render found: one where every address
+          // failed leaves the line as it was rather than clearing a warning that still holds.
+          if (lastWarnings) {
+            showWarnings(lastWarnings);
+          }
           // A test of a scheduled post settles its re-made condition on the server; read the
           // feed now so the banner's line goes with it rather than at the next idle read.
           if (locked && sent > 0) {

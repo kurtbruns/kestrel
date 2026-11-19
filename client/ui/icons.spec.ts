@@ -12,6 +12,7 @@ const ALL = {
   copyout: true,
   editable: true,
   heading: true,
+  image: true,
   indent: true,
   info: true,
   italic: true,
@@ -37,7 +38,9 @@ const ALL = {
   "circle-minus": true,
   desktop: true,
   mail: true,
+  outward: true,
   phone: true,
+  trash: true,
 } as const satisfies Record<IconName, true>;
 const names = Object.keys(ALL) as IconName[];
 

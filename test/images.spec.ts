@@ -341,6 +341,25 @@ describe("images", () => {
     expect((await SELF.fetch(`${base}/media/posts/${id}/b.png`)).status).toBe(200);
   });
 
+  it("gives each image its stored size, on the upload and in the list (SPEC §4)", async () => {
+    const id = await newDraft("Sizes");
+    const up = await readJson(await upload(id, "a.png", AUTH));
+    const served = await SELF.fetch(`${base}/media/posts/${id}/a.png`);
+    const stored = (await served.arrayBuffer()).byteLength;
+    expect(up.image.bytes).toBe(stored);
+
+    // A row whose file storage has lost has no size, rather than failing the whole list.
+    expect((await upload(id, "b.png", AUTH)).status).toBe(201);
+    await env.MEDIA.delete(`posts/${id}/b.png`);
+    const { images } = await readJson(
+      await SELF.fetch(`${base}/api/posts/${id}/images`, { headers: AUTH }),
+    );
+    expect(images.map((i: any) => [i.filename, i.bytes])).toEqual([
+      ["a.png", stored],
+      ["b.png", null],
+    ]);
+  });
+
   it("stores an upload under a name a reference can use, keeping its case (SPEC §4)", async () => {
     const id = await newDraft("Names");
     for (const [sent, stored] of [
