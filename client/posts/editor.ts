@@ -1613,9 +1613,11 @@ export async function renderEditor(
           );
           // An open Images dialog lists the new image, and reads its reference as used.
           imagesChanged?.();
+          // The reference taking the placeholder's place shows the image arrived, so it says
+          // nothing more: a toast for each image in a batch would push out a refusal, which
+          // is the only word of why an image is missing (DESIGN §5).
           if (next) {
             editText(next);
-            toast("Image added");
           } else {
             toast(
               `Uploaded “${image.filename}”, but its placeholder was removed, so it wasn’t added.`,

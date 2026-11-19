@@ -4011,8 +4011,37 @@ describe("editor view", () => {
     input.dispatchEvent(new Event("change"));
     await vi.advanceTimersByTimeAsync(0);
     expect(body().value).toMatch(/^!\[owl\.png\]\(owl\.png\)\n\n# Owls/);
-    expect($("#toasts").textContent).toMatch(/Image added/);
+    expect($("#toasts").textContent).toBe(""); // the reference in the text says it arrived
     expect($("#saveStatus").textContent).toBe("Unsaved changes");
+  });
+
+  // DESIGN §5: only a refusal is toasted, so in a batch none is pushed out by the images that
+  // arrived.
+  it("keeps every refusal from a batch on screen, with no toast for the images that arrived", async () => {
+    await open([
+      { path: "/api/posts/p1", reply: () => draft() },
+      {
+        method: "POST",
+        path: "/api/posts/p1/images",
+        reply: (req) => {
+          const name = (req.form?.get("file") as File | null)?.name ?? "";
+          return name.startsWith("bad")
+            ? jsonResponse({ error: "bad_request", message: `${name} is not an image.` }, 400)
+            : { image: { filename: name, url: `http://m/${name}` } };
+        },
+      },
+    ]);
+    const input = $<HTMLInputElement>("#imgInput");
+    const names = ["bad1.png", "a.png", "bad2.png", "b.png", "c.png", "d.png", "e.png"];
+    const files = names.map((n) => new File(["png"], n, { type: "image/png" }));
+    Object.defineProperty(input, "files", { value: files, configurable: true });
+    input.dispatchEvent(new Event("change"));
+    await vi.advanceTimersByTimeAsync(0);
+    const toasts = [...document.querySelectorAll("#toasts .toast:not(.leaving)")].map(
+      (t) => t.textContent,
+    );
+    expect(toasts).toEqual(["bad1.png is not an image.", "bad2.png is not an image."]);
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("adds an uploaded image as two edits the browser can undo: its placeholder, then the image", async () => {
