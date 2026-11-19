@@ -10,10 +10,10 @@
 // selects the text placeholder, and the editor lets the next Tab move on to the address
 // (`linkAddress`).
 //
-// Bold, Italic, and Code act on the words, not on exactly what was selected: spaces at the ends
-// of a selection stay outside the marks (a double-click often takes the space after a word, and
-// `** word **` marks nothing), and a caret inside a word stands for that word, a contraction's
-// apostrophe included.
+// Bold, Italic, Code, and Link act on the words, not on exactly what was selected: spaces at
+// the ends of a selection stay outside the marks (a double-click often takes the space after a
+// word, `** word **` marks nothing, and a link shouldn't underline a space), and a caret inside
+// a word stands for that word, a contraction's apostrophe included.
 
 /** The post body as the toolbar reads it: its text and the selection in it. */
 export interface TextSelection {
@@ -101,7 +101,8 @@ function wrap(at: TextSelection, before: string, after: string, placeholder: str
 
 const LINK_ADDRESS = "https://";
 
-function link(at: TextSelection): FormatEdit {
+function link(selected: TextSelection): FormatEdit {
+  const at = words(selected, /\s/);
   const edit = wrap(at, "[", `](${LINK_ADDRESS})`, "link text");
   if (at.start === at.end) {
     return { ...edit, tabToAddress: true };

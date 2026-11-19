@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { modifiedKeyEdits, onApple, shortcutKey, shortcutLabel } from "./shortcut";
+import { modifiedKeyEdits, onApple, shortcutKey, shortcutLabel, shortcutLetter } from "./shortcut";
 
 const press = (key: string, mods: KeyboardEventInit = {}) =>
   new KeyboardEvent("keydown", { key, ...mods });
@@ -29,6 +29,22 @@ describe("shortcut keys", () => {
   });
 
   it.each([
+    ["a Latin letter, as typed", press("B", { code: "KeyB" }), "b"],
+    ["a Latin layout's own letter over its place (B on Dvorak)", press("b", { code: "KeyN" }), "b"],
+    ["a Cyrillic layout's letter, by its place", press("и", { code: "KeyB" }), "b"],
+    ["a Greek layout's letter, by its place", press("κ", { code: "KeyK" }), "k"],
+    ["a key that isn't a letter", press("1", { code: "Digit1" }), "1"],
+  ])("reads the shortcut's letter from %s", (_what, e, letter) => {
+    expect(shortcutLetter(e)).toBe(letter);
+  });
+
+  it.each([
+    [
+      "cut with Ctrl on a Cyrillic layout",
+      press("ч", { code: "KeyX", ctrlKey: true }),
+      false,
+      true,
+    ],
     ["cut with ⌘ on a Mac", press("x", { metaKey: true }), true, true],
     ["undo with Ctrl elsewhere", press("z", { ctrlKey: true }), false, true],
     ["a Mac's Ctrl+K, deleting to the line's end", press("k", { ctrlKey: true }), true, true],

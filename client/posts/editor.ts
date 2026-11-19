@@ -68,7 +68,7 @@ import {
 import { highlightMarkdown } from "../ui/highlight";
 import { type Html, html, setHtml } from "../ui/html";
 import { type IconName, icon } from "../ui/icons";
-import { modifiedKeyEdits, shortcutKey, shortcutLabel } from "../ui/shortcut";
+import { modifiedKeyEdits, shortcutKey, shortcutLabel, shortcutLetter } from "../ui/shortcut";
 import { busy, fieldError, modal, renderError, toast } from "../ui/widgets";
 import { bannerActedBy, whoActed } from "../who_acted";
 import { activeSend, postAction } from "./actions";
@@ -817,7 +817,10 @@ export async function renderEditor(
     "PageDown",
   ]);
   ta.addEventListener("keydown", (e) => {
-    if (linkTextStart === null) {
+    // A key that picks an IME's candidate (Safari reports one with isComposing false and
+    // keyCode 229) belongs to the composition: it neither moves the caret off the link's text
+    // nor is a Tab to take.
+    if (linkTextStart === null || e.isComposing || e.keyCode === 229) {
       return;
     }
     if (MOVES_CARET.has(e.key)) {
@@ -847,7 +850,7 @@ export async function renderEditor(
     if (!shortcutKey(e)) {
       return; // on a Mac, Ctrl+B and Ctrl+K stay the text field's own
     }
-    const k = e.key.toLowerCase();
+    const k = shortcutLetter(e);
     if (k === "b") {
       e.preventDefault();
       applyFormat("bold");

@@ -13,6 +13,22 @@ export function shortcutKey(e: KeyboardEvent, apple: boolean = onApple()): boole
   return apple ? e.metaKey : e.ctrlKey;
 }
 
+/**
+ * The letter a shortcut was pressed on, lower case: the key's own when it is a Latin letter,
+ * else the letter at that place on a US keyboard. Off a Mac, Ctrl+B on a Cyrillic or Greek
+ * layout reports the layout's letter ("и"), which no shortcut names, so the key's place
+ * stands in for it, as desktop apps do. A Latin layout's own letter wins, so Ctrl+B is B on
+ * AZERTY and Dvorak wherever B sits.
+ */
+export function shortcutLetter(e: KeyboardEvent): string {
+  const key = e.key.toLowerCase();
+  if (/^[a-z]$/.test(key)) {
+    return key;
+  }
+  const place = /^Key([A-Z])$/.exec(e.code);
+  return place ? (place[1] ?? "").toLowerCase() : key;
+}
+
 /** How a shortcut is written on this device: "⌘K" on Apple's, "Ctrl+K" elsewhere. */
 export function shortcutLabel(key: string, apple: boolean = onApple()): string {
   return apple ? `⌘${key}` : `Ctrl+${key}`;
@@ -25,7 +41,7 @@ const APPLE_CTRL_EDITS = ["h", "d", "k", "o", "t", "y"];
 /** Whether a key held with a modifier would change a text field's text: cut, undo, or redo
  *  with the shortcut key, or one of a Mac's own Ctrl edits. Paste fires its own event. */
 export function modifiedKeyEdits(e: KeyboardEvent, apple: boolean = onApple()): boolean {
-  const k = e.key.toLowerCase();
+  const k = shortcutLetter(e);
   if (shortcutKey(e, apple)) {
     return ["x", "z", "y"].includes(k);
   }

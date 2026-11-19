@@ -1526,6 +1526,44 @@ describe("editor view", () => {
     expect(ta.value).toBe("# **Owls**\n\nHoot.");
   });
 
+  it("takes Ctrl shortcuts by the key's place on a non-Latin layout off a Mac", async () => {
+    onPlatform("Win32");
+    await open([{ path: "/api/posts/p1", reply: () => draft() }]);
+    const ta = body();
+    ta.setSelectionRange(2, 6); // "Owls"
+    const e = new KeyboardEvent("keydown", {
+      key: "и",
+      code: "KeyB",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    ta.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(true);
+    expect(ta.value).toBe("# **Owls**\n\nHoot.");
+  });
+
+  it("leaves a new link's Tab jump to an IME's own keys while it composes", async () => {
+    await open([{ path: "/api/posts/p1", reply: () => draft() }]);
+    const ta = body();
+    const key = (init: KeyboardEventInit) => {
+      const e = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+      ta.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+    $(".tb[data-fmt='link']").click();
+    const placeholder = [ta.selectionStart, ta.selectionEnd];
+    // Picking a candidate with the arrows, and a Tab the IME takes (Safari's keyCode 229 too).
+    expect(key({ key: "ArrowDown", isComposing: true })).toBe(false);
+    expect(key({ key: "Tab", isComposing: true })).toBe(false);
+    expect(key({ key: "Tab", keyCode: 229 })).toBe(false);
+    expect([ta.selectionStart, ta.selectionEnd]).toEqual(placeholder);
+    // Once the composition ends, the jump is still there to take.
+    expect(key({ key: "Tab" })).toBe(true);
+    expect(ta.value.slice(ta.selectionStart, ta.selectionEnd)).toBe("https://");
+  });
+
   it("moves from a new link's text to its address on the next Tab, once", async () => {
     await open([{ path: "/api/posts/p1", reply: () => draft() }]);
     const ta = body();

@@ -163,6 +163,15 @@ describe("toolbar formatting", () => {
     expect(formatEdit("link", { text: "owls", start: 0, end: 4 })?.tabToAddress).toBeUndefined();
   });
 
+  it.each([
+    ["see «owls »here", "see [owls](«https://») here"], // a double-click's trailing space
+    ["see «  owls» here", "see   [owls](«https://») here"],
+    ["see o«»wls here", "see [owls](«https://») here"], // a caret in a word stands for it
+    ["I do«»n't know", "I [don't](«https://») know"],
+  ])("links the words, as the other marks do: %j", (before, after) => {
+    expect(click("link", before)).toBe(after);
+  });
+
   it("links at a bare caret with the text placeholder selected, and lets Tab move on", () => {
     expect(click("link", "see «»")).toBe("see [«link text»](https://)");
     expect(formatEdit("link", { text: "", start: 0, end: 0 })?.tabToAddress).toBe(true);
