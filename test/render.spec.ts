@@ -82,11 +82,6 @@ function image(over: Partial<ImageRow> = {}): ImageRow {
   };
 }
 
-/** The warning for an image uploaded to the post that it doesn't use. */
-function unused(name: string): string {
-  return `The uploaded image “${name}” isn’t used in this post.`;
-}
-
 describe("render (the single render path)", async () => {
   it("resolves images to absolute URLs, caps size, keeps the sentinel, sets subject", async () => {
     const result = await render(
@@ -165,7 +160,6 @@ describe("render (the single render path)", async () => {
       expect(result.html).toContain(`src="${href}"`);
       expect(result.warnings).toEqual([
         `The image “${href}” isn’t on this post. Upload it to this post and reference it by its file name.`,
-        unused("cat.png"),
       ]);
     }
   });
@@ -227,100 +221,12 @@ describe("render (the single render path)", async () => {
     });
   });
 
-  describe("an image uploaded to the post that it doesn't use (SPEC §4)", () => {
-    it("warns on each one the post doesn't reference", async () => {
-      const result = await render(
-        {
-          post: post(),
-          revision: revision("![A cat](cat.png)"),
-          images: [
-            image({ id: "i0", filename: "a.png", storage_key: "posts/p1/a.png" }),
-            image(),
-            image({ id: "i2", filename: "z.png", storage_key: "posts/p1/z.png" }),
-          ],
-        },
-        config,
-      );
-      expect(result.warnings).toEqual([unused("a.png"), unused("z.png")]);
-    });
-
-    it("counts a reference by a path or the image's full address as using it", async () => {
-      for (const markdown of [
-        "![A cat](images/cat.png)",
-        "![A cat](https://media.example/posts/p1/cat.png)",
-      ]) {
-        const result = await render(
-          { post: post(), revision: revision(markdown), images: [image()] },
-          config,
-        );
-        expect(result.warnings, markdown).not.toContain(unused("cat.png"));
-      }
-    });
-
-    it("says nothing of an image the email reaches by its full address some other way", async () => {
-      const address = "https://media.example/posts/p1/cat.png";
-      for (const markdown of [
-        `<img src="${address}" alt="A cat">`,
-        `[See the cat](${address})`,
-        `<div style="background-image:url(${address})">A cat</div>`,
-      ]) {
-        const result = await render(
-          { post: post(), revision: revision(markdown), images: [image()] },
-          config,
-        );
-        expect(result.html, markdown).toContain(address);
-        expect(result.warnings, markdown).toEqual([]);
-      }
-    });
-
-    it("says nothing of an image whose address reaches the email escaped or encoded", async () => {
-      const spaced = image({ filename: "my cat.png", storage_key: "posts/p1/my cat.png" });
-      const amp = image({ filename: "cat&dog.png", storage_key: "posts/p1/cat&dog.png" });
-      const accent = image({ filename: "café&co.png", storage_key: "posts/p1/café&co.png" });
-      for (const [markdown, img] of [
-        ['<img src="https://media.example/posts/p1/my%20cat.png" alt="A cat">', spaced],
-        ["[See the pair](https://media.example/posts/p1/cat&dog.png)", amp],
-        ["[See the caf\u00e9](https://media.example/posts/p1/caf\u00e9&co.png)", accent],
-      ] as const) {
-        const result = await render(
-          { post: post(), revision: revision(markdown), images: [img] },
-          config,
-        );
-        expect(result.warnings, markdown).toEqual([]);
-      }
-    });
-
-    it("warns on a raw reference by bare name, which the render leaves unresolved", async () => {
-      const result = await render(
-        { post: post(), revision: revision('<img src="cat.png" alt="A cat">'), images: [image()] },
-        config,
-      );
-      expect(result.html).not.toContain("https://media.example/posts/p1/cat.png");
-      expect(result.warnings).toEqual([unused("cat.png")]);
-    });
-
-    it("counts a name only in a code span as not using it, and an old name in angle brackets as using it", async () => {
-      const inCode = await render(
-        { post: post(), revision: revision("`![A cat](cat.png)`"), images: [image()] },
-        config,
-      );
-      expect(inCode.warnings).toEqual([unused("cat.png")]);
-      const spaced = image({ filename: "my cat.png", storage_key: "posts/p1/my cat.png" });
-      const bracketed = await render(
-        { post: post(), revision: revision("![A cat](<my cat.png>)"), images: [spaced] },
-        config,
-      );
-      expect(bracketed.warnings).toEqual([]);
-    });
-
-    it("doesn't change the email", async () => {
-      const input = { post: post(), revision: revision("Just words"), images: [] };
-      const without = await render(input, config);
-      const withUnused = await render({ ...input, images: [image()] }, config);
-      expect(withUnused.warnings).toEqual([unused("cat.png")]);
-      expect(withUnused.html).toBe(without.html);
-      expect(withUnused.text).toBe(without.text);
-    });
+  it("says nothing of an image uploaded to the post that it doesn't use (SPEC §4)", async () => {
+    const result = await render(
+      { post: post(), revision: revision("Just words"), images: [image()] },
+      config,
+    );
+    expect(result.warnings).toEqual([]);
   });
 
   it("passes an image on another host through untouched, with no warning of its own", async () => {
@@ -331,7 +237,7 @@ describe("render (the single render path)", async () => {
     );
     expect(result.html).toContain(`src="${href}"`);
     expect(result.html).toContain(`src="${href}" alt="A cat" style=`); // no size: not ours
-    expect(result.warnings).toEqual([unused("cat.png")]); // the upload it only looks like
+    expect(result.warnings).toEqual([]);
   });
 
   it("prints the mailing address in the built-in template's footer only when one is set (SPEC §9)", async () => {
