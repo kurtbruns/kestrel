@@ -1085,6 +1085,48 @@ describe("editor view", () => {
   // elsewhere replaces it, under the same revision.
   // DESIGN §3: a template or identity change made in another tab changes a draft's email
   // under the same revision, so Preview reads it again when the publisher comes back.
+  // DESIGN §3: deleting an image or saving the template in a window beside this one changes
+  // the email without a new revision, and no tab is hidden or shown, so opening Preview asks
+  // the server again rather than trusting the render held.
+  it("shows the server's new render on opening Preview when it changed with no new revision, warnings included", async () => {
+    const server = draftServer();
+    let page = "<p>with the image</p>";
+    let warnings: string[] = [];
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      ...previewRoutes(
+        server,
+        () => page,
+        () => warnings,
+      ),
+    ]);
+    const previewTab = $<HTMLButtonElement>(".ctab[data-tab='preview']");
+    previewTab.click();
+    await previewLoads();
+    expect(shownText()).toBe("with the image");
+    $<HTMLButtonElement>(".ctab[data-tab='edit']").click();
+
+    // In the other window: the image the draft uses is deleted.
+    page = "<p>without it</p>";
+    warnings = ["The image “owl.png” isn’t on this post."];
+    previewTab.click();
+    await previewLoads();
+    expect(shownText()).toBe("without it");
+    expect($("#warnings").textContent).toMatch(/The image “owl\.png” isn’t on this post\./);
+    expect($("#previewStatus").textContent).toBe("");
+
+    // Approaching the tab checks too, once, and the click that follows doesn't ask again.
+    $<HTMLButtonElement>(".ctab[data-tab='edit']").click();
+    page = "<p>the template saved</p>";
+    const reads = renderReads().length;
+    previewTab.dispatchEvent(new Event("pointerenter"));
+    previewTab.click();
+    await previewLoads();
+    expect(renderReads()).toHaveLength(reads + 1);
+    expect(shownText()).toBe("the template saved");
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("shows a draft's new look on Preview when the publisher comes back to the tab, and nothing new when the look is the same", async () => {
     const server = draftServer();
     let look = "old look";
@@ -1742,7 +1784,7 @@ describe("editor view", () => {
   });
 
   describe("the preview, rendered ahead (DESIGN §3)", () => {
-    it("shows the render read after a save the moment Preview opens, without saving or rendering again", async () => {
+    it("shows the render read after a save the moment Preview opens, without saving or waiting on a render", async () => {
       const server = draftServer();
       await open([
         { path: "/api/posts/p1", reply: server.get },
@@ -1762,7 +1804,11 @@ describe("editor view", () => {
       expect($("#previewStatus").textContent).toBe("");
       await previewLoads();
       expect(puts()).toHaveLength(1);
-      expect(renderReads()).toHaveLength(1);
+      // One check behind it, for a change made elsewhere without a revision; the same render
+      // changes nothing on screen.
+      expect(renderReads()).toHaveLength(2);
+      expect(shownText()).toBe("Hoot hoot.");
+      expect($("#previewStatus").textContent).toBe("");
       expect(fake.unhandled).toEqual([]);
     });
 
@@ -1849,7 +1895,8 @@ describe("editor view", () => {
       $(".ctab[data-tab='preview']").click();
       expect(shownText()).toBe("Hoot.");
       await previewLoads();
-      expect(renderReads()).toHaveLength(1);
+      expect(renderReads()).toHaveLength(2); // the click's check behind the render shown
+      expect(shownText()).toBe("Hoot.");
       expect(fake.unhandled).toEqual([]);
     });
 
@@ -3193,6 +3240,85 @@ describe("editor view", () => {
 
   // SPEC §5: with nothing unsaved there is no save to be refused, so the test reads the post
   // first, and another writer's newer version found there is taken in instead of tested.
+  // SPEC §4: the poll's read and the act's read both out, the poll's answering first and
+  // taking in another writer's version: the act's read finds the base moved under it, and
+  // stops rather than act on a version that came on screen that same moment.
+  describe("an act whose read answers after the poll took another writer's version in", () => {
+    function racingServer() {
+      const server = draftServer();
+      let hold = false;
+      const held: (() => void)[] = [];
+      const postRoute: FakeRoute = {
+        path: "/api/posts/p1",
+        reply: () => {
+          const now = server.get();
+          return hold ? new Promise((r) => held.push(() => r(now))) : now;
+        },
+      };
+      return {
+        server,
+        postRoute,
+        holdReads: (on: boolean) => {
+          hold = on;
+        },
+        /** Answer the held reads in this order. */
+        release: (...order: number[]) => {
+          for (const n of order) {
+            held[n]!();
+          }
+        },
+      };
+    }
+
+    it("sends no test", async () => {
+      const race = racingServer();
+      await open([
+        race.postRoute,
+        ...previewRoutes(race.server),
+        { path: "/api/settings", reply: () => ({ settings: { test_recipients: ["me@b.c"] } }) },
+        { method: "POST", path: "/api/posts/p1/test", reply: () => ({ sent: true, warnings: [] }) },
+      ]);
+      $("#testBtn").click();
+      await vi.advanceTimersByTimeAsync(0);
+      race.server.elsewhere("service", "mcp", { markdown: "Claude’s hoot." });
+      race.holdReads(true);
+      await vi.advanceTimersByTimeAsync(10_000); // the poll's read is out
+      $("#tGo").click(); // and the test's
+      await vi.advanceTimersByTimeAsync(0);
+      race.release(0, 1); // the poll's answers first and takes their version in
+      await vi.advanceTimersByTimeAsync(0);
+      expect(body().value).toBe("Claude’s hoot.");
+      expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/test")).toBe(false);
+      expect(document.querySelector(".modal")).toBeNull();
+    });
+
+    it("schedules nothing", async () => {
+      const race = racingServer();
+      await open([
+        race.postRoute,
+        ...previewRoutes(race.server),
+        {
+          path: "/api/subscribers",
+          reply: () => ({ counts: { confirmed: 1 }, page: { total: 1 } }),
+        },
+        { path: "/api/provider", reply: () => providerStatus({ state: "production" }) },
+        { method: "POST", path: "/api/posts/p1/schedule", reply: () => ({ send: { id: "s1" } }) },
+      ]);
+      $("#scheduleBtn").click();
+      $<HTMLInputElement>("#schWhen").value = toLocalInput(Date.now() + 86_400_000, HOME_ZONE);
+      race.server.elsewhere("service", "mcp", { markdown: "Claude’s hoot." });
+      race.holdReads(true);
+      await vi.advanceTimersByTimeAsync(10_000);
+      $("#schGo").click();
+      await vi.advanceTimersByTimeAsync(0);
+      race.release(0, 1);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(body().value).toBe("Claude’s hoot.");
+      expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/schedule")).toBe(false);
+      expect(document.querySelector(".modal")).toBeNull();
+    });
+  });
+
   it("sends no test of another writer's version saved since the last poll, with nothing unsaved here", async () => {
     const server = draftServer();
     await open([
