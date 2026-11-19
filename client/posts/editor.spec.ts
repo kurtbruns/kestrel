@@ -308,6 +308,9 @@ describe("editor view", () => {
   const puts = () =>
     fake.calls.filter((c) => c.method === "PUT" && c.url.pathname === "/api/posts/p1");
   const body = () => $<HTMLTextAreaElement>("#f-markdown");
+  /** The lines of an open action dialog's notice that the post changed (DESIGN §3). */
+  const noticeLines = () =>
+    [...document.querySelectorAll(".modal .dialog-notice p")].map((p) => p.textContent);
   /** Type `text` just before the freshness poll's next read (at a multiple of ten seconds
    *  since mount), so the read finds it unsaved: typed any earlier, its autosave lands first. */
   async function editBeforeTheRead(text: string) {
@@ -3242,7 +3245,8 @@ describe("editor view", () => {
   // first, and another writer's newer version found there is taken in instead of tested.
   // SPEC §4: the poll's read and the act's read both out, the poll's answering first and
   // taking in another writer's version: the act's read finds the base moved under it, and
-  // stops rather than act on a version that came on screen that same moment.
+  // stops rather than act on a version that came on screen that same moment, saying so in
+  // the dialog.
   describe("an act whose read answers after the poll took another writer's version in", () => {
     function racingServer() {
       const server = draftServer();
@@ -3289,7 +3293,7 @@ describe("editor view", () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(body().value).toBe("Claude’s hoot.");
       expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/test")).toBe(false);
-      expect(document.querySelector(".modal")).toBeNull();
+      expect(noticeLines()[1]).toBe("The test will use the latest version.");
     });
 
     it("schedules nothing", async () => {
@@ -3315,11 +3319,11 @@ describe("editor view", () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(body().value).toBe("Claude’s hoot.");
       expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/schedule")).toBe(false);
-      expect(document.querySelector(".modal")).toBeNull();
+      expect(noticeLines()[1]).toBe("Scheduling will use the latest version.");
     });
   });
 
-  it("sends no test of another writer's version saved since the last poll, with nothing unsaved here", async () => {
+  it("sends no test of another writer's version saved since the last poll, says so in the dialog, and tests it on the next press (SPEC §5)", async () => {
     const server = draftServer();
     await open([
       { path: "/api/posts/p1", reply: server.get },
@@ -3334,15 +3338,23 @@ describe("editor view", () => {
     $("#tGo").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/test")).toBe(false);
-    expect(document.querySelector(".modal")).toBeNull();
-    // Their version is on screen now, saying whose it is, so the next test is of what's seen.
+    // Their version is on screen now, and the dialog says so, with the recipients as they were.
     expect(body().value).toBe("Claude’s hoot.");
     expect($("#saveStatus").textContent).toMatch(/^Updated with changes by /);
+    expect(noticeLines()).toEqual([
+      expect.stringMatching(/^This post was changed by a service token at \S.*\.$/),
+      "The test will use the latest version.",
+    ]);
+    expect($<HTMLTextAreaElement>("#testTo").value).toBe("me@b.c");
+    $("#tGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.calls.filter((c) => c.url.pathname === "/api/posts/p1/test")).toHaveLength(1);
+    expect(document.querySelector(".modal")).toBeNull();
     expect(fake.unhandled).toEqual([]);
   });
 
   // SPEC §6: a schedule never freezes a version the publisher hasn't seen, saved or not.
-  it("schedules nothing when another writer saved since the last poll, with nothing unsaved here", async () => {
+  it("schedules nothing when another writer saved since the last poll, says so, and schedules at the picked time on the next press (SPEC §4)", async () => {
     const server = draftServer();
     await open([
       { path: "/api/posts/p1", reply: server.get },
@@ -3353,14 +3365,275 @@ describe("editor view", () => {
       { method: "POST", path: "/api/posts/p1/schedule", reply: () => ({ send: { id: "s1" } }) },
     ]);
     $("#scheduleBtn").click();
-    $<HTMLInputElement>("#schWhen").value = toLocalInput(Date.now() + 86_400_000, HOME_ZONE);
-    server.elsewhere("service", "mcp", { markdown: "Claude’s hoot." });
+    const picked = toLocalInput(Date.now() + 86_400_000, HOME_ZONE);
+    $<HTMLInputElement>("#schWhen").value = picked;
+    server.elsewhere("you@example.com", "claude-code", { markdown: "Claude’s hoot." });
     $("#schGo").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/schedule")).toBe(false);
-    expect(document.querySelector(".modal")).toBeNull();
     expect(body().value).toBe("Claude’s hoot.");
+    expect(noticeLines()).toEqual([
+      expect.stringMatching(/^This post was changed by Claude at \S.*\.$/),
+      "Scheduling will use the latest version.",
+    ]);
+    expect($<HTMLInputElement>("#schWhen").value).toBe(picked);
+    $("#schGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    const scheduled = fake.calls.filter((c) => c.url.pathname === "/api/posts/p1/schedule");
+    expect(scheduled.map((c) => c.json())).toEqual([{ fire_at: picked }]);
     expect(fake.unhandled).toEqual([]);
+  });
+
+  // SPEC §4–§6, DESIGN §3: a change made elsewhere while an action dialog is open is said in
+  // it, the dialog keeps what the publisher filled in, and confirming acts on the latest version.
+  describe("a change made elsewhere while an action dialog is open", () => {
+    const routes = (server: ReturnType<typeof draftServer>): FakeRoute[] => [
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+      ...previewRoutes(server),
+      { path: "/api/settings", reply: () => ({ settings: { test_recipients: [] } }) },
+      { path: "/api/subscribers", reply: () => ({ counts: { confirmed: 1 }, page: { total: 1 } }) },
+      { path: "/api/provider", reply: () => providerStatus({ state: "production" }) },
+      { method: "POST", path: "/api/posts/p1/test", reply: () => ({ sent: true, warnings: [] }) },
+      {
+        method: "POST",
+        path: "/api/posts/p1/schedule",
+        reply: () => ({ send: { id: "s1", fire_at: Date.now() + 86_400_000 } }),
+      },
+      {
+        method: "POST",
+        path: "/api/posts/p1/send",
+        reply: () => ({ send: { id: "s1", fire_at: Date.now() + 360_000 } }),
+      },
+    ];
+    const acts = (path: string) => fake.calls.filter((c) => c.url.pathname === path);
+
+    it("says in Send test that the post changed, keeps the recipients and focus, and tests the latest version (SPEC §4)", async () => {
+      const server = draftServer();
+      await open(routes(server));
+      $("#testBtn").click();
+      await vi.advanceTimersByTimeAsync(0);
+      const to = $<HTMLTextAreaElement>("#testTo");
+      typeInto(to, "me@b.c");
+      expect(noticeLines()).toEqual([]);
+      server.elsewhere("you@example.com", "claude", { markdown: "Claude’s hoot." });
+      await vi.advanceTimersByTimeAsync(10_000); // the freshness poll takes it in
+      expect(body().value).toBe("Claude’s hoot.");
+      expect(noticeLines()).toEqual([
+        expect.stringMatching(/^This post was changed by Claude at \S.*\.$/),
+        "The test will use the latest version.",
+      ]);
+      expect($(".modal .dialog-notice-slot").getAttribute("role")).toBe("status");
+      expect(to.value).toBe("me@b.c");
+      expect(document.activeElement).toBe(to);
+      $("#tGo").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(acts("/api/posts/p1/test").map((c) => c.json())).toEqual([{ to: "me@b.c" }]);
+      expect(document.querySelector(".modal")).toBeNull();
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("says in Schedule that the post changed, keeps the picked time, and schedules on the first press (SPEC §4)", async () => {
+      const server = draftServer();
+      await open(routes(server));
+      $("#scheduleBtn").click();
+      const picked = toLocalInput(Date.now() + 2 * 86_400_000, HOME_ZONE);
+      $<HTMLInputElement>("#schWhen").value = picked;
+      server.elsewhere("you@example.com", "claude-code", { markdown: "Claude’s hoot." });
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(noticeLines()).toEqual([
+        expect.stringMatching(/^This post was changed by Claude at \S.*\.$/),
+        "Scheduling will use the latest version.",
+      ]);
+      // The notice sits under the heading, before the dialog's own hint.
+      expect($("#schHead").nextElementSibling?.className).toBe("dialog-notice-slot");
+      expect($<HTMLInputElement>("#schWhen").value).toBe(picked);
+      $("#schGo").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(acts("/api/posts/p1/schedule").map((c) => c.json())).toEqual([{ fire_at: picked }]);
+      expect(puts()).toHaveLength(0); // nothing of this editor's was owed a save
+    });
+
+    it("says in Send now that the post changed, keeps the settings changed there, and sends on the first press (SPEC §4)", async () => {
+      const server = draftServer();
+      await open(routes(server));
+      $("#scheduleBtn").click();
+      $("#toSendNow").click();
+      await vi.advanceTimersByTimeAsync(0);
+      const include = $<HTMLInputElement>("#schInclude");
+      include.checked = false;
+      include.dispatchEvent(new Event("change"));
+      server.elsewhere("pat@example.com", "editor", { markdown: "Pat’s hoot." });
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(noticeLines()).toEqual([
+        expect.stringMatching(/^This post was changed by pat@example\.com at \S.*\.$/),
+        "Sending now will use the latest version.",
+      ]);
+      expect($<HTMLInputElement>("#schInclude").checked).toBe(false);
+      $("#snGo").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(acts("/api/posts/p1/send").map((c) => c.json())).toEqual([{ email_only: true }]);
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("moves a following address with a subject taken in, saying only that the post changed (SPEC §4)", async () => {
+      const server = draftServer();
+      await open(routes(server));
+      $("#scheduleBtn").click();
+      expect($<HTMLInputElement>("#schSlug").value).toBe("owls");
+      server.elsewhere("you@example.com", "claude-code", { subject: "Barn owls" });
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect($<HTMLInputElement>("#schSlug").value).toBe("barn-owls");
+      expect(noticeLines()).toEqual([
+        expect.stringMatching(/^This post was changed by Claude at \S.*\.$/),
+        "Scheduling will use the latest version.",
+      ]);
+    });
+
+    it("keeps focus on Include in archive when a change elsewhere flips it (SPEC §4)", async () => {
+      const server = draftServer();
+      await open(
+        routes(server).concat({
+          method: "PUT",
+          path: "/api/posts/p1/settings",
+          reply: (req: FakeRequest) => server.listing(req),
+        }),
+      );
+      $("#scheduleBtn").click();
+      $<HTMLInputElement>("#schInclude").focus();
+      server.listing({ json: () => ({ email_only: true }) } as FakeRequest);
+      await vi.advanceTimersByTimeAsync(10_000);
+      const include = $<HTMLInputElement>("#schInclude");
+      expect(include.checked).toBe(false);
+      expect(document.activeElement).toBe(include);
+    });
+
+    it("says a change of unknown source was made elsewhere (SPEC §4)", async () => {
+      const server = draftServer();
+      await open(routes(server));
+      $("#scheduleBtn").click();
+      server.elsewhere("", null, { markdown: "Someone’s hoot." });
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(noticeLines()[0]).toMatch(/^This post was changed elsewhere at \S.*\.$/);
+    });
+
+    it("acts on the first press when it opened over unsaved edits and nothing changed elsewhere (SPEC §4)", async () => {
+      const server = draftServer();
+      await open(routes(server));
+      typeInto(body(), "My own hoot.");
+      $("#scheduleBtn").click();
+      $("#schGo").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(puts()[0]?.json()).toMatchObject({ markdown: "My own hoot." });
+      expect(acts("/api/posts/p1/schedule")).toHaveLength(1);
+      expect(noticeLines()).toEqual([]);
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    describe("the post's settings", () => {
+      const settingsRoutes = (server: ReturnType<typeof draftServer>) => [
+        ...routes(server),
+        {
+          method: "PUT",
+          path: "/api/posts/p1/settings",
+          reply: (req: FakeRequest) => server.listing(req),
+        },
+      ];
+      const settingsNotice = [
+        "This post’s settings changed while this was open.",
+        "The options below are up to date.",
+      ];
+
+      it("follow a change made elsewhere into the options left alone, and say so (SPEC §4)", async () => {
+        const server = draftServer();
+        await open(settingsRoutes(server));
+        $("#scheduleBtn").click();
+        // Claude sets the address by hand while the dialog is open.
+        server.listing({ json: () => ({ slug: "night-owls" }) } as FakeRequest);
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(noticeLines()).toEqual(settingsNotice);
+        expect($<HTMLInputElement>("#schSlug").value).toBe("night-owls");
+        expect($("#schNote").textContent).toBe(""); // set by hand now, not following the subject
+        $("#schGo").click();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(acts("/api/posts/p1/schedule")[0]?.json()).toEqual({
+          fire_at: expect.any(String),
+        });
+      });
+
+      it("keep an option the publisher changed, and send only that (SPEC §4)", async () => {
+        const server = draftServer();
+        await open(settingsRoutes(server));
+        $("#scheduleBtn").click();
+        typeInto($<HTMLInputElement>("#schSlug"), "dusk-owls");
+        // Claude leaves the post out of the archive while the dialog is open.
+        server.listing({ json: () => ({ email_only: true }) } as FakeRequest);
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(noticeLines()).toEqual(settingsNotice);
+        // Include in archive was left alone here, so it follows; the address was typed, so it stays.
+        const include = $<HTMLInputElement>("#schInclude");
+        expect(include.checked).toBe(false);
+        include.checked = true;
+        include.dispatchEvent(new Event("change"));
+        expect($<HTMLInputElement>("#schSlug").value).toBe("dusk-owls");
+        $("#schGo").click();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(acts("/api/posts/p1/schedule")[0]?.json()).toEqual({
+          fire_at: expect.any(String),
+          email_only: false,
+          slug: "dusk-owls",
+        });
+      });
+
+      it("stop the press whose own check finds a settings change, say it, and act on the next (SPEC §4)", async () => {
+        const server = draftServer();
+        await open(settingsRoutes(server));
+        $("#scheduleBtn").click();
+        expect($<HTMLInputElement>("#schInclude").checked).toBe(true);
+        // Claude leaves the post out of the archive after the last poll, before the press.
+        server.listing({ json: () => ({ email_only: true }) } as FakeRequest);
+        $("#schGo").click();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(acts("/api/posts/p1/schedule")).toHaveLength(0);
+        expect(noticeLines()).toEqual(settingsNotice);
+        expect($<HTMLInputElement>("#schInclude").checked).toBe(false);
+        $("#schGo").click();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(acts("/api/posts/p1/schedule").map((c) => c.json())).toEqual([
+          { fire_at: expect.any(String) },
+        ]);
+      });
+
+      it("keep the caret where it was in the address being typed when they follow a change (SPEC §4)", async () => {
+        const server = draftServer();
+        await open(settingsRoutes(server));
+        $("#scheduleBtn").click();
+        const slug = $<HTMLInputElement>("#schSlug");
+        typeInto(slug, "dusk");
+        slug.focus(); // which selects the whole slug
+        slug.setSelectionRange(2, 2);
+        server.listing({ json: () => ({ slug: "night-owls" }) } as FakeRequest);
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(noticeLines()).toEqual(settingsNotice);
+        const again = $<HTMLInputElement>("#schSlug");
+        expect(again.value).toBe("dusk"); // theirs, typed here
+        expect(document.activeElement).toBe(again);
+        expect([again.selectionStart, again.selectionEnd]).toEqual([2, 2]);
+      });
+
+      it("send nothing of a change made elsewhere back over it (SPEC §4)", async () => {
+        const server = draftServer();
+        await open(settingsRoutes(server));
+        $("#scheduleBtn").click();
+        server.listing({ json: () => ({ email_only: true }) } as FakeRequest);
+        await vi.advanceTimersByTimeAsync(10_000);
+        $("#schGo").click();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(acts("/api/posts/p1/schedule")[0]?.json()).toEqual({
+          fire_at: expect.any(String),
+        });
+      });
+    });
   });
 
   // DESIGN §4: the schedule dialog says no provider is connected before the publisher picks

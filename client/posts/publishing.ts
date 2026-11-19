@@ -178,20 +178,85 @@ export function settingsChange(saved: Publishing, working: Publishing): PostSett
 }
 
 /**
+ * Whether two reads of a post's settings differ in what a publisher sets: Include in archive, the
+ * address, or whether the address is fixed. A following address moves with each saved subject,
+ * and with another post taking its slug, which is no settings change.
+ */
+export function settingsDiffer(a: Publishing, b: Publishing): boolean {
+  return (
+    a.emailOnly !== b.emailOnly ||
+    a.slugAuto !== b.slugAuto ||
+    a.fixed !== b.fixed ||
+    (!a.slugAuto && a.slug !== b.slug)
+  );
+}
+
+/**
+ * Follow a settings change made elsewhere into a dialog's working copy, which opened as `opened`
+ * (SPEC §4): each setting the publisher hasn't changed takes the stored value from `fresh`, and
+ * one they changed keeps theirs. The dialog then takes `fresh` as what it opened with, so
+ * `settingsChange` still sends only the publisher's own changes.
+ */
+export function followSettings(opened: Publishing, working: Publishing, fresh: Publishing): void {
+  if (working.emailOnly === opened.emailOnly) {
+    working.emailOnly = fresh.emailOnly;
+  }
+  const addressUntouched =
+    working.slugAuto === opened.slugAuto && (working.slugAuto || working.slug === opened.slug);
+  if (addressUntouched) {
+    working.slugAuto = fresh.slugAuto;
+    // A following address shows the subject in the field, as the dialog opened it.
+    working.slug =
+      fresh.slugAuto && !fresh.slugTaken ? slugify(working.subject) || fresh.slug : fresh.slug;
+  }
+  working.slugTaken = fresh.slugTaken;
+  working.fixed = fresh.fixed;
+}
+
+/**
  * Draw the settings form into `el` over the working copy `p`, and keep it wired: each change
  * that shows or hides a part redraws it. For a dialog that holds the form beside other fields.
+ * Returns `sync`, which shows `p` again after it changed from outside the form (a change made
+ * elsewhere, followed into it): the box, the address, and the line under it are set in place,
+ * so focus and a caret in the form stay where they are. Only a change that shows, hides, or
+ * fixes the address draws the form again.
  */
 export function mountSettingsForm(
   el: HTMLElement,
   p: Publishing,
   prefix: string,
   options: SettingsFormOptions = {},
-): void {
+): () => void {
+  const { fixedNote = FIXED_NOTE } = options;
+  let drawn = { emailOnly: p.emailOnly, fixed: p.fixed };
   const paint = () => {
     setHtml(el, settingsFormHtml(p, prefix, options));
     wireSettingsForm(el, p, prefix, paint, options);
+    drawn = { emailOnly: p.emailOnly, fixed: p.fixed };
   };
   paint();
+  return () => {
+    const include = el.querySelector<HTMLInputElement>(`#${prefix}Include`);
+    if (p.emailOnly !== drawn.emailOnly || p.fixed !== drawn.fixed) {
+      const hadFocus = include !== null && document.activeElement === include;
+      paint();
+      if (hadFocus) {
+        el.querySelector<HTMLInputElement>(`#${prefix}Include`)?.focus();
+      }
+      return;
+    }
+    if (include) {
+      include.checked = !p.emailOnly;
+    }
+    const slug = el.querySelector<HTMLInputElement>(`#${prefix}Slug`);
+    if (slug && slug.value !== p.slug) {
+      slug.value = p.slug; // never one the publisher typed: theirs is kept in `p`
+    }
+    const note = el.querySelector<HTMLElement>(`#${prefix}Note`);
+    if (note) {
+      setHtml(note, addressNoteHtml(p, fixedNote) ?? html``);
+    }
+  };
 }
 
 /**

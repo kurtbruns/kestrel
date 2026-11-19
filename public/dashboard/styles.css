@@ -3385,6 +3385,26 @@ a.images-open:hover .images-name {
   border-radius: 8px;
   padding: 10px 12px;
 }
+/* An action dialog's notice that the post changed while it was open (DESIGN §3): the accent's
+   quiet tint, not the amber, since a collaborator's change is news rather than a fault. */
+.modal .dialog-notice {
+  color: var(--fg);
+  background: var(--accent-soft);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.modal .dialog-notice p {
+  margin: 0;
+}
+.modal .dialog-notice p + p {
+  margin-top: 6px;
+}
+.modal .dialog-notice strong {
+  font-weight: 600;
+}
 .modal .actions {
   display: flex;
   justify-content: flex-end;

@@ -106,6 +106,17 @@ describe("RevisionTracker", () => {
     expect(t.warnedRevision).toBeNull();
     expect(t.decide(draft("r2"), { saving: false, baseAtRequest: "r2" })).toBe("fresh");
   });
+
+  it("counts each version taken in, and none of this editor's own saves or a kept warning", () => {
+    const t = new RevisionTracker("r1");
+    t.saved("r2");
+    t.noteWarned({ kind: "stale", revision: "r3", author: null, client: null });
+    t.adoptWarned();
+    expect(t.taken).toBe(0);
+    t.took("r4");
+    t.took("r5");
+    expect(t.taken).toBe(2);
+  });
 });
 
 describe("answerNewer (SPEC §4)", () => {

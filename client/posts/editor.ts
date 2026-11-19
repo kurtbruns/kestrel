@@ -70,7 +70,7 @@ import { type Html, html, setHtml } from "../ui/html";
 import { type IconName, icon } from "../ui/icons";
 import { modifiedKeyEdits, shortcutKey, shortcutLabel, shortcutLetter } from "../ui/shortcut";
 import { busy, fieldError, modal, renderError, toast } from "../ui/widgets";
-import { bannerActedBy, whoActed } from "../who_acted";
+import { bannerActedBy, changedBy, whoActed } from "../who_acted";
 import { activeSend, postAction } from "./actions";
 import { createAutosave } from "./autosave";
 import { carryOffset } from "./caret";
@@ -84,10 +84,12 @@ import { trackSaves } from "./pending_save";
 import {
   destinationHtml,
   destinationIcon,
+  followSettings,
   mountSettingsForm,
   type Publishing,
   publishingOf,
   settingsChange,
+  settingsDiffer,
   showSlugRefusal,
 } from "./publishing";
 import { answerNewer, type Conflict, conflictFromError, RevisionTracker } from "./revisions";
@@ -103,6 +105,11 @@ import {
 import { previewOpensWebVersion, webVersionHash } from "./web";
 
 const message = describeError;
+
+/** What changed under an open dialog: another writer's version taken in, the out-of-date
+ *  banner raised over the text, an image uploaded, the post's settings, or a following address
+ *  that moved with the subject (or another post's slug), which is no settings change. */
+type DialogChange = "taken" | "conflict" | "image" | "settings" | "address";
 
 // Each button, its name, and the letter of its shortcut, if it has one (⌘ on a Mac, Ctrl
 // elsewhere: ui/shortcut.ts).
@@ -422,9 +429,15 @@ export async function renderEditor(
     if (since !== settingsWrites) {
       return; // older than a settings change this editor made since
     }
+    const before = pub;
     pub = publishingOf(p, held);
     actions = p.actions;
     paintPublishing();
+    if (settingsDiffer(before, pub)) {
+      dialogWatch?.("settings"); // an open Schedule or Send now follows it, and says so
+    } else if (before.slug !== pub.slug || before.slugTaken !== pub.slugTaken) {
+      dialogWatch?.("address"); // a following address moved with the subject: shown, not said
+    }
   };
   /** Save a change to the post's settings (`PUT /api/posts/:id/settings`), and show what the server made
    *  of it. Throws the refusal, for the dialog that asked to say it. */
@@ -884,8 +897,13 @@ export async function renderEditor(
   // The last save errored, or the draft changed elsewhere (the out-of-date banner is up):
   // either way the leave guard prompts instead of silently flushing.
   let saveFailed = false;
-  // The open Images dialog's notifier, called when the post's text may have changed under it.
-  let imagesChanged: (() => void) | null = null;
+  // The open dialog's notifier (the Images dialog, or Schedule, Send test, or Send now), called
+  // with what changed under it: another writer's version taken in, the out-of-date banner
+  // raised over the text, an image uploaded, or the post's settings (SPEC §4).
+  let dialogWatch: ((change: DialogChange) => void) | null = null;
+  // Who saved the version last taken in, in a dialog's words, and when, for an action dialog's
+  // notice (DESIGN §3).
+  let lastTaken: { by: string | null; when: string } | null = null;
   let conflicted = false;
   // Why the last save failed, in the publisher's words, kept on the save cue until a save
   // succeeds: a toast would be gone in seconds and leave the cue reading like ordinary
@@ -1246,7 +1264,6 @@ export async function renderEditor(
     replaceKeepingPlace(ta, fresh.markdown);
     nameTab();
     paintMarkdown();
-    imagesChanged?.();
     revisions.took(revision);
     dirty.markSaved();
     adopt(fresh.post, fresh.subject_slug_held, since);
@@ -1254,7 +1271,9 @@ export async function renderEditor(
     const at = fresh.post.updated_at; // when they saved, not when this editor noticed
     const when = fmtAt(at, clocksFor([at]));
     tookIn = `Updated with changes ${who ? `by ${who}` : "made elsewhere"} · ${when}`;
+    lastTaken = { by: changedBy(fresh.post.author, fresh.post.author_client, you), when };
     refreshDirty();
+    dialogWatch?.("taken");
     // The email on screen is the old version's. On the Preview tab, ask for the new one the
     // way opening the tab does, so a render that fails says so rather than staying on
     // Updating…; elsewhere, mark it and render ahead.
@@ -1278,7 +1297,7 @@ export async function renderEditor(
       return;
     }
     conflicted = true; // pauses autosave; makes the leave guard prompt
-    imagesChanged?.(); // the saved post is now another writer's
+    dialogWatch?.("conflict"); // the saved post is now another writer's
     saveError = null; // the banner is the story now; an older failure's reason would contradict it
     paintSaveBtn();
     revisions.noteWarned(conflict);
@@ -1408,6 +1427,81 @@ export async function renderEditor(
       return result;
     }
     return (await checkFreshness()) ? "refused" : "unchanged";
+  }
+  /**
+   * Keep an open action dialog (Schedule, Send test, Send now) honest about the post under it
+   * (SPEC §4–§6, DESIGN §3). Another writer's version taken in while it is open, or by the
+   * confirm's own check, is said in a notice under the dialog's heading, and the dialog stays as
+   * the publisher left it. A dialog that carries the post's settings passes `follow`, which takes
+   * the stored settings into its working copy: a settings change is followed and said the same
+   * way, and a version taken in, or an address that moved with the subject, is followed quietly,
+   * since only the address shown changes. `place` puts the notice into the view on screen, with
+   * the line saying what its act will use; a dialog with two views calls it for each. The confirm
+   * notes `shown()` as it is pressed and acts only if `changedSince` is false after its check.
+   */
+  function watchForAction(box: HTMLElement, follow?: () => void) {
+    let taken: { by: string | null; when: string } | null = null;
+    let settings = false;
+    let followed = 0; // settings changes said, counted as take-ins are
+    let uses = "";
+    const slot = () => {
+      // A live region that is already in the view when its words arrive, so they are announced.
+      let el = box.querySelector<HTMLElement>(".dialog-notice-slot");
+      if (!el) {
+        el = document.createElement("div");
+        el.className = "dialog-notice-slot";
+        el.setAttribute("role", "status");
+        box.querySelector("h3")?.after(el);
+      }
+      return el;
+    };
+    const paint = () => {
+      const lines: Html[] = [];
+      if (taken) {
+        const by = taken.by
+          ? `This post was changed by ${taken.by} at ${taken.when}.`
+          : `This post was changed elsewhere at ${taken.when}.`;
+        lines.push(html`<p><strong>${by}</strong></p><p>${uses}</p>`);
+      }
+      if (settings) {
+        lines.push(
+          html`<p><strong>This post’s settings changed while this was open.</strong></p><p>The options below are up to date.</p>`,
+        );
+      }
+      setHtml(slot(), lines.length ? html`<div class="dialog-notice">${lines}</div>` : html``);
+    };
+    const redraw = () => follow?.();
+    dialogWatch = (change) => {
+      if (!box.isConnected) {
+        return; // a dialog closed since
+      }
+      if (change === "taken") {
+        taken = lastTaken;
+        redraw(); // a new subject moves a following address
+        paint();
+      } else if (change === "address") {
+        redraw();
+      } else if (change === "settings" && follow) {
+        settings = true;
+        followed += 1;
+        redraw();
+        paint();
+      }
+    };
+    const seen = () => revisions.taken + followed;
+    return {
+      place(usesLine: string) {
+        uses = usesLine;
+        paint();
+      },
+      /** What the dialog has shown as the publisher confirms: versions taken in and settings
+       *  changes said, the publisher's own saves counting for neither. */
+      shown: seen,
+      /** Whether a version was taken in or a settings change said since `shown`, by the
+       *  confirm's own check or the poll beside it. Its notice is up, so the press acts on
+       *  nothing and the next one acts. */
+      changedSince: (shown: number) => seen() !== shown,
+    };
   }
   /** Read the post's freshness now, outside the poll's pace. */
   function readFreshness() {
@@ -1718,7 +1812,7 @@ export async function renderEditor(
             `![${image.filename}](${image.filename})`,
           );
           // An open Images dialog lists the new image, and reads its reference as used.
-          imagesChanged?.();
+          dialogWatch?.("image");
           // The reference taking the placeholder's place shows the image arrived, so it says
           // nothing more: a toast for each image in a batch would push out a refusal, which
           // is the only word of why an image is missing (DESIGN §5).
@@ -1772,7 +1866,11 @@ export async function renderEditor(
     void openImagesDialog(id, signal, {
       body: () => ta.value,
       watch: (changed) => {
-        imagesChanged = changed;
+        dialogWatch = (change) => {
+          if (change !== "settings" && change !== "address") {
+            changed();
+          }
+        };
       },
       insert: (filename) => {
         showTab("edit");
@@ -1911,6 +2009,9 @@ export async function renderEditor(
     }
     const to = $<HTMLTextAreaElement>("#testTo", m.el);
     to.focus();
+    // A scheduled post's test is of its frozen copy, which nothing changes.
+    const watch = locked ? null : watchForAction($(".modal", m.el));
+    watch?.place("The test will use the latest version.");
     // The hint names where the list came from, so it goes once the list is anyone else's.
     const defaultsHint = $("#testDefaultsHint", m.el);
     to.addEventListener("input", () => {
@@ -1942,13 +2043,21 @@ export async function renderEditor(
           return;
         }
         try {
-          // A refused save means the server holds another writer's newer revision, and a test
-          // renders what is saved: it would deliver their version as the review of this text.
-          // As with Schedule, close the dialog and let the out-of-date banner be the next step.
-          if (!locked && (await saveBeforeActing()) === "refused") {
-            m.close();
-            freshnessEl.scrollIntoView({ block: "nearest" });
-            return;
+          // A test renders what is saved, so it never tests a version the dialog hasn't shown:
+          // one taken in by the check before it is said in the dialog, and the next press tests
+          // it. A refused save means the server holds another writer's version over unsaved
+          // edits here: as with Schedule, close the dialog onto the out-of-date banner.
+          if (watch) {
+            const shown = watch.shown();
+            const saved = await saveBeforeActing();
+            if (watch.changedSince(shown)) {
+              return;
+            }
+            if (saved === "refused") {
+              m.close();
+              freshnessEl.scrollIntoView({ block: "nearest" });
+              return;
+            }
           }
           // One request per address, each on its own, so one that fails doesn't stop the
           // rest, and the dialog can name exactly the ones to try again.
@@ -2029,7 +2138,7 @@ export async function renderEditor(
       // under the time edits it, and it reaches the post only when Schedule or Send now is
       // pressed, so Cancel leaves the post as it was. A following address shows the subject in
       // the field as it now stands, unless another post holds that slug.
-      const opened = pub;
+      let opened = pub;
       const working: Publishing = { ...pub, subject: subjectEl.value };
       if (working.slugAuto && !working.slugTaken) {
         working.slug = slugify(working.subject) || working.slug;
@@ -2105,7 +2214,21 @@ export async function renderEditor(
       };
 
       // The form under the time edits the dialog's copy; its first line follows the copy.
-      const showForm = () => mountSettingsForm($("#schForm", box), working, "sch");
+      // Its `sync` shows a change followed into the copy, for the view on screen.
+      let syncForm = () => {};
+      const showForm = () => {
+        syncForm = mountSettingsForm($("#schForm", box), working, "sch");
+      };
+      // A change made elsewhere while the dialog is open is said in it (DESIGN §3). The stored
+      // settings reach those the publisher left alone, a following address takes the subject now
+      // on screen, and the stored settings become what the dialog opened with, so the act still
+      // carries only the publisher's own changes.
+      const watch = watchForAction(box, () => {
+        working.subject = subjectEl.value;
+        followSettings(opened, working, pub);
+        opened = pub;
+        syncForm();
+      });
       // The dialog's settings go with the act itself, checked and applied together, so a
       // refused schedule changes neither and a refused address schedules nothing.
       // Only what the dialog changed is sent, so a change made elsewhere while it was open (the
@@ -2133,10 +2256,16 @@ export async function renderEditor(
             return;
           }
           try {
-            // A refused save means the server holds another writer's newer revision, so
-            // scheduling now would freeze content the publisher never saw (SPEC §6).
-            // Close the dialog and let the out-of-date banner behind it be the next step.
-            if ((await saveBeforeActing()) === "refused") {
+            // Scheduling freezes what is saved, so never a version the dialog hasn't shown
+            // (SPEC §6): one the check before it takes in is said here, and the next press
+            // schedules it. A refused save means the server holds another writer's version
+            // over unsaved edits here: close onto the out-of-date banner behind.
+            const shown = watch.shown();
+            const saved = await saveBeforeActing();
+            if (watch.changedSince(shown)) {
+              return;
+            }
+            if (saved === "refused") {
               refused();
               return;
             }
@@ -2171,8 +2300,13 @@ export async function renderEditor(
         busy($<HTMLButtonElement>("#snGo", box), "Queuing…", async () => {
           m.clearError();
           try {
-            // As in doSchedule: a refused save must not become a frozen send.
-            if ((await saveBeforeActing()) === "refused") {
+            // As in doSchedule: an unshown version or a refused save never becomes a send.
+            const shown = watch.shown();
+            const saved = await saveBeforeActing();
+            if (watch.changedSince(shown)) {
+              return;
+            }
+            if (saved === "refused") {
               refused();
               return;
             }
@@ -2198,6 +2332,7 @@ export async function renderEditor(
 
       function wireSchedule() {
         box.setAttribute("aria-labelledby", "schHead");
+        watch.place("Scheduling will use the latest version.");
         $("#schCancel", box).onclick = m.close;
         $("#schGo", box).onclick = doSchedule;
         // The server would refuse a schedule; the standing line above says why and where to
@@ -2231,6 +2366,7 @@ export async function renderEditor(
           html`<h3 id="snHead">Send now?</h3><p class="hint">Sends this draft, as it is now, to <strong id="snWho">your subscribers</strong> in ${sendNowWhenText()}. The post locks until then, and you can cancel any time before it starts sending.</p><div class="dialog-settings" id="schForm"></div>${dailyWritesLine()}${sandboxSendLine()}${refusingSendLine()}<div class="actions"><button type="button" class="linkbtn actions-back" id="toSchedule">← Back to schedule</button><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`,
         );
         box.setAttribute("aria-labelledby", "snHead");
+        watch.place("Sending now will use the latest version.");
         $("#snCancel", box).onclick = m.close;
         $("#snGo", box).onclick = doSendNow;
         showForm();
