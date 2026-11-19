@@ -10,6 +10,22 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Breaking
+
+
+### Added
+
+
+### Changed
+
+
+### Fixed
+
+
+## [1.26.0] - 2026-11-19
+
+**Upgrading from 1.25.0.** No database migrations, so `npm run sync-migrations` brings in nothing and there's nothing to apply, and no new setting. In your instance's repository, start with nothing uncommitted, as [Upgrade to a new release](https://github.com/kurtbruns/kestrel/blob/v1.26.0/docs/guides/upgrade.md) says, and install the release with `npm install @kurtbruns/kestrel@1.26.0`. Run `npm run check-context`: this release changes two files of the operator's Claude context, the upgrade skill and `CLAUDE.md`, and a copy you've edited is merged by hand. The skill's change bears on safety, since it now shows you the restore point's bookmark before the migration and stops there when the command printed none, as Go back needs it to restore the database. The guide's new check arrives with that install, and the skill rereads the guide from there, so this upgrade's restore point is checked too; the skill's own new stop is in force once `check-context` brings it into `.claude/`. `CLAUDE.md`'s line on posts with images is shorter: it no longer lists the preview's warnings, and when Claude swaps an image it now deletes the one it replaced while the post is still a draft, since an image stays public at its address, and for good once the post is sent, deleting only an image the body no longer uses unless the publisher says otherwise. Images uploaded before the upgrade keep their location and camera metadata, since an image is never rewritten at its address. To clear one from a draft, add the photo again, which puts it in at your cursor under a new name, take the old reference out of the text, then delete the old image in the editor's **Images** dialog, where it now reads "Not used". A scheduled post's images can be cleared this way once its send is canceled, and a sent post's stay as they are. Then run `npm run typecheck`, commit the upgrade, note a restore point, run the guide's Apply the database changes step, which applies nothing for this release but any migration from a release you skipped, and deploy with `npx wrangler deploy --env production`, as the guide lays out.
+
 ### Changed
 
 - The built-in template, and both starting templates, now set a quote (`> …` in Markdown) off as a pull quote: a grey bar on its left, a little padding, and muted text, lighter in dark mode. Emails already sent or frozen keep the look they were made with, and a scheduled send picks it up only if a template or identity change re-makes it. A custom template keeps its own styles; to match, copy the `.email blockquote` rules (and their dark-mode pair) from **Start from example**.
@@ -960,7 +976,8 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
-[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.25.0...HEAD
+[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.26.0...HEAD
+[1.26.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.26.0
 [1.25.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.25.0
 [1.24.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.24.0
 [1.23.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.23.0
