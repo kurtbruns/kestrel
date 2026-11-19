@@ -2966,13 +2966,11 @@ body.web-mode .content {
   fill: currentColor;
 }
 /* The Images dialog (DESIGN, the editor): a drop region over the draft's images, one row
-   each. The row itself is the Insert button: on hover and focus it takes the accent's soft
-   tint, its picture an accent edge, and an Insert pill at its right, so what a press will do
-   is shown where the press lands. Delete sits beside it as its own control, so pressing it
-   never inserts, and over it, or while it asks, the whole row takes the danger's tint and
-   edge instead, so the row always says what the press under the pointer does. "Not used"
-   is a plain fact in the row's small print, not a warning, so it takes the text
-   colour at weight, never amber. */
+   each. A row's picture and name are one link that opens the image full size, marked with
+   the arrow a new tab takes (§7); Insert (Ghost) and Delete (subtle Danger) sit at its right on
+   every row, used or not. Nothing else on the row responds, so it needs no hover state to say
+   what a press does. While Delete asks, the row takes the danger's tint. "Not used" is a plain
+   fact in the row's small print, not a warning, so it takes the text colour at weight. */
 /* Held near the top rather than centred, so a deleted row shortens the dialog from the bottom
    and the rows above it stay under the pointer. */
 .modal.modal-images {
@@ -3003,7 +3001,7 @@ body.web-mode .content {
   color: var(--muted);
   font-size: 12px;
 }
-/* No frame around the list: each row is its own rounded item, so its tint and focus ring sit
+/* No frame around the list: each row is its own rounded item, so its tint and a focus ring sit
    on its own edge, never just inside a frame's line. */
 .images-list {
   display: grid;
@@ -3014,43 +3012,30 @@ body.web-mode .content {
   max-height: min(50vh, 420px);
   overflow-y: auto;
 }
-/* The whole row is the target, gaps and all, so the pointer never flickers between a hand and
-   an arrow crossing it: a press anywhere but Delete inserts (images_dialog.ts), and the Insert
-   button inside carries the name and the focus for the keyboard. */
 .images-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 10px;
+  gap: 8px;
+  padding: 6px 8px;
   border-radius: 8px;
-  cursor: pointer;
 }
-
-.images-insert {
+.images-row.asking {
+  background: color-mix(in srgb, var(--danger-fg) 8%, transparent);
+}
+.images-open {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
   gap: 12px;
-  padding: 0;
-  border: 0;
-  background: transparent;
+  padding: 2px;
+  border-radius: 6px;
   color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
+  text-decoration: none;
 }
-.images-insert:focus-visible {
-  outline: none;
-}
-.images-row:hover,
-.images-row:has(.images-insert:focus-visible) {
-  background: var(--accent-soft);
-}
-.images-row:has(.images-insert:focus-visible) {
+.images-open:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: -2px;
+  outline-offset: 1px;
 }
 .images-thumb {
   flex: none;
@@ -3061,24 +3046,10 @@ body.web-mode .content {
   border-radius: 4px;
   background: var(--hover);
 }
-.images-row:hover .images-thumb,
-.images-row:has(.images-insert:focus-visible) .images-thumb {
+a.images-open:hover .images-thumb {
   border-color: var(--accent);
 }
-.images-row:has(.images-delete:hover),
-.images-row:has(.images-delete:focus-visible),
-.images-row:has(.images-delete.danger) {
-  background: color-mix(in srgb, var(--danger-fg) 8%, transparent);
-}
-/* Delete keeps the card's fill and the text colour, so it stands up off the row's tint rather
-   than washing into it; its hover is still subtle Danger's red. */
-.images-row .images-delete {
-  background: var(--card);
-  color: var(--fg);
-}
-.images-row:has(.images-delete:hover) .images-thumb,
-.images-row:has(.images-delete:focus-visible) .images-thumb,
-.images-row:has(.images-delete.danger) .images-thumb {
+.images-row.asking .images-thumb {
   border-color: var(--danger-fg);
 }
 .images-thumb img {
@@ -3098,6 +3069,16 @@ body.web-mode .content {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.images-arrow {
+  color: var(--muted);
+}
+a.images-open:hover .images-name {
+  color: var(--accent);
+  text-decoration: underline;
+}
+a.images-open:hover .images-arrow {
+  color: var(--accent);
+}
 .images-meta {
   color: var(--muted);
   font-size: 12px;
@@ -3107,41 +3088,35 @@ body.web-mode .content {
   color: var(--fg);
   font-weight: 600;
 }
-.images-hint {
+/* Insert and Delete keep the card's fill, so the danger tint behind an asking row never washes
+   them out. */
+.images-row .images-insert,
+.images-row .images-delete {
   flex: none;
-  margin-left: auto;
-  margin-right: 6px;
-  padding: 4px 11px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--accent-on);
-  font-size: 12.5px;
-  font-weight: 600;
-  visibility: hidden;
+  font-size: 13px;
 }
-.images-row:hover .images-hint,
-.images-row:has(.images-insert:focus-visible) .images-hint {
-  visibility: visible;
+.images-row .images-insert:not(:hover) {
+  color: var(--fg);
 }
-.images-row:has(.images-delete:hover) .images-hint,
-.images-row:has(.images-delete.danger) .images-hint {
-  visibility: hidden;
+.images-row .images-insert,
+.images-row .images-delete.danger-subtle:not(:hover) {
+  background: var(--card);
 }
-/* On a phone the row's name needs the width: Delete wraps under the text, lined up with it,
-   and the Insert pill gives way, since a touch has no hover to show it. */
+.images-row .images-delete.danger-subtle:not(:hover) {
+  color: var(--fg);
+}
+/* On a phone the row's name needs the width: Insert and Delete wrap under the text, lined up
+   with it. */
 @media (max-width: 539px) {
   .images-row {
     flex-wrap: wrap;
-    row-gap: 2px;
+    row-gap: 4px;
   }
-  .images-insert {
+  .images-open {
     flex-basis: 100%;
   }
-  .images-row > .images-delete {
-    margin-left: 76px;
-  }
-  .images-hint {
-    display: none;
+  .images-row > .images-insert {
+    margin-left: 78px;
   }
 }
 /* The locked composer's foot: where a draft's foot offers images, a scheduled post's says

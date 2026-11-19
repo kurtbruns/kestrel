@@ -3282,7 +3282,7 @@ describe("editor view", () => {
       $<HTMLButtonElement>(`.images-insert[data-name="${name}"]`).closest("li") as HTMLElement;
     const dialogOpen = () => document.querySelector(".modal-images") !== null;
 
-    it("lists the draft's images, saying which the body doesn't use, and offers Delete only on those", async () => {
+    it("lists the draft's images, saying which the body doesn't use, each opening full size and offering Insert and Delete", async () => {
       await open([
         { path: "/api/posts/p1", reply: () => withBarn() },
         listRoute(() => ["barn.png", "owl.png"]),
@@ -3293,12 +3293,16 @@ describe("editor view", () => {
       expect(row("owl.png").querySelector(".images-meta")?.textContent).toBe(
         "1600×1200 · 412 KB · Not used",
       );
-      expect(row("barn.png").querySelector(".images-delete")).toBe(null);
-      expect(row("owl.png").querySelector(".images-delete")?.getAttribute("aria-label")).toBe(
-        "Delete owl.png",
-      );
-      expect(row("barn.png").querySelector("img")?.getAttribute("src")).toBe(
-        "https://news.example.com/media/posts/p1/barn.png",
+      for (const name of ["barn.png", "owl.png"]) {
+        expect(row(name).querySelector(".images-delete")?.getAttribute("aria-label")).toBe(
+          `Delete ${name}`,
+        );
+        const link = row(name).querySelector("a.images-open");
+        expect(link?.getAttribute("href")).toBe(`https://news.example.com/media/posts/p1/${name}`);
+        expect(link?.getAttribute("target")).toBe("_blank");
+      }
+      expect(row("barn.png").querySelector(".images-insert")?.getAttribute("aria-label")).toBe(
+        "Insert barn.png again",
       );
       expect(fake.unhandled).toEqual([]);
     });
@@ -3316,13 +3320,40 @@ describe("editor view", () => {
       expect($("#saveStatus").textContent).toBe("Unsaved changes");
     });
 
-    it("inserts on a press anywhere on the row, not only on its picture and name", async () => {
+    it("does nothing on a press of the row itself, away from its link and buttons", async () => {
       await open([{ path: "/api/posts/p1", reply: () => draft() }, listRoute(() => ["owl.png"])]);
       imagesButton().click();
       await vi.advanceTimersByTimeAsync(0);
-      row("owl.png").click(); // the row's own padding, beside Delete
-      expect(dialogOpen()).toBe(false);
-      expect(body().value).toContain("![owl.png](owl.png)");
+      row("owl.png").click();
+      expect(dialogOpen()).toBe(true);
+      expect(body().value).toBe("# Owls\n\nHoot.");
+    });
+
+    it("deletes an image the post uses once asked whether to, leaving its reference in the text (SPEC §4)", async () => {
+      let names = ["barn.png"];
+      await open([
+        { path: "/api/posts/p1", reply: () => withBarn() },
+        listRoute(() => names),
+        {
+          method: "DELETE",
+          path: "/api/posts/p1/images/barn.png",
+          reply: () => {
+            names = [];
+            return { deleted: true };
+          },
+        },
+      ]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      const del = () => $<HTMLButtonElement>(".images-delete");
+      del().click();
+      expect(del().textContent).toBe("In the post. Delete anyway?");
+      expect(del().closest("li")?.classList.contains("asking")).toBe(true);
+      del().click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fake.calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
+      expect(body().value).toContain("![Barn owl](barn.png)");
+      expect(fake.unhandled).toEqual([]);
     });
 
     it("puts the image at the end of a body never focused, where no caret was chosen", async () => {
