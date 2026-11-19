@@ -759,6 +759,8 @@ export async function renderEditor(
   // The last save errored, or the draft changed elsewhere (the out-of-date banner is up):
   // either way the leave guard prompts instead of silently flushing.
   let saveFailed = false;
+  // The open Images dialog's notifier, called when the post's text may have changed under it.
+  let imagesChanged: (() => void) | null = null;
   let conflicted = false;
   // Why the last save failed, in the publisher's words, kept on the save cue until a save
   // succeeds: a toast would be gone in seconds and leave the cue reading like ordinary
@@ -1109,6 +1111,7 @@ export async function renderEditor(
     replaceKeepingPlace(ta, fresh.markdown);
     nameTab();
     paintMarkdown();
+    imagesChanged?.();
     revisions.took(revision);
     dirty.markSaved();
     pub = publishingOf(fresh.post, fresh.subject_slug_held);
@@ -1141,6 +1144,7 @@ export async function renderEditor(
       return;
     }
     conflicted = true; // pauses autosave; makes the leave guard prompt
+    imagesChanged?.(); // the saved post is now another writer's
     saveError = null; // the banner is the story now; an older failure's reason would contradict it
     paintSaveBtn();
     revisions.noteWarned(conflict);
@@ -1576,6 +1580,9 @@ export async function renderEditor(
     imagesOpening = true;
     void openImagesDialog(id, signal, {
       body: () => ta.value,
+      watch: (changed) => {
+        imagesChanged = changed;
+      },
       insert: (filename) => {
         showTab("edit");
         const state = textState();

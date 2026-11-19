@@ -3434,6 +3434,94 @@ describe("editor view", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
+    it("counts an image the saved post uses as used, though the text on screen has dropped it", async () => {
+      await open([
+        { path: "/api/posts/p1", reply: () => withBarn() },
+        listRoute(() => ["barn.png"]),
+      ]);
+      // An edit not yet saved: the server still holds the reference.
+      body().value = "# Owls\n\nHoot.";
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(row("barn.png").querySelector(".images-meta")?.textContent).toBe("1600×1200 · 412 KB");
+      expect(row("barn.png").querySelector(".images-delete")?.hasAttribute("data-used")).toBe(true);
+    });
+
+    it("says an image is used once another writer's version that uses it is taken in, with the dialog open", async () => {
+      const server = draftServer();
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        ...previewRoutes(server),
+        listRoute(() => ["barn.png"]),
+      ]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(row("barn.png").querySelector(".images-meta")?.textContent).toBe(
+        "Not used · 1600×1200 · 412 KB",
+      );
+      server.elsewhere("x@y.z", "claude-code", {
+        subject: "Owls",
+        markdown: "# Owls\n\n![Barn owl](barn.png)",
+      });
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(body().value).toBe("# Owls\n\n![Barn owl](barn.png)");
+      expect(dialogOpen()).toBe(true);
+      expect(row("barn.png").querySelector(".images-meta")?.textContent).toBe("1600×1200 · 412 KB");
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("moves focus to Choose files when the last image is deleted, rather than dropping it", async () => {
+      let names = ["owl.png"];
+      await open([
+        { path: "/api/posts/p1", reply: () => draft() },
+        listRoute(() => names),
+        {
+          method: "DELETE",
+          path: "/api/posts/p1/images/owl.png",
+          reply: () => {
+            names = [];
+            return { deleted: true };
+          },
+        },
+      ]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      $<HTMLButtonElement>(".images-delete").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(document.activeElement?.id).toBe("imagesChoose");
+    });
+
+    it("takes a delete's question back on Escape even with focus outside the dialog, as Safari leaves it", async () => {
+      await open([
+        { path: "/api/posts/p1", reply: () => withBarn() },
+        listRoute(() => ["barn.png"]),
+      ]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      // A click that doesn't focus the button, with focus already off the box.
+      (document.activeElement as HTMLElement | null)?.blur();
+      $<HTMLButtonElement>(".images-delete").click();
+      expect($(".images-delete").textContent?.trim()).toBe("In the post. Delete anyway?");
+      document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(dialogOpen()).toBe(true);
+      expect($(".images-delete").textContent?.trim()).toBe("");
+      document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(dialogOpen()).toBe(false);
+    });
+
+    it("keeps a file dropped on the backdrop, just outside the dialog, from opening in the tab", async () => {
+      await open([{ path: "/api/posts/p1", reply: () => draft() }, listRoute(() => ["owl.png"])]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      const backdrop = $(".modal-images").closest(".modal-backdrop") as HTMLElement;
+      for (const type of ["dragover", "drop"]) {
+        const e = new Event(type, { bubbles: true, cancelable: true });
+        backdrop.dispatchEvent(e);
+        expect(e.defaultPrevented).toBe(true);
+      }
+    });
+
     it("never opens on a scheduled post, where the button nudges the way out", async () => {
       await open([{ path: "/api/posts/p1", reply: () => draft({ status: "scheduled" }) }]);
       imagesButton().click();

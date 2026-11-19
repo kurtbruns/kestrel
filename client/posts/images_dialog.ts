@@ -5,6 +5,7 @@
 // says which, and the editor does it.
 
 import type { ImageListResponse, PostImage } from "../../shared/images";
+import type { PostResponse } from "../../shared/posts";
 import { ApiError, api } from "../api";
 import { $ } from "../ui/dom";
 import { type Html, html, setHtml } from "../ui/html";
@@ -14,8 +15,14 @@ import { imageUsedIn, sizeText } from "./images";
 
 /** What the dialog hands back to the editor that opened it. */
 export interface ImagesDialogHooks {
-  /** The body as it stands, which decides whether each image is used. */
+  /** The body as it stands on screen. An image is used when it or the saved post uses it. */
   body: () => string;
+  /**
+   * Hands the editor a function to call when the post's text may have changed while the dialog
+   * is open (another writer's version taken in, or the out-of-date banner raised), so the dialog
+   * reads the saved post again and says what is used now.
+   */
+  watch: (changed: () => void) => void;
   /** Put a reference to this image at the caret. The dialog has closed. */
   insert: (filename: string) => void;
   /** Upload these files at the caret. The dialog has closed. */
@@ -41,8 +48,17 @@ export async function openImagesDialog(
   hooks: ImagesDialogHooks,
 ): Promise<void> {
   let images: PostImage[];
+  // The saved post's text, beside the text on screen: under the out-of-date banner, or with
+  // edits not yet saved, the two differ, and an image either uses must not read as unused,
+  // since its trash then deletes at once.
+  let saved: string;
+  const readSaved = async () =>
+    (await api<PostResponse>(`/api/posts/${postId}`, { signal })).markdown;
   try {
-    images = (await api<ImageListResponse>(`/api/posts/${postId}/images`, { signal })).images;
+    [images, saved] = await Promise.all([
+      api<ImageListResponse>(`/api/posts/${postId}/images`, { signal }).then((r) => r.images),
+      readSaved(),
+    ]);
   } catch (e) {
     if (!signal.aborted) {
       hooks.failed(e);
@@ -57,6 +73,11 @@ export async function openImagesDialog(
     signal,
   );
   const box = $(".modal", m.el);
+  // A file let go on the backdrop, just outside the box, would otherwise open in the tab and
+  // leave the editor.
+  for (const type of ["dragover", "drop"]) {
+    m.el.addEventListener(type, (e) => e.preventDefault());
+  }
   box.classList.add("modal-images");
   box.setAttribute("aria-labelledby", "imagesHead");
   const listEl = $("#imagesList", box);
@@ -93,6 +114,15 @@ export async function openImagesDialog(
   // The delete of a used image waiting on its second press, so Escape or leaving it takes the
   // question back.
   let asking: HTMLButtonElement | null = null;
+  // Ahead of the dialog's own Escape, which listens on the document: while a question is open
+  // the first Escape takes it back, and only the next closes. On the document in the capture
+  // phase, since Safari doesn't focus a clicked button, so focus may sit outside the box.
+  const escapeTakesBack = (e: KeyboardEvent) => {
+    if (e.key === "Escape" && asking) {
+      e.stopImmediatePropagation();
+      stopAsking();
+    }
+  };
   const stopAsking = () => {
     if (asking?.isConnected) {
       setHtml(asking, icon("trash"));
@@ -100,31 +130,28 @@ export async function openImagesDialog(
       asking.closest(".images-row")?.classList.remove("asking");
     }
     asking = null;
+    document.removeEventListener("keydown", escapeTakesBack, true);
   };
-  // Ahead of the dialog's own Escape, which listens on the document: the first Escape takes
-  // the question back, and only the next closes.
-  box.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && asking) {
-      e.stopPropagation();
-      stopAsking();
-    }
-  });
   box.addEventListener("focusout", (e) => {
     if (asking && e.relatedTarget !== asking) {
       stopAsking();
     }
   });
 
+  const usedNow = () => {
+    const body = hooks.body();
+    return images.map((img) => imageUsedIn(body, img.filename) || imageUsedIn(saved, img.filename));
+  };
+  let painted = "";
   function paint(focusAt?: number) {
     stopAsking();
-    if (!images.length) {
-      setHtml(listEl, html``);
-      return;
-    }
-    const body = hooks.body();
+    const used = usedNow();
+    painted = JSON.stringify([images.map((img) => img.filename), used]);
     setHtml(
       listEl,
-      html`<ul class="images-list" aria-label="This post's images">${images.map((img) => rowHtml(img, imageUsedIn(body, img.filename)))}</ul>`,
+      images.length
+        ? html`<ul class="images-list" aria-label="This post's images">${images.map((img, i) => rowHtml(img, used[i] ?? true))}</ul>`
+        : html``,
     );
     if (focusAt !== undefined) {
       const rows = listEl.querySelectorAll<HTMLButtonElement>(".images-insert");
@@ -133,6 +160,36 @@ export async function openImagesDialog(
       ).focus();
     }
   }
+
+  // The text changed while the dialog was open: read the saved post again, and repaint only if
+  // what is used changed, keeping focus on the control it was on.
+  hooks.watch(async () => {
+    if (!m.el.isConnected || signal.aborted) {
+      return;
+    }
+    try {
+      saved = await readSaved();
+    } catch {
+      return; // the editor answers a failed read of its own post
+    }
+    if (
+      !m.el.isConnected ||
+      JSON.stringify([images.map((i) => i.filename), usedNow()]) === painted
+    ) {
+      return;
+    }
+    const focused = document.activeElement;
+    const name =
+      focused instanceof HTMLElement && listEl.contains(focused) ? focused.dataset.name : undefined;
+    const kind =
+      focused instanceof HTMLElement
+        ? focused.className.split(" ").find((c) => c.startsWith("images-"))
+        : undefined;
+    paint();
+    if (name && kind) {
+      listEl.querySelector<HTMLElement>(`.${kind}[data-name="${CSS.escape(name)}"]`)?.focus();
+    }
+  });
 
   async function read(focusAt?: number) {
     try {
@@ -170,6 +227,7 @@ export async function openImagesDialog(
       if (del.dataset.used && asking !== del) {
         stopAsking();
         asking = del;
+        document.addEventListener("keydown", escapeTakesBack, true);
         setHtml(del, html`${icon("trash")}<span>In the post. Delete anyway?</span>`);
         del.setAttribute("aria-label", `${del.dataset.name} is in the post. Delete anyway?`);
         del.closest(".images-row")?.classList.add("asking");

@@ -18,6 +18,11 @@ describe("imageUsedIn", () => {
     expect(imageUsedIn("![x](My%20Cover.png)", "My Cover.png")).toBe(true);
   });
 
+  it("finds a name written with Markdown's backslash escapes, which the render reads without them", () => {
+    expect(imageUsedIn("![A photo](my\\_photo.png)", "my_photo.png")).toBe(true);
+    expect(imageUsedIn("![x](a\\*b\\&c.png)", "a*b&c.png")).toBe(true);
+  });
+
   it("finds a name with an ampersand written as raw HTML writes it", () => {
     expect(imageUsedIn('<img src="/media/posts/p_1/salt&amp;pepper.png">', "salt&pepper.png")).toBe(
       true,

@@ -12,7 +12,8 @@ const NAME_CHAR = /[\p{L}\p{N}_-]/u;
 
 /**
  * Whether `body` uses the image named `filename`: the name appears as a whole name, as written,
- * with `&` written `&amp;` (raw HTML), or percent-encoded (an older name with a space in it).
+ * with `&` written `&amp;` (raw HTML), with Markdown's backslash escapes (`my\_photo.png`), or
+ * percent-encoded (an older name with a space in it).
  * That finds every use the render resolves: a Markdown image, a link, the image's full address,
  * and raw HTML. It also counts a mention in prose or a comment, which errs toward used, the
  * direction that only ever keeps an image (DESIGN, the editor).
@@ -22,7 +23,10 @@ export function imageUsedIn(body: string, filename: string): boolean {
     return false;
   }
   const unescaped = body.replace(/&(?:amp|#0*38|#x0*26);/gi, "&");
-  for (const text of new Set([body, unescaped, decodePercent(unescaped)])) {
+  // Markdown drops a backslash before ASCII punctuation in an address, so `my\_photo.png`
+  // names `my_photo.png`, as exports from Notion and the like write it.
+  const unslashed = unescaped.replace(/\\([!-/:-@[-`{-~])/g, "$1");
+  for (const text of new Set([body, unescaped, unslashed, decodePercent(unescaped)])) {
     for (let at = text.indexOf(filename); at !== -1; at = text.indexOf(filename, at + 1)) {
       if (isWholeName(text, at, filename.length)) {
         return true;
