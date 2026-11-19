@@ -129,6 +129,11 @@ const ARIA_DISABLED = html` aria-disabled="true"`;
 
 type ComposerTab = "edit" | "preview";
 
+// A scheduled post's foot names the way out while there is one, and from the fire time, when
+// Cancel is refused (SPEC §6), says why the text stays locked instead (DESIGN §3).
+const LOCK_FOOT_OPEN = "Cancel the schedule to edit";
+const LOCK_FOOT_DUE = "Locked: this email is going out";
+
 /**
  * How a save ended. `saved` and `unchanged` both mean the server holds what the editor
  * shows. `refused` means it does not: another writer's revision is newer, so the save was
@@ -227,14 +232,18 @@ export async function renderEditor(
   // post is scheduled too, through Post settings, and a dialog's edits reach them only on Save,
   // Schedule, or Send now.
   let pub = publishingOf(post, data.subject_slug_held);
+  // What the server would take for the post now, from its latest read or save: a time zone set
+  // or a provider connected since the editor opened reaches the dialogs without a reload.
+  let actions = post.actions;
 
   // The editor now only ever mounts a draft or a scheduled (frozen) post, so `locked`
   // means scheduled, signaled by the scheduled banner, not a status pill. Whether its text
   // can be saved is the server's to say, in the post's `actions`.
   const locked = !postAction(post, "edit");
   // Whether the server would take a schedule or a send now: a draft, while a provider is
-  // connected. The dialog offers both views only then (DESIGN §4).
-  const canSend = postAction(post, "schedule") !== undefined;
+  // connected and a time zone set. The dialog offers both views only then (DESIGN §4), read
+  // as it opens.
+  const canSend = () => postAction({ actions }, "schedule") !== undefined;
   // The revision this editor is based on, for optimistic concurrency (SPEC §4).
   // Advanced on each successful save; carried on every save so the server rejects
   // (409) rather than clobbers a newer save from another tab or from Claude.
@@ -296,7 +305,7 @@ export async function renderEditor(
         </div>
         ${
           locked
-            ? html`<div class="composer-foot composer-foot-lock" id="lockFoot" role="status">${icon("readonly")}<span>Cancel the schedule to edit</span></div>`
+            ? html`<div class="composer-foot composer-foot-lock" id="lockFoot" role="status">${icon("readonly")}<span id="lockFootText">${LOCK_FOOT_OPEN}</span></div>`
             : html`<div class="composer-foot" id="dropFoot">${icon("paperclip")}<span aria-live="polite">Paste, drop, or click to add images</span></div>`
         }
         <input type="file" id="imgInput" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
@@ -395,15 +404,34 @@ export async function renderEditor(
       setHtml(dest, destinationHtml(pub));
     }
   };
+  // Settings changes this editor has sent. A settings write makes no revision, so a read that
+  // left before one would answer with the settings it replaced: each read notes this count as
+  // it leaves, and its settings are taken only if no write went out meanwhile.
+  let settingsWrites = 0;
+  /** Take the post's settings and actions from a read or write of it, whichever client last
+   *  changed them: a settings change writes no revision, so it arrives on any answer. `since`
+   *  is the settings writes counted when the request left. */
+  const adopt = (
+    p: PostResponse["post"],
+    held: PostResponse["subject_slug_held"],
+    since: number,
+  ) => {
+    if (since !== settingsWrites) {
+      return; // older than a settings change this editor made since
+    }
+    pub = publishingOf(p, held);
+    actions = p.actions;
+    paintPublishing();
+  };
   /** Save a change to the post's settings (`PUT /api/posts/:id/settings`), and show what the server made
    *  of it. Throws the refusal, for the dialog that asked to say it. */
   const saveListing = async (body: PostSettingsBody): Promise<void> => {
+    const since = ++settingsWrites;
     const res = await api<PostSettingsResponse>(`/api/posts/${id}/settings`, {
       method: "PUT",
       json: body,
     });
-    pub = publishingOf(res.post, res.subject_slug_held);
-    paintPublishing();
+    adopt(res.post, res.subject_slug_held, since);
     if (res.changed) {
       readSendsNow(); // the post's sends carry the listing: let every view see it
     }
@@ -411,15 +439,17 @@ export async function renderEditor(
   /** Read the post's settings again, for a change made elsewhere; a failed read leaves what
    *  the page shows, and the next report tries again. */
   const rereadPublishing = async () => {
+    const since = settingsWrites;
     try {
       const fresh = await api<PostResponse>(`/api/posts/${id}`, { signal });
-      pub = publishingOf(fresh.post, fresh.subject_slug_held);
-      paintPublishing();
+      adopt(fresh.post, fresh.subject_slug_held, since);
     } catch {}
   };
   $("#settingsBtn").onclick = () => {
     // A working copy: Cancel, Escape, or a click outside leaves the post as it was. On a draft
-    // the subject in the field is the one the address would follow.
+    // the subject in the field is the one the address would follow. Save sends only what was
+    // changed from the settings as the dialog opened, so a change made elsewhere meanwhile stands.
+    const opened = pub;
     const working: Publishing = { ...pub, subject: subjectEl.value };
     const m = modal(
       html`<h3 id="psHead">Post settings</h3><p class="hint">Neither is part of the email, so both stay open while the post is scheduled.</p><div id="psForm"></div><div class="actions"><button type="button" id="psCancel">Cancel</button><button type="button" class="primary" id="psSave">Save</button></div>`,
@@ -433,7 +463,7 @@ export async function renderEditor(
     save.onclick = () =>
       busy(save, "Saving…", async () => {
         m.clearError();
-        const body = settingsChange(pub, working);
+        const body = settingsChange(opened, working);
         if (!body) {
           m.close();
           return;
@@ -640,6 +670,24 @@ export async function renderEditor(
       .then((r) => r && stage(r))
       .catch(() => {}); // in the background; a click on Preview asks again and says why
   }
+  /** Read the shown render again, for a change no revision marks: the template or identity
+   *  changed elsewhere, while the publisher was in another tab. A render that comes back the
+   *  same changes nothing on screen; a different one loads out of sight and swaps in. */
+  function recheckRender() {
+    if (!previewCurrent()) {
+      return; // a render of what is saved is already on its way, or none is shown yet
+    }
+    renders
+      .recheck()
+      .then((r) => {
+        if (r && r.revision === savedRevision()) {
+          paintPreview(); // the email on screen is the old look until the new one swaps in
+          stage(r);
+        }
+      })
+      .catch(() => {}); // in the background; the next look at Preview asks again
+  }
+  readWhenShown(recheckRender, signal);
   async function showPreview() {
     showTab("preview");
     if (previewCurrent()) {
@@ -648,10 +696,21 @@ export async function renderEditor(
     const round = ++previewRound;
     previewFailed = false; // a new try: "Updating…" until it lands or fails
     paintPreview();
-    try {
-      if (!locked) {
+    if (!locked) {
+      try {
         await saveDraft(true);
+      } catch (e) {
+        // A failed save is said on the save cue, its home (DESIGN §5); Preview says only that
+        // what it shows isn't the text on screen.
+        if (signal.aborted || foundGone(e) || round !== previewRound) {
+          return;
+        }
+        previewFailed = true;
+        paintPreview();
+        return;
       }
+    }
+    try {
       // A write landing first (our own save's echo, a pause's flush, another writer) answers
       // with a render of another revision, which is dropped and asked for again.
       let r: Render | null = null;
@@ -700,7 +759,7 @@ export async function renderEditor(
 
   // --- the lock's nudge ---
   // A scheduled post refuses edits at the browser (readonly) and at the API (SPEC §6). When
-  // one is attempted anyway, the foot's "Cancel the schedule to edit" pulses once, so the
+  // one is attempted anyway, the foot's line ("Cancel the schedule to edit") pulses once, so the
   // way out is seen where the keystroke landed rather than announced elsewhere (DESIGN §3).
   const lockFoot = locked ? $("#lockFoot") : null;
   let nudgeTimer: number | undefined;
@@ -834,6 +893,12 @@ export async function renderEditor(
     }
     paintMarkdown(); // repaint the highlight overlay from the new textarea value
     tookIn = null; // the cue is about this edit now
+    // A failure that won't be tried again (a refused field, say) is answered by this edit:
+    // its reason would point at a mark the edit may have cleared. One whose retry is armed
+    // keeps its line, since the retry still carries this edit.
+    if (saveError && !retryArmed) {
+      saveError = null;
+    }
     refreshDirty();
     if (!conflicted) {
       scheduleAutosave();
@@ -865,6 +930,7 @@ export async function renderEditor(
     const sent = JSON.stringify(fields);
     let landed = false;
     let readAgain = false; // a stale refusal of a save that carried nothing new
+    const since = settingsWrites;
     try {
       const body: PostEditBody = { ...fields, base_revision: revisions.base };
       const { post: u, subject_slug_held } = await api<PostSavedResponse>(`/api/posts/${id}`, {
@@ -872,8 +938,7 @@ export async function renderEditor(
         json: body,
       });
       // The server derives a following slug from the subject on each save (SPEC §4).
-      pub = publishingOf(u, subject_slug_held);
-      paintPublishing();
+      adopt(u, subject_slug_held, since);
       revisions.saved(u.current_revision); // our save is now the newest; poll against it
       dirty.markSaved(sent);
       saveFailed = false;
@@ -908,7 +973,8 @@ export async function renderEditor(
       // server will refuse the same value again, so it is not retried.
       const named = e instanceof ApiError && e.field === "subject" ? subjectEl : undefined;
       if (named) {
-        fieldError(named, describeError(e));
+        // Kept with the empty-subject error's clearer, so a version taken in clears either.
+        clearSubjectErr = fieldError(named, describeError(e));
         saveError = "fix the field marked above.";
       } else {
         saveError = describeError(e);
@@ -1111,7 +1177,10 @@ export async function renderEditor(
 
   /** Take another writer's newer version into an editor with nothing unsaved (SPEC §4): it
    *  becomes the text on screen and the base, and the save cue says whose it is. */
-  function takeIn(fresh: PostResponse, revision: string) {
+  function takeIn(fresh: PostResponse, revision: string, since: number) {
+    // Setting a field's value fires no input event, so an error under the subject would stay
+    // over their subject, which the publisher never typed.
+    clearSubjectError();
     replaceKeepingPlace(subjectEl, fresh.post.subject);
     replaceKeepingPlace(ta, fresh.markdown);
     nameTab();
@@ -1119,8 +1188,7 @@ export async function renderEditor(
     imagesChanged?.();
     revisions.took(revision);
     dirty.markSaved();
-    pub = publishingOf(fresh.post, fresh.subject_slug_held);
-    paintPublishing();
+    adopt(fresh.post, fresh.subject_slug_held, since);
     const who = whoActed(fresh.post.author, fresh.post.author_client);
     const at = fresh.post.updated_at; // when they saved, not when this editor noticed
     const when = fmtAt(at, clocksFor([at]));
@@ -1211,42 +1279,72 @@ export async function renderEditor(
     if (locked || saving || conflicted || gone || document.hidden) {
       return;
     }
-    const baseAtRequest = revisions.base; // to tell our own save landing mid-poll from another writer's
     try {
-      const fresh = await api<PostResponse>(`/api/posts/${id}`, { signal });
-      if (conflicted || gone) {
-        return; // a save's refusal answered first
-      }
-      const decision = revisions.decide(
-        {
-          status: fresh.post.status,
-          revision: fresh.post.current_revision,
-          author: fresh.post.author,
-          client: fresh.post.author_client,
-        },
-        { saving, baseAtRequest },
-      );
-      if (decision === "ignore" || decision === "fresh") {
-        return;
-      }
-      if (decision.kind === "locked") {
-        showConflict(decision);
-        return;
-      }
-      // Read now, after the wait: a keystroke that landed while the read was out makes this a
-      // choice for the publisher, and nothing runs between this check and the swap.
-      const answer = answerNewer({ unsaved: dirty.dirty || uploading.size > 0, composing });
-      if (answer === "take") {
-        takeIn(fresh, decision.revision);
-      } else if (answer === "banner") {
-        showConflict(decision);
-      }
+      await checkFreshness();
     } catch (e) {
       if (isNotFound(e)) {
         removed();
       }
       // Anything else is transient: try again next tick.
     }
+  }
+  /**
+   * Read the post and act on what changed elsewhere: take in its settings, and take in or warn
+   * of a newer revision, as the poll does. True when a newer revision was found (taken in, the
+   * banner raised, or waiting on an input method), so what is saved isn't what this editor
+   * was based on. Throws as the read did.
+   */
+  async function checkFreshness(): Promise<boolean> {
+    const baseAtRequest = revisions.base; // to tell our own save landing mid-poll from another writer's
+    const since = settingsWrites;
+    const fresh = await api<PostResponse>(`/api/posts/${id}`, { signal });
+    if (conflicted || gone) {
+      return true; // a save's refusal answered first
+    }
+    const decision = revisions.decide(
+      {
+        status: fresh.post.status,
+        revision: fresh.post.current_revision,
+        author: fresh.post.author,
+        client: fresh.post.author_client,
+      },
+      { saving, baseAtRequest },
+    );
+    if (decision === "ignore") {
+      return false; // the read may predate our own save, which is the newest
+    }
+    // A settings change made elsewhere writes no revision, so every read carries it.
+    adopt(fresh.post, fresh.subject_slug_held, since);
+    if (decision === "fresh") {
+      return false;
+    }
+    if (decision.kind === "locked") {
+      showConflict(decision);
+      return true;
+    }
+    // Read now, after the wait: a keystroke that landed while the read was out makes this a
+    // choice for the publisher, and nothing runs between this check and the swap.
+    const answer = answerNewer({ unsaved: dirty.dirty || uploading.size > 0, composing });
+    if (answer === "take") {
+      takeIn(fresh, decision.revision, since);
+    } else if (answer === "banner") {
+      showConflict(decision);
+    }
+    return true;
+  }
+  /**
+   * Save what is unsaved before an act that renders or freezes what is saved (a test, a
+   * schedule, a send now), and make sure what is saved is still what this editor shows.
+   * "refused" when it isn't: a save refused as stale, or, with nothing to save, another
+   * writer's newer revision found by reading the post, which the poll may not have read yet
+   * (SPEC §4, §5, §6). Throws as the save or the read did.
+   */
+  async function saveBeforeActing(): Promise<SaveResult> {
+    const result = await saveDraft(true);
+    if (result !== "unchanged") {
+      return result;
+    }
+    return (await checkFreshness()) ? "refused" : "unchanged";
   }
   /** Read the post's freshness now, outside the poll's pace. */
   function readFreshness() {
@@ -1293,6 +1391,7 @@ export async function renderEditor(
     let seenOpen = false; // whether this page showed the window open, and so its buttons
     const reschedBtn = $<HTMLButtonElement>("#rescheduleSchedule");
     const cancelBtn = $<HTMLButtonElement>("#cancelSchedule");
+    const lockFootText = $("#lockFootText");
     const offers = (name: SendAction["name"]) =>
       current.actions === undefined || can({ actions: current.actions }, name);
     const paintBanner = () => {
@@ -1309,6 +1408,7 @@ export async function renderEditor(
       }
       reschedBtn.disabled = due;
       cancelBtn.disabled = due;
+      lockFootText.textContent = due ? LOCK_FOOT_DUE : LOCK_FOOT_OPEN;
       controls.hidden = reschedBtn.hidden && cancelBtn.hidden;
       const markup = scheduledBannerHtml(current, due);
       const key = String(markup);
@@ -1375,6 +1475,13 @@ export async function renderEditor(
             // so such a report may carry a change made elsewhere (Claude, another tab): read the
             // post again for the banner's row. A stage change hands off below instead.
             const settingsMayHaveChanged = !change && send.rev !== current.rev;
+            // A re-make (a template or identity change) rewrites the frozen copy under the same
+            // revision, so the render held for it is no longer the email that will send. A move
+            // or a settings change gives the send a new `rev` too, but leaves the copy as it was.
+            // (The post's reference to its send, read until the send's own read answers, carries
+            // no `remade_at`, so the first report compares against nothing.)
+            const copyMayHaveChanged =
+              current.remade_at !== undefined && send.remade_at !== current.remade_at;
             current = send;
             if (settingsMayHaveChanged) {
               void rereadPublishing();
@@ -1391,6 +1498,14 @@ export async function renderEditor(
             }
             paintBanner();
             paintConditions();
+            if (copyMayHaveChanged) {
+              renders.forget();
+              if (tab === "preview") {
+                void showPreview();
+              } else {
+                paintPreview();
+              }
+            }
           },
           removed,
           // The layer's cursor ran ahead of the database: read the post and its send again.
@@ -1539,9 +1654,13 @@ export async function renderEditor(
             placeholder,
             `![${image.filename}](${image.filename})`,
           );
+          // An open Images dialog lists the new image, and reads its reference as used.
+          imagesChanged?.();
+          // The reference taking the placeholder's place shows the image arrived, so it says
+          // nothing more: a toast for each image in a batch would push out a refusal, which
+          // is the only word of why an image is missing (DESIGN §5).
           if (next) {
             editText(next);
-            toast("Image added");
           } else {
             toast(
               `Uploaded “${image.filename}”, but its placeholder was removed, so it wasn’t added.`,
@@ -1729,6 +1848,11 @@ export async function renderEditor(
     }
     const to = $<HTMLTextAreaElement>("#testTo", m.el);
     to.focus();
+    // The hint names where the list came from, so it goes once the list is anyone else's.
+    const defaultsHint = $("#testDefaultsHint", m.el);
+    to.addEventListener("input", () => {
+      defaultsHint.hidden = true;
+    });
     // Pre-fill with saved defaults (don't clobber anything already typed).
     api<SettingsResponse>("/api/settings")
       .then((s) => {
@@ -1736,9 +1860,8 @@ export async function renderEditor(
         if (defaults.length && !to.value.trim()) {
           to.value = defaults.join("\n");
           m.clearError(); // an empty-field error raised before the defaults arrived no longer holds
-          const hint = $("#testDefaultsHint", m.el);
-          hint.textContent = "Pre-filled from your default test recipients (Settings).";
-          hint.hidden = false;
+          defaultsHint.textContent = "Pre-filled from your default test recipients (Settings).";
+          defaultsHint.hidden = false;
         }
       })
       .catch(() => {});
@@ -1756,8 +1879,13 @@ export async function renderEditor(
           return;
         }
         try {
-          if (!locked) {
-            await saveDraft(true);
+          // A refused save means the server holds another writer's newer revision, and a test
+          // renders what is saved: it would deliver their version as the review of this text.
+          // As with Schedule, close the dialog and let the out-of-date banner be the next step.
+          if (!locked && (await saveBeforeActing()) === "refused") {
+            m.close();
+            freshnessEl.scrollIntoView({ block: "nearest" });
+            return;
           }
           // One request per address, each on its own, so one that fails doesn't stop the
           // rest, and the dialog can name exactly the ones to try again.
@@ -1799,6 +1927,7 @@ export async function renderEditor(
             // The dialog stays open with only the addresses that didn't get it, so Send again
             // tries those and no one gets a second copy.
             to.value = missed.map((x) => x.email).join("\n");
+            defaultsHint.hidden = true;
             m.error(notSentMessage(sent, addrs.length, missed));
             return;
           }
@@ -1832,18 +1961,19 @@ export async function renderEditor(
       // While the server would refuse both views (no provider connected, or no time zone set),
       // the dialog drops the picker and the Send now row and leaves only the standing line
       // (DESIGN §4).
-      const notConnected = !canSend;
+      const notConnected = !canSend();
       // The dialog's own copy of the post's settings (SPEC §4, §5): it opens as stored, the form
       // under the time edits it, and it reaches the post only when Schedule or Send now is
       // pressed, so Cancel leaves the post as it was. A following address shows the subject in
       // the field as it now stands, unless another post holds that slug.
+      const opened = pub;
       const working: Publishing = { ...pub, subject: subjectEl.value };
       if (working.slugAuto && !working.slugTaken) {
         working.slug = slugify(working.subject) || working.slug;
       }
       const scheduleHint = "It sends at the time you pick, with a cancelable window until then.";
       const scheduleView = () =>
-        html`<h3 id="schHead">Schedule this post</h3><p class="hint" id="schHint">${scheduleHint}</p>${notConnectedScheduleLine()}${noTimeZoneLine(canSend)}${dailyWritesLine()}${sandboxSendLine()}${refusingSendLine()}${notConnected ? null : html`${whenHtml("schWhen", def, c)}<div class="dialog-settings" id="schForm"></div>`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Or send as soon as possible.</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
+        html`<h3 id="schHead">Schedule this post</h3><p class="hint" id="schHint">${scheduleHint}</p>${notConnectedScheduleLine()}${noTimeZoneLine(!notConnected)}${dailyWritesLine()}${sandboxSendLine()}${refusingSendLine()}${notConnected ? null : html`${whenHtml("schWhen", def, c)}<div class="dialog-settings" id="schForm"></div>`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Or send as soon as possible.</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
       // The picked time survives a trip to Send now and back.
       let picked = toLocalInput(def, c.home);
       // The mounted picker, for the view that shows it; a trip to Send now and back mounts a
@@ -1915,10 +2045,9 @@ export async function renderEditor(
       const showForm = () => mountSettingsForm($("#schForm", box), working, "sch");
       // The dialog's settings go with the act itself, checked and applied together, so a
       // refused schedule changes neither and a refused address schedules nothing.
-      const settingsBody = () => ({
-        email_only: working.emailOnly,
-        ...settingsChange(pub, working),
-      });
+      // Only what the dialog changed is sent, so a change made elsewhere while it was open (the
+      // post left out of the archive by Claude, say) is never undone by a box left as it opened.
+      const settingsBody = () => settingsChange(opened, working) ?? {};
       /** A refusal of the address goes under its field; any other says itself as it would. */
       const sayRefusal = (e: unknown) => {
         if (!showSlugRefusal(box, "sch", e)) {
@@ -1944,7 +2073,7 @@ export async function renderEditor(
             // A refused save means the server holds another writer's newer revision, so
             // scheduling now would freeze content the publisher never saw (SPEC §6).
             // Close the dialog and let the out-of-date banner behind it be the next step.
-            if ((await saveDraft(true)) === "refused") {
+            if ((await saveBeforeActing()) === "refused") {
               refused();
               return;
             }
@@ -1980,7 +2109,7 @@ export async function renderEditor(
           m.clearError();
           try {
             // As in doSchedule: a refused save must not become a frozen send.
-            if ((await saveDraft(true)) === "refused") {
+            if ((await saveBeforeActing()) === "refused") {
               refused();
               return;
             }
@@ -2042,7 +2171,7 @@ export async function renderEditor(
         $("#snCancel", box).onclick = m.close;
         $("#snGo", box).onclick = doSendNow;
         showForm();
-        $<HTMLButtonElement>("#snGo", box).disabled = !postAction(post, "send_now");
+        $<HTMLButtonElement>("#snGo", box).disabled = !postAction({ actions }, "send_now");
         $("#toSchedule", box).onclick = () => {
           setHtml(box, scheduleView());
           wireSchedule();
@@ -2070,7 +2199,13 @@ type BannerSend = Pick<SendView, "id" | "fire_at" | "rev" | "conditions"> &
   Partial<
     Pick<
       SendView,
-      "phase" | "actions" | "scheduled_by" | "rescheduled_by" | "canceled_by" | "resolved_by"
+      | "phase"
+      | "actions"
+      | "remade_at"
+      | "scheduled_by"
+      | "rescheduled_by"
+      | "canceled_by"
+      | "resolved_by"
     >
   >;
 
