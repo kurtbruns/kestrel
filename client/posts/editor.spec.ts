@@ -1075,6 +1075,36 @@ describe("editor view", () => {
     expect(fake.unhandled).toHaveLength(0);
   });
 
+  // DESIGN §3: a scheduled post's Preview is the copy that will send, so a re-make made
+  // elsewhere replaces it, under the same revision.
+  it("shows the re-made copy on Preview once the send reports a re-make, on either tab", async () => {
+    const linked = scheduledPost(Date.now() + 3_600_000);
+    let name = "Field Notes";
+    await open([
+      ...linked.routes.filter((r) => r.path !== "/api/posts/p1/preview.json"),
+      ...previewRoutes(linked.server, () => `<p>${name}</p>`),
+    ]);
+    await previewLoads();
+    expect(shownText()).toBe("Field Notes");
+
+    name = "Field Notes REMADE"; // the publication renamed, with its re-make confirmed
+    linked.remake(Date.now());
+    await vi.advanceTimersByTimeAsync(60_000);
+    await previewLoads();
+    expect(shownText()).toBe("Field Notes REMADE");
+    expect($("#previewStatus").textContent).toBe("");
+
+    // On Edit, the held render is dropped, and Preview reads the new one when opened.
+    $<HTMLButtonElement>(".ctab[data-tab='edit']").click();
+    name = "Field Notes AGAIN";
+    linked.remake(Date.now() + 1);
+    await vi.advanceTimersByTimeAsync(60_000);
+    $<HTMLButtonElement>(".ctab[data-tab='preview']").click();
+    await previewLoads();
+    expect(shownText()).toBe("Field Notes AGAIN");
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("says on the banner that the send will be held while email is refusing, in the server's words, until it recovers (SPEC §13)", async () => {
     const linked = scheduledPost();
     const refusing = condition.refusing();
@@ -2272,6 +2302,40 @@ describe("editor view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("drops the pre-filled hint once the recipients are edited, or narrowed to those a test missed", async () => {
+    let failing = false;
+    await open([
+      { path: "/api/posts/p1", reply: () => draft() },
+      {
+        path: "/api/settings",
+        reply: () => ({ settings: { test_recipients: ["me@b.c", "you@b.c"] } }),
+      },
+      {
+        method: "POST",
+        path: "/api/posts/p1/test",
+        reply: (req) =>
+          failing && (req.json() as { to: string }).to === "you@b.c"
+            ? jsonResponse({ error: "bad_gateway", message: "The provider didn't answer." }, 502)
+            : { sent: true, warnings: [] },
+      },
+    ]);
+    $("#testBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#testDefaultsHint").hidden).toBe(false);
+    typeInto($<HTMLTextAreaElement>("#testTo"), "me@b.c\nyou@b.c\nthem@b.c");
+    expect($("#testDefaultsHint").hidden).toBe(true);
+    $("#tCancel").click();
+
+    failing = true;
+    $("#testBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#testDefaultsHint").hidden).toBe(false);
+    $("#tGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($<HTMLTextAreaElement>("#testTo").value).toBe("you@b.c");
+    expect($("#testDefaultsHint").hidden).toBe(true);
+  });
+
   it("leaves the warnings under the composer as they were when every test address fails, since nothing rendered", async () => {
     let failing = false;
     await open([
@@ -2399,6 +2463,30 @@ describe("editor view", () => {
     // A second chain would fire here too; the one retry, having failed, waits twice as long.
     await vi.advanceTimersByTimeAsync(5_000);
     expect(puts()).toHaveLength(3);
+  });
+
+  // DESIGN §5: a failure with a home is said there and nowhere else, and a save's is the cue.
+  it("says a save that fails on opening Preview on the save cue only, with Preview not up to date", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/api/posts/p1",
+        reply: () => {
+          throw new TypeError("Failed to fetch");
+        },
+      },
+      ...previewRoutes(server),
+    ]);
+    typeInto(body(), "mine");
+    $(".ctab[data-tab='preview']").click();
+    await previewLoads();
+    expect($("#saveStatus").textContent).toBe(
+      "Not saved: Couldn’t reach Kestrel. Check your connection and try again.",
+    );
+    expect($("#previewStatus").textContent).toBe("Not up to date");
+    expect($("#toasts").textContent).toBe("");
   });
 
   it("tries a save again after a dropped connection, but not after a failure in the page itself", async () => {
@@ -2732,6 +2820,81 @@ describe("editor view", () => {
     expect(puts()).toHaveLength(1);
   });
 
+  it("clears the refused field's line from the save cue once the field is edited, since nothing will retry it (DESIGN §6)", async () => {
+    let refuse = true;
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/api/posts/p1",
+        reply: (req) =>
+          refuse
+            ? jsonResponse(
+                { error: "bad_request", message: "That subject is too long.", field: "subject" },
+                400,
+              )
+            : server.put(req),
+      },
+      ...previewRoutes(server),
+    ]);
+    typeInto(body(), "mine");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect($("#saveStatus").textContent).toBe("Not saved: fix the field marked above.");
+    refuse = false;
+    typeInto($<HTMLInputElement>("#f-subject"), "Owls");
+    expect($("#f-subject").classList.contains("is-invalid")).toBe(false);
+    expect($("#saveStatus").textContent).toBe("Unsaved changes");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect($("#saveStatus").textContent).toBe("Saved");
+  });
+
+  it("keeps a dropped connection's line on the save cue through an edit, since its retry is still coming", async () => {
+    const server = draftServer();
+    let offline = true;
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/api/posts/p1",
+        reply: (req) => {
+          if (offline) {
+            throw new TypeError("Failed to fetch");
+          }
+          return server.put(req);
+        },
+      },
+      ...previewRoutes(server),
+    ]);
+    typeInto(body(), "mine");
+    $("#saveBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    const failed = $("#saveStatus").textContent;
+    expect(failed).toMatch(/^Not saved: /);
+    typeInto(body(), "mine, more");
+    expect($("#saveStatus").textContent).toBe(failed);
+    offline = false;
+    await vi.advanceTimersByTimeAsync(5000);
+    expect($("#saveStatus").textContent).toBe("Saved");
+  });
+
+  it("clears an error under the subject when another writer's version is taken in", async () => {
+    const server = draftServer(draft({ subject: "" }));
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+      ...previewRoutes(server),
+    ]);
+    $("#scheduleBtn").click();
+    expect($("#f-subject").classList.contains("is-invalid")).toBe(true);
+    $<HTMLInputElement>("#f-subject").blur();
+    server.elsewhere("service", "mcp", { subject: "Owls at dusk" });
+    await vi.advanceTimersByTimeAsync(10_000); // the freshness poll takes it in
+    expect($<HTMLInputElement>("#f-subject").value).toBe("Owls at dusk");
+    expect($("#f-subject").classList.contains("is-invalid")).toBe(false);
+    expect(document.querySelector("#f-subject + .field-error")).toBeNull();
+  });
+
   it("refuses to schedule without a subject, then schedules at the picked time and re-mounts scheduled", async () => {
     // A "now" before the picked fire time (2026-09-25 15:00 local), so the scheduled
     // banner never reads it as already missed, whenever the suite runs.
@@ -2771,7 +2934,7 @@ describe("editor view", () => {
     await vi.advanceTimersByTimeAsync(0);
     const scheduled = fake.calls.find((c) => c.url.pathname === "/api/posts/p1/schedule");
     // The local time as picked, which the server reads on the publication's clock (SPEC §6).
-    expect(scheduled?.json()).toEqual({ fire_at: "2026-09-25T15:00", email_only: false });
+    expect(scheduled?.json()).toEqual({ fire_at: "2026-09-25T15:00" }); // no setting changed
     expect($("#toasts").textContent).toMatch(/Scheduled for \w{3} Sep 25, 3:00 PM\. /);
     expect($(".banner-scheduled").textContent).toMatch(/Scheduled for .+ · Sends in /);
     expect(body().readOnly).toBe(true);
@@ -2831,6 +2994,48 @@ describe("editor view", () => {
     expect(handle().dirty()).toBe(true);
   });
 
+  // DESIGN §3: the test is the review, so it must be of the text on screen, never another
+  // writer's version the server holds instead.
+  it("sends no test when the save before it is refused as stale, and points at the banner", async () => {
+    const server = draftServer();
+    let theirs: string | null = null;
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/api/posts/p1",
+        reply: (req) =>
+          server.put(req, () => {
+            theirs ??= server.elsewhere("service", null, { markdown: "theirs" });
+            return jsonResponse(
+              {
+                error: "stale_revision",
+                message: "changed",
+                current_revision: theirs,
+                author: "service",
+              },
+              409,
+            );
+          }),
+      },
+      { path: "/api/settings", reply: () => ({ settings: { test_recipients: ["me@b.c"] } }) },
+      { method: "POST", path: "/api/posts/p1/test", reply: () => ({ sent: true, warnings: [] }) },
+    ]);
+    const intoView = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
+    typeInto(body(), "mine, not theirs");
+    $("#testBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    $("#tGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/test")).toBe(false);
+    expect(document.querySelector(".modal")).toBeNull();
+    expect($("#toasts").textContent).toBe("");
+    expect($("#freshnessBanner").hidden).toBe(false);
+    expect(intoView).toHaveBeenCalledTimes(1);
+    expect(body().value).toBe("mine, not theirs");
+    expect(fake.unhandled).toEqual([]);
+  });
+
   // DESIGN §4: the schedule dialog says no provider is connected before the publisher picks
   // a time, rather than refusing after they confirm.
   it("carries a standing line in the schedule dialog while no provider is connected, with Schedule disabled and no picker or Send now", async () => {
@@ -2888,6 +3093,35 @@ describe("editor view", () => {
     expect(document.querySelector(".modal #schWhen")).not.toBeNull();
     expect($<HTMLButtonElement>("#schGo").disabled).toBe(false);
     $("#schCancel").click();
+  });
+
+  // DESIGN §4: the line reads the post's actions as the dialog opens, so a zone set elsewhere
+  // since the editor opened never leaves it standing over a working dialog.
+  it("drops the no-time-zone line once a read of the post offers scheduling, without a reload", async () => {
+    appState.appConfig = settingsResponse({
+      deployment: { provider: "ses" },
+      settings: { time_zone: null, time_zone_label: null },
+    });
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { path: "/api/subscribers", reply: () => ({ counts: { confirmed: 1 }, page: { total: 1 } }) },
+      { path: "/api/provider", reply: () => providerStatus({ state: "production" }) },
+    ]);
+    $("#scheduleBtn").click();
+    expect(document.querySelector(".modal .no-time-zone")).not.toBeNull();
+    $("#schCancel").click();
+    // The zone is set in Settings in another tab: the server now offers both.
+    appState.appConfig = settingsResponse({ deployment: { provider: "ses" } });
+    await vi.advanceTimersByTimeAsync(10_000); // the freshness poll's read
+    $("#scheduleBtn").click();
+    expect(document.querySelector(".modal .no-time-zone")).toBeNull();
+    expect($<HTMLButtonElement>("#schGo").disabled).toBe(false);
+    $("#toSendNow").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($<HTMLButtonElement>("#snGo").disabled).toBe(false);
+    $("#snCancel").click();
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("says only that no provider is connected, while neither is, since that comes first", async () => {
@@ -2997,7 +3231,39 @@ describe("editor view", () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(listings()).toHaveLength(0);
       const scheduled = fake.calls.find((c) => c.url.pathname === "/api/posts/p1/schedule");
-      expect(scheduled?.json()).toMatchObject({ email_only: false, slug: "dusk-owls" });
+      expect(scheduled?.json()).toMatchObject({ slug: "dusk-owls" });
+      expect(scheduled?.json()).not.toHaveProperty("email_only"); // left as it was
+    });
+
+    // SPEC §4: a settings change writes no revision, so the editor follows it from any read.
+    it("follows a post left out of the archive elsewhere, and never puts it back by scheduling", async () => {
+      const server = draftServer();
+      await open(routes(server));
+      expect($("#headEmailOnly").hidden).toBe(true);
+      // Claude's change_post_settings, while the draft sits open with nothing unsaved.
+      server.listing({ json: () => ({ email_only: true }) } as FakeRequest);
+      await vi.advanceTimersByTimeAsync(10_000); // the freshness poll's read
+      expect($("#headEmailOnly").hidden).toBe(false);
+      $("#scheduleBtn").click();
+      expect($<HTMLInputElement>("#schInclude").checked).toBe(false);
+      $("#schCancel").click();
+      $("#settingsBtn").click();
+      expect($<HTMLInputElement>("#psInclude").checked).toBe(false);
+      $("#psCancel").click();
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("leaves a setting changed elsewhere while the dialog was open as it is", async () => {
+      const server = draftServer();
+      await open(routes(server));
+      $("#scheduleBtn").click();
+      expect($<HTMLInputElement>("#schInclude").checked).toBe(true);
+      server.listing({ json: () => ({ email_only: true }) } as FakeRequest);
+      await vi.advanceTimersByTimeAsync(10_000); // read while the dialog is open
+      $("#schGo").click();
+      await vi.advanceTimersByTimeAsync(0);
+      const scheduled = fake.calls.find((c) => c.url.pathname === "/api/posts/p1/schedule");
+      expect(scheduled?.json()).not.toHaveProperty("email_only");
     });
 
     it("says a refused address under its field, and keeps the dialog open", async () => {
@@ -3537,6 +3803,37 @@ describe("editor view", () => {
       expect(dialogOpen()).toBe(false);
       await vi.advanceTimersByTimeAsync(0);
       expect(body().value).toMatch(/^!\[owl\.png\]\(owl\.png\)\n\n# Owls/);
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("lists an image whose upload lands while the dialog is open, as used", async () => {
+      let names: string[] = [];
+      let land = () => {}; // replaced by the upload's answer once it is asked for
+      await open([
+        { path: "/api/posts/p1", reply: () => draft() },
+        listRoute(() => names),
+        {
+          method: "POST",
+          path: "/api/posts/p1/images",
+          reply: () =>
+            new Promise((resolve) => {
+              land = () => {
+                names = ["owl.png"];
+                resolve({ image: img("owl.png") });
+              };
+            }),
+        },
+      ]);
+      const input = $<HTMLInputElement>("#imgInput");
+      const file = new File(["png"], "owl.png", { type: "image/png" });
+      Object.defineProperty(input, "files", { value: [file], configurable: true });
+      input.dispatchEvent(new Event("change"));
+      imagesButton().click(); // while the upload is still out
+      await vi.advanceTimersByTimeAsync(0);
+      expect(document.querySelector('.images-insert[data-name="owl.png"]')).toBeNull();
+      land();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(row("owl.png").querySelector(".images-meta")?.textContent).toBe("1600×1200 · 412 KB");
       expect(fake.unhandled).toEqual([]);
     });
 

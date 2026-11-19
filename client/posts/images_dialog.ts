@@ -18,9 +18,10 @@ export interface ImagesDialogHooks {
   /** The body as it stands on screen. An image is used when it or the saved post uses it. */
   body: () => string;
   /**
-   * Hands the editor a function to call when the post's text may have changed while the dialog
-   * is open (another writer's version taken in, or the out-of-date banner raised), so the dialog
-   * reads the saved post again and says what is used now.
+   * Hands the editor a function to call when the post's text or images may have changed while
+   * the dialog is open (another writer's version taken in, the out-of-date banner raised, or an
+   * upload landed), so the dialog reads the images and the saved post again and says what is
+   * used now.
    */
   watch: (changed: () => void) => void;
   /** Put a reference to this image at the caret. The dialog has closed. */
@@ -161,14 +162,17 @@ export async function openImagesDialog(
     }
   }
 
-  // The text changed while the dialog was open: read the saved post again, and repaint only if
-  // what is used changed, keeping focus on the control it was on.
+  // The text or the images changed while the dialog was open: read both again, and repaint only
+  // if the list or what is used changed, keeping focus on the control it was on.
   hooks.watch(async () => {
     if (!m.el.isConnected || signal.aborted) {
       return;
     }
     try {
-      saved = await readSaved();
+      [images, saved] = await Promise.all([
+        api<ImageListResponse>(`/api/posts/${postId}/images`, { signal }).then((r) => r.images),
+        readSaved(),
+      ]);
     } catch {
       return; // the editor answers a failed read of its own post
     }
