@@ -212,7 +212,7 @@ If you're more than one release behind, upgrade straight to the release you're m
 Do every other step each paragraph names, oldest release first, where it falls in this guide. Keep in mind:
 
 - A number in a paragraph counts that release alone. If one says it changes two of your Claude Code files, `check-context` can report more, counting every release you skip.
-- A release's change to how you upgrade, such as a new check in the upgrade skill, isn't in force until that release is installed. Until the install, you upgrade on the guide and skill you have now. After it, the new release's guide and skill apply, from the step after the install.
+- A release's change to how you upgrade isn't in force until that release is installed. Until the install, you upgrade on the guide and skill you have now. After it, the new release's guide applies from the step after the install, so a new check in a later step, such as one before the database changes, holds in this upgrade. A change to the upgrade skill, or to a step at or before the install, is guaranteed only from your next upgrade: the skill you started with stays loaded, even once `check-context` brings in the new one.
 - A paragraph may say it removed or renamed something your current skill or guide uses, such as a file or a command. Use what it names instead.
 
 ## What check-context reports
