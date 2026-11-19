@@ -34,7 +34,7 @@ A release's *Upgrading* paragraph is written from the release before it, but an 
 
 - **What an older skill or guide reads, said here.** A release that removes or renames something an earlier release's upgrade skill or guide reads (a docs path, a command, a flag, an npm script) says so in its *Upgrading* paragraph, naming what to use instead, never only in an entry under *Changed*. An operator skipping releases upgrades on the oldest skill, and the paragraph is what the guide tells them to read.
 - **A count is this release's own.** Say what this release changes (two context files, one migration), and let the guide say that `check-context` and `sync-migrations` count across every release skipped. Never write a count meant to cover more than this release.
-- **A change to the upgrade itself takes effect at its install.** A new gate or a skill change applies from the next upgrade, which the paragraph says; the guide already tells someone skipping it that the skill they have runs until the install.
+- **A change to the upgrade itself takes effect at its install, the guide's at once and the skill's at the next upgrade.** The skill rereads the guide from the package it has just installed, so a guide change is in force from the step after the install. The skill's own text is loaded when the upgrade starts and runs to its end, so a skill change applies from the next upgrade, even once `check-context` brings it in. So a new safety check goes in the guide, where it holds at once, and the skill only adds to it. The paragraph says which applies when; the guide already tells someone skipping releases that what they have runs until the install.
 
 ## Cutting a release
 
