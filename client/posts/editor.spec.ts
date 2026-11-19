@@ -293,7 +293,9 @@ describe("editor view", () => {
 
   // The editor mounted the way the router mounts it; `handle()` is what the router sees.
   async function open(routes: FakeRoute[]) {
-    fake = fakeApi(routes);
+    // A draft's editor reads its images for the foot's count; a spec that doesn't serve them
+    // has none.
+    fake = fakeApi([...routes, { path: "/api/posts/p1/images", reply: () => ({ images: [] }) }]);
     await mount((r, s) => renderEditor("p1", r, s));
     await vi.advanceTimersByTimeAsync(0);
   }
@@ -3308,7 +3310,8 @@ describe("editor view", () => {
       path: "/api/posts/p1/preview.json",
       reply: () => ({ revision_id: "r1", html: "<p>Owls</p>", warnings: [] }),
     };
-    const imagesButton = () => $<HTMLButtonElement>('.tb[data-fmt="image"]');
+    // The dialog opens from the foot's count of the draft's images.
+    const imagesButton = () => $<HTMLButtonElement>("#imagesCount");
     const row = (name: string) =>
       $<HTMLButtonElement>(`.images-insert[data-name="${name}"]`).closest("li") as HTMLElement;
     const dialogOpen = () => document.querySelector(".modal-images") !== null;
@@ -3586,11 +3589,131 @@ describe("editor view", () => {
       }
     });
 
-    it("never opens on a scheduled post, where the button nudges the way out", async () => {
-      await open([{ path: "/api/posts/p1", reply: () => draft({ status: "scheduled" }) }]);
-      imagesButton().click();
-      await vi.advanceTimersByTimeAsync(0);
+    it("opens the file picker from the toolbar's Add image, as the foot's click does", async () => {
+      await open([{ path: "/api/posts/p1", reply: () => draft() }]);
+      const picked: Element[] = [];
+      vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(function (
+        this: HTMLInputElement,
+      ) {
+        picked.push(this);
+      });
+      $<HTMLButtonElement>('.tb[data-fmt="image"]').click();
+      expect($('.tb[data-fmt="image"]').getAttribute("aria-label")).toBe("Add image");
+      expect(picked.map((el) => el.id)).toEqual(["imgInput"]);
       expect(dialogOpen()).toBe(false);
+    });
+
+    it("counts the draft's images in the foot, with those not used, and says nothing with none", async () => {
+      await open([
+        { path: "/api/posts/p1", reply: () => withBarn() },
+        listRoute(() => ["barn.png", "owl.png"]),
+      ]);
+      const count = $<HTMLButtonElement>("#imagesCount");
+      expect(count.hidden).toBe(false);
+      expect(count.textContent).toBe("2 images · 1 not used");
+      expect(count.getAttribute("aria-label")).toBe("Manage this post's 2 images, 1 not used");
+      count.click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(dialogOpen()).toBe(true);
+    });
+
+    it("shows no count for a draft with no images", async () => {
+      await open([{ path: "/api/posts/p1", reply: () => draft() }]);
+      expect($<HTMLButtonElement>("#imagesCount").hidden).toBe(true);
+    });
+
+    it("updates the count on a save, not on the keystroke before it", async () => {
+      const server = draftServer();
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        ...previewRoutes(server),
+        listRoute(() => ["owl.png"]),
+      ]);
+      const count = () => $("#imagesCount").textContent;
+      expect(count()).toBe("1 image · 1 not used");
+      typeInto(body(), "# Owls\n\n![An owl](owl.png)");
+      expect(count()).toBe("1 image · 1 not used");
+      await vi.advanceTimersByTimeAsync(5000); // the autosave
+      expect(puts()).toHaveLength(1);
+      expect(count()).toBe("1 image");
+    });
+
+    it("updates the count after an upload lands and after a delete in the dialog", async () => {
+      let names: string[] = [];
+      await open([
+        { path: "/api/posts/p1", reply: () => draft() },
+        listRoute(() => names),
+        renderRoute,
+        {
+          method: "POST",
+          path: "/api/posts/p1/images",
+          reply: () => {
+            names = ["owl.png"];
+            return { image: img("owl.png") };
+          },
+        },
+        {
+          method: "DELETE",
+          path: "/api/posts/p1/images/owl.png",
+          reply: () => {
+            names = [];
+            return { deleted: true };
+          },
+        },
+      ]);
+      const count = $<HTMLButtonElement>("#imagesCount");
+      expect(count.hidden).toBe(true);
+      const input = $<HTMLInputElement>("#imgInput");
+      Object.defineProperty(input, "files", {
+        value: [new File(["png"], "owl.png", { type: "image/png" })],
+        configurable: true,
+      });
+      input.dispatchEvent(new Event("change"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(count.hidden).toBe(false);
+      expect(count.textContent).toBe("1 image");
+
+      body().value = "# Owls\n\nHoot."; // the reference taken out, so its trash goes at once
+      count.click();
+      await vi.advanceTimersByTimeAsync(0);
+      $<HTMLButtonElement>(".images-delete").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(count.hidden).toBe(true);
+    });
+
+    it("updates the count when another writer's version is taken in", async () => {
+      const server = draftServer();
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        ...previewRoutes(server),
+        listRoute(() => ["barn.png"]),
+      ]);
+      expect($("#imagesCount").textContent).toBe("1 image · 1 not used");
+      server.elsewhere("x@y.z", "claude-code", {
+        subject: "Owls",
+        markdown: "# Owls\n\n![Barn owl](barn.png)",
+      });
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(body().value).toBe("# Owls\n\n![Barn owl](barn.png)");
+      expect($("#imagesCount").textContent).toBe("1 image");
+    });
+
+    it("hides the count while a file is held over the body, where the foot names the drop", async () => {
+      await open([{ path: "/api/posts/p1", reply: () => draft() }, listRoute(() => ["owl.png"])]);
+      $("#composerBody").dispatchEvent(new Event("dragover", { bubbles: true, cancelable: true }));
+      expect($("#footText").textContent).toBe("Drop images to upload");
+      expect($<HTMLButtonElement>("#imagesCount").hidden).toBe(true);
+    });
+
+    it("has no count and no dialog on a scheduled post, whose Add image nudges the way out", async () => {
+      await open([{ path: "/api/posts/p1", reply: () => draft({ status: "scheduled" }) }]);
+      expect(document.querySelector("#imagesCount")).toBe(null);
+      const picked = vi.spyOn(HTMLInputElement.prototype, "click");
+      $<HTMLButtonElement>('.tb[data-fmt="image"]').click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(picked).not.toHaveBeenCalled();
       expect(fake.calls.filter((c) => c.url.pathname.endsWith("/images"))).toHaveLength(0);
     });
   });
@@ -3828,12 +3951,12 @@ describe("editor view", () => {
     const frame = $("#composerBody");
     drag("dragover", body());
     expect(frame.classList.contains("dragover")).toBe(true);
-    expect($("#dropFoot span").textContent).toBe("Drop images to upload");
+    expect($("#footText").textContent).toBe("Drop images to upload");
     drag("dragleave", body(), $("#mdHl")); // between the body's own children: still over it
     expect(frame.classList.contains("dragover")).toBe(true);
     drag("dragleave", body()); // out of the window, straight from the textarea
     expect(frame.classList.contains("dragover")).toBe(false);
-    expect($("#dropFoot span").textContent).toBe("Paste, drop, or click to add images");
+    expect($("#footText").textContent).toBe("Paste, drop, or click to add images");
     expect(fake.unhandled).toEqual([]);
   });
 
@@ -3929,14 +4052,14 @@ describe("editor view", () => {
     input.dispatchEvent(new Event("change"));
     await vi.advanceTimersByTimeAsync(0); // the upload is still out
     expect(body().value).toMatch(/^<!-- Uploading "owl\.png"… -->\n\n# Owls/);
-    expect($("#dropFoot span").textContent).toBe("Uploading 1 image…");
+    expect($("#footText").textContent).toBe("Uploading 1 image…");
     expect($<HTMLButtonElement>("#testBtn").disabled).toBe(true);
     expect($<HTMLButtonElement>("#scheduleBtn").disabled).toBe(true);
     typeInto(body(), `${body().value}typed meanwhile`); // the publisher keeps writing
     answer(jsonResponse({ image: { filename: "owl.png", url: "http://m/owl.png" } }));
     await vi.advanceTimersByTimeAsync(0);
     expect(body().value).toMatch(/^!\[owl\.png\]\(owl\.png\)\n\n# Owls[\s\S]*typed meanwhile$/);
-    expect($("#dropFoot span").textContent).toBe("Paste, drop, or click to add images");
+    expect($("#footText").textContent).toBe("Paste, drop, or click to add images");
     expect($<HTMLButtonElement>("#testBtn").disabled).toBe(false);
     expect($<HTMLButtonElement>("#scheduleBtn").disabled).toBe(false);
     expect(fake.unhandled).toEqual([]);
@@ -3955,7 +4078,9 @@ describe("editor view", () => {
       "“huge.png” is 6.0 MB. An image must be 5 MB or smaller.",
     );
     expect(body().value).toBe(before);
-    expect(fake.calls.filter((c) => c.url.pathname.endsWith("/images"))).toHaveLength(0);
+    expect(
+      fake.calls.filter((c) => c.method === "POST" && c.url.pathname.endsWith("/images")),
+    ).toHaveLength(0);
     expect(fake.unhandled).toEqual([]);
   });
 

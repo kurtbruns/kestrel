@@ -74,6 +74,29 @@ export function insertImage(state: TextState, filename: string): TextEdit {
   return { ...edit, select: { start: alt, end: alt + filename.length } };
 }
 
+/** The foot line's count of a draft's images: its words, and the name it gives the dialog. */
+export interface ImagesCount {
+  text: string;
+  label: string;
+}
+
+/**
+ * What the composer's foot says of a draft's images, `notUsed` of `total` unused: nothing with
+ * none, "1 image", "4 images", or "4 images · 1 not used", and the link's name to match.
+ */
+export function imagesCount(total: number, notUsed: number): ImagesCount | null {
+  if (total === 0) {
+    return null;
+  }
+  const images = `${total} image${total === 1 ? "" : "s"}`;
+  return notUsed
+    ? {
+        text: `${images} · ${notUsed} not used`,
+        label: `Manage this post's ${images}, ${notUsed} not used`,
+      }
+    : { text: images, label: `Manage this post's ${images}` };
+}
+
 /** An image's stored size as a reader would say it: `820 bytes`, `412 KB`, `1.9 MB`. */
 export function sizeText(bytes: number): string {
   if (bytes < 1024) {

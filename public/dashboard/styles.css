@@ -2965,6 +2965,44 @@ body.web-mode .content {
   height: 16px;
   fill: currentColor;
 }
+/* The foot's two sides: adding images on the left, and on the right the count of the draft's
+   images, a quiet link in muted text that opens the Images dialog (DESIGN, the editor). The
+   image icon says the images go inline, where a paperclip would say attachment. */
+.foot-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.foot-count {
+  margin-left: auto;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.foot-count:hover {
+  color: var(--fg);
+  text-decoration: underline;
+}
+/* On a phone the count takes a line of its own rather than squeeze the words beside it. */
+@media (max-width: 539px) {
+  .composer-foot {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+  .foot-count {
+    margin-left: 20px;
+    flex-basis: 100%;
+    text-align: left;
+  }
+}
 /* The Images dialog (DESIGN, the editor): a drop region over the draft's images, one row
    each. A row's picture and name are a link that opens the image full size: over them the
    picture takes an accent edge and the ↗ a new tab takes (§7), and the name the link's
