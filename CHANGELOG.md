@@ -28,6 +28,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
+- Scrolling the post editor's body now moves the text, its spelling marks, and the selection as one, where the marks and the selection used to drift off the words while scrolling and catch up a moment later.
 - In the post editor, Bold, Italic, and Code on a selection with a space at either end, as a double-click often leaves, now put their marks around the words and leave the spaces outside, where the marks used to take the spaces in and so marked nothing. With nothing selected and the caret inside a word, they now mark that word instead of inserting placeholder text in the middle of it.
 - An image added to a post now goes in as a paragraph of its own, with one blank line on each side. Before, an image added at the start of a paragraph was joined to that paragraph's text, with an extra blank line left above it.
 - Dragging an image over the post editor and away again without dropping it, back to another window for instance, no longer leaves "Drop images to upload" covering the text until the page is reloaded.

@@ -282,8 +282,12 @@ export async function renderEditor(
           <div class="toolbar" role="toolbar" aria-label="Formatting">${toolbarHtml}</div>
         </div>
         <div class="composer-body${locked ? " locked" : ""}" id="composerBody">
-          <pre class="md-hl" id="mdHl" aria-hidden="true"><code></code></pre>
-          <textarea id="f-markdown" class="editor"${locked ? null : html` placeholder="Type your post in Markdown…"`}${ro}>${markdown}</textarea>
+          <div class="md-scroll" id="mdScroll">
+            <div class="md-stack">
+              <pre class="md-hl" id="mdHl" aria-hidden="true"><code></code></pre>
+              <textarea id="f-markdown" class="editor"${locked ? null : html` placeholder="Type your post in Markdown…"`}${ro}>${markdown}</textarea>
+            </div>
+          </div>
           <iframe class="preview" sandbox="${EMAIL_FRAME_SANDBOX}" title="Email preview" hidden></iframe>
           <iframe class="preview staging" sandbox="${EMAIL_FRAME_SANDBOX}" title="Email preview" hidden></iframe>
         </div>
@@ -322,24 +326,23 @@ export async function renderEditor(
   const ta = $<HTMLTextAreaElement>("#f-markdown");
   const toolbarEl = $(".toolbar", root);
 
-  // Syntax-highlight overlay: a transparent <textarea> over a highlighted
-  // <pre>, kept in scroll sync — the template editor's scaffolding, tokenizing Markdown.
-  // Prose soft-wraps, so both layers share pre-wrap and identical metrics (the caret lands
-  // on the colored text); that wrapping is also why there's no line-number gutter — a
-  // number can't track a wrapped line and prose doesn't want one. The highlight is the point.
-  const mdHl = $("#mdHl");
-  const mdHlCode = $("code", mdHl);
-  const syncMdScroll = () => {
-    mdHl.scrollTop = ta.scrollTop;
-    mdHl.scrollLeft = ta.scrollLeft;
-  };
+  // Syntax-highlight overlay: a transparent <textarea> over a highlighted <pre>, the template
+  // editor's scaffolding, tokenizing Markdown. Prose soft-wraps, so both layers share pre-wrap
+  // and identical metrics (the caret lands on the colored text); that wrapping is also why
+  // there's no line-number gutter — a number can't track a wrapped line and prose doesn't want
+  // one. The highlight is the point.
+  // Neither layer scrolls: the <pre> is as tall as the text and the textarea is stretched over
+  // it, and the box around both (#mdScroll) is the one scroller. A textarea scrolled on its own,
+  // with the <pre> following from its scroll event, is a frame or more behind it, since the
+  // browser moves the textarea off the main thread before the event runs.
+  const mdScroll = $("#mdScroll");
+  const mdHlCode = $("#mdHl code");
   const paintMarkdown = () => {
     // highlightMarkdown emits one block row per source line (split on "\n"), so the row count —
-    // and thus the overlay height — already tracks the textarea, including a trailing blank line.
+    // and thus the stack's height, which the textarea takes — tracks the text, including a
+    // trailing blank line.
     setHtml(mdHlCode, highlightMarkdown(ta.value));
-    syncMdScroll();
   };
-  ta.addEventListener("scroll", syncMdScroll);
   paintMarkdown(); // paint the initial content (a scheduled post is read-only but still highlighted)
 
   // A save carries the subject and the body. The archive address is a publishing setting, set
@@ -481,14 +484,13 @@ export async function renderEditor(
       t.setAttribute("aria-selected", on ? "true" : "false");
     }
     ta.hidden = name !== "edit";
-    mdHl.hidden = name !== "edit"; // the highlight layer travels with the textarea
+    mdScroll.hidden = name !== "edit"; // the highlight layer travels with the textarea
     front.hidden = name !== "preview";
     toolbarEl.classList.toggle("off", name !== "edit");
     // The image foot dims with the toolbar: a click on Preview would insert into a hidden
     // textarea behind a preview that doesn't change. A drop still lands (it switches to Edit).
     root.querySelector("#dropFoot")?.classList.toggle("off", name !== "edit");
     if (name === "edit") {
-      syncMdScroll();
       previewRound += 1; // the look at Preview is over
     }
     paintPreview();

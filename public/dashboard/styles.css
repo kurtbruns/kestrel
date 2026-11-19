@@ -2769,14 +2769,34 @@ body.web-mode .content {
 .composer-body {
   position: relative;
 }
-/* Post editor syntax-highlight overlay: a transparent <textarea> layered over
-   a highlighted <pre> that shows the colored Markdown beneath the caret. The two share
-   identical box + font metrics so the caret sits exactly on the colored text; the textarea
-   is the only scroller and the <pre> is synced to it in script. Unlike the template editor
-   this soft-wraps (Markdown is prose, not code) — hence pre-wrap on both and no line-number
-   gutter — and reuses the shared --syntax-* palette. The textarea keeps normal flow (it owns
-   the height + resize) and paints above the absolutely-positioned <pre> by DOM order, so no
-   z-index is needed and the drop overlay still layers on top. */
+/* Post editor syntax-highlight overlay: a transparent <textarea> layered over a highlighted
+   <pre> that shows the colored Markdown beneath the caret. The two share identical box + font
+   metrics so the caret sits exactly on the colored text. Unlike the template editor this
+   soft-wraps (Markdown is prose, not code), hence pre-wrap on both and no line-number gutter,
+   and reuses the shared --syntax-* palette.
+   Neither layer scrolls. The <pre> sits in flow and is as tall as the text; the textarea is
+   stretched over it (`.md-stack`), and paints above it by DOM order, so no z-index is needed
+   and the drop overlay still layers on top. `.md-scroll` around both is the one scroller and
+   owns the height and the resize, so the text, the browser's spelling marks and selection on
+   the textarea, and the colors on the <pre> move as one surface. A textarea scrolling on its
+   own with the <pre> synced from its scroll event trails it by a frame or more. */
+.md-scroll {
+  height: 320px;
+  min-height: 320px;
+  resize: vertical;
+  overflow-x: hidden;
+  overflow-y: auto;
+  /* Where scrollbars take layout space (Windows/Linux, or "always show"), reserve the gutter
+     always, so the wrap width doesn't change as the text grows past the box and starts it
+     scrolling. With macOS overlay scrollbars it reserves nothing. */
+  scrollbar-gutter: stable;
+  background: var(--syntax-bg);
+}
+/* At least the box's height, so a click under the last line still lands in the textarea. */
+.md-stack {
+  position: relative;
+  min-height: 100%;
+}
 .md-hl,
 .composer-body textarea.editor {
   margin: 0;
@@ -2787,19 +2807,9 @@ body.web-mode .content {
   white-space: pre-wrap;
   overflow-wrap: break-word;
   tab-size: 2;
-  /* Reserve the scrollbar's width on BOTH layers, always. Where scrollbars take layout space
-     (Windows/Linux, or "always show"), the textarea's would otherwise shrink its wrap width
-     only when it scrolls — wrapping long lines a column earlier than the full-width overlay and
-     drifting the caret off the colored text. A stable gutter keeps both wrap identically; with
-     macOS overlay scrollbars it reserves nothing, so nothing changes there. */
-  scrollbar-gutter: stable;
 }
 .md-hl {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
   color: var(--syntax-fg);
-  background: var(--syntax-bg);
   pointer-events: none;
 }
 .md-hl code {
@@ -2818,12 +2828,14 @@ body.web-mode .content {
   background: var(--syntax-code-bg);
 }
 .composer-body textarea.editor {
-  position: relative;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   border: 0;
   border-radius: 0;
-  width: 100%;
-  min-height: 320px;
-  resize: vertical;
+  resize: none;
+  overflow: hidden;
   display: block;
   background: transparent;
   color: transparent;
@@ -2870,7 +2882,7 @@ body.web-mode .content {
    selected), on the recessed surface Settings uses for a read-only card (`.set-card.sunken`);
    the caret is hidden because the field is not for typing. The way out is the composer's
    foot line, below. */
-.composer-body.locked .md-hl {
+.composer-body.locked .md-scroll {
   background: var(--sunken);
 }
 .composer-body.locked textarea.editor {

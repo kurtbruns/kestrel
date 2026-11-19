@@ -543,12 +543,12 @@ describe("editor view", () => {
       ta.focus();
       const at = ta.value.indexOf("Hoot");
       ta.setSelectionRange(at, at + 4);
-      ta.scrollTop = 40;
+      $("#mdScroll").scrollTop = 40;
       server.elsewhere("x@y.z", null, { markdown: "# Barn owls\n\nHoot." });
       await vi.advanceTimersByTimeAsync(10000);
       const moved = ta.value.indexOf("Hoot");
       expect([ta.selectionStart, ta.selectionEnd]).toEqual([moved, moved + 4]);
-      expect(ta.scrollTop).toBe(40);
+      expect($("#mdScroll").scrollTop).toBe(40);
       expect(document.activeElement).toBe(ta);
 
       const subject = $<HTMLInputElement>("#f-subject");
@@ -1511,6 +1511,27 @@ describe("editor view", () => {
       "allow-popups-to-escape-sandbox",
     ]);
     expect(body().hidden).toBe(true);
+  });
+
+  it("scrolls the text and its highlight as one box, which the Preview tab hides and Edit brings back where it was", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+      ...previewRoutes(server),
+    ]);
+    // Neither layer scrolls on its own: one box around both does, so nothing has to follow
+    // the textarea's scroll a frame late.
+    const box = $("#mdScroll");
+    expect(box.contains(body())).toBe(true);
+    expect(box.contains($("#mdHl"))).toBe(true);
+    box.scrollTop = 40;
+    $(".ctab[data-tab='preview']").click();
+    await previewLoads();
+    expect(box.hidden).toBe(true);
+    $(".ctab[data-tab='edit']").click();
+    expect(box.hidden).toBe(false);
+    expect(box.scrollTop).toBe(40);
   });
 
   it("shows what the render found wrong beside the preview, and clears it once the render finds nothing (SPEC §4)", async () => {
