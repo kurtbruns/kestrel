@@ -11,7 +11,6 @@ const ALL = {
   code: true,
   copyout: true,
   editable: true,
-  expand: true,
   heading: true,
   image: true,
   indent: true,
@@ -39,6 +38,7 @@ const ALL = {
   "circle-minus": true,
   desktop: true,
   mail: true,
+  outward: true,
   phone: true,
   trash: true,
 } as const satisfies Record<IconName, true>;

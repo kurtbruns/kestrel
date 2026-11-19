@@ -15,7 +15,6 @@ import code from "./icons/code.svg";
 import copyout from "./icons/copyout.svg";
 import desktop from "./icons/desktop.svg";
 import editable from "./icons/editable.svg";
-import expand from "./icons/expand.svg";
 import heading from "./icons/heading.svg";
 import image from "./icons/image.svg";
 import indent from "./icons/indent.svg";
@@ -27,6 +26,7 @@ import link from "./icons/link.svg";
 import mail from "./icons/mail.svg";
 import octagonAlert from "./icons/octagon-alert.svg";
 import ol from "./icons/ol.svg";
+import outward from "./icons/outward.svg";
 import paperclip from "./icons/paperclip.svg";
 import phone from "./icons/phone.svg";
 import plus from "./icons/plus.svg";
@@ -50,7 +50,6 @@ const ICONS = {
   code: unsafeHtml(code),
   copyout: unsafeHtml(copyout),
   editable: unsafeHtml(editable),
-  expand: unsafeHtml(expand),
   heading: unsafeHtml(heading),
   image: unsafeHtml(image),
   indent: unsafeHtml(indent),
@@ -77,6 +76,7 @@ const ICONS = {
   "circle-minus": unsafeHtml(circleMinus),
   desktop: unsafeHtml(desktop),
   mail: unsafeHtml(mail),
+  outward: unsafeHtml(outward),
   phone: unsafeHtml(phone),
   trash: unsafeHtml(trash),
   x: unsafeHtml(x),

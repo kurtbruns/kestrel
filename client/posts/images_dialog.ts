@@ -222,7 +222,7 @@ function rowHtml(img: PostImage, used: boolean): Html {
     img.width && img.height ? `${img.width}×${img.height}` : null,
     img.bytes === null ? null : sizeText(img.bytes),
   ].filter((f) => f !== null);
-  const look = html`<span class="images-thumb">${web ? html`<img src="${img.url}" alt="" loading="lazy"><span class="images-zoom">${icon("expand")}</span>` : null}</span>
+  const look = html`<span class="images-thumb">${web ? html`<img src="${img.url}" alt="" loading="lazy"><span class="images-zoom">${icon("outward")}</span>` : null}</span>
       <span class="images-text"><span class="images-name">${img.filename}</span><span class="images-meta">${facts.join(" · ")}</span></span>`;
   return html`<li class="images-row${used ? "" : " unused"}">
     ${web ? html`<a class="images-open" href="${img.url}" target="_blank" rel="noopener" aria-label="Open ${img.filename} full size (new tab)">${look}</a>` : html`<span class="images-open">${look}</span>`}

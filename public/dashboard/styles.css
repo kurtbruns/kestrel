@@ -2967,7 +2967,7 @@ body.web-mode .content {
 }
 /* The Images dialog (DESIGN, the editor): a drop region over the draft's images, one row
    each. Pressing a row opens its image full size: the row greys on hover, and its picture
-   takes an accent edge and an expand sign. Insert (Ghost) and the trash can sit at its right as
+   takes an accent edge and the ↗ a new tab takes (§7). Insert (Ghost) and the trash can sit at its right as
    controls of their own, so over either the open cue gives way; over the trash, or while it
    asks, the row takes the danger's tint. An image the post doesn't use says so first in the small
    print, "Not in the post", in the same muted text as the size; one it uses says nothing, since
@@ -3097,7 +3097,7 @@ body.web-mode .content {
 .images-row:has(.images-open:focus-visible) .images-zoom {
   opacity: 1;
 }
-/* No hover to find it by on a touch screen, so the sign stays. */
+/* No hover to find it by on a touch screen, so the arrow stays. */
 @media (hover: none) {
   .images-zoom {
     opacity: 1;
