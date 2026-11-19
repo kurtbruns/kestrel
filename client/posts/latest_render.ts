@@ -74,6 +74,37 @@ export class LatestRender {
     return promise;
   }
 
+  /**
+   * Ask the server again for the render held, which may have changed under the same revision
+   * by a change made elsewhere (the template or the publication's identity). Resolves the new
+   * render when it differs from the one held, in its page or its warnings, and is now held;
+   * null when it is the same, when nothing was held, or when another render or a change landed
+   * meanwhile, which then decides what is held. What is held stays held while the read is out,
+   * so the render on screen isn't marked out of date for a check that usually finds nothing.
+   * Rejects as the request did.
+   */
+  async recheck(): Promise<Render | null> {
+    const before = this.held;
+    if (!before) {
+      return null;
+    }
+    const turn = ++this.asked;
+    const render = await this.fetchRender();
+    if (this.held !== before || turn <= this.forgotAt) {
+      return null;
+    }
+    if (
+      render.revision === before.revision &&
+      render.html === before.html &&
+      render.warnings.join("\n") === before.warnings.join("\n")
+    ) {
+      return null;
+    }
+    this.held = render;
+    this.heldTurn = turn;
+    return render;
+  }
+
   /** The render changed without a new revision (an image the text names was uploaded or
    *  removed), so nothing held or in flight is the render of its revision any more. */
   forget(): void {

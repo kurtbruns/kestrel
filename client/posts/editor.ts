@@ -129,6 +129,11 @@ const ARIA_DISABLED = html` aria-disabled="true"`;
 
 type ComposerTab = "edit" | "preview";
 
+// A scheduled post's foot names the way out while there is one, and from the fire time, when
+// Cancel is refused (SPEC §6), says why the text stays locked instead (DESIGN §3).
+const LOCK_FOOT_OPEN = "Cancel the schedule to edit";
+const LOCK_FOOT_DUE = "Locked: this email is going out";
+
 /**
  * How a save ended. `saved` and `unchanged` both mean the server holds what the editor
  * shows. `refused` means it does not: another writer's revision is newer, so the save was
@@ -300,7 +305,7 @@ export async function renderEditor(
         </div>
         ${
           locked
-            ? html`<div class="composer-foot composer-foot-lock" id="lockFoot" role="status">${icon("readonly")}<span>Cancel the schedule to edit</span></div>`
+            ? html`<div class="composer-foot composer-foot-lock" id="lockFoot" role="status">${icon("readonly")}<span id="lockFootText">${LOCK_FOOT_OPEN}</span></div>`
             : html`<div class="composer-foot" id="dropFoot">${icon("paperclip")}<span aria-live="polite">Paste, drop, or click to add images</span></div>`
         }
         <input type="file" id="imgInput" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
@@ -651,6 +656,24 @@ export async function renderEditor(
       .then((r) => r && stage(r))
       .catch(() => {}); // in the background; a click on Preview asks again and says why
   }
+  /** Read the shown render again, for a change no revision marks: the template or identity
+   *  changed elsewhere, while the publisher was in another tab. A render that comes back the
+   *  same changes nothing on screen; a different one loads out of sight and swaps in. */
+  function recheckRender() {
+    if (!previewCurrent()) {
+      return; // a render of what is saved is already on its way, or none is shown yet
+    }
+    renders
+      .recheck()
+      .then((r) => {
+        if (r && r.revision === savedRevision()) {
+          paintPreview(); // the email on screen is the old look until the new one swaps in
+          stage(r);
+        }
+      })
+      .catch(() => {}); // in the background; the next look at Preview asks again
+  }
+  readWhenShown(recheckRender, signal);
   async function showPreview() {
     showTab("preview");
     if (previewCurrent()) {
@@ -722,7 +745,7 @@ export async function renderEditor(
 
   // --- the lock's nudge ---
   // A scheduled post refuses edits at the browser (readonly) and at the API (SPEC §6). When
-  // one is attempted anyway, the foot's "Cancel the schedule to edit" pulses once, so the
+  // one is attempted anyway, the foot's line ("Cancel the schedule to edit") pulses once, so the
   // way out is seen where the keystroke landed rather than announced elsewhere (DESIGN §3).
   const lockFoot = locked ? $("#lockFoot") : null;
   let nudgeTimer: number | undefined;
@@ -1328,6 +1351,7 @@ export async function renderEditor(
     let seenOpen = false; // whether this page showed the window open, and so its buttons
     const reschedBtn = $<HTMLButtonElement>("#rescheduleSchedule");
     const cancelBtn = $<HTMLButtonElement>("#cancelSchedule");
+    const lockFootText = $("#lockFootText");
     const offers = (name: SendAction["name"]) =>
       current.actions === undefined || can({ actions: current.actions }, name);
     const paintBanner = () => {
@@ -1344,6 +1368,7 @@ export async function renderEditor(
       }
       reschedBtn.disabled = due;
       cancelBtn.disabled = due;
+      lockFootText.textContent = due ? LOCK_FOOT_DUE : LOCK_FOOT_OPEN;
       controls.hidden = reschedBtn.hidden && cancelBtn.hidden;
       const markup = scheduledBannerHtml(current, due);
       const key = String(markup);

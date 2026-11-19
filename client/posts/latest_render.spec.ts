@@ -108,4 +108,49 @@ describe("the post's latest render", () => {
     expect(s.renders.latest).toBe(null);
     await expect(s.renders.want("r2")).rejects.toThrow("The render failed.");
   });
+
+  describe("checked again for a change made elsewhere under the same revision", () => {
+    async function holding(s: ReturnType<typeof source>) {
+      const first = s.renders.want("r2");
+      s.answer(0, "r2", "<p>old look</p>");
+      return (await first)!;
+    }
+
+    it("answers nothing and keeps what is held when the render is the same", async () => {
+      const s = source();
+      const held = await holding(s);
+      const check = s.renders.recheck();
+      expect(s.renders.latest).toBe(held); // still current while the read is out
+      s.answer(1, "r2", "<p>old look</p>");
+      expect(await check).toBe(null);
+      expect(s.renders.latest).toBe(held);
+    });
+
+    it("answers and holds the new render when the template changed it", async () => {
+      const s = source();
+      await holding(s);
+      const check = s.renders.recheck();
+      s.answer(1, "r2", "<p>new look</p>");
+      expect((await check)?.html).toBe("<p>new look</p>");
+      expect(s.renders.latest?.html).toBe("<p>new look</p>");
+    });
+
+    it("leaves a render that landed while it was out in place", async () => {
+      const s = source();
+      await holding(s);
+      const check = s.renders.recheck();
+      const save = s.renders.want("r3"); // a save landed and its render was asked for
+      s.answer(2, "r3", "<p>three</p>");
+      await save;
+      s.answer(1, "r2", "<p>new look</p>");
+      expect(await check).toBe(null);
+      expect(s.renders.latest?.revision).toBe("r3");
+    });
+
+    it("asks nothing when no render is held", async () => {
+      const s = source();
+      expect(await s.renders.recheck()).toBe(null);
+      expect(s.asked()).toBe(0);
+    });
+  });
 });

@@ -1077,6 +1077,36 @@ describe("editor view", () => {
 
   // DESIGN §3: a scheduled post's Preview is the copy that will send, so a re-make made
   // elsewhere replaces it, under the same revision.
+  // DESIGN §3: a template or identity change made in another tab changes a draft's email
+  // under the same revision, so Preview reads it again when the publisher comes back.
+  it("shows a draft's new look on Preview when the publisher comes back to the tab, and nothing new when the look is the same", async () => {
+    const server = draftServer();
+    let look = "old look";
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      ...previewRoutes(server, () => `<p>${look}</p>`),
+    ]);
+    $<HTMLButtonElement>(".ctab[data-tab='preview']").click();
+    await previewLoads();
+    expect(shownText()).toBe("old look");
+    const shown = shownFrame();
+
+    setHidden(true);
+    setHidden(false); // back, with nothing changed
+    await previewLoads();
+    expect(renderReads()).toHaveLength(2);
+    expect(shownFrame()).toBe(shown); // the same frame, never reloaded
+    expect($("#previewStatus").textContent).toBe("");
+
+    setHidden(true);
+    look = "new look"; // the template saved in another tab
+    setHidden(false);
+    await previewLoads();
+    expect(shownText()).toBe("new look");
+    expect($("#previewStatus").textContent).toBe("");
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("shows the re-made copy on Preview once the send reports a re-make, on either tab", async () => {
     const linked = scheduledPost(Date.now() + 3_600_000);
     let name = "Field Notes";
@@ -4343,7 +4373,10 @@ describe("editor view", () => {
     expect($<HTMLElement>("#schedControls").hidden).toBe(false);
     expect($("#cancelSchedule").textContent).toBe("Cancel");
     expect($<HTMLButtonElement>("#cancelSchedule").disabled).toBe(false);
+    expect($("#lockFootText").textContent).toBe("Cancel the schedule to edit");
     await vi.advanceTimersByTimeAsync(6_000);
+    // The foot no longer names a way out the banner doesn't offer (DESIGN §3).
+    expect($("#lockFootText").textContent).toBe("Locked: this email is going out");
     expect($<HTMLElement>("#schedControls").hidden).toBe(false);
     expect($<HTMLButtonElement>("#rescheduleSchedule").disabled).toBe(true);
     expect($<HTMLButtonElement>("#cancelSchedule").disabled).toBe(true);
