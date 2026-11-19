@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EDITOR_CLIENT, KESTREL_CLIENTS } from "../shared/who_acted";
-import { actorLabel, bannerActedBy, sendActedBy, whoActed } from "./who_acted";
+import { actorLabel, bannerActedBy, changedBy, sendActedBy, whoActed } from "./who_acted";
 
 describe("whoActed (SPEC §11, Who acted)", () => {
   it("shows a person in the editor alone", () => {
@@ -115,5 +115,24 @@ describe("bannerActedBy (DESIGN §4, §10)", () => {
 
   it("names the latest act when no one is signed in to compare with", () => {
     expect(bannerActedBy({ scheduled_by: you }, null)).toBe("Scheduled by you@example.com");
+  });
+});
+
+describe("changedBy (DESIGN §3, an action dialog's notice)", () => {
+  const you = { kind: "human" as const, email: "you@example.com", client: "editor" };
+  it("calls Claude Claude, through Claude Code or the connector", () => {
+    expect(changedBy("you@example.com", "claude-code", you)).toBe("Claude");
+    expect(changedBy("you@example.com", "claude", you)).toBe("Claude");
+  });
+
+  it("calls your own editor another tab, and anyone else by their email", () => {
+    expect(changedBy("you@example.com", "editor", you)).toBe("you, in another tab");
+    expect(changedBy("pat@example.com", "editor", you)).toBe("pat@example.com");
+    expect(changedBy("you@example.com", "kestrel-cli", you)).toBe("you@example.com");
+  });
+
+  it("names a service token as one, and nobody as nothing", () => {
+    expect(changedBy("service", "claude-code", you)).toBe("a service token");
+    expect(changedBy(null, "editor", you)).toBeNull();
   });
 });

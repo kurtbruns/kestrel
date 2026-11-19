@@ -178,6 +178,38 @@ export function settingsChange(saved: Publishing, working: Publishing): PostSett
 }
 
 /**
+ * Whether two reads of a post's settings differ in what a publisher sets: Include in archive, or
+ * the address. A following address moves with each saved subject, which is no settings change.
+ */
+export function settingsDiffer(a: Publishing, b: Publishing): boolean {
+  return (
+    a.emailOnly !== b.emailOnly || a.slugAuto !== b.slugAuto || (!a.slugAuto && a.slug !== b.slug)
+  );
+}
+
+/**
+ * Follow a settings change made elsewhere into a dialog's working copy, which opened as `opened`
+ * (SPEC §4): each setting the publisher hasn't changed takes the stored value from `fresh`, and
+ * one they changed keeps theirs. The dialog then takes `fresh` as what it opened with, so
+ * `settingsChange` still sends only the publisher's own changes.
+ */
+export function followSettings(opened: Publishing, working: Publishing, fresh: Publishing): void {
+  if (working.emailOnly === opened.emailOnly) {
+    working.emailOnly = fresh.emailOnly;
+  }
+  const addressUntouched =
+    working.slugAuto === opened.slugAuto && (working.slugAuto || working.slug === opened.slug);
+  if (addressUntouched) {
+    working.slugAuto = fresh.slugAuto;
+    // A following address shows the subject in the field, as the dialog opened it.
+    working.slug =
+      fresh.slugAuto && !fresh.slugTaken ? slugify(working.subject) || fresh.slug : fresh.slug;
+  }
+  working.slugTaken = fresh.slugTaken;
+  working.fixed = fresh.fixed;
+}
+
+/**
  * Draw the settings form into `el` over the working copy `p`, and keep it wired: each change
  * that shows or hides a part redraws it. For a dialog that holds the form beside other fields.
  */

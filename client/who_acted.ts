@@ -109,3 +109,29 @@ export function bannerActedBy(
   }
   return `${latest.verb} by ${actorLabel(latest.actor)}`;
 }
+
+/**
+ * Who changed a post under an open action dialog, in the dialog's plain words (DESIGN §3):
+ * "Claude" for Claude Code or the connector, "you, in another tab" for the person signed in
+ * here through the editor, a service token as one, and anyone else by their email. Null when
+ * nobody is recorded, so the dialog says the post was changed elsewhere.
+ */
+export function changedBy(
+  who: string | null,
+  client: string | null,
+  you: Actor | null,
+): string | null {
+  if (!who) {
+    return null;
+  }
+  if (who === "service") {
+    return whoActed(who, client);
+  }
+  if (client === CLAUDE_CODE_CLIENT || client === CLAUDE_CLIENT) {
+    return "Claude";
+  }
+  if (isYouInEditor({ kind: "human", email: who, client }, you)) {
+    return "you, in another tab";
+  }
+  return who;
+}

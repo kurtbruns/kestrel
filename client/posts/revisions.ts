@@ -56,6 +56,10 @@ export class RevisionTracker {
   base: string | null;
   /** The newest revision already surfaced, so the poll re-warns only on a genuinely newer one. */
   warnedRevision: string | null = null;
+  /** How many times another writer's version has been taken in. An action dialog notes it as the
+   *  publisher confirms and acts only if it hasn't moved, so it never acts on a version it hasn't
+   *  shown; the publisher's own saves leave it alone (SPEC §4). */
+  taken = 0;
 
   constructor(base: string | null) {
     this.base = base;
@@ -84,6 +88,7 @@ export class RevisionTracker {
   /** Another writer's revision was taken into an editor with nothing unsaved: it is the base now. */
   took(revision: string): void {
     this.base = revision;
+    this.taken += 1;
     this.warnedRevision = null;
   }
 
