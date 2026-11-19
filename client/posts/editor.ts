@@ -111,9 +111,6 @@ const message = describeError;
  *  that moved with the subject (or another post's slug), which is no settings change. */
 type DialogChange = "taken" | "conflict" | "image" | "settings" | "address";
 
-/** How long after a dialog's notice of a change a press counts as made before it was read. */
-const JUST_SAID_MS = 1000;
-
 // Each button, its name, and the letter of its shortcut, if it has one (⌘ on a Mac, Ctrl
 // elsewhere: ui/shortcut.ts).
 const TOOLBAR: [IconName, string, string?][][] = [
@@ -1473,9 +1470,6 @@ export async function renderEditor(
       }
       setHtml(slot(), lines.length ? html`<div class="dialog-notice">${lines}</div>` : html``);
     };
-    // When a change was last said, so a press that lands just after it, before anyone could
-    // read it, only says it too.
-    let saidAt = Number.NEGATIVE_INFINITY;
     const redraw = () => follow?.();
     dialogWatch = (change) => {
       if (!box.isConnected) {
@@ -1483,7 +1477,6 @@ export async function renderEditor(
       }
       if (change === "taken") {
         taken = lastTaken;
-        saidAt = Date.now();
         redraw(); // a new subject moves a following address
         paint();
       } else if (change === "address") {
@@ -1491,7 +1484,6 @@ export async function renderEditor(
       } else if (change === "settings" && follow) {
         settings = true;
         followed += 1;
-        saidAt = Date.now();
         redraw();
         paint();
       }
@@ -1502,10 +1494,6 @@ export async function renderEditor(
         uses = usesLine;
         paint();
       },
-      /** Whether a change was said too recently to have been read: the freshness poll can paint
-       *  it a moment before a click already on its way. That press acts on nothing; the notice
-       *  is up, and the next press acts. */
-      justSaid: () => Date.now() - saidAt < JUST_SAID_MS,
       /** What the dialog has shown as the publisher confirms: versions taken in and settings
        *  changes said, the publisher's own saves counting for neither. */
       shown: seen,
@@ -2060,9 +2048,6 @@ export async function renderEditor(
           // it. A refused save means the server holds another writer's version over unsaved
           // edits here: as with Schedule, close the dialog onto the out-of-date banner.
           if (watch) {
-            if (watch.justSaid()) {
-              return;
-            }
             const shown = watch.shown();
             const saved = await saveBeforeActing();
             if (watch.changedSince(shown)) {
@@ -2275,9 +2260,6 @@ export async function renderEditor(
             // (SPEC §6): one the check before it takes in is said here, and the next press
             // schedules it. A refused save means the server holds another writer's version
             // over unsaved edits here: close onto the out-of-date banner behind.
-            if (watch.justSaid()) {
-              return;
-            }
             const shown = watch.shown();
             const saved = await saveBeforeActing();
             if (watch.changedSince(shown)) {
@@ -2319,9 +2301,6 @@ export async function renderEditor(
           m.clearError();
           try {
             // As in doSchedule: an unshown version or a refused save never becomes a send.
-            if (watch.justSaid()) {
-              return;
-            }
             const shown = watch.shown();
             const saved = await saveBeforeActing();
             if (watch.changedSince(shown)) {
