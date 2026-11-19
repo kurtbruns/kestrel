@@ -42,30 +42,30 @@ const SERIAL = text("SN-4417-SECRET");
 const GPS_TAG = 0x0001;
 
 /**
- * A phone's Exif, big-endian: IFD0 holds the make, `orientation`, and a pointer to a GPS
- * directory holding a latitude reference.
+ * A phone's Exif, big-endian unless `little`: IFD0 holds the make, `orientation`, and a pointer
+ * to a GPS directory holding a latitude reference.
  */
-function phoneExif(orientation: number): Uint8Array {
+function phoneExif(orientation: number, little = false): Uint8Array {
   const tiff = new Uint8Array(8 + 42 + SERIAL.length + 18);
   const dv = new DataView(tiff.buffer);
-  tiff.set(text("MM"));
-  dv.setUint16(2, 42);
-  dv.setUint32(4, 8);
-  dv.setUint16(8, 3);
-  const entry = (at: number, tag: number, type: number, count: number, value: number) => {
-    dv.setUint16(at, tag);
-    dv.setUint16(at + 2, type);
-    dv.setUint32(at + 4, count);
-    dv.setUint32(at + 8, value);
+  tiff.set(text(little ? "II" : "MM"));
+  dv.setUint16(2, 42, little);
+  dv.setUint32(4, 8, little);
+  dv.setUint16(8, 3, little);
+  const entry = (at: number, tag: number, type: number, count: number) => {
+    dv.setUint16(at, tag, little);
+    dv.setUint16(at + 2, type, little);
+    dv.setUint32(at + 4, count, little);
+    return at + 8; // where the entry's value goes
   };
   const makeAt = 50;
   const gpsAt = makeAt + SERIAL.length;
-  entry(10, 0x010f, 2, SERIAL.length, makeAt);
-  entry(22, 0x0112, 3, 1, orientation << 16);
-  entry(34, 0x8825, 4, 1, gpsAt);
+  dv.setUint32(entry(10, 0x010f, 2, SERIAL.length), makeAt, little);
+  dv.setUint16(entry(22, 0x0112, 3, 1), orientation, little); // a SHORT sits first in its field
+  dv.setUint32(entry(34, 0x8825, 4, 1), gpsAt, little);
   tiff.set(SERIAL, makeAt);
-  dv.setUint16(gpsAt, 1);
-  entry(gpsAt + 2, GPS_TAG, 2, 2, 0x4e000000); // "N"
+  dv.setUint16(gpsAt, 1, little);
+  tiff.set(text("N"), entry(gpsAt + 2, GPS_TAG, 2, 2));
   return tiff;
 }
 
@@ -182,14 +182,45 @@ const PHONE_WEBP_STORED = extendedWebp(
 
 // GIF_1x1 is its header and a two-colour table (19 bytes), then a graphic control, image, and trailer.
 const GCT_END = 19;
-const xmpExtension = concat(
-  Uint8Array.of(0x21, 0xff, 11),
-  text("XMP DataXMP"),
-  Uint8Array.of(XMP.length),
-  XMP,
-  Uint8Array.of(0),
+// Then its graphic control (8 bytes) and its image (14), before the trailer.
+const IMAGE_END = 41;
+
+/** An application extension named `name`, holding `data` in one sub-block. */
+const gifApp = (name: string, data: Uint8Array) =>
+  concat(
+    Uint8Array.of(0x21, 0xff, 11),
+    text(name),
+    Uint8Array.of(data.length),
+    data,
+    Uint8Array.of(0),
+  );
+
+// XMP as Adobe writes it into a GIF: the packet as raw bytes rather than sub-blocks, then a
+// "magic trailer" that a reader walking it as sub-blocks lands in wherever it starts, and
+// which leads that reader to the block's end.
+const MAGIC_TRAILER = Uint8Array.from({ length: 258 }, (_, i) =>
+  i === 0 ? 1 : Math.max(256 - i, 0),
 );
-const XMP_GIF = concat(GIF_1x1.subarray(0, GCT_END), xmpExtension, GIF_1x1.subarray(GCT_END));
+const xmpExtension = concat(Uint8Array.of(0x21, 0xff, 11), text("XMP DataXMP"), XMP, MAGIC_TRAILER);
+const intoGif = (...blocks: Uint8Array[]) =>
+  concat(GIF_1x1.subarray(0, GCT_END), ...blocks, GIF_1x1.subarray(GCT_END));
+const XMP_GIF = intoGif(xmpExtension);
+
+// A PNG whose walk loses its place: a chunk type that isn't four letters.
+const UNWALKABLE_PNG = intoPng(
+  concat(Uint8Array.of(0, 0, 0, 0), text("\x01\x02\x03\x04"), new Uint8Array(4)),
+);
+
+// A whole PNG whose image chunk states a length past its end, so as to cover a text chunk.
+const OVERSHOT_PNG = (() => {
+  const png = concat(
+    PNG_1x1.subarray(0, PNG_1x1.length - 12),
+    pngChunk("tEXt", text("GPS!!")),
+    PNG_1x1.subarray(PNG_1x1.length - 12),
+  );
+  new DataView(png.buffer).setUint32(IHDR_END, 0xffff);
+  return png;
+})();
 
 describe("an uploaded image is stored without identifying metadata (SPEC §4)", () => {
   it("keeps a JPEG's colour profile and orientation, and drops its Exif, GPS, XMP, IPTC, and comments", () => {
@@ -214,6 +245,54 @@ describe("an uploaded image is stored without identifying metadata (SPEC §4)", 
 
   it("drops a GIF's XMP and leaves the rest", () => {
     expect(stripImageMetadata(XMP_GIF, "image/gif")).toEqual(GIF_1x1);
+  });
+
+  it("drops a GIF's comments and the IPTC ImageMagick writes, and keeps its looping, profile, and drawn text", () => {
+    const comment = concat(Uint8Array.of(0x21, 0xfe, 12), text("GPS 51N home"), Uint8Array.of(0));
+    const kept = [
+      gifApp("NETSCAPE2.0", Uint8Array.of(1, 0, 0)),
+      gifApp("ICCRGBG1012", ICC),
+      concat(
+        Uint8Array.of(0x21, 0x01, 12),
+        new Uint8Array(12),
+        Uint8Array.of(2),
+        text("Hi"),
+        Uint8Array.of(0),
+      ),
+    ];
+    const gif = intoGif(
+      kept[0] as Uint8Array,
+      comment,
+      gifApp("MGK8BIM0000", SERIAL),
+      kept[1] as Uint8Array,
+      gifApp("MGKIPTC0000", SERIAL),
+      kept[2] as Uint8Array,
+    );
+    expect(stripImageMetadata(gif, "image/gif")).toEqual(intoGif(...kept));
+  });
+
+  it("ends a GIF where a browser stops reading it, at a byte that starts no block", () => {
+    const strayed = concat(
+      GIF_1x1.subarray(0, IMAGE_END),
+      Uint8Array.of(0x00),
+      xmpExtension,
+      Uint8Array.of(0x3b),
+    );
+    expect(stripImageMetadata(strayed, "image/gif")).toEqual(GIF_1x1);
+  });
+
+  it("ends a WebP where its header says, dropping what follows", () => {
+    const appended = concat(WEBP_1x1, riffChunk("JUNK", SERIAL));
+    expect(stripImageMetadata(appended, "image/webp")).toEqual(WEBP_1x1);
+  });
+
+  it("keeps a little-endian Exif's orientation, and one whose header ends in 0xFF", () => {
+    const le = intoJpeg(exifApp1(phoneExif(3, true)));
+    expect(stripImageMetadata(le, "image/jpeg")).toEqual(intoJpeg(exifApp1(minimalExif(3))));
+    const ff = intoJpeg(
+      jpegSegment(0xe1, concat(text("Exif\0"), Uint8Array.of(0xff), phoneExif(8))),
+    );
+    expect(stripImageMetadata(ff, "image/jpeg")).toEqual(intoJpeg(exifApp1(minimalExif(8))));
   });
 
   it("keeps no Exif at all for an upright image", () => {
@@ -262,10 +341,27 @@ describe("an uploaded image is stored without identifying metadata (SPEC §4)", 
   });
 
   it("refuses a file whose structure can't be walked, since what follows couldn't be checked", () => {
-    const gif = concat(GIF_1x1.subarray(0, GCT_END), Uint8Array.of(0x99), xmpExtension);
-    expect(stripImageMetadata(gif, "image/gif")).toBeNull();
     const jpeg = intoJpeg(Uint8Array.of(0xff, 0xe1, 0x00, 0x01), exifApp1(phoneExif(6)));
     expect(stripImageMetadata(jpeg, "image/jpeg")).toBeNull();
+    expect(stripImageMetadata(UNWALKABLE_PNG, "image/png")).toBeNull();
+  });
+
+  it("refuses a whole file with a section stating a length past its end, over the metadata after it", () => {
+    expect(stripImageMetadata(OVERSHOT_PNG, "image/png")).toBeNull();
+    const jpeg = concat(
+      JPEG_1x1.subarray(0, JFIF_END),
+      Uint8Array.of(0xff, 0xe0, 0xff, 0xff),
+      exifApp1(phoneExif(6)),
+      Uint8Array.of(0xff, 0xd9),
+    );
+    expect(stripImageMetadata(jpeg, "image/jpeg")).toBeNull();
+    const webp = extendedWebp(
+      XMP_FLAG,
+      riffChunk("VP8 ", new Uint8Array(4)),
+      riffChunk("XMP ", XMP),
+    );
+    new DataView(webp.buffer).setUint32(34, 0xffff, true); // the image chunk's size
+    expect(stripImageMetadata(webp, "image/webp")).toBeNull();
   });
 });
 
@@ -324,13 +420,12 @@ describe("the upload routes store the stripped bytes (SPEC §4, §9)", () => {
 
   it("refuses an image it can't check, naming the file, and stores nothing", async () => {
     const id = await newDraft();
-    const gif = concat(GIF_1x1.subarray(0, GCT_END), Uint8Array.of(0x99));
-    const res = await uploadTo(id, gif, "broken.gif");
+    const res = await uploadTo(id, OVERSHOT_PNG, "broken.png");
     expect(res.status).toBe(400);
     expect(await readJson(res)).toMatchObject({
       field: "file",
-      message: unreadableImageMessage("image/gif"),
+      message: unreadableImageMessage("image/png"),
     });
-    expect(await env.MEDIA.get(`posts/${id}/broken.gif`)).toBeNull();
+    expect(await env.MEDIA.get(`posts/${id}/broken.png`)).toBeNull();
   });
 });

@@ -12,10 +12,13 @@
  *
  * A file cut short is still walked: each section runs to the end of what is there, and a
  * metadata section cut off is dropped like a whole one, since the upload takes a truncated image
- * (`image_types.ts` says why). A file whose structure can't be walked at all, so that what
- * follows can't be checked, is refused rather than stored with metadata possibly left in it.
- * Bytes after a file's end marker are dropped: a phone may append further images there, each
- * with its own Exif, and no viewer shows them.
+ * (`image_types.ts` says why). A file whose structure can't be walked, so that what follows
+ * can't be checked, is refused rather than stored with metadata possibly left in it, and so is
+ * one with a section running past the end of a file that is otherwise whole, which no camera or
+ * editor writes. A section stating a length past the end of a file that is cut short as well
+ * can't be told from a plain truncation, so it is kept: a known limit, for a file no one makes.
+ * Bytes after a file's end are dropped: a phone may append further images there, each with its
+ * own Exif, and no viewer shows them.
  */
 
 import { FORMAT_NAMES } from "./image_types";
@@ -50,6 +53,12 @@ const ORIENTATION_TAG = 0x0112;
 
 const EXIF_PREFIX = "Exif\0\0";
 
+/** Whether `b` opens with an Exif header: `Exif\0` and one more byte, which a few writers set to
+ * 0xFF where the format says zero. */
+function isExifHeader(b: Uint8Array): boolean {
+  return b.length >= 6 && ascii(b, 0, 5) === "Exif\0";
+}
+
 function ascii(b: Uint8Array, offset: number, length: number): string {
   return String.fromCharCode(...b.subarray(offset, offset + length));
 }
@@ -70,7 +79,7 @@ function concat(parts: readonly Uint8Array[]): Uint8Array {
  * and some PNG and WebP writers copy.
  */
 export function exifOrientation(exif: Uint8Array): number | null {
-  const tiff = ascii(exif, 0, 6) === EXIF_PREFIX ? exif.subarray(6) : exif;
+  const tiff = isExifHeader(exif) ? exif.subarray(6) : exif;
   if (tiff.length < 8) {
     return null;
   }
@@ -166,6 +175,11 @@ function isStandalone(marker: number): boolean {
   );
 }
 
+/** Whether a JPEG ends with its end marker, so isn't cut short. */
+function endsWithEoi(b: Uint8Array): boolean {
+  return b[b.length - 2] === 0xff && b[b.length - 1] === 0xd9;
+}
+
 function stripJpeg(b: Uint8Array): Uint8Array | null {
   const dv = new DataView(b.buffer as ArrayBuffer, b.byteOffset, b.byteLength);
   const kept: Uint8Array[] = [b.subarray(0, 2)];
@@ -206,12 +220,15 @@ function stripJpeg(b: Uint8Array): Uint8Array | null {
     if (length < 2) {
       return null; // a length shorter than its own field: nothing after it can be found
     }
+    if (off + 2 + length > b.length && endsWithEoi(b)) {
+      return null; // runs past the end of a whole file, over whatever follows it
+    }
     const end = Math.min(off + 2 + length, b.length);
     const segment = b.subarray(off, end);
     if (isJpegMetadata(marker, segment)) {
       changed = true;
       // The first Exif states the orientation; any later APP1 is XMP or an extension of it.
-      if (marker === 0xe1 && !orientationRead && ascii(segment, 4, 6) === EXIF_PREFIX) {
+      if (marker === 0xe1 && !orientationRead && isExifHeader(segment.subarray(4))) {
         orientationRead = true;
         const o = turning(segment.subarray(4));
         if (o !== null) {
@@ -289,6 +306,11 @@ function pngChunk(type: string, data: Uint8Array): Uint8Array {
  * Browsers turn a PNG by the orientation in its `eXIf`, so a turned one keeps a minimal `eXIf`
  * holding only that, as a JPEG does.
  */
+/** Whether a PNG ends with its IEND chunk, so isn't cut short. */
+function endsWithIend(b: Uint8Array): boolean {
+  return b.length >= 20 && ascii(b, b.length - 8, 4) === "IEND";
+}
+
 function stripPng(b: Uint8Array): Uint8Array | null {
   const dv = new DataView(b.buffer as ArrayBuffer, b.byteOffset, b.byteLength);
   const kept: Uint8Array[] = [b.subarray(0, 8)];
@@ -303,6 +325,9 @@ function stripPng(b: Uint8Array): Uint8Array | null {
     const type = ascii(b, off + 4, 4);
     if (!/^[A-Za-z]{4}$/.test(type)) {
       return null; // not a chunk: the walk has lost its place, so nothing after it can be found
+    }
+    if (off + 12 + length > b.length && endsWithIend(b)) {
+      return null; // runs past the end of a whole file, over whatever follows it
     }
     const end = Math.min(off + 12 + length, b.length);
     if (PNG_METADATA.has(type)) {
@@ -342,29 +367,37 @@ function webpChunk(fourCc: string, data: Uint8Array): Uint8Array {
 /**
  * Drops the `EXIF` and `XMP ` chunks and clears their flags in the extended header. Only an
  * extended WebP may carry Exif, so only one keeps a minimal `EXIF` for a turned image, flagged.
+ * The file ends where its RIFF header says, and anything after that is dropped. A RIFF size too
+ * small to hold even its own form is no size at all, and the walk goes to the end of the bytes.
  */
-function stripWebp(b: Uint8Array): Uint8Array {
+function stripWebp(b: Uint8Array): Uint8Array | null {
   if (b.length < 12) {
     return b;
   }
   const dv = new DataView(b.buffer as ArrayBuffer, b.byteOffset, b.byteLength);
+  const riffSize = dv.getUint32(4, true);
+  const whole = riffSize >= 4 && 8 + riffSize <= b.length;
+  const fileEnd = whole ? 8 + riffSize : b.length;
   const extended = b.length >= 16 && ascii(b, 12, 4) === "VP8X";
   const kept: Uint8Array[] = [b.subarray(0, 12)];
-  let changed = false;
+  let changed = fileEnd < b.length;
   let exifKept = false;
   let off = 12;
-  while (off < b.length) {
-    if (off + 8 > b.length) {
-      kept.push(b.subarray(off));
+  while (off < fileEnd) {
+    if (off + 8 > fileEnd) {
+      kept.push(b.subarray(off, fileEnd));
       break;
     }
     const fourCc = ascii(b, off, 4);
     const size = dv.getUint32(off + 4, true);
-    const end = Math.min(off + 8 + size + (size & 1), b.length);
+    if (whole && off + 8 + size > fileEnd) {
+      return null; // runs past the end of a whole file, over whatever follows it
+    }
+    const end = Math.min(off + 8 + size + (size & 1), fileEnd);
     if (fourCc === "EXIF" || fourCc === "XMP ") {
       changed = true;
       if (fourCc === "EXIF" && extended && !exifKept) {
-        const o = turning(b.subarray(off + 8, Math.min(off + 8 + size, b.length)));
+        const o = turning(b.subarray(off + 8, Math.min(off + 8 + size, fileEnd)));
         if (o !== null) {
           kept.push(webpChunk("EXIF", minimalExif(o)));
           exifKept = true;
@@ -410,11 +443,22 @@ function colourTableSize(flags: number): number {
 }
 
 /**
- * Drops XMP, which a GIF holds in an application extension named `XMP DataXMP`, and leaves
- * every other block. A block that isn't an extension, an image, or the trailer can't be walked
- * past, so the file is refused.
+ * The application extensions that carry metadata, by their 11-byte name: XMP, and the
+ * Photoshop resources and IPTC that ImageMagick writes, either of which can hold a location.
+ * NETSCAPE's looping and an ICC profile stay.
  */
-function stripGif(b: Uint8Array): Uint8Array | null {
+const GIF_METADATA_APPS = new Set(["XMP DataXMP", "MGK8BIM0000", "MGKIPTC0000"]);
+
+/** The extension label of a comment, free text in which an editor or a person may say anything. */
+const GIF_COMMENT = 0xfe;
+
+/**
+ * Drops comments and the application extensions that carry metadata, and leaves every other
+ * block, plain text among them, since it is drawn as part of the image. A byte where a block
+ * should start that starts none ends the image for a browser, so it ends the file here too:
+ * what came before stays, with a trailer after it, and the rest is dropped.
+ */
+function stripGif(b: Uint8Array): Uint8Array {
   if (b.length < 13) {
     return b;
   }
@@ -430,10 +474,12 @@ function stripGif(b: Uint8Array): Uint8Array | null {
       break;
     }
     if (introducer === 0x21) {
-      const isXmp =
-        b[off + 1] === 0xff && b[off + 2] === 11 && ascii(b, off + 3, 11) === "XMP DataXMP";
+      const label = b[off + 1];
+      const isMetadata =
+        label === GIF_COMMENT ||
+        (label === 0xff && b[off + 2] === 11 && GIF_METADATA_APPS.has(ascii(b, off + 3, 11)));
       off = afterSubBlocks(b, off + 2);
-      if (isXmp) {
+      if (isMetadata) {
         changed = true;
       } else {
         kept.push(b.subarray(start, off));
@@ -450,7 +496,9 @@ function stripGif(b: Uint8Array): Uint8Array | null {
       kept.push(b.subarray(start, off));
       continue;
     }
-    return null;
+    kept.push(Uint8Array.of(0x3b));
+    changed = true;
+    break;
   }
   return changed ? concat(kept) : b;
 }
