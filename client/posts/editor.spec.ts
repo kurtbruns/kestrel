@@ -3263,6 +3263,132 @@ describe("editor view", () => {
     );
   });
 
+  describe("the Images dialog (DESIGN, the editor)", () => {
+    const img = (filename: string) => ({
+      filename,
+      content_type: "image/png",
+      width: 1600,
+      height: 1200,
+      bytes: 421_888,
+      url: `https://news.example.com/media/posts/p1/${filename}`,
+    });
+    const withBarn = () => ({ ...draft(), markdown: "# Owls\n\n![Barn owl](barn.png)\n\nHoot." });
+    const listRoute = (names: () => string[]): FakeRoute => ({
+      path: "/api/posts/p1/images",
+      reply: () => ({ images: names().map(img) }),
+    });
+    const imagesButton = () => $<HTMLButtonElement>('.tb[data-fmt="image"]');
+    const row = (name: string) =>
+      $<HTMLButtonElement>(`.images-insert[data-name="${name}"]`).closest("li") as HTMLElement;
+    const dialogOpen = () => document.querySelector(".modal-images") !== null;
+
+    it("lists the draft's images, saying which the body doesn't use, and offers Delete only on those", async () => {
+      await open([
+        { path: "/api/posts/p1", reply: () => withBarn() },
+        listRoute(() => ["barn.png", "owl.png"]),
+      ]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(row("barn.png").querySelector(".images-meta")?.textContent).toBe("1600×1200 · 412 KB");
+      expect(row("owl.png").querySelector(".images-meta")?.textContent).toBe(
+        "1600×1200 · 412 KB · Not used",
+      );
+      expect(row("barn.png").querySelector(".images-delete")).toBe(null);
+      expect(row("owl.png").querySelector(".images-delete")?.getAttribute("aria-label")).toBe(
+        "Delete owl.png",
+      );
+      expect(row("barn.png").querySelector("a")?.getAttribute("href")).toBe(
+        "https://news.example.com/media/posts/p1/barn.png",
+      );
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("puts a pressed image in at the caret, as a paragraph of its own, with its alt text selected", async () => {
+      await open([{ path: "/api/posts/p1", reply: () => draft() }, listRoute(() => ["owl.png"])]);
+      body().focus();
+      body().setSelectionRange(6, 6); // after "# Owls"
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      $<HTMLButtonElement>('.images-insert[data-name="owl.png"]').click();
+      expect(dialogOpen()).toBe(false);
+      expect(body().value).toBe("# Owls\n\n![owl.png](owl.png)\n\nHoot.");
+      expect(body().value.slice(body().selectionStart, body().selectionEnd)).toBe("owl.png");
+      expect($("#saveStatus").textContent).toBe("Unsaved changes");
+    });
+
+    it("puts the image at the end of a body never focused, where no caret was chosen", async () => {
+      await open([{ path: "/api/posts/p1", reply: () => draft() }, listRoute(() => ["owl.png"])]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      $<HTMLButtonElement>('.images-insert[data-name="owl.png"]').click();
+      expect(body().value).toBe("# Owls\n\nHoot.\n\n![owl.png](owl.png)\n\n");
+    });
+
+    it("deletes an unused image on a second press, and Escape takes the question back first", async () => {
+      let names = ["owl.png"];
+      await open([
+        { path: "/api/posts/p1", reply: () => draft() },
+        listRoute(() => names),
+        {
+          method: "DELETE",
+          path: "/api/posts/p1/images/owl.png",
+          reply: () => {
+            names = [];
+            return { deleted: true };
+          },
+        },
+      ]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      const del = () => $<HTMLButtonElement>(".images-delete");
+      del().click();
+      expect(del().textContent).toBe("Delete for good?");
+      del().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(del().textContent).toBe("Delete");
+      expect(dialogOpen()).toBe(true);
+
+      del().click();
+      del().click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fake.calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
+      expect(document.querySelector(".images-row")).toBe(null);
+      expect($("#imagesLive").textContent).toBe("owl.png deleted");
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("closes for files chosen in it and uploads them at the caret, as the foot's picker does", async () => {
+      await open([
+        { path: "/api/posts/p1", reply: () => draft() },
+        listRoute(() => []),
+        {
+          method: "POST",
+          path: "/api/posts/p1/images",
+          reply: () => ({ image: img("owl.png") }),
+        },
+      ]);
+      body().focus();
+      body().setSelectionRange(0, 0);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      const input = $<HTMLInputElement>("#imagesInput");
+      const file = new File(["png"], "owl.png", { type: "image/png" });
+      Object.defineProperty(input, "files", { value: [file], configurable: true });
+      input.dispatchEvent(new Event("change"));
+      expect(dialogOpen()).toBe(false);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(body().value).toMatch(/^!\[owl\.png\]\(owl\.png\)\n\n# Owls/);
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("never opens on a scheduled post, where the button nudges the way out", async () => {
+      await open([{ path: "/api/posts/p1", reply: () => draft({ status: "scheduled" }) }]);
+      imagesButton().click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(dialogOpen()).toBe(false);
+      expect(fake.calls.filter((c) => c.url.pathname.endsWith("/images"))).toHaveLength(0);
+    });
+  });
+
   it("uploads a picked image and inserts it at the caret", async () => {
     await open([
       { path: "/api/posts/p1", reply: () => draft() },

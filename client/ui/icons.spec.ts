@@ -12,6 +12,7 @@ const ALL = {
   copyout: true,
   editable: true,
   heading: true,
+  image: true,
   indent: true,
   info: true,
   italic: true,

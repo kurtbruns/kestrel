@@ -8,6 +8,8 @@ export interface PostImage {
   content_type: string;
   width: number | null;
   height: number | null;
+  /** The stored size in bytes, which every reader downloads; null when storage holds no file for it. */
+  bytes: number | null;
   url: string;
 }
 

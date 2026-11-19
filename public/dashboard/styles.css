@@ -2965,6 +2965,144 @@ body.web-mode .content {
   height: 16px;
   fill: currentColor;
 }
+/* The Images dialog (DESIGN, the editor): a drop region over the draft's images, one row
+   each. The row itself is the Insert button, lit on hover and focus with its word at the
+   right; View and Delete sit beside it as their own controls, so pressing one never inserts.
+   "Not used" is a plain fact in the row's small print, not a warning, so it takes the text
+   colour at weight, never amber. */
+.modal.modal-images {
+  width: min(560px, 100%);
+}
+.images-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 22px 14px;
+  margin-bottom: 14px;
+  border: 1.5px dashed var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+.images-drop.dragover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--fg);
+}
+.images-fine {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.images-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: min(50vh, 420px);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.images-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 6px 6px;
+}
+.images-row + .images-row {
+  border-top: 1px solid var(--line);
+}
+.images-insert {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.images-insert:hover,
+.images-insert:focus-visible {
+  background: var(--hover);
+}
+.images-thumb {
+  flex: none;
+  width: 64px;
+  height: 48px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--hover);
+}
+.images-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.images-text {
+  display: grid;
+  min-width: 0;
+}
+.images-name {
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.images-meta {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.images-unused {
+  color: var(--fg);
+  font-weight: 600;
+}
+.images-hint {
+  flex: none;
+  margin-left: auto;
+  padding-right: 4px;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  visibility: hidden;
+}
+.images-insert:hover .images-hint,
+.images-insert:focus-visible .images-hint {
+  visibility: visible;
+}
+/* On a phone the row's name needs the width: View and Delete wrap under the text, lined up
+   with it, and the Insert word gives way, since a touch has no hover to show it. */
+@media (max-width: 539px) {
+  .images-row {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+  .images-insert {
+    flex-basis: 100%;
+  }
+  .images-row > a,
+  .images-row > .images-delete {
+    margin-left: 80px;
+  }
+  .images-row > a + .images-delete {
+    margin-left: 0;
+  }
+  .images-hint {
+    display: none;
+  }
+}
 /* The locked composer's foot: where a draft's foot offers images, a scheduled post's says
    the way out, "Cancel the schedule to edit", with the read-only lock Settings uses. It is
    a hint, not a control (Cancel stays on the banner, DESIGN §3), so no pointer and no hover

@@ -16,6 +16,7 @@ import copyout from "./icons/copyout.svg";
 import desktop from "./icons/desktop.svg";
 import editable from "./icons/editable.svg";
 import heading from "./icons/heading.svg";
+import image from "./icons/image.svg";
 import indent from "./icons/indent.svg";
 import info from "./icons/info.svg";
 import italic from "./icons/italic.svg";
@@ -48,6 +49,7 @@ const ICONS = {
   copyout: unsafeHtml(copyout),
   editable: unsafeHtml(editable),
   heading: unsafeHtml(heading),
+  image: unsafeHtml(image),
   indent: unsafeHtml(indent),
   info: unsafeHtml(info),
   italic: unsafeHtml(italic),

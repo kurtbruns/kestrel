@@ -76,6 +76,8 @@ import { carryOffset } from "./caret";
 import { DirtyTracker } from "./dirty";
 import { showDropCaret } from "./drop_caret";
 import { formatEdit } from "./format";
+import { insertImage } from "./images";
+import { openImagesDialog } from "./images_dialog";
 import { LatestRender, type Render } from "./latest_render";
 import { trackSaves } from "./pending_save";
 import {
@@ -111,6 +113,7 @@ const TOOLBAR: [IconName, string][][] = [
     ["quote", "Quote"],
     ["code", "Code"],
     ["link", "Link (⌘K)"],
+    ["image", "Images"],
   ],
   [
     ["ul", "Bulleted list"],
@@ -712,6 +715,10 @@ export async function renderEditor(
   function applyFormat(kind: string) {
     if (locked) {
       nudge(); // reached by a toolbar click or a Cmd+B / I / K shortcut
+      return;
+    }
+    if (kind === "image") {
+      openImages();
       return;
     }
     showTab("edit");
@@ -1551,6 +1558,37 @@ export async function renderEditor(
           paintUploads();
         }
       });
+  }
+  // The Images dialog (./images_dialog.ts) lists the draft's images and hands back what to do
+  // with the text. An image picked there goes where the caret was; a body never focused has
+  // no caret the publisher chose, so it goes at the end rather than the start.
+  let bodyFocused = false;
+  ta.addEventListener("focus", () => {
+    bodyFocused = true;
+  });
+  function openImages() {
+    openImagesDialog(id, signal, {
+      body: () => ta.value,
+      insert: (filename) => {
+        showTab("edit");
+        const state = textState();
+        const at = bodyFocused ? state : { ...state, start: ta.value.length, end: ta.value.length };
+        editText(insertImage(at, filename));
+      },
+      upload: (files) => {
+        showTab("edit");
+        for (const f of files) {
+          uploadAndInsert(f);
+        }
+      },
+      // The render changes with the post's images, not only its revision.
+      deleted: () => renders.forget(),
+      failed: (e) => {
+        if (!foundGone(e)) {
+          toast(message(e));
+        }
+      },
+    });
   }
   const composerBody = $("#composerBody");
   if (!locked) {
