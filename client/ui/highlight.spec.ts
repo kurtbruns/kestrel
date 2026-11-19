@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { highlightJson, highlightJsonText, highlightShell } from "./highlight";
+import { highlightJson, highlightJsonText, highlightMarkdown, highlightShell } from "./highlight";
 
 /** The markup as a detached element, to read its text and spans the way the page would. */
 function render(markup: string): HTMLElement {
@@ -80,5 +80,13 @@ describe("highlightShell", () => {
     expect(spans(el, "cx-tag")).toEqual(["cp", "npm", "npx", "tee", "git"]);
     expect(spans(el, "cx-punct")).toEqual(["# start fresh", "&&", "|", "# watch"]);
     expect(spans(el, "cx-num")).toEqual([]);
+  });
+});
+
+describe("highlightMarkdown", () => {
+  it("marks an image's address apart from a link's, so the editor can open images from the text", () => {
+    const out = highlightMarkdown("![An owl](owl.png) and [a page](page.html)").toString();
+    expect(out).toContain('(<span class="cx-md-url cx-md-img">owl.png</span>)');
+    expect(out).toContain('(<span class="cx-md-url">page.html</span>)');
   });
 });

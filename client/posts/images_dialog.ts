@@ -6,7 +6,6 @@ import type { ImageListResponse, PostImage } from "../../shared/images";
 import { ApiError, api } from "../api";
 import { $ } from "../ui/dom";
 import { type Html, html, setHtml } from "../ui/html";
-import { icon } from "../ui/icons";
 import { modal } from "../ui/widgets";
 import { imageUsedIn, sizeText } from "./images";
 
@@ -192,7 +191,7 @@ function rowHtml(img: PostImage, used: boolean): Html {
     <button type="button" class="images-insert" data-name="${img.filename}" aria-label="Insert ${img.filename}${used ? " again" : ""}">
       <span class="images-thumb">${web ? html`<img src="${img.url}" alt="" loading="lazy">` : null}</span>
       <span class="images-text"><span class="images-name">${img.filename}</span><span class="images-meta">${facts.join(" · ")}${used ? null : html`${facts.length ? " · " : null}<span class="images-unused">Not used</span>`}</span></span>
-      <span class="images-hint" aria-hidden="true">${icon("plus")}Insert</span>
+      <span class="images-hint" aria-hidden="true">Insert</span>
     </button>
     ${used ? null : html`<button type="button" class="danger-subtle images-delete" data-name="${img.filename}" aria-label="Delete ${img.filename}">Delete</button>`}
   </li>`;

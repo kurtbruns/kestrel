@@ -1569,15 +1569,16 @@ export async function renderEditor(
   // ⌘-click (Ctrl elsewhere) on an image in the text opens it in a new tab, the way an editor
   // opens a link. A plain click only places the caret, since the text is there to be edited.
   // A scheduled post's text is read-only and still opens, since opening changes nothing.
-  ta.addEventListener("click", (e) => {
-    if (!(e.metaKey || e.ctrlKey)) {
-      return;
-    }
-    const target = imageTargetAt(ta.value, ta.selectionStart);
+  const openImage = (target: string | null) => {
     const base = appState.appConfig?.deployment.media_public_base;
     const url = target && base ? imageAddress(target, base, id) : null;
     if (url) {
       window.open(url, "_blank", "noopener");
+    }
+  };
+  ta.addEventListener("click", (e) => {
+    if (e.metaKey || e.ctrlKey) {
+      openImage(imageTargetAt(ta.value, ta.selectionStart));
     }
   });
   function openImages() {
@@ -1605,6 +1606,23 @@ export async function renderEditor(
     });
   }
   const composerBody = $("#composerBody");
+  // While ⌘ or Ctrl is held, the highlight layer takes the pointer, so an image's address
+  // shows a pointer and opens on a click (the CSS beside .cx-md-img says why). Read from every
+  // key and every move over the body, so a modifier pressed while the window was elsewhere still
+  // counts, and dropped when the window loses focus, where its release is never heard.
+  const showLinks = (e: KeyboardEvent | MouseEvent) =>
+    composerBody.classList.toggle("links", e.metaKey || e.ctrlKey);
+  document.addEventListener("keydown", showLinks, { signal });
+  document.addEventListener("keyup", showLinks, { signal });
+  composerBody.addEventListener("mousemove", showLinks);
+  window.addEventListener("blur", () => composerBody.classList.remove("links"), { signal });
+  mdHl.addEventListener("click", (e) => {
+    const img = e.target instanceof Element ? e.target.closest(".cx-md-img") : null;
+    if (img && (e.metaKey || e.ctrlKey)) {
+      // The address as written, before any title after it.
+      openImage((img.textContent ?? "").trim().split(/\s+/)[0]?.replace(/^<|>$/g, "") ?? null);
+    }
+  });
   if (!locked) {
     const imgInput = $<HTMLInputElement>("#imgInput");
     const foot = $("#dropFoot");

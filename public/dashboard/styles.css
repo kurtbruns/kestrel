@@ -2969,8 +2969,9 @@ body.web-mode .content {
    each. The row itself is the Insert button: on hover and focus it takes the accent's soft
    tint, its picture an accent edge, and an Insert pill at its right, so what a press will do
    is shown where the press lands. Delete sits beside it as its own control, so pressing it
-   never inserts.
-   "Not used" is a plain fact in the row's small print, not a warning, so it takes the text
+   never inserts, and over it, or while it asks, the whole row takes the danger's tint and
+   edge instead, so the row always says what the press under the pointer does. "Not used"
+   is a plain fact in the row's small print, not a warning, so it takes the text
    colour at weight, never amber. */
 .modal.modal-images {
   width: min(560px, 100%);
@@ -3053,6 +3054,16 @@ body.web-mode .content {
 .images-insert:focus-visible .images-thumb {
   border-color: var(--accent);
 }
+.images-row:has(.images-delete:hover),
+.images-row:has(.images-delete:focus-visible),
+.images-row:has(.images-delete.danger) {
+  background: color-mix(in srgb, var(--danger-fg) 8%, transparent);
+}
+.images-row:has(.images-delete:hover) .images-thumb,
+.images-row:has(.images-delete:focus-visible) .images-thumb,
+.images-row:has(.images-delete.danger) .images-thumb {
+  border-color: var(--danger-fg);
+}
 .images-thumb img {
   display: block;
   width: 100%;
@@ -3081,21 +3092,14 @@ body.web-mode .content {
 }
 .images-hint {
   flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
   margin-left: auto;
-  padding: 4px 10px 4px 7px;
+  padding: 4px 11px;
   border-radius: 999px;
   background: var(--accent);
   color: var(--accent-on);
   font-size: 12.5px;
   font-weight: 600;
   visibility: hidden;
-}
-.images-hint svg {
-  width: 14px;
-  height: 14px;
 }
 .images-insert:hover .images-hint,
 .images-insert:focus-visible .images-hint {
@@ -6419,6 +6423,21 @@ button.set-embed-copy svg {
 .cx-md-url {
   color: var(--syntax-property);
   text-decoration: underline;
+}
+/* While ⌘ (Ctrl elsewhere) is held over the post body, the highlight layer takes the pointer
+   from the text above it, so an image's address shows a pointer and a heavier underline, as an
+   editor shows a link it will open, and a ⌘-click on it opens the image (DESIGN, the editor).
+   Letting go gives the pointer back to the text. */
+.composer-body.links textarea.editor {
+  pointer-events: none;
+}
+.composer-body.links .md-hl {
+  pointer-events: auto;
+  cursor: text;
+}
+.composer-body.links .cx-md-img:hover {
+  cursor: pointer;
+  text-decoration-thickness: 2px;
 }
 .cx-md-code {
   color: var(--syntax-string);
