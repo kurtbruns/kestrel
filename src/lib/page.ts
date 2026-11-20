@@ -489,7 +489,6 @@ export function landingPage(opts: {
   if (formHere) {
     const name = opts.identity.name;
     main =
-      `<p class="r-ey">Newsletter</p>` +
       `<h1 class="r-h1">${escapeHtml(name ? `Subscribe to ${name}` : "Subscribe")}</h1>` +
       `<p class="r-lead">No posts yet. Subscribe to get the first one in your inbox.</p>` +
       subscribeFormHtml();

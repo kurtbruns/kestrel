@@ -446,23 +446,15 @@ describe("subscribing: no flood, and no reveal of who is on the list", () => {
   });
 });
 
-describe("the check-inbox page says what to look for (SPEC §7)", () => {
-  it("says the reader isn't subscribed yet, and names the confirmation's subject and the address typed", async () => {
-    await settings.updateSettings(env.DB, {
-      confirmation_email: { subject: "Please confirm <now>" },
-    });
+describe("the check-inbox page (SPEC §7)", () => {
+  it("says the reader isn't subscribed yet, and names the address typed", async () => {
     const email = uniqueEmail();
     const page = await (await formSubscribe(email)).text();
     expect(page).toContain(">Check your inbox to finish subscribing</h1>");
-    expect(page).toContain("with the subject <strong>“Please confirm &lt;now&gt;”</strong>");
-    expect(page).toContain(`sent to <strong>${email}</strong>`);
-    expect(page).toContain("If you’re already subscribed, no email is sent.");
-  });
-
-  it("names the default subject when the publisher left it blank", async () => {
-    await settings.updateSettings(env.DB, { confirmation_email: { subject: "" } });
-    const page = await (await formSubscribe(uniqueEmail())).text();
-    expect(page).toContain("with the subject <strong>“Confirm your subscription”</strong>");
+    expect(page).toContain(
+      `Please click the link in the email we just sent to <strong>${email}</strong>.`,
+    );
+    expect(page).not.toContain("Newsletter</p>");
   });
 });
 

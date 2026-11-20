@@ -6,7 +6,6 @@
 import { isValidEmail, normalizeEmail } from "../../shared/email";
 import type { SignupsState } from "../../shared/provider";
 import type { PublicSubscribeResponse } from "../../shared/subscribers";
-import { getSettingsForDisplay, resolveConfirmationEmail } from "../db/settings";
 import * as subscribers from "../db/subscribers";
 import type { Config } from "../env";
 import { mediaTypeOf, optString, readForm, readJsonObject } from "../lib/body";
@@ -31,13 +30,7 @@ import {
   confirmSubscription,
   requestSubscription,
 } from "../services/subscriptions";
-import {
-  archiveHomeUrl,
-  devDashboardUrl,
-  identityFrom,
-  readerIdentity,
-  readerMessage,
-} from "./reader";
+import { archiveHomeUrl, devDashboardUrl, readerIdentity, readerMessage } from "./reader";
 
 function wantsHtml(c: RequestContext): boolean {
   const ct = c.req.headers.get("content-type") ?? "";
@@ -122,7 +115,6 @@ export function subscribeFormPage(c: RequestContext, identity: ReaderIdentity): 
     ? escapeHtml(identity.tagline)
     : "Get the next post delivered to your inbox.";
   const main =
-    `<p class="r-ey">Newsletter</p>` +
     `<h1 class="r-h1">${escapeHtml(toPublication("Subscribe", identity.name))}</h1>` +
     `<p class="r-lead">${lede}</p>` +
     subscribeFormHtml();
@@ -132,7 +124,6 @@ export function subscribeFormPage(c: RequestContext, identity: ReaderIdentity): 
 /** The form again, for an address that doesn't parse. */
 export function subscribeNotAnEmailPage(c: RequestContext, identity: ReaderIdentity): Response {
   const main =
-    `<p class="r-ey">Newsletter</p>` +
     `<h1 class="r-h1">That doesn’t look like an email</h1>` +
     `<p class="r-lead">Please check the address and try again.</p>` +
     subscribeFormHtml();
@@ -150,7 +141,6 @@ export function subscribeNotOpenPage(
   status = 200,
 ): Response {
   const main =
-    `<p class="r-ey">Newsletter</p>` +
     `<h1 class="r-h1">Signups aren’t open yet</h1>` +
     `<p class="r-lead">This newsletter isn’t taking subscribers yet. Please check back soon.</p>`;
   return subscribePage(c, identity, main, status);
@@ -166,7 +156,6 @@ export function subscribePausedPage(
   status = 200,
 ): Response {
   const main =
-    `<p class="r-ey">Newsletter</p>` +
     `<h1 class="r-h1">Signups are paused</h1>` +
     `<p class="r-lead">This newsletter can’t send confirmation emails right now. Please try again later.</p>`;
   return subscribePage(c, identity, main, status);
@@ -185,21 +174,19 @@ function closedPage(
 }
 
 /**
- * The one answer every subscribe request gets, whatever the address's state (SPEC §7). Its
- * heading says the reader isn't subscribed yet; it names the subject the confirmation goes
- * out with and the address the reader typed, so a typo shows, and none of it depends on the
- * list. Since every address gets it, it says that an address already subscribed is sent
- * nothing.
+ * The one answer every subscribe request gets, whatever the address's state (SPEC §7). It
+ * shows the reader the address they typed, so a typo shows; that address came with the
+ * request, so the page says nothing about the list.
  */
-export async function subscribeCheckInboxPage(c: RequestContext, email: string): Promise<Response> {
-  const settings = await getSettingsForDisplay(c.env.DB);
-  const { subject } = resolveConfirmationEmail(settings);
+export function subscribeCheckInboxPage(
+  c: RequestContext,
+  identity: ReaderIdentity,
+  email: string,
+): Response {
   const main =
-    `<p class="r-ey">Newsletter</p><h1 class="r-h1">Check your inbox to finish subscribing</h1>` +
-    `<p class="r-lead">Look for an email with the subject <strong>“${escapeHtml(subject)}”</strong>, ` +
-    `sent to <strong>${escapeHtml(email)}</strong>, and click the link inside.</p>` +
-    `<p class="r-lead">If you’re already subscribed, no email is sent.</p>`;
-  return subscribePage(c, identityFrom(settings, c.config), main);
+    `<h1 class="r-h1">Check your inbox to finish subscribing</h1>` +
+    `<p class="r-lead">Please click the link in the email we just sent to <strong>${escapeHtml(email)}</strong>.</p>`;
+  return subscribePage(c, identity, main);
 }
 
 export async function subscribeForm(c: RequestContext): Promise<Response> {
@@ -264,7 +251,7 @@ export async function subscribe(c: RequestContext): Promise<Response> {
     const body: PublicSubscribeResponse = { status: "check_inbox" };
     return json(body);
   }
-  return subscribeCheckInboxPage(c, email);
+  return subscribeCheckInboxPage(c, await readerIdentity(c, c.config), email);
 }
 
 /** Opening a confirm link shows a Confirm button and changes nothing: mail scanners open
