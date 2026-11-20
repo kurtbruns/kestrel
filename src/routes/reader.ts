@@ -6,7 +6,7 @@
  * them the same way.
  */
 
-import { getSettingsForDisplay, publicationLogoUrl } from "../db/settings";
+import { type AppSettings, getSettingsForDisplay, publicationLogoUrl } from "../db/settings";
 import type { Config } from "../env";
 import { type MessagePageOptions, messagePage, type ReaderIdentity } from "../lib/page";
 import type { RequestContext } from "../router";
@@ -16,7 +16,14 @@ import type { RequestContext } from "../router";
  *  carrying a name they didn't choose (SPEC §9; shape in `lib/page.ts`). A corrupt
  *  settings row reads as the defaults, so a reader page never fails on it. */
 export async function readerIdentity(c: RequestContext, config: Config): Promise<ReaderIdentity> {
-  const { publication: p, timeZone } = await getSettingsForDisplay(c.env.DB);
+  return identityFrom(await getSettingsForDisplay(c.env.DB), config);
+}
+
+/** The reader identity from settings already read, for a page that needs more of them. */
+export function identityFrom(
+  { publication: p, timeZone }: Pick<AppSettings, "publication" | "timeZone">,
+  config: Config,
+): ReaderIdentity {
   return {
     name: p.name,
     tagline: p.tagline,

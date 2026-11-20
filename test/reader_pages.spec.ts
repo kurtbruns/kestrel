@@ -12,7 +12,7 @@ const publication = "Marsh Lane";
 /** What each page shows that no other does, so a preview can't answer with the wrong one. */
 const SHOWS: Record<string, string[]> = {
   "subscribe/form": [`Subscribe to ${publication}`, 'name="email"'],
-  "subscribe/check-inbox": ["Almost there"],
+  "subscribe/check-inbox": ["Check your inbox"],
   "subscribe/not-an-email": ["That doesn’t look like an email"],
   "subscribe/not-open": ["Signups aren’t open yet"],
   "subscribe/paused": ["Signups are paused", "can’t send confirmation emails right now"],

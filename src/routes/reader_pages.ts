@@ -69,7 +69,7 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
     case "subscribe/form":
       return subscribeFormPage(c, await readerIdentity(c, c.config));
     case "subscribe/check-inbox":
-      return subscribeCheckInboxPage(c, await readerIdentity(c, c.config));
+      return subscribeCheckInboxPage(c, SAMPLE_EMAIL);
     case "subscribe/not-an-email":
       return subscribeNotAnEmailPage(c, await readerIdentity(c, c.config));
     case "subscribe/not-open":

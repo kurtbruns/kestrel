@@ -147,7 +147,7 @@ a.r-t:hover { text-decoration:underline; }
 .r-form { display:flex; gap:10px; flex-wrap:wrap; max-width:460px; }
 .r-form input { flex:1 1 220px; font:inherit; font-size:16px; padding:11px 13px; border:1px solid var(--r-line);
                 border-radius:9px; background:var(--r-card); color:var(--r-ink); }
-.r-form input:focus-visible { outline:2px solid var(--brand-ink); outline-offset:1px; border-color:var(--brand-ink); }
+.r-form input:focus-visible { outline:2px solid var(--brand-ink); outline-offset:-1px; border-color:var(--brand-ink); }
 .r-btn { font:inherit; font-size:15px; font-weight:600; padding:11px 20px; border-radius:9px; border:1px solid var(--r-ink);
          background:var(--r-ink); color:var(--r-bg); cursor:pointer; white-space:nowrap; }
 .r-btn:hover { filter:brightness(1.06); }

@@ -6,6 +6,7 @@
 import { isValidEmail, normalizeEmail } from "../../shared/email";
 import type { SignupsState } from "../../shared/provider";
 import type { PublicSubscribeResponse } from "../../shared/subscribers";
+import { getSettingsForDisplay, resolveConfirmationEmail } from "../db/settings";
 import * as subscribers from "../db/subscribers";
 import type { Config } from "../env";
 import { mediaTypeOf, optString, readForm, readJsonObject } from "../lib/body";
@@ -23,6 +24,7 @@ import {
   subscribeFormHtml,
 } from "../lib/page";
 import type { RequestContext } from "../router";
+import { senderFrom } from "../services/sender";
 import { readSignups } from "../services/sending";
 import {
   type ConfirmLinkState,
@@ -30,7 +32,13 @@ import {
   confirmSubscription,
   requestSubscription,
 } from "../services/subscriptions";
-import { archiveHomeUrl, devDashboardUrl, readerIdentity, readerMessage } from "./reader";
+import {
+  archiveHomeUrl,
+  devDashboardUrl,
+  identityFrom,
+  readerIdentity,
+  readerMessage,
+} from "./reader";
 
 function wantsHtml(c: RequestContext): boolean {
   const ct = c.req.headers.get("content-type") ?? "";
@@ -177,12 +185,23 @@ function closedPage(
     : subscribeNotOpenPage(c, identity, status);
 }
 
-/** The one answer every subscribe request gets, whatever the address's state (SPEC §7). */
-export function subscribeCheckInboxPage(c: RequestContext, identity: ReaderIdentity): Response {
+/**
+ * The one answer every subscribe request gets, whatever the address's state (SPEC §7). It
+ * names what to look for (the sender and subject the confirmation goes out with) and the
+ * address the reader typed, so a typo shows; none of it depends on the list. Since every
+ * address gets it, it says that an address already subscribed is sent nothing.
+ */
+export async function subscribeCheckInboxPage(c: RequestContext, email: string): Promise<Response> {
+  const settings = await getSettingsForDisplay(c.env.DB);
+  const from = senderFrom(settings, c.config);
+  const { subject } = resolveConfirmationEmail(settings);
   const main =
-    `<p class="r-ey">Newsletter</p><h1 class="r-h1">Almost there</h1>` +
-    `<p class="r-lead">A confirmation link is on its way. Check your inbox to finish subscribing. If you’re already subscribed, nothing is sent.</p>`;
-  return subscribePage(c, identity, main);
+    `<p class="r-ey">Newsletter</p><h1 class="r-h1">Check your inbox</h1>` +
+    `<p class="r-lead">To finish subscribing, look for an email from <strong>${escapeHtml(from.name || from.address)}</strong> ` +
+    `with the subject <strong>“${escapeHtml(subject)}”</strong>, sent to <strong>${escapeHtml(email)}</strong>, ` +
+    `and click the link inside.</p>` +
+    `<p class="r-lead">If you’re already subscribed, no email is sent.</p>`;
+  return subscribePage(c, identityFrom(settings, c.config), main);
 }
 
 export async function subscribeForm(c: RequestContext): Promise<Response> {
@@ -247,7 +266,7 @@ export async function subscribe(c: RequestContext): Promise<Response> {
     const body: PublicSubscribeResponse = { status: "check_inbox" };
     return json(body);
   }
-  return subscribeCheckInboxPage(c, await readerIdentity(c, c.config));
+  return subscribeCheckInboxPage(c, email);
 }
 
 /** Opening a confirm link shows a Confirm button and changes nothing: mail scanners open
