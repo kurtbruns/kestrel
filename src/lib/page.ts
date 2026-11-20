@@ -147,7 +147,7 @@ a.r-t:hover { text-decoration:underline; }
 .r-form { display:flex; gap:10px; flex-wrap:wrap; max-width:460px; }
 .r-form input { flex:1 1 220px; font:inherit; font-size:16px; padding:11px 13px; border:1px solid var(--r-line);
                 border-radius:9px; background:var(--r-card); color:var(--r-ink); }
-.r-form input:focus-visible { outline:2px solid var(--brand-ink); outline-offset:1px; border-color:var(--brand-ink); }
+.r-form input:focus-visible { outline:2px solid var(--brand-ink); outline-offset:-1px; border-color:var(--brand-ink); }
 .r-btn { font:inherit; font-size:15px; font-weight:600; padding:11px 20px; border-radius:9px; border:1px solid var(--r-ink);
          background:var(--r-ink); color:var(--r-bg); cursor:pointer; white-space:nowrap; }
 .r-btn:hover { filter:brightness(1.06); }
@@ -362,7 +362,8 @@ export interface MessagePageOptions {
   homeUrl: string | null;
   /** The page's own name; the publication name is appended for the tab title. */
   title: string;
-  eyebrow: string;
+  /** A label over the headline, left off where the headline and masthead already say it. */
+  eyebrow?: string;
   headline: string;
   ledeHtml: string;
   afterHtml?: string;
@@ -371,8 +372,8 @@ export interface MessagePageOptions {
   banner?: ReaderBanner;
 }
 
-/** A message page in the reader shell (confirm, unsubscribe, not found): an eyebrow,
- *  a serif headline, a muted lede, and an optional form or link beneath. A reader
+/** A message page in the reader shell (confirm, unsubscribe, not found): an optional
+ *  eyebrow, a serif headline, a muted lede, and an optional form or link beneath. A reader
  *  arrives here from an email, so the page carries their newsletter's identity but no
  *  subscribe call to action, which would pull them off the task they came for. Always
  *  `private`: several show the reader's address, and none is worth indexing. */
@@ -382,7 +383,7 @@ export function messagePage(opts: MessagePageOptions): Response {
     homeUrl: opts.homeUrl,
     title: pageTitle(opts.title, opts.identity.name),
     mainHtml:
-      `<p class="r-ey">${escapeHtml(opts.eyebrow)}</p>` +
+      (opts.eyebrow ? `<p class="r-ey">${escapeHtml(opts.eyebrow)}</p>` : "") +
       `<h1 class="r-h1">${escapeHtml(opts.headline)}</h1>` +
       `<p class="r-lead">${opts.ledeHtml}</p>` +
       (opts.afterHtml ?? ""),
@@ -489,7 +490,6 @@ export function landingPage(opts: {
   if (formHere) {
     const name = opts.identity.name;
     main =
-      `<p class="r-ey">Newsletter</p>` +
       `<h1 class="r-h1">${escapeHtml(name ? `Subscribe to ${name}` : "Subscribe")}</h1>` +
       `<p class="r-lead">No posts yet. Subscribe to get the first one in your inbox.</p>` +
       subscribeFormHtml();

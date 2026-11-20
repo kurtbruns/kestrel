@@ -294,7 +294,9 @@ describe("the subscribe page answers every address alike (SPEC §7)", () => {
       .run();
   }
 
-  /** The page's answer, as JSON and as a page, with the publication's own words only. */
+  /** The page's answer, as JSON and as a page, with the publication's own words only. The
+   *  page shows the reader the address they typed, so that address is masked: it is all
+   *  that may differ. */
   async function answers(phase: Phase, email: string): Promise<string[]> {
     const json = await signUp(phase, email);
     const page = await fetchWith(VARS[phase], "/subscribe", {
@@ -302,7 +304,8 @@ describe("the subscribe page answers every address alike (SPEC §7)", () => {
       headers: { "content-type": "application/x-www-form-urlencoded", accept: "text/html" },
       body: new URLSearchParams({ email }),
     });
-    return [`${json.status} ${await json.text()}`, `${page.status} ${await page.text()}`];
+    const html = (await page.text()).replaceAll(email, "ADDRESS");
+    return [`${json.status} ${await json.text()}`, `${page.status} ${html}`];
   }
 
   it.each(PHASES)("%s", async (phase) => {

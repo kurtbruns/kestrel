@@ -433,12 +433,28 @@ describe("subscribing: no flood, and no reveal of who is on the list", () => {
     for (const email of states) {
       const res = await publicSubscribe(email);
       answers.add(`${res.status} ${await res.text()}`);
+      // The page shows the address the reader typed back to them, so each differs by
+      // that address and nothing else.
       const page = await formSubscribe(email);
-      pages.add(`${page.status} ${await page.text()}`);
+      const html = await page.text();
+      expect(html).toContain(`<strong>${email}</strong>`);
+      pages.add(`${page.status} ${html.replaceAll(email, "ADDRESS")}`);
     }
     expect([...answers]).toEqual([`200 ${JSON.stringify({ status: "check_inbox" })}`]);
     expect(pages.size).toBe(1);
     expect([...pages][0]).toMatch(/^200 [\s\S]*Check your inbox/);
+  });
+});
+
+describe("the check-inbox page (SPEC §7)", () => {
+  it("says the reader isn't subscribed yet, and names the address typed", async () => {
+    const email = uniqueEmail();
+    const page = await (await formSubscribe(email)).text();
+    expect(page).toContain(">Check your inbox to finish subscribing</h1>");
+    expect(page).toContain(
+      `Please click the link in the email we just sent to <strong>${email}</strong>.`,
+    );
+    expect(page).not.toContain("Newsletter</p>");
   });
 });
 
@@ -508,7 +524,10 @@ describe("the address comes only from the body, never a URL (SPEC §7)", () => {
       body: new URLSearchParams({ email: byForm }).toString(),
     });
     expect(form.status).toBe(200);
-    expect(await form.text()).toContain("Check your inbox");
+    const page = await form.text();
+    expect(page).toContain("Check your inbox");
+    expect(page).toContain(byForm);
+    expect(page).not.toContain(inQuery);
 
     expect((await subs.getByEmail(env.DB, byJson))?.status).toBe("pending");
     expect((await subs.getByEmail(env.DB, byForm))?.status).toBe("pending");

@@ -115,7 +115,6 @@ export function subscribeFormPage(c: RequestContext, identity: ReaderIdentity): 
     ? escapeHtml(identity.tagline)
     : "Get the next post delivered to your inbox.";
   const main =
-    `<p class="r-ey">Newsletter</p>` +
     `<h1 class="r-h1">${escapeHtml(toPublication("Subscribe", identity.name))}</h1>` +
     `<p class="r-lead">${lede}</p>` +
     subscribeFormHtml();
@@ -125,7 +124,6 @@ export function subscribeFormPage(c: RequestContext, identity: ReaderIdentity): 
 /** The form again, for an address that doesn't parse. */
 export function subscribeNotAnEmailPage(c: RequestContext, identity: ReaderIdentity): Response {
   const main =
-    `<p class="r-ey">Newsletter</p>` +
     `<h1 class="r-h1">That doesn’t look like an email</h1>` +
     `<p class="r-lead">Please check the address and try again.</p>` +
     subscribeFormHtml();
@@ -143,7 +141,6 @@ export function subscribeNotOpenPage(
   status = 200,
 ): Response {
   const main =
-    `<p class="r-ey">Newsletter</p>` +
     `<h1 class="r-h1">Signups aren’t open yet</h1>` +
     `<p class="r-lead">This newsletter isn’t taking subscribers yet. Please check back soon.</p>`;
   return subscribePage(c, identity, main, status);
@@ -159,7 +156,6 @@ export function subscribePausedPage(
   status = 200,
 ): Response {
   const main =
-    `<p class="r-ey">Newsletter</p>` +
     `<h1 class="r-h1">Signups are paused</h1>` +
     `<p class="r-lead">This newsletter can’t send confirmation emails right now. Please try again later.</p>`;
   return subscribePage(c, identity, main, status);
@@ -177,11 +173,19 @@ function closedPage(
     : subscribeNotOpenPage(c, identity, status);
 }
 
-/** The one answer every subscribe request gets, whatever the address's state (SPEC §7). */
-export function subscribeCheckInboxPage(c: RequestContext, identity: ReaderIdentity): Response {
+/**
+ * The one answer every subscribe request gets, whatever the address's state (SPEC §7). It
+ * shows the reader the address they typed, so a typo shows; that address came with the
+ * request, so the page says nothing about the list.
+ */
+export function subscribeCheckInboxPage(
+  c: RequestContext,
+  identity: ReaderIdentity,
+  email: string,
+): Response {
   const main =
-    `<p class="r-ey">Newsletter</p><h1 class="r-h1">Almost there</h1>` +
-    `<p class="r-lead">A confirmation link is on its way. Check your inbox to finish subscribing. If you’re already subscribed, nothing is sent.</p>`;
+    `<h1 class="r-h1">Check your inbox to finish subscribing</h1>` +
+    `<p class="r-lead">Please click the link in the email we just sent to <strong>${escapeHtml(email)}</strong>.</p>`;
   return subscribePage(c, identity, main);
 }
 
@@ -247,7 +251,7 @@ export async function subscribe(c: RequestContext): Promise<Response> {
     const body: PublicSubscribeResponse = { status: "check_inbox" };
     return json(body);
   }
-  return subscribeCheckInboxPage(c, await readerIdentity(c, c.config));
+  return subscribeCheckInboxPage(c, await readerIdentity(c, c.config), email);
 }
 
 /** Opening a confirm link shows a Confirm button and changes nothing: mail scanners open
@@ -275,7 +279,6 @@ export async function confirmStatePage(
   state: ConfirmPageState,
   token: string,
 ): Promise<Response> {
-  const eyebrow = "Newsletter";
   switch (state.kind) {
     case "ready": {
       // The consent step names whose list the reader is joining, so a link that opens
@@ -285,7 +288,6 @@ export async function confirmStatePage(
         c,
         {
           title: "Confirm your subscription",
-          eyebrow,
           headline: toPublication("Confirm your subscription", identity.name),
           ledeHtml: `Confirm <strong>${escapeHtml(state.subscriber.email)}</strong> to start receiving the newsletter.`,
           afterHtml:
@@ -299,7 +301,6 @@ export async function confirmStatePage(
     case "confirmed":
       return readerMessage(c, {
         title: "Subscribed",
-        eyebrow,
         headline: "You’re subscribed",
         ledeHtml: `Thanks for confirming <strong>${escapeHtml(state.subscriber.email)}</strong>. The next post will land in your inbox.`,
         afterHtml: archiveLink(archiveHomeUrl(c.config), "Browse the archive"),
@@ -308,7 +309,6 @@ export async function confirmStatePage(
       // A fresh link goes through the ordinary subscribe path, cooldown and all.
       return readerMessage(c, {
         title: "Link expired",
-        eyebrow,
         headline: "This link has expired",
         ledeHtml: `Confirmation links only work for a limited time. We can send a new one to <strong>${escapeHtml(state.subscriber.email)}</strong>.`,
         afterHtml:
@@ -320,7 +320,6 @@ export async function confirmStatePage(
     case "invalid":
       return readerMessage(c, {
         title: "Invalid link",
-        eyebrow,
         headline: "This link is invalid",
         ledeHtml: `<a href="/subscribe">Subscribe again</a> to get a new one.`,
         status: 400,
