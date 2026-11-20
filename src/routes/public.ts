@@ -279,7 +279,6 @@ export async function confirmStatePage(
   state: ConfirmPageState,
   token: string,
 ): Promise<Response> {
-  const eyebrow = "Newsletter";
   switch (state.kind) {
     case "ready": {
       // The consent step names whose list the reader is joining, so a link that opens
@@ -289,7 +288,6 @@ export async function confirmStatePage(
         c,
         {
           title: "Confirm your subscription",
-          eyebrow,
           headline: toPublication("Confirm your subscription", identity.name),
           ledeHtml: `Confirm <strong>${escapeHtml(state.subscriber.email)}</strong> to start receiving the newsletter.`,
           afterHtml:
@@ -303,7 +301,6 @@ export async function confirmStatePage(
     case "confirmed":
       return readerMessage(c, {
         title: "Subscribed",
-        eyebrow,
         headline: "You’re subscribed",
         ledeHtml: `Thanks for confirming <strong>${escapeHtml(state.subscriber.email)}</strong>. The next post will land in your inbox.`,
         afterHtml: archiveLink(archiveHomeUrl(c.config), "Browse the archive"),
@@ -312,7 +309,6 @@ export async function confirmStatePage(
       // A fresh link goes through the ordinary subscribe path, cooldown and all.
       return readerMessage(c, {
         title: "Link expired",
-        eyebrow,
         headline: "This link has expired",
         ledeHtml: `Confirmation links only work for a limited time. We can send a new one to <strong>${escapeHtml(state.subscriber.email)}</strong>.`,
         afterHtml:
@@ -324,7 +320,6 @@ export async function confirmStatePage(
     case "invalid":
       return readerMessage(c, {
         title: "Invalid link",
-        eyebrow,
         headline: "This link is invalid",
         ledeHtml: `<a href="/subscribe">Subscribe again</a> to get a new one.`,
         status: 400,

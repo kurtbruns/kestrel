@@ -75,6 +75,13 @@ describe("reader page previews (SPEC §5)", () => {
         for (const shown of SHOWS[name]!) {
           expect(body, name).toContain(shown);
         }
+        // Joining needs no label over the headline, which the masthead already names;
+        // leaving keeps its "Unsubscribe" label, which says which link a page is about.
+        if (j.id === "subscribe" || j.id === "confirm" || name === "reading/landing-empty") {
+          expect(body, name).not.toContain('class="r-ey"');
+        } else if (j.id === "unsubscribe") {
+          expect(body, name).toContain('<p class="r-ey">Unsubscribe</p>');
+        }
         expect(body, name).toContain(publication);
         // The page exactly as a reader gets it: no test strip, and, since a preview is the
         // deployed page, no local dev dashboard shortcut.

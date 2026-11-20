@@ -362,7 +362,8 @@ export interface MessagePageOptions {
   homeUrl: string | null;
   /** The page's own name; the publication name is appended for the tab title. */
   title: string;
-  eyebrow: string;
+  /** A label over the headline, left off where the headline and masthead already say it. */
+  eyebrow?: string;
   headline: string;
   ledeHtml: string;
   afterHtml?: string;
@@ -371,8 +372,8 @@ export interface MessagePageOptions {
   banner?: ReaderBanner;
 }
 
-/** A message page in the reader shell (confirm, unsubscribe, not found): an eyebrow,
- *  a serif headline, a muted lede, and an optional form or link beneath. A reader
+/** A message page in the reader shell (confirm, unsubscribe, not found): an optional
+ *  eyebrow, a serif headline, a muted lede, and an optional form or link beneath. A reader
  *  arrives here from an email, so the page carries their newsletter's identity but no
  *  subscribe call to action, which would pull them off the task they came for. Always
  *  `private`: several show the reader's address, and none is worth indexing. */
@@ -382,7 +383,7 @@ export function messagePage(opts: MessagePageOptions): Response {
     homeUrl: opts.homeUrl,
     title: pageTitle(opts.title, opts.identity.name),
     mainHtml:
-      `<p class="r-ey">${escapeHtml(opts.eyebrow)}</p>` +
+      (opts.eyebrow ? `<p class="r-ey">${escapeHtml(opts.eyebrow)}</p>` : "") +
       `<h1 class="r-h1">${escapeHtml(opts.headline)}</h1>` +
       `<p class="r-lead">${opts.ledeHtml}</p>` +
       (opts.afterHtml ?? ""),
