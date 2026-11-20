@@ -381,7 +381,8 @@ describe("confirming in one click, in the browser that asked for the link (SPEC 
     expect(page.status).toBe(200);
     const html = await page.text();
     expect(html).toContain("Click the button below to finish subscribing");
-    expect(html).toContain('<button class="r-btn" type="submit">Finish subscribing</button>');
+    expect(html).toContain("Finish subscribing</h1>");
+    expect(html).toContain('<button class="r-btn" type="submit">Confirm subscription</button>');
     expect(page.headers.get("set-cookie")).toBeNull();
     expect((await subs.getByEmail(env.DB, email))?.status).toBe("pending");
 

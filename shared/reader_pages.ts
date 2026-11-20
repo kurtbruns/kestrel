@@ -47,7 +47,7 @@ export const READER_JOURNEYS = [
     label: "Confirm",
     flow: "steps",
     states: [
-      { id: "ready", label: "Ready", at: CONFIRM },
+      { id: "ready", label: "Finish subscribing", at: CONFIRM },
       { id: "confirmed", label: "Confirmed", at: CONFIRM },
       { id: "expired", label: "Expired", offPath: true, at: CONFIRM },
       { id: "invalid", label: "Invalid link", offPath: true, at: CONFIRM },

@@ -48,7 +48,7 @@ const STATE_NOTES: StateNotes = {
     ready:
       "When a reader opens the link in your confirmation email somewhere other than the browser they subscribed from, such as another device or their mail app.",
     confirmed:
-      "After they confirm, by opening the link in the browser they subscribed from or by pressing Finish subscribing. They’re on your list and get your next post.",
+      "After they confirm, by opening the link in the browser they subscribed from or by pressing Confirm subscription. They’re on your list and get your next post.",
     expired: "When a reader opens a confirmation link that’s too old. They can ask for a new one.",
     invalid: "When a confirmation link is broken, mistyped, or replaced by a newer one.",
   },

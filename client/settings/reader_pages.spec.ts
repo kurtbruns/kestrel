@@ -268,7 +268,7 @@ describe("reader pages section (SPEC §5)", () => {
     expect($("#rpStage").hidden).toBe(true);
     expect($("#rpError").hidden).toBe(false);
     // The next page that reads comes back in the frame, and the error goes.
-    row("confirm", "Ready").click();
+    row("confirm", "Finish subscribing").click();
     await settle();
     expect(frame().srcdoc).toContain("/api/reader-pages/confirm/ready");
     expect($("#rpStage").hidden).toBe(false);

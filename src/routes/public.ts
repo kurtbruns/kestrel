@@ -319,21 +319,21 @@ export async function confirmStatePage(
 ): Promise<Response> {
   switch (state.kind) {
     case "ready": {
-      // The consent step names whose list the reader is joining, so a link that opens
-      // from an email can't read as anyone's.
+      // The masthead names whose list the reader is joining, so a link that opens from an
+      // email can't read as anyone's; the heading says only what is left to do.
       const identity = await readerIdentity(c, c.config);
       return readerMessage(
         c,
         {
           title: "Confirm your subscription",
-          headline: toPublication("Confirm your subscription", identity.name),
-          // The last step, said plainly, with a button worded unlike the email's, so a reader
-          // who just pressed that one doesn't take this page for the end (SPEC §7).
+          // The last step, said plainly, so a reader who just pressed the email's button
+          // doesn't take this page for the end (SPEC §7).
+          headline: "Finish subscribing",
           ledeHtml: `Click the button below to finish subscribing <strong>${escapeHtml(state.subscriber.email)}</strong>.`,
           afterHtml:
             `<form class="r-form" method="post" action="/confirm">` +
             `<input type="hidden" name="token" value="${escapeHtmlAttr(token)}">` +
-            `<button class="r-btn" type="submit">Finish subscribing</button></form>`,
+            `<button class="r-btn" type="submit">Confirm subscription</button></form>`,
         },
         identity,
       );
