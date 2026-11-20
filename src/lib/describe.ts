@@ -59,6 +59,14 @@ const BARE_ADDRESS = /(?:\b[a-z][a-z0-9+.-]*:\/\/|\bmailto:|\bwww\.)\S*/gi;
 /** A delivery slot as the frozen copy keeps it (the unsubscribe link, the sent-to address). */
 const PLACEHOLDER = /%%[A-Z_]+%%/g;
 
+/** A send's frozen plain text without its footer, which holds the unlisted link and the
+ *  unsubscribe slot: the post's own text, as readers received it. Unchanged when no footer
+ *  rule is found. */
+export function postTextBody(frozenText: string): string {
+  const end = frozenText.lastIndexOf(TEXT_FOOTER_RULE);
+  return end === -1 ? frozenText : frozenText.slice(0, end);
+}
+
 /** A line that already ends a sentence or clause, so the next one follows after a space. */
 const ENDS_CLAUSE = /[.!?…:;,)\]"'”’»]$/;
 
@@ -72,8 +80,7 @@ const ENDS_CLAUSE = /[.!?…:;,)\]"'”’»]$/;
  * the next by a dash so the two don't run together. "" when no prose is left.
  */
 export function postDescription(frozenText: string, subject: string): string {
-  const end = frozenText.lastIndexOf(TEXT_FOOTER_RULE);
-  const body = end === -1 ? frozenText : frozenText.slice(0, end);
+  const body = postTextBody(frozenText);
   const lines: string[] = [];
   for (const raw of body.split("\n")) {
     const kept = raw.replace(LINK_ADDRESS, "").replace(BARE_ADDRESS, "").replace(PLACEHOLDER, "");

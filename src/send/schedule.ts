@@ -79,6 +79,7 @@ export async function renderPost(
   return {
     rendered_html: rendered.html,
     rendered_text: rendered.text,
+    rendered_web: rendered.web,
     subject: rendered.subject,
     warnings: rendered.warnings,
     from_name: branding.senderName,

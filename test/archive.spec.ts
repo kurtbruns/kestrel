@@ -450,6 +450,7 @@ describe("reader surface — no admin link once deployed (§11)", () => {
       subscribeUrl: "https://app.example/subscribe",
       homeUrl: "https://app.example/",
       archiveUrl: "https://app.example/archive",
+      feedUrl: "https://app.example/archive/feed.xml",
       recent: [],
       signupsOpen: true,
       devDashboardUrl: "https://app.example/dashboard/",
@@ -459,6 +460,7 @@ describe("reader surface — no admin link once deployed (§11)", () => {
       subscribeUrl: "https://app.example/subscribe",
       homeUrl: "https://app.example/",
       archiveUrl: "https://app.example/archive",
+      feedUrl: "https://app.example/archive/feed.xml",
       recent: [],
       signupsOpen: true,
     }).text();
@@ -477,6 +479,7 @@ describe("reader surface — no admin link once deployed (§11)", () => {
       subscribeUrl: "https://app.example/subscribe",
       homeUrl: "https://app.example/",
       archiveUrl: "https://app.example/archive",
+      feedUrl: "https://app.example/archive/feed.xml",
       posts: [],
     }).text();
     expect(deployed).not.toContain("/dashboard");

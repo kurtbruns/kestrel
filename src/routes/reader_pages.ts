@@ -38,7 +38,7 @@ import {
   unsubscribedPage,
   unsubscribeInvalidPage,
 } from "./public";
-import { archiveHomeUrl, readerIdentity } from "./reader";
+import { archiveFeedUrl, archiveHomeUrl, readerIdentity } from "./reader";
 import { SAMPLE_POST_SUBJECT, sampleRenderInput } from "./render_actions";
 
 /** The address a preview shows where a reader's own would be. */
@@ -98,6 +98,7 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
         subscribeUrl,
         homeUrl: home,
         archiveUrl: archiveHomeUrl(c.config),
+        feedUrl: archiveFeedUrl(c.config),
         featured,
         recent,
         signupsOpen: true,
@@ -110,6 +111,7 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
         subscribeUrl,
         homeUrl: home,
         archiveUrl: archiveHomeUrl(c.config),
+        feedUrl: archiveFeedUrl(c.config),
         posts: samplePosts(c, identity, Date.now()),
       });
     }
@@ -120,6 +122,7 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
         subscribeUrl,
         homeUrl: home,
         archiveUrl: archiveHomeUrl(c.config),
+        feedUrl: archiveFeedUrl(c.config),
         recent: [],
         signupsOpen: true,
       });
@@ -129,6 +132,7 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
         subscribeUrl,
         homeUrl: home,
         archiveUrl: archiveHomeUrl(c.config),
+        feedUrl: archiveFeedUrl(c.config),
         posts: [],
       });
     case "reading/post": {
@@ -145,6 +149,7 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
         config: c.config,
         identity,
         dateMs: Date.now(),
+        listed: true,
         // The head a listed post's page carries, at the sample post's archive address.
         describe: postPageDescription(
           c.config,

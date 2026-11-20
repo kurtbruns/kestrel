@@ -327,6 +327,7 @@ describe("the log records an act only when its change landed (SPEC §6)", () => 
           recipient_count: 0,
           rendered_html: "",
           rendered_text: "",
+          rendered_web: "",
           subject: "S",
           warnings: [],
           from_name: "",

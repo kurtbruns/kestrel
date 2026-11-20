@@ -293,6 +293,8 @@ export interface Send {
   fire_at: number;
   rendered_html: string;
   rendered_text: string;
+  /** The post's content alone as web HTML, frozen beside the email by the same render (SPEC §5), which the archive's feed serves; null for a send frozen before it was kept. */
+  rendered_web: string | null;
   subject: string;
   recipient_count: number;
   locked_until: number | null;
@@ -358,6 +360,7 @@ export type SendSummary = Omit<
   Send,
   | "rendered_html"
   | "rendered_text"
+  | "rendered_web"
   | "web_link"
   | "render_warnings"
   | "requested_local_time"

@@ -306,6 +306,32 @@ export async function listPublishedPosts(db: D1Database, limit = 200): Promise<P
   return results;
 }
 
+/** One post for the archive's feed (SPEC §5): what the archive index lists, plus the frozen
+ *  copies an item is made from, the web copy (null for a send frozen before it was kept) and
+ *  the plain text that stands in for it and gives the summary. */
+export interface FeedPost extends PublishedPost {
+  rendered_web: string | null;
+  rendered_text: string;
+}
+
+/** The newest `limit` posts the archive index lists, newest first, with their frozen copies:
+ *  the same rows as `listPublishedPosts`, so the feed and the index never disagree. */
+export async function listFeedPosts(db: D1Database, limit: number): Promise<FeedPost[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT p.slug AS slug, s.subject AS subject, MAX(${PUBLISHED_AT}) AS published_at,
+              s.rendered_web AS rendered_web, s.rendered_text AS rendered_text
+         FROM sends s JOIN posts p ON p.id = s.post_id
+         WHERE ${PUBLISHED_SEND} AND p.email_only = 0
+         GROUP BY s.post_id
+         ORDER BY published_at DESC
+         LIMIT ?`,
+    )
+    .bind(limit)
+    .all<FeedPost>();
+  return results;
+}
+
 /** Narrow the send list by `status`, a subject contains-search, and — `failures: "only"` —
  *  to sends with any bounce, complaint, or unsent recipient on their counters. */
 export interface SendFilter {
@@ -963,12 +989,14 @@ export async function countDeliveriesFiltered(
 // --- the freeze ------------------------------------------------------------------
 
 /** The frozen render a freeze (or a re-make) writes onto a send: the one render
- *  path's output, as the three columns the send loop reads back, the render's
+ *  path's output, as the three columns the send loop reads back and the post's web copy
+ *  the archive's feed serves (SPEC §5), the render's
  *  warnings about it, which the publisher's instruments report (SPEC §5), and the
  *  display name the send goes out under, frozen with the copy it reviews (SPEC §9). */
 export interface FrozenRender {
   rendered_html: string;
   rendered_text: string;
+  rendered_web: string;
   subject: string;
   warnings: string[];
   from_name: string;
@@ -1038,8 +1066,8 @@ export function insertScheduledSendStmt(
 ): D1PreparedStatement {
   return db
     .prepare(
-      `INSERT INTO sends (id, post_id, status, fire_at, requested_local_time, requested_time_zone, rendered_html, rendered_text, subject, render_warnings, from_name, recipient_count, scheduled_at, web_link, rev)
-       SELECT ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unlisted', ${NEXT_REV}
+      `INSERT INTO sends (id, post_id, status, fire_at, requested_local_time, requested_time_zone, rendered_html, rendered_text, rendered_web, subject, render_warnings, from_name, recipient_count, scheduled_at, web_link, rev)
+       SELECT ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unlisted', ${NEXT_REV}
         WHERE ${guard.sql}`,
     )
     .bind(
@@ -1050,6 +1078,7 @@ export function insertScheduledSendStmt(
       send.requested?.zone ?? null,
       send.rendered_html,
       send.rendered_text,
+      send.rendered_web,
       send.subject,
       JSON.stringify(send.warnings),
       send.from_name,
@@ -1260,12 +1289,13 @@ export function remakeSendStmt(
 ): D1PreparedStatement {
   return db
     .prepare(
-      `UPDATE sends SET rendered_html = ?, rendered_text = ?, subject = ?, render_warnings = ?, from_name = ?, remade_at = ?, web_link = 'unlisted', rev = ${NEXT_REV}
+      `UPDATE sends SET rendered_html = ?, rendered_text = ?, rendered_web = ?, subject = ?, render_warnings = ?, from_name = ?, remade_at = ?, web_link = 'unlisted', rev = ${NEXT_REV}
         WHERE id = ? AND status = 'scheduled' AND ${guard.sql}`,
     )
     .bind(
       render.rendered_html,
       render.rendered_text,
+      render.rendered_web,
       render.subject,
       JSON.stringify(render.warnings),
       render.from_name,

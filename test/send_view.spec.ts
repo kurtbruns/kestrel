@@ -242,6 +242,7 @@ describe("the time to finish, in ticks", () => {
       fire_at: T,
       rendered_html: "",
       rendered_text: "",
+      rendered_web: null,
       subject: "s",
       web_link: "unlisted",
       render_warnings: "[]",
