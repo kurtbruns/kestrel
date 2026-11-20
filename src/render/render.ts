@@ -5,6 +5,8 @@
  * for the per-recipient unsubscribe URL and sent-to address); consumers fill them at
  * delivery via `substituteRecipient` (send/test) or with generic/empty values
  * (preview/archive). Both go through the one token engine (render/template_engine.ts).
+ * Beside the email it returns the post's content alone as HTML (`web`), which the archive's
+ * feed serves, so the feed's copy of a post comes from this path too.
  */
 
 import { archivePostUrl, unlistedPostUrl } from "../../shared/archive_url";
@@ -58,6 +60,14 @@ export interface RenderedEmail {
 }
 
 export interface RenderResult extends RenderedEmail {
+  /**
+   * The post's content alone as HTML, for the web rather than an inbox: the same Markdown
+   * pass and sanitizer the email's body is, before the template wraps it, so it carries no
+   * email layout, no delivery placeholders, and no template furniture. The archive's feed
+   * serves it (SPEC §5); being part of this one render, what the feed carries is the post as
+   * it was reviewed and mailed (I3, I5).
+   */
+  web: string;
   warnings: string[];
 }
 
@@ -185,7 +195,7 @@ export async function render(
     "",
   ].join("\n");
 
-  return { subject, html, text, warnings };
+  return { subject, html, text, web: cleanHtml, warnings };
 }
 
 /** The DELIVERY pass over a rendered email: fill the per-recipient (delivery-phase)

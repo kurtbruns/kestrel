@@ -27,7 +27,7 @@ A test sent from a draft is only a preview, and doesn't check off the dashboard'
 
 To change the post, choose **Cancel** on its banner, and it's a draft again. **Edit schedule** moves the time without unlocking it.
 
-At the send time, the post goes to your confirmed subscribers, and its page goes up in your archive. Watch it go out under **Sent**. Your first post that goes to the archive ends the dashboard's setup steps; an email-only one doesn't. If a send needs you, its page says so, and [Troubleshooting](troubleshooting.md) covers each case.
+At the send time, the post goes to your confirmed subscribers, and its page goes up in your archive and in your archive's feed. Watch it go out under **Sent**. Your first post that goes to the archive ends the dashboard's setup steps; an email-only one doesn't. If a send needs you, its page says so, and [Troubleshooting](troubleshooting.md) covers each case.
 
 ## Post settings
 

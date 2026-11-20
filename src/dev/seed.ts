@@ -1282,6 +1282,7 @@ export async function seedDatabase(
         fire_at: timeline.scheduledFireAt,
         rendered_html: result.html,
         rendered_text: result.text,
+        rendered_web: result.web,
         subject: result.subject,
         recipient_count: audience.length,
         scheduled_at: at,
@@ -1308,6 +1309,7 @@ export async function seedDatabase(
         fire_at: fireAt,
         rendered_html: result.html,
         rendered_text: result.text,
+        rendered_web: result.web,
         subject: result.subject,
         recipient_count: demoPost.sentTo.length,
         scheduled_at: fireAt - 6 * 60 * 1000, // Send now: the minimum lead, then the minute
@@ -1343,6 +1345,7 @@ export async function seedDatabase(
       fire_at: fireAt,
       rendered_html: result.html,
       rendered_text: result.text,
+      rendered_web: result.web,
       subject: result.subject,
       recipient_count: sentAudience.length,
       scheduled_at: scheduledAt,

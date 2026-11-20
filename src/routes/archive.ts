@@ -11,15 +11,17 @@
 
 import { formatPublicationDate } from "../../shared/time_zone";
 import { getBySlug, getByUnlistedToken, type PostRow } from "../db/posts";
-import { listPublishedPosts, publishedSendForPost, type SendRow } from "../db/sends";
+import { listFeedPosts, listPublishedPosts, publishedSendForPost, type SendRow } from "../db/sends";
 import type { Config } from "../env";
 import { archiveAnswers } from "../lib/archive_address";
-import { describeHead, type PageDescription, postDescription } from "../lib/describe";
+import { describeHead, type PageDescription, postDescription, postTextBody } from "../lib/describe";
+import { FEED_ITEM_LIMIT, plainTextAsHtml, rssFeed } from "../lib/feed";
 import {
   ARCHIVE_POST_HEAD,
   archiveDevDashboardChrome,
   archiveIndexPage,
   archiveLink,
+  feedLink,
   landingPage,
   type ReaderIdentity,
   readerIconLink,
@@ -36,7 +38,13 @@ import { fillDeliveryTokens } from "../render/template_engine";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { readSignups } from "../services/sending";
-import { archiveHomeUrl, devDashboardUrl, readerIdentity, readerMessage } from "./reader";
+import {
+  archiveFeedUrl,
+  archiveHomeUrl,
+  devDashboardUrl,
+  readerIdentity,
+  readerMessage,
+} from "./reader";
 
 /** A post's date as the reader surface shows it: the publication's day, from its time zone
  *  (SPEC §9), with no zone named; the day in UTC while none is set. Computed when the page is
@@ -68,6 +76,7 @@ export async function landing(c: RequestContext): Promise<Response> {
     subscribeUrl: `${c.config.appOrigin}/subscribe`,
     homeUrl: `${c.config.appOrigin}/`,
     archiveUrl: archiveHomeUrl(c.config),
+    feedUrl: archiveFeedUrl(c.config),
     featured,
     recent,
     signupsOpen: signups === "open",
@@ -88,12 +97,53 @@ export async function archiveIndex(c: RequestContext): Promise<Response> {
     subscribeUrl: signups === "open" ? `${c.config.appOrigin}/subscribe` : undefined,
     homeUrl: `${c.config.appOrigin}/`,
     archiveUrl: archiveHomeUrl(c.config),
+    feedUrl: archiveFeedUrl(c.config),
     posts: posts.map((i) => ({
       title: i.subject,
       url: archiveUrl(c.config, i.slug),
       dateLabel: formatPublishedDate(i.published_at, identity),
     })),
     devDashboardUrl: devDashboardUrl(c.config),
+  });
+}
+
+/**
+ * The archive's feed (SPEC §5): the newest posts the archive index lists, each in full from
+ * its send's frozen web copy, or, for a send frozen before that was kept, its frozen plain
+ * text. Briefly cacheable, as the index is, so a listing change reaches readers within
+ * minutes. It carries posts' HTML, so it is served under the post pages' policy, though no
+ * browser runs it as a page.
+ */
+export async function archiveFeed(c: RequestContext): Promise<Response> {
+  const [posts, identity] = await Promise.all([
+    listFeedPosts(c.env.DB, FEED_ITEM_LIMIT),
+    readerIdentity(c, c.config),
+  ]);
+  const xml = rssFeed({
+    title: identity.name || "Archive",
+    description: identity.tagline || identity.name || "",
+    link: archiveHomeUrl(c.config),
+    self: archiveFeedUrl(c.config),
+    logoUrl: identity.logoUrl,
+    items: posts.map((p) => ({
+      title: p.subject,
+      url: archiveUrl(c.config, p.slug),
+      publishedAt: p.published_at,
+      summary: postPageDescription(
+        c.config,
+        identity,
+        { slug: p.slug, emailOnly: false },
+        { subject: p.subject, text: p.rendered_text },
+      ).description,
+      contentHtml: p.rendered_web ?? plainTextAsHtml(postTextBody(p.rendered_text)),
+    })),
+  });
+  return new Response(xml, {
+    headers: {
+      ...POST_PAGE_SECURITY_HEADERS,
+      "content-type": "application/rss+xml; charset=utf-8",
+      "cache-control": "public, max-age=300",
+    },
   });
 }
 
@@ -116,6 +166,9 @@ export function webVersion(
     /** What the page says about itself to search engines and link previews
      *  (`postPageDescription`). */
     describe?: PageDescription;
+    /** Whether the post is listed in the archive, so its page names the archive's feed. An
+     *  email-only post's page, reached by its unlisted link, names no archive address. */
+    listed: boolean;
   },
 ): string {
   const masthead = archiveMasthead({
@@ -138,6 +191,7 @@ export function webVersion(
     .join(
       ARCHIVE_POST_HEAD +
         (opts.describe ? describeHead(opts.describe) : "") +
+        (opts.listed ? feedLink(archiveFeedUrl(opts.config), opts.identity.name) : "") +
         readerIconLink(opts.identity.logoUrl) +
         dev.head,
     );
@@ -201,6 +255,7 @@ async function postPage(c: RequestContext, post: PostRow, send: SendRow): Promis
     identity,
     dateMs: send.started_at ?? send.fire_at,
     devDashboardUrl: devDashboardUrl(c.config),
+    listed: !post.email_only,
     describe: postPageDescription(
       c.config,
       identity,

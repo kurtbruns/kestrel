@@ -8,6 +8,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ## [Unreleased]
 
+**Upgrading.** One database migration, `0028_sends_rendered_web`, which keeps each send's formatted copy for the feed. Bring it in with `npm run sync-migrations` and apply it as the upgrade guide's Apply the database changes step says, before you deploy.
+
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
 ### Breaking
@@ -15,6 +17,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Added
 
+- Your archive has an RSS feed at `feed.xml` under the archive's address (`/archive/feed.xml` by default), so readers can follow your publication in a feed reader. It lists the 20 newest posts in the archive, each in full as it was sent, without the template's unsubscribe link and other email-only parts; email-only posts stay out of it, as they do the archive. The home page, the archive index, and each archived post's page link it, so a feed reader finds it from any of their addresses. A post sent before this release is in the feed as its plain text, since the formatted copy is kept only for sends scheduled from this release on (SPEC §5).
 
 ### Changed
 

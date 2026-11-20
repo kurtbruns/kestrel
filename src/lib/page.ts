@@ -247,6 +247,13 @@ export function archiveDevDashboardChrome(url?: string): { head: string; masthea
   return { head: devDashboardStyle(url), masthead: devDashboardBadge(url) };
 }
 
+/** The tag a reader page carries so a feed reader given the page's address finds the archive's
+ *  feed (SPEC §5), titled with the publication's name. A post page gets it through the head
+ *  anchor at serve time, never in the frozen render or an email (I3). */
+export function feedLink(url: string, name: string): string {
+  return `<link rel="alternate" type="application/rss+xml" title="${escapeHtmlAttr(name || "Archive")}" href="${escapeHtmlAttr(url)}">`;
+}
+
 /** The strip's stylesheet, emitted beside it and only when it is. */
 function readerBannerStyle(banner?: ReaderBanner): string {
   return banner ? `<style>${READER_BANNER_STYLE}</style>` : "";
@@ -282,6 +289,8 @@ export function readerPage(opts: {
   /** What the page says about itself to search engines and link previews (`siteDescription`).
    *  Left out of a page reached from an email (`messagePage`), whose address may hold a token. */
   describe?: PageDescription;
+  /** The archive's feed, advertised in the head (`feedLink`): on the pages that list posts. */
+  feedUrl?: string;
 }): Response {
   const { name, tagline, logoUrl } = opts.identity;
   const logo = logoUrl
@@ -315,7 +324,7 @@ export function readerPage(opts: {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(opts.title)}</title>
-${opts.describe ? `${describeHead(opts.describe)}\n` : ""}${readerIconLink(logoUrl)}
+${opts.describe ? `${describeHead(opts.describe)}\n` : ""}${opts.feedUrl ? `${feedLink(opts.feedUrl, name)}\n` : ""}${readerIconLink(logoUrl)}
 <style>${READER_STYLE}</style>${readerBannerStyle(opts.banner)}${devDashboardStyle(opts.devDashboardUrl)}
 </head>
 <body>
@@ -474,6 +483,8 @@ export function landingPage(opts: {
   archiveUrl: string;
   /** The most recent post, featured; absent when nothing has been sent. */
   featured?: ArchiveIndexPost;
+  /** The archive's feed, which the page advertises. */
+  feedUrl: string;
   /** The next-most-recent posts, listed beneath the feature. */
   recent: ArchiveIndexPost[];
   /** Whether a subscribe would be taken: false while email isn't working (SPEC §7, §13),
@@ -518,6 +529,7 @@ export function landingPage(opts: {
     mainHtml: main,
     devDashboardUrl: opts.devDashboardUrl,
     describe: siteDescription(opts.identity, opts.homeUrl),
+    feedUrl: opts.feedUrl,
     // With nothing listed yet, whether it shows the form follows signups, which can open or
     // pause at any moment (SPEC §7), so it is never served stale. Once a post is listed it
     // doesn't depend on them, and stays briefly cacheable.
@@ -535,6 +547,8 @@ export function archiveIndexPage(opts: {
   /** The archive index's own public address, for its link preview. */
   archiveUrl: string;
   posts: ArchiveIndexPost[];
+  /** The archive's feed, which the page advertises. */
+  feedUrl: string;
   /** Dev-only editor shortcut (§11); set only on a dev-shaped instance. */
   devDashboardUrl?: string;
 }): Response {
@@ -549,6 +563,7 @@ export function archiveIndexPage(opts: {
     mainHtml: `<p class="r-ey">Archive</p>${list}`,
     devDashboardUrl: opts.devDashboardUrl,
     describe: siteDescription(opts.identity, opts.archiveUrl),
+    feedUrl: opts.feedUrl,
   });
 }
 
