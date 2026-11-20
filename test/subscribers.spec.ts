@@ -76,6 +76,36 @@ async function confirmToken(token: string): Promise<Response> {
   });
 }
 
+/** The confirm cookie's value a subscribe answer gave its browser (SPEC §7). */
+function cookieValue(res: Response): string {
+  const match = /^kestrel_confirm=([0-9a-f]{64});/.exec(res.headers.get("set-cookie") ?? "");
+  expect(match, "a subscribe answer sets the confirm cookie").not.toBeNull();
+  return match![1]!;
+}
+
+/** An answer's headers, the confirm cookie's value masked, so two answers compare whole. */
+function headersOf(res: Response): string {
+  return JSON.stringify(
+    [...res.headers].map(([k, v]) => [
+      k,
+      k === "set-cookie" ? v.replace(/=[0-9a-f]{64};/, "=VALUE;") : v,
+    ]),
+  );
+}
+
+/** Open a confirm link, as a browser holding `cookie` (a value, or none) would. */
+async function openLink(
+  token: string,
+  cookie: string | null,
+  headers: Record<string, string> = {},
+): Promise<Response> {
+  return route(
+    new Request(`${base}/confirm?token=${token}`, {
+      headers: cookie ? { ...headers, cookie: `other=1; kestrel_confirm=${cookie}` } : headers,
+    }),
+  );
+}
+
 async function confirmEmail(email: string): Promise<Response> {
   return confirmToken(await tokenFor(email));
 }
@@ -294,6 +324,146 @@ describe("confirming: only the owner's click records consent (I1)", () => {
   });
 });
 
+describe("confirming in one click, in the browser that asked for the link (SPEC §7)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("every answer the form gives sets the cookie, for as long as a link lasts and never cached", async () => {
+    const email = uniqueEmail();
+    await addPending(email);
+    await ageConfirmation(email, CONFIRM_LINK_TTL_MS);
+    const expired = await (
+      await SELF.fetch(`${base}/confirm?token=${await tokenFor(email)}`)
+    ).text();
+    expect(expired).toContain(`action="/subscribe"`);
+    // The JSON answer, the form's page, and the expired page's Send a new link, which posts
+    // the form's way.
+    for (const res of [await publicSubscribe(uniqueEmail()), await formSubscribe(email)]) {
+      expect(res.headers.get("set-cookie")).toBe(
+        `kestrel_confirm=${cookieValue(res)}; Max-Age=${CONFIRM_LINK_TTL_MS / 1000}; Path=/confirm; HttpOnly; Secure; SameSite=Lax`,
+      );
+      expect(res.headers.get("cache-control")).toBe("no-store");
+    }
+  });
+
+  it("opening the link in that browser confirms at once, says so, records it, and clears the cookie (I1)", async () => {
+    const spies = [vi.spyOn(console, "log")];
+    const email = uniqueEmail();
+    const cookie = cookieValue(await formSubscribe(email));
+    const token = await tokenFor(email);
+
+    const res = await openLink(token, cookie, { "cf-connecting-ip": "203.0.113.7" });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("You’re subscribed");
+    expect(res.headers.get("set-cookie")).toBe(
+      "kestrel_confirm=; Max-Age=0; Path=/confirm; HttpOnly; Secure; SameSite=Lax",
+    );
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    const row = await subs.getByEmail(env.DB, email);
+    expect(row).toMatchObject({ status: "confirmed", confirm_browser_hash: null });
+    expect(JSON.parse(row!.consent_evidence!)).toEqual({
+      confirmed_ip: "203.0.113.7",
+      via: "link",
+    });
+    expect(logged(...spies).filter((l) => l.event.startsWith("subscribe.confirm"))).toEqual([
+      expect.objectContaining({ event: "subscribe.confirmed", via: "link" }),
+    ]);
+  });
+
+  it("without the cookie, the link shows the button and changes nothing; the press is recorded as the button's", async () => {
+    const spies = [vi.spyOn(console, "log")];
+    const email = uniqueEmail();
+    await formSubscribe(email);
+    const token = await tokenFor(email);
+
+    const page = await openLink(token, null);
+    expect(page.status).toBe(200);
+    const html = await page.text();
+    expect(html).toContain("One more step to subscribe");
+    expect(html).toContain('<button class="r-btn" type="submit">Finish subscribing</button>');
+    expect(page.headers.get("set-cookie")).toBeNull();
+    expect((await subs.getByEmail(env.DB, email))?.status).toBe("pending");
+
+    expect((await confirmToken(token)).status).toBe(200);
+    const row = await subs.getByEmail(env.DB, email);
+    expect(row?.status).toBe("confirmed");
+    expect(JSON.parse(row!.consent_evidence!)).toEqual({ via: "button" });
+    expect(
+      logged(...spies)
+        .filter((l) => l.event.startsWith("subscribe.confirm"))
+        .map((l) => [l.event, l.reason ?? l.via]),
+    ).toEqual([
+      ["subscribe.confirm_page", "no_cookie"],
+      ["subscribe.confirmed", "button"],
+    ]);
+  });
+
+  it("another browser's cookie shows the button: subscribing a stranger's address gains nothing", async () => {
+    const spies = [vi.spyOn(console, "log")];
+    const stranger = uniqueEmail();
+    const theirs = uniqueEmail();
+    // The stranger's link went to their inbox; the other browser holds only its own value.
+    await formSubscribe(stranger);
+    const other = cookieValue(await formSubscribe(theirs));
+
+    const page = await openLink(await tokenFor(stranger), other);
+    expect(await page.text()).toContain("Finish subscribing");
+    expect(page.headers.get("set-cookie")).toBeNull();
+    expect((await subs.getByEmail(env.DB, stranger))?.status).toBe("pending");
+    expect(logged(...spies).find((l) => l.event === "subscribe.confirm_page")).toMatchObject({
+      reason: "mismatch",
+    });
+  });
+
+  it("a link the publisher's Add sent is bound to no browser, so it always shows the button", async () => {
+    const email = uniqueEmail();
+    expect((await adminAdd(email)).status).toBe(201);
+    const row = await subs.getByEmail(env.DB, email);
+    expect(row?.confirm_browser_hash).toBeNull();
+    const someone = cookieValue(await formSubscribe(uniqueEmail()));
+    expect(await (await openLink(row!.confirm_token!, someone)).text()).toContain(
+      "Finish subscribing",
+    );
+    expect((await subs.getByEmail(env.DB, email))?.status).toBe("pending");
+  });
+
+  it("an expired link confirms nothing, even in the browser that asked for it", async () => {
+    const email = uniqueEmail();
+    const cookie = cookieValue(await formSubscribe(email));
+    await ageConfirmation(email, CONFIRM_LINK_TTL_MS);
+
+    const page = await openLink(await tokenFor(email), cookie);
+    expect(page.status).toBe(410);
+    expect(await page.text()).toContain("This link has expired");
+    expect(page.headers.get("set-cookie")).toBeNull();
+    expect((await subs.getByEmail(env.DB, email))?.status).toBe("pending");
+  });
+
+  it("a request inside the cooldown leaves the link already sent bound to the browser that asked for it", async () => {
+    const email = uniqueEmail();
+    const first = cookieValue(await formSubscribe(email));
+    const hash = (await subs.getByEmail(env.DB, email))!.confirm_browser_hash;
+    const second = cookieValue(await formSubscribe(email));
+    expect(second).not.toBe(first);
+    expect(await confirmationsTo(email)).toBe(1);
+    expect((await subs.getByEmail(env.DB, email))!.confirm_browser_hash).toBe(hash);
+
+    const token = await tokenFor(email);
+    expect(await (await openLink(token, second)).text()).toContain("Finish subscribing");
+    expect(await (await openLink(token, first)).text()).toContain("You’re subscribed");
+  });
+
+  it("an erasure clears which browser asked (SPEC §7)", async () => {
+    const email = uniqueEmail();
+    await formSubscribe(email);
+    const row = (await subs.getByEmail(env.DB, email))!;
+    expect(row.confirm_browser_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect((await subs.erase(env.DB, row.id)).kind).toBe("erased");
+    expect((await subs.getById(env.DB, row.id))!.confirm_browser_hash).toBeNull();
+  });
+});
+
 describe("subscribing: no flood, and no reveal of who is on the list", () => {
   it("racing subscribes for one address send one confirmation between them", async () => {
     const email = uniqueEmail();
@@ -430,17 +600,23 @@ describe("subscribing: no flood, and no reveal of who is on the list", () => {
     ];
     const answers = new Set<string>();
     const pages = new Set<string>();
+    const cookies = new Set<string>();
     for (const email of states) {
       const res = await publicSubscribe(email);
-      answers.add(`${res.status} ${await res.text()}`);
-      // The page shows the address the reader typed back to them, so each differs by
-      // that address and nothing else.
+      answers.add(`${res.status} ${headersOf(res)} ${await res.text()}`);
+      // The page shows the address the reader typed back to them, and each answer gives its
+      // browser a fresh random value, so each differs by those two and nothing else.
       const page = await formSubscribe(email);
       const html = await page.text();
       expect(html).toContain(`<strong>${email}</strong>`);
-      pages.add(`${page.status} ${html.replaceAll(email, "ADDRESS")}`);
+      pages.add(`${page.status} ${headersOf(page)} ${html.replaceAll(email, "ADDRESS")}`);
+      cookies.add(cookieValue(res));
+      cookies.add(cookieValue(page));
     }
-    expect([...answers]).toEqual([`200 ${JSON.stringify({ status: "check_inbox" })}`]);
+    expect(cookies.size).toBe(states.length * 2);
+    expect([...answers]).toEqual([
+      `200 ${headersOf(await publicSubscribe(uniqueEmail()))} ${JSON.stringify({ status: "check_inbox" })}`,
+    ]);
     expect(pages.size).toBe(1);
     expect([...pages][0]).toMatch(/^200 [\s\S]*Check your inbox/);
   });

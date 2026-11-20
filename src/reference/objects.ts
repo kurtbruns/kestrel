@@ -798,7 +798,8 @@ const SUBSCRIBER_FIELDS: ReferenceField[] = [
   {
     name: "consent_evidence",
     type: "string | null",
-    description: "The proof of consent, as JSON text.",
+    description:
+      "The proof of consent, as JSON text: an import's evidence verbatim, or for a confirmation here the IP it came from (`confirmed_ip`, when known) and `via`, `link` when the link opened in the browser that asked for it or `button` when the reader pressed Confirm.",
   },
   {
     name: "import_id",
@@ -1122,7 +1123,7 @@ export const OBJECTS: Record<ObjectKey, Omit<ReferenceObject, "key">> = {
       confirm_attempt_at: 1768381200000,
       origin: "kestrel",
       opt_in: "double",
-      consent_evidence: '{"confirmed_ip":"203.0.113.7"}',
+      consent_evidence: '{"confirmed_ip":"203.0.113.7","via":"link"}',
       import_id: null,
       created_at: 1768381200000,
       confirmed_at: 1768381500000,
