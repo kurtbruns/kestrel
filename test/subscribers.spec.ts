@@ -447,26 +447,21 @@ describe("subscribing: no flood, and no reveal of who is on the list", () => {
 });
 
 describe("the check-inbox page says what to look for (SPEC §7)", () => {
-  it("names the sender and subject the confirmation goes out with, and the address typed", async () => {
+  it("says the reader isn't subscribed yet, and names the confirmation's subject and the address typed", async () => {
     await settings.updateSettings(env.DB, {
-      publication: { name: "Field Notes" },
       confirmation_email: { subject: "Please confirm <now>" },
     });
     const email = uniqueEmail();
     const page = await (await formSubscribe(email)).text();
-    expect(page).toContain("look for an email from <strong>Field Notes</strong>");
+    expect(page).toContain(">Check your inbox to finish subscribing</h1>");
     expect(page).toContain("with the subject <strong>“Please confirm &lt;now&gt;”</strong>");
     expect(page).toContain(`sent to <strong>${email}</strong>`);
     expect(page).toContain("If you’re already subscribed, no email is sent.");
   });
 
-  it("names the sending address when the publication has no name, and the default subject", async () => {
-    await settings.updateSettings(env.DB, {
-      publication: { name: "" },
-      confirmation_email: { subject: "" },
-    });
+  it("names the default subject when the publisher left it blank", async () => {
+    await settings.updateSettings(env.DB, { confirmation_email: { subject: "" } });
     const page = await (await formSubscribe(uniqueEmail())).text();
-    expect(page).toContain("look for an email from <strong>newsletter@send.example.com</strong>");
     expect(page).toContain("with the subject <strong>“Confirm your subscription”</strong>");
   });
 });

@@ -18,7 +18,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
-- The page a reader sees after subscribing is headed "Check your inbox" and says what to look for: the confirmation's sender and subject, and the address they typed, so a typo shows.
+- The page a reader sees after subscribing is headed "Check your inbox to finish subscribing" and says what to look for: the confirmation's subject, and the address they typed, so a typo shows.
 
 ### Fixed
 

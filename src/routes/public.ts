@@ -24,7 +24,6 @@ import {
   subscribeFormHtml,
 } from "../lib/page";
 import type { RequestContext } from "../router";
-import { senderFrom } from "../services/sender";
 import { readSignups } from "../services/sending";
 import {
   type ConfirmLinkState,
@@ -186,20 +185,19 @@ function closedPage(
 }
 
 /**
- * The one answer every subscribe request gets, whatever the address's state (SPEC §7). It
- * names what to look for (the sender and subject the confirmation goes out with) and the
- * address the reader typed, so a typo shows; none of it depends on the list. Since every
- * address gets it, it says that an address already subscribed is sent nothing.
+ * The one answer every subscribe request gets, whatever the address's state (SPEC §7). Its
+ * heading says the reader isn't subscribed yet; it names the subject the confirmation goes
+ * out with and the address the reader typed, so a typo shows, and none of it depends on the
+ * list. Since every address gets it, it says that an address already subscribed is sent
+ * nothing.
  */
 export async function subscribeCheckInboxPage(c: RequestContext, email: string): Promise<Response> {
   const settings = await getSettingsForDisplay(c.env.DB);
-  const from = senderFrom(settings, c.config);
   const { subject } = resolveConfirmationEmail(settings);
   const main =
-    `<p class="r-ey">Newsletter</p><h1 class="r-h1">Check your inbox</h1>` +
-    `<p class="r-lead">To finish subscribing, look for an email from <strong>${escapeHtml(from.name || from.address)}</strong> ` +
-    `with the subject <strong>“${escapeHtml(subject)}”</strong>, sent to <strong>${escapeHtml(email)}</strong>, ` +
-    `and click the link inside.</p>` +
+    `<p class="r-ey">Newsletter</p><h1 class="r-h1">Check your inbox to finish subscribing</h1>` +
+    `<p class="r-lead">Look for an email with the subject <strong>“${escapeHtml(subject)}”</strong>, ` +
+    `sent to <strong>${escapeHtml(email)}</strong>, and click the link inside.</p>` +
     `<p class="r-lead">If you’re already subscribed, no email is sent.</p>`;
   return subscribePage(c, identityFrom(settings, c.config), main);
 }

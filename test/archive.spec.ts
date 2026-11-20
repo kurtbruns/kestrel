@@ -962,7 +962,7 @@ describe("a publication with no name (SPEC §9)", () => {
       "/subscribe",
       { method: "POST", headers: asForm, body: "email=new@example.com" },
       "Subscribe",
-      "Check your inbox",
+      "Check your inbox to finish subscribing",
     ],
     [
       "confirm (ready)",
