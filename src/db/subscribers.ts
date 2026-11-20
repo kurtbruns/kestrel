@@ -185,6 +185,25 @@ export async function armConfirmation(
 }
 
 /**
+ * Bind the link a pending subscriber was already sent to the browser that asked most recently
+ * (SPEC §7), for a request inside the cooldown, which sends nothing. Only the binding moves:
+ * the token, and so the link in the reader's inbox, stays as it was. A row that is no longer
+ * pending, or holds no link, is left alone.
+ */
+export async function rebindConfirmation(
+  db: D1Database,
+  id: string,
+  browserHash: string,
+): Promise<void> {
+  await db
+    .prepare(
+      "UPDATE subscribers SET confirm_browser_hash = ? WHERE id = ? AND status = 'pending' AND confirm_token IS NOT NULL",
+    )
+    .bind(browserHash, id)
+    .run();
+}
+
+/**
  * Undo a `claimConfirmation` whose confirmation never went out, so the cooldown counts only
  * confirmations that were sent. A row `ensureSubscriber` made for this request (`created`)
  * is removed instead, so no pending subscriber is left holding a link nobody received.

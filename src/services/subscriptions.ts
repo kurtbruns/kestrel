@@ -71,7 +71,13 @@ export async function requestSubscription(
   const { subscriber, created } = await subscribers.ensureSubscriber(db, email);
   const now = Date.now();
   if (!(await subscribers.claimConfirmation(db, subscriber.id, now, now - CONFIRM_COOLDOWN_MS))) {
-    // Already confirmed by a racing request, or a confirmation went out moments ago.
+    // Already confirmed by a racing request, or a confirmation went out moments ago. The link
+    // that went out is bound to this browser instead, so a reader who submits again while
+    // waiting for the email still confirms in one click (SPEC §7). Never for the publisher's
+    // Add, which binds no browser and leaves the reader's binding alone.
+    if (browserHash) {
+      await subscribers.rebindConfirmation(db, subscriber.id, browserHash);
+    }
     const current = await subscribers.getById(db, subscriber.id);
     return {
       kind: "skipped",
@@ -111,8 +117,7 @@ export async function requestSubscription(
   }
   // Sent, or it may have been: arm its link so it works if it arrived, and keep the claim,
   // so a retry can't turn an outage into a flood.
-  // The browser that asked for this link is armed with it, so a request inside the cooldown,
-  // which never gets here, leaves the link already sent bound to the browser that asked for it.
+  // The browser that asked for this link is armed with it, in the same statement as its token.
   const armed = await subscribers.armConfirmation(
     db,
     subscriber.id,

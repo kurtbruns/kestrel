@@ -440,18 +440,38 @@ describe("confirming in one click, in the browser that asked for the link (SPEC 
     expect((await subs.getByEmail(env.DB, email))?.status).toBe("pending");
   });
 
-  it("a request inside the cooldown leaves the link already sent bound to the browser that asked for it", async () => {
+  it("a request inside the cooldown binds the link already sent to its browser, so submitting twice still confirms in one click", async () => {
     const email = uniqueEmail();
     const first = cookieValue(await formSubscribe(email));
-    const hash = (await subs.getByEmail(env.DB, email))!.confirm_browser_hash;
+    const token = await tokenFor(email);
     const second = cookieValue(await formSubscribe(email));
     expect(second).not.toBe(first);
     expect(await confirmationsTo(email)).toBe(1);
-    expect((await subs.getByEmail(env.DB, email))!.confirm_browser_hash).toBe(hash);
+    expect(await tokenFor(email)).toBe(token);
 
-    const token = await tokenFor(email);
-    expect(await (await openLink(token, second)).text()).toContain("Finish subscribing");
-    expect(await (await openLink(token, first)).text()).toContain("You’re subscribed");
+    // The browser that asked most recently is the one that counts.
+    expect(await (await openLink(token, first)).text()).toContain("Finish subscribing");
+    expect(await (await openLink(token, second)).text()).toContain("You’re subscribed");
+  });
+
+  it("a request inside the cooldown binds nothing to someone who left since their link went out (I2)", async () => {
+    const email = uniqueEmail();
+    const { id } = await addPending(email);
+    await subs.unsubscribeById(env.DB, id);
+    await formSubscribe(email);
+    expect(await subs.getByEmail(env.DB, email)).toMatchObject({
+      status: "unsubscribed",
+      confirm_browser_hash: null,
+    });
+  });
+
+  it("the publisher's Add inside the cooldown leaves the reader's browser bound", async () => {
+    const email = uniqueEmail();
+    const cookie = cookieValue(await formSubscribe(email));
+    expect(await readJson(await adminAdd(email))).toMatchObject({ action: "recently_sent" });
+    expect(await (await openLink(await tokenFor(email), cookie)).text()).toContain(
+      "You’re subscribed",
+    );
   });
 
   it("an erasure clears which browser asked (SPEC §7)", async () => {
