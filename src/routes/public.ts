@@ -326,10 +326,10 @@ export async function confirmStatePage(
         c,
         {
           title: "Confirm your subscription",
+          headline: toPublication("Confirm your subscription", identity.name),
           // The last step, said plainly, with a button worded unlike the email's, so a reader
           // who just pressed that one doesn't take this page for the end (SPEC §7).
-          headline: toPublication("One more step to subscribe", identity.name),
-          ledeHtml: `Press Finish subscribing to start receiving posts at <strong>${escapeHtml(state.subscriber.email)}</strong>.`,
+          ledeHtml: `Click the button below to finish subscribing <strong>${escapeHtml(state.subscriber.email)}</strong>.`,
           afterHtml:
             `<form class="r-form" method="post" action="/confirm">` +
             `<input type="hidden" name="token" value="${escapeHtmlAttr(token)}">` +

@@ -17,8 +17,8 @@ const SHOWS: Record<string, string[]> = {
   "subscribe/not-open": ["Signups aren’t open yet"],
   "subscribe/paused": ["Signups are paused", "can’t send confirmation emails right now"],
   "confirm/ready": [
-    `One more step to subscribe to ${publication}`,
-    "Press Finish subscribing to start receiving posts at <strong>reader@example.com</strong>.",
+    `Confirm your subscription to ${publication}`,
+    "Click the button below to finish subscribing <strong>reader@example.com</strong>.",
   ],
   "confirm/confirmed": ["You’re subscribed", "<strong>reader@example.com</strong>"],
   "confirm/expired": ["This link has expired", "Send a new link"],

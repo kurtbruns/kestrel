@@ -592,7 +592,7 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
         confirmLanding,
         "/confirm?token=cfm-p",
         [
-          `One more step to subscribe to ${publication}`,
+          `Confirm your subscription to ${publication}`,
           '<form class="r-form" method="post" action="/confirm">',
           '<button class="r-btn" type="submit">Finish subscribing</button>',
         ],
@@ -969,7 +969,7 @@ describe("a publication with no name (SPEC §9)", () => {
       "/confirm?token=cfm-p",
       {},
       "Confirm your subscription",
-      "One more step to subscribe",
+      "Confirm your subscription",
     ],
     ["confirm (confirmed)", "/confirm?token=cfm-a", {}, "Subscribed", "You’re subscribed"],
     ["confirm (expired)", "/confirm?token=cfm-x", {}, "Link expired", "This link has expired"],
@@ -1024,7 +1024,7 @@ describe("a publication with no name (SPEC §9)", () => {
       [
         "/confirm?token=cfm-p",
         "Confirm your subscription · Birds Weekly",
-        "One more step to subscribe to Birds Weekly",
+        "Confirm your subscription to Birds Weekly",
       ],
       ["/unsubscribe?token=uns-a", "Unsubscribe · Birds Weekly", "Unsubscribe from Birds Weekly?"],
       ["/confirm?token=cfm-a", "Subscribed · Birds Weekly", "You’re subscribed"],

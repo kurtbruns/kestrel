@@ -17,7 +17,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Added
 
-- A reader who opens their confirmation link in the browser they subscribed from is confirmed at once, with no second press. The subscribe form sets one cookie for this, the reader pages' only one: a random value, sent back only to the confirm page and gone once the link is used or expires. Anywhere else, a mail scanner, another device, or a mail app's own browser, the link shows the Confirm button as before, now headed "One more step to subscribe" with a **Finish subscribing** button, so a reader who already pressed the email's button doesn't stop there. A subscriber's consent evidence says which way they confirmed (`via`: `link` or `button`), and two new log lines, `subscribe.confirmed` and `subscribe.confirm_page`, count each path (SPEC §7).
+- A reader who opens their confirmation link in the browser they subscribed from is confirmed at once, with no second press. The subscribe form sets one cookie for this, the reader pages' only one: a random value, sent back only to the confirm page and gone once the link is used or expires. Anywhere else, a mail scanner, another device, or a mail app's own browser, the link shows the page with the button as before, which now says "Click the button below to finish subscribing" above a **Finish subscribing** button, so a reader who already pressed the email's button doesn't stop there. A subscriber's consent evidence says which way they confirmed (`via`: `link` or `button`), and two new log lines, `subscribe.confirmed` and `subscribe.confirm_page`, count each path (SPEC §7).
 
 ### Changed
 
