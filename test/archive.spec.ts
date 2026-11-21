@@ -592,7 +592,7 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
         confirmLanding,
         "/confirm?token=cfm-p",
         [
-          `Confirm your subscription to ${publication}`,
+          ">Finish subscribing</h1>",
           '<form class="r-form" method="post" action="/confirm">',
           '<button class="r-btn" type="submit">Confirm subscription</button>',
         ],
@@ -969,7 +969,7 @@ describe("a publication with no name (SPEC §9)", () => {
       "/confirm?token=cfm-p",
       {},
       "Confirm your subscription",
-      "Confirm your subscription",
+      "Finish subscribing",
     ],
     ["confirm (confirmed)", "/confirm?token=cfm-a", {}, "Subscribed", "You’re subscribed"],
     ["confirm (expired)", "/confirm?token=cfm-x", {}, "Link expired", "This link has expired"],
@@ -1021,11 +1021,7 @@ describe("a publication with no name (SPEC §9)", () => {
     await nameIt();
     const named: [string, string, string][] = [
       ["/subscribe", "Subscribe · Birds Weekly", "Subscribe to Birds Weekly"],
-      [
-        "/confirm?token=cfm-p",
-        "Confirm your subscription · Birds Weekly",
-        "Confirm your subscription to Birds Weekly",
-      ],
+      ["/confirm?token=cfm-p", "Confirm your subscription · Birds Weekly", "Finish subscribing"],
       ["/unsubscribe?token=uns-a", "Unsubscribe · Birds Weekly", "Unsubscribe from Birds Weekly?"],
       ["/confirm?token=cfm-a", "Subscribed · Birds Weekly", "You’re subscribed"],
     ];

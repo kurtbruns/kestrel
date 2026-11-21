@@ -10,11 +10,14 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+**Upgrading from 1.26.0.** `npm run sync-migrations` brings in one database migration, which records which browser asked for each confirmation link. Apply it where [Upgrade to a new release](https://github.com/kurtbruns/kestrel/blob/main/docs/guides/upgrade.md) does, after noting a restore point and before you deploy, with `npx wrangler d1 migrations apply DB --remote --env production`. Confirmation links sent before the upgrade keep working, with the Confirm button as before.
+
 ### Breaking
 
 
 ### Added
 
+- A reader who opens their confirmation link in the browser they subscribed from is confirmed at once, with no second press. The subscribe form sets one cookie for this, the reader pages' only one: a random value, sent back only to the confirm page, and lasting no longer than a link would. Anywhere else, a mail scanner, another device, or a mail app's own browser, the link shows the page with the button as before, now headed "Finish subscribing" and saying "Click the button below to finish subscribing", so a reader who already pressed the email's button doesn't stop there. A subscriber's consent evidence says which way they confirmed (`via`: `link` or `button`), and two new log lines, `subscribe.confirmed` and `subscribe.confirm_page`, count each path (SPEC §7).
 
 ### Changed
 

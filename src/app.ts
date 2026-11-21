@@ -1956,7 +1956,7 @@ export function createRouter({
               confirmed_at: "2026-01-02T09:42:00.000Z",
               unsubscribed_at: null,
               suppressed_at: null,
-              evidence: '{"confirmed_ip":"203.0.113.7"}',
+              evidence: '{"confirmed_ip":"203.0.113.7","via":"link"}',
               format: "kestrel-subscribers/2",
             },
           ],
@@ -2516,7 +2516,7 @@ export function createRouter({
       title: "Request a subscription",
       summary: "Request a subscription; starts the double opt-in (confirmation email).",
       description:
-        "Answers alike whatever the address's state, before any confirmation is sent, so neither the reply nor its timing reveals list membership. A confirmation goes out only when due: never to a confirmed or suppressed address, at most one per cooldown. One the provider refuses is logged and changes nothing. The address is read only from the body, never the query string, so it stays out of every URL; a request whose body carries none is a 400, as an address that isn't one is, and a form gets the page saying so.",
+        "Answers alike whatever the address's state, before any confirmation is sent, so neither the reply nor its timing reveals list membership. A confirmation goes out only when due: never to a confirmed or suppressed address, at most one per cooldown. One the provider refuses is logged and changes nothing. Every request the form takes, JSON or page alike, sets a cookie with a fresh random value (HttpOnly, `Path=/confirm`, lasting as long as a link, `Cache-Control: no-store`), and the link that goes out, if one does, is bound to it, so opening the link in this browser confirms at once; a request inside the cooldown sends nothing and binds the link already sent to its browser instead, so the browser that asked most recently is the one that confirms in one click. The address is read only from the body, never the query string, so it stays out of every URL; a request whose body carries none is a 400, as an address that isn't one is, and a form gets the page saying so.",
       accepts: ["application/json", "application/x-www-form-urlencoded", "multipart/form-data"],
       body: [
         {
@@ -2549,9 +2549,10 @@ export function createRouter({
       access: "public",
       resource: "subscriptions",
       title: "Show the confirmation page",
-      summary: "Confirmation landing page (`?token=`): a Confirm button, and no change.",
+      summary:
+        "Confirmation landing page (`?token=`): confirms at once in the browser that asked for the link, and otherwise shows the button that does.",
       description:
-        "Opening the link records nothing, since mail scanners open every link; the page's button POSTs the token. An expired link's page offers to send a fresh one instead.",
+        "Opening a live link in the browser that asked for it, the one holding the cookie the subscribe form set when the link was sent, confirms at once (`via: \"link\"` in the consent evidence), shows the confirmed page, and clears the cookie. Anywhere else, a mail scanner, another device, or a browser holding another link's cookie, opening it records nothing and the page's button POSTs the token. An expired link's page offers to send a fresh one instead.",
       query: [
         {
           name: "token",
@@ -2568,6 +2569,8 @@ export function createRouter({
       resource: "subscriptions",
       title: "Confirm a subscription",
       summary: "Confirm a subscription: the landing page's button (form field `token`).",
+      description:
+        'Records consent with `via: "button"` in the consent evidence, beside the IP the press came from.',
       handler: publicRoutes.confirm,
     },
     {

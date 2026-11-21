@@ -7,6 +7,7 @@ import * as notifications from "../db/notifications";
 import { getSettings, resolveConfirmationEmail } from "../db/settings";
 import * as subscribers from "../db/subscribers";
 import { confirmationEmail } from "../emails/system";
+import { confirmBrowserHash } from "../lib/confirm_browser";
 import { newToken } from "../lib/ids";
 import { errorText, log } from "../lib/log";
 import { CONFIRM_COOLDOWN_MS, CONFIRM_LINK_TTL_MS } from "../lib/time";
@@ -49,6 +50,9 @@ export async function requestSubscription(
   /** Whether a reader asked through the public form, where nobody sees a refusal as it
    *  happens, so the publisher is told by email that email isn't going out (SPEC §8). */
   fromReader = false,
+  /** The cookie value the public form gave the browser that asked (SPEC §7): the link that
+   *  goes out confirms at once when opened there. None for the publisher's Add. */
+  browserValue: string | null = null,
 ): Promise<SubscriptionOutcome> {
   requireConnectedProvider(c.config);
   const db = c.env.DB;
@@ -62,11 +66,18 @@ export async function requestSubscription(
   // Everything that can fail before the provider is asked happens before the claim, so
   // such a failure changes nothing and is never mistaken for a send.
   const token = newToken();
+  const browserHash = browserValue ? await confirmBrowserHash(browserValue) : null;
   const { message, sender } = await confirmationMessage(c, token);
   const { subscriber, created } = await subscribers.ensureSubscriber(db, email);
   const now = Date.now();
   if (!(await subscribers.claimConfirmation(db, subscriber.id, now, now - CONFIRM_COOLDOWN_MS))) {
-    // Already confirmed by a racing request, or a confirmation went out moments ago.
+    // Already confirmed by a racing request, or a confirmation went out moments ago. The link
+    // that went out is bound to this browser instead, so a reader who submits again while
+    // waiting for the email still confirms in one click (SPEC §7). Never for the publisher's
+    // Add, which binds no browser and leaves the reader's binding alone.
+    if (browserHash) {
+      await subscribers.rebindConfirmation(db, subscriber.id, browserHash);
+    }
     const current = await subscribers.getById(db, subscriber.id);
     return {
       kind: "skipped",
@@ -106,7 +117,15 @@ export async function requestSubscription(
   }
   // Sent, or it may have been: arm its link so it works if it arrived, and keep the claim,
   // so a retry can't turn an outage into a flood.
-  const armed = await subscribers.armConfirmation(db, subscriber.id, token, now, subscriber.status);
+  // The browser that asked for this link is armed with it, in the same statement as its token.
+  const armed = await subscribers.armConfirmation(
+    db,
+    subscriber.id,
+    token,
+    now,
+    subscriber.status,
+    browserHash,
+  );
   if (!armed) {
     // The subscriber confirmed or unsubscribed while this was being sent; that stands, so
     // the link just sent is not armed and does nothing.
@@ -214,19 +233,32 @@ export async function confirmLinkState(db: D1Database, token: string): Promise<C
     : { kind: "expired", subscriber: row };
 }
 
-/** Record consent for a confirm link, the owner's deliberate action (I1), with the IP the
- *  press came from as its evidence. Returns the link's state after: `confirmed` on success,
- *  else why it could not be. */
+/** Whether a browser holding the cookie value `browserValue` asked for this subscriber's
+ *  current link (SPEC §7): only then is opening the link consent. */
+export async function isAskingBrowser(
+  row: subscribers.SubscriberRow,
+  browserValue: string,
+): Promise<boolean> {
+  return (
+    row.confirm_browser_hash !== null &&
+    row.confirm_browser_hash === (await confirmBrowserHash(browserValue))
+  );
+}
+
+/** Record consent for a confirm link, the owner's deliberate action (I1): the Confirm button
+ *  pressed, or the link opened in the browser that asked for it (`via`), with the IP it came
+ *  from as its evidence. Returns the link's state after: `confirmed` on success, else why it
+ *  could not be. Logs the confirmation, never the address, once, when it lands. */
 export async function confirmSubscription(
   db: D1Database,
   token: string,
-  ip?: string | null,
+  ip: string | null,
+  via: subscribers.ConfirmVia,
 ): Promise<ConfirmLinkState> {
-  const row = token
-    ? await subscribers.confirm(db, token, Date.now() - CONFIRM_LINK_TTL_MS, ip)
-    : null;
-  if (row?.status === "confirmed") {
-    return { kind: "confirmed", subscriber: row };
+  const result = await subscribers.confirm(db, token, Date.now() - CONFIRM_LINK_TTL_MS, ip, via);
+  if (result?.confirmedNow) {
+    log.info("subscribe.confirmed", { via });
+    return { kind: "confirmed", subscriber: result.subscriber };
   }
   return confirmLinkState(db, token);
 }

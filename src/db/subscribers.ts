@@ -24,6 +24,9 @@ export type { SubscribeAction, SubscriberStatus };
 export type SubscriberRow = Omit<Subscriber, "suppression" | "receives_posts"> & {
   /** One-shot double opt-in token, rotated on each re-arm; null once spent. */
   confirm_token: string | null;
+  /** SHA-256 of the cookie value the browser that asked for `confirm_token`'s link holds, armed
+   *  with it, so opening the link there confirms at once (SPEC §7). Null when no browser asked. */
+  confirm_browser_hash: string | null;
   /** Durable token in every delivered mail's unsubscribe link; never rotated (I2). Null once
    *  erased, which discards it; a person who signs up again gets a new one. */
   unsub_token: string | null;
@@ -160,6 +163,9 @@ export async function claimConfirmation(
  * confirms. An import reads it, and never confirms such a row (SPEC §7). An erased person
  * signing up again holds no unsubscribe token or provenance, so they are given a new token
  * and read as joining here.
+ *
+ * `browserHash` binds the link to the browser that asked for it (SPEC §7), armed in this one
+ * statement so it can never describe another link; null, for the publisher's Add, binds none.
  */
 export async function armConfirmation(
   db: D1Database,
@@ -167,14 +173,34 @@ export async function armConfirmation(
   token: string,
   claimedAt: number,
   statusAtClaim: SubscriberStatus,
+  browserHash: string | null = null,
 ): Promise<boolean> {
   const res = await db
     .prepare(
-      "UPDATE subscribers SET status = 'pending', confirm_token = ?, confirm_sent_at = ?, confirmed_at = NULL, unsub_token = COALESCE(unsub_token, ?), origin = COALESCE(origin, 'kestrel'), opt_in = COALESCE(opt_in, 'double') WHERE id = ? AND confirm_attempt_at = ? AND status = ?",
+      "UPDATE subscribers SET status = 'pending', confirm_token = ?, confirm_browser_hash = ?, confirm_sent_at = ?, confirmed_at = NULL, unsub_token = COALESCE(unsub_token, ?), origin = COALESCE(origin, 'kestrel'), opt_in = COALESCE(opt_in, 'double') WHERE id = ? AND confirm_attempt_at = ? AND status = ?",
     )
-    .bind(token, claimedAt, newToken(), id, claimedAt, statusAtClaim)
+    .bind(token, browserHash, claimedAt, newToken(), id, claimedAt, statusAtClaim)
     .run();
   return (res.meta.changes ?? 0) > 0;
+}
+
+/**
+ * Bind the link a pending subscriber was already sent to the browser that asked most recently
+ * (SPEC §7), for a request inside the cooldown, which sends nothing. Only the binding moves:
+ * the token, and so the link in the reader's inbox, stays as it was. A row that is no longer
+ * pending, or holds no link, is left alone.
+ */
+export async function rebindConfirmation(
+  db: D1Database,
+  id: string,
+  browserHash: string,
+): Promise<void> {
+  await db
+    .prepare(
+      "UPDATE subscribers SET confirm_browser_hash = ? WHERE id = ? AND status = 'pending' AND confirm_token IS NOT NULL",
+    )
+    .bind(browserHash, id)
+    .run();
 }
 
 /**
@@ -207,6 +233,10 @@ export async function releaseConfirmation(
     .run();
 }
 
+/** How a confirmation here was made (SPEC §7): the link opened in the browser that asked for
+ *  it, or the Confirm button pressed. */
+export type ConfirmVia = "link" | "button";
+
 /**
  * Confirm a pending subscriber by their confirm token (double opt-in), if the link was sent
  * after `sentAfter`, since a link is only good for a limited time. Idempotent for an
@@ -216,22 +246,29 @@ export async function releaseConfirmation(
  *
  * The consent is then this app's own (SPEC §7): the subscriber reads as joining through its
  * double opt-in, not through any import that added them pending, and the evidence is the
- * IP the confirmation came from, when the request carried one. It is also what brings back
- * someone who left, whatever the cause, so the cause goes with it. A suppression on the
- * address is the publisher's to lift and is left alone.
+ * IP the confirmation came from, when the request carried one, and `via`, whether the link
+ * opened in the browser that asked for it or the reader pressed Confirm. It is also what
+ * brings back someone who left, whatever the cause, so the cause goes with it. A suppression
+ * on the address is the publisher's to lift and is left alone. The browser binding has done
+ * its job, so it goes.
+ *
+ * `confirmedNow` says whether this call is the one that confirmed them, so two requests
+ * racing on one link (a double click, or the link and the button together) both land on the
+ * confirmed subscriber while only one counts as the confirmation.
  */
 export async function confirm(
   db: D1Database,
   token: string,
   sentAfter: number,
   ip?: string | null,
-): Promise<SubscriberRow | null> {
+  via: ConfirmVia = "button",
+): Promise<{ subscriber: SubscriberRow; confirmedNow: boolean } | null> {
   const row = await getByConfirmToken(db, token);
   if (!row) {
     return null;
   }
   if (row.status === "confirmed") {
-    return row;
+    return { subscriber: row, confirmedNow: false };
   }
   if (
     row.status !== "pending" ||
@@ -240,13 +277,14 @@ export async function confirm(
   ) {
     return null;
   }
-  await db
+  const { meta } = await db
     .prepare(
-      "UPDATE subscribers SET status = 'confirmed', confirmed_at = ?, origin = 'kestrel', opt_in = 'double', import_id = NULL, consent_evidence = ?, unsubscribe_cause = NULL WHERE id = ? AND status = 'pending' AND confirm_token = ?",
+      "UPDATE subscribers SET status = 'confirmed', confirmed_at = ?, confirm_browser_hash = NULL, origin = 'kestrel', opt_in = 'double', import_id = NULL, consent_evidence = ?, unsubscribe_cause = NULL WHERE id = ? AND status = 'pending' AND confirm_token = ?",
     )
-    .bind(Date.now(), ip ? JSON.stringify({ confirmed_ip: ip }) : null, row.id, token)
+    .bind(Date.now(), JSON.stringify(ip ? { confirmed_ip: ip, via } : { via }), row.id, token)
     .run();
-  return getById(db, row.id);
+  const subscriber = await getById(db, row.id);
+  return subscriber ? { subscriber, confirmedNow: meta.changes > 0 } : null;
 }
 
 /**
@@ -568,7 +606,7 @@ export async function erase(db: D1Database, id: string): Promise<EraseOutcome> {
       .prepare(
         `UPDATE subscribers SET status = 'unsubscribed', unsubscribe_cause = 'erased',
            created_at = ?2, unsubscribed_at = ?2, confirmed_at = NULL, confirm_token = NULL,
-           confirm_sent_at = NULL, confirm_attempt_at = NULL, unsub_token = NULL,
+           confirm_browser_hash = NULL, confirm_sent_at = NULL, confirm_attempt_at = NULL, unsub_token = NULL,
            origin = NULL, opt_in = NULL, consent_evidence = NULL, import_id = NULL
          WHERE id = ?3 AND email = ?1 AND ${idle}`,
       )

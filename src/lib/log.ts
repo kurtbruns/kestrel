@@ -72,6 +72,13 @@ export const LOG_EVENTS = {
   "subscribe.confirmation_refused": "warn",
   "subscribe.confirmation_unknown": "warn",
   "subscribe.not_connected": "warn",
+  // Someone confirmed, with `via`: `link` when the confirmation link opened in the browser that
+  // asked for it, `button` when they pressed Confirm. Never the address.
+  "subscribe.confirmed": "info",
+  // A live confirmation link showed its Confirm button, with `reason`: `no_cookie` when the
+  // browser held no cookie from the form, `mismatch` when it held another link's. Mail scanners
+  // open links too, so the count is a ceiling on readers who reached the page (SPEC §7).
+  "subscribe.confirm_page": "info",
   "provider.unrecognized": "warn",
   "provider.bad_request": "warn",
   // The provider's account, as the sweep's account check reads it (SPEC §13).

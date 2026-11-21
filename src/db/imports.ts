@@ -332,6 +332,7 @@ export async function applyImport(
   add(
     "confirmed",
     `UPDATE subscribers SET status = 'confirmed', confirmed_at = ${v("cat")}, confirm_token = NULL,
+                            confirm_browser_hash = NULL,
                             origin = ${v("org")}, opt_in = ${v("opt")}, consent_evidence = ${v("ev")},
                             import_id = ?2
        FROM json_each(?1) AS j
@@ -379,7 +380,8 @@ export async function applyImport(
       db
         .prepare(
           `UPDATE subscribers SET created_at = COALESCE(unsubscribed_at, ?2), confirmed_at = NULL,
-                  confirm_token = NULL, confirm_sent_at = NULL, confirm_attempt_at = NULL,
+                  confirm_token = NULL, confirm_browser_hash = NULL, confirm_sent_at = NULL,
+                  confirm_attempt_at = NULL,
                   unsub_token = NULL, origin = NULL, opt_in = NULL,
                   consent_evidence = NULL, import_id = NULL
             WHERE email IN (${erasedHere}) AND unsub_token IS NOT NULL`,
