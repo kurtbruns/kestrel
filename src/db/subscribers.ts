@@ -251,6 +251,10 @@ export type ConfirmVia = "link" | "button";
  * brings back someone who left, whatever the cause, so the cause goes with it. A suppression
  * on the address is the publisher's to lift and is left alone. The browser binding has done
  * its job, so it goes.
+ *
+ * `confirmedNow` says whether this call is the one that confirmed them, so two requests
+ * racing on one link (a double click, or the link and the button together) both land on the
+ * confirmed subscriber while only one counts as the confirmation.
  */
 export async function confirm(
   db: D1Database,
@@ -258,13 +262,13 @@ export async function confirm(
   sentAfter: number,
   ip?: string | null,
   via: ConfirmVia = "button",
-): Promise<SubscriberRow | null> {
+): Promise<{ subscriber: SubscriberRow; confirmedNow: boolean } | null> {
   const row = await getByConfirmToken(db, token);
   if (!row) {
     return null;
   }
   if (row.status === "confirmed") {
-    return row;
+    return { subscriber: row, confirmedNow: false };
   }
   if (
     row.status !== "pending" ||
@@ -273,13 +277,14 @@ export async function confirm(
   ) {
     return null;
   }
-  await db
+  const { meta } = await db
     .prepare(
       "UPDATE subscribers SET status = 'confirmed', confirmed_at = ?, confirm_browser_hash = NULL, origin = 'kestrel', opt_in = 'double', import_id = NULL, consent_evidence = ?, unsubscribe_cause = NULL WHERE id = ? AND status = 'pending' AND confirm_token = ?",
     )
     .bind(Date.now(), JSON.stringify(ip ? { confirmed_ip: ip, via } : { via }), row.id, token)
     .run();
-  return getById(db, row.id);
+  const subscriber = await getById(db, row.id);
+  return subscriber ? { subscriber, confirmedNow: meta.changes > 0 } : null;
 }
 
 /**

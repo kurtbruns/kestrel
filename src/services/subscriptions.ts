@@ -255,14 +255,10 @@ export async function confirmSubscription(
   ip: string | null,
   via: subscribers.ConfirmVia,
 ): Promise<ConfirmLinkState> {
-  const before = await confirmLinkState(db, token);
-  if (before.kind !== "ready") {
-    return before;
-  }
-  const row = await subscribers.confirm(db, token, Date.now() - CONFIRM_LINK_TTL_MS, ip, via);
-  if (row?.status === "confirmed") {
+  const result = await subscribers.confirm(db, token, Date.now() - CONFIRM_LINK_TTL_MS, ip, via);
+  if (result?.confirmedNow) {
     log.info("subscribe.confirmed", { via });
-    return { kind: "confirmed", subscriber: row };
+    return { kind: "confirmed", subscriber: result.subscriber };
   }
   return confirmLinkState(db, token);
 }

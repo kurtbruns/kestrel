@@ -618,7 +618,7 @@ describe("what an import does to each address (SPEC §7)", () => {
     await importFile(file);
     expect(await subscriberRow("left@x.io")).toMatchObject({ status: "pending" });
     // Its owner's own confirmation still brings it back.
-    expect((await subscribers.confirm(env.DB, "tok", 0))?.status).toBe("confirmed");
+    expect((await subscribers.confirm(env.DB, "tok", 0))?.subscriber.status).toBe("confirmed");
   });
 
   it("unsubscribes a reader confirmed here when the file gives no time for the unsubscribe", async () => {

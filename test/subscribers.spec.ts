@@ -145,7 +145,7 @@ async function addPending(email: string): Promise<subs.SubscriberRow> {
 
 async function addConfirmed(email: string): Promise<subs.SubscriberRow> {
   const pending = await addPending(email);
-  return (await subs.confirm(env.DB, pending.confirm_token!, 0))!;
+  return (await subs.confirm(env.DB, pending.confirm_token!, 0))!.subscriber;
 }
 
 /** A confirmed subscriber the publisher then erased (SPEC §7). */
@@ -415,6 +415,41 @@ describe("confirming in one click, in the browser that asked for the link (SPEC 
     expect(logged(...spies).find((l) => l.event === "subscribe.confirm_page")).toMatchObject({
       reason: "mismatch",
     });
+  });
+
+  it("the link and the button landing together confirm once, and count once (I1)", async () => {
+    const spies = [vi.spyOn(console, "log")];
+    const email = uniqueEmail();
+    const cookie = cookieValue(await formSubscribe(email));
+    const token = await tokenFor(email);
+
+    const pages = await Promise.all([
+      openLink(token, cookie),
+      confirmToken(token),
+      confirmToken(token),
+    ]);
+    for (const page of pages) {
+      expect(await page.text()).toContain("You’re subscribed");
+    }
+    expect((await subs.getByEmail(env.DB, email))?.status).toBe("confirmed");
+    expect(logged(...spies).filter((l) => l.event === "subscribe.confirmed")).toHaveLength(1);
+  });
+
+  it("reopening a confirmed link in the browser that asked shows it confirmed and counts nothing", async () => {
+    const spies = [vi.spyOn(console, "log")];
+    const email = uniqueEmail();
+    const cookie = cookieValue(await formSubscribe(email));
+    const token = await tokenFor(email);
+    expect((await confirmToken(token)).status).toBe(200);
+
+    const page = await openLink(token, cookie);
+    expect(await page.text()).toContain("You’re subscribed");
+    expect(page.headers.get("set-cookie")).toBeNull();
+    expect(
+      logged(...spies)
+        .filter((l) => l.event.startsWith("subscribe.confirm"))
+        .map((l) => [l.event, l.via]),
+    ).toEqual([["subscribe.confirmed", "button"]]);
   });
 
   it("a link the publisher's Add sent is bound to no browser, so it always shows the button", async () => {
