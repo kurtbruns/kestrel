@@ -9,6 +9,12 @@ import type { PublicSubscribeResponse } from "../../shared/subscribers";
 import * as subscribers from "../db/subscribers";
 import type { Config } from "../env";
 import { mediaTypeOf, optString, readForm, readJsonObject } from "../lib/body";
+import {
+  CLEAR_CONFIRM_BROWSER_COOKIE,
+  newConfirmBrowserValue,
+  readConfirmBrowserCookie,
+  setConfirmBrowserCookie,
+} from "../lib/confirm_browser";
 import { json } from "../lib/errors";
 import { escapeHtml, escapeHtmlAttr } from "../lib/html";
 import { log } from "../lib/log";
@@ -28,6 +34,7 @@ import {
   type ConfirmLinkState,
   confirmLinkState,
   confirmSubscription,
+  isAskingBrowser,
   requestSubscription,
 } from "../services/subscriptions";
 import { archiveHomeUrl, devDashboardUrl, readerIdentity, readerMessage } from "./reader";
@@ -78,6 +85,14 @@ async function readToken(c: RequestContext): Promise<string> {
     }
   }
   return "";
+}
+
+/** `res` setting or clearing the confirm cookie (SPEC §7), and so never kept by a cache, which
+ *  could hand one browser's value to another. */
+function withConfirmCookie(res: Response, cookie: string): Response {
+  res.headers.append("set-cookie", cookie);
+  res.headers.set("cache-control", "no-store");
+  return res;
 }
 
 /** A headline that names the publication when it has a name ("Subscribe to Birds") and
@@ -236,11 +251,16 @@ export async function subscribe(c: RequestContext): Promise<Response> {
     }
     return subscribeNotAnEmailPage(c, await readerIdentity(c, c.config));
   }
+  // Every submission gives its browser a fresh value, whatever the address's state, so the
+  // answer stays the same for every address; the link that goes out, if one does, is bound to
+  // it, and opening that link in this browser confirms at once (SPEC §7).
+  const browserValue = newConfirmBrowserValue();
+  const cookie = setConfirmBrowserCookie(browserValue);
   // Subscribing, and any confirmation, happen after the answer has gone: the answer, and
   // how long it takes, must not depend on the address's state (SPEC §7). A refusal is
   // logged and changes nothing, so the reader can simply submit again.
   c.ctx.waitUntil(
-    requestSubscription(c, email, true).catch((err: unknown) => {
+    requestSubscription(c, email, true, browserValue).catch((err: unknown) => {
       // The error's kind, not its text, which may carry the address being subscribed.
       log.error("subscribe.failed", { name: err instanceof Error ? err.name : typeof err });
     }),
@@ -249,23 +269,41 @@ export async function subscribe(c: RequestContext): Promise<Response> {
   // pending, suppressed, or new.
   if (!wantsHtml(c)) {
     const body: PublicSubscribeResponse = { status: "check_inbox" };
-    return json(body);
+    return withConfirmCookie(json(body), cookie);
   }
-  return subscribeCheckInboxPage(c, await readerIdentity(c, c.config), email);
+  return withConfirmCookie(
+    subscribeCheckInboxPage(c, await readerIdentity(c, c.config), email),
+    cookie,
+  );
 }
 
-/** Opening a confirm link shows a Confirm button and changes nothing: mail scanners open
- *  every link in a message, and only the owner's click is consent (I1, SPEC §7). */
+/**
+ * Opening a confirm link (I1, SPEC §7). In the browser that asked for it, the one holding the
+ * cookie whose hash the link was armed with, that is consent: it confirms at once and clears
+ * the cookie. Anywhere else it shows the Confirm button and changes nothing, since mail
+ * scanners open every link in a message and only the owner's act is consent.
+ */
 export async function confirmLanding(c: RequestContext): Promise<Response> {
   const token = c.url.searchParams.get("token") ?? "";
-  return confirmStatePage(c, await confirmLinkState(c.env.DB, token), token);
+  const state = await confirmLinkState(c.env.DB, token);
+  if (state.kind !== "ready") {
+    return confirmStatePage(c, state, token);
+  }
+  const browserValue = readConfirmBrowserCookie(c.req);
+  if (browserValue && (await isAskingBrowser(state.subscriber, browserValue))) {
+    const ip = c.req.headers.get("cf-connecting-ip");
+    const after = await confirmSubscription(c.env.DB, token, ip, "link");
+    return withConfirmCookie(await confirmStatePage(c, after, token), CLEAR_CONFIRM_BROWSER_COOKIE);
+  }
+  log.info("subscribe.confirm_page", { reason: browserValue ? "mismatch" : "no_cookie" });
+  return confirmStatePage(c, state, token);
 }
 
-/** The Confirm button's POST: the one request that records consent. */
+/** The Confirm button's POST: the owner's deliberate press records consent. */
 export async function confirm(c: RequestContext): Promise<Response> {
   const token = await readToken(c);
   const ip = c.req.headers.get("cf-connecting-ip");
-  return confirmStatePage(c, await confirmSubscription(c.env.DB, token, ip), token);
+  return confirmStatePage(c, await confirmSubscription(c.env.DB, token, ip, "button"), token);
 }
 
 /** A confirm page's state: a link's state, or a preview's sample of one. */
@@ -281,15 +319,17 @@ export async function confirmStatePage(
 ): Promise<Response> {
   switch (state.kind) {
     case "ready": {
-      // The consent step names whose list the reader is joining, so a link that opens
-      // from an email can't read as anyone's.
+      // The masthead names whose list the reader is joining, so a link that opens from an
+      // email can't read as anyone's; the heading says only what is left to do.
       const identity = await readerIdentity(c, c.config);
       return readerMessage(
         c,
         {
           title: "Confirm your subscription",
-          headline: toPublication("Confirm your subscription", identity.name),
-          ledeHtml: `Confirm <strong>${escapeHtml(state.subscriber.email)}</strong> to start receiving the newsletter.`,
+          // The last step, said plainly, so a reader who just pressed the email's button
+          // doesn't take this page for the end (SPEC §7).
+          headline: "Finish subscribing",
+          ledeHtml: `Click the button below to finish subscribing <strong>${escapeHtml(state.subscriber.email)}</strong>.`,
           afterHtml:
             `<form class="r-form" method="post" action="/confirm">` +
             `<input type="hidden" name="token" value="${escapeHtmlAttr(token)}">` +

@@ -97,7 +97,7 @@ function counts(over: Partial<OutcomeCounts>): OutcomeCounts {
 
 async function subscriberRow(email: string) {
   return env.DB.prepare(
-    "SELECT status, origin, opt_in, consent_evidence, import_id, confirm_token, confirmed_at, unsubscribed_at, unsubscribe_cause FROM subscribers WHERE email = ?",
+    "SELECT status, origin, opt_in, consent_evidence, import_id, confirm_token, confirm_browser_hash, confirmed_at, unsubscribed_at, unsubscribe_cause FROM subscribers WHERE email = ?",
   )
     .bind(email)
     .first<Record<string, unknown>>();
@@ -112,9 +112,17 @@ async function suppressionOf(email: string): Promise<string | null> {
 
 async function seedPending(email: string): Promise<void> {
   await env.DB.prepare(
-    "INSERT INTO subscribers (id, email, status, confirm_token, confirm_sent_at, unsub_token, created_at) VALUES (?, ?, 'pending', ?, ?, ?, ?)",
+    "INSERT INTO subscribers (id, email, status, confirm_token, confirm_browser_hash, confirm_sent_at, unsub_token, created_at) VALUES (?, ?, 'pending', ?, ?, ?, ?, ?)",
   )
-    .bind(`id-${email}`, email, `cfm-${email}`, Date.now(), `uns-${email}`, Date.now())
+    .bind(
+      `id-${email}`,
+      email,
+      `cfm-${email}`,
+      "ab".repeat(32),
+      Date.now(),
+      `uns-${email}`,
+      Date.now(),
+    )
     .run();
 }
 
@@ -468,7 +476,9 @@ describe("what an import does to each address (SPEC §7)", () => {
       status: "confirmed",
       origin: "mailchimp",
       opt_in: "single",
+      // Its link no longer confirms, in any browser (SPEC §7).
       confirm_token: null,
+      confirm_browser_hash: null,
       import_id: id,
     });
     // A subscriber who joined here keeps their own record.
@@ -608,7 +618,7 @@ describe("what an import does to each address (SPEC §7)", () => {
     await importFile(file);
     expect(await subscriberRow("left@x.io")).toMatchObject({ status: "pending" });
     // Its owner's own confirmation still brings it back.
-    expect((await subscribers.confirm(env.DB, "tok", 0))?.status).toBe("confirmed");
+    expect((await subscribers.confirm(env.DB, "tok", 0))?.subscriber.status).toBe("confirmed");
   });
 
   it("unsubscribes a reader confirmed here when the file gives no time for the unsubscribe", async () => {
@@ -663,7 +673,7 @@ describe("a confirmation here makes the consent this app's (SPEC §7)", () => {
       origin: "kestrel",
       opt_in: "double",
       import_id: null,
-      consent_evidence: '{"confirmed_ip":"203.0.113.9"}',
+      consent_evidence: '{"confirmed_ip":"203.0.113.9","via":"button"}',
     });
   });
 });

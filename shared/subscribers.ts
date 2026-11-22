@@ -86,7 +86,7 @@ export interface Subscriber {
   origin: string | null;
   /** How consent was collected: this app's is `double`; an import's is what its file claimed; null once erased. */
   opt_in: OptIn | null;
-  /** The proof of consent, as JSON text: an import's evidence verbatim, or the IP a confirmation here came from. */
+  /** The proof of consent, as JSON text: an import's evidence verbatim, or for a confirmation here the IP it came from and `via` (`link` or `button`, SPEC §7). */
   consent_evidence: string | null;
   /** The import that confirmed or added this subscriber, or null when they joined here. What makes a subscriber read as imported. */
   import_id: string | null;
