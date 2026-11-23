@@ -109,6 +109,10 @@ export const LOG_EVENTS = {
   "import.incomplete": "error",
   // A sign-in Access let through that names neither a person nor a service token (SPEC §11).
   "auth.unidentified": "warn",
+  // An Access token that failed verification, with `reason`: `jwks_unreachable` (the team's
+  // keys couldn't be fetched, answered 503), `expired`, `audience`, `issuer`, `signature`, or
+  // `malformed`. Never the token or a claim of it (SPEC §11, §12).
+  "auth.refused": "warn",
   // A tool call through the MCP server, and the refusal code of one that failed (SPEC §11).
   "mcp.call": "info",
   // A client opening the MCP server, and what it says it is, which nothing checks (SPEC §12).
@@ -206,8 +210,8 @@ function emit(level: LogLevel, event: string, fields: LogFields): void {
  *     has not (missed, stuck, wedged), or a failure nothing else handled. Worth a look.
  *   - `warn`: the app is waiting something out that it recovers from on its own (a halt,
  *     a refusal, a lost lease, a notification to retry, a database stall the next tick makes
- *     up for), but a person may want to know; and a person's manual call on recipients whose
- *     fate was unknown (Resolve).
+ *     up for), but a person may want to know; a sign-in the app refused; and a person's
+ *     manual call on recipients whose fate was unknown (Resolve).
  *   - `info`: the ordinary lifecycle, and the counts of work done.
  * Work over many recipients is one line of counts, never a line each.
  */

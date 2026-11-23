@@ -14,22 +14,25 @@
  * from a session that ended; so does one whose Access login names neither a person nor
  * a service token (`reason: "access_unidentified"`), which signing in the same way again
  * can't fix either (SPEC §11). A local dev server's 401 says a dev token can be minted
- * (`dev_token_available`), so a client asks for one only where the route exists.
+ * (`dev_token_available`), so a client asks for one only where the route exists. When
+ * the Access team's keys can't be fetched, the sign-in may be fine and the app is what
+ * can't check it, so the answer is a 503 (`access_unreachable`) saying when to try again.
  */
-import type { UnauthorizedBody, UnauthorizedReason } from "../../shared/errors";
+import type { ApiErrorBody, UnauthorizedBody, UnauthorizedReason } from "../../shared/errors";
 import { CLIENT_HEADER, isClientName } from "../../shared/who_acted";
 import type { AppEnv, Config } from "../env";
 import { fieldError } from "../lib/body";
 import { json } from "../lib/errors";
+import { REFUSAL_STATUS } from "../reference/refusals";
 import type { Middleware, Principal } from "../router";
-import { ACCESS_JWT_HEADER, verifyAccessJwt } from "./access";
+import { ACCESS_JWT_HEADER, type Unreachable, verifyAccessJwt } from "./access";
 import { verifyDevToken } from "./dev_token";
 
 export async function authenticate(
   req: Request,
   _env: AppEnv,
   config: Config,
-): Promise<Principal | "access_unidentified" | null> {
+): Promise<Principal | "access_unidentified" | Unreachable | null> {
   const jwt = req.headers.get(ACCESS_JWT_HEADER);
   if (jwt) {
     const p = await verifyAccessJwt(jwt, config);
@@ -74,9 +77,29 @@ const UNAUTHORIZED_MESSAGE: Record<UnauthorizedReason, string> = {
     "Cloudflare Access let this sign-in through but sent neither an email address nor a service token, so Kestrel can't tell who is asking. Signing in the same way again gets the same answer: Kestrel takes an Allow policy on people's emails or a Service Auth policy on a service token, as the guide Lock the dashboard with Access says.",
 };
 
-/** Route middleware: require a valid principal or 401. */
+// How long a client waits before asking again when the team's keys couldn't be fetched:
+// long enough for a blip to pass, short enough that a person retrying isn't kept out.
+const UNREACHABLE_RETRY_SECONDS = 30;
+
+/** The 503 for a sign-in the app couldn't check, with when to try again (SPEC §11). */
+function unreachable(): Response {
+  const body: ApiErrorBody & { retry_after: number } = {
+    error: "access_unreachable",
+    message:
+      "Kestrel couldn't fetch Cloudflare Access's signing keys to check this sign-in, so it can't say whether the sign-in is good. Try again shortly. If this keeps happening, check that ACCESS_TEAM_DOMAIN names your Access team.",
+    retry_after: Date.now() + UNREACHABLE_RETRY_SECONDS * 1000,
+  };
+  return json(body, REFUSAL_STATUS.access_unreachable, {
+    "Retry-After": String(UNREACHABLE_RETRY_SECONDS),
+  });
+}
+
+/** Route middleware: require a valid principal, or 401, or 503 when one can't be checked. */
 export const requireAuth: Middleware = async (c) => {
   const principal = await authenticate(c.req, c.env, c.config);
+  if (principal === "access_unreachable") {
+    return unreachable();
+  }
   if (!principal || principal === "access_unidentified") {
     const reason = principal ?? lockedReason(c.config);
     const body: UnauthorizedBody = reason

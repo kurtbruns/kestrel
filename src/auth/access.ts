@@ -10,8 +10,14 @@
  * says why (`access_unidentified`), since signing in again the same way can't help.
  * Returns `null` when Access isn't configured, the token is invalid, or the allowlist
  * refuses the person.
+ *
+ * A token that fails verification is refused with one `auth.refused` line saying why
+ * (SPEC §12), so a locked-out operator can tell a mistyped audience from a wrong team
+ * domain or an expired sign-in. When the team's keys can't be fetched the token is neither
+ * valid nor invalid: the answer is `access_unreachable`, which the middleware turns into
+ * a 503 to try again, never a 401 that sends the person to sign in again for nothing.
  */
-import { createRemoteJWKSet, type JWTPayload, type JWTVerifyGetKey, jwtVerify } from "jose";
+import { createRemoteJWKSet, errors, type JWTPayload, type JWTVerifyGetKey, jwtVerify } from "jose";
 import type { UnauthorizedReason } from "../../shared/errors";
 import type { Config } from "../env";
 import { log } from "../lib/log";
@@ -46,10 +52,59 @@ export function isHumanAllowed(email: string, allowed: string[] | undefined): bo
 /** A verified Access token that names neither a person nor a service token. */
 type Unidentified = Extract<UnauthorizedReason, "access_unidentified">;
 
+/** The team's keys couldn't be fetched, so the token could be neither verified nor refused. */
+export type Unreachable = "access_unreachable";
+
+/**
+ * Why a token failed verification, as `auth.refused` names it: the catalog an operator
+ * filters on, so a name here is public surface.
+ */
+export type RefusedReason =
+  | "jwks_unreachable"
+  | "expired"
+  | "audience"
+  | "issuer"
+  | "signature"
+  | "malformed";
+
+// What jose throws when the keys themselves can't be had: a timeout, an answer that isn't a
+// key set, and its one generic error, which only the key fetch throws (not 200, not JSON).
+const JWKS_FAILURES: ReadonlySet<string> = new Set([
+  errors.JWKSTimeout.code,
+  errors.JWKSInvalid.code,
+  errors.JOSEError.code,
+]);
+
+/**
+ * Read a verification failure as its reason, from the class of jose's error and, for a claim,
+ * the claim's name: never from its message or the claims it carries, so nothing of the token
+ * can reach the log. An error that isn't jose's came from the key fetch itself (the network).
+ */
+export function refusedReason(err: unknown): RefusedReason {
+  if (!(err instanceof errors.JOSEError) || JWKS_FAILURES.has(err.code)) {
+    return "jwks_unreachable";
+  }
+  if (err instanceof errors.JWTExpired) {
+    return "expired";
+  }
+  if (err instanceof errors.JWTClaimValidationFailed) {
+    return err.claim === "aud" ? "audience" : err.claim === "iss" ? "issuer" : "malformed";
+  }
+  // No key of the team's signed it: a forged token, or one another team issued.
+  if (
+    err instanceof errors.JWSSignatureVerificationFailed ||
+    err instanceof errors.JWKSNoMatchingKey ||
+    err instanceof errors.JWKSMultipleMatchingKeys
+  ) {
+    return "signature";
+  }
+  return "malformed";
+}
+
 export async function verifyAccessJwt(
   token: string,
   config: Config,
-): Promise<Principal | Unidentified | null> {
+): Promise<Principal | Unidentified | Unreachable | null> {
   if (!config.accessTeamDomain || !config.accessAud) {
     return null;
   }
@@ -60,8 +115,10 @@ export async function verifyAccessJwt(
       audience: config.accessAud,
     });
     return principalFromClaims(payload, config.accessAllowedEmails);
-  } catch {
-    return null;
+  } catch (err) {
+    const reason = refusedReason(err);
+    log.warn("auth.refused", { reason });
+    return reason === "jwks_unreachable" ? "access_unreachable" : null;
   }
 }
 

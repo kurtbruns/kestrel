@@ -17,6 +17,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Added
 
+- A sign-in that Cloudflare Access let through and Kestrel refused now says why in the log: one `auth.refused` line at warn with a `reason` (`audience`, `issuer`, `signature`, `expired`, `malformed`, or `jwks_unreachable`), never the token or anything in it, and Lock the dashboard with Access lists the fix for each. When Kestrel can't fetch your Access team's signing keys, every admin route answers `503` `access_unreachable` with `retry_after` where it answered `401`, since the sign-in may be fine and signing in again wouldn't help (SPEC §11, §12).
 - A reader who opens their confirmation link in the browser they subscribed from is confirmed at once, with no second press. The subscribe form sets one cookie for this, the reader pages' only one: a random value, sent back only to the confirm page, and lasting no longer than a link would. Anywhere else, a mail scanner, another device, or a mail app's own browser, the link shows the page with the button as before, now headed "Finish subscribing" and saying "Click the button below to finish subscribing", so a reader who already pressed the email's button doesn't stop there. A subscriber's consent evidence says which way they confirmed (`via`: `link` or `button`), and two new log lines, `subscribe.confirmed` and `subscribe.confirm_page`, count each path (SPEC §7).
 
 ### Changed

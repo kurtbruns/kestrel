@@ -57,6 +57,10 @@ const TRY_AGAIN = {
   run_in_progress: [409, "A send run holds what was asked about."],
   conflict: [409, "Settings written at the same moment."],
   remake_too_close: [409, "A send the change would re-make is inside the minimum lead."],
+  access_unreachable: [
+    503,
+    "Cloudflare Access's signing keys couldn't be fetched, so the sign-in couldn't be checked.",
+  ],
 } as const satisfies Record<string, Refusal>;
 
 const CONFIRM = {
@@ -215,6 +219,7 @@ export const STATUSES: ReferenceStatus[] = [
   {
     status: 503,
     name: "Service Unavailable",
-    meaning: "No email provider is connected, so nothing can be sent.",
+    meaning:
+      "No email provider is connected, so nothing can be sent; or a sign-in couldn't be checked just now.",
   },
 ];
