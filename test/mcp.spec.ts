@@ -429,6 +429,38 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
     expect(listed.sends.map((s: { id: string }) => s.id)).toEqual([now.send.id]);
   });
 
+  it("answers each act on a send with the send whole, so its actions and listing need no second read", async () => {
+    const post = (await callOk("save_draft", { subject: "Whole", markdown: "x" })).post;
+    const scheduled = await callOk("schedule_send", {
+      id: post.id,
+      fire_at: inHours(2),
+      email_only: true,
+    });
+    const id = scheduled.send.id;
+    // What get_send answers for it is what each act answers, but for the fire time's words,
+    // which an act that sets the time carries in `read_back` instead.
+    const whole = (await callOk("get_send", { id })).send;
+    const { fire_at_local: _local, fire_at_in: _in, ...asScheduled } = whole;
+    expect(scheduled.send).toEqual(asScheduled);
+    expect(scheduled.send.email_only).toBe(true);
+    expect(scheduled.send.actions).toEqual(["cancel", "reschedule"]);
+    const moved = await callOk("reschedule_send", { id, fire_at: inHours(3) });
+    expect(moved.send.email_only).toBe(true);
+    expect(moved.send.actions).toEqual(["cancel", "reschedule"]);
+    expect(moved.send.rescheduled_by).toEqual({
+      kind: "human",
+      email: "you@example.com",
+      client: "claude",
+    });
+    const canceled = await callOk("cancel_send", { id });
+    expect(canceled.send.email_only).toBe(true);
+    expect(canceled.send.actions).toEqual([]);
+    expect(canceled.send).toEqual((await callOk("get_send", { id })).send);
+    const now = await callOk("send_now", { id: post.id, email_only: false });
+    expect(now.send.email_only).toBe(false);
+    expect(now.send.actions).toEqual(["cancel", "reschedule"]);
+  });
+
   it("never sends at the soonest unless asked by name: schedule_send takes a time, and send_now none", async () => {
     const post = (await callOk("save_draft", { subject: "When", markdown: "x" })).post;
     // A time zone with no time is Schedule's own refusal of the missing fire_at.
@@ -1371,6 +1403,8 @@ describe("a tool names a fire time on the publication's clock", () => {
       fire_at: fire,
       audience: { count: 3 },
       conditions: [],
+      actions: [],
+      links: { archive: null, unlisted: null },
     };
     const post = { id: "p1", subject: "Owls", status: "draft", send: null, actions: [] };
     // Every route answers but the clock's.
@@ -1400,6 +1434,26 @@ describe("a tool names a fire time on the publication's clock", () => {
     const saved = await run("save_draft", { subject: "Owls", markdown: "x" });
     expect(saved.isError).toBe(false);
     expect(JSON.parse(saved.content[0]?.text ?? "").post.id).toBe("p1");
+  });
+
+  it("says how far off a fire time is only while the send is scheduled to fire, never of a canceled one", async () => {
+    const post = (await callOk("save_draft", { subject: "Owls", markdown: "x" })).post;
+    const scheduled = await callOk("schedule_send", { id: post.id, fire_at: inHours(44) });
+    const id = scheduled.send.id;
+    expect((await callOk("get_send", { id })).send.fire_at_in).toMatch(/^in 1 day, \d+ hours$/);
+    // Canceled with its fire time still ahead: the time stays, on the clock, with no "in …".
+    const canceled = (await callOk("cancel_send", { id })).send;
+    expect(canceled.status).toBe("canceled");
+    expect(canceled.fire_at).toBe(scheduled.send.fire_at);
+    expect(canceled.fire_at_local).toBe(scheduled.read_back.fire_at_local);
+    expect(canceled).not.toHaveProperty("fire_at_in");
+    const read = (await callOk("get_send", { id })).send;
+    expect(read.fire_at_local).toBe(scheduled.read_back.fire_at_local);
+    expect(read).not.toHaveProperty("fire_at_in");
+    const listed = (await callOk("list_sends", {})).sends;
+    expect(listed.map((s: { id: string }) => s.id)).toEqual([id]);
+    expect(listed[0].fire_at_local).toBe(scheduled.read_back.fire_at_local);
+    expect(listed[0]).not.toHaveProperty("fire_at_in");
   });
 
   it("words the sends a save re-made on the zone the save set, not the one before it", async () => {

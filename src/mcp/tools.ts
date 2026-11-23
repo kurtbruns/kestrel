@@ -227,10 +227,12 @@ async function readClock(api: Api): Promise<Clock | null> {
 
 /**
  * A fire time as a chat reads it (SPEC §6): the exact moment, the same moment on the
- * publication's clock with its zone named, and, while it is ahead, how far off it is, so Claude
- * relays the app's words rather than converting a UTC time itself.
+ * publication's clock with its zone named, and, while the send is scheduled to fire then
+ * (`upcoming`) and the time is ahead, how far off it is, so Claude relays the app's words rather
+ * than converting a UTC time itself. A canceled send's time is still ahead of the clock, and it
+ * fires at no time, so it is never worded as "in …".
  */
-function fireTime(ms: number, clock: Clock | null) {
+function fireTime(ms: number, clock: Clock | null, upcoming: boolean) {
   if (clock === null) {
     return { fire_at: iso(ms) };
   }
@@ -238,13 +240,13 @@ function fireTime(ms: number, clock: Clock | null) {
   return {
     fire_at: iso(ms),
     fire_at_local: words.fire_at_local,
-    ...(ms > clock.now ? { fire_at_in: words.fire_at_in } : {}),
+    ...(upcoming && ms > clock.now ? { fire_at_in: words.fire_at_in } : {}),
   };
 }
 
-/** A fire time in a line a person reads: "Fri Nov 13, 9:00 AM Eastern Time (in 2 days, 7 hours)". */
+/** A scheduled send's fire time in a line a person reads: "Fri Nov 13, 9:00 AM Eastern Time (in 2 days, 7 hours)". */
 function fireTimeLine(ms: number, clock: Clock | null): string {
-  const t = fireTime(ms, clock);
+  const t = fireTime(ms, clock, true);
   if (!("fire_at_local" in t)) {
     return String(t.fire_at);
   }
@@ -253,7 +255,7 @@ function fireTimeLine(ms: number, clock: Clock | null): string {
 
 /** A moment on the publication's clock with its zone named, or the exact moment without one. */
 function momentLine(ms: number, clock: Clock | null): string {
-  const t = fireTime(ms, clock);
+  const t = fireTime(ms, clock, false);
   return "fire_at_local" in t ? t.fire_at_local : String(t.fire_at);
 }
 
@@ -305,7 +307,11 @@ function postBrief(p: Post, clock: Clock | null) {
     email_only: p.email_only,
     updated_at: iso(p.updated_at),
     send: p.send
-      ? { id: p.send.id, status: p.send.status, ...fireTime(p.send.fire_at, clock) }
+      ? {
+          id: p.send.id,
+          status: p.send.status,
+          ...fireTime(p.send.fire_at, clock, p.send.status === "scheduled"),
+        }
       : null,
   };
 }
@@ -325,7 +331,7 @@ function postFull(p: Post, clock: Clock | null) {
   };
 }
 
-/** A send as a chat reads it. With no clock its fire time is the exact moment alone, as for an
+/** A send as a list reads it. With no clock its fire time is the exact moment alone, as for an
  *  answer that carries the route's own `read_back` beside it. */
 function sendBrief(s: SendView, clock: Clock | null) {
   return {
@@ -334,12 +340,14 @@ function sendBrief(s: SendView, clock: Clock | null) {
     subject: s.subject,
     status: s.status,
     phase: s.phase,
-    ...fireTime(s.fire_at, clock),
+    ...fireTime(s.fire_at, clock, s.status === "scheduled"),
     audience: s.audience.count,
     conditions: s.conditions.map((c) => c.message),
   };
 }
 
+/** A send whole: what get_send answers, and every act on a send too, so the answer to an act
+ *  carries what the next move needs (its `actions`, where the post goes) without a second read. */
 function sendFull(s: SendView, clock: Clock | null) {
   return {
     ...sendBrief(s, clock),
@@ -484,7 +492,7 @@ function scheduled(api: Api, a: Answer): ToolResult {
   }
   const r = a.body as ScheduleResponse & { idempotent?: true };
   return data({
-    send: sendBrief(r.send, null),
+    send: sendFull(r.send, null),
     read_back: r.read_back,
     warnings: r.warnings,
     ...(r.idempotent ? { already_scheduled: true } : {}),
@@ -973,7 +981,7 @@ export const TOOL_DEFS: ToolDef[] = [
         return refused(a);
       }
       const r = a.body as RescheduleResponse;
-      return data({ send: sendBrief(r.send, null), read_back: r.read_back, changed: r.changed });
+      return data({ send: sendFull(r.send, null), read_back: r.read_back, changed: r.changed });
     },
   },
   {
@@ -991,7 +999,7 @@ export const TOOL_DEFS: ToolDef[] = [
       }
       const clock = await readClock(api);
       const r = a.body as SendActionResponse;
-      return data({ send: sendBrief(r.send, clock), changed: r.changed });
+      return data({ send: sendFull(r.send, clock), changed: r.changed });
     },
   },
   {
@@ -1015,7 +1023,7 @@ export const TOOL_DEFS: ToolDef[] = [
       }
       const clock = await readClock(api);
       const r = a.body as ResolveResponse;
-      return data({ send: sendBrief(r.send, clock), resolved: r.resolved, completed: r.completed });
+      return data({ send: sendFull(r.send, clock), resolved: r.resolved, completed: r.completed });
     },
   },
   {
@@ -1048,7 +1056,10 @@ export const TOOL_DEFS: ToolDef[] = [
           file: p.file,
           counts: p.counts,
           suppressions_added: p.suppressions_added,
-          sends_growing: p.sends_growing.map((s) => ({ ...s, ...fireTime(s.fire_at, clock) })),
+          sends_growing: p.sends_growing.map((s) => ({
+            ...s,
+            ...fireTime(s.fire_at, clock, true),
+          })),
           attestation: p.attestation,
           plan_hash: p.plan_hash,
           rows_not_confirmed: p.rows.length,

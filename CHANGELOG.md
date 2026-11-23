@@ -26,6 +26,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Fixed
 
 - The subscribe form's email field shows one solid ring when focused, not a ring with a gap around its border.
+- Through the connector, Claude no longer says a canceled send fires "in 1 day, 20 hours": a fire time reads as how far off only while the send is scheduled (SPEC §6). Scheduling, sending now, moving, canceling, and resolving a send each answer the send whole, with what can be done to it next and whether the post goes in the archive, so Claude doesn't read it again to know (SPEC §11).
 
 ## [1.26.0] - 2026-11-19
 
