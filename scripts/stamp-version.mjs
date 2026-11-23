@@ -2,8 +2,8 @@
 /*
  * Resolve the build stamp and write it into the Worker as a generated module.
  *
- * Every instance should be able to say exactly which build it is (SPEC §9). This
- * resolves five facts at build time and writes them to src/generated/version.ts, which
+ * Every instance should be able to say exactly which release and commit it runs (SPEC §9).
+ * This resolves five facts at build time and writes them to src/generated/version.ts, which
  * the Worker imports (via src/build.ts) and reflects read-only in the reference room and
  * at GET /api/version:
  *
@@ -13,8 +13,11 @@
  *               a build that IS a release gets one, so the version can link to its release
  *               page without ever pointing at a tag that doesn't exist yet or a release
  *               the build has moved past.
- *   buildTime — ISO 8601 timestamp of this build
- *   repoUrl   — package.json `repository`, normalized to a browsable https URL
+ *   commitTime — HEAD's committer time (`git log -1 --format=%cI`), or "" without git. The
+ *                commit's time, never the clock's: the package is built once, when it is
+ *                packed, so a build time would be the same moment on every instance and
+ *                say nothing about any of them.
+ *   sourceUrl  — package.json `repository`, normalized to a browsable https URL
  *
  * A generated module (not wrangler `define`) so the same stamp works uniformly under
  * `wrangler dev`, the package build, and the Vitest pool, and git runs here at build —
@@ -22,15 +25,14 @@
  * is always present and current without being committed: the package build
  * (scripts/build-package.mjs, the `prepare` script, so a fresh checkout and a publish), dev
  * startup (scripts/dev.mjs), and `pretest` / `typecheck`. Deliberately NOT wired as a
- * wrangler `build.command`: wrangler dev watches src/, and this file's build time changes
- * every run, so a build command would rebuild-loop forever. This is build metadata, not deploy config or a runtime preference,
+ * wrangler `build.command`: wrangler dev watches src/, and a build command that rewrote this
+ * file on every run would rebuild-loop forever. This is build metadata, not deploy config or a runtime preference,
  * so it never touches getConfig/settings (SPEC §9).
  *
- * `--if-changed` (pretest, typecheck): leave the file alone when it already names this
- * version and sha. Those two run beside a live `wrangler dev`, which watches src/ — a fresh
- * build time on every test run would reload the dev server each time for nothing. The
- * entry points that ARE a build (the package build, dev startup) always write, so a published
- * build time is that build's.
+ * `--if-changed` (pretest, typecheck): leave the file alone when it already carries this
+ * stamp. Those two run beside a live `wrangler dev`, which watches src/ — rewriting the file
+ * on every test run would reload the dev server each time for nothing. The entry points that
+ * ARE a build (the package build, dev startup) always write.
  *
  * Pure Node, no dependencies — runs anywhere `npm ci` does.
  */
@@ -72,7 +74,7 @@ function resolveTag() {
  * something a browser can open. Accepts the forms npm does: an https / git+https URL, an
  * ssh URL, the `github:owner/repo` and bare `owner/repo` shorthands.
  */
-function resolveRepoUrl() {
+function resolveSourceUrl() {
   const raw = (
     typeof pkg.repository === "string" ? pkg.repository : (pkg.repository?.url ?? "")
   ).trim();
@@ -90,11 +92,14 @@ const info = {
   version: String(pkg.version ?? "0.0.0"),
   sha: resolveSha(),
   tag: resolveTag(),
-  buildTime: new Date().toISOString(),
-  repoUrl: resolveRepoUrl(),
+  commitTime: git(["log", "-1", "--format=%cI"]) ?? "",
+  sourceUrl: resolveSourceUrl(),
 };
 
-/** True when the file on disk already carries this version, sha and tag (`--if-changed`). */
+/**
+ * True when the file on disk already carries this stamp (`--if-changed`). Every field, so a
+ * file written before a field was added or renamed is rewritten, not kept.
+ */
 function isCurrent() {
   if (!existsSync(OUT)) {
     return false;
@@ -102,7 +107,7 @@ function isCurrent() {
   const cur = readFileSync(OUT, "utf8");
   const same = (k) =>
     cur.match(new RegExp(`^  ${k}: (".*"),$`, "m"))?.[1] === JSON.stringify(info[k]);
-  return same("version") && same("sha") && same("tag");
+  return Object.keys(info).every(same);
 }
 
 if (process.argv.includes("--if-changed") && isCurrent()) {
@@ -111,28 +116,28 @@ if (process.argv.includes("--if-changed") && isCurrent()) {
 }
 
 // Emitted WITHOUT `as const`: the string values must widen to `string`, or a literal
-// like sha "dev" would make src/build.ts's `sha !== "dev"` a no-overlap type error.
+// like sha "dev" would make a `sha !== "dev"` check a no-overlap type error.
 const body = `// GENERATED FILE — do not edit. Written by scripts/stamp-version.mjs at build.
-// The build stamp (SPEC §9): version, commit, build time, repo URL. Consumed via
+// The build stamp (SPEC §9): version, commit, commit time, source URL. Consumed via
 // src/build.ts. Gitignored and regenerated at every build; never deploy config.
 
 export const BUILD_INFO: {
   version: string;
   sha: string;
   tag: string;
-  buildTime: string;
-  repoUrl: string;
+  commitTime: string;
+  sourceUrl: string;
 } = {
   version: ${JSON.stringify(info.version)},
   sha: ${JSON.stringify(info.sha)},
   tag: ${JSON.stringify(info.tag)},
-  buildTime: ${JSON.stringify(info.buildTime)},
-  repoUrl: ${JSON.stringify(info.repoUrl)},
+  commitTime: ${JSON.stringify(info.commitTime)},
+  sourceUrl: ${JSON.stringify(info.sourceUrl)},
 };
 `;
 
 mkdirSync(dirname(OUT), { recursive: true });
 writeFileSync(OUT, body);
 console.log(
-  `[version] stamped  v${info.version}  ${info.sha}${info.tag ? `  (${info.tag})` : ""}  ${info.buildTime}`,
+  `[version] stamped  v${info.version}  ${info.sha}${info.tag ? `  (${info.tag})` : ""}  ${info.commitTime}`,
 );

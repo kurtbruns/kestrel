@@ -10,10 +10,11 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading from 1.26.0.** `npm run sync-migrations` brings in one database migration, which records which browser asked for each confirmation link. Apply it where [Upgrade to a new release](https://github.com/kurtbruns/kestrel/blob/main/docs/guides/upgrade.md) does, after noting a restore point and before you deploy, with `npx wrangler d1 migrations apply DB --remote --env production`. Confirmation links sent before the upgrade keep working, with the Confirm button as before.
+**Upgrading from 1.26.0.** `npm run sync-migrations` brings in one database migration, which records which browser asked for each confirmation link. Apply it where [Upgrade to a new release](https://github.com/kurtbruns/kestrel/blob/main/docs/guides/upgrade.md) does, after noting a restore point and before you deploy, with `npx wrangler d1 migrations apply DB --remote --env production`. Confirmation links sent before the upgrade keep working, with the Confirm button as before. A script of your own that reads `GET /api/version`, or `deployment.build` in `GET /api/settings`, changes four names: `build_time` is gone, and `commit_time` in its place is when the running commit was made, not when the package was built; `repo_url` is now `source_url`, with the same value; and `commit_url` and `tag_url` are gone, the commit's page being `{source_url}/commit/{sha}` unless `sha` is `dev`, and the release's `{source_url}/releases/tag/{tag}` only when `tag` is `v{version}`. `version`, `sha`, and `tag` are unchanged.
 
 ### Breaking
 
+- `GET /api/version`, and `deployment.build` in the settings, name the release and commit an instance runs, not when its package was built: `build_time` is replaced by `commit_time`, the time of the commit, since the build time was the moment the release was packed and so the same on every instance; `repo_url` is renamed `source_url`; and `commit_url` and `tag_url` are removed, since both follow from the other fields. The editor's build stamp links the same pages as before, and its tooltip now reads "Released" or "Committed" with that date, where it read "Built". A fork marks its version with build metadata, such as `1.25.0+myfork` (SPEC §9).
 
 ### Added
 

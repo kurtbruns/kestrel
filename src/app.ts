@@ -359,16 +359,14 @@ export function createRouter({
       resource: "system",
       title: "Get the running build",
       summary:
-        "The running build: version, short SHA, release tag (if this build is one), build time, and repo links.",
+        "The running build: version, short SHA, release tag (if this build is one), the commit's time, and where its source is.",
       example: {
         response: {
           version: "0.1.0",
           sha: "a1b2c3d",
           tag: "v0.1.0",
-          build_time: "2026-01-15T09:00:00.000Z",
-          repo_url: "https://github.com/kurtbruns/kestrel",
-          commit_url: "https://github.com/kurtbruns/kestrel/commit/a1b2c3d",
-          tag_url: "https://github.com/kurtbruns/kestrel/releases/tag/v0.1.0",
+          commit_time: "2026-01-15T09:00:00-08:00",
+          source_url: "https://github.com/kurtbruns/kestrel",
         },
       },
       handler: () => json(buildInfo()),

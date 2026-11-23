@@ -5,8 +5,8 @@
  *
  * The build stamp. Resolved into src/generated/version.ts once, before wrangler starts
  * (scripts/stamp-version.mjs), and deliberately not a wrangler `build.command`: wrangler dev
- * watches src/, and the stamp's build time changes on every run, so a build command would
- * rebuild-loop forever. Best-effort: a stale stamp is harmless.
+ * watches src/, and a build command that rewrote the stamp on every run would rebuild-loop
+ * forever. Best-effort: a stale stamp is harmless.
  *
  * The editor's watch build. The admin UI is served from the tree scripts/build-client.mjs
  * emits (see wrangler.jsonc), as its dev build (readable, with the live reload compiled in),

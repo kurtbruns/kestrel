@@ -155,16 +155,19 @@ function renderDocsIndex(
   // Three uniform out-links under a "Kestrel" label — the same shape as the API rail's
   // label + tiers, so mobile can give both the same chip row. getkestrel.dev is the
   // project's home, the same for every instance, so it's a constant; the source and
-  // license links are the deploy's own repo (package.json → build stamp), so they're
+  // license links are the build's own source (package.json → build stamp), so they're
   // absent when no repo is known.
   // Each link carries a short form for the mobile chip row (styles.css swaps which span
   // shows); the full label stays the accessible name at every width.
-  const repoUrl = appState.appConfig?.deployment.build.repo_url || "";
+  const sourceUrl = appState.appConfig?.deployment.build.source_url || "";
   const out = (href: string, label: string, short = label): Html =>
     html`<a class="rail-link" href="${href}" target="_blank" rel="noopener" aria-label="${label}"><span class="rail-link-full">${label}</span><span class="rail-link-short" aria-hidden="true">${short}</span> <span aria-hidden="true">↗</span></a>`;
   const rail = html`<div class="toc-label">Kestrel</div>${out("https://getkestrel.dev", "Project site", "Project")}${
-    repoUrl
-      ? [out(repoUrl, "Source on GitHub", "Source"), out(`${repoUrl}/blob/HEAD/LICENSE`, "License")]
+    sourceUrl
+      ? [
+          out(sourceUrl, "Source on GitHub", "Source"),
+          out(`${sourceUrl}/blob/HEAD/LICENSE`, "License"),
+        ]
       : null
   }`;
   setHtml(root, roomShell("docs", rail, main));
