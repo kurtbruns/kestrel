@@ -514,8 +514,9 @@ export interface SendView {
   counts: SendCounts;
   /** Provider hand-off: how far the send loop has gotten. */
   dispatch: {
-    /** Recipients the loop has finished with (accepted, unsent, or skipped). */
+    /** Recipients the loop has finished with (accepted, unsent, or skipped): 0 until the send fires, and on a send canceled before it did. */
     done: number;
+    /** `done` over the audience, which is the estimate until the send fires. */
     percent: number;
     /** Recipients handed off a minute: what a sweep tick carries, averaged over the ticks run so far (null when not sending, or before the first tick has finished). */
     rate_per_min: number | null;

@@ -391,7 +391,7 @@ The lifecycle (§2) splits what the publisher sees in two. The **draft and sched
 
 ### Is a send happening right now?
 
-A send in flight has a **live watch**. It shows the two stages: **dispatch** (provider-accepted over the audience) comes first, and **delivery** (webhook-confirmed over accepted) fills in behind it as receipts arrive, so delivery always reads as lagging dispatch. Alongside them are the derived **phase** (§12), the breakdown of the counts, and rough throughput and time-to-finish. *Sending* is the app doing work; *sent* is the app done, with the world still reporting back. The watch is the same record the send becomes, so one record is the whole life of a send from first hand-off to settled record.
+A send in flight has a **live watch**. It shows the two stages: **dispatch** (provider-accepted over the audience) comes first, and **delivery** (webhook-confirmed over accepted) fills in behind it as receipts arrive, so delivery always reads as lagging dispatch. Hand-off is counted from the recipients the send has finished with, never from the audience estimate, so a send that hasn't fired, or was canceled before it did, reads as no one handed off. Alongside them are the derived **phase** (§12), the breakdown of the counts, and rough throughput and time-to-finish. *Sending* is the app doing work; *sent* is the app done, with the world still reporting back. The watch is the same record the send becomes, so one record is the whole life of a send from first hand-off to settled record.
 
 ### Is anything wrong right now?
 

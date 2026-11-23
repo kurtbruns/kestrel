@@ -1,6 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
+import type { SendView } from "../shared/sends";
 import type { SendRow } from "../src/db/sends";
 import * as sends from "../src/db/sends";
 import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../src/lib/time";
@@ -153,6 +154,32 @@ describe("a send's view on GET /api/sends/:id", () => {
     expect(body.provider.name).toBe("fake");
   });
 
+  it("reports no one handed off before the send fires, nor once it is canceled (SPEC §8)", async () => {
+    await seedConfirmed(["w1@example.com", "w2@example.com", "w3@example.com"]);
+    const send = await frozenSend(Date.now() + 3_600_000);
+    const read = async () => {
+      const res = await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH });
+      return ((await res.json()) as { send: SendView }).send;
+    };
+
+    // No delivery rows yet: the audience is the estimate, and no one in it is done.
+    const scheduled = await read();
+    expect([scheduled.status, scheduled.audience]).toEqual([
+      "scheduled",
+      { count: 3, fixed: false, fixed_at: null },
+    ]);
+    expect(scheduled.dispatch).toEqual({ done: 0, percent: 0, rate_per_min: null, eta_ms: null });
+
+    const cancel = await SELF.fetch(`${base}/api/sends/${send.id}/cancel`, {
+      method: "POST",
+      headers: AUTH,
+    });
+    expect(cancel.status).toBe(200);
+    const canceled = await read();
+    expect([canceled.status, canceled.audience.count]).toEqual(["canceled", 3]);
+    expect(canceled.dispatch).toEqual({ done: 0, percent: 0, rate_per_min: null, eta_ms: null });
+  });
+
   it("reports the sending state as backing_off after a transient whole-batch failure", async () => {
     await seedConfirmed("q1@example.com");
     const send = await frozenSend(Date.now() - 1000);
@@ -252,6 +279,37 @@ describe("buildSendView — derived phase", () => {
   }
   const phase = (over: Partial<SendRow>, hasRetries = false) =>
     viewOf(mkSend(over), "fake", hasRetries, Date.now()).phase;
+
+  it("counts as handed off only the recipients it has finished with, over the audience (SPEC §8)", () => {
+    const now = Date.now();
+    const dispatch = (over: Partial<SendRow>) =>
+      viewOf(mkSend({ recipient_count: 10, ...over }), "fake", false, now).dispatch;
+    const done = (over: Partial<SendRow>) => {
+      const { done, percent } = dispatch(over);
+      return [done, percent];
+    };
+    // Fired, its audience still to resolve: the estimate is the audience, and no one is done.
+    expect(dispatch({ audience_resolved_at: null })).toEqual({
+      done: 0,
+      percent: 0,
+      rate_per_min: null,
+      eta_ms: null,
+    });
+    expect(done({ c_pending: 10 })).toEqual([0, 0]);
+    expect(
+      done({
+        c_pending: 4,
+        c_in_flight: 1,
+        c_accepted: 2,
+        c_delivered: 1,
+        c_skipped: 1,
+        c_unsent: 1,
+      }),
+    ).toEqual([5, 50]);
+    expect(
+      done({ status: "sent", c_accepted: 6, c_bounced: 2, c_complained: 1, c_unsent: 1 }),
+    ).toEqual([10, 100]);
+  });
 
   it("scheduled in the review window, due once the fire time passes, missed only past the threshold", () => {
     const now = Date.now();
