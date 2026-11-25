@@ -20,7 +20,7 @@ A local send is a real send through the real API, send loop, and receipt ingest;
 
    Only one of `:refuse=<cause>`, `:outage`, `:bad_request`, and `:rejected` can be named, last. To show the editor a particular SES account beside any of these, set `SIMULATE_ACCOUNT` too: a state (`sandbox`, `production`, …) followed by any of `:unrouted`, `:unreported` or `:wrong_topic`, and one problem such as `:set_paused`, as in `sandbox:unrouted:unreported:set_paused`.
 
-   To switch, restart the server with the new value: from a terminal, `SIMULATE_SENDS=ses npm run dev` for one run; for a `preview_start` server, set `SIMULATE_SENDS` (and `SUBREQUEST_BUDGET`) in `.dev.vars`, which is gitignored and local, then stop and start the preview. `--profile` on the script only checks the running server and explains.
+   To switch, restart the server with the new value: from a terminal, `SIMULATE_SENDS=ses npm run dev` for one run; for a `preview_start` server, set `SIMULATE_SENDS` (and `SUBREQUEST_BUDGET` or `SES_MAX_SEND_RATE`) in `.dev.vars`, which is gitignored and local, then stop and start the preview. `--profile` on the script only checks the running server and explains.
 3. **Run it:**
 
    ```bash
