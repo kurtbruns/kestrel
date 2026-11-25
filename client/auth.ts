@@ -1,9 +1,9 @@
 // Auth on the client: the boot probe, the dev token, the bearer header, the identity chip,
 // and the re-auth wall a dead session lands on.
 
-import { devTokenAvailable, unauthorizedReason } from "../shared/errors";
+import { accessUnreachable, devTokenAvailable, unauthorizedReason } from "../shared/errors";
 import { CLIENT_HEADER, EDITOR_CLIENT } from "../shared/who_acted";
-import { showAccessLocked } from "./access_locked";
+import { showAccessLocked, showAccessUnreachable } from "./access_locked";
 import { configRefusal, showConfigProblem } from "./config_problem";
 import { unmount } from "./lifecycle";
 import { app, identity } from "./shell";
@@ -127,7 +127,8 @@ function isSession(data: unknown): data is Session {
  * session, or null once it has put up the wall the probe landed on: the refused
  * configuration's when the server names a setting to fix (SPEC §9), the locked editor's when
  * the deployment has no Access yet (SPEC §11), since signing in again cannot help with
- * either, and the sign-in wall otherwise.
+ * either, the wall for a sign-in the app couldn't check (SPEC §11), where waiting is the
+ * remedy, and the sign-in wall otherwise.
  */
 export async function probeSession(): Promise<Session | null> {
   let { ok, data } = await whoami();
@@ -150,6 +151,8 @@ export async function probeSession(): Promise<Session | null> {
     showConfigProblem(refusal);
   } else if (reason) {
     showAccessLocked(reason);
+  } else if (accessUnreachable(data)) {
+    showAccessUnreachable();
   } else {
     showReauth();
   }

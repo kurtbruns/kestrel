@@ -63,6 +63,7 @@ export type Unreachable = "access_unreachable";
 export type RefusedReason =
   | "jwks_unreachable"
   | "expired"
+  | "not_yet_valid"
   | "audience"
   | "issuer"
   | "signature"
@@ -90,6 +91,10 @@ export function refusedReason(err: unknown): Exclude<RefusedReason, "not_allowed
     return "expired";
   }
   if (err instanceof errors.JWTClaimValidationFailed) {
+    // A start time still ahead of this clock: the two clocks disagree, the token is real.
+    if (err.claim === "nbf" && err.reason === "check_failed") {
+      return "not_yet_valid";
+    }
     return err.claim === "aud" ? "audience" : err.claim === "iss" ? "issuer" : "malformed";
   }
   // No key of the team's signed it: a forged token, or one another team issued.

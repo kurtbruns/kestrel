@@ -438,12 +438,18 @@ describe("a refused Access sign-in says why in the log", () => {
   it("answers 503 with retry_after when the team's keys can't be fetched, and logs reason jwks_unreachable (SPEC §11)", async () => {
     // A sign-in that would verify, on a deployment whose team domain serves no keys.
     const { vars, assertion } = await accessDeployment();
-    const headers = await assertion({ email: "you@example.com" });
+    const person = await assertion({ email: "you@example.com" });
+    const service = await assertion({ common_name: "e367c0ffee5eb4.access" });
     const team = `team-${crypto.randomUUID()}.cloudflareaccess.com`;
     for (const [answer, keys] of Object.entries({
       "no answer": () => Promise.reject(new TypeError("Network connection lost.")),
       "a 404": () => Promise.resolve(new Response("not found", { status: 404 })),
+      "a timeout": () => Promise.reject(new DOMException("timed out", "TimeoutError")),
+      "a 200 that isn't a key set": () => Promise.resolve(Response.json({ keys: "none" })),
+      // A program's sign-in is answered the same way as a person's.
+      "no answer to a service token": () => Promise.reject(new TypeError("Network down.")),
     })) {
+      const headers = answer.endsWith("service token") ? service : person;
       const realFetch = globalThis.fetch;
       vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
         const url = input instanceof Request ? input.url : String(input);
@@ -476,7 +482,7 @@ describe("a refused Access sign-in says why in the log", () => {
     }
   });
 
-  it("names an expired, a foreign-issuer, a wrongly signed, and a malformed token each by its reason, with a 401 and nothing of the token (SPEC §12)", async () => {
+  it("names an expired, a not-yet-valid, a foreign-issuer, a wrongly signed, and a malformed token each by its reason, with a 401 and nothing of the token (SPEC §12)", async () => {
     const { vars, assertion } = await accessDeployment();
     // A real assertion with its signature replaced by another of the same length.
     const good = (await assertion({ email: "you@example.com" }))["Cf-Access-Jwt-Assertion"];
@@ -485,11 +491,14 @@ describe("a refused Access sign-in says why in the log", () => {
     const hour = Math.floor(Date.now() / 1000) - 3600;
     const tokens = {
       expired: await assertion({ email: "you@example.com" }, { expires: hour }),
+      not_yet_valid: await assertion({ email: "you@example.com" }, { notBefore: hour + 7200 }),
       issuer: await assertion(
         { email: "you@example.com" },
         { issuer: "https://elsewhere.example" },
       ),
       signature: { "Cf-Access-Jwt-Assertion": forged },
+      // Signed under a key id the team doesn't publish, as another team's token is.
+      unknown_key: await assertion({ email: "you@example.com" }, { kid: "k2" }),
       malformed: { "Cf-Access-Jwt-Assertion": "not-a-token" },
     };
     const warn = vi.spyOn(console, "warn");
@@ -498,7 +507,9 @@ describe("a refused Access sign-in says why in the log", () => {
       expect(res.status, reason).toBe(401);
       expect(await res.json(), reason).toEqual(PLAIN_401);
     }
-    expect(refusals(warn).map((line) => line.reason)).toEqual(Object.keys(tokens));
+    expect(refusals(warn).map((line) => line.reason)).toEqual(
+      Object.keys(tokens).map((reason) => (reason === "unknown_key" ? "signature" : reason)),
+    );
     const text = JSON.stringify(logged(warn));
     expect(text).not.toContain("example.com");
     expect(text).not.toContain("aud-tag");

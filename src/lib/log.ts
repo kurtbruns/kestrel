@@ -111,7 +111,7 @@ export const LOG_EVENTS = {
   "auth.unidentified": "warn",
   // An Access sign-in the app refused, with `reason`: a token that failed verification
   // (`jwks_unreachable`, the team's keys couldn't be fetched, answered 503; `expired`;
-  // `audience`; `issuer`; `signature`; `malformed`), or `not_allowed`, a verified person the
+  // `not_yet_valid`; `audience`; `issuer`; `signature`; `malformed`), or `not_allowed`, a verified person the
   // allowlist leaves out. Never the token, a claim of it, or the email (SPEC §11, §12).
   "auth.refused": "warn",
   // A tool call through the MCP server, and the refusal code of one that failed (SPEC §11).
