@@ -136,7 +136,7 @@ Store each with `npx wrangler secret put NAME --env production`, which prompts f
 
 - `ACCESS_TEAM_DOMAIN` required
 
-    Your Zero Trust team domain, such as `your-team.cloudflareaccess.com`. An `https://` or `http://` in front and a trailing slash are dropped, but anything else, such as a path or a port, is refused, since it would fail every sign-in. [Lock the dashboard with Access](../get-started/access.md#4-give-the-app-its-two-values) shows where to find it.
+    Your Zero Trust team domain, such as `your-team.cloudflareaccess.com`. An `https://` or `http://` in front and a trailing slash are dropped, but anything else, such as a path or a port, is refused, since it would fail every sign-in. [Lock the dashboard with Access](../get-started/access.md#4-connect-the-app-to-access) shows where to find it.
 
 - `ACCESS_AUD` required
 

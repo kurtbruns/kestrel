@@ -1,6 +1,6 @@
 # Request production access
 
-Once Amazon SES is connected, request production access to start sending email to subscribers. AWS reviews each request by hand, and its first answer can take up to 96 hours. Its reviewer looks for what's now in place: a website that says what the newsletter is, a subscribe form that confirms each signup by email, and bounces and complaints that reach the app.
+Once Amazon SES is connected, request production access to start sending email to subscribers. AWS answers some requests at once, and reviews the rest by hand, where its first answer can take up to 96 hours. Its reviewer looks for what's now in place: a website that says what the newsletter is, a subscribe form that confirms each signup by email, and bounces and complaints that reach the app.
 
 In this guide, you name the publication, submit the request, and answer any questions AWS asks. Then, once AWS answers, you check that it granted access.
 
@@ -36,11 +36,13 @@ AWS reviews each request by hand, for the region the app sends from.
 
 4. Within about ten minutes, the editor's **Settings → Email provider** says AWS is reviewing your request for production access, and later whether AWS has granted it.
 
-Within seconds of every request, AWS sends an automated email asking for more information, in a support case. The SES console then shows **More information needed**, and the editor says AWS hasn't granted production access yet and has replied in AWS Support, with the case number. That's expected, and not a refusal: answer it as the next section describes.
+Most often, within seconds of the request, AWS sends an automated email asking for more information, in a support case. The SES console then shows **More information needed**, and the editor says AWS hasn't granted production access yet and has replied in AWS Support, with the case number. That's expected, and not a refusal: answer it as the next section describes.
+
+AWS can also grant the request as soon as it's submitted, with no questions. If its answer says production access is granted, skip to [Check that AWS granted it](#4-check-that-aws-granted-it).
 
 ## 3. Answer AWS's questions
 
-AWS asks how you collect addresses and handle bounces before it decides, every time. A newsletter may be asked for more detail again, or turned down the first time, sometimes without a reason. A reply that explains how the list is built usually gets further than a new request. Reply in the support case, whichever it is, or open a new request from the **Account dashboard**. The editor reads the same until AWS grants access, since AWS's account reports a request for more information and a refusal alike.
+AWS usually asks how you collect addresses and handle bounces before it decides. A newsletter may be asked for more detail again, or turned down the first time, sometimes without a reason. A reply that explains how the list is built usually gets further than a new request. Reply in the support case, whichever it is, or open a new request from the **Account dashboard**. The editor reads the same until AWS grants access, since AWS's account reports a request for more information and a refusal alike.
 
 In the sandbox, the subscribe form's confirmation email reaches only addresses verified in SES. If AWS's reviewer tries the form, say that this is why no confirmation arrives. In your reply, cover:
 
@@ -58,10 +60,12 @@ Until AWS grants production access, SES sends only to your verified addresses, s
 
 1. In the editor, open **Settings → Email provider**. Its **Production access** row reads **Production**. From the API, `npx kestrel api GET /api/provider` shows `state` as `production`.
 
-2. If it reads **Sandbox**, AWS hasn't granted access yet. If it also says AWS has replied, with a case number, answer in that case, as section 3 describes. Meanwhile, continue with [Verify it works](verify.md), which runs in the sandbox. Come back to this section when AWS answers.
+2. If it reads **Sandbox** after AWS has said access is granted, look again in ten minutes. The app reads the account about that often, and nothing you do in the editor makes it read sooner.
 
-3. If it says Kestrel's AWS key needs permission to read your account, select **Add the permission** and follow the step it opens. The app checks again within an hour.
+3. If it still reads **Sandbox**, AWS hasn't granted access yet. If it also says AWS has replied, with a case number, answer in that case, as section 3 describes. Meanwhile, continue with [Verify it works](verify.md), which runs in the sandbox. Come back to this section when AWS answers.
 
-4. If it reads just "Amazon SES", with nothing under it, the app hasn't heard from SES yet. Look again in ten minutes. If it still reads that way, the app's logs say why, in their `provider.account_checked` line, as [Read the logs](verify.md#7-read-the-logs) describes.
+4. If it says Kestrel's AWS key needs permission to read your account, select **Add the permission** and follow the step it opens. The app checks again within an hour.
+
+5. If it reads just "Amazon SES", with nothing under it, the app hasn't heard from SES yet. Look again in ten minutes. If it still reads that way, the app's logs say why, in their `provider.account_checked` line, as [Read the logs](verify.md#7-read-the-logs) describes.
 
 Next, [verify it works](verify.md).
