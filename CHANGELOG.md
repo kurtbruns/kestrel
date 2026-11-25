@@ -26,6 +26,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Fixed
 
 - The subscribe form's email field shows one solid ring when focused, not a ring with a gap around its border.
+- A send that hasn't fired, or was canceled before it did, no longer reads as fully handed off: its `dispatch` is `done: 0, percent: 0` where it was the whole audience and 100, so a client reading the view, Claude included, isn't told a post went out that didn't (SPEC §8).
 
 ## [1.26.0] - 2026-11-19
 
