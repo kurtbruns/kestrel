@@ -131,6 +131,9 @@ export const LOG_EVENTS = {
   "sim.request_lost": "info",
   "sim.send_refused": "info",
   "sim.receipts_error": "error",
+  // The developer switching what a running dev server simulates, with `sends` and `account`,
+  // the two variables as they now read (SPEC §10).
+  "dev.simulation_switched": "info",
 } as const satisfies Record<string, LogLevel>;
 
 export type LogEvent = keyof typeof LOG_EVENTS;

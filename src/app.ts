@@ -1378,6 +1378,60 @@ export function createRouter({
           "Clears every table, the settings included, and the uploaded logo. Answers `{ reset: true, url }`, `url` the editor's.",
         handler: devRoutes.reset,
       },
+      {
+        method: "GET",
+        path: "/api/dev/simulation",
+        access: "admin",
+        resource: "dev",
+        title: "Read what is simulated",
+        summary: "What the dev server simulates now (local dev only).",
+        description:
+          "Answers `sends` and `account`, `SIMULATE_SENDS` and `SIMULATE_ACCOUNT` as the server reads them now (`off` for one left unset); `source`, for each, `startup` or `switch`; `startup`, the two as the server started; `switched_at`, when the switch in force was made, or null; `simulation`, as `deployment.simulation` in `GET /api/settings`; and `not_connected`. What the app worked out before `switched_at` (email refusing, a held send, a backoff) is from the profile before, and stands until the provider's next answer or the next account reading changes it.",
+        handler: devRoutes.simulation,
+      },
+      {
+        method: "POST",
+        path: "/api/dev/simulation",
+        access: "admin",
+        accepts: JSON_BODY,
+        resource: "dev",
+        title: "Switch what is simulated",
+        summary: "Switch the send or account profile on the running dev server (local dev only).",
+        description:
+          "Changes what the simulated provider does from the next request on, with no restart, and answers as `GET /api/dev/simulation` does. The two values are checked together, as at startup, and a pair the server would refuse to start with is a 400 in the same words, naming `sends` or `account` as `field`. It writes nothing else: a held send resumes at its own next retry, email an email found refusing reads so until the provider takes one, and a send in flight meets the new profile at its next tick, as each would if a real provider changed. Held in memory, so a restart, or a reload of the Worker after a source or editor change, returns to the profile the server started with.",
+        example: {
+          request: { sends: "ses:outage" },
+          response: {
+            sends: "ses:outage",
+            account: "off",
+            source: { sends: "switch", account: "startup" },
+            startup: { sends: "ses", account: "off" },
+            switched_at: "2026-01-16T09:00:00.000Z",
+            simulation: {
+              profile: "ses",
+              faults: "realistic",
+              answer: { kind: "outage" },
+              account: null,
+            },
+            not_connected: false,
+          },
+        },
+        body: [
+          {
+            name: "sends",
+            type: "string | null",
+            description:
+              "`SIMULATE_SENDS`'s new value, as the variable takes it (`ses`, `ses:outage`, `not-connected`, `off`), or `null` for the value the server started with. Left out, it stays as it is.",
+          },
+          {
+            name: "account",
+            type: "string | null",
+            description:
+              "`SIMULATE_ACCOUNT`'s new value (`sandbox`, `production:set_missing`, `off`), or `null` for the value the server started with. Left out, it stays as it is.",
+          },
+        ],
+        handler: devRoutes.switchSimulated,
+      },
     ),
 
     // --- schedule / send / cancel (authed); freeze + soft-lock ---

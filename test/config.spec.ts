@@ -592,7 +592,7 @@ describe("a refused config, on each surface", () => {
   });
 });
 
-// The dev routes (token, seed, reset, outbox) exist only where `devMode` holds, so a
+// The dev routes (token, seed, reset, outbox, simulation) exist only where `devMode` holds, so a
 // deployed env has none: a 404 by absence, whoever asks, and no entry in the reference.
 describe("the dev routes exist only in local development", () => {
   const DEV_ROUTES: [string, string][] = [
@@ -600,6 +600,8 @@ describe("the dev routes exist only in local development", () => {
     ["POST", "/api/dev/seed"],
     ["GET", "/api/dev/outbox"],
     ["GET", "/api/dev/token"],
+    ["GET", "/api/dev/simulation"],
+    ["POST", "/api/dev/simulation"],
   ];
 
   async function expectAbsent(vars: Record<string, string>): Promise<void> {
@@ -660,6 +662,8 @@ describe("the dev routes exist only in local development", () => {
       ["POST", "/api/dev/seed", devRoutes.seed],
       ["POST", "/api/dev/reset", devRoutes.reset],
       ["GET", "/api/dev/outbox", renderRoutes.devOutbox],
+      ["GET", "/api/dev/simulation", async (c) => devRoutes.simulation(c)],
+      ["POST", "/api/dev/simulation", devRoutes.switchSimulated],
     ];
     for (const [method, path, handler] of handlers) {
       await expect(handler(context(path, method)), path).rejects.toMatchObject({ status: 404 });

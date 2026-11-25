@@ -9,10 +9,15 @@
  *
  * Both refuse to run on a refused configuration or on a database behind this release's
  * migrations (SPEC §9; see schema.ts), answering every request before any route is matched.
+ *
+ * Both run on `liveEnv(env)`: the env as given, except in local dev once the developer has
+ * switched what it simulates (SPEC §10; see dev/simulation_switch.ts), so every reader of the
+ * config beneath them, the sweep and the receipts tick included, reads the same profile.
  */
 
 import { createRouter, isReaderPath } from "./app";
 import { drainSimulatedWebhooks, RECEIPTS_CRON } from "./dev/simulated_receipts";
+import { liveEnv } from "./dev/simulation_switch";
 import type { AppEnv, Config } from "./env";
 import { ConfigError, getConfig } from "./env";
 import { json } from "./lib/errors";
@@ -54,12 +59,12 @@ export default {
   fetch(request, env, ctx): Promise<Response> {
     // Every line a request logs, including work it leaves to `waitUntil`, carries its ray.
     return withRun(request.headers.get("cf-ray") ?? newRun(), () =>
-      handleFetch(request, env as AppEnv, ctx),
+      handleFetch(request, liveEnv(env as AppEnv), ctx),
     );
   },
 
   async scheduled(controller, env, ctx): Promise<void> {
-    const appEnv = env as AppEnv;
+    const appEnv = liveEnv(env as AppEnv);
     let config: Config;
     try {
       config = getConfig(appEnv);

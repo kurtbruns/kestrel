@@ -47,17 +47,21 @@ MIN_LEAD_SECONDS="60"
 # Add ":outage" ("ses:outage") to make SES unavailable to every email, notifications
 # included: a send backs off on the real spacing (1, 2, 5, 15, 30, then 60 minutes), and at
 # the sixth failed try, about 53 minutes in, its line turns amber and the publisher's outage
-# email is queued until SES is back. Restart with "ses" to end the outage.
+# email is queued until SES is back. Switch to "ses" to end the outage (see below).
 # Add ":bad_request" ("ses:bad_request") to have SES refuse every request of a list send as
 # invalid, in words that name no reader (tests, confirmations, and notifications go through).
 # A request of several readers holds the send at once. To see the hold of a new account,
 # which sends one email a second, set SES_MAX_SEND_RATE="1" too: each request then carries
 # one reader, and the send holds once two requests sent together, or a list of one, get the
-# answer. Restart with "ses" and the send goes out at its next retry, five minutes or more on.
+# answer. Switch to "ses" and the send goes out at its next retry, five minutes or more on.
 # Add ":rejected" ("ses:rejected") to have SES reject every post's email for its content: a
 # list send holds on its own (another send that SES takes goes out meanwhile) and a test of a
-# post is refused; confirmations and notifications go through. Restart with "ses" to end it.
+# post is refused; confirmations and notifications go through. Switch to "ses" to end it.
 # For one run, set it in the shell instead: SIMULATE_SENDS=ses npm run dev
+# To switch on a running server, with no restart (the outbox and the port stay as they are):
+#   npx kestrel api --local POST /api/dev/simulation -f sends=ses:outage
+# and -F sends=null returns to the value here. A restart, or a reload after a code edit,
+# returns to it too; GET /api/dev/simulation says which the server is on.
 # Only honored in a dev-shaped env (fake transport, no Access, APP_ORIGIN on localhost).
 SIMULATE_SENDS="ses"
 
@@ -80,4 +84,5 @@ SIMULATE_SENDS="ses"
 # so on), as the real account would, unless SIMULATE_SENDS names a refusal of its own. In the sandbox, a recipient outside SENDING_DOMAIN
 # and SES's mailbox simulator is refused. Needs SIMULATE_SENDS=ses; "off" leaves the account unread.
 # For one run, set it in the shell instead: SIMULATE_ACCOUNT=sandbox npm run dev
+# On a running server: npx kestrel api --local POST /api/dev/simulation -f account=sandbox
 SIMULATE_ACCOUNT="off"
