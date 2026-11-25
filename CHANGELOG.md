@@ -31,6 +31,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Fixed
 
 - The subscribe form's email field shows one solid ring when focused, not a ring with a gap around its border.
+- `SES_MAX_SEND_RATE` set in the shell for one run of local development (`SES_MAX_SEND_RATE=1 npm run dev`) now reaches the app, as `SIMULATE_SENDS`, `SIMULATE_ACCOUNT`, `MIN_LEAD_SECONDS`, and `SUBREQUEST_BUDGET` do. It was dropped without a word, so the run kept the rate in `.dev.vars`, or 14 a second, and `SIMULATE_SENDS=ses:bad_request` beside it never showed one reader a request.
 - A send that hasn't fired, or was canceled before it did, no longer reads as fully handed off: its `dispatch` is `done: 0, percent: 0` where it was the whole audience and 100, so a client reading the view, Claude included, isn't told a post went out that didn't (SPEC §8).
 - Through the connector, Claude no longer says a canceled send fires "in 1 day, 20 hours": a fire time reads as how far off only while the send is scheduled (SPEC §6). Scheduling, sending now, moving, canceling, and resolving a send each answer the send whole, with what can be done to it next and whether the post goes in the archive, so Claude doesn't read it again to know (SPEC §11).
 

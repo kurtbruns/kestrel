@@ -49,7 +49,8 @@ export const COMMANDS = [
 
   PORT=<port>                    the port to serve on (default 8787, else a free one)
   SIMULATE_SENDS=<profile>       a provider simulation for this run, over .dev.vars's
-  SIMULATE_ACCOUNT, MIN_LEAD_SECONDS, SUBREQUEST_BUDGET   likewise, for this run`,
+  SIMULATE_ACCOUNT, MIN_LEAD_SECONDS, SUBREQUEST_BUDGET, SES_MAX_SEND_RATE
+                                 likewise, for this run`,
   },
   {
     name: "sync-migrations",

@@ -22,9 +22,10 @@
  * D1 route would 500 until the migrations ran. The local database is probed and, when its
  * tables are missing, migrated before the server starts. Never for `--remote`.
  *
- * Per-run settings. `SIMULATE_SENDS`, `SIMULATE_ACCOUNT`, `MIN_LEAD_SECONDS`, and
- * `SUBREQUEST_BUDGET` set in the shell are forwarded over `.dev.vars`, so `SIMULATE_SENDS=ses kestrel dev` picks a
- * simulation profile for one run without editing a file. A `.dev.vars` missing a setting that
+ * Per-run settings. `SIMULATE_SENDS`, `SIMULATE_ACCOUNT`, `MIN_LEAD_SECONDS`,
+ * `SUBREQUEST_BUDGET`, and `SES_MAX_SEND_RATE` set in the shell are forwarded over `.dev.vars`,
+ * so `SIMULATE_SENDS=ses kestrel dev` picks a simulation profile for one run without editing a
+ * file. Only these are: wrangler hands the Worker nothing else from the shell. A `.dev.vars` missing a setting that
  * `.dev.vars.example` gives a value is named, rather than left to differ quietly. What
  * `SIMULATE_SENDS` makes of this run (a simulated provider, or not connected) is said in one
  * line, since wrangler prints the variable only as "(hidden)".
@@ -54,7 +55,22 @@ const USAGE = usageOf("dev");
 const PREFERRED_PORT = 8787;
 
 // The dev settings a shell may set for one run (see the header).
-const OVERRIDABLE = ["SIMULATE_SENDS", "SIMULATE_ACCOUNT", "MIN_LEAD_SECONDS", "SUBREQUEST_BUDGET"];
+const OVERRIDABLE = [
+  "SIMULATE_SENDS",
+  "SIMULATE_ACCOUNT",
+  "MIN_LEAD_SECONDS",
+  "SUBREQUEST_BUDGET",
+  "SES_MAX_SEND_RATE",
+];
+
+/**
+ * The per-run settings `env` sets, by name. An empty value is left out: forwarded, it would
+ * override `.dev.vars` with the app's default (`MIN_LEAD_SECONDS=` would bring back the five
+ * minutes).
+ */
+export function settingsFromShell(env = process.env) {
+  return OVERRIDABLE.filter((name) => env[name]?.trim());
+}
 
 // Whether a TCP port can be bound on loopback right now. A momentary check, so what it
 // reports can go stale before wrangler binds: the same check-then-bind race autoPort lives with.
@@ -225,7 +241,7 @@ export function localVars({ port, runId, fromShell, env = process.env }) {
     `APP_ORIGIN:${origin}`,
     `ARCHIVE_ORIGIN:${origin}`,
     `MEDIA_PUBLIC_BASE:${origin}/media`,
-    // `--var` wins over `.dev.vars`. An empty one is left out (see `fromShell` in devCommand).
+    // `--var` wins over `.dev.vars`. An empty one is left out (see `settingsFromShell`).
     ...fromShell.map((name) => `${name}:${env[name]}`),
     // The Worker reports this beside the dev token, and seed and reset with no target given
     // check it against the record, so they never wipe a server this directory didn't start.
@@ -294,9 +310,7 @@ export async function devCommand(argv, { onStop = () => {} } = {}) {
   }
   const port = await resolvePort();
   const runId = newDevRunId();
-  // An empty shell value is left out: forwarded, it would override `.dev.vars` with the app's
-  // default (`MIN_LEAD_SECONDS=` would bring back the five minutes).
-  const fromShell = OVERRIDABLE.filter((name) => process.env[name]?.trim());
+  const fromShell = settingsFromShell();
 
   if (!isRemote) {
     checkDevVars(fromShell);
