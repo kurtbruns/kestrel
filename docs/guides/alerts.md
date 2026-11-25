@@ -22,7 +22,7 @@ This Monitor emails you when SES stops sending Kestrel's email, such as when SES
 
 1. In the Cloudflare dashboard, go to **Alerts** > **Monitors**, and select **Create a Monitor**.
 
-1. Choose **Threshold**, then **Custom SQL**, and paste this query, with `ACCOUNT_ID` and `WORKER_NAME` replaced by your two values:
+2. Choose **Threshold**, then **Custom SQL**, and paste this query, with `ACCOUNT_ID` and `WORKER_NAME` replaced by your two values:
 
     ```sql
     SELECT count() AS value FROM logs.workersLogs
@@ -31,15 +31,15 @@ This Monitor emails you when SES stops sending Kestrel's email, such as when SES
       AND attributes['event'] = 'alert.sending'
     ```
 
-1. Set it to fire when the value is `>= 1`, as an **Average** over `1m`, and to **Run every** `1m`.
+3. Set it to fire when the value is `>= 1`, as an **Average** over `1m`, and to **Run every** `1m`.
 
-1. Name it, such as `Field Notes: SES can't send email`. For its description, which the dashboard shows, you can use this:
+4. Name it, such as `Field Notes: SES can't send email`. For its description, which the dashboard shows, you can use this:
 
     ```
     Amazon SES has stopped sending the newsletter's email. Resolved doesn't mean fixed, so check the dashboard.
     ```
 
-1. Add your email address as its destination, and select **Create**.
+5. Add your email address as its destination, and select **Create**.
 
 ## 2. Create the stopped alert
 
@@ -55,15 +55,15 @@ This Monitor emails you when Kestrel stops running the once-a-minute schedule th
       AND attributes['ok'] = true
     ```
 
-1. Set it to fire when the value is `< 0.5`, as an **Average** over `15m`, and to **Run every** `1m`.
+2. Set it to fire when the value is `< 0.5`, as an **Average** over `15m`, and to **Run every** `1m`.
 
-1. Name it, such as `Field Notes: Kestrel has stopped`. For its description, you can use this:
+3. Name it, such as `Field Notes: Kestrel has stopped`. For its description, you can use this:
 
     ```
     The newsletter's once-a-minute schedule has stopped, so scheduled posts aren't going out.
     ```
 
-1. Add your email address, and select **Create**.
+4. Add your email address, and select **Create**.
 
 This Monitor can't be tested without stopping the app. If Kestrel stops, its email arrives about fifteen minutes later, and a `[Resolved]` email about as long after Kestrel is running again.
 
@@ -73,9 +73,9 @@ Cloudflare's own **Test** button sends sample data, so this is the only way to p
 
 1. Wait a few minutes after creating the SES alert. A new Monitor can miss a line written right after it is created.
 
-1. In the editor, open **Settings → Notifications**, and select **Send a test alert**. Kestrel writes the line the SES alert watches for, with `cause` set to `test`, and changes nothing else.
+2. In the editor, open **Settings → Notifications**, and select **Send a test alert**. Kestrel writes the line the SES alert watches for, with `cause` set to `test`, and changes nothing else.
 
-1. Wait for the alert email. It arrives in about five minutes, from `noreply@notify.cloudflare.com`, with your Monitor's name in its subject. A `[Resolved]` email follows a few minutes later.
+3. Wait for the alert email. It arrives in about five minutes, from `noreply@notify.cloudflare.com`, with your Monitor's name in its subject. A `[Resolved]` email follows a few minutes later.
 
     If nothing has arrived after ten minutes, check your spam and other folders, then send the test alert again.
 

@@ -22,6 +22,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- The docs' steps carry their real numbers in the Markdown, where every step was written `1.`. The pages look the same in the editor and on getkestrel.dev; Claude, and anyone reading the files, can now name a step by its number.
 - The page a reader sees after subscribing is headed "Check your inbox to finish subscribing" and asks them to click the link in the email just sent to the address they typed, so a typo shows. The subscribe and confirm pages no longer carry a "Newsletter" label over their heading.
 
 ### Fixed

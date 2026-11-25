@@ -16,7 +16,7 @@ The upgrade starts from a clean repository. A release can also ask you to change
 
     It has to say `nothing to commit, working tree clean`. If it lists anything, untracked files included, the upgrade waits until it doesn't.
 
-1. Find the version your repository pins. It's the version you run, and the one the upgrade starts from:
+2. Find the version your repository pins. It's the version you run, and the one the upgrade starts from:
 
     ```bash
     npm pkg get "dependencies.@kurtbruns/kestrel"
@@ -24,7 +24,7 @@ The upgrade starts from a clean repository. A release can also ask you to change
 
     It prints the version, such as `1.24.0`.
 
-1. Read the [release notes](https://github.com/kurtbruns/kestrel/releases) for every version after yours, up to the one you're moving to. Each release opens with an **Upgrading from…** paragraph that says what to do. Its **Breaking** entries say what changed underneath you. If you're more than one release behind, read [Skipping releases](#skipping-releases) too.
+3. Read the [release notes](https://github.com/kurtbruns/kestrel/releases) for every version after yours, up to the one you're moving to. Each release opens with an **Upgrading from…** paragraph that says what to do. Its **Breaking** entries say what changed underneath you. If you're more than one release behind, read [Skipping releases](#skipping-releases) too.
 
 Nothing has changed yet. If you aren't going on, stop here.
 
@@ -46,7 +46,7 @@ Each step here changes only your instance's repository. Nothing reaches your dep
     npm install @kurtbruns/kestrel@X.Y.Z "wrangler@WRANGLER_RANGE"
     ```
 
-1. Bring in the release's database migrations:
+2. Bring in the release's database migrations:
 
     ```bash
     npm run sync-migrations
@@ -54,7 +54,7 @@ Each step here changes only your instance's repository. Nothing reaches your dep
 
     It copies each new migration into `migrations/` and names the ones it added. It never overwrites one that's there.
 
-1. Check the Claude Code files Kestrel gave your instance. Run it before you commit, since it finds the release you're upgrading from in your last commit:
+3. Check the Claude Code files Kestrel gave your instance. Run it before you commit, since it finds the release you're upgrading from in your last commit:
 
     ```bash
     npm run check-context
@@ -62,15 +62,15 @@ Each step here changes only your instance's repository. Nothing reaches your dep
 
     It names each file in `.claude/` and says what to do with it. A file you haven't edited takes Kestrel's change with `npm run check-context -- --update`. A file you've edited is never overwritten: merge Kestrel's change into it, by hand or with Claude. [What check-context reports](#what-check-context-reports) explains each answer.
 
-1. If the release's **Upgrading from…** paragraph names a setting to add or remove, change `wrangler.jsonc` as it says. When you remove one, remove any comment that describes it too.
+4. If the release's **Upgrading from…** paragraph names a setting to add or remove, change `wrangler.jsonc` as it says. When you remove one, remove any comment that describes it too.
 
-1. Check the configuration and the types:
+5. Check the configuration and the types:
 
     ```bash
     npm run typecheck
     ```
 
-1. **(Optional)** Try the release on your computer. Apply its database changes to your local database, then start the app:
+6. **(Optional)** Try the release on your computer. Apply its database changes to your local database, then start the app:
 
     ```bash
     npx wrangler d1 migrations apply DB --local
@@ -79,7 +79,7 @@ Each step here changes only your instance's repository. Nothing reaches your dep
 
     You see the new version with your local content. It can't show how the changes treat your real data. A staging environment can.
 
-1. Commit the upgrade as one commit. Going back, below, undoes this commit:
+7. Commit the upgrade as one commit. Going back, below, undoes this commit:
 
     ```bash
     git add -A
@@ -98,7 +98,7 @@ D1 keeps a history of your database, called Time Travel, for 30 days on Workers 
 
 1. In the editor, check that no send is in progress. The dashboard lists any that are. Upgrade between sends.
 
-1. Note where the database stands now:
+2. Note where the database stands now:
 
     ```bash
     npx wrangler d1 time-travel info DB --env production
@@ -124,7 +124,7 @@ A release changes the database only by adding a migration. Applying it keeps eve
 
     If it fails, don't deploy. Run the same command again: an applied migration is recorded, so a second run applies only what's left. If it fails again, stop the upgrade here. The release you run now keeps working.
 
-1. Check that nothing is left to apply:
+2. Check that nothing is left to apply:
 
     ```bash
     npx wrangler d1 migrations list DB --remote --env production
@@ -160,11 +160,11 @@ Near its end, the output names your app's hostname, then its schedule and a vers
 
     If it answers `500` with `{"error":"schema_behind","missing":[…],…}` instead, the release was deployed before its database changes: the public pages say the newsletter is temporarily unavailable and nothing is sent. Apply them as in [Apply the database changes](#4-apply-the-database-changes); the app answers as soon as they're applied, with no new deploy.
 
-1. Reload the editor. The foot of the **Docs** tab's contents list shows the new version, which links to its release page.
+2. Reload the editor. The foot of the **Docs** tab's contents list shows the new version, which links to its release page.
 
-1. If an email provider is connected, send yourself a test email. Open **Template** and select **Send test email**, or open a draft you already have and select **Send test email** there. It arrives in your inbox. Within a few minutes, **Settings → Email provider** says SES last reported back at a time after the test. Don't send a real post to check an upgrade: on a live instance, it goes to your whole list.
+3. If an email provider is connected, send yourself a test email. Open **Template** and select **Send test email**, or open a draft you already have and select **Send test email** there. It arrives in your inbox. Within a few minutes, **Settings → Email provider** says SES last reported back at a time after the test. Don't send a real post to check an upgrade: on a live instance, it goes to your whole list.
 
-1. In the logs, filter on `event` equal to `sweep.tick`: a line still arrives every minute. [Read the logs](../get-started/verify.md#7-read-the-logs) shows where the logs are.
+4. In the logs, filter on `event` equal to `sweep.tick`: a line still arrives every minute. [Read the logs](../get-started/verify.md#7-read-the-logs) shows where the logs are.
 
 ## Go back
 
@@ -180,26 +180,26 @@ Never restore past a send that went out, or an unsubscribe recorded since the bo
     git log -1 --oneline --grep="Upgrade Kestrel to X.Y.Z"
     ```
 
-1. Undo it. This adds a commit that puts back the previous release, its migrations, and your Claude Code files, and leaves anything you committed since as it is:
+2. Undo it. This adds a commit that puts back the previous release, its migrations, and your Claude Code files, and leaves anything you committed since as it is:
 
     ```bash
     git revert --no-edit REPLACE_WITH_COMMIT_ID
     ```
 
-1. Install the previous release, and deploy it before the restore. It runs on the newer database, and the new release can't run on the restored one:
+3. Install the previous release, and deploy it before the restore. It runs on the newer database, and the new release can't run on the restored one:
 
     ```bash
     npm ci
     npx wrangler deploy --env production
     ```
 
-1. Restore the database to the bookmark from section 3:
+4. Restore the database to the bookmark from section 3:
 
     ```bash
     npx wrangler d1 time-travel restore DB --env production --bookmark=REPLACE_WITH_BOOKMARK
     ```
 
-1. If your repository has a remote, push the revert to it:
+5. If your repository has a remote, push the revert to it:
 
     ```bash
     git push

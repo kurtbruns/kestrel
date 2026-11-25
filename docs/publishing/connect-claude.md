@@ -12,9 +12,9 @@ How you connect depends on where you talk to Claude:
 ## Claude Desktop or claude.ai
 
 1. In Claude, go to **Customize → Connectors**, select **Add**, then **Add custom connector**.
-1. Name it, and enter your publication's address followed by `/api/mcp`, such as `https://newsletter.example.com/api/mcp`.
-1. Under **OAuth client**, choose **Register automatically**.
-1. Select **Add**, then **Connect**. Sign in the way you do for the dashboard if asked, and choose **Allow**.
+2. Name it, and enter your publication's address followed by `/api/mcp`, such as `https://newsletter.example.com/api/mcp`.
+3. Under **OAuth client**, choose **Register automatically**.
+4. Select **Add**, then **Connect**. Sign in the way you do for the dashboard if asked, and choose **Allow**.
 
 On a Team or Enterprise plan, an Owner of your Claude organization adds the connector under **Organization settings → Connectors** instead, and you then select **Connect** on it. Anthropic's [custom connectors guide](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) has the details.
 
@@ -30,7 +30,7 @@ Claude Code can use the same connector as Claude Desktop and claude.ai. To reach
     npx kestrel login https://newsletter.example.com
     ```
 
-1. Approve the sign-in in the browser that opens. The terminal then says who you're signed in as.
+2. Approve the sign-in in the browser that opens. The terminal then says who you're signed in as.
 
 The sign-in stays on your computer. Opened in your instance's repository, Claude Code then calls Kestrel's API as you through `kestrel api`, which calls the instance whose address that repository's `wrangler.jsonc` names, the way `gh` calls GitHub for the repository you're in, following your instance's instructions for Claude. Its changes show as yours, via Claude Code.
 

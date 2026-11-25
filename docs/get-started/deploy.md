@@ -32,7 +32,7 @@ Your instance's repository holds its configuration, its database migrations, and
 
 1. On GitHub, [create a new repository](https://github.com/new) named after your publication. These guides use `newsletter`. It can be private. Leave it empty, with no README, license, or `.gitignore`.
 
-1. Clone it, and write a new instance into it. Replace `YOUR_USERNAME` with your GitHub username, `newsletter` with your repository's name, and the two hostnames with the ones you chose:
+2. Clone it, and write a new instance into it. Replace `YOUR_USERNAME` with your GitHub username, `newsletter` with your repository's name, and the two hostnames with the ones you chose:
 
     ```bash
     git clone https://github.com/YOUR_USERNAME/newsletter.git
@@ -44,13 +44,13 @@ Your instance's repository holds its configuration, its database migrations, and
 
     `--hostname` puts the app on its hostname in `wrangler.jsonc`'s production settings, and `--sending` sends its email from `newsletter@` your sending hostname. Each takes the hostname alone, with no `https://`. `init` refuses a name on `example.com`, so a command copied without your own names writes nothing. Either can be left out, and you fill in that value by hand in section 4. `init` ends by saying which it filled and which are still on `example.com`.
 
-1. Install the release and its tools:
+3. Install the release and its tools:
 
     ```bash
     npm install
     ```
 
-1. **(Optional)** Try Kestrel locally before you deploy it. Copy the local settings, and start the app:
+4. **(Optional)** Try Kestrel locally before you deploy it. Copy the local settings, and start the app:
 
     ```bash
     cp .dev.vars.example .dev.vars
@@ -59,7 +59,7 @@ Your instance's repository holds its configuration, its database migrations, and
 
     Open http://localhost:8787/dashboard/, and run `npm run seed` in a second terminal to load a demo publication. Email goes to a stand-in, so nothing reaches a real inbox. Press Ctrl+C to stop the server when you're done. `init` prints these steps too, in this order.
 
-1. Commit the new instance, and push it. Your local settings and data stay out of the commit, since the instance's `.gitignore` lists them:
+5. Commit the new instance, and push it. Your local settings and data stay out of the commit, since the instance's `.gitignore` lists them:
 
     ```bash
     git add -A
@@ -77,7 +77,7 @@ Every command from here on acts on your Cloudflare account through the Wrangler 
     npx wrangler login
     ```
 
-1. Confirm which account you're signed in to:
+2. Confirm which account you're signed in to:
 
     ```bash
     npx wrangler whoami
@@ -97,7 +97,7 @@ The commands below use `newsletter`. Use your instance's names instead: `kestrel
     npx wrangler d1 create newsletter-production --env production --binding DB --update-config
     ```
 
-1. Create the bucket for images:
+2. Create the bucket for images:
 
     ```bash
     npx wrangler r2 bucket create newsletter-media-production --env production --binding MEDIA --update-config
@@ -148,13 +148,13 @@ Each prints a snippet to add to your configuration. There's nothing to paste: `-
 
     Every other setting has a working default. [Configuration](../reference/configuration.md) lists them all, and what the app refuses.
 
-1. Check the file. It fails if the configuration doesn't parse:
+2. Check the file. It fails if the configuration doesn't parse:
 
     ```bash
     npm run typecheck
     ```
 
-1. Commit your settings and push them to your repository:
+3. Commit your settings and push them to your repository:
 
     ```bash
     git commit -am "Configure production"
@@ -199,7 +199,7 @@ npx wrangler delete --name newsletter-dev
 
     If `curl` reports a certificate error or can't resolve the host, Cloudflare is still setting up the hostname. Or your computer remembers it from before it existed. Try again over the next 30 minutes.
 
-1. The editor is locked. Until you set up Access in the next step, the app can't tell who is asking, so it lets no one in:
+2. The editor is locked. Until you set up Access in the next step, the app can't tell who is asking, so it lets no one in:
 
     ```bash
     curl -s -o /dev/null -w "%{http_code}\n" https://newsletter.example.com/api/whoami
@@ -211,7 +211,7 @@ npx wrangler delete --name newsletter-dev
 
     In a browser, `https://newsletter.example.com/dashboard/` says the editor is locked until you set up Access. That's expected.
 
-1. In a browser, `https://newsletter.example.com/` shows the newsletter's public home page. Its subscribe page, `/subscribe`, says signups aren't open yet, until Connect Amazon SES has sent its first test email.
+3. In a browser, `https://newsletter.example.com/` shows the newsletter's public home page. Its subscribe page, `/subscribe`, says signups aren't open yet, until Connect Amazon SES has sent its first test email.
 
 If the public pages instead say the newsletter is temporarily unavailable, and `/health` answers `500` with a body like `{"error":"invalid_config","variable":"APP_ORIGIN",…}`, the setting it names is missing, malformed, or still on `example.com`. Fix it in `wrangler.jsonc`, commit, and deploy again.
 

@@ -17,13 +17,13 @@ A test email goes through the same code as a real send. If the test looks right,
 
 1. In the editor at `https://newsletter.example.com/dashboard/`, create a post with a subject, a short body, and an image.
 
-1. Select **Send test email**, enter your address, and send it. If SES refuses it, the test's line says why and what fixes it.
+2. Select **Send test email**, enter your address, and send it. If SES refuses it, the test's line says why and what fixes it.
 
-1. Open the email. It arrives in your inbox, not in spam, the image loads, and the subject reads as you wrote it. Its links work, but a test email unsubscribes no one; section 5 unsubscribes for real.
+3. Open the email. It arrives in your inbox, not in spam, the image loads, and the subject reads as you wrote it. Its links work, but a test email unsubscribes no one; section 5 unsubscribes for real.
 
-1. In **Settings → Email provider**, check when SES last reported back. Within a few minutes it shows a time after the test you just sent, which proves SES's reports reach the app. The amber warning that reports aren't arriving shows only an hour after an email, so its absence proves nothing yet. If no newer report comes, check [Send bounces and complaints to the app](ses.md#4-send-bounces-and-complaints-to-the-app) and [Subscribe the app to the topic](ses.md#7-subscribe-the-app-to-the-topic).
+4. In **Settings → Email provider**, check when SES last reported back. Within a few minutes it shows a time after the test you just sent, which proves SES's reports reach the app. The amber warning that reports aren't arriving shows only an hour after an email, so its absence proves nothing yet. If no newer report comes, check [Send bounces and complaints to the app](ses.md#4-send-bounces-and-complaints-to-the-app) and [Subscribe the app to the topic](ses.md#7-subscribe-the-app-to-the-topic).
 
-1. Send a test email to your second address, not the publisher's inbox, and reply to it from there, as a reader would. The reply arrives in the publisher's inbox, the one you chose in [Connect Amazon SES](ses.md#8-receive-replies-at-your-from-address), or in your From address's own mailbox if you skipped forwarding. If it bounces, check the routing rule and the destination address there.
+5. Send a test email to your second address, not the publisher's inbox, and reply to it from there, as a reader would. The reply arrives in the publisher's inbox, the one you chose in [Connect Amazon SES](ses.md#8-receive-replies-at-your-from-address), or in your From address's own mailbox if you skipped forwarding. If it bounces, check the routing rule and the destination address there.
 
 ## 2. Check that it passes authentication
 
@@ -31,7 +31,7 @@ Inboxes trust mail that passes DKIM and DMARC for the domain it's from. Passing 
 
 1. Open the test email's original source. In Gmail, open the message's menu and select **Show original**.
 
-1. Find the `Authentication-Results` header. It shows:
+2. Find the `Authentication-Results` header. It shows:
 
     - `dkim=pass` for `send.example.com`
     - `dmarc=pass` for `send.example.com`
@@ -47,7 +47,7 @@ Kestrel emails each notifications address when a send finishes, and right away w
 
 1. In the editor, open **Settings → Notifications**, type that address under **Send notifications to**, and select **Add inbox**. It saves right away.
 
-1. Select **Send a test notification**. It arrives at that address, from `Kestrel` until the publication has a name, and then from the publication's name followed by `via Kestrel`. If it doesn't arrive, **Last notification**, on the same page, says what happened.
+2. Select **Send a test notification**. It arrives at that address, from `Kestrel` until the publication has a name, and then from the publication's name followed by `via Kestrel`. If it doesn't arrive, **Last notification**, on the same page, says what happened.
 
 Notifications travel through SES like the newsletter, so they can't tell anyone when SES refuses the account. [Set up alerts](../guides/alerts.md) covers that.
 
@@ -59,15 +59,15 @@ This is a real send, to a list of one. It proves the whole path: subscribing, co
 
 1. Open `https://newsletter.example.com/subscribe`, and subscribe with your second address.
 
-1. Open the confirmation email, follow its link, and select **Confirm subscription**. In the editor, **Subscribers** shows the address as **Confirmed**.
+2. Open the confirmation email, follow its link, and select **Confirm subscription**. In the editor, **Subscribers** shows the address as **Confirmed**.
 
-1. Open the post, select **Schedule**, and then **Send now**.
+3. Open the post, select **Schedule**, and then **Send now**.
 
-1. In the **Send now?** dialog, uncheck **Include in archive**, and select **Send now**. The post goes out as email only, so it doesn't become the publication's first archived post. The dashboard keeps its **Finish setting up** steps for the publisher. Every send waits at least five minutes before it goes out, so you can cancel a mistake.
+4. In the **Send now?** dialog, uncheck **Include in archive**, and select **Send now**. The post goes out as email only, so it doesn't become the publication's first archived post. The dashboard keeps its **Finish setting up** steps for the publisher. Every send waits at least five minutes before it goes out, so you can cancel a mistake.
 
-1. Cancel the send, to see that canceling stops it. Then send it again the same way, with **Include in archive** unchecked, and let it go.
+5. Cancel the send, to see that canceling stops it. Then send it again the same way, with **Include in archive** unchecked, and let it go.
 
-1. When the send finishes, the post arrives at your second address. A notification arrives at your first, with the subject `Sent:` and the post's title.
+6. When the send finishes, the post arrives at your second address. A notification arrives at your first, with the subject `Sent:` and the post's title.
 
 If the send shows in red under **Sent**, its line names the fix. Once that's fixed, the send resumes on its own.
 
@@ -77,7 +77,7 @@ Every email carries an unsubscribe link, and a header that lets mail clients sho
 
 1. Open the post from section 4 in your mail client. It shows an **Unsubscribe** button next to the sender. If your client shows none, use the **Unsubscribe** link in the email's footer, which asks you to confirm on a page.
 
-1. Select it. In the editor, **Subscribers** shows the address as **Unsubscribed**, and later sends leave it out.
+2. Select it. In the editor, **Subscribers** shows the address as **Unsubscribed**, and later sends leave it out.
 
 ## 6. Check that bounces and complaints come back
 
@@ -90,7 +90,7 @@ When an address bounces or marks your mail as spam, SES tells the app through SN
 
     Each one gets a confirmation email, which bounces or is marked as spam.
 
-1. In the editor, **Subscribers** lists the bounce address as **Pending** with a **bounced** flag, and the complaint address as **Unsubscribed**. Open its row: its page says it left by a complaint. The app mails neither again.
+2. In the editor, **Subscribers** lists the bounce address as **Pending** with a **bounced** flag, and the complaint address as **Unsubscribed**. Open its row: its page says it left by a complaint. The app mails neither again.
 
 If the bounce address has no flag, or the complaint address is still pending, SES's events aren't reaching the app, and **Settings → Email provider** warns of it an hour after the confirmations went. Check the configuration set in [Send bounces and complaints to the app](ses.md#4-send-bounces-and-complaints-to-the-app), and the subscription in [Subscribe the app to the topic](ses.md#7-subscribe-the-app-to-the-topic).
 
@@ -100,9 +100,9 @@ The app writes a log line for each thing it does, and Cloudflare keeps them for 
 
 1. In the Cloudflare dashboard, go to **Workers & Pages**, select your Worker, the `name` in the `production` block of `wrangler.jsonc`, and select **Observability**.
 
-1. Filter on `event` equal to `send.completed`. The post you sent yourself in section 4 is there, with its `sendId`.
+2. Filter on `event` equal to `send.completed`. The post you sent yourself in section 4 is there, with its `sendId`.
 
-1. Filter on `level` equal to `error`. A healthy instance shows nothing, and this is the first place to look when something seems wrong.
+3. Filter on `level` equal to `error`. A healthy instance shows nothing, and this is the first place to look when something seems wrong.
 
 A long time range may show only a sample, so narrow it when you follow one send by its `sendId`.
 
@@ -112,9 +112,9 @@ The checks leave test addresses on the list. Erase them, so the publisher starts
 
 1. In the editor, open **Subscribers**.
 
-1. Erase `bounce@simulator.amazonses.com` and `complaint@simulator.amazonses.com`. Open each one's menu (⋯), and select **Erase**.
+2. Erase `bounce@simulator.amazonses.com` and `complaint@simulator.amazonses.com`. Open each one's menu (⋯), and select **Erase**.
 
-1. Erase your second address too, if it won't be a reader.
+3. Erase your second address too, if it won't be a reader.
 
 Erasing keeps only the address, so it's never mailed again, but the person can subscribe again through the subscribe page. Erasing your own address doesn't lock you out.
 
