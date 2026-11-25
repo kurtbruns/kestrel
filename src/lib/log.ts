@@ -107,12 +107,12 @@ export const LOG_EVENTS = {
   "subscriber.complained": "info",
   "subscriber.erased": "info",
   "import.incomplete": "error",
-  // A sign-in Access let through that names neither a person nor a service token (SPEC §11).
-  "auth.unidentified": "warn",
   // An Access sign-in the app refused, with `reason`: a token that failed verification
   // (`jwks_unreachable`, the team's keys couldn't be fetched, answered 503; `expired`;
   // `not_yet_valid`; `audience`; `issuer`; `signature`; `malformed`), or `not_allowed`, a verified person the
-  // allowlist leaves out. Never the token, a claim of it, or the email (SPEC §11, §12).
+  // allowlist leaves out, or `unidentified`, a verified token naming neither a person nor a
+  // service token, with `claims`, the names of the claims it carried. Never the token, a
+  // claim's value, or the email (SPEC §11, §12).
   "auth.refused": "warn",
   // A tool call through the MCP server, and the refusal code of one that failed (SPEC §11).
   "mcp.call": "info",

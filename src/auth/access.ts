@@ -57,8 +57,9 @@ export type Unreachable = "access_unreachable";
 
 /**
  * Why a sign-in was refused, as `auth.refused` names it: the catalog an operator filters
- * on, so a name here is public surface. All but `not_allowed` are a token that failed
- * verification; `not_allowed` is a verified person the allowlist leaves out.
+ * on, so a name here is public surface. Most are a token that failed verification. Two
+ * are a verified one the app's own rule turns away: `not_allowed`, a person the allowlist
+ * leaves out, and `unidentified`, a token naming neither a person nor a service token.
  */
 export type RefusedReason =
   | "jwks_unreachable"
@@ -68,7 +69,8 @@ export type RefusedReason =
   | "issuer"
   | "signature"
   | "malformed"
-  | "not_allowed";
+  | "not_allowed"
+  | "unidentified";
 
 // What jose throws when the keys themselves can't be had: a timeout, an answer that isn't a
 // key set, and its one generic error, which only the key fetch throws (not 200, not JSON).
@@ -83,7 +85,9 @@ const JWKS_FAILURES: ReadonlySet<string> = new Set([
  * the claim's name: never from its message or the claims it carries, so nothing of the token
  * can reach the log. An error that isn't jose's came from the key fetch itself (the network).
  */
-export function refusedReason(err: unknown): Exclude<RefusedReason, "not_allowed"> {
+export function refusedReason(
+  err: unknown,
+): Exclude<RefusedReason, "not_allowed" | "unidentified"> {
   if (!(err instanceof errors.JOSEError) || JWKS_FAILURES.has(err.code)) {
     return "jwks_unreachable";
   }
@@ -130,8 +134,8 @@ export async function verifyAccessJwt(
   const principal = principalFromClaims(payload, config.accessAllowedEmails);
   if (principal === null) {
     // A verified person the allowlist leaves out. Logged without the email, which Access's
-    // own log has, so every 401 on a request that carried an assertion has its one line:
-    // this, a failed check above, or `auth.unidentified`.
+    // own log has, so every 401 on a request that carried an assertion has its one
+    // `auth.refused` line: this, a failed check above, or `unidentified` from the mapping.
     const reason: RefusedReason = "not_allowed";
     log.warn("auth.refused", { reason });
   }
@@ -160,6 +164,7 @@ export function principalFromClaims(
   }
   // Neither a person nor a service token: some other kind of Access rule admitted it.
   // Refused, and warned about so the operator can find which rule.
-  log.warn("auth.unidentified", { claims: Object.keys(payload).sort().join(",") });
+  const reason: RefusedReason = "unidentified";
+  log.warn("auth.refused", { reason, claims: Object.keys(payload).sort().join(",") });
   return "access_unidentified";
 }

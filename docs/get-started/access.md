@@ -136,9 +136,10 @@ Cloudflare Access signs you in, and Kestrel then checks that sign-in itself. Whe
     - `not_yet_valid` means the sign-in starts at a time still ahead of the app's clock, so the two clocks disagree. Try again in a minute.
     - `malformed` means what arrived wasn't a sign-in from Access, or was one the app couldn't read. Check that you opened the address the Access application covers.
     - `not_allowed` means the sign-in was good and `ACCESS_ALLOWED_EMAILS` left the address out. Check the list for a typo. The line doesn't name the address, which Cloudflare's own Access log has.
+    - `unidentified` means Access let the sign-in through without an email or a service token. The editor says the same, and names the two kinds of policy Kestrel accepts. The line's `claims` lists what the sign-in did carry, by name.
     - `jwks_unreachable` means Kestrel couldn't fetch your Access team's signing keys, so it answered `503`, not `401`. Try again in a minute. If it keeps happening, `ACCESS_TEAM_DOMAIN` doesn't name your Access team, so store it again.
 
-1. If there's no `auth.refused` line, filter on `auth.unidentified`. That line means Access sent neither an email nor a service token, which the editor also says. With neither line, the request reached Kestrel with no Access sign-in at all: check that the Access application covers the address you opened.
+1. If the filter shows no line, the request reached Kestrel with no Access sign-in. Check that the Access application covers the address you opened.
 
 [Give the app its two values](#4-give-the-app-its-two-values) shows where to find each value and how to store it. The line never holds the sign-in itself or anything in it.
 

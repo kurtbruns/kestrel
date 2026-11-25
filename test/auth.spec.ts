@@ -63,7 +63,12 @@ describe("Access claims to a principal", () => {
       "access_unidentified",
     );
     expect(lines()).toEqual([
-      expect.objectContaining({ event: "auth.unidentified", level: "warn", claims: "iss,sub" }),
+      {
+        event: "auth.refused",
+        level: "warn",
+        reason: "unidentified",
+        claims: "iss,sub",
+      },
     ]);
     expect(JSON.stringify(lines())).not.toContain("device-7");
   });
@@ -79,7 +84,11 @@ describe("Access claims to a principal", () => {
       via: "access",
     });
     expect(lines()).toEqual([
-      expect.objectContaining({ event: "auth.unidentified", claims: "common_name,sub" }),
+      expect.objectContaining({
+        event: "auth.refused",
+        reason: "unidentified",
+        claims: "common_name,sub",
+      }),
     ]);
   });
 });
@@ -531,12 +540,20 @@ describe("a refused Access sign-in says why in the log", () => {
     ]);
   });
 
-  it("logs auth.unidentified alone, never auth.refused too, for a sign-in that names no one (SPEC §11)", async () => {
+  it("logs one auth.refused line, reason unidentified, with its claim names, for a sign-in that names no one (SPEC §11)", async () => {
     const { vars, assertion } = await accessDeployment();
     const warn = vi.spyOn(console, "warn");
     const res = await fetchWith(vars, "/api/whoami", { headers: await assertion({}) });
     expect(res.status).toBe(401);
-    expect(logged(warn).map((line) => line.event)).toEqual(["auth.unidentified"]);
+    expect(logged(warn)).toEqual([
+      {
+        event: "auth.refused",
+        level: "warn",
+        run: expect.any(String),
+        reason: "unidentified",
+        claims: "aud,exp,iat,iss",
+      },
+    ]);
   });
 
   it("logs nothing for a request with no Access assertion, or one that verifies", async () => {
