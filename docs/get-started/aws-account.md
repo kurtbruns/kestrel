@@ -51,7 +51,7 @@ The root user can do anything in the account, including close it, so it needs mo
 
 2. Under **Multi-factor authentication (MFA)**, choose **Assign MFA device**. Enter a device name that says where the passkey is kept, such as `laptop-passkey`. Select **Passkey or Security Key**, and follow the prompts. A passkey on your computer or phone works.
 
-3. **(Optional, recommended)** Assign a second device the same way, such as a passkey on your phone or a security key. Losing your only device locks you out of the root user, and AWS [recommends more than one](https://docs.aws.amazon.com/IAM/latest/UserGuide/root-user-best-practices.html).
+3. **(Optional)** Assign a second device the same way, such as a passkey on your phone or a security key. Losing your only device locks you out of the root user, and AWS [recommends more than one](https://docs.aws.amazon.com/IAM/latest/UserGuide/root-user-best-practices.html).
 
 4. Leave **Access keys** empty. A root user's key could do anything the root user can. [Connect Amazon SES](ses.md#5-create-the-apps-aws-key) makes a separate key that can only send email and read the account's sending status.
 

@@ -151,7 +151,6 @@ Each prints a snippet to add to your configuration. There's nothing to paste: `-
     - `PROVIDER` stays empty until [Connect Amazon SES](ses.md) sets it. Until then the app runs without an email provider: posts can be written and previewed, but scheduling, test emails, and signups are refused. Never set it to `fake`, the top level's value, even when a wrangler warning suggests copying it: `fake` delivers nothing, and the app refuses it on your hostname.
     - `ARCHIVE_BASE_PATH` is permanent once the first post goes out. Every post sent carries its `/archive/…` link, and changing the prefix later breaks the links already mailed. Keep `/archive` unless you have a reason not to.
     - `FROM_ADDRESS` is the address every email comes from. Keep it on your sending hostname, and set `SENDING_DOMAIN` to the part after the `@`. The name readers see beside it is the publication's name, which the publisher sets in the editor under **Settings → Publication identity**, with no deploy. To send under a fixed name instead, write it in front of the address, like `Name <address>` ([Configuration](../reference/configuration.md) says what that does).
-
     - `AWS_REGION` is the AWS region the app sends from. Leave `us-east-1`, which `init` wrote, until [Connect Amazon SES](ses.md) sets it to the region you choose there.
 
     Change every `example.com` value in the `production` block, the route included. The app refuses to run while any of its settings still names `example.com`.
