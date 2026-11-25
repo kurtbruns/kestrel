@@ -127,13 +127,16 @@ export const COMMANDS = [
   --form <name=value>           a multipart field, repeatable; name=@file attaches a file
   --url <url>                   the instance (default: KESTREL_URL, else this folder's instance, from
                                 its wrangler.jsonc, else the only one you're signed in to)
-  --local                       this directory's dev server, started by kestrel dev
+  --local                       this directory's dev server, started by kestrel dev; not with --url
   --client <name>               your own script's Kestrel-Client name (default ${CLAUDE_CODE_CLIENT}
                                 when Claude Code runs this, otherwise ${KESTREL_CLI_CLIENT}); never
                                 editor, which only the editor names itself
 
 The routes, fields, and refusals come from the instance's own /api/openapi.json, so they
-match the release it runs. A field the route doesn't take is refused before the request.`,
+match the release it runs. A field the route doesn't take is refused before the request.
+
+  KESTREL_LOCAL_ONLY=1          refuse any call but one to this directory's dev server, so a
+                                call that leaves --local off never reaches a deployed instance`,
   },
 ];
 
