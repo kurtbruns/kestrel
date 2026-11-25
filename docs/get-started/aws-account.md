@@ -17,7 +17,15 @@ The address you sign up with belongs to the account's root user, the identity th
 
 1. Choose an address named for its purpose, on your own domain, such as `aws@example.com`. Use one you'll keep, since recovering the account depends on it.
 
-2. Make sure it receives mail before you sign up, since AWS emails it a code right away. If `example.com` receives no mail yet, forward the address to your inbox with Cloudflare Email Routing, as [Enable Email Routing](https://developers.cloudflare.com/email-routing/get-started/enable-email-routing/) describes. If `example.com` already receives mail at a mail host, create the address there instead, since Email Routing replaces a domain's mail servers.
+2. Make sure it receives mail before you sign up, since AWS emails it a code right away. If `example.com` already receives mail at a mail host, create the address there, and skip to step 6. Email Routing, which the next steps use, replaces a domain's mail servers.
+
+3. If `example.com` receives no mail yet, forward the address to your inbox with Cloudflare Email Routing. In the [Cloudflare dashboard](https://dash.cloudflare.com/), go to **Compute → Email Service → Email Routing**, select **Onboard Domain**, and choose `example.com`. Cloudflare adds the DNS records that deliver the domain's mail to it. Cloudflare's [Enable Email Routing](https://developers.cloudflare.com/email-routing/get-started/enable-email-routing/) shows each screen.
+
+4. Under **Destination Addresses**, add your inbox's address. Cloudflare emails it a link. Open that email, and select **Verify email address**.
+
+5. Select `example.com`, open its **Routing Rules** tab, and select **Create routing rule**. Give the rule `aws@example.com` as its address, sending to an email as its action, and your inbox as its destination, and select **Save**.
+
+6. Send an email to `aws@example.com` from another account. It arrives in your inbox.
 
 ## 2. Sign up
 
@@ -41,9 +49,11 @@ The root user can do anything in the account, including close it, so it needs mo
 
 1. In the console, select your account name at the top right, and then **Security credentials**.
 
-2. Under **Multi-factor authentication (MFA)**, choose **Assign MFA device**. Enter a device name, select **Passkey or Security Key**, and follow the prompts. A passkey on your computer or phone works.
+2. Under **Multi-factor authentication (MFA)**, choose **Assign MFA device**. Enter a device name that says where the passkey is kept, such as `laptop-passkey`. Select **Passkey or Security Key**, and follow the prompts. A passkey on your computer or phone works.
 
-3. Leave **Access keys** empty. A root user's key could do anything the root user can. [Connect Amazon SES](ses.md#5-create-the-apps-aws-key) makes a separate key that can only send email and read the account's sending status.
+3. **(Optional, recommended)** Assign a second device the same way, such as a passkey on your phone or a security key. Losing your only device locks you out of the root user, and AWS [recommends more than one](https://docs.aws.amazon.com/IAM/latest/UserGuide/root-user-best-practices.html).
+
+4. Leave **Access keys** empty. A root user's key could do anything the root user can. [Connect Amazon SES](ses.md#5-create-the-apps-aws-key) makes a separate key that can only send email and read the account's sending status.
 
 ## 4. Set a budget alert
 
@@ -61,7 +71,7 @@ AWS charges for what you use, with no spending limit, so a mistake or a leaked k
 
 1. Sign out, and sign in again as the root user, with the address from section 1. After the password, AWS asks for your passkey or security key.
 
-2. Under **Security credentials**, the MFA list shows your device, and **Access keys** lists none.
+2. Select your account name at the top right, and then **Security credentials**. The MFA list shows your device, and **Access keys** lists none.
 
 3. Under **Budgets**, your budget is listed, and its email recipient shows as **Active**.
 
