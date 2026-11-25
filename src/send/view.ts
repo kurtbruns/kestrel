@@ -213,7 +213,19 @@ export function buildSendView(
     counts.unsent;
   const total = summed > 0 ? summed : send.recipient_count;
 
-  const done = Math.max(0, total - counts.pending - counts.dispatched);
+  // Counted from the delivery rows, never from `total`: a send with no rows yet (scheduled,
+  // canceled, or fired with its audience still to resolve) has handed no one off, while
+  // `total` is then the estimate, which would read as everyone done. Never below zero,
+  // should a cached counter have drifted.
+  const done = Math.max(
+    0,
+    counts.accepted +
+      counts.delivered +
+      counts.bounced +
+      counts.complained +
+      counts.skipped +
+      counts.unsent,
+  );
   const dispatchPercent = total > 0 ? round((100 * done) / total) : 0;
 
   // Throughput and time to finish, counted in sweep ticks (`tickEstimate`). Reported only
