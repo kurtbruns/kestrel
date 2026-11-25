@@ -121,7 +121,7 @@ If a check fails:
 
 - **The editor says the configuration needs a fix.** Store the secret it names. While only one of the two is stored, `/health` answers `500` naming the other, and the public pages say the newsletter is temporarily unavailable.
 - **Cloudflare lets you in, but the editor answers `401`.** Kestrel refused the sign-in, and its log says why. [If Kestrel refuses a sign-in](#if-kestrel-refuses-a-sign-in) lists each reason and its fix.
-- **The editor answers `503`, naming `access_unreachable`.** Kestrel couldn't check the sign-in. Try again in a minute, and if it keeps happening, see [If Kestrel refuses a sign-in](#if-kestrel-refuses-a-sign-in).
+- **The editor says Kestrel can't check your sign-in right now.** Kestrel couldn't fetch your Access team's signing keys, so the API answers `503`, naming `access_unreachable`. Try again in a minute, and if it keeps happening, see [If Kestrel refuses a sign-in](#if-kestrel-refuses-a-sign-in).
 - **The editor says Access let you in but didn't say who you are.** Your login carried no email, which happens through a kind of policy the app doesn't accept, such as a device check. Sign out, and sign in through the policy you made above.
 
 ## If Kestrel refuses a sign-in

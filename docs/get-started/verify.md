@@ -60,7 +60,7 @@ This is a real send, to a list of one. It proves the whole path: subscribing, co
 
 1. Open `https://newsletter.example.com/subscribe`, and subscribe with your second address.
 
-2. Open the confirmation email, follow its link, and select **Confirm subscription**. In the editor, **Subscribers** shows the address as **Confirmed**.
+2. Open the confirmation email, and follow its link. In the browser you subscribed from, the link confirms you at once. Anywhere else, such as your mail app's own browser, it opens a page headed "Finish subscribing": select **Confirm subscription** there. In the editor, **Subscribers** shows the address as **Confirmed**.
 
 3. Open the post, select **Schedule**, and then **Send now**.
 
