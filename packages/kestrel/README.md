@@ -10,7 +10,9 @@ npx kestrel api --list
 
 `login` signs you in through your instance's Cloudflare Access, in your browser, and keeps the sign-in in your user config. `api` calls a route as you, and `api --list` and `api help <method> <path>` describe the routes, read from the instance's own OpenAPI document so they match the release it runs. `logout` forgets the sign-in. Each command answers `--help` with its usage, and refuses an option it doesn't know.
 
-`api` calls the instance `--url` or `KESTREL_URL` names; else, run in an instance's repository, that instance, the production `APP_ORIGIN` its `wrangler.jsonc` sets; else the only one you're signed in to. It names on stderr an instance it chose itself.
+`api` calls the instance `--url` or `KESTREL_URL` names; else, run in an instance's repository, that instance, the production `APP_ORIGIN` its `wrangler.jsonc` sets; else the only one you're signed in to. It names on stderr an instance it chose itself. `--local` calls the dev server running in the current folder instead, and is refused beside `--url`, since each names a server.
+
+Set `KESTREL_LOCAL_ONLY=1` where only a local dev server should be reached, such as a Claude Code session trying a change: `api` then refuses any call but one to the current folder's dev server, naming the variable and the host it refused, so a call that leaves `--local` off never reaches a deployed instance.
 
 To start a new instance, run `npx kestrel init` in an empty folder. It writes the instance's repository from the `@kurtbruns/kestrel` package, which the instance installs and pins. The commands that act on that repository (`dev`, `seed`, `reset`, `sync-migrations`, and `check-context`) run from that install, through its npm scripts.
 

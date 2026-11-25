@@ -12,6 +12,11 @@
  * Trusted, not guarded), and the editor's name lifts a step only a person in the editor may take
  * (SPEC §7).
  *
+ * With `KESTREL_LOCAL_ONLY` set it calls this directory's dev server and nothing else: a session
+ * meant to work on a local server leaves `--local` off easily, and without the variable that
+ * call goes to a deployed instance. It is a variable and not a default because a call with no
+ * flag is how an instance's own scripts reach production, a dev server running or not.
+ *
  * It prints the answer's body as it came, so a script or Claude reads a refusal whole; a
  * non-2xx answer also prints its status, and a refusal's code, message, field, and next move,
  * on stderr and exits 1, as curl --fail-with-body.
@@ -26,6 +31,7 @@ import { basename } from "node:path";
 import { usageOf } from "./commands.mjs";
 import { readSignIn, readSignIns, withCredentialsLock, writeSignInLocked } from "./credentials.mjs";
 import { connectDevServer } from "./dev-api.mjs";
+import { readDevServer } from "./dev-server.mjs";
 import { CliError, UsageError } from "./errors.mjs";
 import { folderOrigins } from "./folder-instance.mjs";
 import { fileMediaType } from "./media-types.mjs";
@@ -57,6 +63,9 @@ export const EDITOR_CLIENT = "editor";
 // value, means the name refused is the one the server would have read.
 export const CLIENT_NAME_MAX = 32;
 export const CLIENT_NAME_PATTERN = "^[a-z0-9]+(?:-[a-z0-9]+)*$";
+
+// Set (to anything but nothing, 0, or false), `kestrel api` calls only this directory's dev server.
+export const LOCAL_ONLY_VAR = "KESTREL_LOCAL_ONLY";
 
 const ONE_WAY = "Send the body one way: --data, --form, or -f and -F fields, not two.";
 
@@ -140,6 +149,12 @@ export function parseApiArgs(argv) {
         "--client editor is refused: only the editor names itself the editor, since some acts only a person in the editor may confirm. Name your own program, or leave --client out.",
       );
     }
+  }
+  if (opts.local && opts.url !== undefined) {
+    // Sending to one and dropping the other would leave the caller wrong about where it went.
+    throw new UsageError(
+      "--local and --url each name a server, so they can't go together: --local is this directory's dev server, and --url names another. Pass one.",
+    );
   }
   const { list, ...rest } = opts;
   const bodies = [opts.data !== undefined, opts.forms.length > 0, opts.fields.length > 0];
@@ -378,17 +393,71 @@ async function bearerFetch(url, token, { method = "GET", body, headers = {}, cli
   }
 }
 
+/** Whether `env` asks for local-only calls: the variable set to anything but nothing, 0, or false. */
+export function localOnly(env = process.env) {
+  const value = String(env[LOCAL_ONLY_VAR] ?? "")
+    .trim()
+    .toLowerCase();
+  return value !== "" && value !== "0" && value !== "false";
+}
+
+/**
+ * Under `KESTREL_LOCAL_ONLY`, stop a call that isn't to this directory's dev server, naming the
+ * variable and the host refused. A loopback address at the recorded port passes, and is then
+ * reached as `--local` is, so the server there must still report this directory's run ID; any
+ * other loopback address is another directory's server, and is refused as a deployed one is.
+ * With nothing named, the host refused is the one the call would have chosen, when one can be.
+ */
+function refuseUnlessLocal(args, named) {
+  let origin;
+  if (named) {
+    origin = instanceOrigin(named);
+    if (isLoopback(origin) && new URL(origin).port === readDevServer()?.port) {
+      return;
+    }
+  } else {
+    try {
+      origin = chooseInstance({ signIns: readSignIns(), note: () => {} });
+    } catch (err) {
+      if (!(err instanceof SignInError)) {
+        throw err;
+      }
+    }
+  }
+  const from = args.url
+    ? ", named by --url"
+    : named
+      ? ", named by KESTREL_URL"
+      : origin
+        ? ", the instance it would have chosen"
+        : "";
+  throw new CliError(
+    `${LOCAL_ONLY_VAR} is set, so the call to ${origin ?? "a deployed instance"}${from} was refused and nothing was sent: only this directory's dev server may be called.`,
+    {
+      lines: [
+        "Add --local to call this directory's dev server (`npm run dev` starts it).",
+        `${LOCAL_ONLY_VAR} was set where this runs to keep calls off deployed instances. Reaching one is for whoever set it to decide, by running without it.`,
+      ],
+    },
+  );
+}
+
 /**
  * How a run reaches its instance: a function that sends one request there and answers the
  * Response. A loopback address, given or in KESTREL_URL, is a dev server, which has no sign-in:
  * its own human token is minted as the editor's is (SPEC §10). Anything else is the stored
- * sign-in, refreshed as it needs.
+ * sign-in, refreshed as it needs. Under `KESTREL_LOCAL_ONLY` only this directory's dev server
+ * is reached, however the call names it.
  */
 async function instanceCaller(args, client) {
   const named = args.url || process.env.KESTREL_URL || undefined;
-  if (args.local || (named && isLoopback(instanceOrigin(named)))) {
+  const guarded = !args.local && localOnly();
+  if (guarded) {
+    refuseUnlessLocal(args, named);
+  }
+  if (args.local || guarded || (named && isLoopback(instanceOrigin(named)))) {
     const { base, token } = await connectDevServer(
-      args.local ? undefined : instanceOrigin(named),
+      args.local || guarded ? undefined : instanceOrigin(named),
       "api",
       "human",
     );

@@ -5,7 +5,7 @@
  * The document is a stub written in the shapes the Worker's projection uses
  * (src/reference/openapi.ts), whose own spec holds the real one to them.
  */
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,6 +16,7 @@ import { runCommand } from "../../packages/kestrel/lib/errors.mjs";
 const run = (argv) => runCommand("kestrel api", () => apiCommand(argv));
 
 import { writeSignIn } from "../../packages/kestrel/lib/credentials.mjs";
+import { writeDevServer } from "../../packages/kestrel/lib/dev-server.mjs";
 import { fileMediaType, IMAGE_TYPE_BY_EXTENSION } from "../../packages/kestrel/lib/media-types.mjs";
 import {
   buildFields,
@@ -245,6 +246,18 @@ describe("reading kestrel api's arguments", () => {
       method: "POST",
       path: "/api/posts",
     });
+  });
+
+  it("refuses --local with --url, in either order and for a listing, naming both flags", () => {
+    const both = /^--local and --url each name a server, so they can't go together/;
+    expect(() => parseApiArgs(["GET", "/x", "--local", "--url", "http://localhost:8799"])).toThrow(
+      both,
+    );
+    expect(() => parseApiArgs(["--url=https://news.example.com", "GET", "/x", "--local"])).toThrow(
+      both,
+    );
+    expect(() => parseApiArgs(["--list", "--local", "--url", "x"])).toThrow(both);
+    expect(parseApiArgs(["GET", "/x", "--local"])).toMatchObject({ local: true });
   });
 
   it("refuses a body sent two ways, and a body or field given to --list or help", () => {
@@ -494,6 +507,8 @@ describe("kestrel api against a signed-in instance", () => {
     dir = mkdtempSync(join(tmpdir(), "kestrel-api-"));
     vi.stubEnv("KESTREL_CONFIG_DIR", dir);
     vi.stubEnv("KESTREL_URL", ORIGIN);
+    // A shell may carry the guard; only the specs that are about it set it.
+    vi.stubEnv("KESTREL_LOCAL_ONLY", "");
     await writeSignIn(ORIGIN, {
       token_endpoint: "https://team.cloudflareaccess.com/token",
       client_id: "c",
@@ -788,6 +803,110 @@ describe("kestrel api against a signed-in instance", () => {
     expect(calls[1].headers.authorization).toBe("Bearer dev-token");
     expect(calls[1].headers["kestrel-client"]).toBe("claude-code");
     expect(out.join("")).toContain("Get a send");
+  });
+
+  describe("under KESTREL_LOCAL_ONLY", () => {
+    let here;
+
+    /** A dev server answering on any loopback port as run `runId`, each request recorded. */
+    function serveDev(runId = "run-a") {
+      vi.stubGlobal("fetch", async (url, init = {}) => {
+        calls.push({ url: String(url), headers: init.headers });
+        return String(url).includes("/api/dev/token")
+          ? new Response(JSON.stringify({ token: "dev-token", run_id: runId }))
+          : new Response("{}");
+      });
+    }
+
+    beforeEach(() => {
+      // The directory the command runs in: no instance's repository, with a dev server recorded.
+      here = join(dir, "here");
+      mkdirSync(here);
+      writeDevServer(8799, "run-a", here);
+      vi.spyOn(process, "cwd").mockReturnValue(here);
+      vi.stubEnv("KESTREL_LOCAL_ONLY", "1");
+      vi.stubEnv("KESTREL_URL", "");
+    });
+
+    const refused = (host) =>
+      new RegExp(
+        `^kestrel api: KESTREL_LOCAL_ONLY is set, so the call to ${host}.* was refused and nothing was sent`,
+      );
+
+    it("refuses the instance a call with no flag would have chosen, naming it, and sends nothing", async () => {
+      serveDev();
+      await run(["GET", "/api/posts"]);
+      expect(process.exitCode).toBe(1);
+      expect(calls).toEqual([]);
+      expect(err[0]).toMatch(
+        refused("https://news\\.example\\.com, the instance it would have chosen"),
+      );
+      expect(err[1]).toMatch(/Add --local/);
+    });
+
+    it("refuses a deployed instance named by --url or KESTREL_URL, saying which named it", async () => {
+      serveDev();
+      await run(["GET", "/api/posts", "--url", "https://other.example.com"]);
+      expect(err[0]).toMatch(refused("https://other\\.example\\.com, named by --url"));
+      err.length = 0;
+      vi.stubEnv("KESTREL_URL", ORIGIN);
+      await run(["--list"]);
+      expect(err[0]).toMatch(refused("https://news\\.example\\.com, named by KESTREL_URL"));
+      expect(calls).toEqual([]);
+    });
+
+    it("refuses when no instance could be chosen either, since the call still wasn't local", async () => {
+      vi.stubEnv("KESTREL_CONFIG_DIR", join(dir, "signed-out"));
+      serveDev();
+      await run(["GET", "/api/posts"]);
+      expect(err[0]).toMatch(refused("a deployed instance"));
+      expect(calls).toEqual([]);
+    });
+
+    it("refuses another loopback server, which is some other directory's", async () => {
+      serveDev();
+      await run(["GET", "/api/posts", "--url", "http://localhost:8787"]);
+      expect(process.exitCode).toBe(1);
+      expect(err[0]).toMatch(refused("http://localhost:8787, named by --url"));
+      expect(calls).toEqual([]);
+    });
+
+    it("calls this directory's dev server with --local, or named at its recorded port", async () => {
+      serveDev();
+      await run(["GET", "/api/posts", "--local"]);
+      await run(["GET", "/api/posts", "--url", "http://127.0.0.1:8799"]);
+      expect(process.exitCode).toBeUndefined();
+      expect(calls.map((c) => c.url)).toEqual([
+        "http://localhost:8799/api/dev/token?kind=human",
+        "http://localhost:8799/api/posts",
+        "http://localhost:8799/api/dev/token?kind=human",
+        "http://localhost:8799/api/posts",
+      ]);
+    });
+
+    it("still asks the server at the recorded port to prove it is this directory's", async () => {
+      serveDev("run-b");
+      await run(["GET", "/api/posts", "--url", "http://localhost:8799"]);
+      expect(process.exitCode).toBe(1);
+      expect(err[0]).toMatch(/isn't this directory's dev server, so it was left alone/);
+      expect(calls.map((c) => c.url)).toEqual(["http://localhost:8799/api/dev/token?kind=human"]);
+    });
+
+    it.each(["", "0", "false"])("is off when the variable is %j", async (value) => {
+      vi.stubEnv("KESTREL_LOCAL_ONLY", value);
+      vi.stubEnv("KESTREL_URL", ORIGIN);
+      serve(() => new Response("{}"));
+      await run(["GET", "/api/posts"]);
+      expect(process.exitCode).toBeUndefined();
+      expect(calls.map((c) => c.path)).toEqual(["/api/posts"]);
+    });
+
+    it("answers --help with the usage, which names the variable", async () => {
+      await run(["--help"]);
+      expect(out.join("")).toMatch(
+        /KESTREL_LOCAL_ONLY=1\s+refuse any call but one to this directory's dev server/,
+      );
+    });
   });
 
   it("writes a -F @file's text into the body", async () => {
