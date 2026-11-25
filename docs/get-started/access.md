@@ -10,7 +10,7 @@ Access is part of Cloudflare Zero Trust. Your account needs a Zero Trust organiz
 
 1. In the [Cloudflare dashboard](https://dash.cloudflare.com/), select **Zero Trust**.
 
-2. Choose a team name. It becomes your team domain, `YOUR_TEAM.cloudflareaccess.com`, where your login page lives. You can change the name later under **Zero Trust → Settings**. If you do, store the new team domain again, as [Give the app its two values](#4-give-the-app-its-two-values) shows, or the editor refuses every sign-in.
+2. Choose a team name. It becomes your team domain, `YOUR_TEAM.cloudflareaccess.com`, where your login page lives. You can change the name later under **Zero Trust → Settings**. If you do, store the new team domain again, as [Connect the app to Access](#4-connect-the-app-to-access) shows, or the editor refuses every sign-in.
 
 3. Choose a plan. The Free plan covers a newsletter's editors. Cloudflare asks for payment details even on the Free plan, and doesn't charge them.
 
@@ -57,7 +57,7 @@ Every Access application denies everyone until a policy allows them.
 
 Cloudflare's own login is on by default, and admits members of your Cloudflare account, so the email in the policy you made should be one.
 
-## 4. Give the app its two values
+## 4. Connect the app to Access
 
 The app verifies each login against your team domain, and checks that it was issued for this application.
 
@@ -141,7 +141,7 @@ Cloudflare Access signs you in, and Kestrel then checks that sign-in itself. Whe
 
 3. If the filter shows no line, the request reached Kestrel with no Access sign-in. Check that the Access application covers the address you opened.
 
-[Give the app its two values](#4-give-the-app-its-two-values) shows where to find each value and how to store it. The line never holds the sign-in itself or a value from it. An `unidentified` line names what the sign-in carried, never the values.
+[Connect the app to Access](#4-connect-the-app-to-access) shows where to find each value and how to store it. The line never holds the sign-in itself or a value from it. An `unidentified` line names what the sign-in carried, never the values.
 
 ## Allow someone else in
 
