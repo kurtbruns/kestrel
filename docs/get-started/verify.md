@@ -9,6 +9,7 @@ In this guide, you send yourself a test email, reply to it, and check that it pa
 ## Before you begin
 
 - The two addresses you verified in SES in [Connect Amazon SES](ses.md#3-verify-your-test-addresses). Some steps use both.
+- The publication's time zone, set in the editor under **Settings → Time zone**. Nothing can be scheduled until it's set, and [Set the time zone](../publishing/name-your-publication.md#set-the-time-zone) says which to choose. The publisher can change it later.
 - A Gmail address, or another mail client that shows a message's original source and an **Unsubscribe** button.
 
 ## 1. Send yourself a test email
@@ -19,7 +20,7 @@ A test email goes through the same code as a real send. If the test looks right,
 
 2. Select **Send test email**, enter your address, and send it. If SES refuses it, the test's line says why and what fixes it.
 
-3. Open the email. It arrives in your inbox, not in spam, the image loads, and the subject reads as you wrote it. Its links work, but a test email unsubscribes no one; section 5 unsubscribes for real.
+3. Open the email. It arrives in your inbox, not in spam, the image loads, and the subject reads as you wrote it. Gmail may file it under its **Promotions** tab, which counts as the inbox. Its links work, but a test email unsubscribes no one; section 5 unsubscribes for real.
 
 4. In **Settings → Email provider**, check when SES last reported back. Within a few minutes it shows a time after the test you just sent, which proves SES's reports reach the app. The amber warning that reports aren't arriving shows only an hour after an email, so its absence proves nothing yet. If no newer report comes, check [Send bounces and complaints to the app](ses.md#4-send-bounces-and-complaints-to-the-app) and [Subscribe the app to the topic](ses.md#7-subscribe-the-app-to-the-topic).
 
@@ -65,7 +66,7 @@ This is a real send, to a list of one. It proves the whole path: subscribing, co
 
 4. In the **Send now?** dialog, uncheck **Include in archive**, and select **Send now**. The post goes out as email only, so it doesn't become the publication's first archived post. The dashboard keeps its **Finish setting up** steps for the publisher. Every send waits at least five minutes before it goes out, so you can cancel a mistake.
 
-5. Cancel the send, to see that canceling stops it. Then send it again the same way, with **Include in archive** unchecked, and let it go.
+5. Cancel the send, to see that canceling stops it. Then select **Schedule** and **Send now** again, uncheck **Include in archive** as before, and let it go.
 
 6. When the send finishes, the post arrives at your second address. A notification arrives at your first, with the subject `Sent:` and the post's title.
 
@@ -98,13 +99,15 @@ If the bounce address has no flag, or the complaint address is still pending, SE
 
 The app writes a log line for each thing it does, and Cloudflare keeps them for a few days, depending on your plan. They're the one record of what the app did and when, the once-a-minute schedule that sends posts included, so it's worth knowing where to look before you need it.
 
-1. In the Cloudflare dashboard, go to **Workers & Pages**, select your Worker, the `name` in the `production` block of `wrangler.jsonc`, and select **Observability**.
+1. In the Cloudflare dashboard, go to **Workers & Pages**, and select your Worker, the `name` in the `production` block of `wrangler.jsonc`. Select **Observability**, and then the **Overview** tab.
 
-2. Filter on `event` equal to `send.completed`. The post you sent yourself in section 4 is there, with its `sendId`.
+2. In the **Filter** section, select **+**. Select **Select key...** and enter `event`, choose **Equals**, then select **Select value...** and enter `send.completed`. Select **Run**.
 
-3. Filter on `level` equal to `error`. A healthy instance shows nothing, and this is the first place to look when something seems wrong.
+3. Open the **Events** view. The post you sent yourself in section 4 is there, with its `sendId`. If nothing is listed, choose a time range that covers the send, and run it again.
 
-A long time range may show only a sample, so narrow it when you follow one send by its `sendId`.
+4. Change the filter's key to `level` and its value to `error`, and run it again. A healthy instance shows nothing, and this is the first place to look when something seems wrong.
+
+A long time range may show only a sample, so narrow it when you follow one send by its `sendId`. Cloudflare's [Query Builder](https://developers.cloudflare.com/workers/observability/query-builder/) describes the rest of the screen.
 
 ## 8. Clean up the test subscribers
 

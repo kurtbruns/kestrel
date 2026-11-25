@@ -7,6 +7,7 @@ In this guide, you choose your hostnames, create your instance's repository, cre
 ## Before you begin
 
 - A [Cloudflare account](https://dash.cloudflare.com/sign-up), with your domain's DNS on Cloudflare. Your app's hostname and its login both live there.
+- An R2 subscription on that account, for the image bucket. R2 has a free monthly allowance. To add it, go to **Storage & databases → R2 → Overview** in the [Cloudflare dashboard](https://dash.cloudflare.com/), and complete the checkout.
 - [Node.js](https://nodejs.org/) 22 or later, and [Git](https://git-scm.com/).
 - A GitHub account, or another Git host, for your instance's repository.
 - An AWS account for the newsletter, before [Connect Amazon SES](ses.md). [Create an AWS account](aws-account.md) walks through it. You can start it now. Signing up needs an email address that receives mail, and AWS can take a while to activate a new account.
@@ -44,6 +45,8 @@ Your instance's repository holds its configuration, its database migrations, and
 
     `--hostname` puts the app on its hostname in `wrangler.jsonc`'s production settings, and `--sending` sends its email from `newsletter@` your sending hostname. Each takes the hostname alone, with no `https://`. `init` refuses a name on `example.com`, so a command copied without your own names writes nothing. Either can be left out, and you fill in that value by hand in section 4. `init` ends by saying which it filled and which are still on `example.com`.
 
+    `npx kestrel` runs Kestrel's command-line client, the npm package `kestrel`. Its `init` fetches `@kurtbruns/kestrel` at the same version, and writes the instance from it.
+
 3. Install the release and its tools:
 
     ```bash
@@ -77,13 +80,15 @@ Every command from here on acts on your Cloudflare account through the Wrangler 
     npx wrangler login
     ```
 
+    The command waits two minutes for your approval. If it ends with `Timed out waiting for authorization code`, run it again.
+
 2. Confirm which account you're signed in to:
 
     ```bash
     npx wrangler whoami
     ```
 
-    It prints your email and the account name. If you belong to more than one account, make sure it's the one that holds your domain.
+    It lists each account you can use, by name and ID, and the permissions your login holds. If you belong to more than one account, make sure it's the one that holds your domain.
 
 ## 3. Create the database and the image bucket
 
@@ -102,6 +107,8 @@ The commands below use `newsletter`. Use your instance's names instead: `kestrel
     ```bash
     npx wrangler r2 bucket create newsletter-media-production --env production --binding MEDIA --update-config
     ```
+
+    If it fails with `Please enable R2 through the Cloudflare Dashboard`, add the R2 subscription from [Before you begin](#before-you-begin), and run it again.
 
 Each prints a snippet to add to your configuration. There's nothing to paste: `--update-config` has filled in the database's id, and the `MEDIA` binding already names the bucket. Wrangler also rewrites `wrangler.jsonc` in its own layout, with tabs and one value per line, and your settings stay.
 
@@ -132,7 +139,8 @@ Each prints a snippet to add to your configuration. There's nothing to paste: `-
         "APP_ORIGIN": "https://newsletter.example.com",            // ← your app's hostname
         "ARCHIVE_BASE_PATH": "/archive",
         "SENDING_DOMAIN": "send.example.com",                      // ← your sending hostname
-        "FROM_ADDRESS": "newsletter@send.example.com"               // ← the address your mail is from
+        "FROM_ADDRESS": "newsletter@send.example.com",             // ← the address your mail is from
+        "AWS_REGION": "us-east-1"                                  // ← stays as it is until Connect Amazon SES
       }
     }
     ```
@@ -143,8 +151,9 @@ Each prints a snippet to add to your configuration. There's nothing to paste: `-
     - `PROVIDER` stays empty until [Connect Amazon SES](ses.md) sets it. Until then the app runs without an email provider: posts can be written and previewed, but scheduling, test emails, and signups are refused. Never set it to `fake`, the top level's value, even when a wrangler warning suggests copying it: `fake` delivers nothing, and the app refuses it on your hostname.
     - `ARCHIVE_BASE_PATH` is permanent once the first post goes out. Every post sent carries its `/archive/…` link, and changing the prefix later breaks the links already mailed. Keep `/archive` unless you have a reason not to.
     - `FROM_ADDRESS` is the address every email comes from. Keep it on your sending hostname, and set `SENDING_DOMAIN` to the part after the `@`. The name readers see beside it is the publication's name, which the publisher sets in the editor under **Settings → Publication identity**, with no deploy. To send under a fixed name instead, write it in front of the address, like `Name <address>` ([Configuration](../reference/configuration.md) says what that does).
+    - `AWS_REGION` is the AWS region the app sends from. Leave `us-east-1`, which `init` wrote, until [Connect Amazon SES](ses.md) sets it to the region you choose there.
 
-    Change every `example.com` value, the route included. The app refuses to run while any of its settings still names `example.com`.
+    Change every `example.com` value in the `production` block, the route included. The app refuses to run while any of its settings still names `example.com`.
 
     Every other setting has a working default. [Configuration](../reference/configuration.md) lists them all, and what the app refuses.
 
@@ -153,6 +162,8 @@ Each prints a snippet to add to your configuration. There's nothing to paste: `-
     ```bash
     npm run typecheck
     ```
+
+    It passes when it prints the types Wrangler generated from the file, then `Types written to worker-configuration.d.ts`, with no error after it.
 
 3. Commit your settings and push them to your repository:
 

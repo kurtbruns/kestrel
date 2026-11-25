@@ -27,12 +27,14 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - The log line for an Access sign-in that names neither a person nor a service token is now `auth.refused` with the `reason` `unidentified`, where it was an event of its own, `auth.unidentified`, so every refused sign-in is found with one filter. It still lists the sign-in's `claims` by name. The `401` and its `reason`, `access_unidentified`, are unchanged.
 - The docs' steps carry their real numbers in the Markdown, where every step was written `1.`. The pages look the same in the editor and on getkestrel.dev; Claude, and anyone reading the files, can now name a step by its number.
 - The page a reader sees after subscribing is headed "Check your inbox to finish subscribing" and asks them to click the link in the email just sent to the address they typed, so a typo shows. The subscribe and confirm pages no longer carry a "Newsletter" label over their heading.
+- The setup guide closes the gaps the first new instance's setup found: Deploy the app says R2 has to be added to your Cloudflare account first, and Verify it works asks for the publication's time zone before you begin and gives the clicks for its two log filters.
 - The upgrade guide now says up front what an upgrade changes in your instance's repository: the release it runs, its migrations, the Claude Code files Kestrel gave you, and a setting in `wrangler.jsonc` when a release asks for one. No step changes any other file, such as your `README.md`, and a Claude Code file you added is left alone.
 
 ### Fixed
 
 - `kestrel api --local --url <url>` is refused, naming both flags, where it ignored the URL without a word and called the current folder's dev server. Each flag names a server, so pass one.
 - The subscribe form's email field shows one solid ring when focused, not a ring with a gap around its border.
+- `SES_MAX_SEND_RATE` set in the shell for one run of local development (`SES_MAX_SEND_RATE=1 npm run dev`) now reaches the app, as `SIMULATE_SENDS`, `SIMULATE_ACCOUNT`, `MIN_LEAD_SECONDS`, and `SUBREQUEST_BUDGET` do. It was dropped without a word, so the run kept the rate in `.dev.vars`, or 14 a second, and `SIMULATE_SENDS=ses:bad_request` beside it never showed one reader a request.
 - A send that hasn't fired, or was canceled before it did, no longer reads as fully handed off: its `dispatch` is `done: 0, percent: 0` where it was the whole audience and 100, so a client reading the view, Claude included, isn't told a post went out that didn't (SPEC §8).
 - Through the connector, Claude no longer says a canceled send fires "in 1 day, 20 hours": a fire time reads as how far off only while the send is scheduled (SPEC §6). Scheduling, sending now, moving, canceling, and resolving a send each answer the send whole, with what can be done to it next and whether the post goes in the archive, so Claude doesn't read it again to know (SPEC §11).
 
