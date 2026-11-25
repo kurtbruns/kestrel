@@ -244,9 +244,10 @@ function fireTime(ms: number, clock: Clock | null, upcoming: boolean) {
   };
 }
 
-/** A scheduled send's fire time in a line a person reads: "Fri Nov 13, 9:00 AM Eastern Time (in 2 days, 7 hours)". */
-function fireTimeLine(ms: number, clock: Clock | null): string {
-  const t = fireTime(ms, clock, true);
+/** A fire time in a line a person reads: "Fri Nov 13, 9:00 AM Eastern Time (in 2 days, 7 hours)",
+ *  the words in brackets only while the send is scheduled to fire then (`upcoming`). */
+function fireTimeLine(ms: number, clock: Clock | null, upcoming: boolean): string {
+  const t = fireTime(ms, clock, upcoming);
   if (!("fire_at_local" in t)) {
     return String(t.fire_at);
   }
@@ -331,8 +332,7 @@ function postFull(p: Post, clock: Clock | null) {
   };
 }
 
-/** A send as a list reads it. With no clock its fire time is the exact moment alone, as for an
- *  answer that carries the route's own `read_back` beside it. */
+/** A send as a list reads it. */
 function sendBrief(s: SendView, clock: Clock | null) {
   return {
     id: s.id,
@@ -347,7 +347,9 @@ function sendBrief(s: SendView, clock: Clock | null) {
 }
 
 /** A send whole: what get_send answers, and every act on a send too, so the answer to an act
- *  carries what the next move needs (its `actions`, where the post goes) without a second read. */
+ *  carries what the next move needs (its `actions`, where the post goes) without a second read.
+ *  With no clock its fire time is the exact moment alone, as for an act that sets the time, whose
+ *  answer carries the route's own `read_back` beside the send. */
 function sendFull(s: SendView, clock: Clock | null) {
   return {
     ...sendBrief(s, clock),
@@ -398,13 +400,18 @@ function nextOffset(page: { total: number; limit: number; offset: number }): num
 /** Growing sends as lines a person reads: each subject, fire time, and how many it gains. */
 function growingLines(sends: readonly GrowingSend[], clock: Clock | null): string[] {
   return sends.map(
-    (s) => `- "${s.subject}", firing ${fireTimeLine(s.fire_at, clock)}, would gain ${s.gains}.`,
+    (s) =>
+      `- "${s.subject}", firing ${fireTimeLine(s.fire_at, clock, true)}, would gain ${s.gains}.`,
   );
 }
 
-/** Scheduled sends as lines a person reads: each subject, fire time, and id. */
+/** Scheduled sends as lines a person reads: each subject, fire time, and id. A send canceled
+ *  since the route listed it is read as it now stands, so its time carries no "in …". */
 function sendLines(sends: readonly SendView[], clock: Clock | null): string[] {
-  return sends.map((s) => `- "${s.subject}", firing ${fireTimeLine(s.fire_at, clock)} (${s.id}).`);
+  return sends.map(
+    (s) =>
+      `- "${s.subject}", firing ${fireTimeLine(s.fire_at, clock, s.status === "scheduled")} (${s.id}).`,
+  );
 }
 
 /**

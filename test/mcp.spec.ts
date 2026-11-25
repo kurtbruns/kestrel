@@ -571,6 +571,10 @@ describe("a tool call runs its routes as the person, via Claude (SPEC §11, Who 
     expect((await callOk("get_send", { id })).send.resolved_by).toBeNull();
     const done = await callOk("resolve_send", { id, resolution: "unsent" });
     expect(done).toMatchObject({ resolved: 1, completed: true });
+    // The send whole, as every act on a send answers it.
+    expect(done.send).toEqual((await callOk("get_send", { id })).send);
+    expect(done.send.email_only).toBe(false);
+    expect(done.send.actions).toEqual([]);
     expect((await callOk("get_send", { id })).send.resolved_by).toEqual({
       kind: "human",
       email: "you@example.com",
@@ -1454,6 +1458,45 @@ describe("a tool names a fire time on the publication's clock", () => {
     expect(listed.map((s: { id: string }) => s.id)).toEqual([id]);
     expect(listed[0].fire_at_local).toBe(scheduled.read_back.fire_at_local);
     expect(listed[0]).not.toHaveProperty("fire_at_in");
+  });
+
+  it("lists a send canceled while a save's refusal was being read without saying it fires in a while", async () => {
+    const now = Date.now();
+    const view = (id: string, status: string) => ({
+      id,
+      subject: id,
+      status,
+      fire_at: now + 2 * 3_600_000,
+    });
+    // The route listed two scheduled sends, and one was canceled before it read them back.
+    const api = {
+      call: async (r: { method: string; path: string }) =>
+        r.path === "/api/time"
+          ? { status: 200, ok: true, text: "", body: { time_zone: "UTC", now } }
+          : {
+              status: 409,
+              ok: false,
+              text: "",
+              body: {
+                error: "remake_required",
+                message: "Saving this change re-makes 2 scheduled emails.",
+                sends: [view("kept", "scheduled"), view("gone", "canceled")],
+              },
+            },
+      read: async () => {
+        throw new Error("not used");
+      },
+      editor: (page: string) => page,
+    };
+    const tool = TOOL_DEFS.find((d) => d.name === "update_settings") as ToolDef;
+    const refused = await tool.run(api as any, { publication: { name: "Renamed" } });
+    expect(refused.isError).toBe(true);
+    const local = formatInTimeZone(now + 2 * 3_600_000, "UTC");
+    const lines = (refused.content[0]?.text ?? "").split("\n");
+    expect(lines.filter((l) => l.startsWith("- "))).toEqual([
+      `- "kept", firing ${local} (in 2 hours) (kept).`,
+      `- "gone", firing ${local} (gone).`,
+    ]);
   });
 
   it("words the sends a save re-made on the zone the save set, not the one before it", async () => {
