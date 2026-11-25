@@ -64,6 +64,8 @@ Each step here changes only your instance's repository. Nothing reaches your dep
 
 1. If the release's **Upgrading from…** paragraph names a setting to add or remove, change `wrangler.jsonc` as it says. When you remove one, remove any comment that describes it too.
 
+    No other step touches the files `kestrel init` wrote outside `.claude/`. Your `README.md`, your `wrangler.jsonc`, and the rest were written once, and they're yours from then on. No upgrade step compares them with the release's or rewrites them. A comment or a README row can differ from what a new instance gets today, and nothing is wrong. A change your `wrangler.jsonc` needs is always named in a release's **Upgrading from…** paragraph.
+
 1. Check the configuration and the types:
 
     ```bash

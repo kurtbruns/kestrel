@@ -22,6 +22,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Changed
 
 - The page a reader sees after subscribing is headed "Check your inbox to finish subscribing" and asks them to click the link in the email just sent to the address they typed, so a typo shows. The subscribe and confirm pages no longer carry a "Newsletter" label over their heading.
+- The upgrade guide now says what an upgrade does about the files `kestrel init` wrote outside `.claude/`, such as `README.md` and `wrangler.jsonc`: nothing. They were written once and are yours, no step compares or rewrites them, and a change `wrangler.jsonc` needs is named in a release's Upgrading paragraph.
 
 ### Fixed
 
