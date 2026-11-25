@@ -92,7 +92,9 @@ const info = {
   version: String(pkg.version ?? "0.0.0"),
   sha: resolveSha(),
   tag: resolveTag(),
-  commitTime: git(["log", "-1", "--format=%cI"]) ?? "",
+  // --no-show-signature: with `log.showSignature` set, git log prints a signed commit's
+  // verification lines to stdout ahead of the format, and they would land in the stamp.
+  commitTime: git(["log", "-1", "--no-show-signature", "--format=%cI"]) ?? "",
   sourceUrl: resolveSourceUrl(),
 };
 
