@@ -54,3 +54,14 @@ export function unauthorizedReason(data: unknown): UnauthorizedReason | null {
   const reason = unauthorizedBody(data)?.reason;
   return reason === "access_not_configured" || reason === "access_unidentified" ? reason : null;
 }
+
+/**
+ * Whether a body is the 503 an admin route gives when the app couldn't check a sign-in
+ * (SPEC §11): the access layer's keys were out of reach, so the sign-in may be good and
+ * signing in again can't help.
+ */
+export function accessUnreachable(data: unknown): boolean {
+  return (
+    typeof data === "object" && (data as { error?: unknown } | null)?.error === "access_unreachable"
+  );
+}

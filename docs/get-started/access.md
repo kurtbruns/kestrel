@@ -118,8 +118,30 @@ The app verifies each login against your team domain, and checks that it was iss
 If a check fails:
 
 - **The editor says the configuration needs a fix.** Store the secret it names. While only one of the two is stored, `/health` answers `500` naming the other, and the public pages say the newsletter is temporarily unavailable.
-- **Cloudflare lets you in, but the editor answers `401`.** Check the two secrets for a typo, and that `ACCESS_ALLOWED_EMAILS`, if you set it, includes your address. The same goes for anyone else you let in.
+- **Cloudflare lets you in, but the editor answers `401`.** Kestrel refused the sign-in, and its log says why. [If Kestrel refuses a sign-in](#if-kestrel-refuses-a-sign-in) lists each reason and its fix.
+- **The editor answers `503`, naming `access_unreachable`.** Kestrel couldn't check the sign-in. Try again in a minute, and if it keeps happening, see [If Kestrel refuses a sign-in](#if-kestrel-refuses-a-sign-in).
 - **The editor says Access let you in but didn't say who you are.** Your login carried no email, which happens through a kind of policy the app doesn't accept, such as a device check. Sign out, and sign in through the policy you made above.
+
+## If Kestrel refuses a sign-in
+
+Cloudflare Access signs you in, and Kestrel then checks that sign-in itself. When Kestrel refuses it, the editor answers `401`, and the log says which check failed. This can happen long after setup, such as when a secret is stored again or the Access team is renamed.
+
+1. In the Cloudflare dashboard, open your Worker's **Observability** tab, as in [Read the logs](verify.md#7-read-the-logs).
+
+2. Filter on `event` equal to `auth.refused`, and read the newest line's `reason`:
+
+    - `audience` means the sign-in was made for another application. Store `ACCESS_AUD` again, with this Access application's audience tag.
+    - `signature` or `issuer` means the sign-in came from another Access team. Store `ACCESS_TEAM_DOMAIN` again, with your team's domain.
+    - `expired` means the sign-in ran out. Sign in again.
+    - `not_yet_valid` means the sign-in starts at a time still ahead of the app's clock, so the two clocks disagree. Try again in a minute.
+    - `malformed` means what arrived wasn't a sign-in from Access, or was one the app couldn't read. Check that you opened the address the Access application covers.
+    - `not_allowed` means the sign-in was good and `ACCESS_ALLOWED_EMAILS` left the address out. Check the list for a typo. The line doesn't name the address, which Cloudflare's own Access log has.
+    - `unidentified` means Access let the sign-in through without an email or a service token. The editor says the same, and names the two kinds of policy Kestrel accepts. The line's `claims` lists what the sign-in did carry, by name.
+    - `jwks_unreachable` means Kestrel couldn't fetch your Access team's signing keys, so it answered `503`, not `401`. Try again in a minute. If it keeps happening, `ACCESS_TEAM_DOMAIN` doesn't name your Access team, so store it again.
+
+3. If the filter shows no line, the request reached Kestrel with no Access sign-in. Check that the Access application covers the address you opened.
+
+[Give the app its two values](#4-give-the-app-its-two-values) shows where to find each value and how to store it. The line never holds the sign-in itself or a value from it. An `unidentified` line names what the sign-in carried, never the values.
 
 ## Allow someone else in
 

@@ -10,7 +10,9 @@ import { vi } from "vitest";
  * The deploy vars for a team of its own, and a way to sign its assertions. A team domain of its
  * own per call, since the app caches a team's keys for the life of the isolate. `stored` is the
  * team domain as the operator entered it, which may carry a scheme or a trailing slash. Stubs
- * `fetch` for the team's keys, so the spec restores mocks in its `afterEach`.
+ * `fetch` for the team's keys, so the spec restores mocks in its `afterEach`. An assertion's
+ * `as` overrides what Access would have signed (its issuer, audience, key id, or its expiry or
+ * start time in seconds since the epoch), for a spec of a token the app must refuse.
  */
 export async function accessDeployment(stored: (team: string) => string = (team) => team) {
   const team = `team-${crypto.randomUUID()}.cloudflareaccess.com`;
@@ -25,13 +27,24 @@ export async function accessDeployment(stored: (team: string) => string = (team)
     }
     return realFetch(input, init);
   });
-  const assertion = async (claims: { email?: string; common_name?: string }) => ({
-    "Cf-Access-Jwt-Assertion": await new SignJWT(claims)
-      .setProtectedHeader({ alg: "RS256", kid: "k1" })
-      .setIssuer(`https://${team}`)
-      .setAudience("aud-tag")
+  const assertion = async (
+    claims: { email?: string; common_name?: string },
+    as: {
+      issuer?: string;
+      audience?: string;
+      kid?: string;
+      expires?: number;
+      notBefore?: number;
+    } = {},
+  ) => ({
+    "Cf-Access-Jwt-Assertion": await new SignJWT(
+      as.notBefore === undefined ? claims : { ...claims, nbf: as.notBefore },
+    )
+      .setProtectedHeader({ alg: "RS256", kid: as.kid ?? "k1" })
+      .setIssuer(as.issuer ?? `https://${team}`)
+      .setAudience(as.audience ?? "aud-tag")
       .setIssuedAt()
-      .setExpirationTime("5m")
+      .setExpirationTime(as.expires ?? "5m")
       .sign(privateKey),
   });
   return { vars, assertion };

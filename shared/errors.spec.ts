@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { devTokenAvailable, unauthorizedReason } from "./errors";
+import { accessUnreachable, devTokenAvailable, unauthorizedReason } from "./errors";
+
+describe("accessUnreachable", () => {
+  it("reads only the 503's own code, never a 401 or a body that isn't one", () => {
+    expect(accessUnreachable({ error: "access_unreachable", retry_after: 1 })).toBe(true);
+    expect(accessUnreachable({ error: "unauthorized" })).toBe(false);
+    expect(accessUnreachable(null)).toBe(false);
+    expect(accessUnreachable("access_unreachable")).toBe(false);
+  });
+});
 
 describe("an admin 401's offer of a dev token (SPEC §11)", () => {
   it("reads only an unauthorized body that says true", () => {

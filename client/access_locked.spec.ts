@@ -166,3 +166,44 @@ describe("the locked editor, when Access let in a login that names no one (SPEC 
     expect(assign).toHaveBeenCalledWith(ACCESS_LOGOUT);
   });
 });
+
+describe("the wall for a sign-in the app couldn't check (SPEC §11)", () => {
+  let fake: FakeApi | undefined;
+  afterEach(() => {
+    fake?.restore();
+    fake = undefined;
+    setToken("");
+    resetShell();
+    document.body.classList.remove("signed-out");
+  });
+
+  it("is what the boot probe shows on a 503 access_unreachable: try again, never a session that expired or a sign-in", async () => {
+    const body = { error: "access_unreachable", message: "…", retry_after: Date.now() + 30_000 };
+    fake = fakeApi([{ path: "/api/whoami", reply: () => jsonResponse(body, 503) }]);
+    expect(await probeSession()).toBeNull();
+    expect(document.body.classList.contains("signed-out")).toBe(true);
+    const wall = $("#app .unreachable-wall");
+    expect(wall.getAttribute("role")).toBe("alert");
+    expect($("h2", wall).textContent).toBe("Kestrel can’t check your sign-in right now");
+    expect(wall.textContent).toContain(
+      "so it couldn’t check your sign-in. Signing in again won’t help.",
+    );
+    // The keys being out of reach says nothing about the sign-in, so the wall doesn't vouch for it.
+    expect(wall.textContent).not.toContain("Nothing is wrong");
+    expect($("a", wall).getAttribute("href")).toBe(ACCESS_GUIDE);
+    expect($$("button", wall).map((b) => b.textContent)).toEqual(["Try again"]);
+    expect(wall.textContent).not.toContain("Session expired");
+    expect(document.querySelector("#app #reauth")).toBeNull();
+    expect(document.activeElement).toBe($("h2", wall));
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("keeps the session-expired wall for a 503 that is some other refusal", async () => {
+    fake = fakeApi([
+      { path: "/api/whoami", reply: () => jsonResponse({ error: "provider_not_connected" }, 503) },
+    ]);
+    expect(await probeSession()).toBeNull();
+    expect($("#app .auth-wall h2").textContent).toBe("Session expired");
+    expect(document.querySelector("#app .unreachable-wall")).toBeNull();
+  });
+});

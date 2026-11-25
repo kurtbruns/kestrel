@@ -364,6 +364,7 @@ describe("API reference is generated from the route registration", () => {
       "unauthorized",
       "forbidden",
       "cross_site_request",
+      "access_unreachable",
     ];
     const onRoutes = new Set<string>(defs.flatMap((d) => (d.errors ?? []).map((e) => e.code)));
     const unlisted = Object.keys(REFUSAL_STATUS).filter((code) => !onRoutes.has(code));

@@ -11,6 +11,7 @@ import * as settingsRoutes from "../src/routes/settings";
 import { accessDeployment } from "./support/access";
 import { NOT_CONNECTED_DEPLOY, SES_DEPLOY } from "./support/deploy";
 import { adminAuth, base, DEV_SECRET, readJson } from "./support/http";
+import { logged } from "./support/log";
 import { fetchWith, withVars } from "./support/worker_env";
 
 describe("Access admin allowlist", () => {
@@ -62,7 +63,12 @@ describe("Access claims to a principal", () => {
       "access_unidentified",
     );
     expect(lines()).toEqual([
-      expect.objectContaining({ event: "auth.unidentified", level: "warn", claims: "iss,sub" }),
+      {
+        event: "auth.refused",
+        level: "warn",
+        reason: "unidentified",
+        claims: "iss,sub",
+      },
     ]);
     expect(JSON.stringify(lines())).not.toContain("device-7");
   });
@@ -78,7 +84,11 @@ describe("Access claims to a principal", () => {
       via: "access",
     });
     expect(lines()).toEqual([
-      expect.objectContaining({ event: "auth.unidentified", claims: "common_name,sub" }),
+      expect.objectContaining({
+        event: "auth.refused",
+        reason: "unidentified",
+        claims: "common_name,sub",
+      }),
     ]);
   });
 });
@@ -408,5 +418,156 @@ describe("the auth mode follows how the request signed in", () => {
     expect(await who.json()).toMatchObject({ auth: { mode: "dev" } });
     const settings = await readJson(await settingsRoutes.get(context("/api/settings")));
     expect(settings.deployment.auth_mode).toBe("dev");
+  });
+});
+
+// A sign-in the app refuses says why in the log, by a reason and nothing of the token, so a
+// locked-out operator can read the cause (SPEC §11, §12).
+describe("a refused Access sign-in says why in the log", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const refusals = (warn: ReturnType<typeof vi.spyOn>) =>
+    logged(warn).filter((line) => line.event === "auth.refused");
+
+  it("answers 401 to a token for another audience, and logs auth.refused with reason audience (SPEC §11)", async () => {
+    const { vars, assertion } = await accessDeployment();
+    const warn = vi.spyOn(console, "warn");
+    const res = await fetchWith(vars, "/api/whoami", {
+      headers: await assertion({ email: "you@example.com" }, { audience: "another-app" }),
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual(PLAIN_401);
+    expect(refusals(warn)).toEqual([
+      { event: "auth.refused", level: "warn", run: expect.any(String), reason: "audience" },
+    ]);
+  });
+
+  it("answers 503 with retry_after when the team's keys can't be fetched, and logs reason jwks_unreachable (SPEC §11)", async () => {
+    // A sign-in that would verify, on a deployment whose team domain serves no keys.
+    const { vars, assertion } = await accessDeployment();
+    const person = await assertion({ email: "you@example.com" });
+    const service = await assertion({ common_name: "e367c0ffee5eb4.access" });
+    const team = `team-${crypto.randomUUID()}.cloudflareaccess.com`;
+    for (const [answer, keys] of Object.entries({
+      "no answer": () => Promise.reject(new TypeError("Network connection lost.")),
+      "a 404": () => Promise.resolve(new Response("not found", { status: 404 })),
+      "a timeout": () => Promise.reject(new DOMException("timed out", "TimeoutError")),
+      "a 200 that isn't a key set": () => Promise.resolve(Response.json({ keys: "none" })),
+      // A program's sign-in is answered the same way as a person's.
+      "no answer to a service token": () => Promise.reject(new TypeError("Network down.")),
+    })) {
+      const headers = answer.endsWith("service token") ? service : person;
+      const realFetch = globalThis.fetch;
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+        const url = input instanceof Request ? input.url : String(input);
+        return url === `https://${team}/cdn-cgi/access/certs` ? keys() : realFetch(input, init);
+      });
+      const warn = vi.spyOn(console, "warn");
+      const before = Date.now();
+      const res = await fetchWith({ ...vars, ACCESS_TEAM_DOMAIN: team }, "/api/whoami", {
+        headers,
+      });
+      expect(res.status, answer).toBe(503);
+      expect(res.headers.get("Retry-After"), answer).toBe("30");
+      const body = await readJson(res);
+      expect(body, answer).toEqual({
+        error: "access_unreachable",
+        message: expect.stringContaining("couldn't fetch Cloudflare Access's signing keys"),
+        retry_after: expect.any(Number),
+      });
+      expect(body.retry_after, answer).toBeGreaterThanOrEqual(before + 30_000);
+      expect(body.retry_after, answer).toBeLessThanOrEqual(Date.now() + 30_000);
+      expect(refusals(warn), answer).toEqual([
+        {
+          event: "auth.refused",
+          level: "warn",
+          run: expect.any(String),
+          reason: "jwks_unreachable",
+        },
+      ]);
+      vi.restoreAllMocks();
+    }
+  });
+
+  it("names an expired, a not-yet-valid, a foreign-issuer, a wrongly signed, and a malformed token each by its reason, with a 401 and nothing of the token (SPEC §12)", async () => {
+    const { vars, assertion } = await accessDeployment();
+    // A real assertion with its signature replaced by another of the same length.
+    const good = (await assertion({ email: "you@example.com" }))["Cf-Access-Jwt-Assertion"];
+    const [header, payload, signature] = good.split(".") as [string, string, string];
+    const forged = `${header}.${payload}.${"A".repeat(signature.length)}`;
+    const hour = Math.floor(Date.now() / 1000) - 3600;
+    const tokens = {
+      expired: await assertion({ email: "you@example.com" }, { expires: hour }),
+      not_yet_valid: await assertion({ email: "you@example.com" }, { notBefore: hour + 7200 }),
+      issuer: await assertion(
+        { email: "you@example.com" },
+        { issuer: "https://elsewhere.example" },
+      ),
+      signature: { "Cf-Access-Jwt-Assertion": forged },
+      // Signed under a key id the team doesn't publish, as another team's token is.
+      unknown_key: await assertion({ email: "you@example.com" }, { kid: "k2" }),
+      malformed: { "Cf-Access-Jwt-Assertion": "not-a-token" },
+    };
+    const warn = vi.spyOn(console, "warn");
+    for (const [reason, headers] of Object.entries(tokens)) {
+      const res = await fetchWith(vars, "/api/whoami", { headers });
+      expect(res.status, reason).toBe(401);
+      expect(await res.json(), reason).toEqual(PLAIN_401);
+    }
+    expect(refusals(warn).map((line) => line.reason)).toEqual(
+      Object.keys(tokens).map((reason) => (reason === "unknown_key" ? "signature" : reason)),
+    );
+    const text = JSON.stringify(logged(warn));
+    expect(text).not.toContain("example.com");
+    expect(text).not.toContain("aud-tag");
+  });
+
+  it("logs reason not_allowed, without the email, for a verified person the allowlist leaves out, and nothing more (SPEC §12)", async () => {
+    const { vars, assertion } = await accessDeployment();
+    const warn = vi.spyOn(console, "warn");
+    const res = await fetchWith(
+      { ...vars, ACCESS_ALLOWED_EMAILS: "you@example.com" },
+      "/api/whoami",
+      { headers: await assertion({ email: "intruder@example.com" }) },
+    );
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual(PLAIN_401);
+    // The one line: every other field would be the token's.
+    expect(logged(warn)).toEqual([
+      { event: "auth.refused", level: "warn", run: expect.any(String), reason: "not_allowed" },
+    ]);
+  });
+
+  it("logs one auth.refused line, reason unidentified, with its claim names, for a sign-in that names no one (SPEC §11)", async () => {
+    const { vars, assertion } = await accessDeployment();
+    const warn = vi.spyOn(console, "warn");
+    const res = await fetchWith(vars, "/api/whoami", { headers: await assertion({}) });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({
+      error: "unauthorized",
+      reason: "access_unidentified",
+    });
+    expect(logged(warn)).toEqual([
+      {
+        event: "auth.refused",
+        level: "warn",
+        run: expect.any(String),
+        reason: "unidentified",
+        claims: "aud,exp,iat,iss",
+      },
+    ]);
+  });
+
+  it("logs nothing for a request with no Access assertion, or one that verifies", async () => {
+    const { vars, assertion } = await accessDeployment();
+    const warn = vi.spyOn(console, "warn");
+    expect((await fetchWith(vars, "/api/whoami")).status).toBe(401);
+    const ok = await fetchWith(vars, "/api/whoami", {
+      headers: await assertion({ email: "you@example.com" }),
+    });
+    expect(ok.status).toBe(200);
+    expect(refusals(warn)).toEqual([]);
   });
 });
