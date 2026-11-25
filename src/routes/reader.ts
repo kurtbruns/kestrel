@@ -31,6 +31,12 @@ export function archiveHomeUrl(config: Config): string {
   return `${config.archiveOrigin}${config.archiveBasePath}`;
 }
 
+/** The archive's feed (SPEC §5), beside the index it mirrors, on the archive's origin and
+ *  base path, so a feed for an archive served inside a surrounding website is found there. */
+export function archiveFeedUrl(config: Config): string {
+  return `${archiveHomeUrl(config)}/feed.xml`;
+}
+
 /** The dev-only "Open dashboard" target for the reader surface, or `undefined` when
  *  not a dev-shaped instance. Only local dev (no Access edge) surfaces this link, so
  *  a deployed public page never points at the Access-gated editor (SPEC §5, §11). */

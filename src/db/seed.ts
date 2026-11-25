@@ -98,6 +98,8 @@ export interface SeedSend {
   fire_at: number;
   rendered_html: string;
   rendered_text: string;
+  /** The post's web copy, as the render gives it beside the email (SPEC §5). */
+  rendered_web: string;
   subject: string;
   recipient_count: number;
   scheduled_at: number;
@@ -287,8 +289,8 @@ export async function insertSend(db: D1Database, row: SeedSend): Promise<void> {
   const insert = db
     .prepare(
       `INSERT INTO sends
-         (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, audience_resolved_at, web_link, rev)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, 'unlisted', ${NEXT_REV})`,
+         (id, post_id, status, fire_at, rendered_html, rendered_text, rendered_web, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, audience_resolved_at, web_link, rev)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, 'unlisted', ${NEXT_REV})`,
     )
     .bind(
       row.id,
@@ -297,6 +299,7 @@ export async function insertSend(db: D1Database, row: SeedSend): Promise<void> {
       row.fire_at,
       row.rendered_html,
       row.rendered_text,
+      row.rendered_web,
       row.subject,
       row.recipient_count,
       row.scheduled_at,

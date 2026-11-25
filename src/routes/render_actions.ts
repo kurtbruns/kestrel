@@ -189,6 +189,7 @@ export async function webPage(c: RequestContext): Promise<Response> {
       config: c.config,
       identity,
       dateMs,
+      listed: !input.post.email_only,
       // The head the post page will carry, so the publisher proofs its link preview too.
       describe: postPageDescription(
         c.config,

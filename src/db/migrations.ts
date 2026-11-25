@@ -37,6 +37,7 @@ export const SHIPPED_MIGRATIONS: readonly string[] = [
   "0024_sending_receipts.sql",
   "0026_sends_requested_local_time.sql",
   "0027_subscribers_confirm_browser.sql",
+  "0028_sends_rendered_web.sql",
 ];
 
 /**

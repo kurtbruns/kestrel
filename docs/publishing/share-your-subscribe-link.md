@@ -24,4 +24,8 @@ Change its subject, message, button label, and reassurance line under **Settings
 
 **Settings → Ways to subscribe → Embed a form** gives you HTML to paste into any page you control. **Styled** looks like your subscribe page, and **Plain** takes your site's own styles. A reader who submits it confirms by email, as on the subscribe page.
 
+## Readers who use a feed reader
+
+Your archive has an RSS feed at `feed.xml` under your archive's address, such as `https://newsletter.example.com/archive/feed.xml`. It carries your 20 newest posts in the archive, each in full as it was sent, without the unsubscribe link and other email-only parts. An email-only post stays out of it. A reader can also paste your home page, your archive, or a post's address into their feed reader, which finds the feed from there. The feed is a way to read along, not a subscription: it doesn't add anyone to your list.
+
 **Settings → Reader pages** shows every page a reader can land on, at desktop and phone widths, without walking through the steps. You can also limit how often anyone submits the form, which slows down abuse ([Rate-limit the subscribe form](../guides/rate-limit.md)).

@@ -2647,6 +2647,19 @@ export function createRouter({
       handler: archiveRoutes.archiveIndex,
     },
     {
+      // Before `:slug`, though no slug can be `feed.xml` (a slug has no dot).
+      method: "GET",
+      path: `${archiveBasePath}/feed.xml`,
+      access: "public",
+      resource: "archive",
+      title: "Follow the archive",
+      summary:
+        "The archive as an RSS 2.0 feed: the newest posts the archive index lists, each in full as HTML.",
+      description:
+        "`application/rss+xml`. The 20 newest listed posts, newest first: each item's `link` and `guid` are its archive address, `description` is the summary its post page gives search engines, and `content:encoded` is the post as it was sent (its plain text, for a send frozen before the web copy was kept). Email-only and unpublished posts are left out, as the index leaves them out. The home page, the archive index, and each listed post's page name it in an `alternate` link. Cached five minutes.",
+      handler: archiveRoutes.archiveFeed,
+    },
+    {
       method: "GET",
       path: `${archiveBasePath}/:slug`,
       access: "public",
