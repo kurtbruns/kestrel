@@ -288,8 +288,9 @@ describe("buildSendView — derived phase", () => {
       const { done, percent } = dispatch(over);
       return [done, percent];
     };
-    // Fired, its audience still to resolve: the estimate is the audience, and no one is done.
-    expect(dispatch({ audience_resolved_at: null })).toEqual({
+    // Fired with the provider unavailable, so its audience is still to resolve: the
+    // estimate is the audience, no one is done, and nothing says how fast it will go.
+    expect(dispatch({ audience_resolved_at: null, halt_reason: "unavailable" })).toEqual({
       done: 0,
       percent: 0,
       rate_per_min: null,
