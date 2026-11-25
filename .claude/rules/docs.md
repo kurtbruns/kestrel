@@ -87,6 +87,7 @@ A setup guide page, after Linode's guides:
 - Code is never a link: link the words around it, or use words in place of the code.
 - Code is never bold. A list that explains settings or values leads each item with the code alone (`` - `routes` puts the app… ``); its chip already sets it apart.
 - Placeholders: the example names (`example.com`, `newsletter.example.com`, `send.example.com`); UPPER_SNAKE such as `YOUR_USERNAME` for values only the reader knows; `REPLACE_WITH_…` for ids pasted into config.
+- Steps carry their real numbers (`1.`, `2.`, `3.`), never `1.` repeated. Claude and anyone reading the file follow the Markdown as written, where a repeated `1.` leaves "step 3" naming nothing. Inserting a step renumbers the ones after it. A spec fails on a list out of sequence.
 - Optional steps start with **(Optional)**.
 - Notes and callouts sparingly, and only for what isn't needed to succeed.
 

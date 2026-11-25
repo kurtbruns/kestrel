@@ -316,6 +316,46 @@ describe("each doc as Markdown, for an agent (docMarkdown)", () => {
     expect(docMarkdown("nope")).toBeNull();
   });
 
+  it("numbers every step as it reads, 1, 2, 3, so the Markdown an agent follows names each step", () => {
+    const { sets, docs } = renderDocs();
+    for (const name of [...docs.map((d) => d.slug), ...sets.map((s) => s.id)]) {
+      // The next number each open list expects, by its indent. A fence's contents aren't steps.
+      const next = new Map<number, number>();
+      let fence: string | null = null;
+      for (const line of (docMarkdown(name) ?? "").split("\n")) {
+        const text = line.trimStart();
+        const indent = line.length - text.length;
+        if (fence) {
+          if (text.startsWith(fence)) {
+            fence = null;
+          }
+          continue;
+        }
+        const opened = text.match(/^(`{3,}|~{3,})/);
+        if (opened) {
+          fence = opened[1] ?? null;
+          continue;
+        }
+        if (text === "") {
+          continue;
+        }
+        const item = text.match(/^(\d+)\. /);
+        // Any other line ends the lists at its indent or deeper, and an item ends the deeper ones.
+        for (const at of [...next.keys()]) {
+          if (at > indent || (!item && at === indent)) {
+            next.delete(at);
+          }
+        }
+        if (!item) {
+          continue;
+        }
+        const expected = next.get(indent) ?? 1;
+        expect(Number(item[1]), `${name}: "${text.slice(0, 60)}"`).toBe(expected);
+        next.set(indent, expected + 1);
+      }
+    }
+  });
+
   it("leaves link syntax inside code as written", () => {
     const md = [
       "See [Deploy](../get-started/deploy.md#check-it).",

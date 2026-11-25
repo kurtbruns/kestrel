@@ -17,7 +17,7 @@ The address you sign up with belongs to the account's root user, the identity th
 
 1. Choose an address named for its purpose, on your own domain, such as `aws@example.com`. Use one you'll keep, since recovering the account depends on it.
 
-1. Make sure it receives mail before you sign up, since AWS emails it a code right away. If `example.com` receives no mail yet, forward the address to your inbox with Cloudflare Email Routing, as [Enable Email Routing](https://developers.cloudflare.com/email-routing/get-started/enable-email-routing/) describes. If `example.com` already receives mail at a mail host, create the address there instead, since Email Routing replaces a domain's mail servers.
+2. Make sure it receives mail before you sign up, since AWS emails it a code right away. If `example.com` receives no mail yet, forward the address to your inbox with Cloudflare Email Routing, as [Enable Email Routing](https://developers.cloudflare.com/email-routing/get-started/enable-email-routing/) describes. If `example.com` already receives mail at a mail host, create the address there instead, since Email Routing replaces a domain's mail servers.
 
 ## 2. Sign up
 
@@ -25,15 +25,15 @@ AWS may offer two ways to sign up. Choose **Sign up for AWS (advanced)**. The ot
 
 1. Open [Sign up for AWS](https://signin.aws.amazon.com/signup?request_type=register). If it offers a choice, select **Sign up for AWS (advanced)**.
 
-1. Enter the address from section 1 as the root user's email address, and an account name, such as your publication's name. Verify the address with the code AWS sends to it, and choose a password for the root user.
+2. Enter the address from section 1 as the root user's email address, and an account name, such as your publication's name. Verify the address with the code AWS sends to it, and choose a password for the root user.
 
-1. Choose the paid plan. The free plan closes the account automatically after six months, or sooner once its credits are used, unless you upgrade it before then. The paid plan gets the same sign-up credits, and keeps running once they're used. [AWS Free Tier plans](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-plans.html) describes both.
+3. Choose the paid plan. The free plan closes the account automatically after six months, or sooner once its credits are used, unless you upgrade it before then. The paid plan gets the same sign-up credits, and keeps running once they're used. [AWS Free Tier plans](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-plans.html) describes both.
 
-1. Enter your contact information and payment details, and confirm your phone number if AWS asks.
+4. Enter your contact information and payment details, and confirm your phone number if AWS asks.
 
-1. Choose the free Basic support plan. It's enough for everything the setup guide does. Asking AWS to let SES send to anyone is a form in the SES console, with no paid support plan needed.
+5. Choose the free Basic support plan. It's enough for everything the setup guide does. Asking AWS to let SES send to anyone is a form in the SES console, with no paid support plan needed.
 
-1. Complete the sign-up. The console opens, signed in as the root user, and AWS emails the account's address when the account is ready.
+6. Complete the sign-up. The console opens, signed in as the root user, and AWS emails the account's address when the account is ready.
 
 ## 3. Secure the root user
 
@@ -41,9 +41,9 @@ The root user can do anything in the account, including close it, so it needs mo
 
 1. In the console, select your account name at the top right, and then **Security credentials**.
 
-1. Under **Multi-factor authentication (MFA)**, choose **Assign MFA device**. Enter a device name, select **Passkey or Security Key**, and follow the prompts. A passkey on your computer or phone works.
+2. Under **Multi-factor authentication (MFA)**, choose **Assign MFA device**. Enter a device name, select **Passkey or Security Key**, and follow the prompts. A passkey on your computer or phone works.
 
-1. Leave **Access keys** empty. A root user's key could do anything the root user can. [Connect Amazon SES](ses.md#5-create-the-apps-aws-key) makes a separate key that can only send email and read the account's sending status.
+3. Leave **Access keys** empty. A root user's key could do anything the root user can. [Connect Amazon SES](ses.md#5-create-the-apps-aws-key) makes a separate key that can only send email and read the account's sending status.
 
 ## 4. Set a budget alert
 
@@ -51,19 +51,19 @@ AWS charges for what you use, with no spending limit, so a mistake or a leaked k
 
 1. In the console, open **Billing and Cost Management**, then **Budgets**, and choose **Create budget**.
 
-1. Under **Use a template (simplified)**, select **Monthly cost budget**.
+2. Under **Use a template (simplified)**, select **Monthly cost budget**.
 
-1. Enter a name, and an amount a little above what you expect to spend each month. Add the account's email address, or your own, as an email recipient. Choose **Create budget**.
+3. Enter a name, and an amount a little above what you expect to spend each month. Add the account's email address, or your own, as an email recipient. Choose **Create budget**.
 
-1. AWS emails each recipient to verify it, and sends alerts only to a verified address. Open that email while you're signed in to the account, and verify the address within 12 hours, as [Budgets email recipients](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-email-recipients.html) describes.
+4. AWS emails each recipient to verify it, and sends alerts only to a verified address. Open that email while you're signed in to the account, and verify the address within 12 hours, as [Budgets email recipients](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-email-recipients.html) describes.
 
 ## Check it
 
 1. Sign out, and sign in again as the root user, with the address from section 1. After the password, AWS asks for your passkey or security key.
 
-1. Under **Security credentials**, the MFA list shows your device, and **Access keys** lists none.
+2. Under **Security credentials**, the MFA list shows your device, and **Access keys** lists none.
 
-1. Under **Budgets**, your budget is listed, and its email recipient shows as **Active**.
+3. Under **Budgets**, your budget is listed, and its email recipient shows as **Active**.
 
     If it shows as **Pending**, select **Resend verification** on its row, and verify the address as section 4 describes.
 

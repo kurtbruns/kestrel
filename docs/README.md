@@ -7,12 +7,12 @@ These pages cover deploying and running your own Kestrel, from an empty reposito
 These are the steps to deploy a Kestrel instance and get it ready to send. Each one ends with a check, so you know it worked before you move on.
 
 1. [Deploy the app](get-started/deploy.md)
-1. [Lock the dashboard with Access](get-started/access.md)
-1. [Create an AWS account](get-started/aws-account.md)
-1. [Connect Amazon SES](get-started/ses.md)
-1. [Request production access](get-started/production-access.md)
-1. [Verify it works](get-started/verify.md)
-1. [Go live](get-started/go-live.md)
+2. [Lock the dashboard with Access](get-started/access.md)
+3. [Create an AWS account](get-started/aws-account.md)
+4. [Connect Amazon SES](get-started/ses.md)
+5. [Request production access](get-started/production-access.md)
+6. [Verify it works](get-started/verify.md)
+7. [Go live](get-started/go-live.md)
 
 ## Guides
 

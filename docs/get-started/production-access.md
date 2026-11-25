@@ -15,9 +15,9 @@ AWS may visit the publication's website to review the request. On a new instance
 
 1. In the editor, open **Settings → Publication identity**, and enter the name and tagline. Both can change later.
 
-1. If the newsletter will mainly sell something, add a mailing address there too, with **Add a mailing address**. [When to provide a mailing address](../publishing/name-your-publication.md#when-to-provide-a-mailing-address) explains when US law asks for one.
+2. If the newsletter will mainly sell something, add a mailing address there too, with **Add a mailing address**. [When to provide a mailing address](../publishing/name-your-publication.md#when-to-provide-a-mailing-address) explains when US law asks for one.
 
-1. Open `https://newsletter.example.com/` in a browser. The home page shows the tagline, and a subscribe form.
+3. Open `https://newsletter.example.com/` in a browser. The home page shows the tagline, and a subscribe form.
 
 ## 2. Submit the request
 
@@ -25,16 +25,16 @@ AWS reviews each request by hand, for the region the app sends from.
 
 1. In the [SES console](https://console.aws.amazon.com/ses/), choose the region the app sends from, the one in `AWS_REGION`. Open the **Account dashboard**, select **View Get set up page**, and then **Request production access**.
 
-1. Fill in the request:
+2. Fill in the request:
 
     - **Mail type:** Marketing
     - **Website URL:** `https://newsletter.example.com/`
 
     Leave the other fields as they are.
 
-1. Check the acknowledgement, and select **Submit request**. AWS Support answers by email.
+3. Check the acknowledgement, and select **Submit request**. AWS Support answers by email.
 
-1. Within about ten minutes, the editor's **Settings → Email provider** says AWS is reviewing your request for production access, and later whether AWS has granted it.
+4. Within about ten minutes, the editor's **Settings → Email provider** says AWS is reviewing your request for production access, and later whether AWS has granted it.
 
 Within seconds of every request, AWS sends an automated email asking for more information, in a support case. The SES console then shows **More information needed**, and the editor says AWS hasn't granted production access yet and has replied in AWS Support, with the case number. That's expected, and not a refusal: answer it as the next section describes.
 
@@ -58,10 +58,10 @@ Until AWS grants production access, SES sends only to your verified addresses, s
 
 1. In the editor, open **Settings → Email provider**. Its **Production access** row reads **Production**. From the API, `npx kestrel api GET /api/provider` shows `state` as `production`.
 
-1. If it reads **Sandbox**, AWS hasn't granted access yet. If it also says AWS has replied, with a case number, answer in that case, as section 3 describes. Meanwhile, continue with [Verify it works](verify.md), which runs in the sandbox. Come back to this section when AWS answers.
+2. If it reads **Sandbox**, AWS hasn't granted access yet. If it also says AWS has replied, with a case number, answer in that case, as section 3 describes. Meanwhile, continue with [Verify it works](verify.md), which runs in the sandbox. Come back to this section when AWS answers.
 
-1. If it says Kestrel's AWS key needs permission to read your account, select **Add the permission** and follow the step it opens. The app checks again within an hour.
+3. If it says Kestrel's AWS key needs permission to read your account, select **Add the permission** and follow the step it opens. The app checks again within an hour.
 
-1. If it reads just "Amazon SES", with nothing under it, the app hasn't heard from SES yet. Look again in ten minutes. If it still reads that way, the app's logs say why, in their `provider.account_checked` line, as [Read the logs](verify.md#7-read-the-logs) describes.
+4. If it reads just "Amazon SES", with nothing under it, the app hasn't heard from SES yet. Look again in ten minutes. If it still reads that way, the app's logs say why, in their `provider.account_checked` line, as [Read the logs](verify.md#7-read-the-logs) describes.
 
 Next, [verify it works](verify.md).

@@ -19,13 +19,13 @@ Managed OAuth lets an app such as Claude act with a person's account, the way th
 
 1. In **Zero Trust**, go to **Access controls → Applications**, and select **Configure** on your application.
 
-1. On the **Additional settings** tab, select the **OAuth** filter, and find **Managed OAuth (Beta)**.
+2. On the **Additional settings** tab, select the **OAuth** filter, and find **Managed OAuth (Beta)**.
 
-1. Turn on **Managed OAuth**.
+3. Turn on **Managed OAuth**.
 
-1. Turn on **Allow localhost clients** and **Allow loopback clients**. Claude Code receives the person's approval on their own computer, at a `localhost` or `127.0.0.1` address.
+4. Turn on **Allow localhost clients** and **Allow loopback clients**. Claude Code receives the person's approval on their own computer, at a `localhost` or `127.0.0.1` address.
 
-1. Under **Allowed redirect URIs**, add Claude's address, so Claude Desktop and claude.ai can connect:
+5. Under **Allowed redirect URIs**, add Claude's address, so Claude Desktop and claude.ai can connect:
 
     ```
     https://claude.ai/api/mcp/auth_callback
@@ -33,11 +33,11 @@ Managed OAuth lets an app such as Claude act with a person's account, the way th
 
     Access accepts Claude only with an address listed here. Leave it out if no one will connect Claude Desktop or claude.ai.
 
-1. Set the **Grant session duration** to 1 week. A connection renews itself while it's in use until this ends, and then Claude asks the person to approve it again. Cloudflare recommends one to two weeks for a command-line tool.
+6. Set the **Grant session duration** to 1 week. A connection renews itself while it's in use until this ends, and then Claude asks the person to approve it again. Cloudflare recommends one to two weeks for a command-line tool.
 
-1. Save the application.
+7. Save the application.
 
-1. Check that a request with no sign-in now says where an app signs in:
+8. Check that a request with no sign-in now says where an app signs in:
 
     ```bash
     curl -si https://newsletter.example.com/api/whoami
@@ -63,7 +63,7 @@ Anyone the Access application's Allow policy lets into the dashboard can connect
 
 1. Connect Claude Desktop or claude.ai, as [Connect Claude](../publishing/connect-claude.md) describes. The connector lists Kestrel's tools, such as **Get the publication** and **Save a draft**.
 
-1. Ask Claude what the publication is called. It answers with the name the dashboard shows.
+2. Ask Claude what the publication is called. It answers with the name the dashboard shows.
 
 If a check fails:
 
