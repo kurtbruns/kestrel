@@ -134,9 +134,10 @@ Cloudflare Access signs you in, and Kestrel then checks that sign-in itself. Whe
     - `signature` or `issuer` means the sign-in came from another Access team. Store `ACCESS_TEAM_DOMAIN` again, with your team's domain.
     - `expired` means the sign-in ran out. Sign in again.
     - `malformed` means what arrived wasn't a sign-in from Access. Check that you opened the address the Access application covers.
+    - `not_allowed` means the sign-in was good and `ACCESS_ALLOWED_EMAILS` left the address out. Check the list for a typo. The line doesn't name the address, which Cloudflare's own Access log has.
     - `jwks_unreachable` means Kestrel couldn't fetch your Access team's signing keys, so it answered `503`, not `401`. Try again in a minute. If it keeps happening, `ACCESS_TEAM_DOMAIN` doesn't name your Access team, so store it again.
 
-1. If there's no line, Kestrel accepted the sign-in and `ACCESS_ALLOWED_EMAILS` left the address out. Check the list for a typo.
+1. If there's no `auth.refused` line, filter on `auth.unidentified`. That line means Access sent neither an email nor a service token, which the editor also says. With neither line, the request reached Kestrel with no Access sign-in at all: check that the Access application covers the address you opened.
 
 [Give the app its two values](#4-give-the-app-its-two-values) shows where to find each value and how to store it. The line never holds the sign-in itself or anything in it.
 

@@ -504,6 +504,30 @@ describe("a refused Access sign-in says why in the log", () => {
     expect(text).not.toContain("aud-tag");
   });
 
+  it("logs reason not_allowed, without the email, for a verified person the allowlist leaves out, and nothing more (SPEC §12)", async () => {
+    const { vars, assertion } = await accessDeployment();
+    const warn = vi.spyOn(console, "warn");
+    const res = await fetchWith(
+      { ...vars, ACCESS_ALLOWED_EMAILS: "you@example.com" },
+      "/api/whoami",
+      { headers: await assertion({ email: "intruder@example.com" }) },
+    );
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual(PLAIN_401);
+    // The one line: every other field would be the token's.
+    expect(logged(warn)).toEqual([
+      { event: "auth.refused", level: "warn", run: expect.any(String), reason: "not_allowed" },
+    ]);
+  });
+
+  it("logs auth.unidentified alone, never auth.refused too, for a sign-in that names no one (SPEC §11)", async () => {
+    const { vars, assertion } = await accessDeployment();
+    const warn = vi.spyOn(console, "warn");
+    const res = await fetchWith(vars, "/api/whoami", { headers: await assertion({}) });
+    expect(res.status).toBe(401);
+    expect(logged(warn).map((line) => line.event)).toEqual(["auth.unidentified"]);
+  });
+
   it("logs nothing for a request with no Access assertion, or one that verifies", async () => {
     const { vars, assertion } = await accessDeployment();
     const warn = vi.spyOn(console, "warn");

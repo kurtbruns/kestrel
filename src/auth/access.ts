@@ -13,7 +13,7 @@
  *
  * A token that fails verification is refused with one `auth.refused` line saying why
  * (SPEC §12), so a locked-out operator can tell a mistyped audience from a wrong team
- * domain or an expired sign-in. When the team's keys can't be fetched the token is neither
+ * domain or an expired sign-in, and so is a verified person the allowlist leaves out. When the team's keys can't be fetched the token is neither
  * valid nor invalid: the answer is `access_unreachable`, which the middleware turns into
  * a 503 to try again, never a 401 that sends the person to sign in again for nothing.
  */
@@ -56,8 +56,9 @@ type Unidentified = Extract<UnauthorizedReason, "access_unidentified">;
 export type Unreachable = "access_unreachable";
 
 /**
- * Why a token failed verification, as `auth.refused` names it: the catalog an operator
- * filters on, so a name here is public surface.
+ * Why a sign-in was refused, as `auth.refused` names it: the catalog an operator filters
+ * on, so a name here is public surface. All but `not_allowed` are a token that failed
+ * verification; `not_allowed` is a verified person the allowlist leaves out.
  */
 export type RefusedReason =
   | "jwks_unreachable"
@@ -65,7 +66,8 @@ export type RefusedReason =
   | "audience"
   | "issuer"
   | "signature"
-  | "malformed";
+  | "malformed"
+  | "not_allowed";
 
 // What jose throws when the keys themselves can't be had: a timeout, an answer that isn't a
 // key set, and its one generic error, which only the key fetch throws (not 200, not JSON).
@@ -80,7 +82,7 @@ const JWKS_FAILURES: ReadonlySet<string> = new Set([
  * the claim's name: never from its message or the claims it carries, so nothing of the token
  * can reach the log. An error that isn't jose's came from the key fetch itself (the network).
  */
-export function refusedReason(err: unknown): RefusedReason {
+export function refusedReason(err: unknown): Exclude<RefusedReason, "not_allowed"> {
   if (!(err instanceof errors.JOSEError) || JWKS_FAILURES.has(err.code)) {
     return "jwks_unreachable";
   }
@@ -109,17 +111,26 @@ export async function verifyAccessJwt(
     return null;
   }
   const issuer = `https://${config.accessTeamDomain}`;
+  let payload: JWTPayload;
   try {
-    const { payload } = await jwtVerify(token, jwksFor(issuer), {
+    ({ payload } = await jwtVerify(token, jwksFor(issuer), {
       issuer,
       audience: config.accessAud,
-    });
-    return principalFromClaims(payload, config.accessAllowedEmails);
+    }));
   } catch (err) {
     const reason = refusedReason(err);
     log.warn("auth.refused", { reason });
     return reason === "jwks_unreachable" ? "access_unreachable" : null;
   }
+  const principal = principalFromClaims(payload, config.accessAllowedEmails);
+  if (principal === null) {
+    // A verified person the allowlist leaves out. Logged without the email, which Access's
+    // own log has, so every 401 on a request that carried an assertion has its one line:
+    // this, a failed check above, or `auth.unidentified`.
+    const reason: RefusedReason = "not_allowed";
+    log.warn("auth.refused", { reason });
+  }
+  return principal;
 }
 
 /**
