@@ -326,7 +326,9 @@ describe("each doc as Markdown, for an agent (docMarkdown)", () => {
         const text = line.trimStart();
         const indent = line.length - text.length;
         if (fence) {
-          if (text.startsWith(fence)) fence = null;
+          if (text.startsWith(fence)) {
+            fence = null;
+          }
           continue;
         }
         const opened = text.match(/^(`{3,}|~{3,})/);
@@ -334,12 +336,19 @@ describe("each doc as Markdown, for an agent (docMarkdown)", () => {
           fence = opened[1] ?? null;
           continue;
         }
-        if (text === "") continue;
+        if (text === "") {
+          continue;
+        }
         const item = text.match(/^(\d+)\. /);
         // Any other line ends the lists at its indent or deeper, and an item ends the deeper ones.
-        for (const at of [...next.keys()])
-          if (at > indent || (!item && at === indent)) next.delete(at);
-        if (!item) continue;
+        for (const at of [...next.keys()]) {
+          if (at > indent || (!item && at === indent)) {
+            next.delete(at);
+          }
+        }
+        if (!item) {
+          continue;
+        }
         const expected = next.get(indent) ?? 1;
         expect(Number(item[1]), `${name}: "${text.slice(0, 60)}"`).toBe(expected);
         next.set(indent, expected + 1);
