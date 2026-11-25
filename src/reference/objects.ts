@@ -483,7 +483,7 @@ const SEND_FIELDS: ReferenceField[] = [
     name: "dispatch",
     type: "{ done, percent, rate_per_min, eta_ms }",
     description:
-      "Hand-off progress. `rate_per_min` is a sweep tick's (one a minute); `eta_ms` counts the ticks left, only while handing off.",
+      "Hand-off progress: `done` recipients the send has finished with, and `percent` of the audience. Both are 0 until the send fires, and on a send canceled before it did. `rate_per_min` is a sweep tick's (one a minute); `eta_ms` counts the ticks left, only while handing off.",
   },
   {
     name: "delivery",
