@@ -10,9 +10,9 @@ Access is part of Cloudflare Zero Trust. Your account needs a Zero Trust organiz
 
 1. In the [Cloudflare dashboard](https://dash.cloudflare.com/), select **Zero Trust**.
 
-1. Choose a team name. It becomes your team domain, `YOUR_TEAM.cloudflareaccess.com`, where your login page lives.
+2. Choose a team name. It becomes your team domain, `YOUR_TEAM.cloudflareaccess.com`, where your login page lives.
 
-1. Choose a plan. The Free plan covers a newsletter's editors. Cloudflare asks for payment details even on the Free plan, and doesn't charge them.
+3. Choose a plan. The Free plan covers a newsletter's editors. Cloudflare asks for payment details even on the Free plan, and doesn't charge them.
 
 ## 2. Create the Access application
 
@@ -20,15 +20,15 @@ The editor lives under `/dashboard`, and the API under `/api`. One application c
 
 1. In **Zero Trust**, go to **Access controls → Applications**, and select **Create new application**.
 
-1. Select **Self-hosted and private**.
+2. Select **Self-hosted and private**.
 
-1. Select **Add public hostname**, and enter your app's hostname with the first path:
+3. Select **Add public hostname**, and enter your app's hostname with the first path:
 
     - **Subdomain:** `newsletter`
     - **Domain:** `example.com`
     - **Path:** `dashboard`
 
-1. Add a second public hostname with the same subdomain and domain, and the path `api`:
+4. Add a second public hostname with the same subdomain and domain, and the path `api`:
 
     | Path | What it covers |
     | --- | --- |
@@ -37,11 +37,11 @@ The editor lives under `/dashboard`, and the API under `/api`. One application c
 
     Each path covers everything under it. Leave every other path out. The home page, the archive, subscribing, unsubscribing, images, and your email provider's webhooks must stay public.
 
-1. Add only these two public hostnames. If the form also shows an empty private hostname or IP row, remove it. Otherwise saving fails with an error naming `use_clientless_isolation_app_launcher_url`, saying it needs private destinations.
+5. Add only these two public hostnames. If the form also shows an empty private hostname or IP row, remove it. Otherwise saving fails with an error naming `use_clientless_isolation_app_launcher_url`, saying it needs private destinations.
 
-1. Name the application after your app's hostname, `newsletter.example.com`. Cloudflare suggests a name made from the subdomain, which won't tell two newsletters apart.
+6. Name the application after your app's hostname, `newsletter.example.com`. Cloudflare suggests a name made from the subdomain, which won't tell two newsletters apart.
 
-1. **(Optional)** Choose how long a sign-in lasts. The application's session duration defaults to 24 hours, so everyone signs in again each day. You can set anything from immediately to one month, as Cloudflare's [session management](https://developers.cloudflare.com/cloudflare-one/access-controls/access-settings/session-management/) describes. For example, a week may suit a publisher on their own computer.
+7. **(Optional)** Choose how long a sign-in lasts. The application's session duration defaults to 24 hours, so everyone signs in again each day. You can set anything from immediately to one month, as Cloudflare's [session management](https://developers.cloudflare.com/cloudflare-one/access-controls/access-settings/session-management/) describes. For example, a week may suit a publisher on their own computer.
 
 ## 3. Allow yourself in
 
@@ -53,7 +53,7 @@ Every Access application denies everyone until a policy allows them.
     - **Action:** Allow
     - **Include:** the **Emails** selector, with your email address
 
-1. Select **Create**.
+2. Select **Create**.
 
 Cloudflare's own login is on by default, and admits members of your Cloudflare account, so the email in the policy you made should be one.
 
@@ -63,15 +63,15 @@ The app verifies each login against your team domain, and checks that it was iss
 
 1. Find your team domain under **Zero Trust → Settings**. It looks like `YOUR_TEAM.cloudflareaccess.com`.
 
-1. Find the application's audience tag. Under **Access controls → Applications**, select **Configure** on your application. On the **Additional settings** tab, copy the **Application Audience (AUD) Tag**.
+2. Find the application's audience tag. Under **Access controls → Applications**, select **Configure** on your application. On the **Additional settings** tab, copy the **Application Audience (AUD) Tag**.
 
-1. Store the team domain as a secret. The command prompts you for the value. Enter the hostname alone, without `https://`:
+3. Store the team domain as a secret. The command prompts you for the value. Enter the hostname alone, without `https://`:
 
     ```bash
     npx wrangler secret put ACCESS_TEAM_DOMAIN --env production
     ```
 
-1. Store the audience tag the same way:
+4. Store the audience tag the same way:
 
     ```bash
     npx wrangler secret put ACCESS_AUD --env production
@@ -79,7 +79,7 @@ The app verifies each login against your team domain, and checks that it was iss
 
     A secret takes effect as soon as you store it, with no redeploy.
 
-1. **(Optional, recommended)** Limit the editor to named people. The Access policy decides who can sign in. This list keeps that true if the policy is widened later, for another app or by mistake. Store the list of addresses allowed in:
+5. **(Optional, recommended)** Limit the editor to named people. The Access policy decides who can sign in. This list keeps that true if the policy is widened later, for another app or by mistake. Store the list of addresses allowed in:
 
     ```bash
     npx wrangler secret put ACCESS_ALLOWED_EMAILS --env production
@@ -97,15 +97,15 @@ The app verifies each login against your team domain, and checks that it was iss
 
 1. In a private browser window, open `https://newsletter.example.com/dashboard/`. Cloudflare asks you to sign in.
 
-1. Sign in. The editor loads, and its sidebar shows the email address you signed in with.
+2. Sign in. The editor loads, and its sidebar shows the email address you signed in with.
 
-1. In the same window, open `https://newsletter.example.com/api/whoami`. It shows you as a signed-in person, verified through Access:
+3. In the same window, open `https://newsletter.example.com/api/whoami`. It shows you as a signed-in person, verified through Access:
 
     ```
     {"principal":{"kind":"human","email":"you@example.com","client":null},"auth":{"mode":"access"}}
     ```
 
-1. The public pages still need no login:
+4. The public pages still need no login:
 
     ```bash
     curl https://newsletter.example.com/health
@@ -128,7 +128,7 @@ Cloudflare Access signs you in, and Kestrel then checks that sign-in itself. Whe
 
 1. In the Cloudflare dashboard, open your Worker's **Observability** tab, as in [Read the logs](verify.md#7-read-the-logs).
 
-1. Filter on `event` equal to `auth.refused`, and read the newest line's `reason`:
+2. Filter on `event` equal to `auth.refused`, and read the newest line's `reason`:
 
     - `audience` means the sign-in was made for another application. Store `ACCESS_AUD` again, with this Access application's audience tag.
     - `signature` or `issuer` means the sign-in came from another Access team. Store `ACCESS_TEAM_DOMAIN` again, with your team's domain.
@@ -139,7 +139,7 @@ Cloudflare Access signs you in, and Kestrel then checks that sign-in itself. Whe
     - `unidentified` means Access let the sign-in through without an email or a service token. The editor says the same, and names the two kinds of policy Kestrel accepts. The line's `claims` lists what the sign-in did carry, by name.
     - `jwks_unreachable` means Kestrel couldn't fetch your Access team's signing keys, so it answered `503`, not `401`. Try again in a minute. If it keeps happening, `ACCESS_TEAM_DOMAIN` doesn't name your Access team, so store it again.
 
-1. If the filter shows no line, the request reached Kestrel with no Access sign-in. Check that the Access application covers the address you opened.
+3. If the filter shows no line, the request reached Kestrel with no Access sign-in. Check that the Access application covers the address you opened.
 
 [Give the app its two values](#4-give-the-app-its-two-values) shows where to find each value and how to store it. The line never holds the sign-in itself or anything in it.
 

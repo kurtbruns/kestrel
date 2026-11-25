@@ -7,16 +7,16 @@ These pages get you publishing in the dashboard, and cover the decisions to make
 These are the steps to set up your publication and send your first post, once your Kestrel instance is deployed, as [Self-hosting](../README.md) describes. If you're starting without a list, skip Bring your existing list.
 
 1. Connect Amazon SES
-1. Send a test email
-1. [Name your publication](name-your-publication.md)
-1. Set the time zone
-1. [Get notified](get-notified.md)
-1. Request production access
-1. [Bring your existing list](your-list.md)
-1. [Write your first post](write-a-post.md)
-1. Schedule your first post
-1. Send a test email for your first post
-1. [Share your subscribe link](share-your-subscribe-link.md)
+2. Send a test email
+3. [Name your publication](name-your-publication.md)
+4. Set the time zone
+5. [Get notified](get-notified.md)
+6. Request production access
+7. [Bring your existing list](your-list.md)
+8. [Write your first post](write-a-post.md)
+9. Schedule your first post
+10. Send a test email for your first post
+11. [Share your subscribe link](share-your-subscribe-link.md)
 
 ## Go further
 

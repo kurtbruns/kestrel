@@ -10,9 +10,9 @@ Cloudflare's Free plan includes one rate-limiting rule, and the subscribe form i
 
 1. In the [Cloudflare dashboard](https://dash.cloudflare.com/), open your domain, `example.com`, and go to **Security rules**.
 
-1. Select **Create rule**, then **Rate limiting rules**.
+2. Select **Create rule**, then **Rate limiting rules**.
 
-1. Fill in the rule:
+3. Fill in the rule:
 
     - **Rule name:** `Subscribe form`
     - **If incoming requests match:** **URI Path** equals `/subscribe`
@@ -26,7 +26,7 @@ Cloudflare's Free plan includes one rate-limiting rule, and the subscribe form i
     (http.request.uri.path eq "/subscribe")
     ```
 
-1. Select **Deploy**.
+4. Select **Deploy**.
 
 On the Free plan, a rule can match only on the path. It counts loads of the form as well as submissions, and `/subscribe` on every hostname in your domain. At five requests in 10 seconds, neither gets in a real reader's way.
 
@@ -44,6 +44,6 @@ The rule covers only your domain's hostnames. The Worker's `workers.dev` address
 
     The first requests answer `200`. Once you pass five within 10 seconds, the rest answer `429`, Cloudflare's block. The switch can come a request or two later.
 
-1. Wait 10 seconds, and open `https://newsletter.example.com/subscribe` in a browser. The form loads again.
+2. Wait 10 seconds, and open `https://newsletter.example.com/subscribe` in a browser. The form loads again.
 
-1. In the dashboard, **Security rules** lists `Subscribe form` as active.
+3. In the dashboard, **Security rules** lists `Subscribe form` as active.

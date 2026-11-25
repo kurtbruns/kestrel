@@ -17,11 +17,11 @@ A service token is a Client ID and a Client Secret that a program sends with eac
 
 1. In **Zero Trust**, go to **Access controls → Service credentials → Service Tokens**, and select **Create Service Token**.
 
-1. Name it for what will use it, such as `kestrel-automation`, and choose a **Service Token Duration**. A year is a good default.
+2. Name it for what will use it, such as `kestrel-automation`, and choose a **Service Token Duration**. A year is a good default.
 
-1. Select **Generate token**.
+3. Select **Generate token**.
 
-1. Copy the **Client ID** and the **Client Secret**. Cloudflare shows the secret only once.
+4. Copy the **Client ID** and the **Client Secret**. Cloudflare shows the secret only once.
 
 ## 2. Allow the token in
 
@@ -29,13 +29,13 @@ The application lets in only the people its Allow policy names, so the token nee
 
 1. Under **Access controls → Applications**, select **Configure** on the application from [Lock the dashboard with Access](../get-started/access.md#2-create-the-access-application).
 
-1. Add a policy:
+2. Add a policy:
 
     - **Policy name:** `Automation`
     - **Action:** Service Auth
     - **Include:** the **Service Token** selector, with your token
 
-1. Save the application.
+3. Save the application.
 
 This policy is the only thing that lets the token in. `ACCESS_ALLOWED_EMAILS` doesn't apply to it, since it has no email.
 
@@ -45,7 +45,7 @@ The script sends the two values as headers on every request: `CF-Access-Client-I
 
 1. Store the Client ID and the Client Secret where your script reads secrets, such as its environment, your CI's secrets, or a password manager. Never commit the secret to a repository.
 
-1. Have the script send both headers with every request to `https://newsletter.example.com/api/…`. For example, this request saves a new draft:
+2. Have the script send both headers with every request to `https://newsletter.example.com/api/…`. For example, this request saves a new draft:
 
     ```bash
     curl -s https://newsletter.example.com/api/posts \
@@ -71,9 +71,9 @@ The script sends the two values as headers on every request: `CF-Access-Client-I
 
     The `token_id` is the Client ID Zero Trust shows beside your token. If it's a different one, the script is using another token.
 
-1. Call `GET /api/posts`. It answers with the posts the editor shows.
+2. Call `GET /api/posts`. It answers with the posts the editor shows.
 
-1. Open a draft in the editor, and have the script save a change to it. The editor shows the change, and beside **Save draft** it reads "Updated with changes by a service token", with the time.
+3. Open a draft in the editor, and have the script save a change to it. The editor shows the change, and beside **Save draft** it reads "Updated with changes by a service token", with the time.
 
 If the script gets a `401`, a `403`, or a login page, check the policy from section 2, and the token's two values. The policy's action must be Service Auth, since the app refuses a login through any other kind of policy with a `401` whose `reason` is `access_unidentified`. Check that the token hasn't expired, too. For any other `401`, the log's `auth.refused` line says why, as [Lock the dashboard with Access](../get-started/access.md#if-kestrel-refuses-a-sign-in) lists.
 
