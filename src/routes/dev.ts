@@ -14,14 +14,20 @@
  *                         publication logo. Optional query: `size`
  *                         (100 / 1k / 10k / 100k) scales the list via a seeded PRNG,
  *                         and `seed` pins it; absent, the curated demo list loads.
+ *   GET  /api/dev/simulation → what the server simulates now, and whether each of the two
+ *                         variables is as the server started or switched since.
+ *   POST /api/dev/simulation → switch one or both on the running server (SPEC §10).
  */
 
 import { mintDevToken } from "../auth/dev_token";
 import { resetAll } from "../db/seed";
 import { BRANDING_LOGO_KEY } from "../db/settings";
 import { type DemoImageFile, parseSeedSize, seedDatabase } from "../dev/seed";
-import { fieldError, readForm } from "../lib/body";
-import { json, notFound } from "../lib/errors";
+import { simulationState, switchSimulation } from "../dev/simulation_switch";
+import { ConfigError } from "../env";
+import { fieldError, optStringOrNull, readForm, readJsonObject } from "../lib/body";
+import { badRequest, json, notFound } from "../lib/errors";
+import { log } from "../lib/log";
 import type { RequestContext } from "../router";
 
 /** 404 unless this is local dev. */
@@ -120,4 +126,38 @@ export async function reset(c: RequestContext): Promise<Response> {
     /* best effort — an absent logo is fine */
   }
   return json({ reset: true, url: `${c.config.appOrigin}/dashboard/` });
+}
+
+/** What the server simulates now: the two variables, and where each value is from. */
+export function simulation(c: RequestContext): Response {
+  requireDevMode(c);
+  return json(simulationState(c.env));
+}
+
+/**
+ * Switch what the running server simulates (SPEC §10). The body's values are the variables'
+ * own, and a pair the app would refuse to start with is refused here in the same words,
+ * naming the field the refused variable came in as.
+ */
+export async function switchSimulated(c: RequestContext): Promise<Response> {
+  requireDevMode(c);
+  const body = await readJsonObject(c);
+  const sends = optStringOrNull(body, "sends");
+  const account = optStringOrNull(body, "account");
+  if (sends === undefined && account === undefined) {
+    throw badRequest(
+      "give sends, account, or both: a string to switch to, or null for the value the server started with",
+    );
+  }
+  try {
+    switchSimulation(c.env, { sends, account }, Date.now());
+  } catch (err) {
+    if (err instanceof ConfigError) {
+      throw fieldError(err.variable === "SIMULATE_ACCOUNT" ? "account" : "sends", err.message);
+    }
+    throw err;
+  }
+  const state = simulationState(c.env);
+  log.info("dev.simulation_switched", { sends: state.sends, account: state.account });
+  return json(state);
 }

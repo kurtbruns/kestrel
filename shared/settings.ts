@@ -219,6 +219,27 @@ export interface SimulationView {
 }
 
 /**
+ * What a local dev server simulates now (`GET` and `POST /api/dev/simulation`, SPEC §10), as
+ * the two variables' own values. `off` is a variable left unset.
+ */
+export interface DevSimulationResponse {
+  /** `SIMULATE_SENDS` as the server reads it now. */
+  sends: string;
+  /** `SIMULATE_ACCOUNT` as the server reads it now. */
+  account: string;
+  /** Where each value is from: the server's start, or a switch made since. */
+  source: { sends: "startup" | "switch"; account: "startup" | "switch" };
+  /** The two as the server started with them, which a restart or a reload of the Worker returns to. */
+  startup: { sends: string; account: string };
+  /** When the switch in force was made, or null while nothing is switched. Anything the app worked out before it (email refusing, a held send) is from the profile before. */
+  switched_at: string | null;
+  /** The send simulation those values make, as `deployment.simulation` gives it; null for `off` and `not-connected`. */
+  simulation: SimulationView | null;
+  /** True while the server runs as a deployment with no provider (`not-connected`). */
+  not_connected: boolean;
+}
+
+/**
  * The email provider a deployment sends through (SPEC §9): `none` while none is connected,
  * when every send is refused; `fake`, named for local development, the tests, or a demo,
  * which records a send and delivers nothing; or a real provider.
