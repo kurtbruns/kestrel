@@ -37,11 +37,14 @@ async function publicSubscribe(email: string): Promise<Response> {
 }
 
 /** The public form's own submission: urlencoded, answered with a page. */
-async function formSubscribe(email: string): Promise<Response> {
+async function formSubscribe(
+  email: string,
+  headers: Record<string, string> = {},
+): Promise<Response> {
   return route(
     new Request(`${base}/subscribe`, {
       method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
+      headers: { "content-type": "application/x-www-form-urlencoded", ...headers },
       body: new URLSearchParams({ email }).toString(),
     }),
   );
@@ -398,6 +401,26 @@ describe("confirming in one click, in the browser that asked for the link (SPEC 
       ["subscribe.confirm_page", "no_cookie"],
       ["subscribe.confirmed", "button"],
     ]);
+  });
+
+  it("a form embedded on another site binds the link to the visitor's browser, so their own opening of it confirms at once", async () => {
+    // The cookie says the form was submitted from this browser, not that its owner chose to:
+    // a page elsewhere can post the form, and the link still reaches only the address's inbox.
+    const email = uniqueEmail();
+    const posted = await formSubscribe(email, {
+      origin: "https://elsewhere.example",
+      "sec-fetch-site": "cross-site",
+    });
+    expect(posted.status).toBe(200);
+    const token = await tokenFor(email);
+
+    // Without that browser, the link is only the page with its button.
+    expect(await (await openLink(token, null)).text()).toContain("Finish subscribing");
+    expect((await subs.getByEmail(env.DB, email))?.status).toBe("pending");
+
+    const res = await openLink(token, cookieValue(posted));
+    expect(await res.text()).toContain("You’re subscribed");
+    expect((await subs.getByEmail(env.DB, email))?.status).toBe("confirmed");
   });
 
   it("another browser's cookie shows the button: subscribing a stranger's address gains nothing", async () => {
