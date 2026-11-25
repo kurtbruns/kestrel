@@ -10,7 +10,7 @@ Access is part of Cloudflare Zero Trust. Your account needs a Zero Trust organiz
 
 1. In the [Cloudflare dashboard](https://dash.cloudflare.com/), select **Zero Trust**.
 
-2. Choose a team name. It becomes your team domain, `YOUR_TEAM.cloudflareaccess.com`, where your login page lives. You can change the name later under **Zero Trust → Settings**. If you do, store the new team domain again, as [Connect the app to Access](#4-connect-the-app-to-access) shows, or the editor refuses every sign-in.
+2. Choose a team name. It becomes your team domain, `YOUR_TEAM.cloudflareaccess.com`, where your login page lives. You can change the name later under **Zero Trust → Settings**.
 
 3. Choose a plan. The Free plan covers a newsletter's editors. Cloudflare asks for payment details even on the Free plan, and doesn't charge them.
 
@@ -70,6 +70,8 @@ The app verifies each login against your team domain, and checks that it was iss
     ```bash
     npx wrangler secret put ACCESS_TEAM_DOMAIN --env production
     ```
+
+    If you change the team name later, store the new team domain the same way, or the editor refuses every sign-in.
 
 4. Store the audience tag the same way:
 
