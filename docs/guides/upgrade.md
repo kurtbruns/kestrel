@@ -30,7 +30,7 @@ Nothing has changed yet. If you aren't going on, stop here.
 
 ## 2. Install the release
 
-Each step here changes only your instance's repository. Nothing reaches your deployed app until section 5.
+Each step here changes only your instance's repository. Together they change the Kestrel release it runs, its migrations, the Claude Code files Kestrel gave you, and a setting in `wrangler.jsonc` when a release asks for one. No step changes any other file. Nothing reaches your deployed app until section 5.
 
 1. Install the release. Replace `X.Y.Z` with its version:
 
@@ -60,7 +60,7 @@ Each step here changes only your instance's repository. Nothing reaches your dep
     npm run check-context
     ```
 
-    It names each file in `.claude/` and says what to do with it. A file you haven't edited takes Kestrel's change with `npm run check-context -- --update`. A file you've edited is never overwritten: merge Kestrel's change into it, by hand or with Claude. [What check-context reports](#what-check-context-reports) explains each answer.
+    It names each file Kestrel ships in `.claude/` and says what to do with it. A file you added there is left alone. A file you haven't edited takes Kestrel's change with `npm run check-context -- --update`. A file you've edited is never overwritten: merge Kestrel's change into it, by hand or with Claude. [What check-context reports](#what-check-context-reports) explains each answer.
 
 1. If the release's **Upgrading from…** paragraph names a setting to add or remove, change `wrangler.jsonc` as it says. When you remove one, remove any comment that describes it too.
 
