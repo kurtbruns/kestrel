@@ -69,5 +69,5 @@ If a check fails:
 
 - **Claude can't connect, or the sign-in fails.** Check section 1's settings, and that the connector's address is the instance's address followed by `/api/mcp`.
 - `kestrel login` says the instance "doesn't offer a sign-in for programs". Managed OAuth is off. Turn it on, as section 1 describes.
-- `kestrel login` or `kestrel api` reports a `401`. If you set `ACCESS_ALLOWED_EMAILS`, check that it includes the person's address. Otherwise the log's `auth.refused` line says why, as [Lock the dashboard with Access](../get-started/access.md#check-it) lists.
+- `kestrel login` or `kestrel api` reports a `401`. If you set `ACCESS_ALLOWED_EMAILS`, check that it includes the person's address. Otherwise the log's `auth.refused` line says why, as [Lock the dashboard with Access](../get-started/access.md#if-kestrel-refuses-a-sign-in) lists.
 - **The sign-in says Access didn't say who the person is.** The same goes for a `401` naming `access_unidentified`. The app accepts only an Allow policy on people's emails and a Service Auth policy on a service token. Remove or change any other kind.
