@@ -30,7 +30,7 @@ Nothing has changed yet. If you aren't going on, stop here.
 
 ## 2. Install the release
 
-Each step here changes only your instance's repository. Nothing reaches your deployed app until section 5.
+Each step here changes only your instance's repository: the release `package.json` pins, the migrations in `migrations/`, your Claude Code files in `.claude/`, and `wrangler.jsonc` where a release asks. Everything else in it, such as your `README.md`, is yours, and an upgrade leaves it alone. Nothing reaches your deployed app until section 5.
 
 1. Install the release. Replace `X.Y.Z` with its version:
 
@@ -63,8 +63,6 @@ Each step here changes only your instance's repository. Nothing reaches your dep
     It names each file in `.claude/` and says what to do with it. A file you haven't edited takes Kestrel's change with `npm run check-context -- --update`. A file you've edited is never overwritten: merge Kestrel's change into it, by hand or with Claude. [What check-context reports](#what-check-context-reports) explains each answer.
 
 1. If the release's **Upgrading from…** paragraph names a setting to add or remove, change `wrangler.jsonc` as it says. When you remove one, remove any comment that describes it too.
-
-    No other step touches the files `kestrel init` wrote outside `.claude/`. Your `README.md`, your `wrangler.jsonc`, and the rest were written once, and they're yours from then on. No upgrade step compares them with the release's or rewrites them. A comment or a README row can differ from what a new instance gets today, and nothing is wrong. A change your `wrangler.jsonc` needs is always named in a release's **Upgrading from…** paragraph.
 
 1. Check the configuration and the types:
 
