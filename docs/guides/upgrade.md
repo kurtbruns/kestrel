@@ -30,16 +30,7 @@ Nothing has changed yet. If you aren't going on, stop here.
 
 ## 2. Install the release
 
-This section changes files in your instance's repository, and nothing else. Your deployed app stays as it is until section 5.
-
-The steps change four things:
-
-- `package.json` and `package-lock.json` name the new release.
-- `migrations/` gains the release's database migrations.
-- `.claude/` takes Kestrel's changes to your Claude Code files.
-- `wrangler.jsonc` changes only when the release's **Upgrading from…** paragraph names a setting.
-
-No step changes any other file. Your `README.md`, and anything else you've added or edited, stays as you left it.
+Each step here changes only your instance's repository. Together they change the Kestrel release it runs, its migrations, the Claude Code files Kestrel gave you, and a setting in `wrangler.jsonc` when a release asks for one. No step changes any other file. Nothing reaches your deployed app until section 5.
 
 1. Install the release. Replace `X.Y.Z` with its version:
 
@@ -69,7 +60,7 @@ No step changes any other file. Your `README.md`, and anything else you've added
     npm run check-context
     ```
 
-    It names each file in `.claude/` and says what to do with it. A file you haven't edited takes Kestrel's change with `npm run check-context -- --update`. A file you've edited is never overwritten: merge Kestrel's change into it, by hand or with Claude. [What check-context reports](#what-check-context-reports) explains each answer.
+    It names each file Kestrel ships in `.claude/` and says what to do with it. A file you added there is left alone. A file you haven't edited takes Kestrel's change with `npm run check-context -- --update`. A file you've edited is never overwritten: merge Kestrel's change into it, by hand or with Claude. [What check-context reports](#what-check-context-reports) explains each answer.
 
 1. If the release's **Upgrading from…** paragraph names a setting to add or remove, change `wrangler.jsonc` as it says. When you remove one, remove any comment that describes it too.
 
