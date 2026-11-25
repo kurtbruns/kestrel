@@ -30,7 +30,16 @@ Nothing has changed yet. If you aren't going on, stop here.
 
 ## 2. Install the release
 
-Each step here changes only your instance's repository: the release `package.json` pins, the migrations in `migrations/`, your Claude Code files in `.claude/`, and `wrangler.jsonc` where a release asks. Everything else in it, such as your `README.md`, is yours, and an upgrade leaves it alone. Nothing reaches your deployed app until section 5.
+This section changes files in your instance's repository, and nothing else. Your deployed app stays as it is until section 5.
+
+The steps change four things:
+
+- `package.json` and `package-lock.json` name the new release.
+- `migrations/` gains the release's database migrations.
+- `.claude/` takes Kestrel's changes to your Claude Code files.
+- `wrangler.jsonc` changes only when the release's **Upgrading from…** paragraph names a setting.
+
+No step changes any other file. Your `README.md`, and anything else you've added or edited, stays as you left it.
 
 1. Install the release. Replace `X.Y.Z` with its version:
 
