@@ -907,6 +907,12 @@ const SETTINGS_FIELDS: ReferenceField[] = [
       "Deploy configuration, read-only: `provider`, the origins and addresses, `min_lead_ms`, `auth_mode`, the `build`, and the fields below.",
   },
   {
+    name: "deployment.build",
+    type: "object",
+    description:
+      "The release and commit this instance runs, as `GET /api/version` answers it: `version`, which a fork marks with build metadata (`1.25.0+myfork`); `sha`, the short commit, or `dev`; `tag`, the release tag when the commit is one (`v1.25.0`), else empty; `commit_time`, when that commit was made, never when anything was built or deployed, empty when unknown; and `source_url`, where its source is, empty when unknown. The commit's page is `{source_url}/commit/{sha}` unless `sha` is `dev`, and the release's `{source_url}/releases/tag/{tag}` only when `tag` is `v{version}`.",
+  },
+  {
     name: "deployment.provider",
     type: '"ses" | "fake" | "none"',
     description:

@@ -1,9 +1,8 @@
 // The reference room shell shared by Docs and the API reference: the top bar, the
 // contents rail, and the surface switch; installRoomBar() wires the bar's one delegate.
 
-import { buildRefParts } from "../deployment";
+import { buildDateText, buildRefParts } from "../deployment";
 import { app } from "../shell";
-import { appState } from "../state";
 import { type Html, html } from "../ui/html";
 import { icon } from "../ui/icons";
 
@@ -30,14 +29,11 @@ export function roomShell(active: RoomSurface, rail: Html | null, main: Html): H
   // The running build (SPEC §9) as quiet metadata (version → release, sha → commit),
   // pinned to the rail's bottom-left corner on every surface, so the bar stays identity +
   // nav. On mobile the rail is no longer a column, so the same stamp is the room's foot
-  // instead (styles.css shows one or the other). Nothing until a build is known; the build
-  // time rides the tooltip. Build info lives in the app's own room (and at GET
+  // instead (styles.css shows one or the other). Nothing until a build is known; the
+  // commit's date, or the release's, rides the tooltip. Build info lives in the app's own room (and at GET
   // /api/version), never in the publisher-facing dashboard.
   const parts = buildRefParts();
-  const bt = appState.appConfig?.deployment.build.build_time;
-  const built = bt
-    ? `Built ${new Date(bt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`
-    : null;
+  const built = buildDateText();
   const stamp = parts
     ? html`${parts.version} <span aria-hidden="true">·</span> ${parts.sha}`
     : null;

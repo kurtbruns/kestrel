@@ -469,7 +469,7 @@ The dead-end transport that records every recipient as accepted and delivers not
 
 ### The build
 
-Every instance can also report its own **build**: the admin surface shows the version and commit it is running, and its API adds the build time, so a bug report or support question can name the exact build a live instance is on. It is build metadata, fixed when the instance was built: neither a secret, nor deploy configuration, nor a preference, and independent of the database's schema version. Like the rest of this surface it is shown, never set.
+Every instance can also report its own **build**: the release and commit it runs, so a bug report or support question can name the exact code a live instance is on. The admin surface shows the version and the commit, and its API adds the release tag when the commit is one, when the commit was made, and where its source is. It names what an instance runs, not when it was built or deployed: Kestrel is built once for each release, so every instance on a release reports the same build, and the one time it carries is the commit's. A fork says so in two ways. It names its own source, so the links the admin surface makes from the build, to the commit and to the release, lead to the fork's code; and it marks its version with build metadata, as in `1.25.0+myfork`, so the version alone tells it from the release it started from. It is build metadata: neither a secret, nor deploy configuration, nor a preference, and independent of the database's schema version. Like the rest of this surface it is shown, never set.
 
 ---
 
