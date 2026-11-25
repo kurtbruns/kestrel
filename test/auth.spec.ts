@@ -545,6 +545,10 @@ describe("a refused Access sign-in says why in the log", () => {
     const warn = vi.spyOn(console, "warn");
     const res = await fetchWith(vars, "/api/whoami", { headers: await assertion({}) });
     expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({
+      error: "unauthorized",
+      reason: "access_unidentified",
+    });
     expect(logged(warn)).toEqual([
       {
         event: "auth.refused",

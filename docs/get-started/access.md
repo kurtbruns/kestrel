@@ -141,7 +141,7 @@ Cloudflare Access signs you in, and Kestrel then checks that sign-in itself. Whe
 
 3. If the filter shows no line, the request reached Kestrel with no Access sign-in. Check that the Access application covers the address you opened.
 
-[Give the app its two values](#4-give-the-app-its-two-values) shows where to find each value and how to store it. The line never holds the sign-in itself or anything in it.
+[Give the app its two values](#4-give-the-app-its-two-values) shows where to find each value and how to store it. The line never holds the sign-in itself or a value from it. An `unidentified` line names what the sign-in carried, never the values.
 
 ## Allow someone else in
 

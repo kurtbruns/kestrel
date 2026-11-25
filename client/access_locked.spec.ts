@@ -185,7 +185,11 @@ describe("the wall for a sign-in the app couldn't check (SPEC §11)", () => {
     const wall = $("#app .unreachable-wall");
     expect(wall.getAttribute("role")).toBe("alert");
     expect($("h2", wall).textContent).toBe("Kestrel can’t check your sign-in right now");
-    expect(wall.textContent).toContain("signing in again won’t help");
+    expect(wall.textContent).toContain(
+      "so it couldn’t check your sign-in. Signing in again won’t help.",
+    );
+    // The keys being out of reach says nothing about the sign-in, so the wall doesn't vouch for it.
+    expect(wall.textContent).not.toContain("Nothing is wrong");
     expect($("a", wall).getAttribute("href")).toBe(ACCESS_GUIDE);
     expect($$("button", wall).map((b) => b.textContent)).toEqual(["Try again"]);
     expect(wall.textContent).not.toContain("Session expired");

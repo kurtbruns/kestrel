@@ -52,7 +52,7 @@ export function showAccessLocked(reason: UnauthorizedReason): void {
 
 /**
  * Replace the app with the wall for a sign-in the app couldn't check: Access's signing keys
- * were out of reach, so the session may be fine and signing in again can't help. Its one
+ * were out of reach, so the session may be good and signing in again can't help. Its one
  * control tries again, never a sign-in. Torn down and left alone as the walls above are.
  */
 export function showAccessUnreachable(): void {
@@ -63,7 +63,7 @@ export function showAccessUnreachable(): void {
   document.body.classList.add("signed-out");
   setHtml(
     app,
-    html`<div class="card auth-wall unreachable-wall" role="alert"><h2 tabindex="-1">Kestrel can’t check your sign-in right now</h2><p>Kestrel couldn’t fetch Cloudflare Access’s signing keys, so it can’t tell whether your sign-in is good. Nothing is wrong with your sign-in, and signing in again won’t help. Try again in a minute.</p><p class="hint">If this keeps happening, the Access team domain this instance has stored needs checking. <a href="${ACCESS_GUIDE}" target="_blank" rel="noopener">Lock the dashboard with Access <span aria-hidden="true">↗</span><span class="visually-hidden"> (opens in a new tab)</span></a></p><button id="access-retry" class="primary">Try again</button></div>`,
+    html`<div class="card auth-wall unreachable-wall" role="alert"><h2 tabindex="-1">Kestrel can’t check your sign-in right now</h2><p>Kestrel couldn’t fetch Cloudflare Access’s signing keys, so it couldn’t check your sign-in. Signing in again won’t help. Try again in a minute.</p><p class="hint">If this keeps happening, the Access team domain this instance has stored needs checking. <a href="${ACCESS_GUIDE}" target="_blank" rel="noopener">Lock the dashboard with Access <span aria-hidden="true">↗</span><span class="visually-hidden"> (opens in a new tab)</span></a></p><button id="access-retry" class="primary">Try again</button></div>`,
   );
   $("#access-retry", app).onclick = () => location.reload();
   $<HTMLElement>(".unreachable-wall h2", app).focus();
