@@ -1398,7 +1398,7 @@ export function createRouter({
         title: "Switch what is simulated",
         summary: "Switch the send or account profile on the running dev server (local dev only).",
         description:
-          "Changes what the simulated provider does from the next request on, with no restart, and answers as `GET /api/dev/simulation` does. The two values are checked together, as at startup, and a pair the server would refuse to start with is a 400 in the same words, naming `sends` or `account` as `field`. It writes nothing else: a held send resumes at its own next retry, email an email found refusing reads so until the provider takes one, and a send in flight meets the new profile at its next tick, as each would if a real provider changed. Held in memory, so a restart, or a reload of the Worker after a source or editor change, returns to the profile the server started with.",
+          "Changes what the simulated provider does from the next request on, with no restart, and answers as `GET /api/dev/simulation` does. The two values are checked together, as at startup, and a pair the server would refuse to start with is a 400 in the same words, naming `sends` or `account` as `field`. It writes nothing else: a held send resumes at its own next retry, email that an email found refusing reads so until the provider takes one, and a send in flight meets the new profile at its next tick, as each would if a real provider changed. Held in memory, so a restart, or a reload of the Worker after a source or editor change, returns to the profile the server started with.",
         example: {
           request: { sends: "ses:outage" },
           response: {
