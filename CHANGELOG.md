@@ -10,7 +10,9 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading from 1.26.0.** `npm run sync-migrations` brings in one database migration, which records which browser asked for each confirmation link. Apply it where [Upgrade to a new release](https://github.com/kurtbruns/kestrel/blob/main/docs/guides/upgrade.md) does, after noting a restore point and before you deploy, with `npx wrangler d1 migrations apply DB --remote --env production`. Confirmation links sent before the upgrade keep working, with the Confirm button as before. A script of your own that reads `GET /api/version`, or `deployment.build` in `GET /api/settings`, changes four names: `build_time` is gone, and `commit_time` in its place is when the running commit was made, not when the package was built; `repo_url` is now `source_url`, with the same value; and `commit_url` and `tag_url` are gone, the commit's page being `{source_url}/commit/{sha}` unless `sha` is `dev`, and the release's `{source_url}/releases/tag/{tag}` only when `tag` is `v{version}`. `version`, `sha`, and `tag` are unchanged. A log filter or alert of your own on `auth.unidentified` now finds nothing: change it to `auth.refused` with `reason` equal to `unidentified`.
+## [1.27.0] - 2026-11-25
+
+**Upgrading from 1.26.0.** In your instance's repository, start with nothing uncommitted, as [Upgrade to a new release](https://github.com/kurtbruns/kestrel/blob/v1.27.0/docs/guides/upgrade.md) says, and install the release with `npm install @kurtbruns/kestrel@1.27.0`. `npm run sync-migrations` brings in one database migration, `0027_subscribers_confirm_browser.sql`, which records which browser asked for each confirmation link. Run `npm run check-context`: this release changes one file of the operator's Claude context, `CLAUDE.md`, and a copy you've edited is merged by hand. Its change bears on safety: the line on calling the local app now says that a call without `--local` goes to the deployed instance, and that when `kestrel api` refuses a call naming `KESTREL_LOCAL_ONLY`, Claude adds `--local` and never unsets the variable. Then run `npm run typecheck`, commit the upgrade, note a restore point, apply the migration with `npx wrangler d1 migrations apply DB --remote --env production`, and deploy with `npx wrangler deploy --env production`, as the guide lays out. Confirmation links sent before the upgrade keep working, with the Confirm button as before. A script of your own that reads `GET /api/version`, or `deployment.build` in `GET /api/settings`, changes four names: `build_time` is gone, and `commit_time` in its place is when the running commit was made, not when the package was built; `repo_url` is now `source_url`, with the same value; and `commit_url` and `tag_url` are gone, the commit's page being `{source_url}/commit/{sha}` unless `sha` is `dev`, and the release's `{source_url}/releases/tag/{tag}` only when `tag` is `v{version}`. `version`, `sha`, and `tag` are unchanged. A log filter or alert of your own on `auth.unidentified` now finds nothing: change it to `auth.refused` with `reason` equal to `unidentified`.
 
 ### Breaking
 
@@ -993,7 +995,8 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
-[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.26.0...HEAD
+[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.27.0...HEAD
+[1.27.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.27.0
 [1.26.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.26.0
 [1.25.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.25.0
 [1.24.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.24.0
