@@ -91,17 +91,15 @@ const guide: DocsResponse = {
 };
 
 // Only what the room reads: the build stamp with (or without) a repository to link.
-const config = (repoUrl: string): SettingsResponse =>
+const config = (sourceUrl: string): SettingsResponse =>
   ({
     deployment: {
       build: {
         version: "0.2.0",
         sha: "abc1234",
         tag: "",
-        build_time: "2026-09-21T10:00:00Z",
-        repo_url: repoUrl,
-        commit_url: repoUrl ? `${repoUrl}/commit/abc1234` : "",
-        tag_url: "",
+        commit_time: "2026-09-21T10:00:00Z",
+        source_url: sourceUrl,
       },
     },
   }) as unknown as SettingsResponse;
@@ -112,10 +110,10 @@ const config = (repoUrl: string): SettingsResponse =>
 // comes with its own app state, so it is handed the same config the shared one reads. It
 // also has its own lifecycle, so a view it mounts itself (a link it follows) is not torn down
 // by resetShell's unmount; the room's DOM is still cleared with the shell.
-async function freshDocs(repoUrl = "https://github.com/x/kestrel") {
+async function freshDocs(sourceUrl = "https://github.com/x/kestrel") {
   vi.resetModules();
   const fresh = await import("../state");
-  fresh.appState.appConfig = config(repoUrl);
+  fresh.appState.appConfig = config(sourceUrl);
   const mod = await import("./docs");
   return (slug?: string) => mount((r, s) => mod.renderDocs(slug, r, s));
 }

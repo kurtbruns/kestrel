@@ -2,6 +2,7 @@
 // at boot: the build reference, the archive URL, the minimum lead, and the no-provider notes.
 
 import { archivePostUrl } from "../shared/archive_url";
+import { buildCommitUrl, buildReleaseUrl } from "../shared/build";
 import {
   DEFAULT_MIN_LEAD_MS,
   formatLead,
@@ -18,11 +19,11 @@ export interface BuildRefParts {
 }
 
 /**
- * { version, sha } from the read-only deployment reflection (appConfig.deployment.build,
- * resolved at build in src/build.ts): version → its release (only when this build IS that
- * tagged release), sha → its commit, both on the repo and never getkestrel.dev. Each
- * degrades to plain text (no dead link) when there's no repo, the build isn't a release,
- * or the sha is "dev" (a local build). null until a build is known. Build metadata is
+ * { version, sha } from the read-only deployment reflection (appConfig.deployment.build):
+ * version → its release (only when this build IS that tagged release), sha → its commit,
+ * both on the build's own source and never getkestrel.dev, by the one rule for those pages
+ * (shared/build.ts). Each degrades to plain text (no dead link) when there's no source, the
+ * build isn't a release, or the sha is "dev" (a local build). null until a build is known. Build metadata is
  * quiet, secondary info: roomShell pins it to the rail's bottom-left corner (and, on
  * mobile, sets it as the room's foot); it's also at GET /api/version, where a bug report
  * is filed. Never in the publisher-facing dashboard.
@@ -32,13 +33,31 @@ export function buildRefParts(): BuildRefParts | null {
   if (!b?.version) {
     return null;
   }
-  const version = b.tag_url
-    ? html`<a class="build-link" href="${b.tag_url}" target="_blank" rel="noopener">v${b.version}</a>`
+  const releaseUrl = buildReleaseUrl(b);
+  const commitUrl = buildCommitUrl(b);
+  const version = releaseUrl
+    ? html`<a class="build-link" href="${releaseUrl}" target="_blank" rel="noopener">v${b.version}</a>`
     : html`v${b.version}`;
-  const sha = b.commit_url
-    ? html`<a class="build-link" href="${b.commit_url}" target="_blank" rel="noopener">${b.sha}</a>`
+  const sha = commitUrl
+    ? html`<a class="build-link" href="${commitUrl}" target="_blank" rel="noopener">${b.sha}</a>`
     : html`${b.sha}`;
   return { version, sha };
+}
+
+/**
+ * When the running build's code dates from, for the stamp's tooltip: "Released …" for a
+ * build that is its version's release, whose commit is the release's, and "Committed …" for
+ * any other. The commit's date, never a build's: the package is built once for every
+ * instance. Null when the build carries no commit time (built without git).
+ */
+export function buildDateText(): string | null {
+  const b = appState.appConfig?.deployment.build;
+  const at = b?.commit_time ? new Date(b.commit_time) : null;
+  if (!b || !at || Number.isNaN(at.getTime())) {
+    return null;
+  }
+  const when = at.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  return `${b.tag === `v${b.version}` ? "Released" : "Committed"} ${when}`;
 }
 
 /**

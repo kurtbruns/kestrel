@@ -8,47 +8,40 @@ describe("GET /api/version", () => {
     expect(res.status).toBe(401);
   });
 
-  it("reports the running build to an authed client", async () => {
+  it("reports the release and commit the instance runs to an authed client (SPEC §9)", async () => {
     const res = await SELF.fetch(`${base}/api/version`, { headers: AUTH });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       version: string;
       sha: string;
       tag: string;
-      build_time: string;
-      repo_url: string;
-      commit_url: string;
-      tag_url: string;
+      commit_time: string;
+      source_url: string;
     };
 
-    // Shape + types, not exact values: sha, tag and build_time vary by build.
-    for (const k of [
-      "version",
+    // Exactly these fields: the pages a build links to are derived by the client
+    // (shared/build.ts), never sent.
+    expect(Object.keys(body).sort()).toEqual([
+      "commit_time",
       "sha",
+      "source_url",
       "tag",
-      "build_time",
-      "repo_url",
-      "commit_url",
-      "tag_url",
-    ] as const) {
+      "version",
+    ]);
+    // Shape + types, not exact values: sha, tag and commit_time vary by build.
+    for (const k of ["version", "sha", "tag", "commit_time", "source_url"] as const) {
       expect(typeof body[k]).toBe("string");
     }
     expect(body.version).toMatch(/^\d+\.\d+\.\d+/); // semver-shaped
-    expect(body.build_time).toMatch(/^\d{4}-\d{2}-\d{2}T/); // ISO 8601
+    // The built commit's time as ISO 8601 with its offset, or "" when built without git.
+    expect(
+      body.commit_time === "" ||
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$/.test(body.commit_time),
+    ).toBe(true);
     // A browsable https URL (or "" when package.json names no repository) — the shape,
     // not this repo's owner, so a fork's suite stays green whatever it points at.
-    expect(body.repo_url === "" || /^https:\/\/[^/\s]+\/\S+[^/]$/.test(body.repo_url)).toBe(true);
-
-    // Derived links (src/build.ts) are built from the same fields, so assert the
-    // relationship rather than a frozen string — stable across version/sha bumps. The
-    // release link exists only when this build sits on its own version tag.
-    if (body.sha !== "dev") {
-      expect(body.commit_url).toBe(`${body.repo_url}/commit/${body.sha}`);
-    }
-    if (body.tag === `v${body.version}`) {
-      expect(body.tag_url).toBe(`${body.repo_url}/releases/tag/${body.tag}`);
-    } else {
-      expect(body.tag_url).toBe("");
-    }
+    expect(body.source_url === "" || /^https:\/\/[^/\s]+\/\S+[^/]$/.test(body.source_url)).toBe(
+      true,
+    );
   });
 });
