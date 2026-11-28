@@ -135,7 +135,7 @@ export function publicationLogoUrl(mediaBase: string, logo: PublicationLogo | nu
  *  hardcodes it. */
 export const DEFAULT_CONFIRMATION_EMAIL: ConfirmationEmailCopy = {
   subject: "Confirm your subscription",
-  body: "Thanks for subscribing. Please confirm your email address to start receiving the newsletter.",
+  body: "Please confirm your email address to start receiving the newsletter.",
   button_label: "Confirm subscription",
   reassurance: "If you didn't request this, you can safely ignore this email.",
 };
@@ -197,6 +197,12 @@ function coercePublication(raw: unknown): PublicationSettings {
   };
 }
 
+/** The body line the built-in copy first shipped with. It thanked the reader for subscribing
+ *  before they had, so a row still holding it, saved by any settings save that didn't edit the
+ *  copy, reads as today's default rather than keeping the old line. */
+const FORMER_DEFAULT_BODY =
+  "Thanks for subscribing. Please confirm your email address to start receiving the newsletter.";
+
 /** Coerce a stored (possibly partial / legacy) confirmation blob. Stores the raw
  *  strings, blanks and all; `resolveConfirmationEmail` fills blanks at send time. */
 function coerceConfirmation(raw: unknown): StoredConfirmationEmail {
@@ -204,7 +210,10 @@ function coerceConfirmation(raw: unknown): StoredConfirmationEmail {
   const str = (v: unknown) => (typeof v === "string" ? v : "");
   return {
     subject: str(o.subject).slice(0, MAX_CE_SUBJECT),
-    body: str(o.body).slice(0, MAX_CE_BODY),
+    body:
+      str(o.body) === FORMER_DEFAULT_BODY
+        ? DEFAULT_CONFIRMATION_EMAIL.body
+        : str(o.body).slice(0, MAX_CE_BODY),
     buttonLabel: str(o.buttonLabel).slice(0, MAX_CE_BUTTON),
     reassurance: str(o.reassurance).slice(0, MAX_CE_REASSURANCE),
   };

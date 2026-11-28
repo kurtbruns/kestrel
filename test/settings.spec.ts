@@ -389,6 +389,33 @@ describe("confirmation email copy (SPEC §7)", () => {
     expect(body.settings.confirmation_email_default).toEqual(ce);
   });
 
+  it("opens by asking the reader to confirm, never thanking them before they have", async () => {
+    const { body } = await getSettings();
+    expect(body.settings.confirmation_email.body).toBe(
+      "Please confirm your email address to start receiving the newsletter.",
+    );
+  });
+
+  it("reads a row holding the former built-in line as today's default", async () => {
+    await env.DB.prepare("UPDATE settings SET data = ?, updated_at = 1 WHERE id = 1")
+      .bind(
+        JSON.stringify({
+          confirmationEmail: {
+            subject: "Confirm your subscription",
+            body: "Thanks for subscribing. Please confirm your email address to start receiving the newsletter.",
+            buttonLabel: "Confirm subscription",
+            reassurance: "",
+          },
+        }),
+      )
+      .run();
+    const ce = (await getSettings()).body.settings.confirmation_email;
+    expect([ce.body, ce.reassurance]).toEqual([
+      "Please confirm your email address to start receiving the newsletter.",
+      "",
+    ]);
+  });
+
   it("persists edited copy (trimmed) and reflects it back", async () => {
     const put = await putSettings({
       confirmation_email: {
