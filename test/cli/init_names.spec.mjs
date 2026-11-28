@@ -5,7 +5,7 @@
  * And the hostnames `--hostname` and `--sending` write into the production block, each a bare
  * hostname off example.com, a value not given keeping the placeholder the Worker refuses.
  */
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -376,6 +376,34 @@ describe("initCommand", () => {
       /^refused: "Wind_Break" isn't a valid instance name/,
     );
     expect(() => readFileSync(join(work, "site", "wrangler.jsonc"))).toThrow();
+  });
+
+  it("names three files in the way and counts the rest, rather than listing them all", () => {
+    const dir = join(work, "site");
+    mkdirSync(join(dir, "src"), { recursive: true });
+    for (const file of [
+      "README.md",
+      ".gitignore",
+      "tsconfig.json",
+      "src/index.ts",
+      "wrangler.jsonc",
+    ]) {
+      writeFileSync(join(dir, file), "");
+    }
+    expect(() => initCommand([dir])).toThrow(
+      `refused: README.md, .gitignore, src/index.ts, and 2 other files already exist in ${dir}.`,
+    );
+  });
+
+  it("names every file in the way when there are three or fewer", () => {
+    const dir = join(work, "site");
+    mkdirSync(dir);
+    writeFileSync(join(dir, "README.md"), "");
+    expect(() => initCommand([dir])).toThrow(`refused: README.md already exists in ${dir}.`);
+    writeFileSync(join(dir, ".gitignore"), "");
+    expect(() => initCommand([dir])).toThrow(
+      `refused: README.md and .gitignore already exist in ${dir}.`,
+    );
   });
 
   it("names the package after the instance, as the resources are", () => {

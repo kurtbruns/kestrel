@@ -10,6 +10,15 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Changed
+
+- The confirmation email's built-in line above the button reads "Please confirm your email address to start receiving the newsletter.", no longer thanking the reader for subscribing before they have. An instance still on the built-in line gets the new one; wording you edited is kept.
+- `kestrel init` refusing a folder with files in the way names three and counts the rest ("README.md, .gitignore, package.json, and 32 other files already exist"), instead of listing every file it would write.
+
+### Fixed
+
+- On a phone, tapping the editor's subject or body, or any other field in the admin app, no longer zooms the page in: iOS Safari zooms into text under 16px, so on a touch screen fields take 16px.
+
 ## [1.27.0] - 2026-11-25
 
 **Upgrading from 1.26.0.** In your instance's repository, start with nothing uncommitted, as [Upgrade to a new release](https://github.com/kurtbruns/kestrel/blob/v1.27.0/docs/guides/upgrade.md) says, and install the release with `npm install @kurtbruns/kestrel@1.27.0`. `npm run sync-migrations` brings in one database migration, `0027_subscribers_confirm_browser.sql`, which records which browser asked for each confirmation link. Run `npm run check-context`: this release changes one file of the operator's Claude context, `CLAUDE.md`, and a copy you've edited is merged by hand. Its change bears on safety: the line on calling the local app now says that a call without `--local` goes to the deployed instance, and that when `kestrel api` refuses a call naming `KESTREL_LOCAL_ONLY`, Claude adds `--local` and never unsets the variable. Then run `npm run typecheck`, commit the upgrade, note a restore point, apply the migration with `npx wrangler d1 migrations apply DB --remote --env production`, and deploy with `npx wrangler deploy --env production`, as the guide lays out. Confirmation links sent before the upgrade keep working, with the Confirm button as before. A script of your own that reads `GET /api/version`, or `deployment.build` in `GET /api/settings`, changes four names: `build_time` is gone, and `commit_time` in its place is when the running commit was made, not when the package was built; `repo_url` is now `source_url`, with the same value; and `commit_url` and `tag_url` are gone, the commit's page being `{source_url}/commit/{sha}` unless `sha` is `dev`, and the release's `{source_url}/releases/tag/{tag}` only when `tag` is `v{version}`. `version`, `sha`, and `tag` are unchanged. A log filter or alert of your own on `auth.unidentified` now finds nothing: change it to `auth.refused` with `reason` equal to `unidentified`.

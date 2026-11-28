@@ -604,6 +604,8 @@ A color means one thing, and a token names one color. A second token for a color
 
 **Narrow screens.** The editor gets opened on a phone, often just to check a post went out, so every screen holds at any width, and a list never makes you scroll sideways to read its lead column. At phone width, a list table stacks: each row becomes its lead cell (subject, email) on its own line, with the rest as one muted line and the row's ⋯ at top right; column headers drop, search and filters stay. It's the desktop table's own markup restyled, not a second render, so the two can't drift. Subscribers stacks sooner, whenever its own width leaves the email less than about 250px beside its two other columns, so the sidebar's width counts and a mid-sized window gets the stacked rows rather than a squeezed address; an address that has to wrap breaks before its @. The per-recipient table on the record and the Sends table on a subscriber's page are the holdouts, and scroll sideways within their own frame instead.
 
+On a touch screen every text field, the editor's subject and body included, sets its text at 16px, so a tap into it never zooms the page, which iOS Safari does for anything smaller.
+
 The docs room's bar stays one row at every width, so its anchors always clear it. On a phone, a doc's contents fold to one row that closes once a section is picked, the API rail becomes a chip row, and the build stamp moves to the foot of the page.
 
 ---

@@ -272,14 +272,14 @@ function refuseInit(root, name, { named, hosts, files }) {
   }
   const taken = files.map(([, to]) => to).filter((to) => existsSync(join(root, to)));
   if (taken.length > 0) {
-    throw new CliError(
-      `refused: ${taken.join(", ")} already exist${taken.length === 1 ? "s" : ""} in ${root}.`,
-      {
-        lines: [
-          "Run init in an empty repository (created without a README, .gitignore, or license).",
-        ],
-      },
-    );
+    const others = taken.length - 3;
+    const named =
+      others > 0 ? [...taken.slice(0, 3), `${others} other file${others === 1 ? "" : "s"}`] : taken;
+    const list = new Intl.ListFormat("en", { type: "conjunction" }).format(named);
+    const verb = taken.length === 1 ? "exists" : "exist";
+    throw new CliError(`refused: ${list} already ${verb} in ${root}.`, {
+      lines: ["Run init in an empty repository."],
+    });
   }
 }
 

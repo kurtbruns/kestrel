@@ -3857,6 +3857,22 @@ textarea.is-invalid {
 .url-field input:focus-visible {
   outline: none;
 }
+/* iOS Safari zooms the page into any focused field whose text is under 16px, and leaves it
+   zoomed after, so on a touch screen every field takes 16px. The editor's highlight layer
+   moves with its textarea, at a whole-pixel line height (see .md-hl above). */
+@media (hover: none) and (pointer: coarse) {
+  input,
+  textarea,
+  select,
+  .url-field input {
+    font-size: 16px;
+  }
+  .md-hl,
+  .composer-body textarea.editor {
+    font-size: 16px;
+    line-height: 27px;
+  }
+}
 .url-field.readonly {
   cursor: default;
   background: var(--sunken);
